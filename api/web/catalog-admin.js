@@ -26,6 +26,10 @@
 // what replaced the window.prompt pickers elsewhere, and it is covered by an
 // end-to-end test against exactly the list length a prompt could not show.
 import { openPickModal } from "./pickmodal.js";
+// The plan, and a box for every catalogue, product and process the file would
+// replace (ADR-0467).
+import { importAsking } from "./importchoices.js";
+import { mappingsCard, wireMappings } from "./packagemappings.js";
 import { fmtDateTime } from "./datefmt.js";
 // A product's content from the wiki (ADR-draft-service-content-from-an-external-source):
 // the panel, the catalogue's refresh, and the words the read-only fields use.
@@ -175,6 +179,8 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
   let cats = [];
   let report = null;
   let translation = null;
+  let mappings = null;
+  let accounts = null;
   // null means the directory could not be read, which is different from an empty
   // one: the first degrades to typed ids, the second says there are no groups yet.
   let dir = null;
@@ -191,6 +197,10 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     // reason removing the refusal is safe: a gap nothing says out loud is a gap
     // that surfaces months later as "the French shop reads oddly".
     translation = await api("GET", "/api/v1/catalog-products/translation-gaps").catch(() => null);
+    // What other installations' names mean here, as package imports chose them
+    // (ADR-0467), and the accounts a fixed approver may name.
+    mappings = await api("GET", "/api/v1/catalogs/import/mappings").catch(() => null);
+    accounts = await api("GET", "/api/v1/users/assignable").catch(() => null);
   } catch (e) {
     if (isSuperseded()) return;
     throw e;
@@ -242,10 +252,12 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     </div>
 
     ${importCard()}
+    ${mappingsCard(mappings, dir, accounts)}
     ${approverCard(report)}
     ${translationCard(translation)}`;
 
   wireImport({ api, toast, view });
+  wireMappings({ api, toast, view, dir, accounts, redraw });
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -446,7 +458,7 @@ function audienceField(dir, chosen) {
   if (!boxes.length) {
     return `<div class="field">Audience
       <p class="muted" style="margin:6px 0 0">No group exists yet, so this catalogue can reach
-        nobody. An administrator creates groups under Console → Organization.</p></div>`;
+        nobody. An administrator creates groups under Console → Administration → Organization.</p></div>`;
   }
   return `<div class="field">Audience (none chosen reaches nobody)
     <div class="audience-boxes" style="display:grid; gap:4px; margin-top:6px">
@@ -795,7 +807,7 @@ function eligibleField(dir, chosen) {
     return `<div class="field wide">Who may receive it
       <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
       <p class="muted" style="margin:0">No group exists yet, so there is nothing to
-        narrow to. An administrator creates groups under Console → Organization.</p></div>`;
+        narrow to. An administrator creates groups under Console → Administration → Organization.</p></div>`;
   }
   return `<div class="field wide">Who may receive it (none chosen narrows nothing)
     <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
@@ -1266,7 +1278,9 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
       <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`;
+    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}
+
+    ${mayTheme(me, enforced) ? purgeCard(cat, items, langs) : ""}`;
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
@@ -1276,6 +1290,121 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   // content source cannot have one, so its screen is the one it always had.
   mountCatalogRefresh(view.querySelector(".content-catalog"), { api, toast, reload: redraw }, cat.id,
     offered.filter((iid) => byID[iid] && byID[iid].contentSource).length);
+  wirePurge({ api, toast, view }, cat);
+}
+
+// ---------- Deleting for good ----------
+//
+// A catalogue has no delete on a production server: an order placed years ago and a
+// right still held resolve through it (ADR-0312), and a product is withdrawn instead.
+// A development installation is the exception — somebody imports a catalogue, orders
+// from it to watch the fulfilment run, and must be able to start over — so an
+// administrator can purge one (ADR-0469). It is on unless the server
+// was started with --catalogue-purge=false, which a production installation should be.
+//
+// The card never deletes on the first click. It asks the server what would go and
+// shows the whole answer — the orders, the running work, the holds, the warnings —
+// and the button stays disabled until the id is typed again. On a server that switched
+// the purge off it shows the same preview and says so, because "what would this
+// remove" is still worth knowing where it cannot be done.
+
+// purgeCard is the administrator's panel for deleting this catalogue, or one of the
+// products whose home it is, for good.
+function purgeCard(cat, items, langs) {
+  const own = items.filter((it) => it.homeCatalog === cat.id);
+  return `<h3 style="margin-top:26px">Delete for good</h3>
+    <p class="muted" style="max-width:62ch">For a development or test installation only.
+      Deletes the catalogue, or one of its own products, with every order placed from it,
+      the process instances still working those orders and the rights they granted — with
+      no undo. On a production installation withdraw a product instead.</p>
+    <div class="card cat-purge" style="max-width:62ch; border-color:var(--danger)">
+      <div class="row">
+        <button class="btn danger" type="button" data-act="purge-catalog">Delete this catalogue…</button>
+      </div>
+      ${own.length ? `<label class="field" style="margin-top:12px">Or one of its own products
+        <select name="purgeProduct">${own.map((it) => `<option value="${esc(it.id)}">${
+    esc(textOf(it.texts, langs, it.id))} (${esc(it.id)})</option>`).join("")}</select></label>
+      <div class="row"><button class="btn ghost danger" type="button" data-act="purge-product">Delete this product…</button></div>` : ""}
+      <div class="purge-report"></div>
+    </div>`;
+}
+
+// purgeList renders one list of the plan, or nothing when it is empty.
+function purgeList(title, ids) {
+  if (!ids || !ids.length) return "";
+  return `<p style="margin:8px 0 2px"><b>${esc(title)}</b></p>
+    <ul style="margin:0">${ids.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+}
+
+// purgePlanHTML renders what the server says a purge would remove, and the
+// confirmation it needs.
+export function purgePlanHTML(plan) {
+  const what = plan.kind === "catalog" ? "catalogue" : "product";
+  const counts = [];
+  if (plan.instances) counts.push(`${plan.instances} running process instance(s) are cancelled`);
+  if (plan.entitlements) counts.push(`${plan.entitlements} right(s) of ${plan.holders} person(s) leave the inventory`);
+  return `<div style="margin-top:12px">
+    ${plan.enabled ? "" : `<p><b>Deleting for good is switched off on this server.</b> It was
+      started with <code>--catalogue-purge=false</code> (or <code>ATLAS_CATALOGUE_PURGE=false</code>),
+      as a production installation should be.</p>`}
+    <p style="margin:0 0 4px">Deleting ${esc(what)} <b>${esc(plan.id)}</b> would remove:</p>
+    ${purgeList("Catalogue", plan.catalogs)}
+    ${purgeList("Releases", plan.releases)}
+    ${purgeList("Products", plan.products)}
+    ${purgeList("Orders", plan.orders)}
+    ${purgeList("Orders that stay, with these lines withdrawn",
+    (plan.keptOrders || []).map((k) => `${k.order}: ${k.products.join(", ")}`))}
+    ${purgeList("Catalogues that stop offering",
+    (plan.strippedFrom || []).map((s) => `${s.catalog}: ${s.products.join(", ")}`))}
+    ${counts.length ? `<p style="margin:8px 0 0">${esc(counts.join("; "))}.</p>` : ""}
+    ${purgeList("Processes that stay deployed", plan.processes)}
+    ${(plan.warnings || []).length ? `<div class="card" style="margin-top:10px; border-color:var(--warn)">
+      <b>${plan.enabled ? "Read this before you confirm" : "What deleting would mean"}</b>
+      <ul style="margin:6px 0 0">${plan.warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+    ${plan.enabled ? `<label class="field" style="margin-top:12px">Type <code>${esc(plan.confirm)}</code> to confirm
+        <input name="purgeConfirm" autocomplete="off" spellcheck="false"></label>
+      <div class="row"><button class="btn danger" type="button" data-act="purge-confirm"
+        data-kind="${esc(plan.kind)}" data-id="${esc(plan.id)}" disabled>Delete ${esc(what)} for good</button></div>` : ""}
+  </div>`;
+}
+
+function wirePurge({ api, toast, view }, cat) {
+  const card = view.querySelector(".cat-purge");
+  if (!card) return;
+  const report = card.querySelector(".purge-report");
+  const enc = encodeURIComponent;
+  const base = (kind, id) => kind === "catalog"
+    ? `/api/v1/catalogs/${enc(id)}` : `/api/v1/catalog-products/${enc(id)}`;
+
+  card.addEventListener("input", (e) => {
+    if (e.target.name !== "purgeConfirm") return;
+    const b = card.querySelector('[data-act="purge-confirm"]');
+    if (b) b.disabled = e.target.value !== b.dataset.id;
+  });
+  card.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    const act = b.dataset.act;
+    try {
+      if (act === "purge-catalog" || act === "purge-product") {
+        const kind = act === "purge-catalog" ? "catalog" : "product";
+        const id = kind === "catalog" ? cat.id : card.querySelector('[name="purgeProduct"]').value;
+        report.innerHTML = purgePlanHTML(await api("GET", `${base(kind, id)}/deletion`));
+        return;
+      }
+      if (act === "purge-confirm") {
+        const { kind, id } = b.dataset;
+        if (card.querySelector('[name="purgeConfirm"]').value !== id) return;
+        b.disabled = true;
+        await api("DELETE", `${base(kind, id)}?confirm=${enc(id)}`);
+        toast(`${kind === "catalog" ? "Catalogue" : "Product"} ${id} deleted for good.`);
+        if (kind === "catalog") location.hash = "#/catalog";
+        else redraw();
+      }
+    } catch (err) {
+      toast(err.message, "err");
+    }
+  });
 }
 
 // ---------- Moving a catalogue between installations ----------
@@ -1373,6 +1502,8 @@ function importRefusal(err) {
 function importSummary(res) {
   const n = (list) => (list || []).length;
   const parts = [`${n(res.created)} created`, `${n(res.updated)} updated`];
+  const kept = (res.artifacts || []).filter((a) => a.outcome === "kept").length;
+  if (kept) parts.push(`${kept} kept as they were`);
   if (n(res.deployed)) parts.push(`${n(res.deployed)} processes deployed`);
   if (n(res.unchanged)) parts.push(`${n(res.unchanged)} processes unchanged`);
   if (n(res.releases)) parts.push(`${n(res.releases)} published`);
@@ -1424,11 +1555,14 @@ function wireTransfer({ api, toast, view }, cat) {
         const doc = await readDocument(card.querySelector('[name="productsFile"]'));
         let res;
         try {
-          res = await api("POST", `/api/v1/catalogs/import?into=${enc(cat.id)}`, doc);
+          res = await importAsking((query) => api("POST",
+            `/api/v1/catalogs/import?into=${enc(cat.id)}${query ? "&" + query : ""}`, doc),
+          { title: "Import products" });
         } catch (err) {
           report.innerHTML = importRefusal(err);
           return;
         }
+        if (!res) return;
         toast(importSummary(res));
         redraw();
       }
@@ -1456,11 +1590,13 @@ function wireImport({ api, toast, view }) {
     if (card.querySelector('[name="publish"]').checked) doc.publish = true;
     let res;
     try {
-      res = await api("POST", "/api/v1/catalogs/import", doc);
+      res = await importAsking((query) => api("POST", `/api/v1/catalogs/import${query ? "?" + query : ""}`, doc),
+        { title: "Import a shop" });
     } catch (err) {
       report.innerHTML = importRefusal(err);
       return;
     }
+    if (!res) return;
     toast(importSummary(res));
     redraw();
   });

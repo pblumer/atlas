@@ -129,6 +129,20 @@ The count of answers per line is bounded, because the map arrives whole in a
 request body and without a ceiling one request can grow the order store without
 bound.
 
+### Answers are text
+
+Amended 2026-10. The line keeps each answer as a string, and a process reads it as
+one. The form, though, hands back what its field holds: a number field a number, a
+checkbox a boolean, a multiple choice a list. The shop sent those as they were, and
+the server refused the whole basket with 400 over a field the form editor offers like
+any other. The shop now turns every answer into text before it sends it — a number
+and a boolean as written (`"5"`, `"true"`), a list as its values joined by a comma,
+which is what FEEL's `split()` takes apart again — on ordering and on correcting a
+held position; and a correction opens its form on the stored answers converted back
+to each field's kind, so an earlier choice is still chosen. The server's type stays
+a map of strings: widening it would hand every process an answer whose type depends
+on which field somebody once picked.
+
 ### Consequences
 
 - **Positive:** the story is answered with one field on the product and one on the

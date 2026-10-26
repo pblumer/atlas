@@ -368,7 +368,9 @@ func TestProcessInstanceDecodeLegacy(t *testing.T) {
 func TestAProcessInstanceWrittenBeforeThePassDecodesWithout(t *testing.T) {
 	full := &ProcessInstanceValue{ProcessDefKey: 7, CreatedAt: 1, SuccessorInstanceKey: 9, PublicPassHash: "ab"}
 	enc := full.encode(nil)
-	legacy := enc[:len(enc)-6] // the string's four-byte length and its two bytes
+	// The pass's four-byte length and its two bytes, and the (empty) StartedBy appended
+	// after it — its four-byte length — which a record that old cannot have either.
+	legacy := enc[:len(enc)-10]
 	var got ProcessInstanceValue
 	if err := got.decode(legacy); err != nil {
 		t.Fatalf("decode a record written before the pass: %v", err)

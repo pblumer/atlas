@@ -1,0 +1,541 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkte Lizenz, Team, Funktionspostfach und Postfachzugriff: Vorgesetzten in Entra ID lesen (Entra-Worker, get-user-manager), Aufgabe an sein Atlas-Konto, sonst an die Ersatzgruppe.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_genehmigung_vorgesetzter" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <error id="Err_PersonUnbekannt" name="Person in Entra ID unbekannt" errorCode="ENTRA_USER_NOT_FOUND"/>
+
+  <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,person,postfach,anlass" atlas:dataSubject="recipient">
+    <documentation>Holt die Genehmigung für eine Microsoft-365-Position bei der vorgesetzten Person der betroffenen Person ein und meldet das Ergebnis an den Auftrag.
+
+Ersetzt für die Produkte dieser Applikation die Genehmigungsart «superior» (Systemprozess «Shop: Genehmigung (Linienvorgesetzter)»). Das Produkt nennt diesen Prozess als Genehmigungsart (approval.kind = proc_m365_genehmigung_vorgesetzter). Als eigener Prozess der Installation erhält er die Antworten des Bestellformulars und kennt damit die betroffene Person; der Systemprozess kennt nur das Atlas-Konto der bestellenden Person und nimmt deren Linienvorgesetzten aus diesem Konto (managerId, ADR-0470).
+
+Betroffene Person: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff), in dieser Reihenfolge.
+
+Ablauf: Vorgesetzten in Entra ID lesen (Entra-Worker ucc_entra, Operation get-user-manager), sein Atlas-Konto suchen, Aufgabe an ihn. Gibt es keinen Vorgesetzten, ist die Person unbekannt oder hat der Vorgesetzte kein Atlas-Konto, entscheidet die Ersatzgruppe: approval.ref des Produkts, sonst die Gruppe M365-Administration (über ihren Namen).
+
+Personendaten: upn, besitzer, person, postfach und anlass sind die Antworten der Bestellformulare, die eine Person nennen; sie sind als Personendaten der empfangenden Person deklariert und im Verlauf verschlüsselt. Kein Ausdruck, den die Engine auswertet, liest sie: die betroffene Person wählt der userId-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker ausgewertet wird, und die Nachricht nennt sie im Mail-Worker. Beide erhalten den Klartext. Die übrigen Antworten (Bereich, Bezeichnung, Zugriffsart und so weiter) nennen niemanden. Der Vorgesetzte (vorgesetzter, naechster) ist nicht deklariert: er ist nicht die empfangende Person, und Gateway und Kontosuche müssen ihn lesen.
+
+Voraussetzungen beim Betreiber:
+- Der Entra-Worker ucc_entra, den auch Lizenz, Team und Partnerzugang verwenden. Seine App-Registrierung braucht dafür User.Read.All, das in User.ReadWrite.All enthalten ist.
+- Das Secret atlas (API-Token mit der Rolle operator) für die Aufrufe an Atlas selbst.
+- Die Gruppe M365-Administration.
+- Den Vault des Servers, weil der Prozess Personendaten deklariert.
+- Ein Mail-Worker «mail» für die Benachrichtigung; fehlt er, bleibt nur die Nachricht liegen, die Genehmigung läuft.
+
+Atlas-Konto: gesucht wird ein Konto, dessen Benutzername gleich der UPN oder der Mailadresse des Vorgesetzten ist, sonst eines mit dem Teil vor dem «@» als Benutzername und gleichem Anzeigenamen (so benennt Atlas Konten aus Entra ID). Findet sich keines oder mehr als eines, entscheidet die Ersatzgruppe.</documentation>
+    <startEvent id="Start" name="Genehmigung nötig">
+      <documentation>Wird vom Auftrag gestartet, wenn die Position an der Reihe ist und ihr Produkt diesen Prozess als Genehmigungsart nennt. Startvariablen: orderId, itemId, positionId, recipient, orderer, provisionProcess, approvalRef, variantId, atlasApiBase, portalBaseUrl und die Antworten des Bestellformulars.</documentation>
+      <outgoing>F_Start_Ersatzgruppe</outgoing>
+    </startEvent>
+
+    <scriptTask id="Ersatzgruppe" name="Ersatzgruppe bestimmen">
+      <documentation>Die Gruppe, die entscheidet, wenn sich keine vorgesetzte Person mit Atlas-Konto findet: approval.ref des Produkts, sonst M365-Administration.</documentation>
+      <extensionElements>
+        <zeebe:script expression='=if approvalRef = null or approvalRef = "" then "M365-Administration" else approvalRef' resultVariable="ersatzgruppe"/>
+        <zeebe:ioMapping>
+          <zeebe:output source='=if approvalRef = null or approvalRef = "" then "M365-Administration" else approvalRef' target="ersatzgruppe"/>
+          <zeebe:output source="=null" target="vorgesetzterKonto"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Start_Ersatzgruppe</incoming>
+      <outgoing>F_Ersatzgruppe_Graph</outgoing>
+    </scriptTask>
+
+    <serviceTask id="Graph" name="Vorgesetzten lesen (Entra ID)">
+      <documentation>get-user-manager im Entra-Worker ucc_entra: der Vorgesetzte der betroffenen Person, die upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff) nennt, in dieser Reihenfolge.
+
+Der Ausdruck in userId liest Personendaten und darf es: Die Engine wertet ihn nicht aus. Er wird erst bei der Übergabe des Jobs an den Worker ausgewertet, wo die Angaben im Klartext vorliegen (ADR-0314). In den Prozess kommt nur der Vorgesetzte zurück.
+
+Der Worker liest den Vorgesetzten über die Person (ADR-0172): Hat sie keinen, ist chef null. Kennt Entra ID die Person nicht, endet der Task mit dem BPMN-Fehler ENTRA_USER_NOT_FOUND, den «Person unbekannt» fängt. Ein technischer Fehler (Anmeldung, Berechtigung, Netz) bleibt ein Fehlschlag mit Wiederholungen und dann ein Incident, damit nicht still jede Genehmigung bei der Ersatzgruppe landet. Nennt die Bestellung niemanden, schlägt der Task ebenfalls fehl; die Bestellformulare verlangen die Angabe.
+
+Die Ausgabe formt chef um in vorgesetzter = {gefunden, grund, id, upn, mail, anzeigename}, die Form, die Kontosuche und Entscheider lesen. chef selbst bleibt im Task.</documentation>
+      <extensionElements>
+        <atlas:entraConnector connector="ucc_entra" operation="get-user-manager" userId='=if upn != null and upn != "" then upn else if besitzer != null and besitzer != "" then besitzer else person' select="id,userPrincipalName,mail,displayName" resultVariable="chef"/>
+        <zeebe:ioMapping>
+          <zeebe:output source='=if chef = null then {gefunden: false, grund: "kein-vorgesetzter", id: null, upn: null, mail: null, anzeigename: null} else {gefunden: true, grund: "", id: chef.id, upn: chef.userPrincipalName, mail: chef.mail, anzeigename: chef.displayName}' target="vorgesetzter"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Ersatzgruppe_Graph</incoming>
+      <outgoing>F_Graph_Gw</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="Unbekannt" name="Person unbekannt" attachedToRef="Graph">
+      <documentation>Fängt ENTRA_USER_NOT_FOUND: Entra ID kennt die Person nicht, die die Bestellung nennt. Ohne dieses Ereignis würde der Worker den Fehler nicht werfen, und die Bestellung hinge als Incident fest.</documentation>
+      <outgoing>F_Unbekannt_Festhalten</outgoing>
+      <errorEventDefinition errorRef="Err_PersonUnbekannt"/>
+    </boundaryEvent>
+
+    <scriptTask id="PersonUnbekannt" name="Unbekannte Person festhalten">
+      <documentation>Der Pfad von «Person unbekannt», meist ein Tippfehler in der Adresse im Bestellformular. vorgesetzter hält das in derselben Form fest wie die übrigen Antworten, mit grund person-unbekannt. Die Ersatzgruppe entscheidet, sieht den Grund und kann mit Begründung ablehnen.</documentation>
+      <extensionElements>
+        <zeebe:script expression='={gefunden: false, grund: "person-unbekannt", id: null, upn: null, mail: null, anzeigename: null}' resultVariable="vorgesetzter"/>
+      </extensionElements>
+      <incoming>F_Unbekannt_Festhalten</incoming>
+      <outgoing>F_Festhalten_Merge</outgoing>
+    </scriptTask>
+
+    <exclusiveGateway id="GwGefunden" name="Vorgesetzter gefunden?" default="F_Gw_Merge_Nein">
+      <incoming>F_Graph_Gw</incoming>
+      <outgoing>F_Gw_Konto_Ja</outgoing>
+      <outgoing>F_Gw_Merge_Nein</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="Konto" name="Atlas-Konto des Vorgesetzten suchen">
+      <documentation>GET /api/v1/users/assignable: Benutzername und Anzeigename aller aktiven Konten.
+
+Treffer, in dieser Reihenfolge: ein Benutzername gleich der UPN oder der Mailadresse (Gross-/Kleinschreibung egal); sonst genau ein Benutzername gleich dem Teil vor dem «@», so wie Atlas ihn bei Anmeldung über Entra ID und bei der Kontenspiegelung bildet (kleingeschrieben, nur a-z 0-9 . - _), und dann nur, wenn auch der Anzeigename übereinstimmt. Mehrere oder keine Treffer: die Ersatzgruppe entscheidet.
+
+Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste aller Konten bleibt lokal in diesem Task. Der Vergleich steht in for-Schleifen und nicht in Filtern, weil ein Filter die Variable gesucht nicht sieht.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="GET" url='=atlasApiBase + "/api/v1/users/assignable"' resultVariable="konten" authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=vorgesetzter" target="gesucht"/>
+          <zeebe:output source='={exakt: (for k in konten return if lower case(k.username) = lower case(gesucht.upn) or lower case(k.username) = lower case(gesucht.mail) then k.username else null)[item != null], teilUpn: replace(lower case(substring before(gesucht.upn, "@")), "[^a-z0-9._-]", ""), teilMail: replace(lower case(substring before(gesucht.mail, "@")), "[^a-z0-9._-]", ""), name: lower case(gesucht.anzeigename), lokal: (for k in konten return if (lower case(k.username) = teilUpn or lower case(k.username) = teilMail) and (k.displayName = null or lower case(k.displayName) = name) then k.username else null)[item != null], treffer: if count(exakt) > 0 then exakt[1] else if count(lokal) = 1 then lokal[1] else null}.treffer' target="vorgesetzterKonto"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Gw_Konto_Ja</incoming>
+      <outgoing>F_Konto_Merge</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="GwMerge">
+      <incoming>F_Konto_Merge</incoming>
+      <incoming>F_Gw_Merge_Nein</incoming>
+      <incoming>F_Festhalten_Merge</incoming>
+      <outgoing>F_Merge_Entscheider</outgoing>
+    </exclusiveGateway>
+
+    <scriptTask id="Entscheider" name="Entscheider festlegen">
+      <documentation>Ein Konto gefunden: die Aufgabe geht an diese Person. Sonst geht sie an die Ersatzgruppe, und entscheidungsweg hält fest, warum. Der Grund nennt die betroffene Person nicht, weil die Engine ihre Angaben nicht im Klartext hat.</documentation>
+      <extensionElements>
+        <zeebe:script expression="=if vorgesetzterKonto = null then ersatzgruppe else vorgesetzterKonto" resultVariable="entscheider"/>
+        <zeebe:ioMapping>
+          <zeebe:output source="=vorgesetzterKonto" target="zuweisung"/>
+          <zeebe:output source="=if vorgesetzterKonto = null then ersatzgruppe else vorgesetzterKonto" target="entscheider"/>
+          <zeebe:output source='=if vorgesetzterKonto != null then "Vorgesetzte Person der betroffenen Person" else if vorgesetzter.grund = "person-unbekannt" then "Ersatzgruppe: die betroffene Person ist in Entra ID unbekannt" else if vorgesetzter.grund = "kein-vorgesetzter" then "Ersatzgruppe: für die betroffene Person ist kein Vorgesetzter gepflegt" else "Ersatzgruppe: der Vorgesetzte " + (if vorgesetzter.upn = null then "-" else vorgesetzter.upn) + " hat kein Atlas-Konto"' target="entscheidungsweg"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Merge_Entscheider</incoming>
+      <outgoing>F_Entscheider_Split</outgoing>
+    </scriptTask>
+
+    <parallelGateway id="Split" name="Aufgabe und Nachricht">
+      <documentation>Die Nachricht läuft neben der Aufgabe und nicht vor ihr: ein Mail-Worker, der fehlt, hält sonst die Genehmigung an.</documentation>
+      <incoming>F_Entscheider_Split</incoming>
+      <outgoing>F_Split_Wer</outgoing>
+      <outgoing>F_Split_Mail</outgoing>
+    </parallelGateway>
+
+    <serviceTask id="Benachrichtigen" name="Genehmiger benachrichtigen">
+      <documentation>An die Person oder Gruppe, die entscheidet. Der Empfänger ist ein Benutzername oder ein Gruppenname; die Adresse schlägt der Server beim Versand im Konto nach. «Betrifft» nennt die betroffene Person: der Text entsteht im Mail-Worker, der die Personendaten im Klartext erhält. Voraussetzung: ein Mail-Worker «mail».</documentation>
+      <extensionElements>
+        <atlas:mailConnector connector="mail" to="=entscheider" subject='="Genehmigung nötig: " + itemId' body='="Guten Tag\n\nEine Bestellung wartet auf Ihre Genehmigung.\n\nLeistung: " + itemId + "\nAuftrag: " + orderId + "\nBetrifft: " + (if upn != null then upn else if besitzer != null then besitzer else if person != null then person else "-") + "\nGrund für diese Anfrage: " + entscheidungsweg + "\n\n" + (if portalBaseUrl = null or portalBaseUrl = "" then "Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz." else portalBaseUrl + "/index.html#/tasks?order=" + orderId + "&amp;item=" + positionId) + "\n\nFreundliche Grüsse\nIhr Shop"'/>
+      </extensionElements>
+      <incoming>F_Split_Mail</incoming>
+      <outgoing>F_Mail_Ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="EndeMail" name="Benachrichtigt">
+      <incoming>F_Mail_Ende</incoming>
+    </endEvent>
+
+    <exclusiveGateway id="GwWer" name="Wer entscheidet?" default="F_Wer_Gruppe">
+      <documentation>Zwei Aufgaben statt einer, weil Atlas eine Zuweisung nur an einen Namen erlaubt: eine Aufgabe mit leerer Zuweisung wäre die Arbeit aller und wird deshalb als Incident angehalten.</documentation>
+      <incoming>F_Split_Wer</incoming>
+      <outgoing>F_Wer_Person</outgoing>
+      <outgoing>F_Wer_Gruppe</outgoing>
+    </exclusiveGateway>
+
+    <userTask id="GenehmigenGruppe" name="Genehmigen (Ersatzgruppe)">
+      <documentation>Wer aus der Ersatzgruppe die Aufgabe zuerst übernimmt, entscheidet. entscheidungsweg sagt, warum die Gruppe gefragt ist. Das Formular genehmigung ist das der Atlas-Genehmigungen: der Posteingang zeigt dafür Genehmigen und Ablehnen, verlangt bei einer Ablehnung eine Begründung und zeigt die Angaben der Bestellung.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="genehmigung"/>
+        <zeebe:assignmentDefinition candidateGroups="=ersatzgruppe"/>
+      </extensionElements>
+      <incoming>F_Wer_Gruppe</incoming>
+      <outgoing>F_Gruppe_Merge</outgoing>
+    </userTask>
+
+    <userTask id="GenehmigenPerson" name="Genehmigen (vorgesetzte Person)">
+      <documentation>Die Aufgabe geht an das Atlas-Konto der vorgesetzten Person. Formular genehmigung wie bei der Ersatzgruppe.</documentation>
+      <extensionElements>
+        <zeebe:formDefinition formId="genehmigung"/>
+        <zeebe:assignmentDefinition assignee="=zuweisung"/>
+      </extensionElements>
+      <incoming>F_Wer_Person</incoming>
+      <outgoing>F_Person_Merge</outgoing>
+    </userTask>
+
+    <boundaryEvent id="Frist" name="Eskalationsfrist" attachedToRef="GenehmigenPerson" cancelActivity="false">
+      <documentation>Nach sieben Tagen reicht die Genehmigung an den nächsthöheren Vorgesetzten weiter. Nicht unterbrechend: die Aufgabe bleibt offen, Schweigen ist keine Ablehnung.</documentation>
+      <outgoing>F_Frist_Naechster</outgoing>
+      <timerEventDefinition>
+        <timeDuration>P7D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <boundaryEvent id="Erinnerung" name="Erinnerungsfrist" attachedToRef="GenehmigenPerson" cancelActivity="false">
+      <documentation>Nach drei Tagen eine Erinnerung. Nicht unterbrechend: die Aufgabe bleibt offen.</documentation>
+      <outgoing>F_Erinnerung_Mail</outgoing>
+      <timerEventDefinition>
+        <timeDuration>P3D</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <exclusiveGateway id="GwWerMerge">
+      <incoming>F_Gruppe_Merge</incoming>
+      <incoming>F_Person_Merge</incoming>
+      <outgoing>F_WerMerge_Gw</outgoing>
+    </exclusiveGateway>
+
+    <exclusiveGateway id="Gw" name="Genehmigt?" default="F_Gw_Ablehnen">
+      <incoming>F_WerMerge_Gw</incoming>
+      <outgoing>F_Gw_Provisionieren</outgoing>
+      <outgoing>F_Gw_Ablehnen</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="Provisionieren" name="Provisionierung starten">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start mit approvedBy. approvedBy ist die Person, die die Aufgabe abgeschlossen hat (completedBy), sonst der Entscheider; es darf nicht leer sein, denn ohne approvedBy hält der Auftrag die Zustimmung nicht fest und startet statt der Provisionierung wieder die Genehmigung. Die Positions-ID ist kodiert, weil «#» einer Variante die Adresse sonst abschneidet.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST" url='=atlasApiBase + "/api/v1/orders/" + orderId + "/lines/" + replace(positionId, "#", "%23") + "/start"' authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source='="provision"' target="operation"/>
+          <zeebe:input source='=if completedBy != null and completedBy != "" then completedBy else entscheider' target="approvedBy"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Gw_Provisionieren</incoming>
+      <outgoing>F_Prov_Join</outgoing>
+    </serviceTask>
+
+    <serviceTask id="Ablehnen" name="Ablehnung melden">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/decision mit der Person, die entschieden hat, und ihrer Begründung. Die bestellende Person bekommt die Begründung zu lesen. begruendung ist die Variable, die der Posteingang beim Ablehnen schreibt; der Anlass aus dem Bestellformular des Postfachzugriffs heisst deshalb anlass.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST" url='=atlasApiBase + "/api/v1/orders/" + orderId + "/lines/" + replace(positionId, "#", "%23") + "/decision"' authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source='=if completedBy != null and completedBy != "" then completedBy else entscheider' target="by"/>
+          <zeebe:input source="=begruendung" target="reason"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Gw_Ablehnen</incoming>
+      <outgoing>F_Abl_Join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="Join">
+      <incoming>F_Prov_Join</incoming>
+      <incoming>F_Abl_Join</incoming>
+      <outgoing>F_Join_Ende</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="Ende" name="Entschieden">
+      <incoming>F_Join_Ende</incoming>
+    </endEvent>
+
+    <serviceTask id="Erinnern" name="Erinnerung senden">
+      <extensionElements>
+        <atlas:mailConnector connector="mail" to="=entscheider" subject='="Erinnerung: Genehmigung nötig für " + itemId' body='="Guten Tag\n\nEine Bestellung wartet weiterhin auf Ihre Genehmigung.\n\nLeistung: " + itemId + "\nAuftrag: " + orderId + "\nBetrifft: " + (if upn != null then upn else if besitzer != null then besitzer else if person != null then person else "-") + "\n\n" + (if portalBaseUrl = null or portalBaseUrl = "" then "Sie finden sie in Ihrem Posteingang (Tasks) dieser Atlas-Instanz." else portalBaseUrl + "/index.html#/tasks?order=" + orderId + "&amp;item=" + positionId) + "\n\nFreundliche Grüsse\nIhr Shop"'/>
+      </extensionElements>
+      <incoming>F_Erinnerung_Mail</incoming>
+      <outgoing>F_Erinnerung_Ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="EndeErinnerung" name="Erinnert">
+      <incoming>F_Erinnerung_Ende</incoming>
+    </endEvent>
+
+    <serviceTask id="GraphNaechster" name="Nächsten Vorgesetzten lesen (Entra ID)">
+      <documentation>get-user-manager wie «Vorgesetzten lesen», gefragt nach dem Vorgesetzten des Vorgesetzten über dessen Objekt-ID (vorgesetzter.id). Schreibt naechster in derselben Form.
+
+Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen ausgetreten ist, fängt «Vorgesetzter unbekannt» den Fehler: Die Genehmigung wird ohne neuen Vorgesetzten weitergereicht, und Atlas hält sie als festgefahren fest.</documentation>
+      <extensionElements>
+        <atlas:entraConnector connector="ucc_entra" operation="get-user-manager" userId="=vorgesetzter.id" select="id,userPrincipalName,mail,displayName" resultVariable="chef"/>
+        <zeebe:ioMapping>
+          <zeebe:output source='=if chef = null then {gefunden: false, grund: "kein-vorgesetzter", id: null, upn: null, mail: null, anzeigename: null} else {gefunden: true, grund: "", id: chef.id, upn: chef.userPrincipalName, mail: chef.mail, anzeigename: chef.displayName}' target="naechster"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Frist_Naechster</incoming>
+      <outgoing>F_Naechster_Konto</outgoing>
+    </serviceTask>
+
+    <boundaryEvent id="UnbekanntNaechster" name="Vorgesetzter unbekannt" attachedToRef="GraphNaechster">
+      <outgoing>F_UnbekanntNaechster_Eskalieren</outgoing>
+      <errorEventDefinition errorRef="Err_PersonUnbekannt"/>
+    </boundaryEvent>
+
+    <serviceTask id="KontoNaechster" name="Atlas-Konto des nächsten Vorgesetzten suchen">
+      <extensionElements>
+        <atlas:restConnector method="GET" url='=atlasApiBase + "/api/v1/users/assignable"' resultVariable="konten" authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source="=naechster" target="gesucht"/>
+          <zeebe:output source='={exakt: (for k in konten return if lower case(k.username) = lower case(gesucht.upn) or lower case(k.username) = lower case(gesucht.mail) then k.username else null)[item != null], teilUpn: replace(lower case(substring before(gesucht.upn, "@")), "[^a-z0-9._-]", ""), teilMail: replace(lower case(substring before(gesucht.mail, "@")), "[^a-z0-9._-]", ""), name: lower case(gesucht.anzeigename), lokal: (for k in konten return if (lower case(k.username) = teilUpn or lower case(k.username) = teilMail) and (k.displayName = null or lower case(k.displayName) = name) then k.username else null)[item != null], treffer: if count(exakt) > 0 then exakt[1] else if count(lokal) = 1 then lokal[1] else null}.treffer' target="naechsterKonto"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_Naechster_Konto</incoming>
+      <outgoing>F_KontoNaechster_Eskalieren</outgoing>
+    </serviceTask>
+
+    <serviceTask id="Eskalieren" name="Genehmigung weiterreichen">
+      <documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/escalate mit dem Atlas-Konto des nächsten Vorgesetzten; Atlas gibt die Aufgabe weiter. Ist keiner bekannt (leer), hält Atlas die Genehmigung als festgefahren fest (GET /api/v1/approvals/stalled), und sie bleibt, wo sie ist.</documentation>
+      <extensionElements>
+        <atlas:restConnector method="POST" url='=atlasApiBase + "/api/v1/orders/" + orderId + "/lines/" + replace(positionId, "#", "%23") + "/escalate"' authType="bearer" authSecret="atlas"/>
+        <zeebe:ioMapping>
+          <zeebe:input source='=if naechsterKonto = null then "" else naechsterKonto' target="superior"/>
+        </zeebe:ioMapping>
+      </extensionElements>
+      <incoming>F_KontoNaechster_Eskalieren</incoming>
+      <incoming>F_UnbekanntNaechster_Eskalieren</incoming>
+      <outgoing>F_Eskalieren_Ende</outgoing>
+    </serviceTask>
+
+    <endEvent id="EndeFrist" name="Weitergereicht">
+      <incoming>F_Eskalieren_Ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="F_Start_Ersatzgruppe" sourceRef="Start" targetRef="Ersatzgruppe"/>
+    <sequenceFlow id="F_Ersatzgruppe_Graph" sourceRef="Ersatzgruppe" targetRef="Graph"/>
+    <sequenceFlow id="F_Graph_Gw" sourceRef="Graph" targetRef="GwGefunden"/>
+    <sequenceFlow id="F_Unbekannt_Festhalten" sourceRef="Unbekannt" targetRef="PersonUnbekannt"/>
+    <sequenceFlow id="F_Festhalten_Merge" sourceRef="PersonUnbekannt" targetRef="GwMerge"/>
+    <sequenceFlow id="F_Gw_Konto_Ja" name="ja" sourceRef="GwGefunden" targetRef="Konto">
+      <conditionExpression>=vorgesetzter.gefunden = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="F_Gw_Merge_Nein" name="nein" sourceRef="GwGefunden" targetRef="GwMerge"/>
+    <sequenceFlow id="F_Konto_Merge" sourceRef="Konto" targetRef="GwMerge"/>
+    <sequenceFlow id="F_Merge_Entscheider" sourceRef="GwMerge" targetRef="Entscheider"/>
+    <sequenceFlow id="F_Entscheider_Split" sourceRef="Entscheider" targetRef="Split"/>
+    <sequenceFlow id="F_Split_Wer" sourceRef="Split" targetRef="GwWer"/>
+    <sequenceFlow id="F_Split_Mail" sourceRef="Split" targetRef="Benachrichtigen"/>
+    <sequenceFlow id="F_Mail_Ende" sourceRef="Benachrichtigen" targetRef="EndeMail"/>
+    <sequenceFlow id="F_Wer_Person" name="Person" sourceRef="GwWer" targetRef="GenehmigenPerson">
+      <conditionExpression>=zuweisung != null</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="F_Wer_Gruppe" name="Gruppe" sourceRef="GwWer" targetRef="GenehmigenGruppe"/>
+    <sequenceFlow id="F_Gruppe_Merge" sourceRef="GenehmigenGruppe" targetRef="GwWerMerge"/>
+    <sequenceFlow id="F_Person_Merge" sourceRef="GenehmigenPerson" targetRef="GwWerMerge"/>
+    <sequenceFlow id="F_WerMerge_Gw" sourceRef="GwWerMerge" targetRef="Gw"/>
+    <sequenceFlow id="F_Gw_Provisionieren" name="ja" sourceRef="Gw" targetRef="Provisionieren">
+      <conditionExpression>=genehmigt = true</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="F_Gw_Ablehnen" name="nein" sourceRef="Gw" targetRef="Ablehnen"/>
+    <sequenceFlow id="F_Prov_Join" sourceRef="Provisionieren" targetRef="Join"/>
+    <sequenceFlow id="F_Abl_Join" sourceRef="Ablehnen" targetRef="Join"/>
+    <sequenceFlow id="F_Join_Ende" sourceRef="Join" targetRef="Ende"/>
+    <sequenceFlow id="F_Erinnerung_Mail" sourceRef="Erinnerung" targetRef="Erinnern"/>
+    <sequenceFlow id="F_Erinnerung_Ende" sourceRef="Erinnern" targetRef="EndeErinnerung"/>
+    <sequenceFlow id="F_Frist_Naechster" sourceRef="Frist" targetRef="GraphNaechster"/>
+    <sequenceFlow id="F_Naechster_Konto" sourceRef="GraphNaechster" targetRef="KontoNaechster"/>
+    <sequenceFlow id="F_KontoNaechster_Eskalieren" sourceRef="KontoNaechster" targetRef="Eskalieren"/>
+    <sequenceFlow id="F_Eskalieren_Ende" sourceRef="Eskalieren" targetRef="EndeFrist"/>
+    <sequenceFlow id="F_UnbekanntNaechster_Eskalieren" sourceRef="UnbekanntNaechster" targetRef="Eskalieren"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="Diagram">
+    <bpmndi:BPMNPlane id="Plane" bpmnElement="proc_m365_genehmigung_vorgesetzter">
+      <bpmndi:BPMNShape id="S_Start" bpmnElement="Start">
+        <omgdc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="125" y="225" width="90" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ersatzgruppe" bpmnElement="Ersatzgruppe">
+        <omgdc:Bounds x="240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Graph" bpmnElement="Graph">
+        <omgdc:Bounds x="390" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Unbekannt" bpmnElement="Unbekannt">
+        <omgdc:Bounds x="422" y="142" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="342" y="116" width="90" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_PersonUnbekannt" bpmnElement="PersonUnbekannt">
+        <omgdc:Bounds x="640" y="30" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GwGefunden" bpmnElement="GwGefunden" isMarkerVisible="true">
+        <omgdc:Bounds x="540" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="505" y="145" width="120" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Konto" bpmnElement="Konto">
+        <omgdc:Bounds x="640" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GwMerge" bpmnElement="GwMerge" isMarkerVisible="true">
+        <omgdc:Bounds x="790" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Entscheider" bpmnElement="Entscheider">
+        <omgdc:Bounds x="890" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Split" bpmnElement="Split">
+        <omgdc:Bounds x="1040" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1001" y="232" width="63" height="27"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Mail" bpmnElement="Benachrichtigen">
+        <omgdc:Bounds x="1140" y="40" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeMail" bpmnElement="EndeMail">
+        <omgdc:Bounds x="1840" y="62" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1823" y="105" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GwWer" bpmnElement="GwWer" isMarkerVisible="true">
+        <omgdc:Bounds x="1140" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1121" y="152" width="88" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_TaskGruppe" bpmnElement="GenehmigenGruppe">
+        <omgdc:Bounds x="1240" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_TaskPerson" bpmnElement="GenehmigenPerson">
+        <omgdc:Bounds x="1240" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Frist" bpmnElement="Frist">
+        <omgdc:Bounds x="1252" y="362" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="402" width="76" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnerung" bpmnElement="Erinnerung">
+        <omgdc:Bounds x="1302" y="362" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1332" y="402" width="78" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GwWerMerge" bpmnElement="GwWerMerge" isMarkerVisible="true">
+        <omgdc:Bounds x="1390" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Gw" bpmnElement="Gw" isMarkerVisible="true">
+        <omgdc:Bounds x="1490" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1485" y="152" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Prov" bpmnElement="Provisionieren">
+        <omgdc:Bounds x="1590" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Abl" bpmnElement="Ablehnen">
+        <omgdc:Bounds x="1590" y="300" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Join" bpmnElement="Join" isMarkerVisible="true">
+        <omgdc:Bounds x="1740" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Ende" bpmnElement="Ende">
+        <omgdc:Bounds x="1840" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1827" y="225" width="62" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Erinnern" bpmnElement="Erinnern">
+        <omgdc:Bounds x="1590" y="460" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeErinnerung" bpmnElement="EndeErinnerung">
+        <omgdc:Bounds x="1840" y="482" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1838" y="525" width="40" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_GraphNaechster" bpmnElement="GraphNaechster">
+        <omgdc:Bounds x="1440" y="580" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_UnbekanntNaechster" bpmnElement="UnbekanntNaechster">
+        <omgdc:Bounds x="1472" y="642" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1500" y="682" width="120" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_KontoNaechster" bpmnElement="KontoNaechster">
+        <omgdc:Bounds x="1590" y="580" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_Eskalieren" bpmnElement="Eskalieren">
+        <omgdc:Bounds x="1740" y="580" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="S_EndeFrist" bpmnElement="EndeFrist">
+        <omgdc:Bounds x="1890" y="602" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1873" y="645" width="70" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="E_Start_Ersatzgruppe" bpmnElement="F_Start_Ersatzgruppe">
+        <omgdi:waypoint x="188" y="200"/><omgdi:waypoint x="240" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Ersatzgruppe_Graph" bpmnElement="F_Ersatzgruppe_Graph">
+        <omgdi:waypoint x="340" y="200"/><omgdi:waypoint x="390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Graph_Gw" bpmnElement="F_Graph_Gw">
+        <omgdi:waypoint x="490" y="200"/><omgdi:waypoint x="540" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Unbekannt_Festhalten" bpmnElement="F_Unbekannt_Festhalten">
+        <omgdi:waypoint x="440" y="142"/><omgdi:waypoint x="440" y="70"/><omgdi:waypoint x="640" y="70"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Festhalten_Merge" bpmnElement="F_Festhalten_Merge">
+        <omgdi:waypoint x="740" y="70"/><omgdi:waypoint x="815" y="70"/><omgdi:waypoint x="815" y="175"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Konto_Ja" bpmnElement="F_Gw_Konto_Ja">
+        <omgdi:waypoint x="590" y="200"/><omgdi:waypoint x="640" y="200"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="607" y="182" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Merge_Nein" bpmnElement="F_Gw_Merge_Nein">
+        <omgdi:waypoint x="565" y="225"/><omgdi:waypoint x="565" y="300"/><omgdi:waypoint x="815" y="300"/><omgdi:waypoint x="815" y="225"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="571" y="255" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Konto_Merge" bpmnElement="F_Konto_Merge">
+        <omgdi:waypoint x="740" y="200"/><omgdi:waypoint x="790" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Merge_Entscheider" bpmnElement="F_Merge_Entscheider">
+        <omgdi:waypoint x="840" y="200"/><omgdi:waypoint x="890" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Entscheider_Split" bpmnElement="F_Entscheider_Split">
+        <omgdi:waypoint x="990" y="200"/><omgdi:waypoint x="1040" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Wer" bpmnElement="F_Split_Wer">
+        <omgdi:waypoint x="1090" y="200"/><omgdi:waypoint x="1140" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Split_Mail" bpmnElement="F_Split_Mail">
+        <omgdi:waypoint x="1065" y="175"/><omgdi:waypoint x="1065" y="80"/><omgdi:waypoint x="1140" y="80"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Mail_Ende" bpmnElement="F_Mail_Ende">
+        <omgdi:waypoint x="1240" y="80"/><omgdi:waypoint x="1840" y="80"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Wer_Gruppe" bpmnElement="F_Wer_Gruppe">
+        <omgdi:waypoint x="1190" y="200"/><omgdi:waypoint x="1240" y="200"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1197" y="182" width="36" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Wer_Person" bpmnElement="F_Wer_Person">
+        <omgdi:waypoint x="1165" y="225"/><omgdi:waypoint x="1165" y="340"/><omgdi:waypoint x="1240" y="340"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1171" y="320" width="36" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gruppe_Merge" bpmnElement="F_Gruppe_Merge">
+        <omgdi:waypoint x="1340" y="200"/><omgdi:waypoint x="1390" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Person_Merge" bpmnElement="F_Person_Merge">
+        <omgdi:waypoint x="1340" y="340"/><omgdi:waypoint x="1415" y="340"/><omgdi:waypoint x="1415" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_WerMerge_Gw" bpmnElement="F_WerMerge_Gw">
+        <omgdi:waypoint x="1440" y="200"/><omgdi:waypoint x="1490" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Prov" bpmnElement="F_Gw_Provisionieren">
+        <omgdi:waypoint x="1540" y="200"/><omgdi:waypoint x="1590" y="200"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1557" y="182" width="14" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Gw_Abl" bpmnElement="F_Gw_Ablehnen">
+        <omgdi:waypoint x="1515" y="225"/><omgdi:waypoint x="1515" y="340"/><omgdi:waypoint x="1590" y="340"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1521" y="300" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Prov_Join" bpmnElement="F_Prov_Join">
+        <omgdi:waypoint x="1690" y="200"/><omgdi:waypoint x="1740" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Abl_Join" bpmnElement="F_Abl_Join">
+        <omgdi:waypoint x="1690" y="340"/><omgdi:waypoint x="1765" y="340"/><omgdi:waypoint x="1765" y="225"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Join_Ende" bpmnElement="F_Join_Ende">
+        <omgdi:waypoint x="1790" y="200"/><omgdi:waypoint x="1840" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Mail" bpmnElement="F_Erinnerung_Mail">
+        <omgdi:waypoint x="1320" y="398"/><omgdi:waypoint x="1320" y="500"/><omgdi:waypoint x="1590" y="500"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Erinnerung_Ende" bpmnElement="F_Erinnerung_Ende">
+        <omgdi:waypoint x="1690" y="500"/><omgdi:waypoint x="1840" y="500"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Frist_Naechster" bpmnElement="F_Frist_Naechster">
+        <omgdi:waypoint x="1270" y="398"/><omgdi:waypoint x="1270" y="620"/><omgdi:waypoint x="1440" y="620"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Naechster_Konto" bpmnElement="F_Naechster_Konto">
+        <omgdi:waypoint x="1540" y="620"/><omgdi:waypoint x="1590" y="620"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_KontoNaechster_Eskalieren" bpmnElement="F_KontoNaechster_Eskalieren">
+        <omgdi:waypoint x="1690" y="620"/><omgdi:waypoint x="1740" y="620"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_UnbekanntNaechster_Eskalieren" bpmnElement="F_UnbekanntNaechster_Eskalieren">
+        <omgdi:waypoint x="1490" y="678"/><omgdi:waypoint x="1490" y="720"/><omgdi:waypoint x="1790" y="720"/><omgdi:waypoint x="1790" y="660"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="E_Eskalieren_Ende" bpmnElement="F_Eskalieren_Ende">
+        <omgdi:waypoint x="1840" y="620"/><omgdi:waypoint x="1890" y="620"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

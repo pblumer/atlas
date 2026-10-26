@@ -89,6 +89,38 @@ func (s *Service) CountForApplicationOnLoop(applicationID string) (int, error) {
 	return len(models), nil
 }
 
+// ModelsForApplicationOnLoop lists the models one application owns, newest first,
+// for a deletion preview. Same run-loop precondition as CountForApplicationOnLoop.
+func (s *Service) ModelsForApplicationOnLoop(applicationID string) ([]Summary, error) {
+	models, err := s.store.ForApplication(applicationID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Summary, 0, len(models))
+	for _, m := range models {
+		out = append(out, summarize(m))
+	}
+	return out, nil
+}
+
+// DeleteForApplicationOnLoop removes every model one application owns — the purge
+// of that application
+// (ADR-0468). A model is owned
+// strictly (ADR-0189), so it goes with its application rather than being left
+// without one. Same run-loop precondition as CountForApplicationOnLoop; idempotent.
+func (s *Service) DeleteForApplicationOnLoop(applicationID string) error {
+	models, err := s.store.ForApplication(applicationID)
+	if err != nil {
+		return err
+	}
+	for _, m := range models {
+		if err := s.store.Delete(m.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CountsByApplicationOnLoop returns the artifact-count contribution Panorama
 // makes to every application. It has the same run-loop precondition as
 // CountForApplicationOnLoop and performs one store scan for a whole listing.

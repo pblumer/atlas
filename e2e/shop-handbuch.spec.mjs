@@ -13,6 +13,11 @@ function installMock(page) {
     const method = req.method();
     const body = req.postData();
     calls.push({ method, path, body });
+    // A fixed approver is an account: the approval becomes a task assigned to its
+    // username, so the installer offers usernames for it, not user ids.
+    if (path.endsWith("/users/assignable")) {
+      return route.fulfill({ json: [{ username: "fmeier", displayName: "Fabienne Meier" }] });
+    }
     if (path.endsWith("/principals")) {
       return route.fulfill({ json: [
         { type: "user", id: "usr-fm", name: "Fabienne Meier" },
@@ -56,7 +61,7 @@ test("the installer asks for the audiences and approvers and imports the shop wi
   await expect(q.locator("select")).toHaveCount(4);
   await q.locator('select[data-ph="zielgruppe"]').selectOption("grp-alle");
   await q.locator('select[data-ph="zielgruppe-bau"]').selectOption("grp-bau");
-  await q.locator('select[data-ph="facility-management"]').selectOption("usr-fm");
+  await q.locator('select[data-ph="facility-management"]').selectOption("fmeier");
   await q.locator('select[data-ph="geoportal-verantwortliche"]').selectOption("grp-geo");
   await page.click("#inst-go");
   await expect(page.locator("#inst-status")).toContainText("Installiert");
@@ -73,7 +78,7 @@ test("the installer asks for the audiences and approvers and imports the shop wi
   expect(doc.publish).toBe(true);
   expect(doc.catalogs.map((c) => c.groups[0])).toEqual(["grp-alle", "grp-bau"]);
   const approval = Object.fromEntries(doc.products.map((p) => [p.id, p.approval]));
-  expect(approval["vd-parkplatz"]).toEqual({ kind: "fixed", ref: "usr-fm" });
+  expect(approval["vd-parkplatz"]).toEqual({ kind: "fixed", ref: "fmeier" });
   expect(approval["vd-geoportal"]).toEqual({ kind: "role", ref: "grp-geo" });
   expect(JSON.stringify(doc)).not.toContain("{{");
   expect(errors).toEqual([]);

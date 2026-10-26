@@ -1,5 +1,6 @@
 // Moving a catalogue between installations, from the catalogue screen
-// (ADR-0451).
+// (ADR-0451), and asking before an import replaces what changed here
+// (ADR-0467).
 //
 // The export buttons ask the server for the document and hand it to the browser as a
 // file; the import reads a file and posts it. Neither is something a Go test can see:
@@ -54,12 +55,72 @@ test("importing products posts the file into this catalogue", async ({ page }) =
   const doc = { products: [{ id: "neu", texts: { de: "Neu" } }] };
   await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile(doc));
   await page.locator('.cat-transfer [data-act="import-products"]').click();
-  await expect.poll(async () => (await sent(page, "POST")).length).toBe(1);
-  const [call] = await sent(page, "POST");
+  // The plan first, then — nothing on the server differing — the import itself.
+  await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
+  const [plan, call] = await sent(page, "POST");
+  expect(plan.url).toBe("/api/v1/catalogs/import?into=c1&dryRun=true");
   expect(call.url).toBe("/api/v1/catalogs/import?into=c1");
   expect(call.body).toEqual(doc);
   const toasts = await page.evaluate(() => window.__toasts);
   expect(toasts.map((t) => t.msg).join(" ")).toContain("1 created");
+});
+
+test("an import that would replace what changed here asks first, one box each", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.__importPlan = [
+      { ref: "product:p1", name: "P1", status: "unchanged", outcome: "unchanged" },
+      { ref: "product:p2", name: "Laptop", status: "changed", outcome: "undecided" },
+      { ref: "product:p3", name: "Monitor", status: "changed", outcome: "undecided" },
+    ];
+  });
+  await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
+  await page.locator('.cat-transfer [data-act="import-products"]').click();
+  const dialog = page.locator(".import-choices");
+  await expect(dialog).toContainText("2 changed on both sides");
+  await expect(dialog.locator(".import-pick")).toHaveCount(2);
+  // Unticked is keep: nothing is replaced unless somebody ticks it.
+  await dialog.locator('.import-pick[value="product:p2"]').check();
+  await dialog.locator("[data-ok]").click();
+  await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
+  const [, call] = await sent(page, "POST");
+  expect(decodeURIComponent(call.url)).toBe("/api/v1/catalogs/import?into=c1&overwrite=product:p2&keep=product:p3");
+});
+
+test("what is newer in the file starts ticked, what changed here only does not", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.__importPlan = [
+      { ref: "product:p2", name: "Laptop", status: "changed", outcome: "undecided" },
+      { ref: "product:p3", name: "Monitor", status: "behind", outcome: "updated" },
+      { ref: "product:p4", name: "Maus", status: "behind", outcome: "updated" },
+      { ref: "product:p5", name: "Dock", status: "ahead", outcome: "kept" },
+    ];
+  });
+  await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
+  await page.locator('.cat-transfer [data-act="import-products"]').click();
+  const dialog = page.locator(".import-choices");
+  await expect(dialog.locator('.import-pick[value="product:p3"]')).toBeChecked();
+  await expect(dialog.locator('.import-pick[value="product:p5"]')).not.toBeChecked();
+  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Changed here only");
+  // Left as they start, behind and ahead are not named; a box moved is.
+  await dialog.locator('.import-pick[value="product:p4"]').uncheck();
+  await dialog.locator("[data-ok]").click();
+  await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
+  const [, call] = await sent(page, "POST");
+  expect(decodeURIComponent(call.url)).toBe("/api/v1/catalogs/import?into=c1&keep=product:p2,product:p4");
+});
+
+test("cancelling the choice imports nothing", async ({ page }) => {
+  await open(page);
+  await page.evaluate(() => {
+    window.__importPlan = [{ ref: "product:p2", name: "Laptop", status: "changed", outcome: "undecided" }];
+  });
+  await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
+  await page.locator('.cat-transfer [data-act="import-products"]').click();
+  await page.locator(".import-choices [data-cancel]").click();
+  await expect(page.locator(".import-choices")).toHaveCount(0);
+  expect((await sent(page, "POST")).length).toBe(1);
 });
 
 test("a refused import lists every problem and the processes it deployed", async ({ page }) => {
@@ -91,8 +152,39 @@ test("the catalogue list imports a whole file, published when asked", async ({ p
   await page.locator('.cat-import [name="catalogFile"]').setInputFiles(aFile(doc));
   await page.locator('.cat-import [name="publish"]').check();
   await page.locator('.cat-import [data-act="import-catalog"]').click();
-  await expect.poll(async () => (await sent(page, "POST")).length).toBe(1);
-  const [call] = await sent(page, "POST");
+  await expect.poll(async () => (await sent(page, "POST")).length).toBe(2);
+  const [plan, call] = await sent(page, "POST");
+  expect(plan.url).toBe("/api/v1/catalogs/import?dryRun=true");
   expect(call.url).toBe("/api/v1/catalogs/import");
   expect(call.body).toEqual({ ...doc, publish: true });
+});
+
+test("the catalogue list shows the table of names package imports keep, to remove from and add to", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto("/catalog-editor-harness.html");
+  await page.waitForFunction(() => window.__ready === true);
+  await page.evaluate(() => {
+    window.__mappings = [
+      { kind: "group", answer: "Fachbereich Bau", id: "grp_all", name: "Everybody", here: true },
+      { kind: "account", answer: "Fabienne Meier", id: "weg", name: "", here: false },
+    ];
+    return window.__mountList();
+  });
+  const card = page.locator(".cat-mappings");
+  await expect(card.locator("tbody tr")).toHaveCount(2);
+  await expect(card.locator('tr[data-answer="Fabienne Meier"]')).toContainText("no longer here");
+  await page.evaluate(() => { window.__sent.length = 0; });
+
+  await card.locator('tr[data-answer="Fachbereich Bau"] [data-act="mapping-remove"]').click();
+  await expect.poll(() => sent(page, "DELETE")).toHaveLength(1);
+  expect((await sent(page, "DELETE"))[0].url).toBe("/api/v1/catalogs/import/mappings?kind=group&answer=Fachbereich+Bau");
+
+  // An approver is chosen among the accounts, by username.
+  await card.locator('.mapping-add [name="kind"]').selectOption("account");
+  await expect(card.locator('.mapping-add [name="id"] option')).toHaveText(["Arno"]);
+  await card.locator('.mapping-add [name="answer"]').fill("Arno Muster");
+  await card.locator(".mapping-add button[type=submit]").click();
+  await expect.poll(async () => (await sent(page, "POST")).filter((c) => c.url.endsWith("/mappings"))).toHaveLength(1);
+  const [post] = (await sent(page, "POST")).filter((c) => c.url.endsWith("/mappings"));
+  expect(post.body).toEqual({ mappings: [{ kind: "account", answer: "Arno Muster", id: "arno" }] });
 });

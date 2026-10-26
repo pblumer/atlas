@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,13 @@ func (s *Server) inboundBridge(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-t.C:
+			// While writes are paused the source keeps what it has not delivered —
+			// the cursor only advances past events that were published — so the next
+			// poll after writes resume picks up where this one would have
+			// (ADR-0481).
+			if s.writesPaused() {
+				continue
+			}
 			s.pollInbound(context.Background())
 		}
 	}
@@ -81,8 +89,12 @@ func (s *Server) pollInbound(ctx context.Context) {
 		}
 		events, cursor, err := sb.source.Read(ctx, sb.rec, s.inboundBatch)
 		if err != nil {
-			continue // transient read failure; retry next tick
+			// Retried next tick, and said in the watch's listing meanwhile: a read that
+			// fails every time is otherwise indistinguishable from a quiet source.
+			s.noteInboundFailure(sb.rec, err.Error())
+			continue
 		}
+		s.noteInboundRead(sb.rec)
 		if len(events) == 0 {
 			// Nothing to publish — but a source may still have moved: a mail watch
 			// whose page held only senders it does not admit, a folder the server
@@ -108,7 +120,7 @@ func (s *Server) pollInbound(ctx context.Context) {
 				sourceID: inboundSourceID(sb.kind, sb.rec, ev.MarkKey),
 				seq:      ev.Seq,
 				key:      correlationKeyOf(sb.key, ev.Fields),
-				vars:     eventVars(ev.Fields),
+				vars:     eventVars(ev.payload()),
 			}
 		}
 		name := sb.rec.MessageName
@@ -309,8 +321,12 @@ const inboundPrimeBatch = 4096
 func (s *Server) primeInbound(ctx context.Context, sb pendingSub) {
 	cursor, done, err := sb.source.Prime(ctx, sb.rec)
 	if err != nil {
-		return // transient read failure; retry next tick
+		// Retried next tick. A watch that never primes never publishes, so this is the
+		// failure most worth seeing: it is the first read a new watch makes.
+		s.noteInboundFailure(sb.rec, err.Error())
+		return
 	}
+	s.noteInboundRead(sb.rec)
 	subID := sb.rec.ID
 	s.do(func() { s.markInboundPrimed(subID, cursor, done) })
 }
@@ -333,8 +349,12 @@ func (s *Server) markInboundPrimed(subID, lastEventID string, primed bool) {
 }
 
 // resolveInboundSubs loads the enabled subscriptions whose worker is an enabled
-// clio worker with a live client, compiling each correlation key. It reads the
-// stores, so it runs on the run-loop goroutine.
+// worker with a live client, compiling each correlation key. It reads the stores, so
+// it runs on the run-loop goroutine.
+//
+// An enabled watch it cannot resolve is not dropped in silence: why is recorded as the
+// watch's failure, which its listing shows. That is the case a person cannot otherwise
+// tell from a source with nothing new in it.
 func (s *Server) resolveInboundSubs() []pendingSub {
 	recs, err := s.inboundSubs.LoadAll()
 	if err != nil {
@@ -349,12 +369,20 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		byID[c.ID] = c
 	}
 	var out []pendingSub
+	live := make(map[string]bool, len(recs))
+	defer s.inboundHealth.retain(live)
 	for _, r := range recs {
 		if !r.Enabled {
 			continue
 		}
+		live[r.ID] = true
 		c, ok := byID[r.ConnectorID]
-		if !ok || !c.Enabled {
+		if !ok {
+			s.noteInboundFailure(r, "its Worker no longer exists")
+			continue
+		}
+		if !c.Enabled {
+			s.noteInboundFailure(r, "its Worker "+strconv.Quote(c.Name)+" is switched off")
 			continue
 		}
 		// The worker's kind is the discriminator: a watch record carries no kind of
@@ -365,18 +393,21 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		case connectorKindClio:
 			client, ok := s.clioRegistry.Client(c.Name)
 			if !ok {
+				s.noteInboundFailure(r, s.inboundClientMissing(c))
 				continue
 			}
 			src = clioSource{client: client}
 		case connectorKindJira:
 			client, ok := s.jiraRegistry.Client(c.Name)
 			if !ok {
+				s.noteInboundFailure(r, s.inboundClientMissing(c))
 				continue
 			}
 			src = jiraSource{client: client, now: s.inboundNow}
 		case connectorKindGoogleSheets:
 			client, ok := s.googleSheetsRegistry.Client(c.Name)
 			if !ok {
+				s.noteInboundFailure(r, s.inboundClientMissing(c))
 				continue
 			}
 			// Which of the two Google watches this is follows from the target the
@@ -390,23 +421,30 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 		case connectorKindDiscord:
 			client, ok := s.discordRegistry.Client(c.Name)
 			if !ok {
+				s.noteInboundFailure(r, s.inboundClientMissing(c))
 				continue
 			}
 			src = discordSource{client: client}
 		case connectorKindMail:
 			client, ok := s.mailRegistry.Client(c.Name)
 			if !ok {
+				s.noteInboundFailure(r, s.inboundClientMissing(c))
 				continue
 			}
 			// A mail Worker that only sends — SMTP without an IMAP endpoint, the
-			// preview provider — has no mailbox to watch (ADR-0438).
+			// preview provider — has no mailbox to watch (ADR-0438). The create route
+			// refuses such a watch; this is the one made before it did, or the Worker
+			// whose IMAP endpoint was taken away afterwards.
 			mb, err := mail.MailboxOf(client)
 			if err != nil {
+				s.noteInboundFailure(r, err.Error())
 				continue
 			}
 			src = mailSource{mb: mb}
 		default:
-			continue // a kind with no inbound half; its worker is outbound only
+			// A kind with no inbound half; its worker is outbound only.
+			s.noteInboundFailure(r, "Worker Type "+c.Kind+" has no inbound half, so nothing reads this watch")
+			continue
 		}
 		var compiled *expr.Compiled
 		if strings.TrimSpace(r.CorrelationKey) != "" {
@@ -418,6 +456,7 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 			// arriving from the other side
 			// (ADR-0392).
 			if compiled, err = expr.CompileAuto(r.CorrelationKey); err != nil {
+				s.noteInboundFailure(r, "its correlation key no longer compiles: "+err.Error())
 				continue
 			}
 		}

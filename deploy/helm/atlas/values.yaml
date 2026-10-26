@@ -169,6 +169,20 @@ atlas:
   # and setting it back to true restores everything at the next rollout.
   catalogue:
     enabled: true
+    # -- Let an administrator delete a catalogue or a product for good, with its
+    # orders, the instances working them and the holds they granted
+    # (--catalogue-purge). On by default (opt-out). SET IT TO false ON PRODUCTION:
+    # there a product is withdrawn and a catalogue kept, because orders and held
+    # rights resolve through them. Meant for development and test installations.
+    # While it is true, every start logs a WARN (event=server.catalogue_purge_enabled).
+    purge: true
+
+  # -- Let an administrator delete a process version's finished instances for good,
+  # those that finished before a cut-off (--instance-purge). Running instances are
+  # never touched, and nothing is deleted before the OpenSearch exporter has it. On by
+  # default (opt-out). SET IT TO false ON PRODUCTION, where the history is evidence.
+  # While it is true, every start logs a WARN (event=server.instance_purge_enabled).
+  instancePurge: true
 
   # -- Script task workers. Each shells out to an interpreter and runs arbitrary
   # code (ADR-0047). The default image bundles python3 and node, so those are ON;

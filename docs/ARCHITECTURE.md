@@ -230,6 +230,15 @@ The single writer must never block. Service tasks therefore never call external 
 
 This keeps the processor at full speed and makes external work naturally at-least-once, with idempotency handled via job keys. See [ADR-0007](adr/0007-job-worker-protocol.md).
 
+The same Worker Instances answer a second, **non-durable** kind of message: a *worker
+query*. A person searching a directory from a task form is not work the process depends
+on, so it is not a job — nothing is appended to the log, nothing is replayed, and the
+processor never sees it. The HTTP request that asks holds the query in an in-memory broker
+beside the engine; a Worker Instance holding the named Worker leases it, answers with one
+bounded page under its own credential, and the broker hands the page back to the waiting
+request. Only the value the person finally submits becomes durable, through the ordinary
+task completion. See [ADR-0473](adr/0473-form-remote-data-sources.md).
+
 ## BPMN coverage
 
 The target is full BPMN 2.0 execution semantics. Coverage is delivered in phases (see the [roadmap](../ROADMAP.md)):
@@ -263,10 +272,12 @@ atlas/
 ├── expr/          FEEL expression compilation and evaluation
 ├── job/           Job store, worker subscription, gRPC streaming protocol
 ├── dmn/           DMN registry, resolver, validation, business-rule-task worker
+├── authz/         Authorization decision point: compiled policies, fail-closed combining,
+│                  obligations, action digests (ADR-0475)
 ├── connector/     Worker Type implementations, one package per type (ADR-0203)
 │   ├── rest/          HTTP REST outbound (ADR-0067)
 │   ├── mail/          Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
-│   ├── sharepoint/    SharePoint list items via Graph (ADR-0141)
+│   ├── sharepoint/    SharePoint lists and document libraries via Graph (ADR-0141)
 │   ├── remedy/        BMC Remedy AR System (ADR-0106)
 │   ├── jira/          Atlassian Jira issues (ADR-0201)
 │   ├── googlesheets/  Google Sheets and Drive (ADR-0235)
@@ -283,6 +294,8 @@ atlas/
 │   │                  diagram onto a deployed model (ADR-0124/0127)
 │   ├── collab/        Live collaborative modeling sessions (ADR-0140)
 │   ├── vault/         Encrypted secret store (ADR-0069/0070)
+│   ├── identity/      Linked external accounts, delegated connections, the token broker
+│   ├── policy/        Authorization policies: drafts, immutable versions, the simulator
 │   ├── sidecar/       Store[T]: the durable one-file-per-record store behind every design-time store
 │   ├── processdoc/    Process documentation (ADR-0143), the first per-area service (ADR-0147)
 │   └── formgen/       Writing a form from a description and from the process it belongs

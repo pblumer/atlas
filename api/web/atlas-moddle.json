@@ -310,6 +310,7 @@
         { "name": "subject", "type": "String", "isAttr": true },
         { "name": "body", "type": "String", "isAttr": true },
         { "name": "bodyHtml", "type": "String", "isAttr": true },
+        { "name": "templating", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "operation", "type": "String", "isAttr": true },
         { "name": "folder", "type": "String", "isAttr": true },
@@ -318,7 +319,12 @@
         { "name": "maxResults", "type": "String", "isAttr": true },
         { "name": "includeBody", "type": "String", "isAttr": true },
         { "name": "unreadOnly", "type": "String", "isAttr": true },
-        { "name": "resultVariable", "type": "String", "isAttr": true }
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "attachmentId", "type": "String", "isAttr": true },
+        { "name": "allowedTypes", "type": "String", "isAttr": true },
+        { "name": "store", "type": "String", "isAttr": true },
+        { "name": "bucket", "type": "String", "isAttr": true },
+        { "name": "key", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -342,8 +348,17 @@
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
       "properties": [
         { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
         { "name": "site", "type": "String", "isAttr": true },
         { "name": "list", "type": "String", "isAttr": true },
+        { "name": "itemId", "type": "String", "isAttr": true },
+        { "name": "path", "type": "String", "isAttr": true },
+        { "name": "content", "type": "String", "isAttr": true },
+        { "name": "encoding", "type": "String", "isAttr": true },
+        { "name": "filter", "type": "String", "isAttr": true },
+        { "name": "select", "type": "String", "isAttr": true },
+        { "name": "pageToken", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "fields", "type": "ItemField", "isMany": true }
@@ -502,6 +517,42 @@
       ]
     },
     {
+      "name": "CarddavConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "contactId", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "field", "type": "String", "isAttr": true },
+        { "name": "group", "type": "String", "isAttr": true },
+        { "name": "contact", "type": "String", "isAttr": true },
+        { "name": "contactVariable", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "GoogleContactsConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "contactId", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "field", "type": "String", "isAttr": true },
+        { "name": "group", "type": "String", "isAttr": true },
+        { "name": "contact", "type": "String", "isAttr": true },
+        { "name": "contactVariable", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "TeamsPhoneConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },
@@ -524,6 +575,15 @@
         { "name": "presenceBasedRouting", "type": "String", "isAttr": true },
         { "name": "conferenceMode", "type": "String", "isAttr": true },
         { "name": "allowOptOut", "type": "String", "isAttr": true },
+        { "name": "identity", "type": "String", "isAttr": true },
+        { "name": "phoneNumber", "type": "String", "isAttr": true },
+        { "name": "numberType", "type": "String", "isAttr": true },
+        { "name": "locationId", "type": "String", "isAttr": true },
+        { "name": "resourceAccountIds", "type": "String", "isAttr": true },
+        { "name": "names", "type": "String", "isAttr": true },
+        { "name": "numberPrefix", "type": "String", "isAttr": true },
+        { "name": "max", "type": "String", "isAttr": true },
+        { "name": "assignableTo", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
       ]

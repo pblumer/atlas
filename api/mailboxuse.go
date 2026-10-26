@@ -22,7 +22,9 @@ import (
 // deployer cannot reach — viewer for reading, editor for changing or answering — and
 // when it names a mail Worker that does not exist, because a model deployed against a
 // name nobody holds today reads whichever mailbox somebody configures under it
-// tomorrow. A send is not checked: it stays exactly as open as it was.
+// tomorrow. A send is not checked: it stays exactly as open as it was. An
+// export-attachment is checked twice: the mailbox it reads and the S3 Worker it writes
+// into.
 //
 // It is a check at the doors, as ADR-0205's claim is, and not isolation: it decides
 // whether a definition may be deployed and is not consulted while a job runs.
@@ -60,9 +62,13 @@ func (s *Server) mailboxUseBlockingModel(r *http.Request, body []byte) (*mailbox
 		return nil, err
 	}
 	byName := make(map[string]connector, len(recs))
+	stores := map[string]connector{}
 	for _, c := range recs {
-		if c.Kind == connectorKindMail {
+		switch c.Kind {
+		case connectorKindMail:
 			byName[c.Name] = c
+		case connectorKindS3:
+			stores[c.Name] = c
 		}
 	}
 	for _, u := range uses {
@@ -80,6 +86,24 @@ func (s *Server) mailboxUseBlockingModel(r *http.Request, body []byte) (*mailbox
 		if code, _ := s.checkConnectorRole(r, conn, need); code != 0 {
 			ref.reason = "you may not " + verb + " this worker's mailbox. Ask whoever owns the worker to " +
 				"share it with you (as " + need + ")."
+			return ref, nil
+		}
+		// An export writes into a second Worker, so the deployer must be able to write
+		// through that one too — as an editor, the role that changes what a Worker
+		// holds (ADR-0478). Without this a bucket
+		// private in the Console would be writable by anybody who can draw an export.
+		if u.Store == "" {
+			continue
+		}
+		store, ok := stores[u.Store]
+		if !ok {
+			ref.reason = "it exports into the S3 worker " + u.Store + ", and no S3 worker of that name exists. " +
+				"Configure it first."
+			return ref, nil
+		}
+		if code, _ := s.checkConnectorRole(r, store, ScopeRoleEditor); code != 0 {
+			ref.reason = "it exports into the S3 worker " + u.Store + ", which you may not write into. Ask whoever owns " +
+				"that worker to share it with you (as " + ScopeRoleEditor + ")."
 			return ref, nil
 		}
 	}

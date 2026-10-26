@@ -3,7 +3,7 @@
 The `entra` Worker Type ([ADR-0172](adr/0172-entra-id-connector.md)) is worker-only:
 the tenant id, client id and client secret live in the worker's environment or the
 Console vault, never in the engine. That app registration is the most valuable secret
-any Atlas worker holds — an application permission such as `User.ReadWrite.All` can
+any atlas worker holds — an application permission such as `User.ReadWrite.All` can
 create and disable accounts across the **whole** directory. This page names the smallest
 set of Microsoft Graph **application** permissions each operation needs, so an operator
 grants what their processes use and nothing more.
@@ -30,7 +30,8 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | Operation(s) | Graph request | Minimal application permission |
 |---|---|---|
 | `create-user`, `update-user`, `delete-user`, `enable`, `disable`, `reset-password` | `POST` / `PATCH` / `DELETE /users/{id}` | **`User.ReadWrite.All`** |
-| `get-user`, `list-users`, `delta-users` | `GET /users[/delta]` | `User.Read.All` (subset of `User.ReadWrite.All`) |
+| `get-user`, `get-user-manager`, `list-users`, `delta-users` | `GET /users[/{id}][/delta]` — the manager as `GET /users/{id}?$expand=manager` | `User.Read.All` (subset of `User.ReadWrite.All`) |
+| A form's directory field (lookup, not an operation) | `GET /users?$filter=…&$select=…&$top=…`, and `GET /users/{id}?$select=…` to check a submitted id | `User.Read.All` — and the Worker's **Forms may search** switch in the Console ([ADR-0473](adr/0473-form-remote-data-sources.md)) |
 | `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the worker sends explicit `skuId`s rather than enumerating SKUs |
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |
@@ -78,7 +79,7 @@ when a process actually uses those operations, and drop them otherwise.
   even then it cannot act on holders of higher-privileged roles. Use `reset-password` only
   against ordinary accounts and no directory role is needed, which matches the
   test-object boundary the example processes enforce.
-- **The client secret, or a certificate.** Keep the credential in the Atlas vault
+- **The client secret, or a certificate.** Keep the credential in the atlas vault
   (Console), not in long-lived argv or plaintext environment, and rotate it. The worker
   reads a secret from `ATLAS_ENTRA_<NAME>_CLIENT_SECRET` (or `_CLIENT_SECRET_REF` for a
   vault key). An app that signs in with a certificate instead is configured with

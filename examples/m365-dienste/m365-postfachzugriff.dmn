@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365PostfachzugriffFreigabe: ob ein Postfachzugriff über die Genehmigung der vorgesetzten Person
+  hinaus die Zustimmung der Informationssicherheit braucht.
+
+  Eingaben: postfachtyp ("funktion" | "persoenlich"), zugriffsart ("vollzugriff" | "senden-als" | "im-auftrag")
+  Ausgaben: zusatzfreigabe (Wahrheitswert), hinweis (für die prüfende Stelle)
+
+  hitPolicy FIRST mit Auffangregel: Eine Kombination, die die Tabelle nicht kennt, verlangt die
+  Zusatzfreigabe (fail-closed). Die Regeln sind ein Vorschlag (ANNAHME), keine Rechtsauskunft;
+  massgebend ist die Weisung der eigenen Organisation.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365PostfachzugriffFreigabe" name="M365PostfachzugriffFreigabe" namespace="http://atlas/dmn">
+  <inputData id="id_postfachtyp" name="postfachtyp"/>
+  <inputData id="id_zugriffsart" name="zugriffsart"/>
+  <decision id="M365PostfachzugriffFreigabe" name="M365PostfachzugriffFreigabe">
+    <informationRequirement id="ir_postfachtyp"><requiredInput href="#id_postfachtyp"/></informationRequirement>
+    <informationRequirement id="ir_zugriffsart"><requiredInput href="#id_zugriffsart"/></informationRequirement>
+    <decisionTable id="dt_M365PostfachzugriffFreigabe" hitPolicy="FIRST">
+      <input id="in_postfachtyp" label="postfachtyp"><inputExpression id="ie_postfachtyp" typeRef="string"><text>postfachtyp</text></inputExpression></input>
+      <input id="in_zugriffsart" label="zugriffsart"><inputExpression id="ie_zugriffsart" typeRef="string"><text>zugriffsart</text></inputExpression></input>
+      <output id="out_zusatzfreigabe" label="zusatzfreigabe" name="zusatzfreigabe" typeRef="boolean"/>
+      <output id="out_hinweis" label="hinweis" name="hinweis" typeRef="string"/>
+      <rule id="r1">
+        <description>Funktionspostfach: keine Zusatzfreigabe</description>
+        <inputEntry id="r1_i0"><text>"funktion"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Funktionspostfach: Die Genehmigung der vorgesetzten Person genügt."</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Vollzugriff auf ein persönliches Postfach</description>
+        <inputEntry id="r2_i0"><text>"persoenlich"</text></inputEntry>
+        <inputEntry id="r2_i1"><text>"vollzugriff"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>true</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Vollzugriff auf ein persönliches Postfach legt fremde Korrespondenz offen."</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Senden als, persönliches Postfach</description>
+        <inputEntry id="r3_i0"><text>"persoenlich"</text></inputEntry>
+        <inputEntry id="r3_i1"><text>"senden-als"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"«Senden als» lässt Nachrichten im Namen der Person erscheinen, ohne dass es erkennbar ist."</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Senden im Auftrag, persönliches Postfach</description>
+        <inputEntry id="r4_i0"><text>"persoenlich"</text></inputEntry>
+        <inputEntry id="r4_i1"><text>"im-auftrag"</text></inputEntry>
+        <outputEntry id="r4_o0"><text>false</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"«Senden im Auftrag» weist die Stellvertretung beim Empfänger aus."</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Auffangregel: unbekannte Kombination</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>true</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Unbekannte Kombination: Zusatzfreigabe vorsorglich verlangt."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

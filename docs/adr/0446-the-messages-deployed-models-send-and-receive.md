@@ -1,7 +1,7 @@
 # ADR-0446: Atlas shows the messages its deployed models send and receive
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-22)
+- **Implementation:** Landed
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
 
@@ -170,6 +170,51 @@ depends on other deployments, and deploy order is free.
   carries is an engine change with its own record.
 - **The durable buffer** (ADR-0370). Once it is built, `message.unreceived` must say that a
   message with a TTL waits for a receiver instead of being lost.
+
+### As built
+
+Everything of §1 to §5 landed in one change, together with ADR-0447.
+
+- **The compiler.** `CompiledProcess.MessageSenders` lists every message throw event, message end
+  event and send task naming a message, all of which read the throw detail table.
+  `MessageReceivers` reports a message event subprocess, named by its start event, and every point
+  carries a `Role` in the signal record's words (`start`, `catch`, `boundary`, `event-subprocess`,
+  `throw`) and, for a boundary or an event subprocess, whether it interrupts. A receive task is a
+  `catch`, as an intermediate catch is. The `Start` flag the points carried is replaced by the role.
+- **Message-sources (§1).** The fourth kind is `process-throw`. A process row gains
+  `processName`, `version`, `newest`, `definitionKey`, `projectId`, `system`, `role` and, for a
+  boundary or an event subprocess, `interrupting`. `newest` is left out for an older version rather
+  than written as false, because the row is shared with the kinds that have no version. `element`
+  stays the coarse word a Modeler older than `role` reads: `start`, `catch` for every other receiver,
+  and `throw`. Every deployed version is listed now, not the newest alone, so that the grouped view
+  can list them and still read the same function. The Modeler reads the newest version only, and
+  treats a row without a version as one, which is what an older server sent.
+- **The listener view.** ADR-0435's administrator view reads `MessageReceivers`, so it gains message
+  event subprocesses, and its message rows say `boundary` and `event-subprocess` where they said
+  `catch` before.
+- **The grouped route (§2).** `GET /api/v1/message-names` (`modeler`) groups the rows of the one
+  function behind message-sources, `Server.messageSources`, by name. A row without a name is left out
+  of the groups.
+- **The findings, precisely (§3).** `messageFindings` reads the rows of one name.
+  - `message.unreceived`: a newest version's throw, an enabled watch or an active product action sends
+    the name, and no newest version that is not deactivated waits for it. A deactivated newest version
+    still counts as a sender, because its running instances can still send.
+  - `message.crosses-projects`: a newest sender and a newest receiver differ in project, with a
+    definition without a project counted as a project of its own, as for signals.
+  - `message.reserved-name`: a newest version outside atlas's own sends an `atlas.*` name. Atlas's own
+    is a system process or a definition filed in the system project.
+  - **The buffer.** Since this record was written, ADR-0370's buffer has landed as a local slice. It
+    keeps only a message published through `POST /api/v1/messages` with a `timeToLiveMs`; a throw, a
+    watch and a product action publish without one. So `message.unreceived` stays a finding, and its
+    sentence says which publish would have been kept. This answers the follow-up in §6.
+- **The Console and the Modeler (§5).** The section is the one ADR-0447 adds to the *Events* page,
+  with a channel filter, and a message name's detail lists the watches and product actions beside the
+  processes. The message picker of a receiving element has the group *Messages deployed models send*,
+  and its line names the processes that send the name, which ends the advice to add a watch for it.
+  A sending element's line names who waits for the name, or says that nobody does, with a link to
+  the page.
+- **MCP and the handbook.** `atlas_message_names` proxies the grouped route; message-sources stays
+  outside MCP. The handbook section of ADR-0447 covers messages and the senders that are not models.
 
 ### Consequences
 

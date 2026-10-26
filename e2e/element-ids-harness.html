@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas readable element ids e2e harness</title>
+    <!-- Drives the real api/web/elementids.js and the real api/web/editor.js mountEditor
+         against a mock `api` (ADR-0474): a new diagram's process
+         and start event, and every element drawn afterwards, are named
+         <type>_<yyyymmdd>_<researcher>, never twice in a diagram, and a process id the
+         installation already holds — a draft, a deployment, or one only the
+         availability check knows — is not handed out again. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+      import * as ids from "/elementids.js";
+
+      const view = document.getElementById("view");
+      let world = { drafts: [], processes: [], unavailable: [], draftXml: "", deployedXml: {} };
+      window.__calls = [];
+
+      const api = async (method, url) => {
+        window.__calls.push(method + " " + url);
+        const avail = url.match(/\/drafts\/([^/]+)\/availability$/);
+        if (method === "GET" && avail) {
+          const id = decodeURIComponent(avail[1]);
+          return { id, available: !world.unavailable.includes(id) };
+        }
+        if (method === "GET" && /\/drafts\/[^/]+\/xml$/.test(url)) return world.draftXml;
+        const deployed = url.match(/\/processes\/(\d+)\/xml$/);
+        if (method === "GET" && deployed) return world.deployedXml[deployed[1]] || "";
+        if (method === "GET" && /\/drafts$/.test(url)) return world.drafts;
+        if (method === "GET" && /\/processes$/.test(url)) return world.processes;
+        if (method === "GET" && /\/instances/.test(url)) return { items: [], total: 0, totalExact: true, truncated: false };
+        if (method === "GET" && /\/decisions/.test(url)) return [];
+        if (method === "GET" && /\/forms/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      // __mount opens the editor on a new diagram, or on a draft when the world carries
+      // its XML — the two ways an author starts drawing.
+      window.__mount = async (setup) => {
+        world = { drafts: [], processes: [], unavailable: [], draftXml: "", deployedXml: {}, ...(setup || {}) };
+        window.__calls = [];
+        const opts = { api, toast: () => {} };
+        if (world.draftXml) opts.draftId = "existing";
+        await mountEditor(view, opts);
+        // The deployed ids are loaded beside the editor; naming waits on nothing, but a
+        // test that names an element must know they have arrived.
+        await window.__atlasModeler.atlasNameIdsReady;
+      };
+
+      const modeler = () => window.__atlasModeler;
+      window.__processId = () => {
+        const defs = modeler().getDefinitions();
+        return defs.rootElements.filter((e) => e.$type === "bpmn:Process").map((e) => e.id);
+      };
+      window.__ids = () => modeler().get("elementRegistry").getAll()
+        .filter((e) => e.type !== "label").map((e) => e.businessObject.id);
+
+      // __draw creates n elements of one BPMN type on the root, as the palette does.
+      window.__draw = (type, n) => {
+        const m = modeler();
+        const modeling = m.get("modeling");
+        const factory = m.get("elementFactory");
+        const root = m.get("canvas").getRootElement();
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          const shape = factory.createShape({ type });
+          modeling.createShape(shape, { x: 100 + (i % 20) * 120, y: 300 + Math.floor(i / 20) * 120 }, root);
+          out.push(shape.businessObject.id);
+        }
+        return out;
+      };
+      // __connect draws a sequence flow between the first two shapes it is given.
+      window.__connect = (a, b) => {
+        const m = modeler();
+        const reg = m.get("elementRegistry");
+        const c = m.get("modeling").connect(reg.get(a), reg.get(b), { type: "bpmn:SequenceFlow" });
+        return c.businessObject.id;
+      };
+      // __create asks the bpmn factory for a bare semantic element, the way Atlas's own
+      // code adds a message, signal, error or escalation to the definitions.
+      window.__create = (type) => modeler().get("bpmnFactory").create(type).id;
+      window.__nextPrefixed = (prefix) => modeler().get("moddle").ids.nextPrefixed(prefix);
+
+      // __name names an element as the properties panel does (updateProperties), or —
+      // with onCanvas — as typing into its label on the canvas does (updateLabel). It
+      // answers the element's id afterwards, found through the business object, since
+      // the id is what may change.
+      window.__name = (id, name, onCanvas) => {
+        const m = modeler();
+        const el = m.get("elementRegistry").get(id);
+        const bo = el.businessObject;
+        if (onCanvas) m.get("modeling").updateLabel(el, name);
+        else m.get("modeling").updateProperties(el, { name });
+        return bo.id;
+      };
+      window.__setId = (id, next) => {
+        const m = modeler();
+        const el = m.get("elementRegistry").get(id);
+        m.get("modeling").updateProperties(el, { id: next });
+        return el.businessObject.id;
+      };
+      window.__undo = () => modeler().get("commandStack").undo();
+      window.__redo = () => modeler().get("commandStack").redo();
+      window.__has = (id) => !!modeler().get("elementRegistry").get(id);
+
+      window.__lib = ids;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

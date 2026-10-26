@@ -27,6 +27,20 @@ import (
 // before roles existed, so an account that keeps modeler, operator and user on
 // upgrade can still do exactly what it could yesterday: everything except these.
 var wantAdminRoutes = []string{
+	// Who may do what as whom (ADR-0475): the policies
+	// that decide every governed Worker action, the identity a Worker acts as, the
+	// readiness inventory, and the view of what can act as a given person. A modeler
+	// who deploys BPMN must not be able to change any of them.
+	"GET /api/v1/security/policies",
+	"GET /api/v1/security/policies/{id}",
+	"PUT /api/v1/security/policies/{id}/draft",
+	"POST /api/v1/security/policies/{id}/publish",
+	"POST /api/v1/security/policies/{id}/enabled",
+	"POST /api/v1/security/policies/simulate",
+	"GET /api/v1/security/readiness",
+	"PUT /api/v1/configured-workers/{id}/identity",
+	"DELETE /api/v1/configured-workers/{id}/identity",
+	"GET /api/v1/users/{id}/connections",
 	// The instance itself: its log, its data, its recovery, and the identity it
 	// presents to other servers (ADR-0189 §6). Reading that identity is open to any
 	// signed-in caller — correlation needs it — but naming this node is an operator
@@ -39,6 +53,9 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/restore/full",
 	"GET /api/v1/checkpoints",
 	"POST /api/v1/checkpoints",
+	// The disk under the data directory and its reserve (ADR-0481):
+	// the same paths and sizes the checkpoint status names.
+	"GET /api/v1/storage",
 
 	// Code execution outside a deployment, and the overrides that decide which
 	// process a call activity reaches on this server.
@@ -79,6 +96,11 @@ var wantAdminRoutes = []string{
 	// process bound* travel with them, and nothing can tell a password on its way into
 	// a table from an id — a stronger reason than the directory's, for the same gate.
 	"GET /api/v1/sql/mock-journal",
+	// And what a SharePoint mockup holds: invented sites, filled with whatever a process
+	// wrote — applicants, amounts, letters. Emptying one sits behind the same gate as
+	// reading it, so only the person who can see a site can throw it away.
+	"GET /api/v1/mocks",
+	"DELETE /api/v1/sharepoint/mock-sites/{worker}",
 
 	// Credentials, in every shape Atlas has one.
 	"POST /api/v1/targets",
@@ -144,6 +166,20 @@ var wantAdminRoutes = []string{
 	// back to a browser.
 	"PUT /api/v1/catalogs/{id}/logo",
 	"DELETE /api/v1/catalogs/{id}/logo",
+	// Deleting a catalogue or a product for good, and reading what that would take
+	// with it (ADR-0469). It deletes orders and takes holds out of the
+	// inventory — the evidence a product manager maintains a catalogue around, not
+	// something one may remove — and a production server switches it off altogether.
+	"GET /api/v1/catalogs/{id}/deletion",
+	"DELETE /api/v1/catalogs/{id}",
+	"GET /api/v1/catalog-products/{id}/deletion",
+	"DELETE /api/v1/catalog-products/{id}",
+	// Deleting a version's finished instances for good
+	// (ADR-0486): history is evidence, the
+	// purge cannot be undone, and a production server switches it off altogether.
+	// The preview is the administrator's too, because it is how the purge is decided.
+	"GET /api/v1/processes/{key}/history-purge",
+	"POST /api/v1/processes/{key}/history-purge",
 	"DELETE /api/v1/settings/theme",
 	"PUT /api/v1/settings/logo",
 	"DELETE /api/v1/settings/logo",

@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Erledigte Anträge aufräumen (SharePoint) — der Folgeprozess zu
+  sharepoint-fallakte.bpmn: Er findet die Anträge, die auf "Erledigt" stehen, Seite für
+  Seite, und löscht zu jedem den Fallordner und danach den Listeneintrag.
+
+    Start "Aufräumen angestossen"
+     → "Ablageort festlegen"                  (Script → ablage)
+     → Merge
+     → "Erledigte Anträge suchen"             (list-items mit Filter → seite)
+     → "Fallordner löschen"                   (delete-file, parallel je Antrag)
+     → "Anträge löschen"                      (delete-item, parallel je Antrag)
+     → Gateway "Weitere Seite?"
+         ├ ja    → zurück zum Merge           (mit seite.nextPageToken)
+         └ nein  → Ende "Aufgeräumt"
+
+  Gelöschte Ordner, Dateien und Listeneinträge landen im Papierkorb der Site und lassen
+  sich dort wiederherstellen.
+
+  Läuft nicht ohne SharePoint-Worker "intranet"; siehe sharepoint-fallakte.bpmn.
+  Keine Startvariablen.
+-->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                  xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+                  xmlns:atlas="http://atlas/schema/1.0"
+                  id="defs_sharepoint_aufraeumen"
+                  targetNamespace="http://atlas/examples">
+
+  <bpmn:process id="proc_sharepoint_aufraeumen" name="Erledigte Anträge aufräumen (SharePoint)" isExecutable="true">
+    <bpmn:documentation>Räumt ab, was sharepoint-fallakte.bpmn angelegt hat, sobald ein Antrag erledigt ist: Zu jedem
+Antrag mit Status "Erledigt" löscht er den Fallordner Faelle/&lt;id&gt; in der Bibliothek
+"Fallakten" und danach den Listeneintrag selbst.
+
+Keine Startvariablen. Ergebnis: `seite`, die zuletzt gelesene Seite.
+
+Die Reihenfolge ist Absicht: erst der Ordner, dann der Eintrag. Bricht ein Lauf dazwischen
+ab, steht der Eintrag noch auf "Erledigt", und der nächste Lauf findet ihn wieder. Umgekehrt
+bliebe ein Ordner zurück, zu dem kein Eintrag mehr führt.
+
+Ein Löschauftrag, der nichts mehr vorfindet, scheitert nicht, sondern meldet deleted=false.
+Deshalb ist auch ein wiederholter Lauf harmlos.
+
+Im Betrieb wird man diesen Prozess mit einem Timer-Start auslösen, etwa monatlich
+(R/P1M). Im Beispiel steht ein einfaches Start-Event, damit eine Installation nicht von
+sich aus Instanzen anlegt, die auf einen nicht konfigurierten Worker warten.</bpmn:documentation>
+
+    <bpmn:startEvent id="start" name="Aufräumen angestossen">
+      <bpmn:documentation>Ein einfaches Start-Event ohne Variablen. Im Betrieb ein Timer-Start (siehe Prozess).</bpmn:documentation>
+      <bpmn:outgoing>f1</bpmn:outgoing>
+    </bpmn:startEvent>
+
+    <bpmn:scriptTask id="ablage" name="Ablageort festlegen">
+      <bpmn:documentation>Dieselben Adressen wie in sharepoint-fallakte.bpmn (→ `ablage`), an einem Ort.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <zeebe:script expression="= { site: &quot;https://contoso.sharepoint.com/sites/verwaltung&quot;, liste: &quot;Antraege&quot;, akten: &quot;Fallakten&quot; }" resultVariable="ablage"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f1</bpmn:incoming>
+      <bpmn:outgoing>f2</bpmn:outgoing>
+    </bpmn:scriptTask>
+
+    <bpmn:exclusiveGateway id="seiten_merge">
+      <bpmn:documentation>Führt den ersten Durchgang und jede weitere Seite vor der Suche zusammen.</bpmn:documentation>
+      <bpmn:incoming>f2</bpmn:incoming>
+      <bpmn:incoming>f_ja</bpmn:incoming>
+      <bpmn:outgoing>f3</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:serviceTask id="suchen" name="Erledigte Anträge suchen">
+      <bpmn:documentation>list-items: liest eine Seite der Anträge mit Status "Erledigt" (→ `seite`).
+
+- filter ist ein OData-Filter über die Spalten: fields/Status eq 'Erledigt'. Der Worker
+  schickt dazu den Header, der einen Filter auch auf eine nicht indizierte Spalte erlaubt.
+  Erst eine Liste mit mehr als 5000 Einträgen braucht die Spalte Status indiziert.
+- select="Title" hält jede Seite klein: Gelöscht wird nach `id`, mehr braucht es nicht.
+- maxResults="20" ist die Seitengrösse, höchstens 999.
+- pageToken setzt dort fort, wo die letzte Seite aufgehört hat. Beim ersten Durchgang gibt
+  es `seite` noch nicht, `seite.nextPageToken` ist null, und der Worker liest die erste
+  Seite. Danach ist es der Token, den die vorige Seite geliefert hat — unverändert
+  weitergegeben.
+
+`seite.items` ist die Liste der Einträge (FEEL-Listen beginnen bei 1),
+`seite.hasMore` sagt, ob es weitergeht.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="list-items"
+                                   site="=ablage.site" list="=ablage.liste"
+                                   filter="fields/Status eq 'Erledigt'" select="Title"
+                                   maxResults="20" pageToken="=seite.nextPageToken"
+                                   resultVariable="seite"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>f3</bpmn:incoming>
+      <bpmn:outgoing>f4</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="ordner_loeschen" name="Fallordner löschen">
+      <bpmn:documentation>delete-file als parallele Multi-Instance über `seite.items`: eine Instanz je Antrag,
+`eintrag` ist der jeweilige Listeneintrag, sein Ordner Faelle/&lt;eintrag.id&gt;.
+
+Ein Ordner geht mit allem, was darin liegt, in den Papierkorb der Site. Ein Antrag ohne
+Ordner — angelegt, bevor es diesen Prozess gab — meldet deleted=false und scheitert nicht.
+
+Eine leere Seite ist kein Sonderfall: Eine Multi-Instance über eine leere Liste startet keine
+Instanz und ist sofort abgeschlossen.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="delete-file"
+                                   site="=ablage.site" list="=ablage.akten"
+                                   path="=&quot;Faelle/&quot; + eintrag.id"/>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=seite.items" inputElement="eintrag"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f4</bpmn:incoming>
+      <bpmn:outgoing>f5</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:serviceTask id="antraege_loeschen" name="Anträge löschen">
+      <bpmn:documentation>delete-item als parallele Multi-Instance über dieselbe Seite: löscht den Listeneintrag
+über seine `id`. Erst jetzt, nachdem sein Ordner weg ist — siehe die Begründung am
+Prozess.</bpmn:documentation>
+      <bpmn:extensionElements>
+        <atlas:sharePointConnector connector="intranet" operation="delete-item"
+                                   site="=ablage.site" list="=ablage.liste" itemId="=eintrag.id"/>
+      </bpmn:extensionElements>
+      <bpmn:multiInstanceLoopCharacteristics>
+        <bpmn:extensionElements>
+          <zeebe:loopCharacteristics inputCollection="=seite.items" inputElement="eintrag"/>
+        </bpmn:extensionElements>
+      </bpmn:multiInstanceLoopCharacteristics>
+      <bpmn:incoming>f5</bpmn:incoming>
+      <bpmn:outgoing>f6</bpmn:outgoing>
+    </bpmn:serviceTask>
+
+    <bpmn:exclusiveGateway id="weiter" name="Weitere Seite?" default="f_nein">
+      <bpmn:documentation>`= seite.hasMore = true` führt zurück zur Suche, die dann mit `seite.nextPageToken`
+fortsetzt. Der Default-Flow "nein" beendet den Lauf.
+
+Dass hier gelöscht wird, während weitergeblättert wird, stört nicht: Der Token setzt hinter
+dem letzten Eintrag der vorigen Seite fort, und die gelöschten lagen davor.</bpmn:documentation>
+      <bpmn:incoming>f6</bpmn:incoming>
+      <bpmn:outgoing>f_ja</bpmn:outgoing>
+      <bpmn:outgoing>f_nein</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <bpmn:endEvent id="ende" name="Aufgeräumt">
+      <bpmn:documentation>Kein Antrag steht mehr auf "Erledigt", und kein Fallordner gehört zu einem gelöschten
+Antrag. Alles Gelöschte liegt im Papierkorb der Site.</bpmn:documentation>
+      <bpmn:incoming>f_nein</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="ablage"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="ablage" targetRef="seiten_merge"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="seiten_merge" targetRef="suchen"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="suchen" targetRef="ordner_loeschen"/>
+    <bpmn:sequenceFlow id="f5" sourceRef="ordner_loeschen" targetRef="antraege_loeschen"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="antraege_loeschen" targetRef="weiter"/>
+    <bpmn:sequenceFlow id="f_ja" name="ja" sourceRef="weiter" targetRef="seiten_merge">
+      <bpmn:conditionExpression>= seite.hasMore = true</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_nein" name="nein" sourceRef="weiter" targetRef="ende"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="diagram_sharepoint_aufraeumen">
+    <bpmndi:BPMNPlane id="plane_sharepoint_aufraeumen" bpmnElement="proc_sharepoint_aufraeumen">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start">
+        <dc:Bounds x="152" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="115" y="222" width="110" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ablage" bpmnElement="ablage">
+        <dc:Bounds x="250" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_seiten_merge" bpmnElement="seiten_merge" isMarkerVisible="true">
+        <dc:Bounds x="425" y="175" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_suchen" bpmnElement="suchen">
+        <dc:Bounds x="550" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ordner_loeschen" bpmnElement="ordner_loeschen">
+        <dc:Bounds x="700" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_antraege_loeschen" bpmnElement="antraege_loeschen">
+        <dc:Bounds x="850" y="160" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_weiter" bpmnElement="weiter" isMarkerVisible="true">
+        <dc:Bounds x="1025" y="175" width="50" height="50"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1010" y="140" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ende" bpmnElement="ende">
+        <dc:Bounds x="1172" y="182" width="36" height="36"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1150" y="222" width="80" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1">
+        <di:waypoint x="188" y="200"/>
+        <di:waypoint x="250" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2">
+        <di:waypoint x="350" y="200"/>
+        <di:waypoint x="425" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3">
+        <di:waypoint x="475" y="200"/>
+        <di:waypoint x="550" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4">
+        <di:waypoint x="650" y="200"/>
+        <di:waypoint x="700" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5">
+        <di:waypoint x="800" y="200"/>
+        <di:waypoint x="850" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f6" bpmnElement="f6">
+        <di:waypoint x="950" y="200"/>
+        <di:waypoint x="1025" y="200"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_ja" bpmnElement="f_ja">
+        <di:waypoint x="1050" y="225"/>
+        <di:waypoint x="1050" y="320"/>
+        <di:waypoint x="450" y="320"/>
+        <di:waypoint x="450" y="225"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="738" y="326" width="24" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f_nein" bpmnElement="f_nein">
+        <di:waypoint x="1075" y="200"/>
+        <di:waypoint x="1172" y="200"/>
+        <bpmndi:BPMNLabel><dc:Bounds x="1108" y="180" width="30" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

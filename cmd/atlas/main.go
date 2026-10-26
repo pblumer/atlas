@@ -35,12 +35,14 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api"
+	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/checkpoint"
 	remedymock "github.com/pblumer/atlas/connector/remedy/mock"
 	"github.com/pblumer/atlas/connector/rest/openapimock"
 	"github.com/pblumer/atlas/connector/rest/openapitemplate"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/diskspace"
 	"github.com/pblumer/atlas/internal/trustedproxy"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
@@ -102,6 +104,10 @@ func main() {
 	case "import":
 		if err := runImport(args, os.Stdout); err != nil {
 			fatal("atlas import", err)
+		}
+	case "export":
+		if err := runExport(args, os.Stdout); err != nil {
+			fatal("atlas export", err)
 		}
 	case "check-job-types":
 		if err := runCheckJobTypes(args); err != nil {
@@ -170,6 +176,7 @@ Usage:
   atlas worker         [flags]      Work service-task jobs for a running atlas, out of process
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import         [flags] DIR  Install a package (an application, and its shop) into a running atlas
+  atlas export         [flags] DIR  Write a package from a running atlas, for atlas import elsewhere
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker
@@ -240,6 +247,14 @@ func runServe(args []string) error {
 	oidcClientSecret := fs.String("oidc-client-secret", os.Getenv("ATLAS_OIDC_CLIENT_SECRET"), "client secret for the OIDC token exchange; empty is allowed for a public client, since PKCE covers the flow either way (or ATLAS_OIDC_CLIENT_SECRET)")
 	oidcScopes := fs.String("oidc-scopes", os.Getenv("ATLAS_OIDC_SCOPES"), "space-separated OIDC scopes to request; empty asks for \"openid profile email\" (or ATLAS_OIDC_SCOPES)")
 	oidcName := fs.String("oidc-name", os.Getenv("ATLAS_OIDC_NAME"), "what the sign-in button on the login screen says; empty uses the issuer's host (or ATLAS_OIDC_NAME)")
+	// Linking Microsoft accounts for delegated Worker execution
+	// (ADR-0475 §4): an app registration of one tenant,
+	// separate from the sign-in provider above, because what it asks for — delegated
+	// Graph scopes and offline access — is not what a login needs.
+	linkTenant := fs.String("link-microsoft-tenant", os.Getenv("ATLAS_LINK_MICROSOFT_TENANT"), "Microsoft Entra tenant id whose users may link their accounts for delegated Worker execution; empty turns linking off (or ATLAS_LINK_MICROSOFT_TENANT)")
+	linkClientID := fs.String("link-microsoft-client-id", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_ID"), "client id of the app registration accounts are linked through (or ATLAS_LINK_MICROSOFT_CLIENT_ID)")
+	linkClientSecret := fs.String("link-microsoft-client-secret", os.Getenv("ATLAS_LINK_MICROSOFT_CLIENT_SECRET"), "client secret of that app registration (or ATLAS_LINK_MICROSOFT_CLIENT_SECRET)")
+	linkScopes := fs.String("link-microsoft-scopes", os.Getenv("ATLAS_LINK_MICROSOFT_SCOPES"), "space-separated delegated scopes a linked connection is for, e.g. https://graph.microsoft.com/Sites.ReadWrite.All; openid, profile and offline_access are always added (or ATLAS_LINK_MICROSOFT_SCOPES)")
 	// RFC 7591 self-registration, off by default. It is the one unauthenticated
 	// endpoint that writes durable state, so an operator turns it on deliberately or
 	// not at all; a client that would use it discovers its absence from the metadata
@@ -265,6 +280,7 @@ func runServe(args []string) error {
 	// of finished instances behind is why they are reachable at all.
 	retentionInterval := fs.Duration("retention-interval", envDurationOr("ATLAS_RETENTION_INTERVAL", api.DefaultRetentionInterval), "how often the retention sweep runs (ADR-0115); with --retention-batch this bounds the drain rate of a backlog")
 	eventFeedTTL := fs.Duration("event-feed-ttl", envDuration("ATLAS_EVENT_FEED_TTL"), "how long a row of the event feed GET /api/v1/events serves is kept (ADR-0429 §5): a consumer whose cursor is older is answered 410 with the oldest cursor still held; 0 keeps the default of 720h")
+	eventLogTTL := fs.Duration("event-log-ttl", envDuration("ATLAS_EVENT_LOG_TTL"), "how long a row of the event log GET /api/v1/event-log serves is kept (ADR-0472 §4): every signal thrown, message sent and where each arrived; 0 keeps the default of 720h")
 	messageTTLMax := fs.Duration("message-ttl-max", envDuration("ATLAS_MESSAGE_TTL_MAX"), "the longest timeToLiveMs a published message may ask for (ADR-0370): a message nothing waits for yet is kept that long for a subscription that opens later, and a publish asking for more is refused with 400; 0 keeps the default of 168h")
 	triggerReceiptTTL := fs.Duration("trigger-receipt-ttl", envDuration("ATLAS_TRIGGER_RECEIPT_TTL"), "how long a directed trigger's receipt is kept (ADR-0425): a sender retrying the same triggerId within it gets the first instance back, one retrying after it starts a new one; 0 keeps the default of 720h")
 	retentionBatch := fs.Int("retention-batch", envIntOr("ATLAS_RETENTION_BATCH", api.DefaultRetentionBatch), "how many finished instances one retention sweep evaluates (ADR-0115); the cap keeps a sweep from blocking the run loop, so raise it with the loop's headroom in mind")
@@ -283,10 +299,23 @@ func runServe(args []string) error {
 			"stall — which stalls the run loop, and with it every request. A larger buffer means "+
 			"recovery replays a longer log suffix after a crash; it costs recovery time, never "+
 			"durability (ADR-0005). 0 leaves Pebble's default")
+	storageReserveMB := fs.Int("storage-reserve-mb", envIntOr("ATLAS_STORAGE_RESERVE_MB", int(storage.DefaultReserve>>20)),
+		"disk space to keep free under the data directory, in MiB. Below it the server refuses new "+
+			"writes (HTTP 507) and starts no work of its own, so the state store and the checkpoints "+
+			"that give WAL space back still have room; it resumes by itself once the reserve and a "+
+			"quarter of it are free. 0 keeps the monitoring and turns the freeze off")
 	checkpointKeep := fs.Int("checkpoint-keep", 3, "how many recovery checkpoints to keep; each pins the state files it captured, so this bounds their disk (ADR-0131)")
 	// WAL compaction (ADR-0131): opt-in, off by default. Unlike checkpointing it deletes
 	// data, so — like history retention (ADR-0115) — an operator turns it on deliberately.
-	compactWAL := fs.Bool("compact-wal", false, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing")
+	// ATLAS_COMPACT_WAL lets a container turn it on where its other settings are, and is
+	// read as strictly as the other switches: "ATLAS_COMPACT_WAL=ture" stops the start
+	// rather than leave the log growing where its operator believes it is bounded
+	// (ADR-0486).
+	compactDefault, err := envSwitch("ATLAS_COMPACT_WAL", false)
+	if err != nil {
+		return err
+	}
+	compactWAL := fs.Bool("compact-wal", compactDefault, "delete WAL segments already covered by a recovery checkpoint and every consumer watermark (ADR-0131), bounding the log's disk; off by default because it is irreversible. Requires checkpointing. An administrator can still compact once from the Console or with POST /api/v1/checkpoints?compact=true (or ATLAS_COMPACT_WAL=true)")
 	// Distributed traces (ADR-0142), off unless a collector is configured. The endpoint
 	// is the OTLP/HTTP base URL — Atlas posts to <endpoint>/v1/traces — and the standard
 	// OTEL_EXPORTER_OTLP_ENDPOINT is honored so a deployment that already sets it for
@@ -322,6 +351,25 @@ func runServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Deleting a catalogue or a product for good (ADR-0469): on by
+	// default, like the switch above, so a development installation needs nothing; a
+	// production installation whose orders and holds are evidence switches it off.
+	// Read as strictly as ATLAS_CATALOGUE, because the typo that matters here is the
+	// one in "ATLAS_CATALOGUE_PURGE=flase", and it must stop the start rather than
+	// leave the purge on where its operator believes it is off.
+	purgeDefault, err := envSwitch("ATLAS_CATALOGUE_PURGE", true)
+	if err != nil {
+		return err
+	}
+	cataloguePurge := fs.Bool("catalogue-purge", purgeDefault, "let an administrator delete a catalogue or a product for good, with its releases, its own products, the orders placed from it, the instances working them and the holds they granted (ADR-0469); on by default (opt-out), --catalogue-purge=false to refuse it. Switch it off on a production installation: there a product is withdrawn and a catalogue kept, because orders and held rights resolve through them. GET /api/v1/catalogs/{id}/deletion shows what a purge would remove either way (or ATLAS_CATALOGUE_PURGE=false)")
+	// Deleting a version's finished instances for good on an administrator's request
+	// (ADR-0486): on by default for the catalogue
+	// purge's reason — a development server needs nothing — and read as strictly.
+	instancePurgeDefault, err := envSwitch("ATLAS_INSTANCE_PURGE", true)
+	if err != nil {
+		return err
+	}
+	instancePurge := fs.Bool("instance-purge", instancePurgeDefault, "let an administrator delete a process version's finished instances for good, those that finished before a cut-off, from Operations or POST /api/v1/processes/{key}/history-purge; running instances are never touched and nothing is deleted before the exporter has it. On by default (opt-out), --instance-purge=false to refuse it, which a production installation whose history is evidence should set (or ATLAS_INSTANCE_PURGE=false)")
 	catalogue := fs.Bool("catalogue", catalogueDefault, "serve the shop, the catalogue, the orders and the inventory — their routes, the shop page, their Console menus and MCP tools (ADR-0312); on by default (opt-out), --catalogue=false to switch the whole area off. Nothing stored is removed, deployed processes run unchanged, and turning it back on is a restart (or ATLAS_CATALOGUE=false)")
 	metricsOn := fs.Bool("metrics", true, "serve the Prometheus exposition at /metrics (ADR-0142); pass --metrics=false to disable. With --auth on (the default) it sits behind the boundary like every other route: a scraper needs an API token of scope metrics (ADR-0198)")
 	// The read side of the exposition above, and a different server: this is where
@@ -369,8 +417,8 @@ func runServe(args []string) error {
 		Password: os.Getenv("ATLAS_METRICS_PASSWORD"),
 		Instance: strings.TrimSpace(*metricsInstance),
 	}
-	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, messageTTLMax: *messageTTLMax}
-	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB}
+	retention := retentionConfig{maxAge: *retentionAge, interval: *retentionInterval, batch: *retentionBatch, receiptTTL: *triggerReceiptTTL, feedTTL: *eventFeedTTL, logTTL: *eventLogTTL, messageTTLMax: *messageTTLMax, instancePurgeOff: !*instancePurge}
+	storeCfg := storeConfig{cacheMB: *stateCacheMB, memtableMB: *stateMemtableMB, reserveMB: *storageReserveMB}
 	trace := tracing.Config{
 		Endpoint:    *traceEndpoint,
 		ServiceName: envOr("OTEL_SERVICE_NAME", "atlas"),
@@ -398,7 +446,12 @@ func runServe(args []string) error {
 		ClientSecret: *oidcClientSecret,
 		Scopes:       *oidcScopes,
 		Name:         *oidcName,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}, msLink: api.MicrosoftLinkConfig{
+		TenantID:     *linkTenant,
+		ClientID:     *linkClientID,
+		ClientSecret: *linkClientSecret,
+		Scopes:       *linkScopes,
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -468,6 +521,9 @@ type oauthConfig struct {
 	// the one thing that has to be right for both — the origin this server is
 	// reachable under, which is what a redirect URI is built from.
 	oidc api.OIDCConfig
+	// msLink is the app registration people link Microsoft accounts through for
+	// delegated Worker execution, when an operator configured one.
+	msLink api.MicrosoftLinkConfig
 }
 
 // tlsConfig is the transport half of the serve flags (ADR-0191), kept together for
@@ -498,6 +554,13 @@ type retentionConfig struct {
 	// feedTTL is how long a row of the event feed is kept (ADR-0429 §5); zero keeps
 	// the default of 30 days.
 	feedTTL time.Duration
+	// logTTL is how long a row of the event log is kept (ADR-0472 §4); zero
+	// keeps the default of 30 days.
+	logTTL time.Duration
+	// instancePurgeOff refuses an administrator's delete of finished instances
+	// (--instance-purge=false). Spelled "off" so the zero value is the shipped default,
+	// which allows it (ADR-0486).
+	instancePurgeOff bool
 	// messageTTLMax is the longest time to live a published message may ask for
 	// (ADR-0370); zero keeps the default of seven days.
 	messageTTLMax time.Duration
@@ -509,6 +572,18 @@ type retentionConfig struct {
 type storeConfig struct {
 	cacheMB    int
 	memtableMB int
+	// reserveMB is the disk the storage guard keeps free (ADR-0481). It
+	// rides here because it is a decision about the same disk; it is not a Pebble
+	// option, so options() leaves it out.
+	reserveMB int
+}
+
+// reserve is the storage reserve in bytes; a negative flag means none.
+func (c storeConfig) reserve() uint64 {
+	if c.reserveMB <= 0 {
+		return 0
+	}
+	return uint64(c.reserveMB) << 20
 }
 
 // options renders the config as the state package's open options. A zero or negative
@@ -520,7 +595,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -676,6 +751,12 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if !metricsOn {
 		apiOpts = append(apiOpts, api.WithoutMetrics())
 	}
+	if !cataloguePurge {
+		apiOpts = append(apiOpts, api.WithoutCataloguePurge())
+	}
+	if retention.instancePurgeOff {
+		apiOpts = append(apiOpts, api.WithoutInstancePurge())
+	}
 	if !catalogue {
 		apiOpts = append(apiOpts, api.WithoutCatalogue())
 	}
@@ -700,6 +781,7 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	apiOpts = append(apiOpts, api.WithTriggerReceiptRetention(retention.receiptTTL))
 	apiOpts = append(apiOpts, api.WithMessageTTLMax(retention.messageTTLMax))
 	apiOpts = append(apiOpts, api.WithEventFeedRetention(retention.feedTTL))
+	apiOpts = append(apiOpts, api.WithEventLogRetention(retention.logTTL))
 	if retention.maxAge > 0 {
 		gate := "durable position"
 		if osExport.Enabled() {
@@ -709,6 +791,18 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		logging.Info(logging.RetentionEnabled, "history retention enabled",
 			slog.Duration("maxAge", retention.maxAge), slog.String("gate", gate),
 			slog.Int("batch", retention.batch), slog.Duration("interval", retention.interval))
+	}
+	// The storage guard (ADR-0481): on by default, because the failure it
+	// prevents is a state store that ends the process mid-write. A disk smaller than a
+	// few reserves is said once at start, since the server would pause early on it.
+	apiOpts = append(apiOpts, api.WithStorageReserve(storeCfg.reserve()))
+	if reserve := storeCfg.reserve(); reserve > 0 {
+		if u, err := diskspace.Of(dataDir); err == nil && u.Total < 4*reserve {
+			logging.Warn(logging.StorageLow,
+				"the data directory's file system is small for its storage reserve; the server will stop taking "+
+					"writes early — lower --storage-reserve-mb only if you know the state store needs less",
+				slog.Uint64("totalBytes", u.Total), slog.Uint64("reserveBytes", reserve))
+		}
 	}
 	// Periodic recovery checkpoints keep restart time a function of the cadence rather
 	// than of the whole log's length (ADR-0131). Nothing is deleted by them.
@@ -732,6 +826,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	}
 	if oauth.externalURL != "" {
 		apiOpts = append(apiOpts, api.WithExternalURL(oauth.externalURL))
+	}
+	if oauth.msLink.TenantID != "" {
+		apiOpts = append(apiOpts, api.WithMicrosoftLinking(oauth.msLink))
 	}
 	if oauth.oidc.Issuer != "" {
 		apiOpts = append(apiOpts, api.WithOIDC(oauth.oidc))
@@ -939,16 +1036,48 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 		logging.Info(logging.ServerDocsEnabled, "API explorer enabled",
 			slog.String("docs", base+"/api/docs"), slog.String("openapi", base+"/api/v1/openapi.json"))
 	}
-	if !catalogue {
-		logging.Info(logging.ServerCatalogueDisabled,
-			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
-	}
+	logCatalogueSwitches(catalogue, cataloguePurge)
+	logInstancePurgeSwitch(!retention.instancePurgeOff)
 	if metricsOn {
 		logging.Info(logging.ServerMetrics,
 			"Prometheus metrics enabled (with --auth on, a scraper needs an API token of scope metrics; ADR-0198)",
 			slog.String("metrics", base+"/metrics"))
 	}
 	return serveUntil(ctx, shutdownTimeout, listeners...)
+}
+
+// logCatalogueSwitches says at start what the two catalogue switches decided: that
+// the area is off (ADR-0434), or — when it is on — that its purge is too
+// (ADR-0469). The purge is an opt-out, so a production
+// installation upgraded without --catalogue-purge=false gives every administrator a
+// delete of orders and held rights and nothing else would tell its operator; the
+// WARN does, at every start, until the flag is set.
+func logCatalogueSwitches(catalogue, cataloguePurge bool) {
+	if !catalogue {
+		logging.Info(logging.ServerCatalogueDisabled,
+			"shop, catalogue, orders and inventory switched off (--catalogue=false): their routes are not served and nothing stored was removed")
+		return
+	}
+	if cataloguePurge {
+		logging.Warn(logging.ServerCataloguePurgeEnabled,
+			"an administrator can delete catalogues and products for good, with their orders and the rights they granted; "+
+				"start a production installation with --catalogue-purge=false (ATLAS_CATALOGUE_PURGE=false) to refuse it",
+			slog.String("switch", "--catalogue-purge=false"))
+	}
+}
+
+// logInstancePurgeSwitch says at start that an administrator can delete finished
+// instances for good (ADR-0486). The switch is an
+// opt-out, like the catalogue purge, so a production installation upgraded without
+// --instance-purge=false would allow it and nothing else would tell its operator.
+func logInstancePurgeSwitch(on bool) {
+	if !on {
+		return
+	}
+	logging.Warn(logging.ServerInstancePurgeEnabled,
+		"an administrator can delete finished process instances for good; "+
+			"start a production installation with --instance-purge=false (ATLAS_INSTANCE_PURGE=false) to refuse it",
+		slog.String("switch", "--instance-purge=false"))
 }
 
 // runMCP serves the Model Context Protocol adapter on stdio, proxying tool calls
@@ -1265,7 +1394,7 @@ func runWorker(args []string) error {
 	once := fs.Bool("once", false, "poll each type once and exit, instead of working until interrupted")
 	handles := handleFlag{}
 	fs.Var(handles, "handle", "a job type and the command that works it, as type=command; repeat for each type")
-	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, csv, entra, exchange, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, teamsphone, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CLIENT_SECRET, _CLIENT_CERTIFICATE (the app's certificate with its private key as PEM) or, on Windows, _CLIENT_CERTIFICATE_THUMBPRINT (a certificate in this host's store, whose key signs there), teamsphone takes ATLAS_TEAMSPHONE_CONNECTORS plus ATLAS_TEAMSPHONE_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CERTIFICATE (PEM) or _CERTIFICATE_THUMBPRINT (a certificate in this host's store), runs pwsh — or ATLAS_TEAMSPHONE_PWSH — with the MicrosoftTeams module for each job within ATLAS_TEAMSPHONE_TIMEOUT (default 4m), and with ATLAS_TEAMSPHONE_MOCK=1 serves its tenants from memory instead, exchange takes ATLAS_EXCHANGE_CONNECTORS plus ATLAS_EXCHANGE_<NAME>_CREDENTIALS (the JSON bundle naming an Exchange Online organization or, with \"target\": \"onprem\", an Exchange Server) and optionally _URL (an Exchange Server's Remote PowerShell URI), and ATLAS_EXCHANGE_POWERSHELL for the interpreter an on-premises call starts, remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
+	connectors := fs.String("connector", "", "comma-separated built-in Worker Types this worker serves (currently: ad, carddav, csv, entra, exchange, googlecontacts, jira, ldif, mail, mariadb, mssql, postgres, remedy, rest, script, teamsphone, webscrape). The server must be offloading them (it offloads ad, csv, jira, mail, remedy, script and webscrape by default; --in-process-connectors turns that off), or it still works them itself (ADR-0168). A kind with credentials reads them from the environment, never from a flag: mail takes ATLAS_MAIL_CONNECTORS plus, per name, ATLAS_MAIL_<NAME>_PROVIDER with _ENDPOINT, _SENDER and _SECRET — or, in the SMTP-only form, ATLAS_MAIL_<NAME>_ENDPOINT with the optional _USERNAME, _PASSWORD and _FROM. Each SQL kind takes ATLAS_<KIND>_CONNECTORS plus ATLAS_<KIND>_<NAME>_DSN — or, with ATLAS_<KIND>_MOCK=1, no DSN at all: the worker then answers that product's statements from seeded answers in its own memory, so a model that reads or writes a database runs end to end without one, and ATLAS_<KIND>_MOCK_SEED names the JSON file of answers it starts with (a statement nobody seeded fails naming itself rather than answering no rows). entra takes ATLAS_ENTRA_CONNECTORS plus ATLAS_ENTRA_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CLIENT_SECRET, _CLIENT_CERTIFICATE (the app's certificate with its private key as PEM) or, on Windows, _CLIENT_CERTIFICATE_THUMBPRINT (a certificate in this host's store, whose key signs there), teamsphone takes ATLAS_TEAMSPHONE_CONNECTORS plus ATLAS_TEAMSPHONE_<NAME>_TENANT_ID, _CLIENT_ID and exactly one of _CERTIFICATE (PEM) or _CERTIFICATE_THUMBPRINT (a certificate in this host's store), runs pwsh — or ATLAS_TEAMSPHONE_PWSH — with the MicrosoftTeams module for each job within ATLAS_TEAMSPHONE_TIMEOUT (default 4m), and with ATLAS_TEAMSPHONE_MOCK=1 serves its tenants from memory instead, exchange takes ATLAS_EXCHANGE_CONNECTORS plus ATLAS_EXCHANGE_<NAME>_CREDENTIALS (the JSON bundle naming an Exchange Online organization or, with \"target\": \"onprem\", an Exchange Server) and optionally _URL (an Exchange Server's Remote PowerShell URI), and ATLAS_EXCHANGE_POWERSHELL for the interpreter an on-premises call starts, googlecontacts takes ATLAS_GOOGLECONTACTS_CONNECTORS plus ATLAS_GOOGLECONTACTS_<NAME>_CREDENTIALS (the JSON bundle of a service account acting as a Workspace user, or of a refresh token) and optionally _URL (a People API base behind a proxy), carddav takes ATLAS_CARDDAV_CONNECTORS plus ATLAS_CARDDAV_<NAME>_URL (the address book's URL, or the server's, from which the address book is found) and ATLAS_CARDDAV_<NAME>_CREDENTIALS (the JSON bundle {username, password, groups}), remedy takes ATLAS_REMEDY_CONNECTORS plus ATLAS_REMEDY_<NAME>_ENDPOINT, _USERNAME and _PASSWORD, and jira takes ATLAS_JIRA_CONNECTORS plus ATLAS_JIRA_<NAME>_URL and exactly one credential shape — _EMAIL with _API_TOKEN for Jira Cloud, or _TOKEN alone for a Data Center personal access token, because that shape also decides how an assignee is addressed and which search endpoint is used; ad and ldif need no startup configuration, ad resolving each task's bind-password reference from ATLAS_CONNECTOR_<REF>_TOKEN. Set ATLAS_AD_MOCK=1 to serve Active Directory tasks against a mock directory in this worker's memory instead of a real one — the models stay unchanged, nothing reaches a domain controller, and ATLAS_AD_MOCK_SEED names an LDIF or DSML file of entries it starts with. Point ATLAS_AD_MOCK_VIEW_URL at an atlas's /api/v1/ad/mock-directory and the worker reports the forest it holds, so it shows up under Operations > Mock directory instead of only in this worker's log. A worker this server supervises is switched from Console > Workers instead, which needs no restart; these variables are for a worker you run yourself, and for what a server does before anyone has used that switch. A worker atlas supervises is handed all of that at spawn from the worker store, so it needs none of it set by hand")
 	scriptLanguages := fs.String("script-languages", "", "comma-separated script languages this worker serves (powershell, python, javascript); empty serves all for compatibility. atlas serve sets this automatically from its per-language flags")
 	scriptSandboxRaw := fs.String("script-sandbox", envOr(script.SandboxEnv, string(script.SandboxOff)), "operating-system isolation for script interpreters: off or strict (Linux Landlock/seccomp; or ATLAS_SCRIPT_SANDBOX)")
 	if err := fs.Parse(args); err != nil {
@@ -1314,7 +1443,7 @@ func runWorker(args []string) error {
 		return err
 	}
 	installOutboundProxy(os.Getenv)
-	if len(handles) == 0 && len(builtin.Handlers) == 0 {
+	if len(handles) == 0 && len(builtin.Handlers) == 0 && len(builtin.Queries) == 0 {
 		// Nothing to serve. For a worker an operator ran by hand this is a typo, and
 		// saying so and stopping is right. For a supervised one it is an ordinary
 		// state — a mail worker on a server with no mail worker yet — and the
@@ -1343,8 +1472,15 @@ func runWorker(args []string) error {
 	}
 	opts := worker.Options{
 		Server: strings.TrimRight(*server, "/"), ID: *id, Token: *token,
-		Handlers: execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
+		// Only a server that supervises this worker sets it, and only for the process
+		// serving a Worker whose credential it brokers per job.
+		BrokerKey: os.Getenv("ATLAS_BROKER_KEY"),
+		Handlers:  execs, Lease: *lease, Wait: *wait, MaxJobs: *maxJobs,
 		Connectors: builtin.Names,
+		Endpoints:  builtin.Endpoints,
+		// The form lookups the configured kinds answer, for the same Workers
+		// (ADR-0473).
+		Queries: builtin.Queries,
 	}
 	if serverRoots != nil {
 		// Only where a CA was named: otherwise worker.New builds the client, and a

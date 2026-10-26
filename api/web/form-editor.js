@@ -22,6 +22,7 @@ import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
 import { ensureFormStyles } from "./formviewer.js";
 import { fromTail, noteFormSaved } from "./form-return.js";
+import { attachRemoteSelects, previewTransport, remoteAdapter } from "./remote-select.js";
 
 const FORM_CSS = "vendor/form-js/form-playground.css";
 
@@ -213,10 +214,17 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   let rev = 0;
   let schemaSource = null;
 
+  // What this server offers a select's remote options source (ADR-0473): the sources
+  // and the Workers of their types. The properties panel and the palette offer what it
+  // lists, so it is asked for beside the bundle rather than after it. Not being allowed
+  // to ask, or the server not answering, leaves the editor as form-js ships it.
+  const sourcesReady = api("GET", "/api/v1/form-data/sources").catch(() => null);
+
   // The Playground is the Design pane; build it now (it is the default tab).
   let Playground;
+  let dataSources = null;
   try {
-    ({ Playground } = await loadPlayground());
+    [{ Playground }, dataSources] = await Promise.all([loadPlayground(), sourcesReady]);
   } catch (e) {
     if (gen !== generation) return;
     container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
@@ -228,7 +236,12 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   container.innerHTML = "";
   let playground;
   try {
-    playground = new Playground({ container, schema, data: {} });
+    // The preview searches made-up people and says so: a design-time preview must not
+    // reach a production Worker.
+    playground = new Playground({
+      container, schema, data: {},
+      atlas: { sources: dataSources, remote: remoteAdapter({ transport: previewTransport(), preview: true }) },
+    });
   } catch (e) {
     container.innerHTML = `<p class="muted err" style="padding:20px">Could not open this form: ${esc(e.message)}</p>`;
     return;
@@ -337,10 +350,32 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     if (ed && typeof ed.on === "function") {
       ed.on("changed", syncIdentity);
       if (baseline === null) baseline = snapshot(); // the form as opened, as form-js holds it
+      wireLegacyPreview();
       return;
     }
     if (tries < 40) idWatchTimer = setTimeout(() => followDesignEdits(tries + 1), 50);
   })();
+
+  // ---- Directory fields saved as textfields -------------------------------------
+  // A directory field is a select whose options source is a remote data source; the
+  // bundle's properties panel edits it and its preview searches made-up people (above).
+  // A form saved before then holds it as a textfield, which the panel offers to convert.
+  // Until it is converted, the Design pane's preview attaches the same made-up search to
+  // it, as the Tasks app attaches the live one.
+  let designPreview = null;
+  function wireLegacyPreview() {
+    try {
+      const pf = panes.design.pg.getForm();
+      const attach = () => {
+        if (designPreview) designPreview.destroy();
+        // The preview form's own element, not the editor canvas beside it: both sit
+        // in a .fjs-pgl-form-container, and the canvas renders fields too.
+        const host = pf._container || [...container.querySelectorAll(".fjs-pgl-form-container")].pop() || container;
+        designPreview = attachRemoteSelects(pf, host, { transport: previewTransport(), preview: true });
+      };
+      if (pf && typeof pf.on === "function") { pf.on("import.done", attach); attach(); }
+    } catch { /* the playground's preview is a convenience */ }
+  }
 
   // commit pulls the outgoing pane's edits back into the shared schema, bumping
   // `rev` only when the value actually changed (so an unchanged round-trip does
@@ -489,10 +524,15 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     catch (e) { host.innerHTML = `<p class="muted err">Failed to load the form viewer: ${esc(e.message)}</p>`; return; }
     try {
       if (!p.viewer) {
-        p.viewer = new Form({ container: host });
+        p.viewer = new Form({ container: host, atlasRemote: remoteAdapter({ transport: previewTransport(), preview: true }) });
         p.viewer.on("changed", (ev) => renderOutput(ev.data, ev.errors));
       }
+      if (p.lookups) { p.lookups.destroy(); p.lookups = null; }
       await p.viewer.importSchema(schema, currentInputData());
+      // A directory field previews with made-up people and says so; nothing is asked
+      // of a directory while a form is being designed. A select mounts that search
+      // itself (above); one saved as a textfield has it attached.
+      p.lookups = attachRemoteSelects(p.viewer, host, { transport: previewTransport(), preview: true, data: currentInputData() });
       renderOutput(currentInputData(), null);
     } catch (e) {
       host.innerHTML = `<p class="muted err">Could not render this form: ${esc(e.message)}</p>`;
@@ -721,6 +761,8 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       clearTimeout(reseedTimer);
       clearTimeout(idWatchTimer);
       idCheck.dispose();
+      if (designPreview) { try { designPreview.destroy(); } catch { /* ignore */ } }
+      if (panes.validate.lookups) { try { panes.validate.lookups.destroy(); } catch { /* ignore */ } }
       if (panes.design.pg) { try { panes.design.pg.destroy(); } catch { /* ignore */ } }
       if (panes.validate.viewer) { try { panes.validate.viewer.destroy(); } catch { /* ignore */ } }
       if (panes.validate.input) { try { panes.validate.input.destroy(); } catch { /* ignore */ } }

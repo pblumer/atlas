@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Postfachzugriff entziehen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_postfachzugriff_entziehen" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_postfachzugriff_entziehen" name="Exchange: Postfachzugriff entziehen" isExecutable="true" atlas:personal="postfach,person,anlass" atlas:dataSubject="recipient">
+    <documentation>Entzieht den mit der Position erteilten Postfachzugriff wieder. Rückgabeprozess des Produkts m365-postfachzugriff (Form 1); er läuft bei Rückgabe durch die Person, durch den Betrieb oder wenn das befristete Recht abgelaufen ist und ein Prozess es zurückgibt (siehe examples/befristung.bpmn).
+
+Die Antworten des Bestellformulars reisen mit der Rückgabe mit, deshalb kennt der Prozess Postfach, Person und Zugriffsart, ohne etwas nachzuschlagen.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Rückgabe gestartet"><documentation>Die Rückgabe startet den Prozess für die Position.</documentation><outgoing>f_s__gw_art</outgoing></startEvent>
+    <exclusiveGateway id="gw_art" name="Welche Zugriffsart?" default="f_gw_art__st_auftrag"><incoming>f_s__gw_art</incoming><outgoing>f_gw_art__st_voll</outgoing><outgoing>f_gw_art__st_sendas</outgoing><outgoing>f_gw_art__st_auftrag</outgoing></exclusiveGateway>
+    <serviceTask id="st_voll" name="Vollzugriff entziehen"><documentation>remove-full-access.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-full-access" parameters='{"Identity": "=postfach", "User": "=person"}'/></extensionElements><incoming>f_gw_art__st_voll</incoming><outgoing>f_st_voll__gw_join</outgoing></serviceTask>
+    <serviceTask id="st_sendas" name="«Senden als» entziehen"><documentation>remove-send-as.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-send-as" parameters='{"Identity": "=postfach", "User": "=person"}'/></extensionElements><incoming>f_gw_art__st_sendas</incoming><outgoing>f_st_sendas__gw_join</outgoing></serviceTask>
+    <serviceTask id="st_auftrag" name="«Im Auftrag» entziehen"><documentation>revoke-send-on-behalf.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="revoke-send-on-behalf" parameters='{"Identity": "=postfach", "User": "=person"}'/></extensionElements><incoming>f_gw_art__st_auftrag</incoming><outgoing>f_st_auftrag__gw_join</outgoing></serviceTask>
+    <exclusiveGateway id="gw_join"><incoming>f_st_voll__gw_join</incoming><incoming>f_st_sendas__gw_join</incoming><incoming>f_st_auftrag__gw_join</incoming><outgoing>f_gw_join__st_returned</outgoing></exclusiveGateway>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_join__st_returned</incoming><outgoing>f_st_returned__e</outgoing></serviceTask>
+    <endEvent id="e" name="Zugriff entzogen"><incoming>f_st_returned__e</incoming></endEvent>
+    <sequenceFlow id="f_s__gw_art" sourceRef="s" targetRef="gw_art"/>
+    <sequenceFlow id="f_gw_art__st_voll" sourceRef="gw_art" targetRef="st_voll" name="Vollzugriff"><conditionExpression>=zugriffsart = "vollzugriff"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_art__st_sendas" sourceRef="gw_art" targetRef="st_sendas" name="Senden als"><conditionExpression>=zugriffsart = "senden-als"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_art__st_auftrag" sourceRef="gw_art" targetRef="st_auftrag" name="Im Auftrag"/>
+    <sequenceFlow id="f_st_voll__gw_join" sourceRef="st_voll" targetRef="gw_join"/>
+    <sequenceFlow id="f_st_sendas__gw_join" sourceRef="st_sendas" targetRef="gw_join"/>
+    <sequenceFlow id="f_st_auftrag__gw_join" sourceRef="st_auftrag" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__st_returned" sourceRef="gw_join" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e" sourceRef="st_returned" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_postfachzugriff_entziehen_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_postfachzugriff_entziehen_plane" bpmnElement="proc_m365_postfachzugriff_entziehen">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_art_di" bpmnElement="gw_art" isMarkerVisible="true"><omgdc:Bounds x="305" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="233" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_voll_di" bpmnElement="st_voll"><omgdc:Bounds x="430" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sendas_di" bpmnElement="st_sendas"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_auftrag_di" bpmnElement="st_auftrag"><omgdc:Bounds x="430" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true"><omgdc:Bounds x="605" y="245" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="730" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="912" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__gw_art_di" bpmnElement="f_s__gw_art"><omgdi:waypoint x="198" y="270"/><omgdi:waypoint x="305" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_voll_di" bpmnElement="f_gw_art__st_voll"><omgdi:waypoint x="355" y="270"/><omgdi:waypoint x="430" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="361" y="248" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_sendas_di" bpmnElement="f_gw_art__st_sendas"><omgdi:waypoint x="330" y="245"/><omgdi:waypoint x="330" y="130"/><omgdi:waypoint x="430" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="336" y="180" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_auftrag_di" bpmnElement="f_gw_art__st_auftrag"><omgdi:waypoint x="330" y="295"/><omgdi:waypoint x="330" y="410"/><omgdi:waypoint x="430" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="336" y="345" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_voll__gw_join_di" bpmnElement="f_st_voll__gw_join"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="605" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sendas__gw_join_di" bpmnElement="f_st_sendas__gw_join"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="630" y="130"/><omgdi:waypoint x="630" y="245"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_auftrag__gw_join_di" bpmnElement="f_st_auftrag__gw_join"><omgdi:waypoint x="530" y="410"/><omgdi:waypoint x="630" y="410"/><omgdi:waypoint x="630" y="295"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="655" y="270"/><omgdi:waypoint x="730" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_di" bpmnElement="f_st_returned__e"><omgdi:waypoint x="830" y="270"/><omgdi:waypoint x="912" y="270"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

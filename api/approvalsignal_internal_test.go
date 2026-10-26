@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -92,7 +91,9 @@ func TestTheApprovalProcessesAnnounceTheRequestAsASignal(t *testing.T) {
 	}{
 		{"atlas-genehmigung-fix", "fixed", "anna", "anna"},
 		{"atlas-genehmigung-rolle", "role", "einkauf", "einkauf"},
-		{"atlas-genehmigung-vorgesetzter", "superior", "", "chefin"},
+		// The server starts it with the orderer's line manager as approvalRef; the
+		// model asks no directory (ADR-0470).
+		{"atlas-genehmigung-vorgesetzter", "superior", "chefin", "chefin"},
 	} {
 		t.Run(c.kind, func(t *testing.T) {
 			defKey := keys[c.process]
@@ -119,15 +120,6 @@ func TestTheApprovalProcessesAnnounceTheRequestAsASignal(t *testing.T) {
 			if err := json.Unmarshal(raw, &started); err != nil || started.Key == 0 {
 				t.Fatalf("decode start of %s: %v (%s)", c.process, err, raw)
 			}
-			if c.kind == "superior" {
-				// The directory answers who the orderer's manager is.
-				job := lease(t, srv, "ad")
-				body := fmt.Sprintf(`{"worker":"w1","leaseToken":%d,"variables":{"entries":[{"manager":"chefin"}]}}`, job.LeaseToken)
-				if code, raw := completeJob(t, srv, job, body); code != http.StatusOK && code != http.StatusNoContent {
-					t.Fatalf("complete the directory lookup: %d %s", code, raw)
-				}
-			}
-
 			var fresh []row
 			for _, r := range listeners() {
 				if !seen[r.Key] {

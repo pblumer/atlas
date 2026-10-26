@@ -1,0 +1,74 @@
+{
+  "type": "default",
+  "id": "m365-warteschlange-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Anrufwarteschlange · Call queue**\n\nName und Ressourcenkonto entstehen nach der Namensregel: CQ-<BEREICH> <Bezeichnung>. · Name and resource account follow the naming rule: CQ-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "agenten",
+      "type": "textarea",
+      "label": "Agenten (UPN, je Zeile eine) · Agents (UPN, one per line)",
+      "description": "Höchstens 20. · At most 20.",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "sprachregion",
+      "type": "radio",
+      "label": "Sprache der Ansagen · Prompt language",
+      "values": [
+        {
+          "label": "Deutsch · German",
+          "value": "de"
+        },
+        {
+          "label": "Französisch · French",
+          "value": "fr"
+        },
+        {
+          "label": "Italienisch · Italian",
+          "value": "it"
+        },
+        {
+          "label": "Englisch · English",
+          "value": "en"
+        }
+      ],
+      "defaultValue": "de",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -57,7 +57,7 @@ func TestWorkersAnUnservedNameNamesEveryProcessWaitingOnIt(t *testing.T) {
 // empty row on the view.
 func TestWorkersRegistryIgnoresEmptyReports(t *testing.T) {
 	r := newWorkerRegistry(nil)
-	r.holdsConnectors("", nil)
+	r.holdsConnectors("", nil, nil)
 	r.polls("worker-1", "   ")
 	if _, ok := r.byName[""]; ok {
 		t.Error("an empty connector report created a nameless worker")

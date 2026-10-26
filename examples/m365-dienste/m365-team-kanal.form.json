@@ -1,0 +1,29 @@
+{
+  "type": "default",
+  "id": "m365-team-kanal",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Kanal anlegen · Create a channel**"
+    },
+    {
+      "key": "kanalname",
+      "type": "textfield",
+      "label": "Kanalname · Channel name",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kanalbeschreibung",
+      "type": "textarea",
+      "label": "Beschreibung · Description",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

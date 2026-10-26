@@ -24,6 +24,10 @@ type graphReq struct {
 	method, path, prefer, auth string
 	query                      url.Values
 	body                       map[string]any
+	// raw is the request body as it arrived, for the requests that are not JSON (a
+	// media upload) and the ones whose shape a test reads whole.
+	raw         []byte
+	contentType string
 }
 
 func newGraphFake(t *testing.T, answer func(r graphReq) (int, any)) *graphFake {
@@ -31,8 +35,9 @@ func newGraphFake(t *testing.T, answer func(r graphReq) (int, any)) *graphFake {
 	g := &graphFake{}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		req := graphReq{method: r.Method, path: r.URL.Path, prefer: r.Header.Get("Prefer"),
-			auth: r.Header.Get("Authorization"), query: r.URL.Query()}
+			auth: r.Header.Get("Authorization"), query: r.URL.Query(), contentType: r.Header.Get("Content-Type")}
 		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
+			req.raw = raw
 			_ = json.Unmarshal(raw, &req.body)
 		}
 		g.mu.Lock()
@@ -40,7 +45,9 @@ func newGraphFake(t *testing.T, answer func(r graphReq) (int, any)) *graphFake {
 		g.mu.Unlock()
 		status, body := answer(req)
 		w.WriteHeader(status)
-		if body != nil {
+		if raw, ok := body.([]byte); ok {
+			_, _ = w.Write(raw) // an attachment's $value is its bytes, not JSON
+		} else if body != nil {
 			_ = json.NewEncoder(w).Encode(body)
 		}
 	}))

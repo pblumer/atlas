@@ -159,14 +159,44 @@ b { font-weight: 600; }
 .mark.has-logo { background: transparent; }
 .mark .mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .divider { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
-.topnav { display: flex; align-items: center; gap: 2px; height: 100%; }
-.topnav a {
-  display: inline-flex; align-items: center; height: 100%;
-  padding: 0 12px; color: var(--muted); font-weight: 500;
+/* The view names never wrap and never push the icons off the bar. Two-word names
+   broke onto two lines and the account button was cut off at the right edge as soon as
+   the names outgrew the window — at every width, not only on a phone. So the bar takes
+   what is left beside the icons and scrolls sideways within it when that is not
+   enough, which is what it already did below 860px. */
+.topnav {
+  display: flex; align-items: center; gap: 2px; height: 100%;
+  flex: 0 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.topnav::-webkit-scrollbar { display: none; }
+.topnav > a, .topnav-group-btn {
+  display: inline-flex; align-items: center; height: 100%; flex: 0 0 auto;
+  padding: 0 12px; color: var(--muted); font-weight: 500; white-space: nowrap;
   border-bottom: 2px solid transparent;
 }
-.topnav a:hover { color: var(--text); text-decoration: none; }
-.topnav a.active { color: var(--text); border-bottom-color: var(--accent); }
+.topnav > a:hover, .topnav-group-btn:hover { color: var(--text); text-decoration: none; }
+.topnav > a.active, .topnav-group-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+/* A group of pages behind one entry (Console › Administration). Its menu is the shared
+   dropdown, position:fixed, so the bar's sideways scroll cannot clip it. */
+.topnav-group { display: flex; height: 100%; flex: 0 0 auto; }
+.topnav-group-btn { gap: 4px; background: none; border-top: 0; border-left: 0; border-right: 0; font: inherit; font-weight: 500; cursor: pointer; }
+.topnav-caret { font-size: 10px; }
+.topnav-group .dropdown-menu a.active { font-weight: 600; background: var(--bg); }
+/* Everything else on the bar keeps its size; the organisation's name gives way first,
+   and goes altogether where the names need its room. */
+.topbar > :not(.topnav):not(.spacer):not(.org) { flex: 0 0 auto; }
+.topbar .org { flex: 0 1 auto; min-width: 0; }
+@media (max-width: 1100px) {
+  .topbar .org { display: none; }
+  .topnav > a, .topnav-group-btn { padding: 0 8px; }
+}
+/* On a phone the app's name gives its room to the view names. Logo, name and six
+   buttons were wider than the screen: the view names had no width left at all, and in
+   Operations, the longer name, the account button was pushed off the right edge. The
+   mark beside it and the app drawer, which marks the open app, still say where one is. */
+@media (max-width: 520px) {
+  .topbar #app-name { display: none; }
+}
 /* Count on a nav entry — today the parked tokens on Operations › Incidents
    (ADR-0151). Red and always legible, including on the muted inactive entry: an
    operator should see it without first landing on the view it belongs to. */
@@ -677,7 +707,10 @@ textarea::placeholder {
 .stats { display: flex; gap: 34px; flex-wrap: wrap; }
 .stat b { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
 .stat span { font-size: 12px; color: var(--muted); }
-.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+/* A pill is a label, and like a chip it keeps to one line: its round ends are made for
+   one, and a pill folded by a narrow table column reads as a tall blob. A column too
+   narrow for it moves it under the cell's text instead. */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .chip { display: inline-block; font: 12px/1.6 ui-monospace, monospace; padding: 1px 7px; border-radius: 5px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 
 /* Artifact id availability (ADR-0222). A draft is stored under its
@@ -767,9 +800,43 @@ textarea::placeholder {
 .deploy-warnings li + li { margin-top: 4px; }
 /* What switching the catalogue off strands, on an administrator's dashboard
    (ADR-0434): processes still working orders that will fail at the order routes. */
-.catalogue-stranded { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
-.catalogue-stranded h2 { color: var(--warn); }
-.catalogue-stranded ul { margin: 6px 0 10px; padding-left: 18px; }
+.catalogue-stranded, .tokens-expiring { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
+.catalogue-stranded h2, .tokens-expiring h2 { color: var(--warn); }
+.catalogue-stranded ul, .tokens-expiring ul { margin: 6px 0 10px; padding-left: 18px; }
+/* The storage guard (ADR-0481): an alert above the dashboard when there is
+   something to do — amber while the room runs low, red once writes are refused — and the
+   administrator's card with one bar per file system. The bar's track is what this server
+   can ever have (used + available, as df counts it); the dark mark is where the reserve
+   begins, so the distance between the fill and the mark is the room left before a freeze. */
+.storage-alert { border: 1px solid var(--warn); background: var(--warn-soft); margin-bottom: 18px; }
+.storage-alert h2 { color: var(--warn); }
+.storage-alert.storage-frozen, .storage-alert.storage-halted { border-color: var(--danger); background: var(--danger-soft); }
+.storage-alert.storage-frozen h2, .storage-alert.storage-halted h2 { color: var(--danger); }
+.storage-card { margin-top: 18px; }
+.storage-fs { margin: 10px 0 14px; }
+.storage-paths code { font-size: 12px; }
+.storage-bar { position: relative; height: 10px; border-radius: 5px; background: var(--border); margin: 6px 0 4px; }
+.storage-used { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--ok); }
+.storage-used.storage-warn { background: var(--warn); }
+.storage-used.storage-frozen, .storage-used.storage-halted { background: var(--danger); }
+.storage-used.storage-unknown { background: var(--muted); }
+.storage-reserve { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); }
+.storage-nums { font-size: 12px; }
+.storage-forecast { margin: 4px 0 8px; }
+.storage-error { color: var(--danger); }
+/* How the card gives disk back, and the dialog that deletes finished instances
+   (ADR-0486). */
+.storage-reclaim { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
+.storage-reclaim-title { font-size: 14px; margin: 0 0 6px; }
+.storage-reclaim-actions { gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.storage-reclaim-result:empty { display: none; }
+.confirm-modal.purge-modal { width: min(560px, 94vw); }
+.purge-preview { margin: 10px 0 4px; min-height: 1.4em; }
+.purge-preview p, .purge-progress p { margin: 4px 0; }
+.purge-versions, .purge-notes { margin: 4px 0 8px 18px; padding: 0; font-size: 12.5px; }
+.purge-off { color: var(--danger); }
+.purge-progress { margin-top: 10px; }
+#api-tokens #tok-soon ul { margin: 6px 0; padding-left: 18px; }
 /* The variable editor inside the incident's fix dialog (ADR-0158). */
 .inc-vars-modal { max-width: 620px; width: 92vw; }
 .inc-vars-json {
@@ -1448,6 +1515,8 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .tok-html-tag    { color: #116329; }
 .tok-html-attr   { color: #8250df; }
 .tok-html-entity { color: #953800; }
+/* Template tags — {{ }}, {{#if }}, {{/loop}} — around the FEEL they hold (dev-lang.js). */
+.tok-tpl-tag     { color: #0550ae; font-weight: 700; }
 
 /* Completion popup. */
 .feel-pop {
@@ -2086,6 +2155,25 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   padding: 0 5px; margin-left: 6px; border-radius: 4px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap; vertical-align: middle;
 }
+/* What a value in the replay variables table names — a person, a process, a product —
+   beside the value itself (varrefs.js). A link only where the reader may open it. */
+.c-ref {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; max-width: 100%;
+  font: 600 11px/1.6 system-ui, sans-serif; white-space: nowrap; vertical-align: middle;
+  padding: 0 7px; border-radius: 999px; color: var(--accent); background: var(--accent-soft);
+  text-decoration: none; cursor: default;
+}
+.c-ref svg { flex: none; }
+.c-ref .c-ref-name { overflow: hidden; text-overflow: ellipsis; }
+a.c-ref { cursor: pointer; }
+a.c-ref:hover .c-ref-name { text-decoration: underline; }
+.c-ref:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.c-ref.missing { color: var(--muted); background: var(--surface); border: 1px dashed var(--border); font-style: italic; }
+.ref-pop { max-width: 340px; }
+.ref-pop-kind { font: 600 11px/1.4 system-ui, sans-serif; color: var(--muted); }
+.ref-pop-id { font: 11.5px/1.5 ui-monospace, monospace; color: var(--text); margin-top: 2px; word-break: break-all; }
+.ref-pop-note, .ref-pop-go { font: 11.5px/1.45 system-ui, sans-serif; color: var(--muted); margin: 6px 0 0; }
+.ref-pop-go { color: var(--accent); }
 .vars .vv.num  { color: #0a7c5a; }
 .vars .vv.str  { color: var(--text); }
 .vars .vv.bool { color: #b26a00; font-weight: 600; }
@@ -3649,6 +3737,39 @@ tr[hidden] { display: none; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
+/* The Events page (events.js): each of its two sections is a <details> that folds away,
+   its summary the section's heading with a caret that turns, and beside it a line saying
+   what the section holds and warns about — readable while the section is folded. A row's
+   detail is a dialog wide enough for the tables in it. */
+.ev-section { margin-top: 18px; }
+.ev-section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px;
+}
+.ev-section > summary::-webkit-details-marker { display: none; }
+.ev-section > summary::before {
+  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
+}
+.ev-section[open] > summary::before { transform: rotate(90deg); }
+.ev-section > summary h2 { margin: 0; }
+.ev-section > summary:hover h2 { color: var(--accent); }
+.ev-sum-warn { color: var(--warn); font-weight: 600; }
+.modal.ev-modal { width: min(960px, 100%); }
+.modal.ev-modal:focus { outline: none; }
+.ev-modal .modal-head h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-modal .modal-foot { justify-content: flex-end; }
+
+/* Deleting an application (deletedialog.js): two modes, and for the irreversible one
+   the server's preview of what goes and what stops working outside it. */
+.modal.purge-modal { width: min(640px, 100%); }
+.purge-choice { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; cursor: pointer; line-height: 1.45; }
+.purge-choice input { margin-top: 3px; }
+.purge-h { margin: 16px 0 6px; font-size: 13px; }
+.purge-list { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
+.purge-names { margin: 2px 0 4px; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.purge-warning { margin: 14px 0 10px; color: var(--danger); font-weight: 600; }
+.purge-refusal { margin: 12px 0 0; color: var(--danger); }
+
 /* The Used-by dialog behind that chip: every deployed process that resolves through one
    worker, grouped by process — a model redeployed five times is one entry with five
    versions rather than five entries that read as five different processes. */
@@ -4077,6 +4198,30 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 }
 .dev-run-detail.err { color: var(--danger); border-color: #f3c9c4; background: var(--danger-soft); }
 
+/* Preview panel — a mail template rendered with the sample variables
+   (ADR-0487). It takes a fair share of the column, since reading the
+   result is the point; the code keeps the rest. An HTML body is shown as a sandboxed page (no
+   scripts, no same-origin), the posture the outbox already gives a rendered mail. */
+.dev-run.dev-preview { flex: 0 0 48%; min-height: 220px; display: flex; flex-direction: column; }
+.dev-run.dev-preview[hidden] { display: none; }
+.dev-run.dev-preview .dev-run-vars { max-height: 18vh; flex: 0 0 auto; }
+.dev-preview-out { flex: 1 1 auto; min-height: 0; display: flex; }
+.dev-preview-out.stale { opacity: .45; }
+.dev-preview-text {
+  flex: 1 1 auto; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font: 13px/1.55 system-ui, sans-serif; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+}
+.dev-preview-html {
+  flex: 1 1 auto; width: 100%; min-height: 120px; border: 1px solid var(--border);
+  border-radius: 6px; background: #fff;
+}
+.dev-preview-problems {
+  margin: 0; padding: 6px 8px 6px 24px; font-size: 12px; color: var(--warn);
+  background: var(--surface); border: 1px dashed var(--border); border-radius: 6px;
+  max-height: 80px; overflow: auto;
+}
+
 /* Side panel: tabs + one filter + the active pane. */
 .dev-side {
   flex: 0 0 320px; min-width: 0; display: flex; flex-direction: column;
@@ -4311,6 +4456,23 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .sqlmock-failed .sqlmock-stmt { color: var(--err, #b3261e); }
 .sqlmock-detail { margin-top: 2px; font-size: 12px; color: var(--err, #b3261e); overflow-wrap: anywhere; }
 .sqlmock-table tr + tr > td, .sqlmock-table tr + tr > th { padding-top: 8px; }
+
+/* ---------- Mockups (ADR-0216) and the SharePoint card (ADR-0484) ---------- */
+/* Between its two siblings: a site has state, drawn as one table per list or library,
+   and a journal, drawn as the mock database draws its sequence. */
+.spmock-list { margin-top: 8px; }
+.spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.spmock-list > summary::marker { color: var(--muted); }
+.spmock-table { width: 100%; margin: 4px 0 0; }
+.spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
+.spmock-table td { padding: 2px 12px 2px 0; }
+.spmock-folder td:first-child code { font-weight: 600; }
+.spmock-size { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+.spmock-journal .spmock-at { white-space: nowrap; width: 1%; padding-right: 12px; font-size: 12px; }
+/* A kind with no card of its own yet (ADR-0216): its data as served, plainly. */
+.mockups-data {
+  margin: 8px 0 0; max-height: 360px; overflow: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
 /* ---------- Secret shape hints (ADR-0155) ---------- */
 /* A vault secret is a name and an opaque string, so the form has to say what the
@@ -4693,6 +4855,20 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   background: var(--warn-soft); border: 1px solid var(--warn); color: var(--text); font-size: 13px;
 }
 .warn-note code { font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* The API-token page (ADR-0194). The scope picker wears the inputs' look; the
+   result panel is set off from the form it answers; and an expired token keeps its
+   row — the listing is where somebody sees what to reissue — but reads as one. */
+#api-tokens .field select {
+  display: block; width: 100%; box-sizing: border-box; margin-top: 5px;
+  padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px;
+  font: inherit; color: var(--text); background: var(--surface);
+}
+#api-tokens .tok-roles { margin-top: 14px; }
+#api-tokens .tok-reach { margin: 4px 0 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+#api-tokens .tok-result { margin-top: 16px; padding: 14px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg); }
+#api-tokens tr.tok-expired > td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+#api-tokens tr.tok-expired b { text-decoration: line-through; text-decoration-color: var(--danger); }
 
 /* Worker ownership (ADR-0205): who else may configure one, inline in its row. */
 .conn-share { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
@@ -6328,7 +6504,6 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
 /* The three parts of "used by" stack rather than wrap: they are three different
    statements, and a wrapped one reads as a broken line. */
 .bo-used { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font-size: 12px; }
-.bo-used .pill { white-space: nowrap; }
 .bo-kind.businessObject { border-color: var(--accent); color: var(--accent); }
 .bo-kind.enumeration { border-style: dashed; }
 .bo-scope { margin: 10px 2px 0; font-size: 12px; color: var(--muted); max-width: 90ch; line-height: 1.5; }
@@ -6931,9 +7106,8 @@ button.im-problem:hover { background: var(--accent-soft); }
      not need to be used, gives its place up. */
   .topbar { gap: 2px; padding: 0 6px; }
   .topbar .org, .topbar .divider { display: none; }
-  .topnav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  .topnav::-webkit-scrollbar { display: none; }
-  .topnav a { padding: 0 8px; white-space: nowrap; }
+  .topnav { flex: 1 1 auto; }
+  .topnav > a, .topnav-group-btn { padding: 0 8px; }
   .topbar .spacer { display: none; }
   .icon-btn { width: 36px; height: 36px; flex: 0 0 auto; }
   main { padding: 12px; }
@@ -7183,3 +7357,66 @@ button.im-problem:hover { background: var(--accent-soft); }
    where the separators fall, and a proportional font moves them. */
 .ds-option-sample { font-family: ui-monospace, monospace; font-size: 13px; color: var(--muted); }
 .ds-option input:checked ~ .ds-option-name { font-weight: 600; }
+
+/* The plan an import shows before it replaces anything
+   (ADR-0467): one box per artifact that differs. */
+.import-choices .import-changed { list-style: none; padding: 0; margin: 10px 0 0; max-height: 40vh; overflow: auto; }
+.import-choices .import-changed li { padding: 4px 0; }
+.import-choices .import-changed label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.import-choices .import-bulk { display: flex; gap: 6px; }
+.import-choices .import-new { margin-top: 12px; }
+.import-choices .import-new ul { margin: 6px 0 0; max-height: 25vh; overflow: auto; }
+.import-choices .import-group { margin-top: 14px; }
+.import-choices .import-group h3 { font-size: 13px; margin: 0 0 2px; }
+
+/* What an application's processes need from the installation and no source download
+   carries, before the download and after an import (ADR-0467). */
+.source-download .source-constants { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; cursor: pointer; }
+.source-download .needs-title { font-size: 14px; margin: 16px 0 0; }
+.source-download .need-group, .import-needs .need-group { margin-top: 12px; }
+.source-download .need-group h3, .import-needs .need-group h3 { font-size: 13px; margin: 0 0 2px; }
+.source-download .need-group ul, .import-needs .need-group ul { margin: 6px 0 0; padding-left: 18px; max-height: 30vh; overflow: auto; }
+.source-download .need-group li, .import-needs .need-group li { padding: 2px 0; }
+.need-state { margin-left: 6px; font-size: 12px; color: var(--warn); }
+.need-state[data-state="set"], .need-state[data-state="configured"] { color: var(--ok); }
+.need-state[data-state="fallback"] { color: var(--muted); }
+.need-carried { margin-left: 6px; font-size: 12px; color: var(--muted); }
+.source-download .package-catalogs { list-style: none; padding: 0; margin: 6px 0 0; max-height: 25vh; overflow: auto; }
+.source-download .package-catalogs li { padding: 3px 0; }
+.source-download .package-catalogs label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+.source-download .package-warnings { margin-top: 12px; }
+.cat-mappings .mapping-add { display: grid; grid-template-columns: minmax(140px, 1fr) 2fr 2fr auto; gap: 10px; align-items: end; margin-top: 14px; }
+.cat-mappings .mapping-add .field { margin: 0; }
+@media (max-width: 720px) { .cat-mappings .mapping-add { grid-template-columns: 1fr; } }
+.package-answers .package-question { margin-top: 12px; }
+.package-answers .package-question label { display: grid; gap: 4px; }
+.package-answers .package-answer { max-width: 100%; }
+
+/* A select's remote options source in the form editor's properties panel
+   (vendor/form-js/src/atlas/editor.jsx, ADR-0473). The entries are the panel's own
+   markup; only what the panel has no rule for — a list of checkboxes under one label,
+   a filter's block of entries, a plain button — is laid out here, in the panel's own
+   variables. */
+.atlas-remote-checks > .bio-properties-panel-label { display: block; margin-bottom: 4px; }
+/* A long checkbox label wraps beside its box, not below it. */
+.atlas-remote-checkbox > .bio-properties-panel-checkbox { display: flex; align-items: flex-start; }
+.atlas-remote-checkbox > .bio-properties-panel-checkbox > .bio-properties-panel-input { margin-top: 3px; flex: 0 0 auto; }
+.atlas-remote-checkbox > .bio-properties-panel-checkbox > .bio-properties-panel-label { margin-top: 0; }
+.atlas-remote-checks > .bio-properties-panel-checkbox { margin: 2px 0; }
+.atlas-remote-filter { border: 1px solid var(--color-borders-group, var(--border)); border-radius: 2px; padding: 4px 0; margin: 0 0 8px; }
+.atlas-remote-filter .bio-properties-panel-entry { margin-right: 12px; }
+.atlas-remote-button { font: inherit; font-size: var(--text-size-small, 13px); padding: 4px 10px; margin: 4px 0; border: 1px solid var(--input-border-color, var(--border-strong)); border-radius: 2px; background: var(--input-background-color, var(--surface)); color: var(--color-text, var(--text)); cursor: pointer; }
+.atlas-remote-button:hover:not(:disabled) { border-color: var(--input-focus-border-color, var(--accent)); }
+.atlas-remote-button:disabled { opacity: 0.6; cursor: default; }
+.atlas-remote-filter .atlas-remote-remove { margin-left: 12px; }
+/* The directory field's own warn states (form-theme.css lays the field out): the
+   preview's "example data" note and a chosen id the directory no longer resolves. */
+.fjs-container .atlas-rs-preview { background: var(--warn-soft); color: var(--warn); }
+.fjs-container .atlas-rs-selected.atlas-rs-unknown { border-color: var(--warn); background: var(--warn-soft); }
+/* The event log (web/eventlog.js): a reception, start or keeping sits under the send it
+   shares a cause with, so the send reads as the head of its group. */
+.el-row.el-child td { border-top-color: transparent; }
+.el-row.el-child td:nth-child(4) { padding-left: 22px; }
+/* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
+   row's text, so it reads as a note on the verb rather than as a second headline. */
+.el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }

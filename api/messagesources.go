@@ -9,20 +9,25 @@ import (
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/compiler"
 )
 
-// The kinds of source a message name has (ADR-0429 §6). The listing used to hold the
-// first alone; a modeller now picks a name from all three, grouped by where it comes
-// from.
+// The kinds of source a message name has (ADR-0429 §6, ADR-0446 §1). The listing used
+// to hold the first alone; a modeller now picks a name from all four, grouped by where
+// it comes from.
 const (
 	// sourceInboundWatch is a Worker's event: an inbound watch publishes the name.
 	sourceInboundWatch = "inbound-watch"
 	// sourceProductAction is a product's action: the order starts or delivers the name
 	// when the action is asked for.
 	sourceProductAction = "product-action"
-	// sourceWaitingProcess is a deployed process waiting for the name: a message start event,
-	// or a catch — an intermediate catch, a boundary event, a receive task.
+	// sourceWaitingProcess is a deployed process waiting for the name: a message start
+	// event, or a catch — an intermediate catch, a boundary event, a receive task, an
+	// event subprocess's message start.
 	sourceWaitingProcess = "process"
+	// sourceProcessThrow is a deployed process sending the name: a message throw event,
+	// a message end event, or a send task naming a message, which compiles to a throw.
+	sourceProcessThrow = "process-throw"
 )
 
 // messageSourceView is one source of a message name. It is the Modeler's answer to a
@@ -61,6 +66,12 @@ type messageSourceView struct {
 	// CorrelationKey is the FEEL the watch correlates on, under the same rule as
 	// Description.
 	CorrelationKey string `json:"correlationKey,omitempty"`
+	// LastError and FailingSince say, while a watch cannot read its source, why and
+	// since when (unix seconds) — under the same rule as Description, since the reason
+	// names the Worker's configuration. An enabled watch that is failing feeds its name
+	// as little as a disabled one, and only this tells the two apart from a quiet source.
+	LastError    string `json:"lastError,omitempty"`
+	FailingSince int64  `json:"failingSince,omitempty"`
 
 	// ProductID, ProductName, Action, Effect and Triggers describe a product action:
 	// the product, its name in the catalogue's first language, the action's key and
@@ -72,12 +83,28 @@ type messageSourceView struct {
 	Triggers    []string `json:"triggers,omitempty"`
 	// ProcessID is, for a product action, the process the product binds the action to,
 	// so a Modeler can tell that the model it shows is one a product binds; for a
-	// process, the process that waits.
+	// process, the process that waits or sends.
 	ProcessID string `json:"processId,omitempty"`
-	// ElementID and Element name where a process waits: its BPMN id, and "start" or
-	// "catch".
+	// ElementID and Element name where a process waits or sends: its BPMN id, and
+	// "start", "catch" or "throw". Element is the coarse word a Modeler older than Role
+	// reads; every receiver that is not a start is a "catch" to it.
 	ElementID string `json:"elementId,omitempty"`
 	Element   string `json:"element,omitempty"`
+
+	// The fields below describe a process row, a waiting or a sending one (ADR-0446
+	// §1): which deployed version it is and whether it is the newest of its process,
+	// its project, whether it is one of atlas's system processes, and the element's
+	// role — start, catch, boundary, event-subprocess or throw. Newest is absent, that
+	// is false, for an older version. Interrupting is set for a boundary or an event
+	// subprocess only: whether firing cancels the work it guards.
+	ProcessName   string `json:"processName,omitempty"`
+	Version       int32  `json:"version,omitempty"`
+	Newest        bool   `json:"newest,omitempty"`
+	DefinitionKey uint64 `json:"definitionKey,omitempty"`
+	ProjectID     string `json:"projectId,omitempty"`
+	System        bool   `json:"system,omitempty"`
+	Role          string `json:"role,omitempty"`
+	Interrupting  *bool  `json:"interrupting,omitempty"`
 }
 
 // handleListMessageSources lists every inbound watch on this server by the message name
@@ -90,8 +117,22 @@ type messageSourceView struct {
 // see. Filtering to one name server-side would also make the panel ask again on every
 // keystroke of a rename, for a listing small enough to hold.
 func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request) {
+	out, err := s.messageSources(r)
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list message sources: "+err.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, out)
+}
+
+// messageSources is every source of every message name the caller may see, in a
+// stable order: the one function behind the flat listing the Modeler's picker reads
+// and the grouped one the Console's overview reads (ADR-0446 §2), so the two cannot
+// disagree about a row or about who may see it.
+func (s *Server) messageSources(r *http.Request) ([]messageSourceView, error) {
 	var (
 		out     = []messageSourceView{}
+		defs    []deployedDefinition
 		loadErr error
 	)
 	// The subscription store, the worker store and the role check happen in one
@@ -130,6 +171,9 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 			if code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer); code == 0 {
 				v.Description = describeInboundWatch(c.Kind, sub)
 				v.CorrelationKey = sub.CorrelationKey
+				if f, failing := s.inboundHealth.failure(sub.ID); failing {
+					v.LastError, v.FailingSince = f.LastError, f.FailingSince
+				}
 			}
 			out = append(out, v)
 		}
@@ -138,14 +182,15 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 			return
 		}
 		out = append(out, actions...)
-		out = append(out, s.processSources()...)
+		defs = s.readableDefinitions(httpapi.PrincipalFrom(r.Context()))
 	})
 	if loadErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "list message sources: "+loadErr.Error())
-		return
+		return nil, loadErr
 	}
-	// Stable order: by message name, then by kind, then by who sends or waits, so the
-	// panel's line does not reshuffle between two renders of the same state.
+	out = append(out, processSources(defs)...)
+	// Stable order: by message name, then by kind, then by who sends or waits, newest
+	// version first, so the panel's line does not reshuffle between two renders of the
+	// same state.
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.MessageName != b.MessageName {
@@ -163,9 +208,12 @@ func (s *Server) handleListMessageSources(w http.ResponseWriter, r *http.Request
 		if a.ProcessID != b.ProcessID {
 			return a.ProcessID < b.ProcessID
 		}
+		if a.Version != b.Version {
+			return a.Version > b.Version
+		}
 		return a.ElementID < b.ElementID
 	})
-	httpapi.JSON(w, http.StatusOK, out)
+	return out, nil
 }
 
 // productActionSources lists every product action's message, for the products of the
@@ -238,29 +286,41 @@ func productNameIn(it catalog.Item, langs []string) string {
 	return it.ID
 }
 
-// processSources lists where the newest deployed version of every process waits for a
-// message: its message start events and its catches. A send task or a throw event
-// names one of these to reach a process that is already modelled. Runs on the loop.
-func (s *Server) processSources() []messageSourceView {
-	newest := map[string]*deployment{}
-	for _, d := range s.deployments {
-		if d == nil || d.cp == nil {
-			continue
-		}
-		if have, ok := newest[d.ProcessID]; !ok || d.Version > have.Version {
-			newest[d.ProcessID] = d
-		}
-	}
+// processSources lists where every deployed version of every process the caller may
+// read waits for a message — its message starts, catches, receive tasks, boundaries
+// and event subprocesses — and where it sends one (ADR-0446 §1). Each row says which
+// version it is and whether it is the newest: a Modeler asking who waits now reads the
+// newest, the overview lists every version, because an older version's running
+// instances still wait and send. It reads the copies readableDefinitions made, off
+// the loop.
+func processSources(defs []deployedDefinition) []messageSourceView {
 	var out []messageSourceView
-	for id, d := range newest {
-		on := !d.inactive
-		for _, ms := range d.cp.MessageStartEvents() {
-			out = append(out, messageSourceView{MessageName: ms.MessageName, SourceKind: sourceWaitingProcess,
-				Enabled: on, ProcessID: id, ElementID: d.cp.ElementBpmnId(ms.ElementId), Element: "start"})
+	for _, d := range defs {
+		row := func(mp compiler.MessagePoint, kind string) messageSourceView {
+			element := "catch"
+			switch mp.Role {
+			case compiler.MessageStarts:
+				element = "start"
+			case compiler.MessageSends:
+				element = "throw"
+			}
+			v := messageSourceView{
+				MessageName: mp.MessageName, SourceKind: kind, Enabled: !d.inactive,
+				ProcessID: d.processID, ElementID: mp.Element, Element: element,
+				ProcessName: d.name, Version: d.version, Newest: d.newest,
+				DefinitionKey: d.key, ProjectID: d.projectID, System: d.system,
+				Role: string(mp.Role),
+			}
+			if mp.Role == compiler.MessageBoundary || mp.Role == compiler.MessageEventSubProcess {
+				v.Interrupting = &mp.Interrupting
+			}
+			return v
 		}
-		for _, cp := range d.cp.MessageCatchPoints() {
-			out = append(out, messageSourceView{MessageName: cp.MessageName, SourceKind: sourceWaitingProcess,
-				Enabled: on, ProcessID: id, ElementID: cp.Element, Element: "catch"})
+		for _, mp := range d.cp.MessageReceivers() {
+			out = append(out, row(mp, sourceWaitingProcess))
+		}
+		for _, mp := range d.cp.MessageSenders() {
+			out = append(out, row(mp, sourceProcessThrow))
 		}
 	}
 	return out

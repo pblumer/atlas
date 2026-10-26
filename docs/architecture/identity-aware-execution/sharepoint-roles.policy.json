@@ -1,0 +1,18 @@
+{
+  "id": "sharepoint-roles",
+  "description": "The business half as a decision table a business analyst can read: which role may do which operation. The built-in guards and the HR approval policy still apply beside it, and a Deny anywhere wins.",
+  "priority": 20,
+  "target": {
+    "workerTypes": [
+      "sharepoint"
+    ]
+  },
+  "ruleCombining": "first-applicable",
+  "rules": [
+    {
+      "id": "by-role",
+      "decision": "sharepointAccess"
+    }
+  ],
+  "dmn": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"https://www.omg.org/spec/DMN/20191111/MODEL/\" id=\"sp-roles\" name=\"SharePoint roles\" namespace=\"http://atlas/authz\">\n  <inputData id=\"in_op\" name=\"operation\"/>\n  <inputData id=\"in_roles\" name=\"subjectRoles\"/>\n  <decision id=\"sharepointAccess\" name=\"sharepointAccess\">\n    <informationRequirement><requiredInput href=\"#in_op\"/></informationRequirement>\n    <informationRequirement><requiredInput href=\"#in_roles\"/></informationRequirement>\n    <decisionTable id=\"dt\" hitPolicy=\"FIRST\">\n      <input id=\"i1\" label=\"Manager\"><inputExpression id=\"ie1\" typeRef=\"boolean\"><text>list contains(subjectRoles, \"manager\")</text></inputExpression></input>\n      <input id=\"i2\" label=\"Operation\"><inputExpression id=\"ie2\" typeRef=\"string\"><text>operation</text></inputExpression></input>\n      <output id=\"o1\" name=\"effect\" typeRef=\"string\"/>\n      <output id=\"o2\" name=\"reasonCode\" typeRef=\"string\"/>\n      <rule id=\"r1\"><inputEntry id=\"r1a\"><text>true</text></inputEntry><inputEntry id=\"r1b\"><text>\"delete-file\",\"delete-item\"</text></inputEntry><outputEntry id=\"r1c\"><text>\"Permit\"</text></outputEntry><outputEntry id=\"r1d\"><text>\"MANAGER_DELETE\"</text></outputEntry></rule>\n      <rule id=\"r2\"><inputEntry id=\"r2a\"><text>-</text></inputEntry><inputEntry id=\"r2b\"><text>\"delete-file\",\"delete-item\"</text></inputEntry><outputEntry id=\"r2c\"><text>\"Deny\"</text></outputEntry><outputEntry id=\"r2d\"><text>\"DELETE_NOT_ALLOWED\"</text></outputEntry></rule>\n      <rule id=\"r3\"><inputEntry id=\"r3a\"><text>-</text></inputEntry><inputEntry id=\"r3b\"><text>\"get-file\",\"download-file\",\"list-folder\",\"get-item\",\"list-items\"</text></inputEntry><outputEntry id=\"r3c\"><text>\"Permit\"</text></outputEntry><outputEntry id=\"r3d\"><text>\"READ\"</text></outputEntry></rule>\n      <rule id=\"r4\"><inputEntry id=\"r4a\"><text>-</text></inputEntry><inputEntry id=\"r4b\"><text>\"create-item\",\"update-item\"</text></inputEntry><outputEntry id=\"r4c\"><text>\"Permit\"</text></outputEntry><outputEntry id=\"r4d\"><text>\"LIST_WRITE\"</text></outputEntry></rule>\n      <rule id=\"r5\"><inputEntry id=\"r5a\"><text>-</text></inputEntry><inputEntry id=\"r5b\"><text>-</text></inputEntry><outputEntry id=\"r5c\"><text>\"NotApplicable\"</text></outputEntry><outputEntry id=\"r5d\"><text>\"\"</text></outputEntry></rule>\n    </decisionTable>\n  </decision>\n</definitions>"
+}

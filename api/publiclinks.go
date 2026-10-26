@@ -331,6 +331,9 @@ func (s *Server) handlePublicFormStart(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read form: "+formErr.Error())
 		return
 	}
+	if refuseDirectoryFieldInPublic(w, schema) {
+		return
+	}
 	var passSecret, passHashed string
 	if wantsPass {
 		if passSecret, passHashed, err = mintPass(); err != nil {

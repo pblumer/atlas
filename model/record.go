@@ -167,12 +167,31 @@ const (
 	// Appended last so every prior value type keeps its numeric value on the log.
 	VTActionOutcome
 
-	// VTFeedRetention records how far the event feed has been pruned (ADR-0429 §5):
-	// every feed row of the partition at or before Through is gone. The feed is state
-	// folded from facts, so it is shortened by a fact of its own rather than by a
-	// delete nobody replays (I4). Appended last so every prior value type keeps its
-	// numeric value on the log.
+	// VTFeedRetention records how far a table folded from facts has been pruned: the
+	// event feed (ADR-0429 §5) with IntentFeedPruned, the event log (ADR-0472)
+	// with IntentEventLogPruned. Every row of the partition at or before Through is
+	// gone. Such a table is shortened by a fact of its own rather than by a delete
+	// nobody replays (I4). Appended last so every prior value type keeps its numeric
+	// value on the log.
 	VTFeedRetention
+
+	// VTDispatch is the fact that a signal was broadcast or a message published: by
+	// whom, under which name, and how far it reached (ADR-0472 §1). One
+	// record per send, a send that reached nobody included. It carries no payload.
+	// Appended last so every prior value type keeps its numeric value on the log; a
+	// version before it decodes it to no value and skips it on replay.
+	VTDispatch
+	// VTAuthorization is one policy decision about one external Worker action — the
+	// evidence written before anything the action needs is released
+	// (ADR-0475 §12). Append-only history keyed under
+	// its process instance, like VTOperatorAction. Appended last so every prior value
+	// type keeps its numeric value on the log.
+	VTAuthorization
+	// VTActionApproval is one fact about the approval of one action digest: requested,
+	// answered, or withdrawn (§9). A separate type from VTAuthorization because the two
+	// answer different questions — what was decided, and who agreed to what. Appended
+	// last so every prior value type keeps its numeric value on the log.
+	VTActionApproval
 )
 
 func (t ValueType) String() string {
@@ -203,6 +222,12 @@ func (t ValueType) String() string {
 		return "ActionOutcome"
 	case VTFeedRetention:
 		return "FeedRetention"
+	case VTDispatch:
+		return "Dispatch"
+	case VTAuthorization:
+		return "Authorization"
+	case VTActionApproval:
+		return "ActionApproval"
 	case VTSignal:
 		return "Signal"
 	case VTError:
@@ -527,6 +552,38 @@ const (
 	// IntentMessageExpired is the fact that it was: the buffered message, if it still
 	// waited, and its id are gone.
 	IntentMessageExpired
+	// IntentDispatched is the fact that a signal was broadcast or a message published
+	// (VTDispatch, ADR-0472 §1). Appended at the end so every prior intent
+	// keeps its numeric value on the log.
+	IntentDispatched
+	// IntentSignalStarted is the fact that a broadcast started an instance of a
+	// definition with a matching signal start event: the definition, its start
+	// element, the signal and the sender (VTSignal, ADR-0472 §2). It changes
+	// no subscription; the event log folds a row from it.
+	IntentSignalStarted
+	// IntentEventLogPruning is a command-only intent: the retention sweep asks the event
+	// log to drop its rows through a log position (ADR-0472 §4).
+	IntentEventLogPruning
+	// IntentEventLogPruned is the fact that it did, with the position it was pruned
+	// through (VTFeedRetention).
+	IntentEventLogPruned
+
+	// IntentAuthorizationDeciding is a command-only intent: an enforcement point asks
+	// that a decision it made be recorded for a job it holds a lease on
+	// (ADR-0475 §5). Its handler re-checks the lease,
+	// records IntentAuthorizationDecided and, for an enforced refusal, fails the job or
+	// asks for approval in the same batch, so the decision and its consequence are
+	// durable together (I2). Appended at the end so every prior intent keeps its value.
+	IntentAuthorizationDeciding
+	// IntentAuthorizationDecided is the decision, as a fact.
+	IntentAuthorizationDecided
+	// IntentApprovalDeciding is a command-only intent: an approver answers an approval,
+	// or withdraws an answer. Its handler checks the approval is open and records
+	// IntentApprovalRecorded.
+	IntentApprovalDeciding
+	// IntentApprovalRecorded is one fact about an approval — requested, answered or
+	// withdrawn; the value's Kind says which.
+	IntentApprovalRecorded
 )
 
 func (i Intent) String() string {
@@ -653,6 +710,22 @@ func (i Intent) String() string {
 		return "MessageExpiring"
 	case IntentMessageExpired:
 		return "MessageExpired"
+	case IntentDispatched:
+		return "Dispatched"
+	case IntentSignalStarted:
+		return "SignalStarted"
+	case IntentEventLogPruning:
+		return "EventLogPruning"
+	case IntentEventLogPruned:
+		return "EventLogPruned"
+	case IntentAuthorizationDeciding:
+		return "AuthorizationDeciding"
+	case IntentAuthorizationDecided:
+		return "AuthorizationDecided"
+	case IntentApprovalDeciding:
+		return "ApprovalDeciding"
+	case IntentApprovalRecorded:
+		return "ApprovalRecorded"
 	default:
 		return "Intent(?)"
 	}

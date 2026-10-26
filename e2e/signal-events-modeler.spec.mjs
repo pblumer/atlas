@@ -3,7 +3,8 @@
 // that waits for a signal is offered the events atlas emits that a model may listen to,
 // picking one declares or reuses a signal of that name, the chosen event says what it
 // carries with its personal data named, and an atlas.* name that is no event, or that a
-// model throws, is warned about.
+// model throws, is warned about. The signals the deployed models throw are offered too,
+// and a throw is told who receives its name (ADR-0447 §6).
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -134,5 +135,72 @@ test("a catalogue that cannot be read leaves the picker as it was", async ({ pag
   await expect(eventGroup(page)).toHaveCount(0);
   await expect(page.locator('#f-sigref option[value="__new__"]')).toHaveCount(1);
   await expect(page.locator('#f-sigref option[value="Signal_req"]')).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
+});
+
+// The inventory of the signals the deployed models throw and receive (ADR-0447 §6): a
+// receiving element is offered the names the newest versions throw, and a throwing one
+// is told who receives its name.
+const SIGNALS = {
+  signals: [
+    { name: "atlas.user.requested", points: [{ processId: "rogue", version: 1, newest: true, role: "throw" }], findings: [] },
+    { name: "old.throw", points: [{ processId: "legacy", version: 1, newest: false, role: "throw" }], findings: [] },
+    { name: "only.received", points: [{ processId: "waiter", version: 1, newest: true, role: "catch" }], findings: [] },
+    { name: "order.cancelled", points: [
+      { processId: "billing", version: 2, newest: true, role: "boundary", interrupting: true },
+      { processId: "billing", version: 1, newest: false, role: "boundary", interrupting: true },
+      { processId: "shop", version: 4, newest: true, role: "throw" },
+      { processId: "stale", version: 1, newest: true, role: "catch", inactive: true },
+    ], findings: [] },
+  ],
+};
+
+const deployedGroup = (page) => page.locator("#f-sigref optgroup#f-sig-deployed");
+
+test("a signal start is offered the signals deployed models throw", async ({ page }) => {
+  await page.evaluate((s) => { window.__SIGNALS = s; }, SIGNALS);
+  await mount(page);
+  await openSignal(page, "Start_sig");
+  await expect(deployedGroup(page)).toHaveAttribute("label", "Signals deployed models throw");
+  // An atlas.* name, a name only an older version throws and a name nobody throws are
+  // not offered.
+  const offered = await deployedGroup(page).locator("option").evaluateAll((os) =>
+    os.map((o) => ({ value: o.value, text: o.textContent })));
+  expect(offered).toEqual([{ value: "__event__:order.cancelled", text: "order.cancelled — shop — new" }]);
+
+  await page.locator("#f-sigref").selectOption("__event__:order.cancelled");
+  const xml = await page.evaluate(() => window.__xml());
+  const sig = /<bpmn:signal id="([^"]+)" name="order\.cancelled"/.exec(xml);
+  expect(sig).not.toBeNull();
+  expect(xml).toMatch(new RegExp(`<bpmn:startEvent id="Start_sig"[\\s\\S]*?signalRef="${sig[1]}"`));
+  expect(page.__errors).toEqual([]);
+});
+
+test("a throw is told who receives its name, or that nobody does", async ({ page }) => {
+  await page.evaluate((s) => { window.__SIGNALS = s; }, SIGNALS);
+  await mount(page);
+  await openSignal(page, "Throw_1");
+  const line = page.locator("#f-sigreceivers");
+  // An atlas.* name is atlas's: the note says so, and the line says nothing.
+  await expect(page.locator("#f-sigevent .hint.warn")).toHaveCount(1);
+  await expect(line).toBeEmpty();
+
+  // The newest, active receivers count: billing's v2, not its v1, and not the inactive one.
+  await page.locator("#f-signame").fill("order.cancelled");
+  await page.locator("#f-signame").blur();
+  await expect(line).toContainText("Received by 1 deployed process: billing.");
+  await expect(line.locator('a[href="/#/console/events?name=order.cancelled&channel=signal"]')).toHaveCount(1);
+
+  await page.locator("#f-signame").fill("nobody.hears");
+  await page.locator("#f-signame").blur();
+  await expect(line).toContainText("No deployed process receives it");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a server without the inventory leaves the picker as it was", async ({ page }) => {
+  await mount(page);
+  await openSignal(page, "Start_sig");
+  await expect(eventGroup(page).locator("option")).toHaveCount(2);
+  await expect(deployedGroup(page)).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });

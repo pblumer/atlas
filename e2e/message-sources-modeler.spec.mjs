@@ -5,7 +5,10 @@
 // events and the product actions, an element that throws one the processes waiting for it
 // and never a product action, whose message is the order's to send. A row without a
 // sourceKind is an inbound watch, as an older server means it, and only watches count as
-// Worker events. Driven through the real vendored bpmn-js against a mock `api`.
+// Worker events. A newer server adds a fourth kind, a deployed process sending the name,
+// and lists every version (ADR-0446): a waiting element is offered what the newest
+// versions send, and a sending one is told who waits for it. Driven through the real
+// vendored bpmn-js against a mock `api`.
 import { test, expect } from "@playwright/test";
 
 // mount opens the Modeler on the shared diagram filed under processId and shows the
@@ -212,4 +215,64 @@ test("a listing that fails leaves the throw's picker and name field as they were
   await expect(page.locator('#f-msgref option[value="__new__"]')).toHaveCount(1);
   await expect(page.locator('#f-msgref option[value="Message_done"]')).toHaveCount(1);
   expect(errors).toEqual([]);
+});
+
+// A newer server lists a deployed process's own sends and every deployed version
+// (ADR-0446 §1). The picker reads the newest version alone, offers a waiting element
+// the names models send, and a sending element is told whether anybody waits.
+const NEWER = [
+  { sourceKind: "process-throw", messageName: "invoice.sent", enabled: true, processId: "billing", elementId: "Send_inv", element: "throw", role: "throw", version: 3, newest: true },
+  { sourceKind: "process-throw", messageName: "invoice.sent", enabled: true, processId: "billing", elementId: "Send_inv", element: "throw", role: "throw", version: 2 },
+  { sourceKind: "process-throw", messageName: "only.old", enabled: true, processId: "legacy", elementId: "Send_old", element: "throw", role: "throw", version: 1 },
+  { sourceKind: "process", messageName: "invoice.paid", enabled: true, processId: "legacy", elementId: "Catch_old", element: "catch", role: "catch", version: 1 },
+];
+
+async function mountNewer(page, processId) {
+  await page.goto("/message-sources-harness.html");
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await page.evaluate((rows) => { window.__extraSources = rows; }, NEWER);
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.__errors = errors;
+  await page.evaluate((pid) => window.__mount(pid), processId);
+  await page.locator('[data-tab="implement"]').click();
+}
+
+test("a waiting element is offered the names deployed models send, newest versions only", async ({ page }) => {
+  await mountNewer(page, "onboarding");
+  await openMessage(page, "Catch_new");
+  await expect(group(page, "sending-processes")).toHaveCount(1);
+  expect(await groupLabels(page)).toEqual(["Events from Workers", "Product actions", "Messages deployed models send"]);
+  // only.old is sent by an older version alone, so nobody sends it now.
+  expect(await optionsOf(page, "sending-processes")).toEqual([
+    { value: "__source__:invoice.sent", text: "invoice.sent — billing · throw", disabled: false },
+  ]);
+
+  // A name a deployed model sends no longer reads as unfed.
+  await page.locator("#f-msgref").selectOption("__source__:invoice.sent");
+  await expect(page.locator("#f-msgname")).toHaveValue("invoice.sent");
+  await expect(page.locator("#f-msgsources")).toContainText("Sent by deployed process billing.");
+  await expect(page.locator("#f-msgsources")).not.toContainText("No inbound event watch");
+  expect(page.__errors).toEqual([]);
+});
+
+test("a sending element is told who waits for its message, or that nobody does", async ({ page }) => {
+  await mountNewer(page, "onboarding");
+  // An older version's catch is not offered: who waits now is the newest version.
+  await openMessage(page, "Throw_new");
+  expect(await optionsOf(page, "waiting-processes")).toEqual([
+    { value: "__source__:invoice.paid", text: "invoice.paid — billing · catch, dunning · start", disabled: false },
+  ]);
+
+  await mount(page, "mailbox-lifecycle");
+  await openMessage(page, "Send_msg");
+  const hint = page.locator("#f-msgsources");
+  await expect(hint).toContainText("Waited for by deployed process archive (catch).");
+  await expect(hint.locator('a[href="/#/console/events?name=mailbox.done&channel=message"]')).toHaveCount(1);
+
+  await page.locator("#f-msgname").fill("nobody.waits");
+  await page.locator("#f-msgname").blur();
+  await expect(hint).toContainText("No deployed process waits for nobody.waits: what this element sends is lost.");
+  await expect(hint.locator('a[href="/#/console/events?name=nobody.waits&channel=message"]')).toHaveCount(1);
+  expect(page.__errors).toEqual([]);
 });

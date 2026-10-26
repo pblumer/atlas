@@ -21,14 +21,19 @@ type gmailFake struct {
 	messages map[string]map[string]any
 	list     []string
 	reqs     []graphReq
+	// raw answers format=raw for a message id; attachments answers an attachment id.
+	raw         map[string][]byte
+	attachments map[string][]byte
 }
 
 func newGmailFake(t *testing.T) *gmailFake {
 	t.Helper()
 	g := &gmailFake{profile: "100", messages: map[string]map[string]any{}}
 	g.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		req := graphReq{method: r.Method, path: r.URL.Path, auth: r.Header.Get("Authorization"), query: r.URL.Query()}
+		req := graphReq{method: r.Method, path: r.URL.Path, auth: r.Header.Get("Authorization"), query: r.URL.Query(),
+			contentType: r.Header.Get("Content-Type")}
 		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
+			req.raw = raw
 			_ = json.Unmarshal(raw, &req.body)
 		}
 		g.mu.Lock()
@@ -62,10 +67,19 @@ func (g *gmailFake) answer(r graphReq) (int, any) {
 		return 200, map[string]any{"messages": ms}
 	case strings.HasSuffix(p, "/modify"), strings.HasSuffix(p, "/trash"), p == "/messages/send":
 		return 200, map[string]any{"id": "x"}
+	case r.path == "/upload/users/me/messages/send":
+		return 200, map[string]any{"id": "fwd"}
 	case strings.Contains(p, "/attachments/"):
+		if data, ok := g.attachments[p[strings.LastIndex(p, "/")+1:]]; ok {
+			return 200, map[string]any{"data": base64.URLEncoding.EncodeToString(data)}
+		}
 		return 200, map[string]any{"data": base64.URLEncoding.EncodeToString([]byte("big body"))}
 	case strings.HasPrefix(p, "/messages/"):
-		if m, ok := g.messages[strings.TrimPrefix(p, "/messages/")]; ok {
+		id := strings.TrimPrefix(p, "/messages/")
+		if raw, ok := g.raw[id]; ok && r.query.Get("format") == "raw" {
+			return 200, map[string]any{"id": id, "threadId": "t-" + id, "raw": base64.URLEncoding.EncodeToString(raw)}
+		}
+		if m, ok := g.messages[id]; ok {
 			return 200, m
 		}
 		return 404, map[string]any{"error": "not found"}
@@ -164,7 +178,7 @@ func TestGmailWatchReadsHistoryAsALog(t *testing.T) {
 	if e.Auth.DMARC != "pass" || e.Body != "Grüezi" {
 		t.Errorf("auth %+v body %q", e.Auth, e.Body)
 	}
-	if len(e.Attachments) != 1 || e.Attachments[0] != (Attachment{Name: "R.pdf", ContentType: "application/pdf", Size: 4000}) {
+	if len(e.Attachments) != 1 || e.Attachments[0] != (Attachment{ID: "1", Name: "R.pdf", ContentType: "application/pdf", Size: 4000}) {
 		t.Errorf("attachments = %+v", e.Attachments)
 	}
 	for _, r := range g.requests() {

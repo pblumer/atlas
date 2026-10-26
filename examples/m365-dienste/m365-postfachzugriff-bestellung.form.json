@@ -1,0 +1,82 @@
+{
+  "type": "default",
+  "id": "m365-postfachzugriff-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugriff auf ein Postfach · Access to a mailbox**\n\nFür persönliche Postfächer prüft je nach Zugriffsart zusätzlich die Informationssicherheit. · For personal mailboxes, information security also reviews depending on the access type."
+    },
+    {
+      "key": "postfach",
+      "type": "textfield",
+      "label": "Postfach (Adresse) · Mailbox (address)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "postfachtyp",
+      "type": "radio",
+      "label": "Art des Postfachs · Mailbox type",
+      "values": [
+        {
+          "label": "Funktionspostfach · Shared mailbox",
+          "value": "funktion"
+        },
+        {
+          "label": "Persönliches Postfach · Personal mailbox",
+          "value": "persoenlich"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zugriffsart",
+      "type": "radio",
+      "label": "Zugriffsart · Access type",
+      "values": [
+        {
+          "label": "Vollzugriff · Full access",
+          "value": "vollzugriff"
+        },
+        {
+          "label": "Senden als · Send as",
+          "value": "senden-als"
+        },
+        {
+          "label": "Senden im Auftrag · Send on behalf",
+          "value": "im-auftrag"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "person",
+      "type": "textfield",
+      "label": "Wer erhält den Zugriff (UPN) · Who gets access (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "anlass",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

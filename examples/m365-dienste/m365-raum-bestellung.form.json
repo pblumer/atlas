@@ -1,0 +1,59 @@
+{
+  "type": "default",
+  "id": "m365-raum-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Sitzungszimmer · Meeting room**\n\nName und Adresse entstehen nach der Namensregel: RM-<BEREICH> <Bezeichnung>. · Name and address follow the naming rule: RM-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kapazitaet",
+      "type": "textfield",
+      "label": "Plätze · Seats",
+      "description": "Eine Zahl von 1 bis 999. · A number from 1 to 999.",
+      "validate": {
+        "required": true,
+        "pattern": "^[1-9][0-9]{0,2}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "standort",
+      "type": "textfield",
+      "label": "Standort · Location",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

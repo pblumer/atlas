@@ -1,6 +1,6 @@
 # ADR-0370: A published message waits for its subscriber
 
-- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; amended 2026-10-13 — what the first slice decided where this record was silent: the buffer feeds subscriptions and not message starts, an id is remembered across delivery, one catch per event-based gateway takes a message, and a message that may be kept carries no personal data; see the amendment notes below)
+- **Status:** Accepted (amended 2026-09-16 — the buffer ships as a standalone local slice, ahead of and independent of any cross-node traffic; amended 2026-09-17 — expiry at an entry point that states a commitment is a breach rather than a silent outcome; amended 2026-10-13 — what the first slice decided where this record was silent: the buffer feeds subscriptions and not message starts, an id is remembered across delivery, one catch per event-based gateway takes a message, and a message that may be kept carries no personal data; amended 2026-10-23 — a subscription whose element no longer waits is no delivery; see the amendment notes below)
 - **Implementation:** Partial
 - **Date:** 2026-09-16
 - **Deciders:** Atlas maintainers
@@ -86,6 +86,30 @@
 > - **A lifetime is bounded.** `--message-ttl-max` (default seven days) bounds what a
 >   publish may ask for; more is refused with 400 rather than shortened, because a sender
 >   that asked for a lifetime relies on it.
+
+> **Amendment (2026-10-23): a subscription whose element no longer waits is no delivery.**
+> "If it delivered to nothing — no subscription correlated" was read literally, and a
+> subscription is correlated even when its element no longer waits: the losing branch of an
+> event-based gateway and a boundary whose host finished leave their subscription behind,
+> and the next matching send clears it (`deliverToSubscriptions`). Such a send counted as
+> delivered, so a message with a time to live that only a left-behind subscription matched
+> was not kept and was lost. It also wrote its payload into that instance, which may have
+> moved on and now read values of a message it never received, and it left a message flow
+> in the collaboration replay (ADR-0038) for a delivery that did not happen.
+>
+> - **Delivered means an element received it.** A correlation with a subscription whose
+>   element instance is gone clears the subscription and nothing more: no payload, no
+>   flow, no completion, and it does not count as delivered. A message with a time to live
+>   that reached only such subscriptions is kept, as the record intended for a message
+>   "nothing waits for".
+> - **The same holds for a signal** (ADR-0088): a broadcast writes nothing into an
+>   instance whose subscription was left behind.
+> - **Replay is unchanged.** What earlier versions wrote stays on the log and replays as it
+>   was; the rule changes what is written from this version on.
+>
+> Found while building the event log ([ADR-0472](0472-event-log.md)), which
+> showed such a send as "reached 0" with no message kept. Tests:
+> `engine/stale_subscription_test.go`.
 
 > **As built (2026-10-13).** The local slice is built. `POST /api/v1/messages` and
 > `atlas_publish_message` take `timeToLiveMs` and `messageId`; the engine's

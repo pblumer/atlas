@@ -36,6 +36,8 @@ var (
 	setupDocKindMap = regexp.MustCompile(`(?s)const WORKER_KIND_TO_DOC = \{(.*?)\};`)
 	setupDocKindRe  = regexp.MustCompile(`([a-zA-Z0-9]+):\s*"([a-zA-Z0-9]+)"`)
 	handbookIDRe    = regexp.MustCompile(`id="([a-zA-Z0-9-]+)"`)
+	// A reference card linked beside the setup card: `reference: { anchor: "…", title: … }`.
+	setupDocReferenceRe = regexp.MustCompile(`(?m)^    reference: \{ anchor: "([a-z0-9-]+)", title: `)
 )
 
 // workerTypeDoc is one parsed entry: what it links to, and enough of its body to tell a
@@ -155,6 +157,10 @@ func TestEverySetupDocAnchorIsInTheHandbook(t *testing.T) {
 	for id, doc := range parseWorkerTypeDocs(t) {
 		if doc.anchor != "" && !ids[doc.anchor] {
 			dangling = append(dangling, id+" → #"+doc.anchor)
+		}
+		// The reference card linked beside the setup card is held to the same rule.
+		if m := setupDocReferenceRe.FindStringSubmatch(doc.body); m != nil && !ids[m[1]] {
+			dangling = append(dangling, id+" → #"+m[1]+" (reference)")
 		}
 	}
 	if len(dangling) > 0 {

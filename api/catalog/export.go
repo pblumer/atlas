@@ -56,14 +56,27 @@ type ProcessDeployer interface {
 
 // HandleExportCatalog serves GET /api/v1/catalogs/{id}/document: the catalogue as a
 // document, ?processes=true with the processes its products are bound to.
+func (s *Service) HandleExportCatalog(w http.ResponseWriter, r *http.Request) {
+	want := r.URL.Query().Get("processes")
+	doc, code, msg := s.ExportDocument(httpapi.PrincipalFrom(r.Context()), r.PathValue("id"), want == "true" || want == "1")
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, doc)
+}
+
+// ExportDocument is the catalogue as GET /api/v1/catalogs/{id}/document answers it,
+// for whoever p is; with processes, the processes its products are bound to. code
+// and msg are the route's refusal, and code is 0 when it answers. The application
+// package (ADR-0467) exports through it, so a catalogue reaches a package under
+// exactly the authority it reaches a file.
 //
 // Only a maintainer exports. The document is the whole record — members, approval
 // rules, process bindings — which is more than the shop shows the people a
 // catalogue is for, so seeing the catalogue is not enough. A catalogue the caller
 // cannot see reads as absent, as it does everywhere.
-func (s *Service) HandleExportCatalog(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	p := httpapi.PrincipalFrom(r.Context())
+func (s *Service) ExportDocument(p *httpapi.Principal, id string, processes bool) (Document, int, string) {
 	var (
 		doc             Document
 		found, readable bool
@@ -100,14 +113,73 @@ func (s *Service) HandleExportCatalog(w http.ResponseWriter, r *http.Request) {
 	})
 	switch {
 	case loadErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "export catalogue: "+loadErr.Error())
+		return doc, http.StatusInternalServerError, "export catalogue: " + loadErr.Error()
 	case !found || !readable:
-		httpapi.Error(w, http.StatusNotFound, "no catalogue "+id)
+		return doc, http.StatusNotFound, "no catalogue " + id
 	case !allowed:
-		httpapi.Error(w, http.StatusForbidden, problemNotYours)
-	default:
-		s.answerExport(w, r, doc)
+		return doc, http.StatusForbidden, problemNotYours
 	}
+	if processes {
+		return s.withProcesses(doc)
+	}
+	return doc, 0, ""
+}
+
+// Released reports whether a catalogue has a release. Only a shop whose catalogues
+// are all published here is published by the package's import: one still being
+// built would otherwise be refused there for what is unfinished here.
+func (s *Service) Released(id string) (bool, error) {
+	var (
+		releases []Release
+		err      error
+	)
+	s.loop.Do(func() { releases, err = s.store.ReleasesOf(id) })
+	return len(releases) > 0, err
+}
+
+// ExportChoice is a catalogue a person may export, as the application package's
+// download offers it: its id and texts, and whether a product it maintains or
+// offers runs on one of the processes asked about.
+type ExportChoice struct {
+	ID    string            `json:"id"`
+	Texts map[string]string `json:"texts"`
+	Bound bool              `json:"bound"`
+}
+
+// ExportChoices names every catalogue p may export, sorted by id, each marked bound
+// when one of its products is bound to one of processes (ADR-0467).
+func (s *Service) ExportChoices(p *httpapi.Principal, processes []string) ([]ExportChoice, error) {
+	out := []ExportChoice{}
+	var err error
+	s.loop.Do(func() {
+		var cats []Catalog
+		if cats, err = s.store.Catalogs(); err != nil {
+			return
+		}
+		var items []Item
+		if items, err = s.store.Items(); err != nil {
+			return
+		}
+		for _, c := range cats {
+			if !s.mayRead(c, p) || !s.mayEdit(c, p) {
+				continue
+			}
+			choice := ExportChoice{ID: c.ID, Texts: c.Texts}
+			for _, it := range items {
+				if it.HomeCatalog != c.ID && !slices.Contains(c.Items, it.ID) {
+					continue
+				}
+				for _, proc := range processesOf([]Item{it}) {
+					if slices.Contains(processes, proc) {
+						choice.Bound = true
+					}
+				}
+			}
+			out = append(out, choice)
+		}
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, err
 }
 
 // HandleExportProducts serves GET /api/v1/catalog-products/document?ids=a,b: the
@@ -190,19 +262,30 @@ func (s *Service) HandleExportProducts(w http.ResponseWriter, r *http.Request) {
 // loop itself, and Loop.Do is a rendezvous.
 func (s *Service) answerExport(w http.ResponseWriter, r *http.Request, doc Document) {
 	if want := r.URL.Query().Get("processes"); want == "true" || want == "1" {
-		if s.Models == nil {
-			httpapi.Error(w, http.StatusServiceUnavailable, "this server cannot read its processes to export them")
+		var code int
+		var msg string
+		if doc, code, msg = s.withProcesses(doc); code != 0 {
+			httpapi.Error(w, code, msg)
 			return
-		}
-		for _, id := range processesOf(doc.Products) {
-			if xml, deployed := s.Models.ProcessXML(id); deployed {
-				doc.Processes = append(doc.Processes, Process{ID: id, XML: string(xml)})
-			} else {
-				doc.MissingProcesses = append(doc.MissingProcesses, id)
-			}
 		}
 	}
 	httpapi.JSON(w, http.StatusOK, doc)
+}
+
+// withProcesses adds the processes the document's products are bound to, as their
+// newest version was deployed, and names those deployed nowhere here.
+func (s *Service) withProcesses(doc Document) (Document, int, string) {
+	if s.Models == nil {
+		return doc, http.StatusServiceUnavailable, "this server cannot read its processes to export them"
+	}
+	for _, id := range processesOf(doc.Products) {
+		if xml, deployed := s.Models.ProcessXML(id); deployed {
+			doc.Processes = append(doc.Processes, Process{ID: id, XML: string(xml)})
+		} else {
+			doc.MissingProcesses = append(doc.MissingProcesses, id)
+		}
+	}
+	return doc, 0, ""
 }
 
 // exported is a product as a document carries it: without the revision and times

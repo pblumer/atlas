@@ -13,6 +13,9 @@ import { enhanceTable } from "./table.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
+import { outcomeSummary } from "./importchoices.js";
+import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.js";
+import { importPackage, packageSummary } from "./packageimport.js";
 import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -32,16 +35,19 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
+import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
 import { refDeleteWarning } from "./dmnref-impact.js";
 import { versionDeleteState, holderNote } from "./decision-cleanup.js";
 import { frozenMark } from "./frozen-decisions.js";
-import { t as tr, plural as trPlural } from "./i18n.js";
+import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
+import { attachRemoteSelects, remoteAdapter, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
 import { uncoveredStartVariables, extraStartFieldsHTML, wireStartJSONEditors, readTypedDeployBody, keepConstantNameInCapitals } from "./startvars.js";
@@ -54,7 +60,8 @@ import { viewAIAccess } from "./aiaccess.js";
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
 import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
-import { fmtDateTime } from "./datefmt.js";
+import { fmtDate, fmtDateTime } from "./datefmt.js";
+import { mockupsHTML } from "./mockups.js";
 import { prefs, loadPrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
 
@@ -238,6 +245,8 @@ function updateAccount() {
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
+      `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
+      `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
@@ -691,25 +700,40 @@ const APPS = [
 const TOPNAV = {
   console: [
     { name: "Dashboard", route: "#/console", role: "any" },
-    { name: "Engine", route: "#/console/engine", role: "admin" },
-    { name: "Logs", route: "#/console/logs", role: "admin" },
-    { name: "Backup", route: "#/console/backup", role: "admin" },
-    { name: "Organization", route: "#/console/org", role: "admin" },
     { name: "Workers", route: "#/console/workers", role: "any" },
     // What atlas emits (ADR-0435): a modeler chooses an event to listen to here; an
     // administrator also sees who listens now.
     { name: "Events", route: "#/console/events", role: "modeler" },
     { name: "AI access", route: "#/console/ai-access", role: "any" },
-    { name: "Audit log", route: "#/console/audit", role: "admin" },
-    // Where a product's description may come from outside Atlas
-    // (ADR-draft-service-content-from-an-external-source § 3): installation
-    // configuration naming a vault secret, so it sits beside the Workers and the
-    // vault and is the administrator's. The catalogue's, so it goes with the switch.
-    { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },
     // How this person reads: number format, time zone, language. Role "any",
     // because it configures the reader rather than the server
     // (ADR-0459).
     { name: "Display", route: "#/console/settings", role: "any" },
+    // The administrator's pages, behind one entry. Eleven side by side no longer fitted
+    // a laptop's window: the bar wrapped two-word names onto two lines and cut off the
+    // account button. These six are what only an administrator opens, and seldom, so
+    // they cost one click more and the bar holds its place for everybody else. A group
+    // rather than an overflow menu that fills with whatever does not fit, because then
+    // where a page is would depend on the width of the window, and "Console →
+    // Administration → API tokens" has to be true on every screen.
+    { name: "Administration", role: "admin", items: [
+      { name: "Engine", route: "#/console/engine", role: "admin" },
+      { name: "Logs", route: "#/console/logs", role: "admin" },
+      { name: "Backup", route: "#/console/backup", role: "admin" },
+      { name: "Organization", route: "#/console/org", role: "admin" },
+      // The credentials machines sign in with (ADR-0194). Admin, like the three routes
+      // behind it: issuing one is the same class of act as creating an account.
+      { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      // Which Workers act as whom, by which policy: readiness, policies, the simulator
+      // and the recorded decisions (ADR-0475).
+      { name: "Security", route: "#/console/security", role: "admin" },
+      { name: "Audit log", route: "#/console/audit", role: "admin" },
+      // Where a product's description may come from outside Atlas
+      // (ADR-draft-service-content-from-an-external-source § 3): installation
+      // configuration naming a vault secret, so it is the administrator's, beside the
+      // other installation settings. The catalogue's, so it goes with the switch.
+      { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },
+    ] },
   ],
   modeler: [
     { name: "Home", route: "#/modeler", role: "modeler" },
@@ -719,19 +743,34 @@ const TOPNAV = {
     { name: "Instances", route: "#/operations", role: "operator" },
     { name: "Incidents", route: "#/operations/incidents", badge: "incidents", role: "operator" },
     { name: "Workers", route: "#/operations/workers", role: "operator" },
-    // What waits in the message buffer for a subscription that has not opened yet
-    // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
-    { name: "Messages", route: "#/operations/messages", role: "operator" },
-    { name: "Outbox", route: "#/operations/outbox", role: "operator" },
-    { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
-    { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
     { name: "Decisions", route: "#/operations/decisions", role: "operator" },
     // Where Atlas and the target systems disagree about who holds what
     // (ADR-0334). Operations rather than Catalogue: maintaining a
     // catalogue is authoring, and acting on a finding is repair — the three acts
     // are the operator's role on the server too.
     { name: "Reconciliation", route: "#/operations/reconciliation", role: "operator", feature: "catalogue" },
-    { name: "Call activities", route: "#/operations/call-activities", role: "any" },
+    // The pages an operator opens to look into something rather than to work a case:
+    // what waits, what was sent, who calls whom, and — for an administrator — what the
+    // mock workers recorded. Behind one entry for the reason Console › Administration
+    // is: ten side by side did not fit a laptop's window. The group is offered to
+    // anybody and shows each page to whoever its own role admits, so Call activities
+    // stays where it was for everybody who could reach it before.
+    { name: "Diagnostics", role: "any", items: [
+      // What waits in the message buffer for a subscription that has not opened yet
+      // (ADR-0370): the one place a message "from the past" can be seen before it arrives.
+      { name: "Messages", route: "#/operations/messages", role: "operator" },
+      // What was actually sent and where it arrived (ADR-0472). Open to
+      // anybody: the route reads each row as its instance is read, so a project member
+      // sees the rows of their projects and an operator every row.
+      { name: "Event log", route: "#/operations/event-log", role: "any" },
+      { name: "Outbox", route: "#/operations/outbox", role: "operator" },
+      { name: "Call activities", route: "#/operations/call-activities", role: "any" },
+      { name: "Mock directory", route: "#/operations/ad-mock", role: "admin" },
+      { name: "Mock database", route: "#/operations/sql-mock", role: "admin" },
+      // The one view ADR-0216 settles on, where every mockup
+      // is to land; SharePoint's is the first, and the two above move in later.
+      { name: "Mockups", route: "#/operations/mockups", role: "admin" },
+    ] },
   ],
   tasks: [
     { name: "Inbox", route: "#/tasks", role: "user" },
@@ -827,8 +866,8 @@ const WORKER_TYPES = [
     refs: "ADR-0041 · ADR-0079 · ADR-0093", status: "active", statusLabel: "configurable",
   },
   {
-    id: "sharepoint", name: "SharePoint", kind: "List item",
-    desc: "Creates a list item in a Microsoft SharePoint site from a service task off the processor loop via the Graph API (OAuth2 app-only or refresh-token). The site, list, and item fields are model-authored (FEEL-capable) and the created item's JSON is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored on a service task with the SharePoint Worker Type.",
+    id: "sharepoint", name: "SharePoint", kind: "Lists & documents",
+    desc: "Creates, reads, updates, deletes and finds the items of a Microsoft SharePoint list, and uploads, downloads, checks, lists, creates and deletes files and folders in a document library — from a service task off the processor loop via the Graph API (OAuth2 app-only with a client secret or a certificate, or refresh-token). The operation, site, list or library and values are model-authored (FEEL-capable) and what Graph answered is written into a result variable; the Graph base and credentials are managed below and resolved from the vault. Authored on a service task with the SharePoint Worker Type.",
     refs: "ADR-0041 · ADR-0093 · ADR-0141", status: "active", statusLabel: "configurable",
   },
   {
@@ -885,6 +924,16 @@ const WORKER_TYPES = [
     id: "teamsphone", name: "Microsoft Teams Phone", kind: "Telephony",
     desc: "Provisions a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls, and removes them again \u2014 without a model authoring PowerShell. The work is fixed PowerShell shipped with atlas, run by the worker on a host with PowerShell 7 and the MicrosoftTeams module, one process per job. Every ensure looks before it creates, so a retried task converges, and an account Entra already holds but Teams does not show yet is adopted instead of failing. Configure each tenant below: its {tenantId, clientId} bundle with a certificate or a certificate thumbprint lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
     refs: "ADR-0463 \u00b7 ADR-0172", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "googlecontacts", name: "Google Contacts", kind: "Contacts",
+    desc: "Uses a Google address book from a process: finds a contact by e-mail address, phone number or a custom field such as a customer number, reads, lists, creates, updates and deletes contacts, puts a label such as Kunden on one or takes it off, and searches the organization\u0027s Workspace directory for a colleague. A contact arrives as one flat object (email, phone, organization, address, fields, groups) rather than as Google\u0027s lists of entries. Find reads the address book itself, exact and current, so a process asking whether a customer is known does not get the stale answer Google\u0027s search cache can give. Configure each address book below: a service account acting as a Workspace user, or a person\u0027s refresh token, lives in the vault and never enters a model. Worker-only, and atlas supervises the worker for it.",
+    refs: "ADR-0476", status: "active", statusLabel: "configured below",
+  },
+  {
+    id: "carddav", name: "CardDAV contacts", kind: "Contacts",
+    desc: "Uses a CardDAV address book from a process \u2014 iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak, Fastmail, Synology, Radicale and most mail providers\u0027 \u2014 with the operations and the contact of Google Contacts: finds a contact by e-mail address, phone number or a custom field, reads, searches, lists, creates, updates and deletes contacts, and puts a group such as Kunden on one or takes it off. An update keeps every property it does not change, a photo included, and a repeated create finds the contact the first round made instead of making a second. Configure each address book below: its URL, and the account\u0027s username and app-specific password in the vault, which never enter a model. Worker-only, and atlas supervises the worker for it.",
+    refs: "ADR-0490", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",
@@ -1142,8 +1191,13 @@ function handbookHelp(path) {
   // chapter of its own: how a person reads the console is not a quick-start topic.
   if (path.startsWith("#/console/settings")) return H("darstellung", "Display settings");
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
+  if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
+  if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
+  if (path.startsWith("#/console/approvals")) return H("konten", "Approving an action");
+  if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
   if (path.startsWith("#/console/events")) return H("ereignisse", "Events");
+  if (path.startsWith("#/operations/event-log")) return H("ereignisse", "The event log");
   if (path.startsWith("#/console/engine")) return H("konzepte", "Core concepts");
   // Organization pointed at the worker chapter only because the worker cards used to
   // sit on it; with those on their own page it points there instead, and Organization
@@ -1322,18 +1376,32 @@ function setChrome(appId, route) {
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
   paintApps();
   const topnav = document.getElementById("topnav");
-  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) =>
+  topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) => {
+    // A group is one entry that opens its pages in a menu (the shared dropdown, which
+    // is position:fixed, so the bar scrolling sideways cannot clip it). It is marked
+    // active while one of its pages is open, so the bar still says where one is.
+    if (t.items) {
+      const pages = t.items.filter((i) => offered(i));
+      if (!pages.length) return "";
+      const here = pages.some((i) => i.route === route);
+      return `<div class="dropdown topnav-group" data-group="${t.name}">` +
+        `<button type="button" class="topnav-group-btn dropdown-toggle${here ? " active" : ""}" aria-haspopup="menu">` +
+        `${t.name}<span class="topnav-caret" aria-hidden="true">▾</span></button>` +
+        `<div class="dropdown-menu" role="menu" hidden>` +
+        pages.map((i) => `<a href="${i.route}" role="menuitem"${i.route === route ? ` class="active" aria-current="page"` : ""}>${i.name}</a>`).join("") +
+        `</div></div>`;
+    }
     // A `separate` entry is a page of its own and opens in one, exactly as the
     // drawer opens it. Rendered as a plain link it would replace the console in the
     // same tab, which is the behaviour the note above APPS argues against: the only
     // way back is one small link, and somebody in the middle of something loses it.
-    `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
-    `class="${t.route === route ? "active" : ""}">${t.name}` +
-    (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`
-  ).join("");
-  // On a narrow screen the view names scroll sideways within the bar, and the one
+    return `<a href="${t.route}"${t.separate ? ` target="_blank" rel="noopener"` : ""} ` +
+      `class="${t.route === route ? "active" : ""}">${t.name}` +
+      (t.badge ? `<span class="nav-badge" data-badge="${t.badge}" hidden></span>` : "") + `</a>`;
+  }).join("");
+  // When the view names do not fit they scroll sideways within the bar, and the one
   // open may be past its edge; bring it into view so the bar says where one is.
-  const current = topnav.querySelector("a.active");
+  const current = topnav.querySelector(":scope > a.active, .topnav-group-btn.active");
   if (current && topnav.scrollWidth > topnav.clientWidth) {
     const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
     topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
@@ -1553,7 +1621,10 @@ function paintReleaseNotes(slot, lang) {
 // ---------- Views ----------
 async function viewConsoleDashboard() {
   view.innerHTML = `
+    <div id="storage-alert-slot"></div>
     <div id="catalogue-stranded-slot"></div>
+    <div id="api-tokens-expiring-slot"></div>
+    <div id="approvals-waiting-slot"></div>
     <div class="card">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
@@ -1592,12 +1663,36 @@ async function viewConsoleDashboard() {
         </div>
       </div>
     </div>
+    <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
   if (!FEATURES.catalogue && mayUse("admin")) renderCatalogueStranded(document.getElementById("catalogue-stranded-slot"));
+  // API tokens about to expire (ADR-0194): asked only by an administrator, the one
+  // person who may read the list and mint the replacement. Silent otherwise.
+  if (mayUse("admin")) {
+    import("./apitokens.js").then((m) => m.renderExpiringTokens(document.getElementById("api-tokens-expiring-slot"), { api }))
+      .catch(() => {});
+  }
+  // The disk under the data directory (ADR-0481): asked only by an
+  // administrator, the one person the route answers and the one who can free space.
+  // The card is always shown to them; the alert above the dashboard only when the room
+  // runs low, the server is frozen below its reserve, or the engine has halted.
+  if (mayUse("admin")) {
+    import("./storage.js").then((m) => m.renderStorage({
+      alertSlot: document.getElementById("storage-alert-slot"),
+      cardSlot: document.getElementById("storage-card-slot"),
+      api,
+    })).catch(() => {});
+  }
+  // Action approvals waiting for this person's answer (ADR-0475 §9): asked only when
+  // somebody is signed in, because only a person answers one. Silent otherwise.
+  if (AUTH.enabled && AUTH.user) {
+    import("./approvals.js").then((m) => m.renderWaitingApprovals(document.getElementById("approvals-waiting-slot"), { api }))
+      .catch(() => {});
+  }
   renderReleaseNotes(document.getElementById("release-notes-slot")); // fills its own slot; safe if it fails
   // The key-features tile sits below the dashboard's own tiles: what Atlas is, for
   // someone who arrived here without having read the README. Fills its own slot,
@@ -2084,7 +2179,7 @@ const GRANTABLE_ROLES = [
   { id: "feedreader", name: "Feed reader", what: "read the event feed of action outcomes, granted and revoked rights and incidents, and nothing else" },
 ];
 
-function userForm(u) {
+function userForm(u, people) {
   const isEdit = !!u;
   const held = (isEdit && u.roles) || ["user"];
   const boxes = GRANTABLE_ROLES.map((r) =>
@@ -2099,10 +2194,36 @@ function userForm(u) {
       <label class="field">Email<input name="email" type="email" value="${isEdit ? esc(u.email || "") : ""}"></label>
       ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
+      ${isEdit ? lineManagerField(u, people) : ""}
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
       <div class="row" style="margin-top:4px"><button class="btn" type="submit" title="${isEdit ? "Save changes to this user" : "Create the user account"}">${isEdit ? "Save changes" : "Create user"}</button></div>
     </form>
     ${isEdit ? avatarField(u) : ""}</div>`;
+}
+
+// lineManagerField is whom a `superior` approval of this person's orders goes to
+// (ADR-0470). Every other account is offered; the
+// account itself never is. Where the directory mirror reports the manager the field
+// is shown and not offered for editing — the server refuses the edit, because a value
+// typed here would outlive the directory changing it — and the form leaves it out of
+// what it sends.
+function lineManagerField(u, people) {
+  const fromDirectory = !!u.managerDirectoryId;
+  const others = (people || []).filter((p) => p.id !== u.id);
+  const label = (p) => `${p.displayName || p.username}${p.displayName ? ` (${p.username})` : ""}`;
+  const known = others.some((p) => p.id === u.managerId);
+  const options = [`<option value="">— none —</option>`]
+    .concat(others.map((p) => `<option value="${esc(p.id)}"${p.id === u.managerId ? " selected" : ""}>${esc(label(p))}</option>`))
+    // A manager whose account is gone stays visible as what it is, rather than the
+    // select quietly showing "none" and a save then clearing it.
+    .concat(u.managerId && !known ? [`<option value="${esc(u.managerId)}" selected>${esc(u.managerId)} — no account</option>`] : [])
+    .join("");
+  const note = fromDirectory
+    ? `The directory reports this person's line manager (${esc(u.managerDirectoryId)}); change it there, and the mirror brings it here.`
+    : "Whom an approval of the kind “superior” goes to when this person orders.";
+  return `<label class="field">Line manager
+    <select name="managerId"${fromDirectory ? " disabled" : ""}>${options}</select>
+    <span class="muted manager-note" style="font-size:12px">${note}</span></label>`;
 }
 
 // avatarField is the picture, outside the form on purpose.
@@ -2212,12 +2333,18 @@ async function createUser(fd, reload) {
 
 async function saveUser(id, fd, reload, u) {
   try {
-    await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, {
+    const body = {
       displayName: (fd.get("displayName") || "").trim(),
       email: (fd.get("email") || "").trim(),
       roles: rolesFrom(fd, u),
       disabled: !!fd.get("disabled"),
-    });
+    };
+    // Only a change is sent. A disabled select (the directory's) is not in the form
+    // data at all, and re-sending an unchanged manager would fail an unrelated edit
+    // once that manager's account is gone.
+    const manager = fd.get("managerId");
+    if (manager !== null && manager !== ((u && u.managerId) || "")) body.managerId = manager;
+    await api("PATCH", `/api/v1/users/${encodeURIComponent(id)}`, body);
     toast("User updated", "ok");
     reload();
   } catch (e) { toast("could not update user: " + e.message, "err"); }
@@ -2483,7 +2610,7 @@ async function viewConsoleWorkers() {
         a leaver has nothing to disable in an empty directory. Atlas keeps this and hands it to the
         worker, so there is no file path to type and nothing to place on the worker's host.
         This is where every forest <i>starts</i> and is never written back: what a mockup run has
-        actually put in one is under <a href="#/operations/ad-mock">Operations &rsaquo; Mock directory</a>.</div>
+        actually put in one is under <a href="#/operations/ad-mock">Operations &rsaquo; Diagnostics &rsaquo; Mock directory</a>.</div>
         <div class="between" style="gap:10px; flex-wrap:wrap">
           <span id="admock-seed-state" data-seed-name="${esc(adMock.seedName || "")}" style="font-size:13px">${
             adMock.hasSeed
@@ -2692,6 +2819,28 @@ async function viewConsoleOrg() {
     return `<span class="pill off" title="${esc(closed)}"><span class="dot"></span>offline</span>`;
   };
 
+  // The day each account last signed in (ADR-0477).
+  // Presence is this minute and a restart forgets it; this is what tells an account
+  // somebody still uses from one nobody has opened since spring. The server keeps a
+  // UTC calendar day and nothing finer, so its age is counted against today's UTC day
+  // as well — that makes "today" and "3 days ago" right for every reader, whichever
+  // time zone they chose. Shown with the same condition as presence: with login not
+  // enforced, nobody signs in and every row would say so.
+  const showLastLogin = AUTH.enabled;
+  const lastLoginCell = (u) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(u.lastLoginDate || "");
+    if (!m) {
+      return `<td class="muted" data-sort="" title="No login recorded for this account. Logins are recorded from this release on, and an account used only through an API token or an AI client never signs in here.">—</td>`;
+    }
+    const day = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const now = new Date();
+    const age = Math.round((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - day) / 86400000);
+    const when = age <= 0 ? "today" : age === 1 ? "yesterday" : `${age} days ago`;
+    const date = fmtDate(day, { timeZone: "UTC" });
+    return `<td class="nowrap" data-sort="${esc(u.lastLoginDate)}" title="Last signed in on ${esc(date)} (a UTC calendar day — Atlas keeps the day, not the time)">${esc(when)}
+        <div class="muted" style="font-size:12px">${esc(date)}</div></td>`;
+  };
+
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
@@ -2710,6 +2859,7 @@ async function viewConsoleOrg() {
       <td>${esc(u.displayName || "—")}${u.email ? `<div class="muted" style="font-size:12px">${esc(u.email)}</div>` : ""}</td>
       <td>${roleChips(u.roles)}</td>
       <td>${statusPill(u)}</td>
+      ${showLastLogin ? lastLoginCell(u) : ""}
       ${showPresence ? `<td class="presence-cell">${presencePill(u.presence)}</td>` : ""}
       <td style="text-align:right; white-space:nowrap">
         <button class="btn ghost" data-act="edit" title="Edit this user’s details and roles">Edit</button>
@@ -2736,13 +2886,17 @@ async function viewConsoleOrg() {
           carries, and nothing more.${showPresence ? ` <b>Presence</b> is who is signed in this minute, and only
           administrators see it: <b>online</b> means somebody did something in the last five minutes,
           <b>idle</b> that a session is open but untouched, <b>offline</b> that no browser is reporting.
-          It is read from the live sessions and never stored — a restart shows nobody.` : ""}</p>
+          It is read from the live sessions and never stored — a restart shows nobody.` : ""}${showLastLogin ? ` <b>Last login</b>
+          is the day an account last signed in, kept per account so that an account nobody uses any more
+          stands out. It is a calendar day (UTC) and nothing finer: it says whether an account is in use, not
+          when anybody starts work — the audit log has the exact time of every login.` : ""}</p>
         <div id="user-form-slot" style="padding:0 18px"></div>
         <table data-dt-key="users">
           <thead><tr><th>User</th><th>Name</th><th>Roles</th><th>Status</th>${
+            showLastLogin ? "<th>Last login</th>" : ""}${
             showPresence ? "<th>Presence</th>" : ""}<th></th></tr></thead>
           <tbody id="user-rows">${(users || []).map(userRow).join("")
-            || `<tr><td colspan="${showPresence ? 6 : 5}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
+            || `<tr><td colspan="${5 + (showLastLogin ? 1 : 0) + (showPresence ? 1 : 0)}" class="muted" style="padding:14px 18px">No users yet.</td></tr>`}</tbody>
         </table>
       </div>`;
 
@@ -2844,7 +2998,7 @@ async function viewConsoleOrg() {
     switch (btn.dataset.act) {
       case "edit":
         slot.dataset.mode = "edit";
-        slot.innerHTML = userForm(u);
+        slot.innerHTML = userForm(u, users);
         slot.querySelector(".user-form").addEventListener("submit", (ev) => {
           ev.preventDefault();
           saveUser(u.id, new FormData(ev.target), reload, u);
@@ -3263,7 +3417,7 @@ async function viewModelerHome() {
         { sep: true },
         { label: "Import file…", icon: "📥", act: "import" },
         { label: "Import MIM workflow (XOML)…", icon: "🔁", act: "import-mim" },
-        { label: "Import source tree…", icon: "🗂", act: "import-source" },
+        { label: "Import application…", icon: "🗂", act: "import-source" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -3618,7 +3772,7 @@ async function viewProjectDetail(id) {
     ];
 
     const projItems = ungrouped ? [] : [
-      { label: "Download source…", icon: "🗂", act: "srcexport" },
+      { label: "Export application…", icon: "🗂", act: "srcexport" },
       ...(rl.length ? [{ label: "Validate DMN", icon: "✔", act: "valproj" }] : []),
       ...(AUTH.enabled && isOwner ? [{ label: "Share…", icon: "👤", act: "shareproj" }] : []),
       ...(isOwner ? [{ label: "Rename application", icon: "✎", act: "renproj" }] : []),
@@ -3939,8 +4093,8 @@ async function renderAppDeployments(id) {
     <td class="muted" data-sort="${r.publishedAt || 0}">${esc(fmtTime(r.publishedAt))}</td>
     <td class="muted">${(r.members || []).length}</td>
     <td class="muted">${esc(r.note || "—")}</td>
-    <td class="row-actions">${targets.length
-      ? `<button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
+    <td class="row-actions"><button class="btn ghost sm" data-architecture="${r.version}" title="How this release reaches and is reached by its environment">Architecture</button>${targets.length
+      ? ` <button class="btn ghost sm" data-promote="${r.version}" title="Ship this release to a deployment target">Promote…</button>`
       : ""}</td>
   </tr>`;
 
@@ -3972,9 +4126,51 @@ async function renderAppDeployments(id) {
 
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
+  for (const b of host.querySelectorAll("button[data-architecture]"))
+    b.addEventListener("click", () => openReleaseArchitecture(id, view.name, Number(b.dataset.architecture)));
   // This pane loads lazily on its first open, long after the route enhanced the view's
   // tables — without this its lists would be the only ones with no sorting or filters.
   enhanceViewTables();
+}
+
+// openReleaseArchitecture shows one release's architecture sketch (ADR-0471): the SVG
+// the server rendered from the snapshot the release carries, and the two files a
+// reader takes away. The picture is the server's rendering, not one drawn here, so the
+// dialog shows exactly what a download contains — and it is shown through an <img>,
+// where an SVG cannot run anything even if a label in it tried to.
+async function openReleaseArchitecture(appID, appName, version) {
+  const base = `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/architecture`;
+  let svg;
+  try {
+    svg = await api("GET", base + ".svg");
+  } catch (e) { toast(e.message, "err"); return; }
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
+
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Architecture of v${version}" style="width:min(1180px, 96vw)">
+      <div class="modal-head">
+        <h2>Architecture of v${version}</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <div class="modal-body" style="overflow:auto; background:#fff">
+        <img src="${url}" alt="Architecture sketch of release v${version}" style="display:block; max-width:100%; height:auto">
+      </div>
+      <div class="modal-foot">
+        <span class="muted small">Taken when the release was recorded on this installation. Endpoints and worker instances you may not see are withheld.</span>
+        <a class="btn ghost" href="${base}.xml" download="${esc(file)}.xml" title="ArchiMate Open Exchange document, for Archi and other architecture tools">ArchiMate (.xml)</a>
+        <a class="btn" href="${base}.svg" download="${esc(file)}.svg" title="The sketch as a standalone image">Image (.svg)</a>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+
+  const close = () => { ov.remove(); URL.revokeObjectURL(url); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("[data-x]").addEventListener("click", close);
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The
@@ -4017,18 +4213,40 @@ async function deleteDraft(processId, reload) {
   await reload();
 }
 
+// deleteProcess removes every deployed version of a process. A version the server
+// refuses keeps the server's reason — it used to be replaced by a guess ("running
+// instances?") that was wrong for a process a catalogue release binds. A 409 is a
+// guard the forced delete overrides, so it is offered, with what it does, before
+// anything is forced (ADR-0468).
 async function deleteProcess(processId, groups, reload) {
   const group = groups.find((g) => g.processId === processId);
   if (!group) return;
   const n = group.versions.length;
-  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}?`)) return;
-  let failed = 0;
+  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}? This cannot be undone.`)) return;
+  let refused = [];
   for (const v of group.versions) {
     try { await api("DELETE", `/api/v1/processes/${v.key}`); }
-    catch (e) { failed++; }
+    catch (e) { refused.push({ v, e }); }
   }
-  if (failed) toast(`Could not delete ${failed} version(s) — running instances?`, "err");
-  else toast(`Deleted "${processId}"`, "ok");
+  const forcible = refused.filter((r) => r.e.status === 409);
+  if (forcible.length) {
+    const reasons = [...new Set(forcible.map((r) => forceReason(r.e.message)))].join("\n\n");
+    const ask = `The server refused to delete ${forcible.length === 1 ? "a version" : `${forcible.length} versions`} of "${processId}":\n\n${reasons}\n\n` +
+      "Delete anyway? Its running instances are cancelled, and it is removed even if a catalogue product or an order still needs it. This cannot be undone.";
+    if (window.confirm(ask)) {
+      const still = [];
+      for (const r of forcible) {
+        try { await api("DELETE", `/api/v1/processes/${r.v.key}?force=true`); }
+        catch (e) { still.push({ v: r.v, e }); }
+      }
+      refused = refused.filter((r) => r.e.status !== 409).concat(still);
+    }
+  }
+  if (refused.length) {
+    toast(`Could not delete ${refused.length} version(s) of "${processId}": ${forceReason(refused[0].e.message)}`, "err");
+  } else {
+    toast(`Deleted "${processId}"`, "ok");
+  }
   await reload();
 }
 
@@ -4076,11 +4294,20 @@ async function renameProject(id, current, reload) {
   await reload();
 }
 
+// deleteProject deletes an application either way
+// ADR-0468 allows: keeping its contents
+// as Not assigned, or with everything it owns after the server's preview of what
+// that removes.
 async function deleteProject(id, name, reload) {
-  if (!window.confirm(`Delete application "${name}"? BPMN, DMN, and form artifacts are kept and become Not assigned. Panorama models must be deleted first.`)) return;
+  const path = `/api/v1/applications/${encodeURIComponent(id)}`;
+  const mode = await openApplicationDeleteDialog({
+    name,
+    loadPreview: () => api("GET", `${path}/deletion-preview`),
+  });
+  if (!mode) return;
   try {
-    await api("DELETE", `/api/v1/applications/${encodeURIComponent(id)}`);
-    toast(`Deleted application "${name}"`, "ok");
+    await api("DELETE", mode === "purge" ? `${path}?purge=true` : path);
+    toast(mode === "purge" ? `Deleted application "${name}" and everything in it` : `Deleted application "${name}"`, "ok");
   } catch (e) { toast("could not delete application: " + e.message, "err"); }
   await reload();
 }
@@ -4733,12 +4960,13 @@ function wireWorkerManagement(workers) {
       if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
-        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
+        <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
         <label class="field provider-field" style="margin:0"><span class="provider-label">Provider</span><select name="provider"></select></label>
         <label class="field" style="margin:0;flex:1 1 160px"><span>Name</span><input name="name" placeholder="risk-service" required/></label>
         <label class="field endpoint-field" style="margin:0;flex:1 1 200px"><span>Endpoint</span><input name="endpoint" placeholder="https://temis.internal" required/></label>
         <label class="field mail-only" style="margin:0;flex:1 1 180px"><span>Sender</span><input name="sender" placeholder="bot@example.com"/></label>
         <label class="field mailbox-field" style="margin:0;flex:1 1 200px" title="Lets this Worker read the mailbox it sends from: a watch, or a task that lists, files or answers mail. Logs in as the sender, always over TLS."><span>IMAP endpoint (optional)</span><input name="mailboxEndpoint" placeholder="imaps://imap.example.com:993"/></label>
+        <label class="field scanner-field" style="margin:0;flex:1 1 200px" title="Every attachment this Worker forwards, reads into a variable or exports into a store is scanned by this ClamAV daemon first. A scanner that does not answer stops the task rather than letting the attachment through."><span>Malware scanner (optional)</span><input name="scanner" placeholder="clamd://clamav.internal:3310"/></label>
         <label class="field model-field" style="margin:0;flex:1 1 180px"><span>Default model</span><input name="model" title="What a step that names no model of its own asks. A task or an agent container may name one, and then that one runs (ADR-0256)."/></label>
         <label class="field sql-only" style="margin:0;flex:1 1 100%"><span>Connection string</span><input name="connectionString" type="password" autocomplete="new-password"/></label>
         <label class="field credref-field" style="margin:0;flex:1 1 180px"><span class="credref-label">Token reference (optional)</span><input name="credentialsRef" placeholder="risk_token"/></label>
@@ -4781,6 +5009,7 @@ function wireWorkerManagement(workers) {
         const sh = workerShape(kindSel.value, providerSel.value);
         form.querySelectorAll(".mail-only").forEach((el) => { el.style.display = sh.mail ? "" : "none"; });
         form.querySelector(".mailbox-field").style.display = sh.mailbox ? "" : "none";
+        form.querySelector(".scanner-field").style.display = sh.scanner ? "" : "none";
         form.querySelector(".provider-field").style.display = sh.provider ? "" : "none";
         form.querySelector(".provider-label").textContent = sh.model ? "Wire format" : "Provider";
         const modelField = form.querySelector(".model-field");
@@ -5089,10 +5318,13 @@ async function toggleInboundSubs(row, workerId, kind) {
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
       <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
-      <td>${s.enabled
-        ? '<span class="pill ok"><span class="dot"></span>on</span>'
-        : `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
-          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")}</td>
+      <td>${!s.enabled
+        ? `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
+          + (s.disabledReason ? ` <span class="muted">${esc(s.disabledReason)}</span>` : "")
+        : s.lastError
+        ? `<span class="pill err" title="${esc(s.lastError)}"><span class="dot"></span>not reading</span>`
+          + ` <span class="muted">since ${esc(fmtTime(s.failingSince))}: ${esc(s.lastError)}</span>`
+        : '<span class="pill ok"><span class="dot"></span>on</span>'}</td>
       <td style="text-align:right"><button class="btn ghost danger" data-sdel title="Delete this subscription">Delete</button></td>
     </tr>`).join("") || `<tr><td colspan="4" class="muted" style="padding:10px">No subscriptions. Add one below to have clio events start or wake processes.</td></tr>`;
   const isJira = kind === "jira";
@@ -5125,7 +5357,7 @@ async function toggleInboundSubs(row, workerId, kind) {
     ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
-      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included. These are also seeded as process variables; <code>messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
+      <div class="muted" style="grid-column:1 / -1">The folder is an IMAP folder name, a Gmail label id (<code>INBOX</code>, <code>Label_…</code>) or a Microsoft folder id or well-known name (<code>inbox</code>, <code>archive</code>); empty is the inbox. The correlation key (FEEL) sees <code>messageId</code>, <code>internetMessageId</code>, <code>from</code>, <code>fromName</code>, <code>replyTo</code>, <code>to</code>, <code>cc</code>, <code>subject</code>, <code>receivedAt</code>, <code>unread</code>, <code>hasAttachments</code>, <code>attachments</code>, <code>auth</code> (<code>spf</code>, <code>dkim</code>, <code>dmarc</code>), <code>folder</code>, <code>eventType</code> — and <code>body</code> when the text is included, by these names or under <code>mail</code> (<code>mail.internetMessageId</code>). The process receives them as one variable, <code>mail</code>: <code>mail.from</code>, <code>mail.subject</code>, <code>mail.auth.dmarc</code>; <code>mail.messageId</code> is what a mail task's operation addresses. A new watch is forward-only, so the mail already in the folder is skipped.</div>`
     : isDiscord
     ? `<div class="muted" style="grid-column:1 / -1">In Discord, enable <b>Developer Mode</b> (User Settings &rsaquo; Advanced) and use the channel's <b>Copy Channel ID</b>. A thread is itself a channel, so a thread's id works here too. The correlation key (FEEL) sees <code>messageId</code>, <code>channelId</code>, <code>content</code>, <code>authorId</code>, <code>authorName</code>, <code>authorBot</code>, <code>timestamp</code>, <code>eventType</code>, and <code>message</code> — the whole message, for anything not named here. These are also seeded as process variables on the started instance. <b>Guard against your own bot</b>: if this Worker also posts into this channel, key or condition on <code>authorBot</code>, or the watch will react to what it wrote. A new watch is forward-only, so the messages already in the channel are skipped.</div>`
     : isGoogle
@@ -5930,19 +6162,53 @@ function showDeployWarnings(warnings) {
   ov.querySelector("[data-done]").focus();
 }
 
-// downloadApplicationSource downloads the application's source tree (ADR-0134): a
-// manifest plus its drafts and forms as native .bpmn and .form.json files, in one
-// .tar.gz. A plain same-origin navigation, so the session cookie authenticates it,
-// exactly as the console's backup download does.
-function downloadApplicationSource(id) {
-  window.location.href = `/api/v1/applications/${encodeURIComponent(id)}/source`;
+// downloadApplicationSource downloads the application's package (ADR-0134, ADR-0467):
+// its source tree — a manifest plus its drafts and forms as native .bpmn and
+// .form.json files — in one .tar.gz, with the catalogues ticked in the dialog and
+// their groups and people as questions answered by name. The dialog also asks whether
+// the constant values travel, and lists what the processes need from the target that
+// no download carries. The download itself is a plain same-origin navigation, so the
+// session cookie authenticates it, exactly as the console's backup download does.
+async function downloadApplicationSource(id) {
+  let info;
+  try {
+    info = await api("GET", `/api/v1/applications/${encodeURIComponent(id)}/needs`);
+  } catch (e) {
+    toast("Could not read what the application needs: " + (e && e.message || e), "err");
+    return;
+  }
+  const url = await openSourceDownload({ id, info, preview: (u) => api("GET", u) });
+  if (url) window.location.href = url;
 }
 
-// importApplicationSource reads a source tree back in. Which application it lands
-// in is not this dialog's choice: the tree's manifest carries the portable key, so
-// the server updates the application that key names or creates it when this server
-// has never seen it (ADR-0134). An import never deletes — artifacts the tree omits
-// are reported back and left alone.
+// packageCall sends one request of a package import and answers its status and body
+// rather than throwing: a 422 with questions is a step of the import, not a failure.
+async function packageCall(method, path, body, type) {
+  const opts = { method };
+  if (body instanceof Uint8Array) {
+    opts.body = body;
+    opts.headers = { "Content-Type": type };
+  } else if (body !== undefined) {
+    opts.body = JSON.stringify(body);
+    opts.headers = { "Content-Type": "application/json" };
+  }
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => null);
+  return { status: res.status, data };
+}
+
+// importApplicationSource installs an application package, or a source tree, which is
+// a package without a shop. Which application it lands in is not this dialog's
+// choice: the tree's manifest carries the portable key, so the server updates the
+// application that key names or creates it when this server has never seen it
+// (ADR-0134). An import never deletes — artifacts the tree omits are reported back and
+// left alone — and never replaces unasked: the plan comes first, and whatever differs
+// from this server's, constants and catalogues included, is listed to tick or leave
+// (ADR-0467). A package with catalogues has their groups and people answered from this
+// server's directory, asking for any it cannot find; the application is then
+// published, because the products are bound to its processes, and the catalogues
+// imported. What the processes need and this server does not have yet is named once
+// the import is in.
 function importApplicationSource(reload) {
   const picker = document.createElement("input");
   picker.type = "file";
@@ -5951,21 +6217,19 @@ function importApplicationSource(reload) {
     const file = picker.files[0];
     if (!file) return;
     try {
-      const res = await fetch("/api/v1/applications/source", {
-        method: "POST",
-        headers: { "Content-Type": "application/gzip" },
-        body: file,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error((data && data.error) || res.statusText);
-      const n = (data.processes || 0) + (data.forms || 0) + (data.decisions || 0);
+      const out = await importPackage(file, { call: packageCall, title: "Import application" });
+      if (!out) return;
+      const data = out.source;
+      const shop = packageSummary(out);
       toast(
-        `${data.created ? "Created" : "Updated"} ${data.name} — ${n} artifact${n === 1 ? "" : "s"}` +
+        `${data.created ? "Created" : "Imported"} ${data.name} — ${outcomeSummary(data.artifacts)}` +
         (data.untracked && data.untracked.length
           ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
-          : ""),
+          : "") + (shop ? ` · ${shop}` : ""),
         "ok");
       await reload();
+      const report = { ...data, warnings: out.warnings };
+      if (needsReport(report)) await showImportNeeds(report);
     } catch (e) {
       toast("Import failed: " + (e && e.message || e), "err");
     }
@@ -6198,6 +6462,16 @@ async function viewInstances() {
           { label: "Terminate all running", icon: "⛔", act: "term", data: { proc: g.processId }, danger: true },
         );
       }
+      // Deleting finished instances for good is an administrator's, and offered only
+      // where there are some (ADR-0486). The
+      // dialog reads its own counts: the Finished column counts every instance that
+      // ever finished, including the ones already deleted.
+      if (s.finished && mayUse("admin")) {
+        menuItems.push(
+          { sep: true },
+          { label: tr("purge.menu"), icon: "✕", act: "purge", data: { proc: g.processId }, danger: true },
+        );
+      }
       // A running count says nothing about a token being *stuck*: an instance parked
       // behind an incident is counted as running like any other (ADR-0151).
       const inc = incidentCell(g);
@@ -6236,6 +6510,20 @@ async function viewInstances() {
         // How many instances a version holds: the per-version running counts the
         // overview already read, so the picker says which one is worth draining.
         runningOf: (v) => runningByDef.get(String(v.key)) || 0,
+        onDone: load,
+      });
+      return;
+    }
+    // Delete a process's finished instances for good, a version or all of them, up to
+    // a cut-off (ADR-0486).
+    if (act === "purge") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await purgeFinishedFlow({
+        api, toast,
+        processId: g.processId,
+        processName: g.latest.name || g.processId,
+        versions: g.versions,
         onDone: load,
       });
       return;
@@ -7134,7 +7422,9 @@ async function viewWorkers() {
             title="Show the jobs this worker ran">${w.worker ? esc(w.worker) : "(unnamed)"}</a></b></td>
           <td>${Object.keys(w.types || {}).sort()
             .map((t) => `<span class="pill-kv">${esc(t)}</span>`).join(" ") || `<span class="muted">&mdash;</span>`}</td>
-          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}</span>`).join(" ")
+          <td>${(w.connectors || []).map((c) => `<span class="pill-kv">${esc(c)}${
+              w.endpoints && Object.hasOwn(w.endpoints, c)
+                ? ` <span class="muted">&rarr; ${esc(w.endpoints[c])}</span>` : ""}</span>`).join(" ")
             || `<span class="muted">&mdash;</span>`}</td>
           <td class="wk-num">${w.leased}</td>
           <td class="wk-num">${w.pulled}</td>
@@ -7998,6 +8288,95 @@ async function viewSQLMockJournal() {
   window.__atlasCleanup = () => clearInterval(timer);
 }
 
+// viewMockups is the Operations "Mockups" view (ADR-0216): one card per mockup, drawn by
+// its kind's renderer in mockups.js. Today the SharePoint Workers with the Mockup
+// provider (ADR-0484) are its cards; the AD and SQL mockups keep
+// their pages until they move here, and the page links to them so the question "what is
+// simulated right now" still has one starting point. This is the page around the cards —
+// the refresh, the folds a refresh must not undo, and emptying a SharePoint site.
+async function viewMockups() {
+  const gen = navGen;
+  view.innerHTML = `
+    <div class="between">
+      <h1>Mockups</h1>
+      <span class="row" style="gap:12px; align-items:center">
+        <label class="field inline" style="margin:0"><input type="checkbox" id="spmock-follow" checked> Auto-refresh</label>
+        <button class="btn neutral" id="spmock-refresh" title="Reload what the mockups hold">Refresh</button>
+      </span>
+    </div>
+    <p class="muted">What the mockups hold and every operation they were asked, newest last.
+    Nothing here reached a real system. A <b>SharePoint</b> Worker with the provider <b>Mockup</b>
+    keeps its site in this server's memory: a list or library exists from the first time a task
+    writes to it, and a restart of atlas empties it. An operation shown in red was <b>refused</b> —
+    as the real site would have refused it — and failed its task with the reason given. The
+    <a href="#/operations/ad-mock">mock directory</a>, the <a href="#/operations/sql-mock">mock
+    database</a> and the <a href="#/operations/outbox">preview outbox</a> still have pages of
+    their own.</p>
+    <div id="spmock-list"><p class="empty">Loading…</p></div>`;
+  const list = document.getElementById("spmock-list");
+
+  // Folds are remembered by worker and section, both ways, so a refresh neither reopens
+  // what somebody closed nor closes what they opened.
+  const keyOf = (d) => {
+    const w = d.closest("[data-worker]");
+    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
+  };
+  const foldState = () => {
+    const state = new Map();
+    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
+    return state;
+  };
+  const refold = (state) => {
+    for (const d of list.querySelectorAll("details")) {
+      const was = state.get(keyOf(d));
+      if (was !== undefined) d.open = was;
+    }
+  };
+
+  let rendered = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await api("GET", "/api/v1/mocks");
+    } catch (e) {
+      rendered = null;
+      list.innerHTML = `<p class="empty">${esc(e.message)}</p>`;
+      return;
+    }
+    const fresh = JSON.stringify(data);
+    if (fresh === rendered) return;
+    const folds = foldState();
+    rendered = fresh;
+    list.innerHTML = mockupsHTML(data);
+    refold(folds);
+  };
+
+  list.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-spmock-clear]");
+    if (!btn) return;
+    // The button sits in the card's summary; without this the click would also fold it.
+    e.preventDefault();
+    const worker = btn.dataset.spmockClear;
+    if (!confirm(`Empty the mockup site of ${worker}? Its lists, libraries and journal are gone; nothing outside this server is touched.`)) return;
+    try {
+      await api("DELETE", "/api/v1/sharepoint/mock-sites/" + encodeURIComponent(worker));
+      toast(`The site of ${worker} is empty`, "ok");
+    } catch (err) {
+      toast("Could not empty the site: " + (err && err.message ? err.message : err), "warn");
+    }
+    await load();
+  });
+
+  await load();
+  if (superseded(gen)) return;
+  document.getElementById("spmock-refresh").addEventListener("click", load);
+  const follow = document.getElementById("spmock-follow");
+  // Five seconds, like its two siblings: a mockup run is watched while clicking through a
+  // process, and the read is a small in-memory snapshot off the engine's run loop.
+  const timer = setInterval(() => { if (follow.checked) load(); }, 5000);
+  window.__atlasCleanup = () => clearInterval(timer);
+}
+
 // viewDecisionDetail lists every evaluation of one decision — its "instances" —
 // newest first, each showing the exact inputs it saw, the outputs it produced, and
 // (expandable) the temis trace of which rules fired (ADR-0066). This is the
@@ -8338,6 +8717,7 @@ async function viewTasks(preselectKey) {
     me: authOn ? ((AUTH.user && AUTH.user.username) || "") : (localStorage.getItem("atlas.tasks.me") || ""),
     assignable: [], // enabled users a task can be assigned to, for the picker
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
+    mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
@@ -8958,6 +9338,12 @@ async function viewTasks(preselectKey) {
   // destroyForm tears down the live form-js instance (if any) before the detail
   // pane is re-rendered or the selection changes, so no viewer leaks.
   function destroyForm() {
+    // The directory fields' searches first: they hold requests and listeners on the
+    // form being torn down (ADR-0473).
+    if (state.mountedLookups) {
+      try { state.mountedLookups.destroy(); } catch { /* already gone */ }
+      state.mountedLookups = null;
+    }
     if (state.mountedForm) {
       try { state.mountedForm.destroy(); } catch { /* already gone */ }
       state.mountedForm = null;
@@ -9030,10 +9416,19 @@ async function viewTasks(preselectKey) {
       ]);
       if (state.selected !== t.key) return; // selection moved on; drop this mount
       host.innerHTML = "";
-      const form = new Form({ container: host });
+      // A directory field searches its remote data source through this task: the
+      // server checks that this person may work on it and reads which Worker and which
+      // properties from the stored form (ADR-0473). The form's selects mount the search
+      // themselves; a directory field saved as a textfield has it attached below. A form
+      // without one asks nothing.
+      const lookups = { transport: taskTransport(t.key), data: data || {} };
+      // atlasLocale: the e-mail view speaks the language the Tasks app does
+      // (ADR-0489).
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasLocale: trLocale() });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
+      state.mountedLookups = attachRemoteSelects(form, host, lookups);
       // The variables the form was filled from, kept beside it. Completing the task
       // needs one the form does not render — which catalogue a picked logo belongs
       // to — and reading it back off the submitted data would only find the fields
@@ -10873,7 +11268,7 @@ async function viewCollaboration(key) {
 
 async function viewInstanceReplay(key) {
   const mod = await import("./editor.js");
-  await mod.mountInstanceReplay(view, { api, toast, key });
+  await mod.mountInstanceReplay(view, { api, toast, key, mayUse });
 }
 
 // ---------- Router ----------
@@ -11103,6 +11498,11 @@ function routeTitle(path) {
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
     [/^#\/console\/content-sources$/, "Content sources · Console"],
+    [/^#\/operations\/event-log$/, "Event log · Operations"],
+    [/^#\/console\/api-tokens$/, "API tokens · Console"],
+    [/^#\/console\/connections/, "Connected accounts · Console"],
+    [/^#\/console\/approvals$/, "Approvals · Console"],
+    [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
@@ -11202,6 +11602,27 @@ async function route() {
     if (path === "#/console/ai-access") {
       const gen = navGen;
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/api-tokens") {
+      const gen = navGen;
+      const { viewAPITokens } = await import("./apitokens.js");
+      return await viewAPITokens({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/connections") {
+      const gen = navGen;
+      const { viewConnections } = await import("./connections.js");
+      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/console/approvals") {
+      const gen = navGen;
+      const { viewApprovals } = await import("./approvals.js");
+      return await viewApprovals({ api, toast, view, isSuperseded: () => superseded(gen),
+        signedIn: !!(AUTH.enabled && AUTH.user), canOperate: mayUse("operator") });
+    }
+    if (path === "#/console/security") {
+      const gen = navGen;
+      const { viewSecurity } = await import("./security.js");
+      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/console/content-sources") {
@@ -11318,8 +11739,14 @@ async function route() {
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/messages") return await viewBufferedMessages();
+    if (path === "#/operations/event-log") {
+      const gen = navGen;
+      const { viewEventLog } = await import("./eventlog.js");
+      return await viewEventLog({ api, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/operations/ad-mock") return await viewADMockDirectory();
     if (path === "#/operations/sql-mock") return await viewSQLMockJournal();
+    if (path === "#/operations/mockups") return await viewMockups();
     if (path === "#/operations/decisions") return await viewDecisions();
     if (path === "#/tasks/recertification") {
       // Taken before the import, as the routes above take it: the closure is read

@@ -27,6 +27,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`application-delete.spec.mjs`**
+  ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):
+  the application delete dialog against previews of its own — the default keeps the contents and
+  reads no preview; deleting everything lists what goes (the running instances it cancels
+  included) and what outside the application stops working, and is armed only once the
+  application's name is typed; a refusal in the preview, or a caller who may not cancel
+  instances, keeps it disarmed; Escape cancels.
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed
@@ -54,6 +61,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`history-purge.spec.mjs`** ([ADR-0486](../docs/adr/0486-operator-history-purge-and-compaction.md)):
+  deleting a process's finished instances and the storage card's reclaim section against a
+  stubbed API — the preview counts every version with one cut-off and writes nothing, and says
+  that deleting frees no disk until the WAL is compacted and that the Finished column does not go
+  down; only the process id typed exactly arms the delete; the batches run newest version first,
+  each repeating the cut-off and passing the cursor, until nothing remains; a server that switched
+  the purge off keeps it disarmed; a failure part-way says how many already went; a purge can be
+  stopped between two batches and cannot be closed while one runs; and the card reads the
+  checkpoints without verifying them, says when compaction is off, asks before compacting once,
+  and reports what the pass removed.
 - **`instance-samples.spec.mjs`** ([ADR-0145](../docs/adr/0145-developer-view-for-code-fields.md),
   amended): the **live values** the Developer View and the Variables panel show, against a
   mock API — the picker lists the newest instances of every version of the process, running
@@ -66,6 +83,27 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   `dev-view.spec.mjs` drives the search field itself: Enter searches, a pick stays inside the
   search, a search that finds nothing or fails keeps the instance on screen, and emptying the
   field returns to the recent instances.
+- **`mail-view.spec.mjs`** ([ADR-0489](../docs/adr/0489-mail-html-view.md)):
+  the **E-mail view** form component, on the real vendored viewer (`mail-view-harness.html`)
+  and in the form editor — the envelope is text, never markup; the HTML is in an
+  `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">` whose own policy blocks
+  remote images (no request reaches the image host) until *Bilder laden*, which loads them;
+  a script the server might have missed does not run; the text version is a tab away;
+  submitting the form never carries the mail; a mail without HTML, without content or
+  without a value says so; the view speaks the page's `atlasLocale` and reads a group's
+  path; and in the editor the view is in the palette, and its Label and Variable entries
+  edit what is saved. `mail-template.spec.mjs` covers the Modeler's *Include the text and
+  the HTML* on Read message and its removal when a get becomes a list.
+- **`mail-template.spec.mjs`** ([ADR-0487](../docs/adr/0487-mail-templates.md)):
+  **mail templates** in the Modeler, on `mail-html-harness.html` with a mock renderer behind
+  `POST /api/v1/feel/template` — the **Placeholders** select writes `templating="true"` and turns
+  the subject and bodies into template fields that colour their `{{ }}` tags; F2 opens a body
+  with a **Preview** that renders it with the sample variables, again on every edit, points out
+  a placeholder that rendered as nothing and sends `html: false`; an HTML template is previewed
+  in an `<iframe sandbox="">` with its values escaped and `html: true`; a template that does not
+  compile shows its line and column and dims the last rendering; an HTML body without
+  placeholders previews itself without a request; and an operation that sends no text drops
+  the switch from the XML.
 - **`token-simulation.spec.mjs`** — message semantics across two pools (ADR-0101): a thrown
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
@@ -140,7 +178,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`multi-instance.spec.mjs`** (ADR-0097 / ADR-0100): a modelled **loop cardinality** drives
   the instance count and ticks down; a **data-driven** activity falls back to the
   toolbar-configurable default.
-- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Backup** view — the nav entry
+- **`backup.spec.mjs`** (ADR-0107 / ADR-0109): the **Console → Administration → Backup** view — the nav entry
   opens it, both the design-time backup and the whole-instance **full snapshot** expose their
   `.tar.gz` download links and restore controls, and each restore flow validates an empty
   selection, then reports the file count and restart note on a (mocked) successful upload.
@@ -189,6 +227,18 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   are both kept, and so are CSV's columns, one attribute the catalog describes twice (names,
   or name:width) with one description always hidden. Assertions are on the exported XML,
   because a hidden attribute is what the compiler refuses and the panel cannot show.
+- **`googlecontacts-modeler.spec.mjs`** (ADR-0476): the **Google
+  Contacts Worker Type in the Implement panel** — choosing it starts on Find contacts and
+  shows the query, custom field, label and bound a find takes; switching a find to an update
+  drops what only a find takes; a delete offers and writes no result variable; and a
+  contact given by a variable hides the inline values and keeps the variable across an
+  unrelated edit. Assertions are on the exported XML, which is what the compiler checks.
+- **`carddav-modeler.spec.mjs`** (ADR-0490): the **CardDAV Worker Type
+  in the Implement panel**, held to the same four checks as Google Contacts — choosing it
+  starts on Find contacts and shows the query, custom field, group and bound a find takes;
+  switching a find to an update drops what only a find takes; a delete offers and writes
+  no result variable; and a contact given by a variable hides the inline values and keeps
+  the variable across an unrelated edit. Assertions are on the exported XML.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -216,6 +266,25 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and — for a branch this instance never took — the element's identity plus its
   documentation instead of the old silent fallback to the process panel. Reads it off the
   rendered model; no server call involved.
+- **`variables-refs.spec.mjs`** (ADR-0314): what an id in the **Operations instance
+  replay**'s Variables tab stands for (`api/web/varrefs.js`), against a mock `api`. A
+  principal id is named beside its unchanged value, and the copy button still copies the
+  id. Hovering or focusing a chip opens a card naming the kind, the id and that the name
+  is today's. A user id no enabled account answers to is marked *no account*, with
+  deleted and disabled both named; a group nobody lists is *no group*, and only deleted
+  is named, since a group cannot be disabled. A process links to its newest deployment's live view and a
+  product or position to its home catalogue, and neither links without the role. A
+  filter containing an id, a sentence, an unknown word and a number get no chip. Each
+  directory is read once however often the rows are redrawn. A directory that fails
+  leaves its ids unclaimed. The value column's filter finds a row by the resolved name.
+
+- **`user-line-manager.spec.mjs`**
+  ([ADR-0470](../docs/adr/0470-the-line-manager-is-on-the-account.md)):
+  an account's line manager in Console → Organization, against a mock of the users
+  endpoints. The edit form offers every other account and "none", with the current manager
+  chosen. A save sends `managerId` only when it changed, and an empty id to clear it. A
+  manager the directory reports is shown disabled with a note naming the directory, and is
+  left out of the save.
 
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
@@ -282,6 +351,25 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   re-renders on every selection does not pepper the server; and a burst of keystrokes
   asks exactly one question.
 
+- **`element-ids.spec.mjs`** ([ADR-0474](../docs/adr/0474-readable-element-ids.md)):
+  **readable ids for new BPMN elements**, `<type>_<yyyymmdd>_<researcher>`. Drives the real
+  `elementids.js` and the real `mountEditor` against a mock `api`, on a fixed clock: a new
+  diagram's process and start event, and every task, event, gateway, flow and message
+  drawn afterwards, carry the form; four hundred tasks in one diagram never repeat an id,
+  and once every researcher is taken a counter follows the name; an id the opened diagram
+  already holds is never minted; and a process id held by a draft, by a deployment, or
+  only by the server's availability check is not chosen — for the new diagram nor for a
+  pool added to it.
+
+- **`element-name-ids.spec.mjs`** ([ADR-0474](../docs/adr/0474-readable-element-ids.md), amended):
+  **an element's id follows its name**, on the same harness. The name segment spells
+  umlauts out, drops accents and symbols and stays within 60 characters; naming a task,
+  gateway, event or flow in the panel or on the canvas renames its id; a second and a
+  third element of a type with the same name get `_01` and `_02`; a renamed element's id
+  follows and frees the old one; an empty or letterless name, an id the author typed, an
+  id a deployed version carries and the process's own id are kept; and one undo takes
+  back name and id together.
+
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start
@@ -328,6 +416,34 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with padding, since headless Chromium hides scrollbars). A double-click on either
   divider restores the column's default width.
 
+- **`remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **directory field** (`api/web/remote-select.js`, `vendor/form-js/src/atlas/viewer.jsx`)
+  on the real vendored form-js viewer, with a transport the test answers itself, each property
+  shown for the select the editor writes and for a directory field saved as a textfield —
+  nothing is asked before somebody types; a search
+  waits for the department it is bound to and for the field's minimum length; loading, results,
+  an empty answer and a failure each say so; keystrokes are debounced into one request; a newer
+  term aborts the older request and a late answer is ignored; the keyboard moves through the
+  results and Enter chooses without submitting; the form submits the chosen id, not its label,
+  and refuses a missing choice; changing the department clears a choice it no longer admits;
+  Load more continues through the server's cursor; a reopened task shows who its value stands
+  for, or that the directory no longer holds it; and the preview searches made-up people.
+- **`tasks-remote-select.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the same field, as a select and as a textfield, in the **real Tasks app** against a stubbed
+  API — the search goes to the
+  task's own lookup route, Complete sends `{abteilung, user}` with the object id, Complete
+  without a choice sends nothing, and "Back to the list" completes nothing.
+- **`form-directory-field.spec.mjs`** ([ADR-0473](../docs/adr/0473-form-remote-data-sources.md)):
+  the **form editor's** directory field (`vendor/form-js/src/atlas/editor.jsx`) — the palette's
+  **Directory picker** adds a select searching through the Worker open to forms; a static
+  select gets its options from the remote source under Options source ▸ Type, bound to the
+  department it is filtered by; the source is offered on a select only; a Worker that does not
+  let forms search it is named as such; an unfinished filter is pointed out and a fixed value
+  completes it; back to static options drops the block; both the Validate tab and the Design
+  preview search made-up people and ask no directory, while the canvas shows the field without
+  searching; and a directory field saved as a textfield is converted into a select on request.
+  `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
   three states from what the roster carries, and keep itself current *without* reloading
@@ -337,6 +453,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   enforcement off there is no session to be present in, so nothing is reported and the
   column is absent. Drives the real app shell against a routed mock, with Playwright's
   clock driving both intervals — the timing is part of what is being tested.
+
+- **`user-last-login.spec.mjs`** ([ADR-0477](../docs/adr/0477-last-login-day.md)):
+  **when each account last signed in**, in the same Users card. The column turns the
+  stored UTC day into "today" / "yesterday" / "N days ago" with the date beneath, says
+  "no login recorded" rather than inventing a date, sorts the accounts nobody uses to the
+  top, and is absent with enforcement off. The browser sits in Zurich with the clock
+  fixed half an hour after local midnight, when the local and the UTC calendar disagree:
+  the age must be counted in UTC, as the day was.
 
 - **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **product's actions** in the catalogue editor. A product that still carries the
@@ -353,9 +477,36 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   export as one document, and none ticked asks for some rather than calling the server; a
   products file is posted with `?into=` the catalogue shown; a refused import lists every
   problem with its subject and names the processes deployed before the refusal; and the
-  catalogue list posts a whole file, with `publish` when asked. Drives the real
-  `viewCatalogDetail` and `viewCatalogs` through the editor harness, whose mock refuses an
-  import when a spec sets `window.__importRefusal`.
+  catalogue list posts a whole file, with `publish` when asked. Every import asks for the plan
+  first ([ADR-0467](../docs/adr/0467-application-package-export.md)):
+  with nothing to replace or keep it imports straight away; otherwise it shows one box per
+  product, in three groups — changed on both sides (unticked), newer in the file (ticked) and
+  changed here only (unticked) — and posts every changed one by name, behind and ahead only
+  where a box was moved; cancelling imports nothing. Drives the real `viewCatalogDetail` and
+  `viewCatalogs` (and `api/web/importchoices.js` through them) via the editor harness, whose mock
+  refuses an import when a spec sets `window.__importRefusal` and answers a dry run with
+  `window.__importPlan`. The catalogue list also shows the **table of names** package imports
+  keep: each entry with what it means here, one whose principal is gone marked as such, a
+  remove button that sends `DELETE …/import/mappings?kind=&answer=`, and a form that adds an
+  approver among the accounts by username (`window.__mappings` sets the entries).
+
+- **`source-transfer.spec.mjs`** ([ADR-0467](../docs/adr/0467-application-package-export.md)):
+  **moving an application and its catalogues** from the Console. The export dialog lists what the
+  processes need from the target and no download carries — server constants, application
+  constants, workers, each with the processes that read it, and the drafts it could not read —
+  carries the application's constant values (`?constants=true`) only while that box is ticked,
+  and offers the catalogues the person maintains, those selling the application ticked; with one
+  ticked it asks `…/package` for a preview first and shows its warnings before "Download anyway",
+  with none it downloads the source tree. The import reads a package archive in the browser,
+  answers its questions through `/api/v1/catalogs/import/answers` — the package's answers and
+  the person's choices sent apart — asks the person for any the directory cannot answer (a fixed
+  approver among usernames), shows one plan for the application and the catalogues, then imports
+  the application, publishes it, imports the catalogues and only then keeps the choices the server
+  calls learned in the target's table of names, in that order; a source tree without a shop asks nothing and publishes nothing; cancelling a
+  question installs nothing. After an import the report names only what the target still lacks
+  and the constants it did not set. Drives the real `api/web/sourceneeds.js` and
+  `api/web/packageimport.js` through their own harness, whose mock answers each route as the spec
+  gives it.
 
 - **`catalog-commanded-by.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md) §10):
   **which process applications may command a product** in the catalogue editor. The
@@ -375,6 +526,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   asks first and sends a command id, one with a form opens it under the position, refuses
   to send it empty and sends its answers; and a product whose return only an operator gives
   is not offered for return. Loads the real `shop.html` with only the network replaced.
+
+- **`shop-config-answers.spec.mjs`** ([ADR-0358](../docs/adr/0358-order-line-configuration.md)):
+  the **answers an order carries**. An order form asks one question of each kind the form
+  editor offers — text, number, checkbox, one choice, several choices — and the order the
+  page sends carries every answer as text, saying what was entered (`"5"`, `"true"`, the
+  choices joined by a comma), because `POST /api/v1/orders` takes them as a map of strings
+  and refused the whole basket with 400 over a number. A correction of a held position
+  opens its form on the stored answers in each field's own kind — the number, the unticked
+  box, the earlier choices still chosen — and saves them as text again. Loads the real
+  `shop.html` and form runtime with only the network replaced.
 
 - **`worker-events-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **Worker events in the message picker**. An element that waits for a message — a
@@ -415,7 +576,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   product action, and stays selectable. The name field suggests the same names; the line
   under it names the watches, the product action that owns the name and the processes
   waiting for it, and stops suggesting a watch for a name a product owns. A listing that
-  fails leaves a throw's picker as it was. Shares `message-sources-harness.html` with the
+  fails leaves a throw's picker as it was. A newer server's rows
+  ([ADR-0446](../docs/adr/0446-the-messages-deployed-models-send-and-receive.md)): a waiting
+  element is offered «Messages deployed models send», newest versions only, and a name a model
+  sends no longer reads as unfed; a sending element is told who waits for it, or that nobody
+  does, with a link to the Events page. Shares `message-sources-harness.html` with the
   next spec.
 
 - **`shop-badges-modeler.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
@@ -451,6 +616,29 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
     is not sent an incident, which belongs to none;
   - says, with the shop switched off, that the feed passes over the catalogue's events while
     the engine's still reach every subscription.
+
+  Its second section ([ADR-0447](../docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
+  [ADR-0446](../docs/adr/0446-the-messages-deployed-models-send-and-receive.md)) lists the
+  installation's own signals and messages beside the catalogue, never in it: each name with who
+  sends and receives it, an older version named by its number, and its findings; a channel
+  filter and a filter for names with a finding; a detail with the interrupting receivers, a
+  link to each deployed version and the watches that send a message. A link naming a name and a
+  channel opens it, unfolding its section, and a server without the routes leaves the catalogue
+  standing.
+
+  A row's detail opens in a dialog in view, by click, Enter or the space bar; Escape, the close
+  button and a click beside it close it back onto the row, and a navigation closes it. Each
+  section folds away, is still folded on the next visit, and says while folded how many entries
+  it holds and what it warns about. A hyphenated name stays on one line beside a long column.
+  The page reads in the Console's language: German for a viewer who chose none, with German words
+  for the server's ids and no raw message key left on screen, and English when chosen; an event's
+  meaning and a payload field's follow it, and the server's own English sentences are marked
+  `lang="en"`. The other cases check the wiring in English.
+- **`operations-eventlog.spec.mjs`** ([ADR-0472](../docs/adr/0472-event-log.md)):
+  the Operations page **Event log**. A send heads its group with the receptions and starts it
+  caused under it; a send nobody received is marked unless the buffer kept it, and an expiry is
+  marked; instances and definitions link to their pages; the filters travel as query parameters,
+  *Older* pages back with `before`, and Live puts what came `after` the newest row on top.
 - **`signal-events-modeler.spec.mjs`** ([ADR-0435](../docs/adr/0435-one-catalogue-of-the-events-atlas-emits.md)):
   the **events atlas emits in the Modeler's signal picker**, driven through the real
   vendored bpmn-js.
@@ -460,6 +648,10 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   - An `atlas.*` name that is no event, and a throw on an `atlas.*` name, are warned about.
   - The catalogue is asked for once. A catalogue that cannot be read leaves the picker as it
     was.
+  - The signals the newest versions of deployed models throw are offered in a group of their
+    own, without `atlas.*` names; a throw says how many deployed processes receive its name, or
+    that none does, with a link to the Events page
+    ([ADR-0447](../docs/adr/0447-the-signals-deployed-models-throw-and-receive.md)).
 - **`timer-fx-modeler.spec.mjs`** ([ADR-0055](../docs/adr/0055-feel-expression-timer-schedules.md)):
   the **fx switch on a timer's schedule field**, driven through the real vendored bpmn-js.
   - A literal duration opens as a literal and an `=` value as an expression; the switch flips
@@ -524,6 +716,49 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   process id across a new version. Signed in, the stars are read from and written to
   `/api/v1/me/start-favourites` and nothing is kept in the browser; a write the server refuses
   puts the star back and shows the reason. With authentication off (404) they are the browser's.
+- **`console-api-tokens.spec.mjs`** ([ADR-0194](../docs/adr/0194-api-tokens.md), amendment
+  2026-10-21): the Console's **API tokens** page against a stubbed `fetch`, in the manner of
+  `shop-config-answers.spec.mjs`; the stub keeps the tokens as the server would.
+  - **Minting:** the form shows the scope's sentence and the roles the token will carry before
+    it is sent — feedreader alone for `events`, modeler, operator and user otherwise. A
+    `landscape` token is not sent without an application, an `events` token may name catalogues,
+    and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
+    confirmation beside its warning.
+  - **The secret:** shown once, in the document once, and copied from the panel. It never
+    reaches storage, the URL or the console. Done removes it, and leaving the view empties the
+    node it was in. Sealed in the vault, it is never sent to the page.
+  - **Revoking:** asks first, saying it is immediate and that callers fail from their next
+    request on; a dismissed dialog sends nothing.
+  - **The listing:** an expired token stays listed and is marked expired. A token with less than
+    30 days left — and not one with thirty days and an hour — is marked with its days left and
+    named above the list, a token minted for less than that at once, and revoking it clears the
+    notice.
+  - **The dashboard:** names those tokens to an administrator, with the vault secret each was
+    sealed as and a link to the page; says nothing when none is about to expire; and a
+    non-administrator's dashboard does not ask for the tokens at all.
+  - **Who sees it:** a non-administrator is not offered the page, and reaching it anyway shows
+    a refusal instead of the form. It reads in English when the reader chose English.
+
+- **`console-menu.spec.mjs`**: the **bar of view names** under the top bar, against a stubbed
+  API. It measures, not eyeballs, at 1440, 1280 and 1024 pixels — the Console's and the
+  Operations bar for an administrator, the Operations bar for an operator:
+  - no name takes two lines;
+  - every button on the top bar lies wholly inside the window;
+  - the entries need no sideways scroll.
+
+  At 900 and 700 pixels and on a phone, names still never wrap and no button is clipped;
+  the bar scrolls within itself. The administrator's Console pages sit behind
+  **Administration**: the menu opens unclipped, marks the open page, and the group is the
+  entry marked while one of its pages is open. A modeller and a task worker see no group;
+  with enforcement off it is offered. Operations keeps its working pages and the incident
+  count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
+  administrator sees.
+- **`workers-endpoints.spec.mjs`**
+  ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
+  against a stubbed API. A worker name a Worker Instance holds shows the endpoint the
+  instance reported for it beside the name. A name without a report shows the name alone,
+  including one that is also an inherited object property. A reported value is drawn as
+  text, never as markup.
 
 ## Rendering a conformance gallery diagram
 

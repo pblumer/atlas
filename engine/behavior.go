@@ -55,8 +55,11 @@ func (p *Processor) registerHandlers() {
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggering):             handleTriggering,
 		handlerKey(model.VTTriggerReceipt, model.IntentTriggerReceiptsPruning): handleTriggerReceiptsPruning,
 		handlerKey(model.VTFeedRetention, model.IntentFeedPruning):             handleFeedPruning,
+		handlerKey(model.VTFeedRetention, model.IntentEventLogPruning):         handleEventLogPruning,
 		handlerKey(model.VTTriggerReceipt, model.IntentDelivering):             handleDelivering,
 		handlerKey(model.VTActionOutcome, model.IntentActionReporting):         handleActionReporting,
+		handlerKey(model.VTAuthorization, model.IntentAuthorizationDeciding):   handleAuthorizationDeciding,
+		handlerKey(model.VTActionApproval, model.IntentApprovalDeciding):       handleApprovalDeciding,
 	}
 }
 
@@ -1289,19 +1292,27 @@ func handleJobError(c *ProcessingContext) {
 			ErrorCode:          code,
 		})
 	}
+	throwJobError(c, c.cmd.Key, job, code, c.cmd.ErrorMessage)
+}
+
+// throwJobError throws code from the job's element: to the nearest handler that
+// catches it, or — with nowhere to go — onto an incident that keeps the job, its
+// retries spent. A worker's report and an enforcement point's request for approval
+// (ADR-0475 §9) throw through here alike.
+func throwJobError(c *ProcessingContext, key uint64, job *model.JobValue, code, message string) {
 	if ei := c.GetElementInstance(job.ElementInstanceKey); ei != nil && errorUncaughtAtRoot(c, job.ElementInstanceKey, ei, code) {
 		// Given back as a failing worker gives it back (handleJobFailed): the lease is
 		// released, Assignee left alone.
 		job.Retries = 0
 		job.LeaseExpiresAt = 0
 		msg := unhandledErrorMessage(code)
-		if c.cmd.ErrorMessage != "" {
-			msg += ": " + c.cmd.ErrorMessage
+		if message != "" {
+			msg += ": " + message
 		}
-		recordJobFailure(c, c.cmd.Key, job, 0, msg, model.IncidentUnhandledError)
+		recordJobFailure(c, key, job, 0, msg, model.IncidentUnhandledError)
 		return
 	}
-	c.AppendJobEvent(c.cmd.Key, model.IntentJobCanceled, *job)
+	c.AppendJobEvent(key, model.IntentJobCanceled, *job)
 	propagateError(c, job.ElementInstanceKey, code)
 }
 
@@ -1708,6 +1719,16 @@ func handleTimerStartArm(c *ProcessingContext) {
 	}
 }
 
+// publisher is who sent a message no instance sent: an inbound watch when the publish
+// carries a source id (ADR-0075), and otherwise a publish — the route, or atlas's own
+// order and fulfilment publishes.
+func publisher(src model.InboundDeliveryValue) sender {
+	if src.SourceID != "" {
+		return sender{source: model.DispatchFromInbound}
+	}
+	return sender{source: model.DispatchFromPublish}
+}
+
 // handleMessagePublished correlates an externally published message (from the
 // HTTP API) against the open subscriptions. The command carries the message name
 // and correlation key (in its subscription payload) and any payload variables (in
@@ -1737,7 +1758,7 @@ func handleMessagePublished(c *ProcessingContext) {
 	if ttl <= 0 {
 		// No time to live: ADR-0020's publish, a no-op when nothing matches, and an id
 		// means nothing without a lifetime to remember it for.
-		correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+		correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, publisher(src))
 		return
 	}
 	// A message with an id that is still remembered is the same message again: a
@@ -1754,7 +1775,7 @@ func handleMessagePublished(c *ProcessingContext) {
 		}
 	}
 	// An API publish has no sending instance, so the recorded flow's sender is 0.
-	delivered := correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	delivered := correlateMessage(c, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, publisher(src))
 	// The expiry is read from the clock here and frozen into the event, so replay
 	// keeps the message exactly as long as the live run did (I6).
 	now := c.Now()
@@ -2785,7 +2806,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2805,7 +2826,7 @@ func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, ei.ProcessInstanceKey)
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2865,8 +2886,9 @@ type subscriptionMatch struct {
 // the subscription, records the message flow, writes the payload into the waiting
 // instance's scope and commands the waiting element to complete. Shared by the
 // name-correlated publish and the directed delivery to one instance, so a message
-// arrives the same way whichever of the two sent it.
-func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) {
+// arrives the same way whichever of the two sent it. reached is how many of the
+// subscriptions still had a waiting element: the others are only cleared.
+func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (reached int) {
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
 	// the producer is put back rather than zeroed (ADR-0219).
@@ -2874,6 +2896,17 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 	for i := range matches {
 		m := matches[i]
 		c.AppendMessageSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// A subscription whose element no longer waits — the losing branch of an
+		// event-based gateway, a boundary whose host finished — was left behind to be
+		// cleared lazily, and the correlation above is that clearing and nothing more.
+		// The message reaches nobody there: it leaves no flow, writes nothing into an
+		// instance that may have moved on, and is not counted as delivered, so a
+		// message with a time to live that only such a subscription matched is kept
+		// (ADR-0370, amendment of 2026-10-23).
+		if c.GetElementInstance(m.elKey) == nil {
+			continue
+		}
+		reached++
 		// Retain the delivery to the waiting catch event for the collaboration
 		// replay (ADR-0038), before the subscription's fields are needed elsewhere.
 		c.AppendMessageFlowEvent(model.MessageFlowValue{
@@ -2906,6 +2939,7 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
 		}
 	}
+	return reached
 }
 
 // correlateMessage delivers a message with the given name and correlation key to
@@ -2916,15 +2950,17 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 // subscription can't disturb the scan. A message that matches nothing is a no-op here;
 // it reports so, and a publish with a time to live then buffers it (ADR-0370).
 // delivered is whether a subscription received the message or an instance was started
-// from it.
-func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (delivered bool) {
+// from it. from is who sent it: the send is recorded once, after its deliveries, with
+// how far it reached (ADR-0472 §1).
+func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []model.VariableValue, from sender) (delivered bool) {
 	var matches []subscriptionMatch
 	c.p.fail(c.tx.CorrelatableSubscriptions(name, correlationKey, func(elKey uint64, v *model.MessageSubscriptionValue) error {
 		matches = append(matches, subscriptionMatch{elKey: elKey, sub: *v})
 		return nil
 	}))
-	deliverToSubscriptions(c, matches, name, correlationKey, vars, senderPIKey)
-	delivered = len(matches) > 0
+	reached := deliverToSubscriptions(c, matches, name, correlationKey, vars, from.piKey)
+	started := 0
+	delivered = reached > 0
 	// A message also instantiates every deployed process with a matching message
 	// start event, seeded with the payload (ADR-0035). Matching is by name; the
 	// created instance additionally records the correlation key its start event
@@ -2954,17 +2990,19 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, startKey, ref.elementId)
 		delivered = true
+		started++
 		// Retain the delivery into the message-start event too, so the replay shows
 		// the message that opened the receiving pool. The receiver instance does not
 		// exist yet (the create is a followup), so its key is left 0 (ADR-0038).
 		c.AppendMessageFlowEvent(model.MessageFlowValue{
-			SenderProcessInstanceKey: senderPIKey,
+			SenderProcessInstanceKey: from.piKey,
 			ReceiverProcessDefKey:    ref.defKey,
 			ReceiverElementId:        ref.elementId,
 			MessageName:              name,
 			CorrelationKey:           correlationKey,
 		})
 	}
+	c.appendDispatch(model.DispatchMessage, from, name, correlationKey, reached, started)
 	return delivered
 }
 
@@ -3004,7 +3042,7 @@ func (signalThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	broadcastSignal(c, detail.SignalName, payload)
+	broadcastSignal(c, detail.SignalName, payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -3025,7 +3063,7 @@ func (signalEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.SignalThrow(cp.Node(ei.ElementId).Detail)
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	broadcastSignal(c, detail.SignalName, payload)
+	broadcastSignal(c, detail.SignalName, payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -3044,7 +3082,12 @@ func (signalEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei 
 // fire-and-forget, with no buffering (ADR-0088). It mirrors correlateMessage,
 // and — like a correlating message — also instantiates every deployed process
 // with a matching signal start event (ADR-0088).
-func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue) {
+//
+// from is the throwing element. Every correlation names it, a correlation that only
+// clears a subscription whose element no longer waits says so, each start the
+// broadcast causes is recorded, and the broadcast itself is recorded last, with how
+// far it reached (ADR-0472 §1, §2).
+func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableValue, from sender) {
 	type match struct {
 		elKey uint64
 		sub   model.SignalSubscriptionValue
@@ -3054,10 +3097,20 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		matches = append(matches, match{elKey: elKey, sub: *v})
 		return nil
 	}))
+	reached, started := 0, 0
 	prevProducer := c.producer
 	for i := range matches {
 		m := matches[i]
+		m.sub.SenderProcessInstanceKey = from.piKey
+		m.sub.Stale = c.GetElementInstance(m.elKey) == nil
 		c.AppendSignalSubscriptionEvent(m.elKey, model.IntentSubscriptionCorrelated, m.sub)
+		// As for a message (deliverToSubscriptions): a subscription whose element no
+		// longer waits is only cleared, and the broadcast writes nothing into an
+		// instance it did not reach.
+		if m.sub.Stale {
+			continue
+		}
+		reached++
 		// As in correlateMessage: the broadcast payload is the catch event's own
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
@@ -3092,7 +3145,15 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 			continue
 		}
 		c.AppendCreateInstanceCommand(ref.defKey, vars, "", ref.elementId)
+		started++
+		// The instance does not exist yet (the create is a followup), so the start is
+		// recorded by its definition and start element, as a message start's flow is.
+		c.AppendSignalSubscriptionEvent(0, model.IntentSignalStarted, model.SignalSubscriptionValue{
+			SignalName: name, ProcessDefKey: ref.defKey, ElementId: ref.elementId,
+			SenderProcessInstanceKey: from.piKey,
+		})
 	}
+	c.appendDispatch(model.DispatchSignal, from, name, "", reached, started)
 }
 
 // errorEndEventBehavior: an end event that throws a BPMN error (ADR-0089). Unlike a none

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pblumer/atlas/api/sidecar"
 )
@@ -87,6 +88,13 @@ type apiToken struct {
 
 	CreatedAt int64  `json:"createdAt"`
 	CreatedBy string `json:"createdBy,omitempty"`
+
+	// VaultSecret is the vault secret this token was sealed as when it was minted, or
+	// empty when the secret went to the caller instead (ADR-0194, amendment
+	// 2026-10-21). It records where the token went, not where it is now: the secret
+	// can have been overwritten since, by hand or by the next token minted under the
+	// same name, which is how a token is rotated.
+	VaultSecret string `json:"vaultSecret,omitempty"`
 }
 
 // scope returns the token's effective scope, resolving the empty default.
@@ -125,12 +133,16 @@ type apiTokenView struct {
 	ExpiresAt int64    `json:"expiresAt,omitempty"`
 	CreatedAt int64    `json:"createdAt"`
 	CreatedBy string   `json:"createdBy,omitempty"`
+	// VaultSecret says which vault secret the token was sealed as, so an operator
+	// rotating the one behind authSecret="atlas" can tell which token that was.
+	VaultSecret string `json:"vaultSecret,omitempty"`
 }
 
 func (t apiToken) view() apiTokenView {
 	return apiTokenView{
 		ID: t.ID, Name: t.Name, Scope: t.scope(), Reach: t.Reach, Roles: t.roles(),
 		ExpiresAt: t.ExpiresAt, CreatedAt: t.CreatedAt, CreatedBy: t.CreatedBy,
+		VaultSecret: t.VaultSecret,
 	}
 }
 
@@ -200,6 +212,38 @@ func (i *apiTokenIndex) remove(id string) {
 		}
 	}
 	i.mu.Unlock()
+}
+
+// apiTokenExpiry is what the index says about lifetimes at one instant: the tokens
+// still accepted that run out within the warning window, the ones that already have,
+// and the earliest expiry among those still accepted (zero when none runs out).
+type apiTokenExpiry struct {
+	soon, expired int
+	next          int64
+}
+
+// expiry summarises the tokens' lifetimes at the given Unix time, by the same
+// reading match applies: a token is expired from its expiry second on.
+func (i *apiTokenIndex) expiry(now int64, window time.Duration) apiTokenExpiry {
+	warn := int64(window / time.Second)
+	var e apiTokenExpiry
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	for _, rec := range i.byHash {
+		switch {
+		case rec.ExpiresAt == 0:
+		case rec.expired(now):
+			e.expired++
+		default:
+			if rec.ExpiresAt-now < warn {
+				e.soon++
+			}
+			if e.next == 0 || rec.ExpiresAt < e.next {
+				e.next = rec.ExpiresAt
+			}
+		}
+	}
+	return e
 }
 
 // match resolves a presented secret to its token, refusing one whose lifetime has

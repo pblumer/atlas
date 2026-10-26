@@ -61,6 +61,8 @@ spec:
             - --vault={{ .Values.atlas.vault.enabled }}
             - --docs={{ .Values.atlas.docs.enabled }}
             - --catalogue={{ .Values.atlas.catalogue.enabled }}
+            - --catalogue-purge={{ .Values.atlas.catalogue.purge }}
+            - --instance-purge={{ .Values.atlas.instancePurge }}
             - --powershell={{ .Values.atlas.script.powershell }}
             - --python={{ .Values.atlas.script.python }}
             - --javascript={{ .Values.atlas.script.javascript }}

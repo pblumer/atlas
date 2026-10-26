@@ -15,17 +15,21 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/envname"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
+	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/nettimeout"
 	"github.com/pblumer/atlas/connector/rest"
+	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -61,7 +65,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 	if env == nil {
 		env = func(string) string { return "" }
 	}
-	built := Connectors{Handlers: map[string]Exec{}}
+	built := Connectors{Handlers: map[string]Exec{}, Queries: map[string]QueryFunc{}, Endpoints: map[string]string{}}
 	for _, kind := range kinds {
 		switch kind {
 		case "csv":
@@ -229,8 +233,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				continue
 			}
 			built.Names = append(built.Names, names...)
+			// The S3 Workers this host holds, when it holds any, are where an
+			// export-attachment puts its document (ADR-0478).
+			// They are read from the same variables the s3 kind reads, and are not
+			// reported as names this worker serves: holding an identity to export into
+			// is not leasing S3 tasks.
+			s3reg, _, err := s3RegistryFor(env, mailStoreNames(env))
+			if err != nil {
+				return Connectors{}, err
+			}
+			var docs mail.DocumentStore
+			if s3reg != nil {
+				docs = s3.Documents(s3reg)
+			}
 			built.Handlers[compiler.MailJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunMailJob(ctx, j, reg)
+				return RunMailJobWith(ctx, j, reg, docs)
 			})
 		case "ad":
 			// Two shapes at once, because a model may carry either
@@ -293,6 +310,12 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.EntraJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunEntraJob(ctx, j, reg)
 			})
+			// The same tenants answer a form's directory search, under the same
+			// credential and never anywhere else: the server routes a query only to an
+			// Instance reporting the tenant it names.
+			built.Queries[compiler.EntraJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return entra.RunLookup(ctx, connector, q, reg)
+			}
 		case "teamsphone":
 			reg, names, err := teamsPhoneRegistryFromEnv(env)
 			if err != nil {
@@ -332,7 +355,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				})
 			}
 		case "sharepoint":
-			reg, names, err := sharepointRegistryFromEnv(env)
+			reg, names, brokered, err := sharepointSourcesFromEnv(env)
 			if err != nil {
 				return Connectors{}, err
 			}
@@ -346,9 +369,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				continue
 			}
 			built.Names = append(built.Names, names...)
-			built.Handlers[compiler.SharePointJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
-				return RunSharePointJob(ctx, j, reg)
-			})
+			// Both job types: create-item keeps the one it always had, and every other
+			// operation rides compiler.SharePointOpsJobType, which a worker built before
+			// operations existed does not lease.
+			for _, jobType := range []string{compiler.SharePointJobType, compiler.SharePointOpsJobType} {
+				built.Handlers[jobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+					return runSharePointJob(ctx, j, reg, brokered)
+				})
+			}
 		case "googlesheets":
 			reg, names, err := googleSheetsRegistryFromEnv(env)
 			if err != nil {
@@ -421,6 +449,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.S3JobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunS3Job(ctx, j, reg)
 			})
+		case "paperless":
+			// Experimental external-only path: plain BPMN service-task jobs of
+			// type paperless.v1, never a reserved engine job index.
+			clients, names, err := paperlessRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if clients == nil {
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[paperlessJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunPaperlessJob(ctx, j, clients)
+			})
 		case "exchange":
 			reg, names, err := exchangeRegistryFromEnv(env)
 			if err != nil {
@@ -437,6 +480,38 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Names = append(built.Names, names...)
 			built.Handlers[compiler.ExchangeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunExchangeJob(ctx, j, reg)
+			})
+		case "googlecontacts":
+			reg, names, err := googleContactsRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve Google Contacts, holding no address book. Not an error,
+				// for Exchange's reason: the kind is supervised by default, and a server
+				// where nobody has configured one yet must park its tasks rather than
+				// restart this worker forever.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.GoogleContactsJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunGoogleContactsJob(ctx, j, reg)
+			})
+		case "carddav":
+			reg, names, err := cardDAVRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve CardDAV, holding no address book: not an error, for Google
+				// Contacts' reason — the kind is supervised by default.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.CardDAVJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunCardDAVJob(ctx, j, reg)
 			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
@@ -508,7 +583,53 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 		}
 	}
 	sort.Strings(built.Names)
+	noteEndpoints(&built, kinds, env)
 	return built, nil
+}
+
+// endpointKeys names, per Worker Type, the variable a held worker's endpoint is read
+// from: <prefix><NAME>_<field>, the same one the kind's loader reads. A kind absent
+// here holds no endpoint of its own to report — its tasks author their own server
+// (ldap, rest, soap, scim), it has nothing to reach (csv, script), or its address is
+// a fixed service the configuration does not name (teamsphone).
+var endpointKeys = map[string]struct{ prefix, field string }{
+	"ad":           {adDirEnvPrefix, "URL"},
+	"agent":        {agentEnvPrefix, "ENDPOINT"},
+	"clio":         {clioEnvPrefix, "ENDPOINT"},
+	"discord":      {discordEnvPrefix, "URL"},
+	"entra":        {entraEnvPrefix, "BASE_URL"},
+	"exchange":     {exchangeEnvPrefix, "URL"},
+	"googlesheets": {googleSheetsEnvPrefix, "ENDPOINT"},
+	"jira":         {jiraEnvPrefix, "URL"},
+	"mail":         {mailEnvPrefix, "ENDPOINT"},
+	"paperless":    {paperlessEnvPrefix, "URL"},
+	"remedy":       {remedyEnvPrefix, "ENDPOINT"},
+	"s3":           {s3EnvPrefix, "URL"},
+	"sharepoint":   {sharepointEnvPrefix, "ENDPOINT"},
+	"temis":        {temisEnvPrefix, "URL"},
+	// A People API base an operator behind a proxy names; empty for most, and then
+	// nothing is reported. A block of its own so the table above keeps its alignment.
+	"googlecontacts": {googleContactsEnvPrefix, "URL"},
+}
+
+// noteEndpoints records, for each worker name this worker holds, the endpoint its
+// configuration names — reduced to scheme, host and port here, before it is ever
+// reported, so a credential or a path in the configured value never leaves this
+// process (ADR-0471). A name whose kind configures no endpoint, or whose value is not
+// an address, is left out: an architecture sketch then says the endpoint is held by
+// the worker, which is true, rather than drawing something this worker never named.
+func noteEndpoints(built *Connectors, kinds []string, env func(string) string) {
+	for _, kind := range kinds {
+		key, ok := endpointKeys[kind]
+		if !ok {
+			continue
+		}
+		for _, name := range built.Names {
+			if a, ok := endpoint.Reduce(env(key.prefix + envFold(name) + "_" + key.field)); ok {
+				built.Endpoints[name] = a.String()
+			}
+		}
+	}
 }
 
 // Connectors is what a worker was configured to serve: the handlers, keyed by the
@@ -522,7 +643,15 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 // to show the names configured nowhere (ADR-0168).
 type Connectors struct {
 	Handlers map[string]Exec
-	Names    []string
+	// Queries are the form lookups the configured kinds answer, keyed by job type
+	// (ADR-0473). A kind that answers them serves jobs too, and
+	// answers them for the same Workers.
+	Queries map[string]QueryFunc
+	Names   []string
+	// Endpoints are the endpoints the held names' configurations name, reduced to
+	// scheme, host and port, keyed by worker name. A worker reports them beside the
+	// names on every poll (ADR-0471).
+	Endpoints map[string]string
 	// Unconfigured are kinds this worker was asked to serve and holds no
 	// configuration for, so it does not subscribe to them. It is reported at startup
 	// rather than swallowed: "mail is not being served here" is the answer to why a
@@ -542,7 +671,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "clio", "csv", "discord", "entra", "exchange", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
@@ -588,6 +717,25 @@ func mailRegistryFromEnv(env func(string) string) (*mail.Registry, []string, err
 	return reg, names, nil
 }
 
+// mailStoresEnv names the S3 Workers a mail worker holds to export attachments into
+// (ADR-0478). A supervising engine renders it with
+// exactly the stores its deployed models export into.
+const mailStoresEnv = mailEnvPrefix + "STORES"
+
+// mailStoreNames is every S3 identity this host configures: the s3 kind's own and the
+// ones named for mail's exports, once each.
+func mailStoreNames(env func(string) string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, n := range append(splitAndTrim(env(s3EnvPrefix+"CONNECTORS")), splitAndTrim(env(mailStoresEnv))...) {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // mailClientFromEnv builds one worker's client from its environment.
 func mailClientFromEnv(env func(string) string, name string) (mail.Client, error) {
 	key := mailEnvPrefix + envFold(name) + "_"
@@ -600,6 +748,7 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 			Name:     name,
 			Outbox:   previewSink(env),
 			Mailbox:  env(key + "MAILBOX"),
+			Scanner:  env(key + "SCANNER"),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
@@ -610,12 +759,16 @@ func mailClientFromEnv(env func(string) string, name string) (mail.Client, error
 	if endpoint == "" {
 		return nil, fmt.Errorf("worker: mail worker %q has no endpoint: set %sENDPOINT", name, key)
 	}
-	return mail.NewSMTPClient(mail.Connector{
+	scanner, err := mail.NewScanner(env(key + "SCANNER"))
+	if err != nil {
+		return nil, fmt.Errorf("worker: mail worker %q: %w", name, err)
+	}
+	return mail.WithScanner(mail.NewSMTPClient(mail.Connector{
 		Endpoint: endpoint,
 		Username: env(key + "USERNAME"),
 		Password: env(key + "PASSWORD"),
 		From:     env(key + "FROM"),
-	}), nil
+	}), scanner), nil
 }
 
 // previewSink is where this worker's preview workers deliver, or nil when it was
@@ -697,6 +850,12 @@ func splitAndTrim(s string) []string {
 // [mail.Run] with the in-process path, so no two of those can disagree about what a
 // resolved mail task means — only about which credentials are in reach.
 func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any, error) {
+	return RunMailJobWith(ctx, j, reg, nil)
+}
+
+// RunMailJobWith is [RunMailJob] with the object stores an export-attachment may put a
+// document into; nil holds none.
+func RunMailJobWith(ctx context.Context, j Job, reg *mail.Registry, docs mail.DocumentStore) (map[string]any, error) {
 	if j.Connector == nil {
 		return nil, fmt.Errorf("mail: the job carried no resolved worker detail; is this server offloading the mail kind?")
 	}
@@ -712,7 +871,7 @@ func RunMailJob(ctx context.Context, j Job, reg *mail.Registry) (map[string]any,
 	// operation answers what the task's result variable receives — the same
 	// distinction the in-process handler makes, so a mark-read offloaded does not
 	// write a null where a get would write a value (ADR-0438).
-	res, err := mail.Run(ctx, task, reg)
+	res, err := mail.RunWith(ctx, task, reg, docs)
 	if err != nil || task.ResultVariable == "" || res == nil {
 		return nil, err
 	}

@@ -314,11 +314,21 @@ func (f *fakeIMAP) uidCommand(tag string, args []string, fo *fakeFolder, folderN
 					i+1, m.uid, strings.Join(flags, " "), m.date, size, m.header, m.bs)
 				continue
 			}
+			if items == "(BODYSTRUCTURE)" {
+				say("* %d FETCH (UID %d BODYSTRUCTURE %s)", i+1, m.uid, m.bs)
+				continue
+			}
 			start := strings.Index(items, "BODY.PEEK[")
 			end := strings.Index(items, "]")
 			section := items[start+len("BODY.PEEK[") : end]
 			data := m.sections[section]
-			say("* %d FETCH (UID %d BODY[%s]<0> {%d}\r\n%s)", i+1, m.uid, section, len(data), data)
+			// A partial fetch is answered with its origin, a whole one without — as
+			// RFC 3501 §7.4.2 has it, and as a client must read either.
+			origin := ""
+			if strings.Contains(items, "]<") {
+				origin = "<0>"
+			}
+			say("* %d FETCH (UID %d BODY[%s]%s {%d}\r\n%s)", i+1, m.uid, section, origin, len(data), data)
 		}
 		say("%s OK done", tag)
 	case "STORE":

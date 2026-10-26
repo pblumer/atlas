@@ -82,4 +82,4 @@ und endet in *„Bezahlt"*.
 Der Mahn-Task ist ein **Mockup** (ADR-0120), das Beispiel läuft also ohne
 Mailserver. Zu ersetzen ist genau dieser eine Task — durch einen Mail-Task. Zum
 Üben genügt der Mail-Worker im **Vorschau**-Modus: die Mahnung wird identisch
-gebaut und landet im Postausgang unter *Operations ▸ Outbox* statt beim Kunden.
+gebaut und landet im Postausgang unter *Operations ▸ Diagnostics ▸ Outbox* statt beim Kunden.

@@ -23,8 +23,8 @@ func feelExpr(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// handleListInboundSubscriptions lists the inbound event subscriptions of one clio
-// worker, oldest first.
+// handleListInboundSubscriptions lists the inbound event subscriptions of one
+// worker, oldest first, each with why it cannot read its source while it cannot.
 func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.Request) {
 	connID := r.PathValue("id")
 	// A subscription list is every message name this worker publishes under, and
@@ -35,7 +35,7 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 		return
 	}
 	var (
-		out     []inboundSubscription
+		out     = []inboundSubView{}
 		loadErr error
 	)
 	s.do(func() {
@@ -45,16 +45,13 @@ func (s *Server) handleListInboundSubscriptions(w http.ResponseWriter, r *http.R
 		}
 		for _, sub := range all {
 			if sub.ConnectorID == connID {
-				out = append(out, sub)
+				out = append(out, s.viewInboundSub(sub))
 			}
 		}
 	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "list subscriptions: "+loadErr.Error())
 		return
-	}
-	if out == nil {
-		out = []inboundSubscription{}
 	}
 	httpapi.JSON(w, http.StatusOK, out)
 }
@@ -132,6 +129,7 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	var (
 		kind     string
 		provider string
+		noRead   error
 		kindErr  error
 	)
 	s.do(func() {
@@ -142,6 +140,9 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		}
 		if ok {
 			kind, provider = conn.Kind, conn.Provider
+			if kind == connectorKindMail {
+				noRead = mail.CanReadMailbox(conn.Provider, conn.Sender, conn.MailboxEndpoint)
+			}
 		}
 	})
 	if kindErr != nil {
@@ -185,6 +186,15 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 	}
 	if msg := validateInboundWatch(kind, &rec); msg != "" {
 		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
+	}
+	// A mail Worker that only sends has no mailbox behind it: a watch on it would be
+	// stored, switched on, and never read anything, which looks exactly like a quiet
+	// inbox (ADR-0438). Refused here, from the Worker's configuration, while somebody is
+	// still there to read why — whether its credential works is the first read's to say.
+	if noRead != nil {
+		httpapi.Error(w, http.StatusBadRequest, "a watch needs a mailbox to read: "+
+			strings.TrimPrefix(noRead.Error(), "mail: "))
 		return
 	}
 	// Gmail keeps about a week of history and has no beginning to list a mailbox

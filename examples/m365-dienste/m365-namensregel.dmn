@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365Namensregel: die Namenskonvention für alles, was der Microsoft-365-Katalog anlegt (Governance).
+
+  Eingaben: objekttyp  ("team" | "funktionspostfach" | "verteiler" | "raum" | "warteschlange" | "telefonzentrale")
+            slug       (die normalisierte Bezeichnung; der Prozess bildet sie im Input-Mapping)
+            laenge     (berechnet: Länge von slug und bereich zusammen)
+            bereich, bezeichnung (Formularantworten; die Ausgaben lesen sie)
+  Ausgaben: erlaubt (Wahrheitswert), grund (Begründung, wird bei einer Ablehnung der bestellenden
+            Person gezeigt), anzeigename, alias
+
+  hitPolicy FIRST: zuerst die Ablehnungsgründe (leer, reserviert, zu lang), dann eine Regel je
+  Objekttyp, zuletzt die Auffangregel. Die Reihenfolge ist die Regel: Eine reservierte Bezeichnung
+  wird abgelehnt, welcher Objekttyp auch immer.
+
+  Wer die Konvention ändert, ändert diese Tabelle und nicht die Prozesse. Achtung: Präfixe sind Teil
+  der Identität bestehender Teams und Ressourcenkonten (deren Rückgabe bildet den Alias neu); ein
+  geändertes Präfix gilt deshalb nur für neue Objekte. Exchange-Objekte werden über ihre
+  Herkunftskennzeichnung gefunden und sind davon nicht betroffen.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365Namensregel" name="M365Namensregel" namespace="http://atlas/dmn">
+  <inputData id="id_objekttyp" name="objekttyp"/>
+  <inputData id="id_slug" name="slug"/>
+  <inputData id="id_bereich" name="bereich"/>
+  <inputData id="id_bezeichnung" name="bezeichnung"/>
+  <decision id="M365Namensregel" name="M365Namensregel">
+    <informationRequirement id="ir_objekttyp"><requiredInput href="#id_objekttyp"/></informationRequirement>
+    <informationRequirement id="ir_slug"><requiredInput href="#id_slug"/></informationRequirement>
+    <informationRequirement id="ir_bereich"><requiredInput href="#id_bereich"/></informationRequirement>
+    <informationRequirement id="ir_bezeichnung"><requiredInput href="#id_bezeichnung"/></informationRequirement>
+    <decisionTable id="dt_M365Namensregel" hitPolicy="FIRST">
+      <input id="in_objekttyp" label="objekttyp"><inputExpression id="ie_objekttyp" typeRef="string"><text>objekttyp</text></inputExpression></input>
+      <input id="in_slug" label="slug"><inputExpression id="ie_slug" typeRef="string"><text>slug</text></inputExpression></input>
+      <input id="in_laenge" label="laenge"><inputExpression id="ie_laenge" typeRef="number"><text>string length(slug) + string length(bereich)</text></inputExpression></input>
+      <output id="out_erlaubt" label="erlaubt" name="erlaubt" typeRef="boolean"/>
+      <output id="out_grund" label="grund" name="grund" typeRef="string"/>
+      <output id="out_anzeigename" label="anzeigename" name="anzeigename" typeRef="string"/>
+      <output id="out_alias" label="alias" name="alias" typeRef="string"/>
+      <rule id="r1">
+        <description>Leere Bezeichnung: nichts, woraus sich ein Alias bilden liesse</description>
+        <inputEntry id="r1_i0"><text>-</text></inputEntry>
+        <inputEntry id="r1_i1"><text>null, ""</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Die Bezeichnung enthält keine Buchstaben oder Ziffern."</text></outputEntry>
+        <outputEntry id="r1_o2"><text>null</text></outputEntry>
+        <outputEntry id="r1_o3"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Reservierte Bezeichnungen: Adressen, die Mailsysteme, Sicherheit oder Support für sich beanspruchen</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>"admin", "administrator", "postmaster", "hostmaster", "webmaster", "abuse", "noreply", "no-reply", "security", "sicherheit", "root", "support", "test"</text></inputEntry>
+        <inputEntry id="r2_i2"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>false</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Diese Bezeichnung ist reserviert (z.B. admin, postmaster, security, support)."</text></outputEntry>
+        <outputEntry id="r2_o2"><text>null</text></outputEntry>
+        <outputEntry id="r2_o3"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Zu lang: Bereich und Bezeichnung zusammen über 30 Zeichen</description>
+        <inputEntry id="r3_i0"><text>-</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <inputEntry id="r3_i2"><text>&gt; 30</text></inputEntry>
+        <outputEntry id="r3_o0"><text>false</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Bereich und Bezeichnung ergeben zusammen mehr als 30 Zeichen; der Alias wäre zu lang."</text></outputEntry>
+        <outputEntry id="r3_o2"><text>null</text></outputEntry>
+        <outputEntry id="r3_o3"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Objekttyp team: Präfix TM</description>
+        <inputEntry id="r4_i0"><text>"team"</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>true</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r4_o2"><text>"TM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r4_o3"><text>"tm-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Objekttyp funktionspostfach: Präfix FP</description>
+        <inputEntry id="r5_i0"><text>"funktionspostfach"</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>true</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r5_o2"><text>"FP-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r5_o3"><text>"fp-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Objekttyp verteiler: Präfix VL</description>
+        <inputEntry id="r6_i0"><text>"verteiler"</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <outputEntry id="r6_o0"><text>true</text></outputEntry>
+        <outputEntry id="r6_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r6_o2"><text>"VL-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r6_o3"><text>"vl-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r7">
+        <description>Objekttyp raum: Präfix RM</description>
+        <inputEntry id="r7_i0"><text>"raum"</text></inputEntry>
+        <inputEntry id="r7_i1"><text>-</text></inputEntry>
+        <inputEntry id="r7_i2"><text>-</text></inputEntry>
+        <outputEntry id="r7_o0"><text>true</text></outputEntry>
+        <outputEntry id="r7_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r7_o2"><text>"RM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r7_o3"><text>"rm-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r8">
+        <description>Objekttyp warteschlange: Präfix CQ</description>
+        <inputEntry id="r8_i0"><text>"warteschlange"</text></inputEntry>
+        <inputEntry id="r8_i1"><text>-</text></inputEntry>
+        <inputEntry id="r8_i2"><text>-</text></inputEntry>
+        <outputEntry id="r8_o0"><text>true</text></outputEntry>
+        <outputEntry id="r8_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r8_o2"><text>"CQ-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r8_o3"><text>"cq-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r9">
+        <description>Objekttyp telefonzentrale: Präfix AA</description>
+        <inputEntry id="r9_i0"><text>"telefonzentrale"</text></inputEntry>
+        <inputEntry id="r9_i1"><text>-</text></inputEntry>
+        <inputEntry id="r9_i2"><text>-</text></inputEntry>
+        <outputEntry id="r9_o0"><text>true</text></outputEntry>
+        <outputEntry id="r9_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r9_o2"><text>"AA-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r9_o3"><text>"aa-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r10">
+        <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>
+        <inputEntry id="r10_i0"><text>-</text></inputEntry>
+        <inputEntry id="r10_i1"><text>-</text></inputEntry>
+        <inputEntry id="r10_i2"><text>-</text></inputEntry>
+        <outputEntry id="r10_o0"><text>false</text></outputEntry>
+        <outputEntry id="r10_o1"><text>"Für diesen Objekttyp ist keine Namensregel hinterlegt."</text></outputEntry>
+        <outputEntry id="r10_o2"><text>null</text></outputEntry>
+        <outputEntry id="r10_o3"><text>null</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

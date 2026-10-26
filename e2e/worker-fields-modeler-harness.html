@@ -18,7 +18,10 @@
          Activity_licence  Entra, Assign licence, its body given both inline and by a
                            variable — two alternatives, each hiding the other
          Activity_csv      CSV, a delimited file with its column names — a field the
-                           catalog describes twice, as names and as name:width -->
+                           catalog describes twice, as names and as name:width
+         Activity_sharepoint SharePoint as a model authored before operations existed:
+                           no operation attribute, a list and one column
+         Activity_sp_explicit SharePoint naming create-item outright, a list and one column -->
     <link rel="stylesheet" href="/app.css" />
     <style>
       html, body { margin: 0; height: 100%; background: #fff; }
@@ -60,14 +63,24 @@
       <bpmn:extensionElements><atlas:csvConnector source="csvText" delimiter=";" hasHeader="false" columns="email,group,license" resultVariable="rows"/></bpmn:extensionElements>
       <bpmn:incoming>f5</bpmn:incoming><bpmn:outgoing>f6</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f6</bpmn:incoming></bpmn:endEvent>
+    <bpmn:serviceTask id="Activity_sharepoint" name="Erfassen">
+      <bpmn:extensionElements><atlas:sharePointConnector connector="intranet" site="https://contoso.sharepoint.com/sites/hr" list="Auftraege" resultVariable="angelegt"><atlas:itemField name="Title" value="=betreff"/></atlas:sharePointConnector></bpmn:extensionElements>
+      <bpmn:incoming>f6</bpmn:incoming><bpmn:outgoing>f7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Activity_sp_explicit" name="Protokoll">
+      <bpmn:extensionElements><atlas:sharePointConnector connector="intranet" operation="create-item" site="https://contoso.sharepoint.com/sites/hr" list="Protokoll"><atlas:itemField name="Title" value="=betreff"/></atlas:sharePointConnector></bpmn:extensionElements>
+      <bpmn:incoming>f7</bpmn:incoming><bpmn:outgoing>f8</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_1" name="End"><bpmn:incoming>f8</bpmn:incoming></bpmn:endEvent>
     <bpmn:sequenceFlow id="f0" sourceRef="Start_1" targetRef="Activity_plain"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Activity_plain" targetRef="Activity_account"/>
     <bpmn:sequenceFlow id="f2" sourceRef="Activity_account" targetRef="Activity_resolve"/>
     <bpmn:sequenceFlow id="f3" sourceRef="Activity_resolve" targetRef="Activity_stale"/>
     <bpmn:sequenceFlow id="f4" sourceRef="Activity_stale" targetRef="Activity_licence"/>
     <bpmn:sequenceFlow id="f5" sourceRef="Activity_licence" targetRef="Activity_csv"/>
-    <bpmn:sequenceFlow id="f6" sourceRef="Activity_csv" targetRef="End_1"/>
+    <bpmn:sequenceFlow id="f6" sourceRef="Activity_csv" targetRef="Activity_sharepoint"/>
+    <bpmn:sequenceFlow id="f7" sourceRef="Activity_sharepoint" targetRef="Activity_sp_explicit"/>
+    <bpmn:sequenceFlow id="f8" sourceRef="Activity_sp_explicit" targetRef="End_1"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="felder">
     <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="120" width="36" height="36"/></bpmndi:BPMNShape>
@@ -77,7 +90,9 @@
     <bpmndi:BPMNShape id="Activity_stale_di" bpmnElement="Activity_stale"><dc:Bounds x="700" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_licence_di" bpmnElement="Activity_licence"><dc:Bounds x="850" y="98" width="100" height="80"/></bpmndi:BPMNShape>
     <bpmndi:BPMNShape id="Activity_csv_di" bpmnElement="Activity_csv"><dc:Bounds x="1000" y="98" width="100" height="80"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="1150" y="120" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_sharepoint_di" bpmnElement="Activity_sharepoint"><dc:Bounds x="1150" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Activity_sp_explicit_di" bpmnElement="Activity_sp_explicit"><dc:Bounds x="1300" y="98" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="1450" y="120" width="36" height="36"/></bpmndi:BPMNShape>
     <bpmndi:BPMNEdge id="f0_di" bpmnElement="f0"><di:waypoint x="196" y="138"/><di:waypoint x="250" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="350" y="138"/><di:waypoint x="400" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="500" y="138"/><di:waypoint x="550" y="138"/></bpmndi:BPMNEdge>
@@ -85,6 +100,8 @@
     <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="800" y="138"/><di:waypoint x="850" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f5_di" bpmnElement="f5"><di:waypoint x="950" y="138"/><di:waypoint x="1000" y="138"/></bpmndi:BPMNEdge>
     <bpmndi:BPMNEdge id="f6_di" bpmnElement="f6"><di:waypoint x="1100" y="138"/><di:waypoint x="1150" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f7_di" bpmnElement="f7"><di:waypoint x="1250" y="138"/><di:waypoint x="1300" y="138"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f8_di" bpmnElement="f8"><di:waypoint x="1400" y="138"/><di:waypoint x="1450" y="138"/></bpmndi:BPMNEdge>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 

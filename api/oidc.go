@@ -272,50 +272,77 @@ func (p *oidcProvider) keySet(ctx context.Context, now time.Time, force bool) (*
 // RFC 6749 requires the two to be identical, and a server that recomputes it is a
 // server whose logins break the day it sits behind a different proxy.
 func (p *oidcProvider) exchange(ctx context.Context, code, verifier, redirectURI string, now time.Time) (string, error) {
-	d, err := p.endpoints(ctx, now)
-	if err != nil {
-		return "", err
-	}
-	form := url.Values{
+	tokens, err := p.tokenRequest(ctx, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {redirectURI},
 		"code_verifier": {verifier},
-		"client_id":     {p.cfg.ClientID},
+	}, now)
+	if err != nil {
+		return "", err
 	}
+	if tokens.IDToken == "" {
+		return "", errors.New("oidc: token response carries no id_token")
+	}
+	return tokens.IDToken, nil
+}
+
+// oauthTokens is a provider's token response. A login reads only the ID token; an
+// account link (ADR-0475 §4) also keeps the refresh
+// token, which goes straight to the vault.
+type oauthTokens struct {
+	IDToken      string `json:"id_token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+// errProviderInvalidGrant is the provider refusing the grant itself — a refresh token
+// revoked or expired — as opposed to being unreachable.
+var errProviderInvalidGrant = errors.New("oidc: the provider answered invalid_grant")
+
+// tokenRequest posts form to the provider's token endpoint as this client and returns
+// the response. The client's own id and secret are added here, so a caller states only
+// the grant.
+func (p *oidcProvider) tokenRequest(ctx context.Context, form url.Values, now time.Time) (oauthTokens, error) {
+	d, err := p.endpoints(ctx, now)
+	if err != nil {
+		return oauthTokens{}, err
+	}
+	form.Set("client_id", p.cfg.ClientID)
 	if p.cfg.ClientSecret != "" {
 		form.Set("client_secret", p.cfg.ClientSecret)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("oidc: build token request: %w", err)
+		return oauthTokens{}, fmt.Errorf("oidc: build token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("oidc: token exchange: %w", err)
+		return oauthTokens{}, fmt.Errorf("oidc: token exchange: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, p.budgets().Definition))
 	if err != nil {
-		return "", fmt.Errorf("oidc: read token response: %w", err)
+		return oauthTokens{}, fmt.Errorf("oidc: read token response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		// The provider's own error is worth carrying into the audit line: "invalid_grant"
 		// and "invalid_client" send an operator to entirely different places.
-		return "", fmt.Errorf("oidc: token endpoint answered %d: %s", resp.StatusCode, tokenError(body))
+		code := tokenError(body)
+		if strings.HasPrefix(code, "invalid_grant") {
+			return oauthTokens{}, fmt.Errorf("%w: %s", errProviderInvalidGrant, code)
+		}
+		return oauthTokens{}, fmt.Errorf("oidc: token endpoint answered %d: %s", resp.StatusCode, code)
 	}
-	var out struct {
-		IDToken string `json:"id_token"`
-	}
+	var out oauthTokens
 	if err := json.Unmarshal(body, &out); err != nil {
-		return "", fmt.Errorf("oidc: token response is not JSON: %w", err)
+		return oauthTokens{}, fmt.Errorf("oidc: token response is not JSON: %w", err)
 	}
-	if out.IDToken == "" {
-		return "", errors.New("oidc: token response carries no id_token")
-	}
-	return out.IDToken, nil
+	return out, nil
 }
 
 // tokenError pulls the OAuth error code out of a failed token response, or says

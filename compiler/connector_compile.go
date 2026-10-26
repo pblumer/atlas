@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // connectorCompiler compiles one worker flavor of a job-worker task (service or
@@ -143,6 +145,16 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.TeamsPhone.Retries },
 		compile: compileTeamsPhoneConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.GoogleContacts != nil },
+		retries: func(st xmlServiceTask) string { return st.GoogleContacts.Retries },
+		compile: compileGoogleContactsConnectorTask,
+	},
+	{
+		present: func(st xmlServiceTask) bool { return st.CardDAV != nil },
+		retries: func(st xmlServiceTask) string { return st.CardDAV.Retries },
+		compile: compileCardDAVConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here
@@ -217,16 +229,21 @@ type entraOp struct {
 	// reason and takes none of the query fields: there is no collection to filter,
 	// project or page.
 	isBinary bool
-	// selects marks a single-object read that takes a select (get-user, get-group):
-	// Graph's default property set leaves out assignedLicenses, employeeId and others a
-	// process may need to read (ADR-0172, amended).
+	// selects marks a single-object read that takes a select (get-user, get-group,
+	// get-user-manager): Graph's default property set leaves out assignedLicenses,
+	// employeeId and others a process may need to read (ADR-0172, amended).
 	selects bool
+	// expands marks a read that returns an object expanded on the user instead of the
+	// user — get-user-manager (ADR-0172, amended 2026-10-22). Like a listing, it needs a
+	// resultVariable: reading the manager to discard it is a read nothing asked for.
+	expands bool
 }
 
 var entraOps = map[string]entraOp{
 	"create-user":         {needsAttributes: true},
 	"get-user":            {needsUser: true, selects: true},
 	"get-user-photo":      {needsUser: true, isBinary: true},
+	"get-user-manager":    {needsUser: true, selects: true, expands: true},
 	"list-users":          {isList: true},
 	"delta-users":         {isDelta: true},
 	"update-user":         {needsUser: true, needsAttributes: true},
@@ -333,7 +350,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
 	}
-	if (spec.isList || spec.isDelta || spec.isBinary) && strings.TrimSpace(cn.ResultVariable) == "" {
+	if (spec.isList || spec.isDelta || spec.isBinary || spec.expands) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
 	}
 	if err := entraFieldGating(st.Id, op, spec, cn); err != nil {
@@ -437,8 +454,8 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 //
 //   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
 //     delta endpoint runs none of them, so they are an error on a delta op too.
-//   - select — a listing, a delta query, or a single-object read (get-user, get-group):
-//     each returns something whose properties can be projected.
+//   - select — a listing, a delta query, or a single-object read (get-user, get-group,
+//     get-user-manager): each returns something whose properties can be projected.
 //   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
 //
 // pageSize and maxUsers are numbers, gated by [entraListBound]; this covers the
@@ -454,7 +471,7 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-group, list-users, list-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
@@ -1288,7 +1305,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if !ok {
 		return 0, fmt.Errorf("compiler: mail task %q has an unknown operation %q (want %s)", st.Id, cn.Operation, strings.Join(MailOperations(), ", "))
 	}
-	if op == mailOpSend && strings.TrimSpace(cn.To) == "" {
+	if (op == mailOpSend || spec.forward) && strings.TrimSpace(cn.To) == "" {
 		return 0, fmt.Errorf("compiler: mail task %q needs a to recipient", st.Id)
 	}
 	// One pass over every authored value, as for Discord: required where the operation
@@ -1301,13 +1318,14 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		allowed  bool
 		why      string
 	}{
-		{"to", cn.To, false, spec.send, "the recipients of a message this task sends"},
-		{"cc", cn.Cc, false, spec.send, "copy recipients of a message this task sends"},
-		{"bcc", cn.Bcc, false, spec.send, "blind-copy recipients of a message this task sends"},
-		{"from", cn.From, false, spec.send, "the sender of a message this task sends"},
-		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply takes the original's"},
-		{"body", cn.Body, false, spec.send || spec.reply, "the text of a message or a reply"},
-		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply, "the HTML of a message or a reply"},
+		{"to", cn.To, false, spec.send || spec.forward, "the recipients of a message this task sends or forwards"},
+		{"cc", cn.Cc, false, spec.send || spec.forward, "copy recipients of a message this task sends or forwards"},
+		{"bcc", cn.Bcc, false, spec.send || spec.forward, "blind-copy recipients of a message this task sends or forwards"},
+		{"from", cn.From, false, spec.send, "the sender of a message this task sends; a forward goes out from the Worker's own mailbox"},
+		{"subject", cn.Subject, false, spec.send, "the subject of a message this task sends; a reply and a forward take the original's"},
+		{"body", cn.Body, false, spec.send || spec.reply || spec.forward, "the text of a message, a reply, or the note above a forward"},
+		{"bodyHtml", cn.BodyHtml, false, spec.send || spec.reply || spec.forward, "the HTML of a message, a reply, or the note above a forward"},
+		{"templating", cn.Templating, false, spec.send || spec.reply || spec.forward, "whether the subject and bodies of a message are templates"},
 		{"folder", cn.Folder, false, spec.list, "the folder a list reads"},
 		{"messageId", cn.MessageID, spec.message, spec.message, "the message the operation acts on — the messageId a watch or a list answered"},
 		{"destination", cn.Destination, spec.destination, spec.destination, "the folder a move files the message into"},
@@ -1315,6 +1333,11 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"unreadOnly", cn.UnreadOnly, false, spec.list, "whether a list answers only unread messages"},
 		{"includeBody", cn.IncludeBody, false, spec.list || spec.get, "whether the text of a message is read along with it"},
 		{"resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult, "the process variable receiving what the mailbox answered"},
+		{"attachmentId", cn.AttachmentID, spec.attachment, spec.attachment, "the attachment the operation reads — the id an envelope's attachments list carries"},
+		{"allowedTypes", cn.AllowedTypes, false, spec.attachment, "the media types the task accepts, judged from the document's content"},
+		{"store", cn.Store, spec.export, spec.export, "the S3 Worker the attachment is put into"},
+		{"bucket", cn.Bucket, spec.export, spec.export, "the bucket the attachment is put into"},
+		{"key", cn.Key, spec.export, spec.export, "the object key the attachment is stored under"},
 	} {
 		set := strings.TrimSpace(v.raw) != ""
 		if v.required && !set {
@@ -1332,11 +1355,21 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		Connector: strings.TrimSpace(cn.Connector),
 		Retries:   retries,
 		ResultVar: strings.TrimSpace(cn.ResultVariable),
+		Store:     strings.TrimSpace(cn.Store),
+	}
+	// The store is a Worker's name and stays literal, as the worker attribute does: the
+	// deploy check has to see which Worker a model writes into, and a name computed at
+	// run time would be one it could not check.
+	if strings.HasPrefix(cfg.Store, "=") {
+		return 0, fmt.Errorf("compiler: mail task %q names its store with an expression; store names an S3 Worker and must be written as its name", st.Id)
+	}
+	var err error
+	if cfg.AllowedTypes, err = mailAllowedTypes(st.Id, cn.AllowedTypes); err != nil {
+		return 0, err
 	}
 	if op != mailOpSend {
 		cfg.Operation = op
 	}
-	var err error
 	if spec.list {
 		if cfg.MaxResults, err = mailMaxResults(st.Id, cn.MaxResults); err != nil {
 			return 0, err
@@ -1345,8 +1378,32 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, err
 		}
 	}
-	if cfg.IncludeBody, err = mailFlag(st.Id, "includeBody", cn.IncludeBody); err != nil {
+	if cfg.IncludeBody, cfg.IncludeHTML, err = mailBody(st.Id, op, cn.IncludeBody); err != nil {
 		return 0, err
+	}
+	templating, err := mailFlag(st.Id, "templating", cn.Templating)
+	if err != nil {
+		return 0, err
+	}
+	// With templating on, a subject or body that uses the template language is parsed
+	// and its FEEL compiled here, once (I5). A leading '=' still makes the whole value
+	// one FEEL expression, and a value without {{ is still a literal: templating
+	// changes only what a placeholder in a literal means.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into **feelers.Template
+	}{
+		{"subject", cn.Subject, &cfg.SubjectTemplate},
+		{"body", cn.Body, &cfg.BodyTemplate},
+		{"bodyHtml", cn.BodyHtml, &cfg.BodyHTMLTemplate},
+	} {
+		if !templating || strings.HasPrefix(strings.TrimSpace(v.raw), "=") || !feelers.IsTemplate(v.raw) {
+			continue
+		}
+		if *v.into, err = feelers.Compile(v.raw, b.gate().compileFEEL); err != nil {
+			return 0, fmt.Errorf("compiler: mail task %q: %s: %w", st.Id, v.what, err)
+		}
 	}
 	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
 	// here and evaluated over the variables the task sees at call time.
@@ -1365,6 +1422,9 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 		{"folder", cn.Folder, &cfg.Folder},
 		{"messageId", cn.MessageID, &cfg.Message},
 		{"destination", cn.Destination, &cfg.Destination},
+		{"attachmentId", cn.AttachmentID, &cfg.Attachment},
+		{"bucket", cn.Bucket, &cfg.Bucket},
+		{"key", cn.Key, &cfg.Key},
 	} {
 		if *v.into, err = restValue(b.gate(), st.Id, v.what, v.raw); err != nil {
 			return 0, err
@@ -1391,17 +1451,43 @@ type mailOp struct {
 	send, reply, list, get   bool
 	message, destination     bool
 	needsResult, takesResult bool
+	// forward, attachment and export are the operations that hand a document on
+	// (ADR-0478).
+	forward, attachment, export bool
 }
 
 var mailOps = map[string]mailOp{
-	mailOpSend:    {send: true},
-	"list":        {list: true, needsResult: true, takesResult: true},
-	"get":         {get: true, message: true, needsResult: true, takesResult: true},
-	"move":        {message: true, destination: true, takesResult: true},
-	"mark-read":   {message: true},
-	"mark-unread": {message: true},
-	"delete":      {message: true},
-	"reply":       {reply: true, message: true},
+	mailOpSend:          {send: true},
+	"list":              {list: true, needsResult: true, takesResult: true},
+	"get":               {get: true, message: true, needsResult: true, takesResult: true},
+	"move":              {message: true, destination: true, takesResult: true},
+	"mark-read":         {message: true},
+	"mark-unread":       {message: true},
+	"delete":            {message: true},
+	"reply":             {reply: true, message: true},
+	"forward":           {forward: true, message: true},
+	"get-attachment":    {attachment: true, message: true, needsResult: true, takesResult: true},
+	"export-attachment": {attachment: true, export: true, message: true, takesResult: true},
+}
+
+// mailAllowedTypes reads an allowedTypes value: comma-separated media types, each exact
+// ("application/pdf") or a family ("image/*"). It is normalized here, once, so the
+// worker compares and never parses (I5); a value that is not a media type is refused
+// by name, because a typo would otherwise be a rule that quietly accepts nothing.
+func mailAllowedTypes(taskID, raw string) ([]string, error) {
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		t := strings.ToLower(strings.TrimSpace(p))
+		if t == "" {
+			continue
+		}
+		typ, sub, ok := strings.Cut(t, "/")
+		if !ok || typ == "" || sub == "" || typ == "*" || strings.ContainsAny(t, " ;=\"") || strings.Count(t, "/") != 1 {
+			return nil, fmt.Errorf("compiler: mail task %q: allowedTypes entry %q is not a media type (want e.g. application/pdf or image/*)", taskID, p)
+		}
+		out = append(out, t)
+	}
+	return out, nil
 }
 
 // MailOperations lists the operations a mail task may name, sorted.
@@ -1427,6 +1513,21 @@ func mailMaxResults(taskID, raw string) (int32, error) {
 		return 0, fmt.Errorf("compiler: mail task %q has a maxResults of %d; a list answers between 1 and %d messages", taskID, n, mailMaxResultsCeiling)
 	}
 	return int32(n), nil
+}
+
+// mailBody reads includeBody: false (or blank) for the envelope, true for the text too,
+// and html for the text and the HTML body — on a get only (ADR-0489). A
+// list answers up to a hundred messages into one variable, and a hundred HTML bodies
+// are not something a variable can hold, so a list that wants one reads it with a get.
+func mailBody(taskID, op, raw string) (text, html bool, err error) {
+	if strings.EqualFold(strings.TrimSpace(raw), "html") {
+		if op != "get" {
+			return false, false, fmt.Errorf("compiler: mail task %q has includeBody=%q; only a get reads a message's HTML body — a list answers up to %d messages into one variable, so read the one you need with a get", taskID, raw, mailMaxResultsCeiling)
+		}
+		return true, true, nil
+	}
+	text, err = mailFlag(taskID, "includeBody", raw)
+	return text, false, err
 }
 
 // mailFlag reads a literal true/false attribute. It is not FEEL: whether a body is read
@@ -1493,42 +1594,273 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}), nil
 }
 
-// compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: it
-// creates a list item in a model-authored site/list through a server-registered
-// SharePoint provider (Microsoft Graph) via the job path (ADR-0141). The provider
-// (Graph base, OAuth credential) is resolved server-side by worker name, like mail;
-// only the target (site, list, item fields) lives in the model.
+// The content encodings and the listing ceilings a SharePoint task may author. They are
+// spelled here as well as in connector/sharepoint because the compiler cannot import
+// that package (the dependency runs the other way); the drift test
+// TestSharePointOpsMatchTheCompiler guards the seam.
+const (
+	sharePointEncodingText   = "text"
+	sharePointEncodingBase64 = "base64"
+
+	// sharePointDefaultMaxResults and sharePointMaxPageSize bound one page of a listing.
+	// A hundred is small enough that a page of list items with all their columns stays
+	// well inside a process variable, and 999 is the largest page Graph accepts on the
+	// collections that state one; a list or a folder may answer with fewer per page,
+	// and then says where to carry on.
+	sharePointDefaultMaxResults int32 = 100
+	sharePointMaxPageSize       int32 = 999
+)
+
+// sharePointOp describes what one SharePoint operation requires of a model and what it
+// is allowed to carry. The table is the compiler's half of connector/sharepoint's Ops
+// table; the drift test TestSharePointOpsMatchTheCompiler keeps the two from
+// disagreeing about the operation set.
+//
+// "Needs" is the familiar half: an update with no item id cannot be sent. "Takes" is
+// the half that is expensive to forget — a filter authored on a get-item, or content on
+// a delete, would otherwise compile and then be dropped at call time, which from the
+// author's side is indistinguishable from a Worker that ignored it.
+type sharePointOp struct {
+	// needsList marks an item operation, which acts on one list; takesList a file
+	// operation, where the list is the document library and may be left to the site's
+	// default one.
+	needsList bool
+	takesList bool
+	// needsItemID marks an operation on one list item.
+	needsItemID bool
+	// needsPath marks an operation on one file or folder; takesPath a listing of a
+	// folder, whose path may be empty for the library's top level.
+	needsPath bool
+	takesPath bool
+	// needsFields marks update-item, which is nothing without the columns it sets;
+	// takesFields the two that may carry column values without needing them — an item
+	// created with only its defaults, a file uploaded without properties.
+	needsFields bool
+	takesFields bool
+	// needsContent and takesEncoding mark the byte path: an upload carries content, and
+	// an upload and a download say whether it is text or base64.
+	needsContent  bool
+	takesEncoding bool
+	// takesFilter marks the one listing that can be filtered (folders cannot), and
+	// takesSelect the reads whose columns can be narrowed.
+	takesFilter bool
+	takesSelect bool
+	// takesPaging marks the two listings: pageToken and maxResults apply to them only.
+	takesPaging bool
+	// needsResult marks an operation whose whole point is what it returns.
+	needsResult bool
+	takesResult bool
+}
+
+// sharePointOps is the operation table: the steps a process takes in a SharePoint site
+// — record a row, read it back, change it, find rows, take one away; put a document in
+// a library, read it, ask whether it is there, list a folder, make one, delete one. It
+// mirrors connector/sharepoint.Ops, which the drift test keeps honest.
+var sharePointOps = map[string]sharePointOp{
+	"create-item":   {needsList: true, takesFields: true, takesResult: true},
+	"get-item":      {needsList: true, needsItemID: true, takesSelect: true, needsResult: true, takesResult: true},
+	"update-item":   {needsList: true, needsItemID: true, needsFields: true, takesResult: true},
+	"delete-item":   {needsList: true, needsItemID: true, takesResult: true},
+	"list-items":    {needsList: true, takesFilter: true, takesSelect: true, takesPaging: true, needsResult: true, takesResult: true},
+	"upload-file":   {takesList: true, needsPath: true, needsContent: true, takesEncoding: true, takesFields: true, takesResult: true},
+	"download-file": {takesList: true, needsPath: true, takesEncoding: true, needsResult: true, takesResult: true},
+	"get-file":      {takesList: true, needsPath: true, needsResult: true, takesResult: true},
+	"list-folder":   {takesList: true, takesPath: true, takesPaging: true, needsResult: true, takesResult: true},
+	"create-folder": {takesList: true, needsPath: true, takesResult: true},
+	"delete-file":   {takesList: true, needsPath: true, takesResult: true},
+}
+
+// sharePointOpNames lists the operations, sorted, for the messages that have to say what
+// was expected.
+func sharePointOpNames() []string {
+	out := make([]string, 0, len(sharePointOps))
+	for name := range sharePointOps {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// compileSharePointConnectorTask compiles an <atlas:sharepointConnector> task: one list
+// or library operation in a model-authored site through a server-registered SharePoint
+// provider (Microsoft Graph) via the job path (ADR-0141, amended). The provider (Graph
+// base, OAuth credential) is resolved server-side by worker name, like mail; only the
+// operation and its target live in the model.
+//
+// A task naming no operation creates a list item, which keeps every model authored
+// before operations existed meaning what it meant.
 func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
 	cn := st.sharePointConn()
 	if strings.TrimSpace(cn.Connector) == "" {
 		return 0, fmt.Errorf("compiler: sharepoint task %q needs a worker", st.Id)
 	}
-	if strings.TrimSpace(cn.Site) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint task %q needs a site", st.Id)
+	op := strings.ToLower(strings.TrimSpace(cn.Operation))
+	if op == "" {
+		op = sharePointCreateItem
 	}
-	if strings.TrimSpace(cn.List) == "" {
-		return 0, fmt.Errorf("compiler: sharepoint task %q needs a list", st.Id)
+	spec, ok := sharePointOps[op]
+	if !ok {
+		return 0, fmt.Errorf("compiler: sharepoint task %q has an unknown operation %q (want %s)",
+			st.Id, cn.Operation, strings.Join(sharePointOpNames(), ", "))
 	}
-	site, err := restValue(b.gate(), st.Id, "site", cn.Site)
-	if err != nil {
-		return 0, err
+	// One pass over every authored value: required where the operation needs it, refused
+	// where it does not use it — the same table-driven check the S3 and Jira tasks make,
+	// for their reason: an added attribute is one row rather than two checks that can
+	// disagree.
+	values := []struct {
+		attr     string
+		noun     string
+		raw      string
+		required bool
+		allowed  bool
+	}{
+		{"site", "a site", cn.Site, true, true},
+		{"list", "a list", cn.List, spec.needsList, spec.needsList || spec.takesList},
+		{"itemId", "an itemId", cn.ItemID, spec.needsItemID, spec.needsItemID},
+		{"path", "a path", cn.Path, spec.needsPath, spec.needsPath || spec.takesPath},
+		{"content", "content to upload", cn.Content, spec.needsContent, spec.needsContent},
+		{"encoding", "an encoding", cn.Encoding, false, spec.takesEncoding},
+		{"filter", "a filter", cn.Filter, false, spec.takesFilter},
+		{"select", "a select", cn.Select, false, spec.takesSelect},
+		{"pageToken", "a pageToken", cn.PageToken, false, spec.takesPaging},
+		{"maxResults", "a maxResults", cn.MaxResults, false, spec.takesPaging},
+		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
 	}
-	list, err := restValue(b.gate(), st.Id, "list", cn.List)
-	if err != nil {
-		return 0, err
+	for _, v := range values {
+		set := strings.TrimSpace(v.raw) != ""
+		if v.required && !set {
+			return 0, fmt.Errorf("compiler: sharepoint task %q operation %q needs %s (%s)",
+				st.Id, op, v.noun, sharePointWhy(v.attr))
+		}
+		if set && !v.allowed {
+			return 0, fmt.Errorf("compiler: sharepoint task %q operation %q does not use %s (%s); remove it rather than leaving a value the Worker ignores",
+				st.Id, op, v.attr, sharePointWhy(v.attr))
+		}
+	}
+	switch {
+	case len(cn.Fields) > 0 && !spec.takesFields && !spec.needsFields:
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q sets no columns, so it does not use itemField values; remove them rather than leaving values the Worker ignores", st.Id, op)
+	case len(cn.Fields) == 0 && spec.needsFields:
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q needs at least one itemField: the column values it sets", st.Id, op)
 	}
 	fields, err := httpKVList(b.gate(), st.Id, "item field", cn.Fields)
 	if err != nil {
 		return 0, err
 	}
-	return b.AddSharePointConnectorTask(SharePointConfig{
-		Connector: strings.TrimSpace(cn.Connector),
-		Site:      site,
-		List:      list,
-		Fields:    fields,
-		ResultVar: strings.TrimSpace(cn.ResultVariable),
-		Retries:   retries,
-	}), nil
+	encoding, err := sharePointEncoding(st.Id, op, cn.Encoding, spec.takesEncoding)
+	if err != nil {
+		return 0, err
+	}
+	maxResults, err := sharePointMaxResults(st.Id, op, cn.MaxResults, spec.takesPaging)
+	if err != nil {
+		return 0, err
+	}
+	cfg := SharePointConfig{
+		Connector:  strings.TrimSpace(cn.Connector),
+		Operation:  op,
+		Fields:     fields,
+		Encoding:   encoding,
+		MaxResults: maxResults,
+		ResultVar:  strings.TrimSpace(cn.ResultVariable),
+		Retries:    retries,
+	}
+	// Each authored value is literal or FEEL (the fx toggle, ADR-0067), compiled once
+	// here and evaluated over the variables the task sees at call time. The diagnostics
+	// keep the "rest worker" wording restValue gave them before operations existed.
+	for _, v := range []struct {
+		what string
+		raw  string
+		into *RestExpr
+	}{
+		{"site", cn.Site, &cfg.Site},
+		{"list", cn.List, &cfg.List},
+		{"itemId", cn.ItemID, &cfg.ItemID},
+		{"path", cn.Path, &cfg.Path},
+		{"content", cn.Content, &cfg.Content},
+		{"filter", cn.Filter, &cfg.Filter},
+		{"select", cn.Select, &cfg.Select},
+		{"pageToken", cn.PageToken, &cfg.PageToken},
+	} {
+		if strings.TrimSpace(v.raw) == "" {
+			continue
+		}
+		val, err := restValue(b.gate(), st.Id, v.what, v.raw)
+		if err != nil {
+			return 0, err
+		}
+		*v.into = val
+	}
+	return b.AddSharePointConnectorTask(cfg), nil
+}
+
+// sharePointWhy explains one attribute, so both halves of the check above — the missing
+// value and the ignored one — say the same thing about it in one place.
+func sharePointWhy(attr string) string {
+	switch attr {
+	case "site":
+		return "the site every operation acts in: a Graph site id, host:/sites/name, or the site's URL"
+	case "list":
+		return "the list an item operation acts on, or the document library a file operation does — empty there means the site's default library"
+	case "itemId":
+		return "the id of the one list item the operation addresses, e.g. the id create-item or list-items answered with"
+	case "path":
+		return "the file or folder inside the library, e.g. Vertraege/2026/vertrag.pdf; list-folder lists the library's top level without one"
+	case "content":
+		return "what upload-file writes, and nothing else carries content"
+	case "encoding":
+		return "whether upload-file's content or download-file's answer is text or base64"
+	case "filter":
+		return "an OData filter over list-items, such as fields/Status eq 'Offen'; a folder listing cannot be filtered"
+	case "select":
+		return "the columns get-item and list-items answer with"
+	case "pageToken", "maxResults":
+		return "where a listing carries on and how much one page holds; only list-items and list-folder page"
+	case "resultVariable":
+		return "a read whose answer is discarded is a call made for nothing"
+	}
+	return attr
+}
+
+// sharePointEncoding reads the content encoding an upload or a download authors,
+// defaulting to text. It is compiled structure rather than an authored value, because it
+// decides how the bytes are read rather than which bytes they are.
+func sharePointEncoding(taskID, op, raw string, takes bool) (string, error) {
+	if !takes {
+		return "", nil
+	}
+	switch mode := strings.ToLower(strings.TrimSpace(raw)); mode {
+	case "":
+		return sharePointEncodingText, nil
+	case sharePointEncodingText, sharePointEncodingBase64:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("compiler: sharepoint task %q operation %q has an unknown encoding %q (want %q or %q)",
+			taskID, op, raw, sharePointEncodingText, sharePointEncodingBase64)
+	}
+}
+
+// sharePointMaxResults reads a listing's page size, applying the default when a model
+// authors none. A value that is not a positive number, or is past what Graph accepts,
+// is refused at deploy rather than becoming a call Graph refuses on every token.
+func sharePointMaxResults(taskID, op, raw string, takes bool) (int32, error) {
+	if !takes {
+		return 0, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return sharePointDefaultMaxResults, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a non-numeric maxResults %q", taskID, op, raw)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a maxResults of %d; it must be positive", taskID, op, n)
+	}
+	if n > int(sharePointMaxPageSize) {
+		return 0, fmt.Errorf("compiler: sharepoint task %q operation %q has a maxResults of %d, and one page holds at most %d; page with pageToken instead", taskID, op, n, sharePointMaxPageSize)
+	}
+	return int32(n), nil
 }
 
 // compileRemedyConnectorTask compiles an <atlas:remedyConnector> task: it creates an
@@ -2702,8 +3034,10 @@ func s3Count(taskID, op, attr, raw string, takes bool, def, max int32) (int32, e
 // test TestTeamsPhoneOpsMatchTheCompiler keeps the two from disagreeing.
 //
 // required and optional are authored values (literal-or-FEEL); settings are static
-// values validated against teamsPhoneSettings and defaulted here, so the worker never
-// has to guess one.
+// values validated against teamsPhoneSettings. A setting the model leaves out is not
+// compiled to its default: the worker applies the default to an object the task creates,
+// and an existing one keeps what it has, which only the setting's absence can say
+// (ADR-0463, amendment 2026-10-20).
 type teamsPhoneOp struct {
 	required    []string
 	optional    []string
@@ -2728,20 +3062,36 @@ var teamsPhoneOps = map[string]teamsPhoneOp{
 	"remove-auto-attendant":   {required: []string{"resourceAccountId"}, optional: []string{"name"}},
 	"remove-call-queue":       {required: []string{"resourceAccountId"}, optional: []string{"name"}},
 	"remove-resource-account": {required: []string{"resourceAccountId"}},
+	"ensure-phone-number": {
+		required:    []string{"identity", "phoneNumber"},
+		optional:    []string{"locationId"},
+		settings:    []string{"numberType"},
+		needsResult: true,
+	},
+	"remove-phone-number": {required: []string{"identity"}, optional: []string{"phoneNumber"}},
+	"remove-hotline":      {required: []string{"resourceAccountIds"}, optional: []string{"names"}},
+	"list-free-phone-numbers": {
+		optional:    []string{"numberPrefix", "max"},
+		settings:    []string{"numberType", "assignableTo"},
+		needsResult: true,
+	},
 }
 
-// teamsPhoneSettings are the static values and their defaults. An empty default makes a
-// setting required: an account type guessed wrong creates an account that cannot carry
-// the voice app it was meant for.
+// teamsPhoneSettings are the static values each setting may take, and whether a model
+// must author it: an account type guessed wrong creates an account that cannot carry the
+// voice app it was meant for, and a free number listed for the wrong kind of holder is
+// one Teams then refuses to give. The defaults of the others are the worker's.
 var teamsPhoneSettings = map[string]struct {
-	values []string
-	def    string
+	values   []string
+	required bool
 }{
-	"accountType":          {values: []string{"call-queue", "auto-attendant"}},
-	"routingMethod":        {values: []string{"attendant", "serial", "round-robin", "longest-idle"}, def: "attendant"},
-	"presenceBasedRouting": {values: []string{"true", "false"}, def: "true"},
-	"conferenceMode":       {values: []string{"true", "false"}, def: "true"},
-	"allowOptOut":          {values: []string{"true", "false"}, def: "true"},
+	"accountType":          {values: []string{"call-queue", "auto-attendant"}, required: true},
+	"routingMethod":        {values: []string{"attendant", "serial", "round-robin", "longest-idle"}},
+	"presenceBasedRouting": {values: []string{"true", "false"}},
+	"conferenceMode":       {values: []string{"true", "false"}},
+	"allowOptOut":          {values: []string{"true", "false"}},
+	"numberType":           {values: []string{"direct-routing", "calling-plan", "operator-connect"}, required: true},
+	"assignableTo":         {values: []string{"user", "resource-account"}, required: true},
 }
 
 func teamsPhoneOpNames() []string {
@@ -2792,10 +3142,10 @@ func compileTeamsPhoneConnectorTask(b *Builder, st xmlServiceTask, retries int32
 				return 0, fmt.Errorf("compiler: teamsphone task %q: %s decides what is created and cannot be a FEEL expression (want %s)", st.Id, v.attr, strings.Join(setting.values, ", "))
 			}
 			if value == "" {
-				value = setting.def
-			}
-			if value == "" {
-				return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s (%s)", st.Id, op, v.attr, strings.Join(setting.values, ", "))
+				if setting.required {
+					return 0, fmt.Errorf("compiler: teamsphone task %q operation %q needs %s (%s)", st.Id, op, v.attr, strings.Join(setting.values, ", "))
+				}
+				continue
 			}
 			if !in(setting.values, value) {
 				return 0, fmt.Errorf("compiler: teamsphone task %q has %s %q (want %s)", st.Id, v.attr, v.raw, strings.Join(setting.values, ", "))

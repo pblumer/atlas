@@ -80,6 +80,23 @@ func TestApplicationToolsPublishLoop(t *testing.T) {
 		t.Fatalf("releases = %s, want exactly v1", releases)
 	}
 
+	// The release carries its architecture snapshot (ADR-0471), readable as data.
+	architecture := callOne(t, atlas, "atlas_release_architecture", map[string]any{"id": app.ID, "version": 1})
+	var arch struct {
+		Version      int32 `json:"version"`
+		Architecture struct {
+			Processes []struct {
+				ProcessID string `json:"processId"`
+			} `json:"processes"`
+		} `json:"architecture"`
+	}
+	if err := json.Unmarshal([]byte(architecture), &arch); err != nil {
+		t.Fatalf("decode architecture = %q: %v", architecture, err)
+	}
+	if arch.Version != 1 || len(arch.Architecture.Processes) != 1 || arch.Architecture.Processes[0].ProcessID != "mcp-app-proc" {
+		t.Fatalf("architecture = %s, want v1 with its one process", architecture)
+	}
+
 	deployments := callOne(t, atlas, "atlas_application_deployments", map[string]any{"id": app.ID})
 	var view struct {
 		Version     int32 `json:"version"`

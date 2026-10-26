@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365VerteilerZuordnung: welche interne Verteilerliste eine öffentliche Auswahl bedeutet.
+
+  Eingabe:  liste (der Wert aus dem öffentlichen Formular)
+  Ausgaben: verteiler (Alias der internen Liste, nach der Namensregel), freigabe (ob M365-Administration
+            die Anmeldung prüft), bezeichnung
+
+  Die internen Adressen stehen nur hier, nie im öffentlichen Formular. Eine unbekannte Auswahl wird zur
+  Prüfung vorgelegt (Auffangregel). Die Listen sind Beispiele (ANNAHME) und anzupassen.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365VerteilerZuordnung" name="M365VerteilerZuordnung" namespace="http://atlas/dmn">
+  <inputData id="id_liste" name="liste"/>
+  <decision id="M365VerteilerZuordnung" name="M365VerteilerZuordnung">
+    <informationRequirement id="ir_liste"><requiredInput href="#id_liste"/></informationRequirement>
+    <decisionTable id="dt_M365VerteilerZuordnung" hitPolicy="FIRST">
+      <input id="in_liste" label="liste"><inputExpression id="ie_liste" typeRef="string"><text>liste</text></inputExpression></input>
+      <output id="out_verteiler" label="verteiler" name="verteiler" typeRef="string"/>
+      <output id="out_freigabe" label="freigabe" name="freigabe" typeRef="boolean"/>
+      <output id="out_bezeichnung" label="bezeichnung" name="bezeichnung" typeRef="string"/>
+      <rule id="r1">
+        <description>Partner-News: offen</description>
+        <inputEntry id="r1_i0"><text>"partner-news"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"vl-kom-partner-news"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>false</text></outputEntry>
+        <outputEntry id="r1_o2"><text>"Partner-News"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Medienmitteilungen: offen</description>
+        <inputEntry id="r2_i0"><text>"medienmitteilungen"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"vl-kom-medienmitteilungen"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>false</text></outputEntry>
+        <outputEntry id="r2_o2"><text>"Medienmitteilungen"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Kundenbeirat: nur nach Prüfung</description>
+        <inputEntry id="r3_i0"><text>"kundenbeirat"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"vl-kom-kundenbeirat"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>true</text></outputEntry>
+        <outputEntry id="r3_o2"><text>"Kundenbeirat"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Auffangregel: unbekannte Liste zur Prüfung</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>null</text></outputEntry>
+        <outputEntry id="r4_o1"><text>true</text></outputEntry>
+        <outputEntry id="r4_o2"><text>"Unbekannte Liste"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

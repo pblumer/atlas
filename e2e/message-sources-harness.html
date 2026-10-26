@@ -110,7 +110,9 @@
         window.__sourceCalls++;
         if (window.__holdSources) await new Promise((r) => held.push(r));
         if (window.__failSources) throw new Error("unreachable");
-        return SOURCES;
+        // __extraSources, set before mounting, adds rows of a newer server: a deployed
+        // process sending a name, and older versions (ADR-0446 §1).
+        return SOURCES.concat(window.__extraSources || []);
       };
 
       let served = xmlFor("mailbox-lifecycle");

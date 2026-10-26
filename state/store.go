@@ -135,6 +135,13 @@ func Open(dir string, opts ...Option) (*Store, error) {
 	return s, nil
 }
 
+// DiskSpaceUsage is the store's own account of the bytes it holds on disk: tables, its
+// log, manifest and the output of compactions in progress. It is kept in memory by the
+// store, so reading it touches no file and needs nothing from the run loop. Tables a
+// recovery checkpoint still links after the store compacted them away are not in it —
+// they belong to the checkpoint now (ADR-0131).
+func (s *Store) DiskSpaceUsage() uint64 { return s.db.Metrics().DiskSpaceUsage() }
+
 // Close flushes and closes the store.
 func (s *Store) Close() error {
 	if s.freeBatch != nil {
@@ -1091,6 +1098,20 @@ func (q queries) FinishedInstancesOfDefDesc(procDefKey uint64, beforeCompletedAt
 		hi = keyInstanceDoneByDef(procDefKey, beforeCompletedAt, beforeKey)
 	}
 	return q.instancesOfDefDesc(lo, hi, keyProcessInstanceHistory, fn)
+}
+
+// CountFinishedOfDefBefore counts the finished instances of one definition that
+// completed strictly before the cut-off, which is how many a history purge up to it
+// would consider (ADR-0486). It walks the
+// piDoneByDef index entries of that range and decodes no record, so a preview over
+// millions of instances reads millions of keys and nothing else.
+func (q queries) CountFinishedOfDefBefore(procDefKey uint64, before int64) (int, error) {
+	count := 0
+	err := q.scanRange(instanceDoneByDefPrefix(procDefKey), keyInstanceDoneByDef(procDefKey, before, 0), func(_, _ []byte) error {
+		count++
+		return nil
+	})
+	return count, err
 }
 
 // InstancesOnElementDesc calls fn with every live instance of one definition that

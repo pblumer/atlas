@@ -108,6 +108,20 @@ func (s *Store) Item(id string) (Item, bool, error) { return s.items.Get(id) }
 // Items lists every item, by id.
 func (s *Store) Items() ([]Item, error) { return s.items.LoadAll() }
 
+// DeleteCatalog removes a catalogue's record, and DeleteItem and DeleteRelease the
+// same for a product and a release. ADR-0312 gave the catalogue no delete; these
+// exist only for the administrator's purge (ADR-0469), which a
+// server started with --catalogue-purge=false refuses, and which decides beforehand
+// what else has to go with them. A record already gone is not an error, so a purge
+// that stopped halfway can be run again.
+func (s *Store) DeleteCatalog(id string) error { return s.catalogs.Delete(id) }
+
+// DeleteItem removes a product's record. See [Store.DeleteCatalog].
+func (s *Store) DeleteItem(id string) error { return s.items.Delete(id) }
+
+// DeleteRelease removes a release. See [Store.DeleteCatalog].
+func (s *Store) DeleteRelease(id string) error { return s.releases.Delete(id) }
+
 // SaveRelease writes a release. A release is never rewritten in practice — an
 // order names one and its contents must not move — so this is the one call that
 // creates it.
@@ -115,6 +129,9 @@ func (s *Store) SaveRelease(r Release) error { return s.releases.Save(r) }
 
 // Release reads one release.
 func (s *Store) Release(id string) (Release, bool, error) { return s.releases.Get(id) }
+
+// Releases lists every release of every catalogue, newest first.
+func (s *Store) Releases() ([]Release, error) { return s.releases.LoadAll() }
 
 // ReleasesOf lists one catalogue's releases, newest first.
 func (s *Store) ReleasesOf(catalogID string) ([]Release, error) {

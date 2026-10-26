@@ -189,7 +189,7 @@ Every request accepts either credential:
 | | Session cookie | API token |
 |---|---|---|
 | **For** | People | Machines: Newman, CI, workers, a stdio MCP adapter |
-| **Obtain** | `POST /api/v1/auth/login` with `{"username", "password"}` | `POST /api/v1/api-tokens` (admin) or the Console; the secret is shown **once** |
+| **Obtain** | `POST /api/v1/auth/login` with `{"username", "password"}` | `POST /api/v1/api-tokens` (admin) or **Console → Administration → API tokens**; the secret is shown **once** |
 | **Send** | Cookie `atlas_session` (Postman's cookie jar does it) | Header `Authorization: Bearer <token>` (the collection does it when `apiToken` is set) |
 | **Lifetime** | 12 hours | `expiresInDays`, or never (`0`) |
 | **Roles** | The user's roles | The minter's roles **without admin** |

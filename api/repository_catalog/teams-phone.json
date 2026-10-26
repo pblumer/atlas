@@ -1,10 +1,10 @@
 {
   "id": "atlas.teams-phone",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "kind": "connector",
   "title": "Microsoft Teams Phone voice apps",
   "author": "Atlas core",
-  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Licences and the employee id stay Entra operations.",
+  "description": "Provision a Teams Phone call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell. A model names the operation and supplies values; the worker runs fixed PowerShell shipped with Atlas on a host that has PowerShell 7 and the MicrosoftTeams module, signing in with the app's certificate from the vault (ADR-0463). Every ensure operation looks before it creates, so a retried job converges instead of creating a second queue; a resource account Entra already holds but Teams does not show yet is adopted rather than refused. Ensure call queue also brings an existing queue to the agents, authorized users and routing a model names, and a phone number is given to a user or a resource account, replacing the one it had; List free phone numbers offers the inventory's numbers nobody holds to choose from. A refusal a process may have a path for carries a TEAMSPHONE_ code and is thrown as a BPMN error when the process catches that code. Licences and the employee id stay Entra operations.",
   "engineCompat": ">=0.13",
   "template": {
     "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
@@ -22,7 +22,11 @@
           { "name": "Ensure auto attendant", "value": "ensure-auto-attendant" },
           { "name": "Remove auto attendant", "value": "remove-auto-attendant" },
           { "name": "Remove call queue", "value": "remove-call-queue" },
-          { "name": "Remove resource account", "value": "remove-resource-account" }
+          { "name": "Remove resource account", "value": "remove-resource-account" },
+          { "name": "List free phone numbers", "value": "list-free-phone-numbers" },
+          { "name": "Ensure phone number", "value": "ensure-phone-number" },
+          { "name": "Remove phone number", "value": "remove-phone-number" },
+          { "name": "Remove hotline (everything)", "value": "remove-hotline" }
         ] },
       { "label": "Users (Resolve users)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:users" },
         "description": "The people to look up — a FEEL list, or one text separated by commas. They come back as ids, the form a queue's agents and authorized users take, and the ones not found are listed in notFound rather than failing the task." },
@@ -43,24 +47,72 @@
       { "label": "Transfer to (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:transferTarget" },
         "description": "The resource account id of the call queue the auto attendant hands every call to." },
       { "label": "Agents (Ensure call queue)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:agents" },
-        "description": "Ids from Resolve users, at most 20. When set, an existing queue is brought to exactly this list, but never emptied: an empty list for a queue with agents is refused. Empty keeps the agents a queue has, and creates a new queue without agents." },
+        "description": "Ids from Resolve users, at most 20. When set, an existing queue is brought to exactly this list, but never emptied: an empty list for a queue with agents is refused (TEAMSPHONE_WOULD_EMPTY_LIST). Empty keeps the agents a queue has, and creates a new queue without agents." },
       { "label": "Authorized users (Ensure call queue / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:authorizedUsers" },
-        "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams." },
+        "description": "Ids from Resolve users of the people who may change the voice app's settings in Teams. On a call queue, an existing queue is brought to exactly this list but never emptied, and empty keeps the ones it has; on an auto attendant, applied when it is created." },
       { "label": "Language (Ensure call queue optional / auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:languageId" },
         "description": "A language tag Teams supports, e.g. de-CH or en-US. Required on an auto attendant, which speaks it." },
       { "label": "Time zone (Ensure auto attendant)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:timeZone" },
         "description": "A Windows time zone id, e.g. W. Europe Standard Time." },
       { "label": "Holidays (Ensure auto attendant)", "type": "Text", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:holidays" },
         "description": "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for one day." },
-      { "label": "Routing (Ensure call queue)", "type": "Dropdown", "value": "attendant", "binding": { "type": "property", "name": "atlas:routingMethod" },
+      { "label": "Routing (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:routingMethod" },
         "choices": [
+          { "name": "Keep — attendant for a new queue", "value": "" },
           { "name": "Attendant — ring every agent", "value": "attendant" },
           { "name": "Serial", "value": "serial" },
           { "name": "Round robin", "value": "round-robin" },
           { "name": "Longest idle", "value": "longest-idle" }
+        ],
+        "description": "A routing chosen here is also set on a queue that already exists; Keep leaves an existing queue's routing as it is." },
+      { "label": "Presence-based routing (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:presenceBasedRouting" },
+        "choices": [
+          { "name": "Keep — on for a new queue", "value": "" },
+          { "name": "On", "value": "true" },
+          { "name": "Off", "value": "false" }
+        ],
+        "description": "On offers a call only to agents whose presence is Available. On or Off is also set on a queue that already exists." },
+      { "label": "Conference mode (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:conferenceMode" },
+        "choices": [
+          { "name": "Keep — on for a new queue", "value": "" },
+          { "name": "On", "value": "true" },
+          { "name": "Off", "value": "false" }
         ] },
+      { "label": "Agents may opt out (Ensure call queue)", "type": "Dropdown", "value": "", "binding": { "type": "property", "name": "atlas:allowOptOut" },
+        "choices": [
+          { "name": "Keep — yes for a new queue", "value": "" },
+          { "name": "Yes", "value": "true" },
+          { "name": "No", "value": "false" }
+        ] },
+      { "label": "Resource accounts (Remove hotline)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:resourceAccountIds" },
+        "description": "The hotline's resource accounts. The auto attendants go first, then the queues, then each account's numbers and the account; refused before anything changes when a voice app also answers for an account not named." },
+      { "label": "Voice app names (optional on Remove hotline)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:names" },
+        "description": "The voice apps' names, which find one again that an earlier run left without its account." },
+      { "label": "User or resource account (phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:identity" },
+        "description": "Who holds the number: a person's or a resource account's user principal name or object id." },
+      { "label": "Phone number (Ensure / optional on Remove phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:phoneNumber" },
+        "description": "Written as people write one; spaces, dashes and a tel: prefix are dropped, a (0) after the country code is refused. A number the holder has is left alone, another one it holds is replaced. On a remove, empty takes every number away." },
+      { "label": "Number type (Ensure phone number / List free phone numbers)", "type": "Dropdown", "value": "direct-routing", "binding": { "type": "property", "name": "atlas:numberType" },
+        "choices": [
+          { "name": "Direct Routing", "value": "direct-routing" },
+          { "name": "Calling Plan", "value": "calling-plan" },
+          { "name": "Operator Connect", "value": "operator-connect" }
+        ],
+        "description": "How the tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is listed as free only once it has been uploaded to the tenant's inventory." },
+      { "label": "Emergency location (Ensure phone number)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:locationId" },
+        "description": "Optional. The LocationId of the emergency address the number is registered at." },
+      { "label": "Numbers for (List free phone numbers)", "type": "Dropdown", "value": "user", "binding": { "type": "property", "name": "atlas:assignableTo" },
+        "choices": [
+          { "name": "a person", "value": "user" },
+          { "name": "a resource account (voice app)", "value": "resource-account" }
+        ],
+        "description": "Teams gives a number to a person or to a voice app's resource account only when the number carries that capability, so only those are listed." },
+      { "label": "Starting with (optional on List free phone numbers)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:numberPrefix" },
+        "description": "Only numbers that start with this, written as people write one." },
+      { "label": "At most (optional on List free phone numbers)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:max" },
+        "description": "How many numbers to answer, from 1 to 500; 100 when empty. truncated says when there were more." },
       { "label": "Result variable", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
-        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name and created; or removed. Required on every operation but the removes." }
+        "description": "Receives the answer: ids and notFound; objectId, created and source; id, name, created and, for a call queue, changed; assigned and previousNumber; numbers, entries, count and truncated; or removed. Required on every operation but the removes." }
     ]
   }
 }

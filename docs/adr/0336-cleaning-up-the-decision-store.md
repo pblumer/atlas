@@ -1,6 +1,6 @@
 # ADR-0336: Cleaning up the decision store
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-21: an application purge overrides the pin guards for the decisions it published — see the amendment below)
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Atlas maintainers
@@ -153,6 +153,18 @@ here**: `DELETE /api/v1/processes/{key}` has had the same property since ADR-001
 and completed instances reference process definition keys. It is a general question
 about the key space, it wants one answer for both kinds, and inventing half of one
 inside a cleanup slice would be worse than naming it.
+
+### Amendment (2026-10-21): a purge overrides the pin guards
+
+Deleting a decision deployment on its own keeps every refusal above. Purging the
+application it was published from
+([ADR-0468](0468-deleting-an-application-with-its-contents.md))
+removes the application's whole decision history in one turn and overrides the two
+refusals that protect *other* deployed processes — the pin and the stranded latest
+binding — after its preview has named those processes. It keeps the version-counter
+refusal: a purge that would remove the current version of a decision whose older
+versions survive outside the application is refused before anything is deleted, because
+the next deploy would reuse a version number without anybody noticing.
 
 ### Consequences
 

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -110,6 +111,62 @@ func TestATeamsPhoneWorkerInMockModeServesAJob(t *testing.T) {
 	res := out["agents"].(map[string]any)
 	if len(res["ids"].([]string)) != 1 || res["notFound"].([]string)[0] != "ghost@contoso.example" {
 		t.Errorf("result = %v", res)
+	}
+}
+
+// The codes the process catches arrive with the job, and a refusal under one of them
+// leaves the handler as the BPMN error the worker throws — not as a failure it retries.
+func TestATeamsPhoneRefusalTheProcessCatchesIsThrown(t *testing.T) {
+	got, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_TEAMSPHONE_CONNECTORS": "contoso",
+		"ATLAS_TEAMSPHONE_MOCK":       "true",
+		"ATLAS_TEAMSPHONE_MOCK_USERS": "anna@contoso.example",
+	}), "teamsphone")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	h := got.Handlers[compiler.TeamsPhoneJobType].(ExecFunc)
+	job := func(codes []any) Job {
+		return Job{Connector: &ConnectorPayload{Kind: "teamsphone", Fields: map[string]any{
+			"connector": "contoso", "operation": "ensure-resource-account", "resultVariable": "konto",
+			"args":       map[string]any{"userPrincipalName": "anna@contoso.example", "displayName": "Anna", "accountType": "call-queue"},
+			"errorCodes": codes,
+		}}}
+	}
+	_, err = h(context.Background(), job([]any{"TEAMSPHONE_UPN_TAKEN"}))
+	var thrown *BPMNError
+	if !errors.As(err, &thrown) || thrown.Code != "TEAMSPHONE_UPN_TAKEN" {
+		t.Errorf("a refusal the process catches: %v; want the BPMN error TEAMSPHONE_UPN_TAKEN", err)
+	}
+	if _, err = h(context.Background(), job(nil)); err == nil || errors.As(err, &thrown) {
+		t.Errorf("a refusal the process does not catch: %v; want a failure the worker retries", err)
+	}
+}
+
+// In mock mode the tenant's numbers are the ones ATLAS_TEAMSPHONE_MOCK_NUMBERS names, so a
+// model tries the refusal of a number the tenant lacks before any tenant exists.
+func TestATeamsPhoneMockTenantHasTheNumbersItIsGiven(t *testing.T) {
+	got, err := BuiltinConnectors(envMap(map[string]string{
+		"ATLAS_TEAMSPHONE_CONNECTORS":   "contoso",
+		"ATLAS_TEAMSPHONE_MOCK":         "true",
+		"ATLAS_TEAMSPHONE_MOCK_NUMBERS": "+41 44 111 00 00",
+	}), "teamsphone")
+	if err != nil {
+		t.Fatalf("BuiltinConnectors: %v", err)
+	}
+	h := got.Handlers[compiler.TeamsPhoneJobType].(ExecFunc)
+	assign := func(number string) error {
+		_, err := h(context.Background(), Job{Connector: &ConnectorPayload{Kind: "teamsphone", Fields: map[string]any{
+			"connector": "contoso", "operation": "ensure-phone-number", "resultVariable": "nummer",
+			"args": map[string]any{"identity": "anna@contoso.example", "phoneNumber": number, "numberType": "calling-plan"},
+		}}})
+		return err
+	}
+	if err := assign("+41441110000"); err != nil {
+		t.Errorf("a number the mock tenant has: %v", err)
+	}
+	if err := assign("+41449999999"); err == nil || !strings.Contains(err.Error(), "acquire or port it first") {
+		t.Errorf("a number the mock tenant lacks: %v; want it refused", err)
 	}
 }
 

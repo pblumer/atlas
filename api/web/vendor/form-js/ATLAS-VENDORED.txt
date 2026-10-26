@@ -1,0 +1,78 @@
+form-viewer.js and form-playground.js are pre-built ESM bundles of:
+
+  - @bpmn-io/form-js-viewer@1.24.0
+  - @bpmn-io/form-js-editor@1.24.0       (form-playground.js only)
+  - @bpmn-io/form-js-playground@1.24.0   (form-playground.js only)
+  - preact@10.29.8                       (the one Preact all of the above resolve to)
+  - feelers@3.1.0                        (pinned by an override, see below)
+  - Atlas's own form-js modules in src/atlas/ (ADR-0473, ADR-draft-mail-html-view)
+  - esbuild@0.28.2                       (bundler only; not shipped)
+
+with every transitive dependency fixed by src/package-lock.json.
+
+What the bundles add to form-js is in src/atlas/ and nothing else; no file of form-js
+is patched or copied:
+
+  - remote-source.js adds a fourth options source, "Remote data source", to the
+    tables form-js describes its options sources in (Static, Input data, Expression).
+    Everything in form-js that deals with options sources reads those tables.
+  - mailview.jsx is the e-mail view (ADR-draft-mail-html-view), a component of its
+    own type, "mailview": it shows the mail a mail task read into a variable — the
+    envelope, the text, and the cleaned HTML body in a sandboxed frame that loads no
+    remote image until the reader asks. It is not keyed, so the form never submits it.
+    viewer.jsx registers it; editor.jsx gives it its Label and Variable entries.
+  - viewer.jsx registers the component every select renders through. It renders
+    form-js's own Select for the three sources form-js knows, and for the remote one a
+    field that mounts the search the page provides as the `atlasRemote` service
+    (api/web/remote-select.js).
+  - editor.jsx extends the editor's properties panel: Options source ▸ Type offers the
+    remote source on a select, and the source, the Worker, what is searched, filtered
+    and shown are edited there. It adds the "Directory picker" palette preset and the
+    "Convert to select" entry for a directory field saved as a textfield.
+  - viewer.js and playground.js are the entries. Their Form and Playground are
+    form-js's, constructed with the Atlas modules added.
+
+To rebuild, with ATLAS=this repository and WORK=an empty directory outside it:
+
+  cp -r $ATLAS/api/web/vendor/form-js/src/. $WORK/
+  cd $WORK && npm ci
+  B="./node_modules/.bin/esbuild --bundle --format=esm --minify --jsx=automatic --jsx-import-source=preact"
+  $B viewer.js --legal-comments=none --outfile=$ATLAS/api/web/vendor/form-js/form-viewer.js
+  $B playground.js --outfile=$ATLAS/api/web/vendor/form-js/form-playground.js
+
+Then record the two sums below. Build outside the repository: everything under
+api/web is embedded into the binary and served, node_modules included.
+
+Three details of that recipe are load-bearing:
+
+  - feelers is overridden to 3.1.0. form-js-viewer 1.24.0 accepts feelers ^3.1.0, and
+    feelers 3.2.0 depends on @bpmn-io/feelin 7 while form-js-viewer itself uses
+    @bpmn-io/feelin 6. Without the override the viewer carries two FEEL interpreters
+    of different major versions: the one form-js evaluates expressions with and the
+    one feelers evaluates templates with.
+  - preact is a direct dependency at the exact version form-js resolves to, so the
+    Atlas modules' hooks and JSX run on the same Preact as form-js. A second Preact
+    renders nothing wrong at first sight and breaks every hook.
+  - The Atlas modules import nothing from @bpmn-io/properties-panel. form-js-editor
+    carries that library inside its own dist and exports none of it; importing the
+    package would bundle a second copy, with a Preact of its own and contexts the
+    editor's panel never provides. editor.jsx writes its entries in the panel's
+    markup instead, and the panel's own CSS lays them out.
+
+Reproducibility: the tree is fixed by src/package-lock.json, and two builds from it
+produce identical bytes. The bundles committed before this record were built from a
+recipe that named only the entry packages, without a lockfile; they cannot be rebuilt
+byte for byte, because the transitive tree they were built from is not recorded.
+
+form-js.css and form-playground.css are unchanged by the rebuild and are not built
+by this recipe: form-js.css is @bpmn-io/form-js-viewer's dist/assets/form-js.css
+verbatim, and form-playground.css concatenates that file with form-js-editor's
+dist/assets/form-js-editor-base.css, form-js-editor.css, draggle.css and
+properties-panel.css and form-js-playground's dist/assets/form-js-playground.css, all
+verbatim (README.md). License: see LICENSE.
+
+SHA-256 form-viewer.js:
+fea3df381936e23f7ea80c0ab7ac9a6527094dc2ab116d3c5ee745a49640b7bb
+
+SHA-256 form-playground.js:
+85d5f9790b3f92fbed35d16166b2931eafef8eda7ba0d73b02790fe9fc9dbc60

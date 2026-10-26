@@ -9,6 +9,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/internal/endpoint"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -44,6 +45,10 @@ type workerStat struct {
 	// the providers it can reach. Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string `json:"connectors,omitempty"`
+	// Endpoints are where the worker reports those workers connect, reduced to
+	// scheme, host and port and keyed by worker name (ADR-0471). Only names in
+	// Connectors are kept, and a name the worker reported no endpoint for has none.
+	Endpoints map[string]string `json:"endpoints,omitempty"`
 	// Serves are the job types this worker has asked for, recorded on every poll
 	// including the ones that came back empty.
 	//
@@ -105,17 +110,57 @@ func (r *workerRegistry) seen(worker string) *workerStat {
 	return st
 }
 
-// holdsConnectors records the worker names a worker reports holding. It replaces
-// rather than merges: the report is that worker's current configuration, so a
-// worker removed from it should stop being counted as served rather than linger
-// from an earlier poll.
-func (r *workerRegistry) holdsConnectors(worker string, names []string) {
+// holdsConnectors records the worker names a worker reports holding, and where it
+// reports they connect. It replaces rather than merges: the report is that worker's
+// current configuration, so a worker removed from it should stop being counted as
+// served rather than linger from an earlier poll.
+func (r *workerRegistry) holdsConnectors(worker string, names []string, endpoints map[string]string) {
 	if worker == "" && len(names) == 0 {
 		return
 	}
 	st := r.seen(worker)
 	st.Connectors = append([]string(nil), names...)
 	sort.Strings(st.Connectors) // stable order, so the view does not shuffle
+	st.Endpoints = nil
+	for _, name := range st.Connectors {
+		if e, ok := endpoints[name]; ok {
+			if st.Endpoints == nil {
+				st.Endpoints = map[string]string{}
+			}
+			st.Endpoints[name] = e
+		}
+	}
+}
+
+// Bounds on what one poll may report, so a misbehaving worker cannot grow the
+// registry without limit: a worker holds a handful of names, and an endpoint reduced
+// to scheme, host and port is short.
+const (
+	maxReportedEndpoints   = 256
+	maxReportedEndpointLen = 300
+)
+
+// reportedEndpoints keeps the endpoints a poll reported for the names it reported,
+// each reduced again to scheme, host and port (internal/endpoint), and drops what is
+// not an address. It runs off the loop: it reads only the request.
+func reportedEndpoints(names []string, endpoints map[string]string) map[string]string {
+	if len(endpoints) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for _, name := range names {
+		if len(out) == maxReportedEndpoints {
+			break
+		}
+		raw, ok := endpoints[name]
+		if !ok || len(raw) > maxReportedEndpointLen {
+			continue
+		}
+		if a, ok := endpoint.Reduce(raw); ok {
+			out[name] = a.String()
+		}
+	}
+	return out
 }
 
 // leased records that a worker took n jobs of a type.

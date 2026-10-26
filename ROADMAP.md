@@ -549,6 +549,27 @@ The control-flow basics most real models use.
   Remedy instance, `atlas mock-remedy` serves an in-memory AR System REST mock
   (login → create-entry → logout, plus a `GET /mock/entries` inspection endpoint) the
   worker runs against unmodified (package `connector/remedy/mock`).
+  **SharePoint is another Worker Type in the catalog**
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended 2026-10-22): a service task
+  marked `<atlas:sharepointConnector connector operation site …>` performs one step in a
+  site through Microsoft Graph — create, read, update, delete and find (OData filter,
+  paged) the items of a list, and upload, download, check, list, create and delete files
+  and folders in a document library — with every authored value literal-or-FEEL, column
+  values keeping the type of their FEEL value, and what Graph answered written into a
+  result variable. The site is named by its URL, `host:/sites/name` or Graph's id; the
+  Graph base and the OAuth bundle (client secret, certificate or refresh token) are
+  server-registered and vault-resolved, never in the model. Create-item keeps its job
+  type and every other operation rides `io.atlas.sharepoint`, so a worker built before
+  the operations never performs one as a create. Sharing links, an idempotency column
+  against a duplicated create, and a `select` on file reads are follow-ups.
+  A SharePoint Worker with the provider **Mockup**
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)) needs no
+  tenant: its operations run against a site in the server's memory — a supervised worker
+  forwards them there — answering in Graph's shapes, refusing what SharePoint refuses, and
+  filtering in a stated OData subset. Operations › Diagnostics › Mockups shows its lists,
+  libraries and journal through `GET /api/v1/mocks`, the first piece of the one mockup view
+  ([ADR-0216](docs/adr/0216-mockups-are-one-view.md)); moving the AD and SQL mockups into
+  that view is a follow-up.
   **Jira is another Worker Type in the catalog**
   ([ADR-0201](docs/adr/0201-jira-connector.md)): a service task marked
   `<atlas:jiraConnector connector operation …>` performs one Atlassian Jira operation
@@ -597,20 +618,67 @@ The control-flow basics most real models use.
   **Teams Phone is another Worker Type in the catalog**
   ([ADR-0463](docs/adr/0463-teams-phone-worker.md)): a service task marked
   `<atlas:teamsPhoneConnector connector operation …>` resolves users, ensures the resource
-  accounts, a call queue and the auto attendant in front of it, and removes all three
-  again — fixed PowerShell shipped with Atlas, run by `pwsh` and the MicrosoftTeams module
-  on the worker host with the app's certificate from the vault. Every ensure looks before
-  it creates, and `ensure-call-queue` brings an existing queue to the agents a model names,
-  without ever emptying it. Still open: a run against a live tenant, phone numbers,
-  business hours and menus, the settings of an existing queue other than its agents, and a
+  accounts, a call queue and the auto attendant in front of it, lists the free phone
+  numbers, gives a person or a resource account one, and removes all of it again, a
+  whole hotline in one task if need be — fixed PowerShell shipped with Atlas, run by
+  `pwsh` and the MicrosoftTeams module on the worker host with the app's certificate from
+  the vault.
+  Every ensure looks before it creates, and
+  `ensure-call-queue` brings an existing queue to the agents, authorized users and routing
+  settings a model names, without ever emptying a list. Eight refusals carry
+  `TEAMSPHONE_…` codes an error boundary can catch, and the handbook's reference card
+  explains every operation. Still open: a run against a live tenant, business hours and
+  menus, an existing queue's language and an existing auto attendant's settings, and a
   warm `pwsh` session per tenant.
+  **Google Contacts is another Worker Type in the catalog**
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)): a service
+  task marked `<atlas:googleContactsConnector connector operation …>` finds a contact by
+  e-mail address, phone number or a custom field such as a customer number, reads, lists,
+  searches, creates, updates and deletes contacts, puts a label on one or takes it off, and
+  searches the Workspace directory — ten operations in one table
+  (`connector/googlecontacts/catalog`) that the compiler and the worker both read. A contact
+  is one flat object; null leaves a value as it is, `""` clears it, and an update writes
+  under the etag it read. `find-contacts` reads the address book rather than Google's search
+  cache, so a process deciding whether a customer is known is not told "no" about one
+  created a minute ago. Worker-only and supervised by default; the credential is the Google
+  Sheets bundle with the Workspace user it acts as. Still open: a run against a real
+  account (the record's open question), and a form-lookup provider so a person picks a
+  customer in a task form ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+  **CardDAV address books are a Worker Type too**
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)): a service task marked
+  `<atlas:carddavConnector connector operation …>` runs Google Contacts' operations and
+  contact — less the directory search — against iCloud, Nextcloud, ownCloud, mailbox.org,
+  Posteo, Infomaniak, Fastmail, Synology, Radicale and Baïkal, nine operations in one table
+  (`connector/carddav/catalog`). The address book is found from the server's URL
+  (RFC 6764 well-known, principal, home); groups are `CATEGORIES` or Apple's group cards,
+  one form per Worker; an update rewrites only the properties a contact key maps to, so a
+  photo and every other client's properties survive; and `create-contact` is safe to
+  repeat, because the contact's name is derived from the job and written with
+  `If-None-Match: *`. Worker-only and supervised by default. Walked against Radicale and
+  Xandikos; still open: a run against iCloud, Nextcloud and the hosted mail providers (the
+  record's open question), Exchange mailbox contacts through Microsoft Graph, and no
+  capability claim yet — the two contact Worker Types are not declared interchangeable
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
+  reference-only document search, authenticated presentation, safe metadata operations
+  and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
+  separately designed streamed upload path. OCR text and document bytes must
+  not enter process variables/WAL by default. Slice A is an executable search →
+  human-review workflow; Slice C depends on an explicitly authorized external
+  document source and retry/duplicate reconciliation. A preliminary external-only
+  `paperless.v1` job handler and metadata-safe API client now exist (see
+  [planning](docs/planning/paperless-worker-v1.md)); the first-class compiler,
+  Modeler/Console, Repository package, supervised vault setup and end-to-end
+  recovery verification are still outstanding.
   **On Windows, the Go Workers take the route PowerShell takes**
   ([ADR-0464](docs/adr/0464-windows-system-proxy.md)): outbound
   HTTP follows a proxy variable when one is set and otherwise the account's PAC, WPAD or
   Internet Options settings, by .NET's rules, so a group-policy proxy needs no
   configuration; and the Entra Worker signs with a certificate from the Windows
   certificate store by thumbprint, its key never read
-  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended). Still open: both are
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended), as does the SharePoint
+  Worker, which also takes a certificate as PEM
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended). Still open: both are
   exercised on the CI's Windows runner, not yet behind a real group-policy proxy.
   **The mail Worker reads its mailbox** ([ADR-0438](docs/adr/0438-mailbox-worker.md)):
   an inbound watch on a mail Worker publishes the new mail of one folder as an Atlas
@@ -618,7 +686,7 @@ The control-flow basics most real models use.
   history and the Microsoft Graph messages API for those providers — and a mail task's
   `operation` lists, reads, moves, marks, deletes (to the trash) or answers mail by the
   `messageId` a watch or a list answered. A process receives the envelope by default and
-  the text only on request; attachment content never. A watch admits `allowedSenders` and,
+  the text only on request; attachment content only through the operations below. A watch admits `allowedSenders` and,
   optionally, only a DMARC pass, and never changes the mailbox. A task that reads a mail
   Worker's mailbox deploys only for a viewer of it and one that changes it for an editor,
   at every deploy door — the application import included, which also gained ADR-0205's
@@ -626,6 +694,32 @@ The control-flow basics most real models use.
   than by role (ADR-0275), so what a process receives is not yet hidden from the
   installation's other operators; IMAP `XOAUTH2`; push instead of polling (IMAP `IDLE`,
   Graph change notifications).
+  **A mail's documents leave the mailbox, inspected**
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)):
+  `forward` sends a mail with its attachments to new recipients, `get-attachment` reads one
+  attachment into a variable under the variable budget, and `export-attachment` carries one
+  from the mailbox straight into a named S3 Worker, so a user task can open it through a
+  presigned link — for IMAP, Gmail and Graph alike. Every document they hand on is judged
+  from its content first (programs, scripts, macros, encrypted archives, PDFs that run code,
+  disguised names are refused; `allowedTypes` narrows further), and a mail Worker that
+  names a ClamAV `scanner` has every document scanned, failing closed when the scanner does
+  not answer. A refusal is the BPMN error `MAIL_ATTACHMENT_REJECTED` where the process
+  catches it. Still open: an ICAP client for antivirus gateways that do not speak clamd;
+  the Graph and Gmail calls walked at a live tenant; re-checking a stored object's verdict
+  before presenting it long after its export.
+  **Mail texts are templates, previewed as they are written**
+  ([ADR-0487](docs/adr/0487-mail-templates.md)): with `templating="true"`
+  a mail task's subject and bodies use the template language form text views already
+  speak — `{{ FEEL }}` placeholders, `{{#if}}` and `{{#loop}}` sections — compiled at deploy
+  and rendered by the worker, the HTML body escaping what a placeholder inserts; F2 opens
+  each field with a preview rendered by `POST /api/v1/feel/template`.
+  **A received mail's HTML is shown in a task form**
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)): a get with
+  `includeBody="html"` reads the HTML body as well, cleaned on the server of what runs and
+  cut to fit the variable, and the form component *E-mail view* (`mailview`) shows it in a
+  sandboxed frame with remote images blocked until the reader loads them; the view never
+  submits the mail back. Still open: the HTML body on an inbound mail watch, inline `cid:`
+  images, the Graph and Gmail HTML reads walked at a live mailbox.
   The same reader also runs the other way: `atlas openapi-template --spec x.yaml --out
   dir` writes one element-template package per operation, in the repository catalog's
   own shape ([ADR-0300](docs/adr/0300-openapi-element-templates.md)) —
@@ -910,13 +1004,26 @@ Making processes wait, react, and time out.
   what waits through `GET /api/v1/messages/buffered`, the MCP tool and the Console, and
   `atlas_buffered_messages` counts it on `/metrics`. Built as the local slice; delivery
   from a peer (ADR-0372) and a time to live on a throw event are not.
+- ✅ **Overviews of the messages and signals deployed models exchange**
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
+  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md)): the Console's
+  *Events* page has a second section, *Signals and messages of this installation*, derived on
+  request from the deployed definitions (`GET /api/v1/signals`, `GET /api/v1/message-names`,
+  `modeler`): for each name who throws or sends it and who receives it, every version listed,
+  and the findings of the newest versions — a throw nobody receives, a receiver nothing throws,
+  a name that crosses projects, a model that speaks for atlas. Message-sources names a model's
+  own sends and message event subprocesses, the Modeler's pickers offer what deployed models
+  throw and send and tell a sending element who receives it, and MCP has `atlas_signals` and
+  `atlas_message_names`.
+- ✅ **The event log** ([ADR-0472](docs/adr/0472-event-log.md)): every signal
+  thrown and message sent, with its sender and how far it reached, every reception, start,
+  keeping and expiry, folded from the log into a table kept for `--event-log-ttl` (30 days).
+  *Operations → Diagnostics → Event log*, `GET /api/v1/event-log` and `atlas_event_log`; a row
+  is read as its instance is (ADR-0275). Counters per name are not built.
 
 **Still open in this milestone:**
 - 🔲 **Repeatable non-interrupting conditional events**: a non-interrupting conditional
   fires once per arm; firing again on every false→true edge is ADR-0137's follow-up.
-- 🔲 **Overviews of the messages and signals deployed models exchange**
-  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md),
-  [ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md), both proposed).
 - 🔲 **Lanes, layers B and C** ([ADR-0121](docs/adr/0121-bpmn-lanes.md)): a lane naming
   an Atlas group as a compile-time `candidateGroups` default, and instance-level access
   control.
@@ -985,7 +1092,15 @@ Composition and reuse.
 What it takes to run this for real.
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
+- ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
+  only): the roles a token will carry are shown before it is minted, the secret once, and an
+  expired token stays listed and marked; one with less than 30 days left is flagged there and
+  on the dashboard, and counted on `/metrics` for an alert rule (amendment 2026-10-22). A
+  token can be sealed straight into the vault
+  (`vaultSecret`), so the one the shop's system processes present never leaves the server
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21)
 - 🚧 Job-worker protocol — ADR-0007: built over HTTP, with the type-keyed pull, long-poll, leases, `leaseToken` fencing, complete, fail and BPMN errors, and the activation and lease-timeout counters. A gRPC transport is not built, and whether it should be is open
+- 🚧 Authorize step in the job-worker protocol ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)): a Worker governed by an identity policy asks `POST /api/v1/jobs/{key}/authorize` for the lease it holds before it acts, and a completion without a recorded Permit for that lease is refused (409). The shipped SharePoint Worker asks; other Worker Types and externally built Workers do not yet. A per-Worker-Instance credential, which would let the server tell instances apart beyond the shared internal token, is not built
 - 🚧 Worker SDK (Go first): the `worker` package is usable from Go — handlers, concurrency, `BPMNError` — but is not yet packaged and documented as an SDK
 - ✅ A worker runs the jobs of one type concurrently: `--max-jobs` places, a poll asking only
   for the free ones, and supervised built-in workers at the engine's in-process bound
@@ -1041,6 +1156,27 @@ What it takes to run this for real.
   compacted log. `GET`/`POST /api/v1/checkpoints` expose the status — published
   checkpoints and whether they still verify, the last pass, the WAL's footprint — and a
   checkpoint-now control for a planned restart. **ADR-0131 is complete.**
+- ✅ A full disk neither loses data nor stops the server from restarting
+  ([ADR-0481](docs/adr/0481-storage-guard.md)). The dashboard shows an
+  administrator each file system the server writes to, the reserve, what the WAL and the
+  state store hold, and a forecast smoothed over about six hours; `GET /api/v1/storage`,
+  the `atlas_storage` MCP tool and `atlas_storage_*` on `/metrics` report the same reading.
+  Below the reserve (`--storage-reserve-mb`, default 1 GiB) writes are refused with 507
+  before they reach the engine and background work pauses, resuming by itself once space is
+  back. Underneath, a WAL write cut short is cut off again, and the engine halts after a
+  batch it could not make durable instead of running refused commands later. Open: whether
+  1 GiB covers a large store's compaction output (the record's open question)
+- ✅ An administrator gives disk back where the disk is shown
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)),
+  the "purge now" follow-up ADR-0115, ADR-0144 and ADR-0146 named. Operations deletes a
+  version's finished instances up to a cut-off — the history no `atlas:historyTtl` reaches —
+  in bounded batches through the retention purge event and behind its export gate
+  (`GET`/`POST /api/v1/processes/{key}/history-purge`, two MCP tools, `--instance-purge=false`
+  to refuse it on production). The storage card says whether the WAL is compacted, what the
+  last pass did, and compacts once on request (`POST /api/v1/checkpoints?compact=true`, also
+  on a frozen server); `ATLAS_COMPACT_WAL` switches compaction on from the environment. Open:
+  whether the retention sweep should purge records without a terminal position when no
+  exporter runs, as the manual purge does
 - ✅ Exported-log stream for downstream analytics: the OpenSearch exporter ([ADR-0114](docs/adr/0114-opensearch-event-exporter.md)) and the CloudEvents feed, pushed to a receiver ([ADR-0433](docs/adr/0433-the-event-feed-is-pushed-to-a-cloudevents-endpoint.md))
 - ✅ **Instance migration**
   ([ADR-0162](docs/adr/0162-process-instance-migration.md)): move running
@@ -1168,6 +1304,15 @@ Beyond a single node.
 
 Adoption and polish.
 
+- 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
+  descriptor for a Worker Type operation's claimed semantics: resource kind and
+  identity scope, JSON Schema roots, error taxonomy, idempotency, consistency and
+  pagination ([ADR-0485](docs/adr/0485-technical-capability-semantics.md)).
+  T1a validates the contract envelope without publishing a canonical production
+  corpus or certifying providers. **T1b** adds full JSON Schema verification and
+  provider conformance evidence; **T2** projects verified built-in operation claims
+  without copying operation tables (see
+  [implementation plan](docs/planning/technical-capability-contract.md)).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
@@ -1374,7 +1519,26 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   supervised worker authenticates with. The roster now also says **who is signed in
   right now** — `online` / `idle` / `offline` per account, admin-only, read from the
   live sessions and stored nowhere, so it is presence and never an attendance history
-  ([ADR-0228](docs/adr/0228-user-presence.md)).
+  ([ADR-0228](docs/adr/0228-user-presence.md)) — and **the day each account last
+  signed in**, kept beside the account as a UTC calendar day and nothing finer, so an
+  account nobody uses any more stands out without the roster learning when anybody
+  starts work ([ADR-0477](docs/adr/0477-last-login-day.md)).
+- 🚧 **Identity-aware Worker execution & policy-based authorization**
+  ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
+  proposed): a person links their Microsoft account (authorization code with PKCE; no
+  password ever reaches Atlas) and chooses which Workers may act as them; the refresh
+  token stays in the vault, and a supervised SharePoint Worker receives a short-lived
+  access token only after a recorded Permit for that exact action. Versioned, immutable
+  policies (JSON matchers, FEEL conditions, DMN decisions) are evaluated fail-closed —
+  default deny, deny-overrides, Indeterminate refuses — with approval obligations bound to
+  the action's digest and separation of duties by stable ids. Every decision and approval
+  is an engine fact fenced on the job's lease, replayed without re-evaluation. The Console
+  has **Connected accounts**, **Approvals** (a person's open action approvals across
+  instances) and **Administration → Security** (readiness, policies, simulator, evidence).
+  Built for the SharePoint Worker Type only, with brokering to Atlas-supervised Worker
+  Instances only. Next: Google, further Worker Types, the evidence in the Operations
+  instance view, and the open question of brokering to external Worker Instances (an
+  amendment of ADR-0168).
 - ✅ **Engine-internal encrypted secret vault**
   ([ADR-0069](docs/adr/0069-engine-internal-encrypted-secret-vault.md),
   [ADR-0070](docs/adr/0070-vault-on-by-default-with-generated-key.md)): closes
@@ -1698,6 +1862,21 @@ the hand-written Details panel one vertical slice at a time:
   kept per person on the server; the process listing names each row's application where
   the caller may see it
   ([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)).
+- ✅ **Remote data sources in task forms**: a select whose options source is a remote data
+  source (an `atlasDataSource` block)
+  searches a directory through the Worker the stored form names — Microsoft Entra ID users
+  first — and submits only the chosen object id. One bounded page per request, filters
+  bound to another field or fixed, a sealed cursor for the next page, a per-person rate
+  limit, and a check of the value before the task completes. The search is a **worker
+  query**, the protocol's non-durable message kind beside the job, so nothing about it
+  reaches the log; a Worker's editors open it with **Forms may search**. The form editor
+  configures it under the select's own Options source, without JSON, and previews it with
+  made-up people ([ADR-0473](docs/adr/0473-form-remote-data-sources.md), amended).
+- 🔲 A tag list whose options come from a remote data source: several entries, and a
+  submission check over a list of ids.
+- 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode
+  for word matching, and departments discovered rather than configured — each needs a
+  provider row and a query handler in its Worker Type.
 
 **Publication** ([ADR-0029](docs/adr/0029-public-process-start-links.md)):
 - ✅ Opt-in, revocable public start links: a scoped, unauthenticated
@@ -1901,6 +2080,13 @@ dataset of up to 50 000 cases":
 - 🚧 Minimap, align/distribute, element color/appearance: align and distribute are on the bpmn-js context menu; a minimap and element colour are not built.
 - 🔲 Element comments / annotations.
 - 🚧 Projects/folders to organize diagrams (draft/deployment listing grows a tree): projects exist ([ADR-0034](docs/adr/0034-projects-and-artifacts.md), [ADR-0128](docs/adr/0128-process-applications.md)); nested folders do not.
+- ✅ **Deleting an application with everything it owns**
+  ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)):
+  the delete dialog offers to keep the contents (Not assigned) or to remove every deployed version
+  with its running instances, the decision deployments, drafts, forms, references, models and
+  scenarios, after a preview of what goes and what outside the application stops working
+  (`?purge=true`, `GET .../deletion-preview`). A single version can be deleted with `?force=true`
+  over running instances and the ADR-0427 guard, and a refused delete shows the server's reason.
 - ✅ **The editor says which version it shows** ([ADR-0452](docs/adr/0452-modeler-shows-its-version.md)):
   a chip beside the breadcrumbs names the open record — the draft, or version N of M — and how it
   stands against the other (`Draft = v7`, `Draft · v7 + changes`, `Draft ≠ v7` when a newer
@@ -2100,6 +2286,17 @@ the method and how to work it with Atlas as it stands are in
   the automation one), and on the coverage read — and it never withholds a stale
   record, which would make the map least useful exactly when it needs attention.
 
+- 🚧 **B11 — Technical capability contract, first slice.** Optional, versioned
+  operation-level capability claims in the existing Worker Type manifest
+  ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  This is metadata validated at admission, **not** a new integration-capability
+  register or capability-based job routing. The first slice includes negative
+  validation tests and legacy-manifest compatibility; built-in Worker Type
+  projections, canonical semantic contracts, conformance tests and graph
+  relationships are subsequent slices described in
+  [the implementation plan](docs/planning/technical-capability-contract.md).
+  **Do not mark this completed before full Go checks and CI are green.**
+
 Deliberately out of scope: business areas (Level 1) and integration capabilities
 (Level 5) as record kinds of their own — the first is a tag, and the second is what a
 Worker Type already is ([ADR-0203](docs/adr/0203-worker-execution-model.md)). Importing
@@ -2109,6 +2306,96 @@ exists to settle it. No approval workflow: `state` is a field somebody sets, and
 is the engine an organisation would model such a workflow *in*.
 
 ---
+
+## Milestone IAE — Identity-aware Execution 🚧
+
+A dedicated cross-milestone [delivery programme](docs/planning/identity-aware-execution-program.md) for linked external user identities, managed Connections, delegated OAuth, enforceable per-action authorization, DMN/FEEL-backed business policy, trusted approval obligations, separation of duties and durable attribution. [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md) is **Proposed / Partial**: a supervised delegated SharePoint example does **not** establish enforcement for every Worker Type or externally hosted Worker Instance.
+
+- 🚧 **IAE0 — Architecture, threat model and decision gates.** Review ADR-0475, current code, trust boundaries, revocation, retention and compatibility before treating this as a universal security guarantee.
+- 🚧 **IAE1–IAE2 — External identities, Connections and delegated OAuth.** Build on existing Atlas principals, vault and OAuth mechanics; finish secure connection ownership, token rotation and provider consent lifecycle. Existing app-only and certificate Workers remain compatible.
+- 🚧 **IAE3–IAE4 — Policy decisions and enforced external execution.** Versioned fail-closed PDP, trusted PIP and an enforceable pre-effect PEP with durable action-bound decisions, lease fencing and recovery. Existing supervised SharePoint coverage is only a partial baseline; validate every supported execution mode.
+- 🔲 **IAE5 — Approval obligations and separation of duties.** Bind real, distinct approving principals to the exact action and policy revision; do not trust process variables as authorization evidence.
+- 🔲 **IAE6 — Console, API and Operations.** Linked identities, Connection management, policy publication/simulation, worker binding, readable audit and correctly scoped visibility.
+- 🔲 **IAE7 — Provider-by-provider adoption.** Microsoft Mail, selected Entra/Google/Jira/REST paths only after compatibility and enforceable credential boundaries are proven; no blanket claims.
+- 🔲 **IAE8 — Controlled SharePoint PoC and readiness review.** Test a real consented site and delegated user under applicable tenant policy, separately from simulated tests.
+
+**Programme boundary:** [CDA](docs/planning/capability-driven-automation-program.md) establishes *what* technical operation a Worker supports and how an opt-in BPMN task binds it; IAE establishes *who* may perform the particular external action, *as whom* and with which durable decision evidence. **CDA7 requires IAE4 enforcement for its chosen provider, but technical conformance is never authorization.** Follow the detailed [IAE gates and evidence register](docs/planning/identity-aware-execution-program.md).
+
+---
+
+## Milestone CDA — Capability-driven Automation 🚧
+
+A separate cross-milestone programme joining the existing Business Capability
+register, BPMN service tasks, versioned technical operation contracts, Worker
+Types, configured Workers, and identity-aware policy enforcement. Its
+[delivery programme](docs/planning/capability-driven-automation-program.md)
+is the status/dependency authority; the original [T0–T5 plan](docs/planning/technical-capability-contract.md)
+retains the technical task detail. This track **does not reopen completed
+Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
+**A descriptive claim is not proof of conformance, and conformance is not authorization.**
+
+- 🚧 **CDA0 — Declarative Worker Type operation claims (T0 / B11).**
+  [PR #1343](https://github.com/pblumer/atlas/pull/1343) merged the
+  manifest fields and validation on `main`. [ADR-0480](docs/adr/0480-technical-capability-contract.md)
+  is **Proposed / Partial**; the claims remain advisory and no capability
+  routing exists. Keep B11 open until the architecture decision and
+  verification gates have been reviewed.
+- 🚧 **CDA1 — Canonical semantic contract envelope (T1a / Milestone 6).**
+  [PR #1346](https://github.com/pblumer/atlas/pull/1346) merged the strict
+  envelope on `main`: exact ID/version/profile, resource kind, identity
+  scope and schema roots. [ADR-0485](docs/adr/0485-technical-capability-semantics.md)
+  is **Proposed / Partial**; no proof of provider behavior.
+- 🚧 **CDA2 — Contract governance and conformance (T1b / Milestone 6).**
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)
+  is **Accepted**: immutable source-controlled contracts, independent
+  digest-bound evidence, explicit reviewer approval and withdrawal.
+  [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged offline,
+  schema-only validation; [PR #1360](https://github.com/pblumer/atlas/pull/1360)
+  (content digests) is a draft in review; publication, verified
+  provider evidence and revocation are not yet implemented. No Worker Type
+  can certify its own claims or obtain runtime routing from JSON validation.
+- 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
+  Derive from existing provider operation catalogues, first distinguishing
+  an Entra account from a Google contact and an LDAP entry. Mark unknown,
+  candidate, verified and withdrawn truthfully, prevent catalogue drift;
+  no implicit provider substitution. Depends on CDA2 and ADR-0208's
+  relevant trust/pinning prerequisites.
+- 🔲 **CDA4 — Cross-layer technical capability graph (T3).**
+  Extend proposed [ADR-0420](docs/adr/0420-one-graph-model-several-projections.md)
+  with stable technical capability and Worker operation nodes, authored
+  versus derived provenance, a bounded off-loop query and source-specific
+  authorization. Depends on CDA2/CDA3 and acceptance of the graph model;
+  the previous Milestone P scope stays marked done.
+- 🔲 **CDA5 — Panorama, API and MCP discovery and impact (T4).**
+  Explain the path Value Stream → authored Business Capability realization →
+  BPMN task → exact technical operation → configured Worker, including
+  verified evidence, unknown links, gaps and restricted traversal.
+  Prove a Worker outage impact query without exposing hidden resources.
+  Depends on CDA4; do not display runtime execution support not yet built.
+- 🔲 **CDA6 — Capability-aware BPMN deployment binding (T5a).**
+  An opt-in service task declares one exact verified contract and freezes
+  one explicitly chosen Worker at deployment; reject missing, ambiguous,
+  withdrawn or mismatched bindings. Preserve existing BPMN and job types.
+  Governed by [ADR-0482](docs/adr/0482-capability-aware-binding-and-routing.md);
+  depends on CDA2/CDA3 and the accepted binding decision. **No new
+  execution behavior in this slice.**
+- 🔲 **CDA7 — Governed execution and recovery (T5b).**
+  Enable one narrow provider path through [ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)
+  authorization only when that Worker's enforcement exists: pin target,
+  deny without fallback, durable decisions before `fsync`-gated effects,
+  live/replay equality, deterministic retries, no hot-path allocations,
+  and a legacy-BPMN compatibility test. Depends on CDA6 and an accepted
+  routing decision. **Dynamic choice among multiple Workers is not
+  authorized by this milestone**; it needs its own approved event/policy
+  and recovery design.
+
+**Milestone gates:** CDA2 requires independent semantic conformance, CDA4
+requires accepted provenance/visibility semantics, CDA6 requires an approved
+BPMN binding, and CDA7 requires an approved replay-safe execution policy
+with provider enforcement. The full [ADR decision matrix and acceptance
+tests](docs/planning/capability-driven-automation-program.md) are the
+review checklist. Treat `Proposed`, `Partial`, `Merged`, and `Landed`
+as distinct states.
 
 ## Milestone K — Service catalogue, orders & the portal 🚧
 
@@ -2177,6 +2464,43 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   id or by name, and every open answer is refused before the first write
   ([ADR-0437](docs/adr/0437-a-package-is-imported-from-the-command-line.md)).
   An `atlas.json` for the other examples is a follow-up.
+- ✅ **A package is written from a server.** `atlas export` writes the package `atlas import`
+  installs elsewhere: the application's source with the decision models the server keeps, its
+  constants as a suggestion, and the chosen catalogues, whose groups and people become questions
+  answered by name; exporting again updates the directory in place, for git
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- ✅ **Imports ask before they replace, and repeat without effect.** The source and catalogue
+  imports answer a plan (`?dryRun=true`) and replace a changed artifact only when
+  `?overwrite=`/`?keep=` decides it; `atlas import` asks per artifact at a terminal and stops in
+  a pipeline, and the Console asks with one box each. Unchanged artifacts are not written, and
+  nothing is published again that the import did not change
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
+  Each import remembers what it brought, so only what both sides moved is asked about: an
+  artifact the package moved on is taken, one edited here is kept, constants included
+  (ADR-0467, amended).
+  Information models, Playground scenarios and Panorama models do not travel yet, and the shop
+  handbook's browser installer does not use the plan.
+- ✅ **A download says what the target needs.** The Console's source download carries the
+  application's constants when that is ticked, and the source import offers them with the same
+  plan; the tree names the server constants, application constants and workers its processes
+  need, and the import, `atlas export` and `atlas import` say what the target still lacks before
+  anything is published (ADR-0467, amended 2026-10-21).
+- ✅ **The Console moves an application with its catalogues.** Export application… downloads
+  the package `atlas export` writes, catalogues and their questions included; Import
+  application… answers the questions from the target's directory, asks for the rest, and installs
+  the application, its constants and its catalogues in `atlas import`'s order. A fixed approver
+  travels as an account by username (ADR-0467, amended 2026-10-21).
+- ✅ **A target remembers what a package's names mean.** A name chosen once on import — in the
+  Console or with `atlas import --set` — is kept in the target's table of names, shown and
+  corrected on the catalogue list, and answers the same question on every later import
+  (ADR-0467, amended 2026-10-21).
+- ✅ **A catalogue can be deleted for good.** An administrator deletes a catalogue or a product
+  with its releases, own products, orders, the instances working them and the holds they
+  granted, after a preview and a confirmation by id — in the Console, over HTTP and over MCP.
+  On by default for development and test installations; a production installation opts out
+  with `--catalogue-purge=false`, and there a product is withdrawn and a catalogue kept
+  ([ADR-0469](docs/adr/0469-catalogue-purge.md)). The inventory's history of
+  the removed holds is kept; erasing it would need an engine event of its own.
 
 **The shop & ordering**
 - ✅ **Browsing.** A person sees the one catalogue their groups reach, by rank, narrowed per
@@ -2213,6 +2537,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   `GET /api/v1/approvals/stalled` for a person to reassign
   ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md)); reminder processes read
   `GET /api/v1/pending-work` ([ADR-0343](docs/adr/0343-pending-work.md)).
+- ✅ **The line manager is on the account.** A `superior` approval starts with the orderer's
+  line manager as the account records it, and its escalation follows the line from whoever
+  holds it now. The Entra mirror fills the reference from `manager`, and an administrator
+  sets it where there is no mirror
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
+  Still open: whether an order placed for somebody else should go to the recipient's line
+  manager, and an automatic feed from on-premises Active Directory.
 
 **Fulfilment & product lifecycle**
 - ✅ **Fulfilment.** The shipped orchestrator starts lines wave by wave, calling Atlas as
@@ -2252,7 +2583,9 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   until that endpoint exists ([ADR-0313](docs/adr/0313-portal-language-follows-the-browser.md)).
 - 🚧 **Personal data.** A reference by default, and a per-subject key in the vault for the
   rest, so erasure destroys one key; whether erasure waits for running instances and held
-  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)).
+  rights is still open ([ADR-0314](docs/adr/0314-portal-personal-data.md)). The Operations
+  replay's Variables tab resolves those references when it is drawn, naming the person,
+  process or product beside the id and storing nothing.
 
 **Not built yet**
 - 🔲 The aggregate figures a product manager may see and the integration-manager relation

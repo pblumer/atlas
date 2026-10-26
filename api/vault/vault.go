@@ -197,7 +197,7 @@ func (v *Vault) List() ([]Meta, error) {
 	}
 	out := make([]Meta, 0, len(all))
 	for _, m := range all {
-		if !IsDataKeyName(m.Name) {
+		if !IsReservedName(m.Name) {
 			out = append(out, m)
 		}
 	}

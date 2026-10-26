@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -17,6 +18,7 @@ import (
 // credentials a machine authenticates with. Admin-gated, because issuing one is
 // the same class of act as creating an account — and, like the deploy tokens this
 // follows, the secret is returned exactly once because the server does not keep it.
+// These are the routes the Console's API-token page drives (web/apitokens.js).
 
 // maxAPITokenLifetime bounds how long a token may be asked to live. It is not a
 // security boundary — a machine that needs a year gets a year by asking — but a
@@ -24,11 +26,19 @@ import (
 // far out makes an absurd value (a typo of a hundred years) fail loudly.
 const maxAPITokenLifetime = 5 * 365 * 24 * time.Hour
 
+// apiTokenExpiryWarning is how far ahead a token's expiry is warned about, on the
+// Console (EXPIRY_WARN_DAYS in web/apitokens.js) and on /metrics alike, so the page
+// and an alert never disagree about which tokens are in trouble. A token that runs
+// out fails every call its machine makes from then on; thirty days leaves room to
+// mint a replacement and get it through a change process.
+const apiTokenExpiryWarning = 30 * 24 * time.Hour
+
 // newAPITokenResp is the mint response: the only time the secret exists outside
-// the caller's memory.
+// the caller's memory. Token is empty, and therefore absent, when the secret was
+// sealed in the vault instead: then it never leaves the server at all.
 type newAPITokenResp struct {
 	apiTokenView
-	Token string `json:"token"`
+	Token string `json:"token,omitempty"`
 }
 
 // loadAPITokens fills the in-memory index from the durable records. It runs before
@@ -45,13 +55,20 @@ func (s *Server) loadAPITokens() error {
 
 // handleCreateAPIToken mints a token. Body:
 // {"name": "...", "scope": "full|worker|metrics|status|directory|inventory|landscape|events",
-// "reach": ["..."], "expiresInDays": 90}. The reach is optional except for landscape,
-// and names projects — or, for an events token, catalogues.
+// "reach": ["..."], "expiresInDays": 90, "vaultSecret": "atlas"}. The reach is optional
+// except for landscape, and names projects — or, for an events token, catalogues.
 //
 // The name is required and the scope is required, both because the alternative is
 // a credential nobody can identify later and one whose reach nobody chose. An
 // omitted lifetime means the token does not expire, which is allowed and is said
 // out loud in the response rather than hidden in a default.
+//
+// vaultSecret is optional and seals the secret in this server's vault under that name
+// instead of returning it (ADR-0194, amendment 2026-10-21). It exists for the token a
+// model's own REST tasks present — authSecret="atlas" in the shop's system processes
+// (ADR-0411) — which no person ever needs to read: returned and pasted into the vault
+// by hand, it crossed the wire twice and sat in a clipboard in between. It is all or
+// nothing: a vault that is missing or refuses the write leaves no token behind.
 func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, s.budgets().ModelUpload))
 	if err != nil {
@@ -63,6 +80,7 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		Scope         string   `json:"scope"`
 		Reach         []string `json:"reach"`
 		ExpiresInDays int      `json:"expiresInDays"`
+		VaultSecret   string   `json:"vaultSecret"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -95,6 +113,18 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 	lifetime := time.Duration(payload.ExpiresInDays) * 24 * time.Hour
 	if lifetime > maxAPITokenLifetime {
 		httpapi.Error(w, http.StatusBadRequest, "expiresInDays is beyond the maximum lifetime")
+		return
+	}
+	vaultName, refusal := vaultSecretName(payload.VaultSecret)
+	if refusal != "" {
+		httpapi.Error(w, http.StatusBadRequest, refusal)
+		return
+	}
+	// Asked before anything is minted, so the answer to a server without a vault is a
+	// refusal and not a token that exists with nobody holding its secret.
+	if vaultName != "" && s.vault == nil {
+		httpapi.Error(w, http.StatusServiceUnavailable,
+			"vault not configured: no token was minted, because its secret would have nowhere to go")
 		return
 	}
 
@@ -134,7 +164,12 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec.Roles = roles
+	rec.VaultSecret = vaultName
 
+	if vaultName != "" {
+		s.mintIntoVault(w, r, rec, secret)
+		return
+	}
 	var saveErr error
 	s.do(func() {
 		if saveErr = s.apiTokenStore.Save(rec); saveErr != nil {
@@ -146,11 +181,93 @@ func (s *Server) handleCreateAPIToken(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "create api token: "+saveErr.Error())
 		return
 	}
-	audit(r, logging.AuthTokenMinted, "api token minted",
+	auditMinted(r, rec)
+	httpapi.JSON(w, http.StatusOK, newAPITokenResp{apiTokenView: rec.view(), Token: secret})
+}
+
+// mintIntoVault stores a token whose secret is sealed in the vault under
+// rec.VaultSecret, and answers without the secret.
+//
+// The order is what makes it all or nothing. The record is written first, then the
+// secret is sealed; a vault that refuses gets the record deleted again, and only when
+// both are durable does the token join the index that authenticates. So a failure
+// leaves either nothing, or — if the delete fails too — a record whose secret nobody
+// has, which can never be presented. Sealing first would be the worse order: a
+// refused record write would leave the vault holding a secret for a token that does
+// not exist, having overwritten whatever the name held before.
+//
+// The worker registries are rebuilt and the supervised workers refreshed in the same
+// step, as PUT /api/v1/secrets does: a vault secret can be the credential behind a
+// Worker, and there is no route by which a secret changes for the engine and not for
+// its workers. A failed rebuild comes after the token exists, and says so.
+func (s *Server) mintIntoVault(w http.ResponseWriter, r *http.Request, rec apiToken, secret string) {
+	var saveErr, sealErr, reloadErr error
+	s.doAndRefresh(func() {
+		if saveErr = s.apiTokenStore.Save(rec); saveErr != nil {
+			return
+		}
+		if _, sealErr = s.vault.Set(rec.VaultSecret, secret); sealErr != nil {
+			if delErr := s.apiTokenStore.Delete(rec.ID); delErr != nil {
+				sealErr = fmt.Errorf("%w (and removing the token record failed: %v; it can never be presented, because nobody holds its secret)", sealErr, delErr)
+			}
+			return
+		}
+		s.apiTokens.add(rec)
+		reloadErr = s.rebuildConnectorRegistries()
+	})
+	switch {
+	case saveErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "create api token: "+saveErr.Error())
+		return
+	case sealErr != nil:
+		httpapi.Error(w, http.StatusInternalServerError,
+			"seal api token in the vault as "+rec.VaultSecret+": "+sealErr.Error()+"; no token was minted")
+		return
+	}
+	auditMinted(r, rec)
+	if reloadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError,
+			"api token "+rec.ID+" was minted and sealed as "+rec.VaultSecret+
+				", but reloading the workers failed: "+reloadErr.Error())
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, newAPITokenResp{apiTokenView: rec.view()})
+}
+
+// auditMinted writes the audit line of a mint. It names the vault secret a token was
+// sealed as — a name, never the value — because that is where the credential went.
+func auditMinted(r *http.Request, rec apiToken) {
+	attrs := []slog.Attr{
 		slog.String("token_id", rec.ID), slog.String("token_name", rec.Name),
 		slog.String("scope", rec.scope()), slog.String("roles", strings.Join(rec.roles(), " ")),
-		slog.Int64("expires_at", rec.ExpiresAt))
-	httpapi.JSON(w, http.StatusOK, newAPITokenResp{apiTokenView: rec.view(), Token: secret})
+		slog.Int64("expires_at", rec.ExpiresAt),
+	}
+	if rec.VaultSecret != "" {
+		attrs = append(attrs, slog.String("vault_secret", rec.VaultSecret))
+	}
+	audit(r, logging.AuthTokenMinted, "api token minted", attrs...)
+}
+
+// vaultSecretName validates the optional vault secret a token is to be sealed as. An
+// absent or empty field means none. A name of only spaces is refused rather than read
+// as absent: somebody filled the field in, and handing their secret back instead of
+// sealing it would be the surprising answer. A data subject's personal-data key is
+// refused for the reason PUT /api/v1/secrets refuses it: overwriting it makes that
+// subject's data unreadable, silently and irreversibly (ADR-0314).
+func vaultSecretName(raw string) (name, refusal string) {
+	if raw == "" {
+		return "", ""
+	}
+	name = strings.TrimSpace(raw)
+	switch {
+	case name == "":
+		return "", "vaultSecret must name a vault secret, or be left out"
+	case vault.IsDataKeyName(name):
+		return "", "vaultSecret names a data subject's personal-data key, which is not an operator secret (ADR-0314)"
+	case vault.IsReservedName(name):
+		return "", "vaultSecret names a delegated connection's credential, which is not an operator secret"
+	}
+	return name, ""
 }
 
 // handleListAPITokens lists the tokens by identity, reach, lifetime and

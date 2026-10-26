@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas Mockups e2e harness</title>
+    <!-- Renders the real api/web/mockups.js against a fixture shaped like
+         GET /api/v1/mocks. The page around it is app.js's, which boots
+         the whole console on import and cannot be loaded here — so this proves what the
+         view shows, not app.js's polling and folding around it. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="list"></div>
+    <script type="module">
+      import { mockupsHTML } from "/mockups.js";
+      const list = document.getElementById("list");
+      window.render = (data) => { list.innerHTML = mockupsHTML(data); };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

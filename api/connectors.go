@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/discord"
@@ -24,8 +25,10 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/temis"
+	"github.com/pblumer/atlas/internal/certstore"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/vault"
 )
 
 // clioReadScope builds the clio scope string granting read on a subject: the exact
@@ -71,6 +74,15 @@ func envConnectorSecret(ref string) string {
 func (s *Server) resolveConnectorSecret(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
+		return ""
+	}
+	// A Worker's reference is operator input, and whatever it resolves to is handed
+	// to the Worker — into a supervised child's environment among other places. A
+	// reserved name would hand over a person's delegated refresh token or a data
+	// subject's key, so it resolves to nothing (ADR-0475
+	// §3): delegated credentials leave Atlas only as short-lived access tokens, through
+	// the authorization endpoint.
+	if vault.IsReservedName(ref) {
 		return ""
 	}
 	if s.vault != nil {
@@ -133,8 +145,12 @@ func envTemisClients() map[string]temis.Client {
 // The strings are read by an operator in an incident message and in the worker
 // list, so they say what to go and fix, not what the code decided.
 const (
-	problemDisabled   = "the worker is disabled"
-	problemNoEndpoint = "no endpoint is configured"
+	problemDisabled = "the worker is disabled"
+	// problemGovernedInProcess is why a governed Worker has no in-engine client. The
+	// Console does not show it: a governed Worker served by a supervised Worker
+	// Instance is working as intended (connectorkinds.go).
+	problemGovernedInProcess = "it is governed by an identity policy, so only a supervised Worker Instance that asks before acting runs its tasks; it never runs inside the engine (--in-process-connectors)"
+	problemNoEndpoint        = "no endpoint is configured"
 )
 
 // noteForeignKinds records, for every worker record that ended up as neither a
@@ -266,6 +282,7 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 			Name:     c.Name,
 			Outbox:   s.mailOutbox,
 			Mailbox:  strings.TrimSpace(c.MailboxEndpoint),
+			Scanner:  strings.TrimSpace(c.Scanner),
 		})
 		if err != nil {
 			// Misconfigured provider: its tasks park until it is fixed (ADR-0093) — and
@@ -289,6 +306,11 @@ func (s *Server) buildMailClients() (map[string]mail.Client, map[string]string, 
 // is misconfigured — unparseable, a missing field — is skipped (its tasks park)
 // rather than failing the whole rebuild. The resolved secret is the OAuth credential
 // JSON bundle held in the vault (I6), never a value in a model.
+//
+// A record whose provider is the mockup binds to its site in s.sharePointMocks instead,
+// and the rebuild is where a site whose Worker was deleted, or switched to Graph, is
+// let go (ADR-0484). A disabled or governed mockup keeps its
+// site: switching a Worker off is not asking for its content to be thrown away.
 func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[string]string, error) {
 	clients := map[string]sharepoint.Client{}
 	problems := map[string]string{}
@@ -296,20 +318,60 @@ func (s *Server) buildSharePointClients() (map[string]sharepoint.Client, map[str
 	if err != nil {
 		return nil, nil, err
 	}
+	var mocks []string
+	defer func() {
+		if s.sharePointMocks != nil {
+			s.sharePointMocks.Keep(mocks...)
+		}
+	}()
 	for _, c := range recs {
 		if c.Kind != connectorKindSharePoint {
 			continue
+		}
+		mock := c.Provider == sharepoint.MockProvider
+		if mock && s.sharePointMocks != nil {
+			// Made here for every mockup, not only the ones this engine serves: a
+			// governed one is served by a supervised worker, which forwards to it.
+			s.sharePointMocks.Site(c.Name)
+			mocks = append(mocks, c.Name)
 		}
 		if !c.Enabled {
 			problems[c.Name] = problemDisabled
 			continue
 		}
+		// A governed Worker never runs inside the engine: there it would act with the
+		// Worker's own credential without asking, and the engine would complete the job
+		// itself, past the completion guard
+		// (ADR-0475 §11). Its tasks park here and are
+		// served only by a supervised Worker Instance that asks first.
+		if c.Identity != nil {
+			problems[c.Name] = problemGovernedInProcess
+			continue
+		}
+		if mock {
+			if s.sharePointMocks == nil {
+				problems[c.Name] = "sharepoint: this server keeps no mockups"
+				continue
+			}
+			clients[c.Name] = s.sharePointMocks.Site(c.Name)
+			continue
+		}
+		secret := s.resolveConnectorSecret(c.CredentialsRef)
 		client, err := sharepoint.NewProviderClient(sharepoint.ProviderConfig{
 			Endpoint: strings.TrimSpace(c.Endpoint),
-			Secret:   s.resolveConnectorSecret(c.CredentialsRef),
+			Secret:   secret,
 		})
 		if err != nil {
 			problems[c.Name] = err.Error() // its tasks park until it is fixed (ADR-0141)
+			continue
+		}
+		// A thumbprint names a certificate in the Windows certificate store, so on a host
+		// without one the record is reported rather than served: neither this client nor a
+		// supervised worker, which sharepointWorkerEnv leaves it out of, could ever sign
+		// with it. On Windows the client is built without the store being asked — that
+		// happens on its first token request, off this loop (ADR-0141, amended).
+		if sharepoint.CertificateThumbprint(secret) != "" && !certStoreSupported {
+			problems[c.Name] = "sharepoint: " + certstore.ErrUnsupported.Error()
 			continue
 		}
 		clients[c.Name] = client
@@ -584,6 +646,7 @@ func (s *Server) buildRemedyClients() (map[string]remedy.Client, map[string]stri
 // goroutine, inside the same s.do closure that saved the change, so the rebuild sees
 // the write.
 func (s *Server) rebuildConnectorRegistries() error {
+	s.refreshGoverned()
 	for _, k := range managedConnectorKinds {
 		// A worker-only kind has no in-engine registry to rebuild: it is served by a
 		// supervised worker, which refreshSupervisedWorkers restarts when its store
@@ -683,6 +746,18 @@ func (s *Server) connectorProblem(kind, name string) string {
 	return ""
 }
 
+// refuseReservedRef says why a Worker may not name ref as its credential, or "". The
+// reserved regions of the vault — a person's data key, a delegated connection's
+// refresh token — are written and read only by the code that owns them; a Worker
+// naming one could read it through its supervised environment, or have it
+// overwritten by a provisioning call (ADR-0475 §6).
+func refuseReservedRef(ref string) string {
+	if vault.IsReservedName(strings.TrimSpace(ref)) {
+		return "a Worker's credential reference may not name a reserved vault entry"
+	}
+	return ""
+}
+
 // handleCreateConnector creates a managed worker and rebuilds the
 // runtime registry so a central decision referencing it starts resolving at once.
 func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
@@ -706,9 +781,14 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	p.Sender = strings.TrimSpace(p.Sender)
 	p.Model = strings.TrimSpace(p.Model)
 	p.MailboxEndpoint = strings.TrimSpace(p.MailboxEndpoint)
+	p.Scanner = strings.TrimSpace(p.Scanner)
 	p.CredentialsRef = strings.TrimSpace(p.CredentialsRef)
 	if p.Name == "" {
 		httpapi.Error(w, http.StatusBadRequest, "worker name is required")
+		return
+	}
+	if msg := refuseReservedRef(p.CredentialsRef); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 	kind, ok := lookupManagedConnectorKind(p.Kind)
@@ -751,6 +831,11 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 	}
 	if p.Kind != connectorKindMail {
 		p.MailboxEndpoint = "" // a mail-only field, cleared like Provider and Sender are
+		p.Scanner = ""
+	}
+	if p.FormLookups && !formLookupKind(p.Kind) {
+		httpapi.Error(w, http.StatusBadRequest, refuseFormLookups(p.Kind))
+		return
 	}
 	// And the one rule a pure validator cannot state, because it depends on a stored
 	// setting: whether a database needs a connection string at all. The read rides the
@@ -772,6 +857,8 @@ func (s *Server) handleCreateConnector(w http.ResponseWriter, r *http.Request) {
 		CredentialsRef: p.CredentialsRef, Enabled: enabled,
 		Provider: p.Provider, Sender: p.Sender, Model: p.Model,
 		MailboxEndpoint: p.MailboxEndpoint,
+		Scanner:         p.Scanner,
+		FormLookups:     p.FormLookups,
 		CreatedAt:       time.Now().Unix(),
 		// Whoever made it owns it, and it starts private (ADR-0205). Private is the
 		// only defensible default for a thing that may hold a personal mailbox; what
@@ -850,7 +937,13 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint; "" removes it, which
 		// makes the Worker a sender only again (ADR-0438).
 		MailboxEndpoint *string `json:"mailboxEndpoint"`
-		Enabled         *bool   `json:"enabled"`
+		// Scanner is a mail Worker's malware scanner; "" removes it, which leaves only
+		// the built-in inspection (ADR-0478).
+		Scanner *string `json:"scanner"`
+		Enabled *bool   `json:"enabled"`
+		// FormLookups opens the Worker to task forms' directory searches, or closes it
+		// (ADR-0473). An editor's act, like the credential.
+		FormLookups *bool `json:"formLookups"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -881,11 +974,18 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 			refusedCode, refusedMsg = code, msg
 			return
 		}
+		if msg := s.refuseGovernedChange(r, rec); msg != "" {
+			refusedCode, refusedMsg = http.StatusForbidden, msg
+			return
+		}
 		if p.Endpoint != nil {
 			rec.Endpoint = strings.TrimSpace(*p.Endpoint)
 		}
 		if p.CredentialsRef != nil {
 			rec.CredentialsRef = strings.TrimSpace(*p.CredentialsRef)
+			if badRequest = refuseReservedRef(rec.CredentialsRef); badRequest != "" {
+				return
+			}
 		}
 		if p.Provider != nil {
 			rec.Provider = strings.TrimSpace(*p.Provider)
@@ -899,13 +999,33 @@ func (s *Server) handleUpdateConnector(w http.ResponseWriter, r *http.Request) {
 		if p.MailboxEndpoint != nil {
 			rec.MailboxEndpoint = strings.TrimSpace(*p.MailboxEndpoint)
 		}
+		if p.Scanner != nil {
+			rec.Scanner = strings.TrimSpace(*p.Scanner)
+		}
 		if p.Enabled != nil {
 			rec.Enabled = *p.Enabled
+		}
+		if p.FormLookups != nil {
+			if *p.FormLookups && !formLookupKind(rec.Kind) {
+				badRequest = refuseFormLookups(rec.Kind)
+				return
+			}
+			rec.FormLookups = *p.FormLookups
 		}
 		// The updated record has to satisfy what a create would have demanded of it —
 		// an SMTP endpoint that dials, a provider that has a credential — or the change
 		// is refused here instead of parking a token later (ADR-0150/0159).
 		if badRequest = normalizeConnectorUpdate(&rec); badRequest != "" {
+			return
+		}
+		// A delegated Worker's endpoint is where a person's token goes; even an
+		// administrator moves it only to another Microsoft Graph.
+		if rec.Identity != nil && authz.IsDelegated(rec.Identity.Mode) && !delegatedEndpointAllowed(rec.Endpoint) {
+			badRequest = "a delegated Worker's endpoint must be Microsoft Graph (or blank): it is where a person's token is sent"
+			return
+		}
+		if rec.Identity != nil && authz.IsDelegated(rec.Identity.Mode) && rec.Provider == sharepoint.MockProvider {
+			badRequest = mockDelegatedRefusal
 			return
 		}
 		if saveErr = s.connectors.Save(rec); saveErr != nil {
@@ -954,6 +1074,12 @@ func (s *Server) handleDeleteConnector(w http.ResponseWriter, r *http.Request) {
 		// ever existed.
 		if found {
 			if refusedCode, refusedMsg = s.checkConnectorRole(r, rec, ScopeRoleOwner); refusedCode != 0 {
+				return
+			}
+			// Deleting a governed Worker drops its identity policy, and a Worker created
+			// again under the name would inherit the consent people gave the name.
+			if msg := s.refuseGovernedChange(r, rec); msg != "" {
+				refusedCode, refusedMsg = http.StatusForbidden, msg
 				return
 			}
 		}
@@ -1081,6 +1207,10 @@ func (s *Server) handleProvisionClioKey(w http.ResponseWriter, r *http.Request) 
 	setRef := ref == ""
 	if setRef {
 		ref = conn.Name
+	}
+	if msg := refuseReservedRef(ref); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
+		return
 	}
 	var saveErr error
 	s.doAndRefresh(func() {
@@ -1354,11 +1484,11 @@ func (s *Server) testSQLConnector(w http.ResponseWriter, r *http.Request, produc
 func connectorTestDetail(provider, endpoint, to string, loggedIn bool) string {
 	switch {
 	case to != "" && provider == mail.ProviderPreview:
-		return "Test message delivered to the outbox (Operations › Outbox) — the preview provider sends nothing outward."
+		return "Test message delivered to the outbox (Operations › Diagnostics › Outbox) — the preview provider sends nothing outward."
 	case to != "":
 		return "Test message sent to " + to + ". If it does not arrive, the message left atlas and the provider still has it."
 	case provider == mail.ProviderPreview:
-		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Outbox)."
+		return "Ready. The preview provider dials nothing: messages land in the outbox (Operations › Diagnostics › Outbox)."
 	case provider == mail.ProviderSMTP && !loggedIn:
 		return "Connected to " + endpoint + " without logging in: no credential reference is set, so the server has to " +
 			"admit atlas by its network address. No message was sent — send a test message to confirm it relays."

@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "m365-postfach-person",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Person · Person**"
+    },
+    {
+      "key": "person",
+      "type": "textfield",
+      "label": "Person (UPN oder Adresse) · Person (UPN or address)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

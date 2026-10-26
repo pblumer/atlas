@@ -146,6 +146,7 @@ Chosen: **option 3.** A second due-date-ordered family, `cfHistoryExpiry`
 
 ## Links
 
+- extended by ADR-0486 (the "purge now" action this record named)
 - extends ADR-0144 (per-definition history TTL — the `atlas:historyTtl` this schedules)
 - extends ADR-0115 (history retention — the purge event, the export gate, the sweep)
 - mirrors ADR-0051 (due-timer index — the range-scan-to-now shape reused here)

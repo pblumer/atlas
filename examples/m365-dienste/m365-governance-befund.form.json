@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "m365-governance-befund",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Governance-Befund · Governance findings**\n\nObjekte, die nicht über den Katalog entstanden sind oder die Namensregel verletzen. Je Objekt: übernehmen, umbenennen oder entfernen. · Objects not created through the catalogue or breaking the naming rule. For each: adopt, rename or remove."
+    },
+    {
+      "key": "anzahlAbweichungen",
+      "type": "number",
+      "label": "Abweichungen · Findings",
+      "disabled": true
+    },
+    {
+      "key": "befundText",
+      "type": "textarea",
+      "label": "Befund · Findings",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "massnahmen",
+      "type": "textarea",
+      "label": "Vereinbarte Massnahmen · Agreed actions",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

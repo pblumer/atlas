@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,11 +21,13 @@ import (
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/agent"
+	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -44,6 +47,7 @@ import (
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 	"github.com/pblumer/atlas/logging"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -881,6 +885,91 @@ func (s *Server) handleEvaluateFeel(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, evalFeelResp{OK: true, Result: result, Kind: kind.Label()})
 }
 
+type renderTemplateReq struct {
+	Template  string         `json:"template"`
+	Variables map[string]any `json:"variables"`
+	HTML      bool           `json:"html"`
+}
+
+type renderTemplateResp struct {
+	OK       bool              `json:"ok"`
+	Result   string            `json:"result"`
+	Problems []feelers.Problem `json:"problems"`
+	Error    string            `json:"error,omitempty"`
+	// Line and Column place a template that does not compile; 0 when it compiled or
+	// the fault has no place (a '=' value's FEEL).
+	Line   int `json:"line,omitempty"`
+	Column int `json:"column,omitempty"`
+}
+
+// handleRenderTemplate renders a mail text against sample variables, so the Modeler's
+// template editor can show what a mail will say before anything is deployed
+// (ADR-0487). It reads a value as a mail task with templating on
+// does: a leading '=' makes it one FEEL expression, otherwise its {{ }} placeholders
+// and sections are the template language, compiled by the same rules a deploy
+// applies. With html set, what a placeholder inserts is escaped, as the HTML body's
+// is. Like the FEEL evaluate route it is a pure compile and render over a
+// caller-supplied scope: no state is read or written, so it runs off the
+// single-writer loop.
+func (s *Server) handleRenderTemplate(w http.ResponseWriter, r *http.Request) {
+	dec := json.NewDecoder(io.LimitReader(r.Body, s.budgets().Request))
+	dec.UseNumber()
+	var req renderTemplateReq
+	if err := dec.Decode(&req); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	bindings, err := feelBindings(req.Variables)
+	if err != nil {
+		httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+		return
+	}
+	if trimmed := strings.TrimSpace(req.Template); strings.HasPrefix(trimmed, "=") {
+		compiled, err := gatedFEEL(strings.TrimSpace(trimmed[1:]))
+		if err != nil {
+			httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+			return
+		}
+		v, err := compiled.Eval(bindings)
+		if err != nil {
+			httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}})
+			return
+		}
+		_, _, text := expr.Classify(v)
+		httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: true, Result: text, Problems: []feelers.Problem{}})
+		return
+	}
+	tpl, err := feelers.Compile(req.Template, gatedFEEL)
+	if err != nil {
+		resp := renderTemplateResp{OK: false, Error: err.Error(), Problems: []feelers.Problem{}}
+		var fe *feelers.Error
+		if errors.As(err, &fe) {
+			resp.Line, resp.Column = fe.Line, fe.Column
+		}
+		httpapi.JSON(w, http.StatusOK, resp)
+		return
+	}
+	var escape func(string) string
+	if req.HTML {
+		escape = html.EscapeString
+	}
+	out, problems := tpl.Render(feelers.Vars(bindings), escape)
+	if problems == nil {
+		problems = []feelers.Problem{}
+	}
+	httpapi.JSON(w, http.StatusOK, renderTemplateResp{OK: true, Result: out, Problems: problems})
+}
+
+// gatedFEEL compiles one of a template's FEEL blocks as a deploy does: refusing a call
+// this build can only ever answer with null (ADR-0388) before compiling it, so a
+// preview never passes what the deploy would then refuse.
+func gatedFEEL(src string) (*expr.Compiled, error) {
+	if err := expr.CheckCallsError(src); err != nil {
+		return nil, err
+	}
+	return expr.CompileAuto(src)
+}
+
 // feelBindings converts the JSON sample variables into FEEL values. Numbers keep
 // their exact text (json.Number) so decimals aren't mangled by float rounding.
 // Objects and arrays bind as FEEL contexts and lists — the same contract as start
@@ -1135,7 +1224,7 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, projectID, deployedBy string) (deployed []deployedProcess, compErr, persistErr error) {
 	// Set while registering: whether any process in this model binds to a directory,
 	// which is what a supervised AD worker may need a fresh credential for.
-	var namesADBindSecret bool
+	var refreshWorkers bool
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
@@ -1262,7 +1351,7 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 		// A model that binds to a directory names a bind-password reference, and this
 		// server's supervised AD worker may not be holding that one yet — it is handed
 		// exactly the references the deployed models make (adWorkerEnv).
-		namesADBindSecret = namesADBindSecret || len(adBindSecretRefs(cp)) > 0
+		refreshWorkers = refreshWorkers || len(adBindSecretRefs(cp)) > 0 || len(mailExportStores(cp)) > 0
 		deployed = append(deployed, deployedProcess{Key: key, ProcessID: pid, Name: name, Version: version})
 	}
 	// Run the arm commands queued above (ADR-0051) so a timer start event's durable
@@ -1273,13 +1362,14 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	if err := s.proc.RunUntilIdle(); err != nil {
 		return deployed, nil, err
 	}
-	// Let a supervised AD worker pick up a bind password it is not holding yet. Off
+	// Let a supervised AD worker pick up a bind password it is not holding yet — and a
+	// supervised mail worker an S3 Worker a new export-attachment writes into. Off
 	// the loop, because rendering a child's environment needs the loop this deploy is
 	// running on; and only when a new model actually binds to a directory, so the
 	// common deploy queues nothing. The refresh restarts a child only when its
 	// environment really changed, so a redeploy that names the same reference — or
 	// one whose reference resolves to nothing — costs no restart.
-	if namesADBindSecret && s.supervisor != nil {
+	if refreshWorkers && s.supervisor != nil {
 		go s.refreshSupervisedWorkers()
 	}
 	return deployed, nil, nil
@@ -1343,8 +1433,9 @@ func (s *Server) handleProcessXML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var raw []byte
+	p := httpapi.PrincipalFrom(r.Context())
 	s.do(func() {
-		if d, ok := s.deployments[key]; ok {
+		if d, ok := s.deployments[key]; ok && definitionReadable(p, d) {
 			raw = d.xml
 		}
 	})
@@ -1534,11 +1625,21 @@ func (s *Server) handleLayout(w http.ResponseWriter, r *http.Request) {
 
 // handleDeleteProcess removes a deployed definition (one version). It refuses if
 // the definition still has running instances, since a live instance resolves its
-// definition by key on every batch.
+// definition by key on every batch. With force=true it cancels them instead and
+// overrides the order and catalogue guards (forceDeleteProcess).
 func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid definition key")
+		return
+	}
+	force, err := boolQuery(r.URL.Query().Get("force"), "force")
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if force {
+		s.forceDeleteProcess(w, r, key)
 		return
 	}
 	var (
@@ -1596,21 +1697,7 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		if scanErr != nil || running > 0 {
 			return
 		}
-		// Durable before visible (I2, ADR-0019): remove the on-disk record first,
-		// so a deletion that is acknowledged never reappears on restart.
-		if err := s.deploys.delete(key); err != nil {
-			persistErr = err
-			return
-		}
-		s.proc.Undeploy(key)
-		s.forgetLandscape()
-		delete(s.deployments, key)
-		for i, k := range s.order {
-			if k == key {
-				s.order = append(s.order[:i], s.order[i+1:]...)
-				break
-			}
-		}
+		persistErr = s.undeployOnLoop(key)
 	})
 	switch {
 	case !found:
@@ -1620,13 +1707,13 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "check instances: "+scanErr.Error())
 	case needed != "":
-		httpapi.Error(w, http.StatusConflict, needed)
+		httpapi.Error(w, http.StatusConflict, needed+forceHint)
 	case len(released) > 0:
 		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: the current catalogue "+
 			"release binds %s for %s; an order placed now would freeze it (ADR-0427)",
-			processID, strings.Join(released, ", ")))
+			processID, strings.Join(released, ", "))+forceHint)
 	case running > 0:
-		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running))
+		httpapi.Error(w, http.StatusConflict, fmt.Sprintf("cannot delete: %d running instance(s); cancel them first", running)+forceHint)
 	case persistErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "remove deployment: "+persistErr.Error())
 	default:
@@ -5497,10 +5584,11 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		actor = p.Username
 	}
 	var (
-		found     bool
-		notHolder bool
-		badReport error
-		runErr    error
+		found        bool
+		notHolder    bool
+		unauthorized bool
+		badReport    error
+		runErr       error
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5511,6 +5599,13 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
+				return
+			}
+			// A governed Worker's completion stands only on a permit recorded for this
+			// very lease (ADR-0475 §11): a Worker that
+			// acted without asking cannot move the process on, whatever it did.
+			if s.refusesUnauthorizedCompletion(key, jv) {
+				unauthorized = true
 				return
 			}
 			// A decision report is accepted only from a lease-holding worker, and
@@ -5573,6 +5668,12 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	case notHolder:
 		httpapi.Error(w, http.StatusConflict,
 			"worker "+strconv.Quote(worker)+" does not hold this job's current lease; it may have elapsed and been taken by another worker. Lease it again, or complete it as an operator with a reason")
+	case unauthorized:
+		auditRefusal(r, logging.AuthorizationRefused, "refused a completion no permit was recorded for",
+			slog.Uint64("job", key), slog.String("worker", worker))
+		httpapi.Error(w, http.StatusConflict,
+			"this job belongs to a governed Worker and no permit was recorded for the lease it is held under: "+
+				"authorize it (POST /api/v1/jobs/{key}/authorize) before acting, then complete it")
 	default:
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
@@ -5778,6 +5879,13 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	// processor is told anything.
 	auth, authErr := s.mayWorkTask(r, key)
 	if s.refuseTaskWork(w, auth, authErr) {
+		return
+	}
+	// A directory field's value is the business decision, so it is checked before it
+	// becomes one: its shape, and by default the directory once more
+	// (ADR-0473). Off the run loop; a form without such a
+	// field is not looked at.
+	if s.checkTaskSubmission(w, r, key, body) {
 		return
 	}
 	var (
@@ -6471,11 +6579,18 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 		// process's environment. Reporting it here is what lets the Workers view say
 		// which names deployed models reference and *nothing* can serve (ADR-0168).
 		Connectors []string `json:"connectors,omitempty"`
+		// Endpoints are where those workers connect, keyed by worker name, as the
+		// worker reduced them to scheme, host and port (ADR-0471). The server reduces
+		// them again before keeping them — a report is input, not a promise — and an
+		// architecture sketch draws them for workers the server holds no
+		// configuration for.
+		Endpoints map[string]string `json:"endpoints,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
 		httpapi.Error(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	reported := reportedEndpoints(body.Connectors, body.Endpoints)
 	body.Type = strings.TrimSpace(body.Type)
 	if body.Type == "" {
 		httpapi.Error(w, http.StatusBadRequest, "type is required: a worker leases by job type")
@@ -6587,7 +6702,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// Recorded on every poll, not just a productive one: an idle worker still
 			// holds its workers, and it is exactly the idle case an operator is
 			// looking at when work is not moving.
-			s.workers.holdsConnectors(body.Worker, body.Connectors)
+			s.workers.holdsConnectors(body.Worker, body.Connectors, reported)
 		})
 	}
 
@@ -6783,7 +6898,15 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"operation": j.Operation, "folder": j.Folder, "target": j.Target,
 			"destination": j.Destination, "maxResults": j.MaxResults,
 			"includeBody": j.IncludeBody, "unreadOnly": j.UnreadOnly,
+			// A get's HTML body (ADR-0489).
+			"includeHtml":    j.IncludeHTML,
 			"resultVariable": j.ResultVariable,
+			// The documents half (ADR-0478): which
+			// attachment, which types the task accepts, and for an export the S3
+			// Worker's *name* and where in it — never its access key.
+			"attachment": j.Attachment, "allowedTypes": j.AllowedTypes,
+			"store": j.Store, "bucket": j.Bucket, "key": j.Key,
+			"errorCodes": j.ErrorCodes,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service
@@ -6954,17 +7077,22 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"version": j.Version, "body": j.Body, "auth": j.Auth,
 			"resultVariable": j.Result,
 		}}
-	case compiler.SharePointJobTypeIndex:
+	case compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex:
 		// Jira's arm exactly, and for Jira's reason: the task names its instance, and
 		// the Graph endpoint and OAuth bundle stay with the worker — a URL is half a
-		// credential (ADR-0141/0168). The site and list are model data and travel.
+		// credential (ADR-0141/0168). The operation, the site, the list and the values
+		// it takes are model data and travel. Both job types share the arm: which one a
+		// job carries decides which workers lease it, not what it says.
 		j, err := sharepoint.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey, jobKey)
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "sharepoint", Fields: map[string]any{
-			"connector": j.Connector, "site": j.Site, "list": j.List,
-			"fields": j.Fields, "requestId": j.RequestID, "resultVariable": j.Result,
+			"connector": j.Connector, "operation": j.Operation, "site": j.Site,
+			"list": j.List, "itemId": j.ItemID, "path": j.Path, "fields": j.Fields,
+			"content": j.Content, "encoding": j.Encoding, "filter": j.Filter,
+			"select": j.Select, "pageToken": j.PageToken, "maxResults": j.MaxResults,
+			"requestId": j.RequestID, "resultVariable": j.Result,
 		}}
 	case compiler.ScimJobTypeIndex:
 		// The authored operation and its operands travel, not the method and URL
@@ -6993,7 +7121,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"groupId": j.GroupID, "attributes": j.Attributes, "newPassword": j.NewPassword,
 			"filter": j.Filter, "select": j.Select, "pageSize": j.PageSize, "maxUsers": j.MaxUsers,
 			"search": j.Search, "advancedQuery": j.Advanced, "deltaLink": j.DeltaLink,
-			"resultVariable": j.ResultVariable,
+			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ExchangeJobTypeIndex:
 		// Entra's arm with Exchange's operation: the operation and its evaluated
@@ -7012,14 +7140,48 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.TeamsPhoneJobTypeIndex:
 		// The operation and its values travel; the tenant's app certificate does not
-		// exist here to travel. Worker-only, like Entra (ADR-0463).
+		// exist here to travel. Worker-only, like Entra (ADR-0463). The codes the process
+		// catches travel too, for the reason a script task's do: they are what makes a
+		// refusal a BPMN error rather than a failure, and a worker has no compiled process
+		// to ask (ADR-0461).
 		j, err := teamsphone.Resolve(rd, cp, cp.ConnectorTask(node.Detail), ei, jv.ElementInstanceKey)
 		if err != nil {
 			return nil
 		}
 		return &connectorPayload{Kind: "teamsphone", Fields: map[string]any{
 			"connector": j.Connector, "operation": j.Operation, "args": j.Args,
-			"resultVariable": j.ResultVariable,
+			"resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.GoogleContactsJobTypeIndex:
+		// Exchange's arm with an address book's operation: the evaluated values travel,
+		// and nothing that says whose address book or as whom — that and the credential
+		// exist only on the worker (ADR-0476). The codes the
+		// process catches travel too, so a missing contact can take the process's path
+		// for it (ADR-0461).
+		j, err := googlecontacts.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "googlecontacts", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+		}}
+	case compiler.CardDAVJobTypeIndex:
+		// Google Contacts' arm with a CardDAV address book: the evaluated values travel,
+		// and nothing that says which server or as whom (ADR-0490). The
+		// create key does: it is derived from this installation's node id and the job key,
+		// so a create repeated after a lease elapsed names the contact the first round
+		// made, and no other installation's job names the same one.
+		j, err := carddav.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey, jobKey, s.nodeID)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "carddav", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "contactId": j.ContactID,
+			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+			"createKey": j.CreateKey,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

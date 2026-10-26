@@ -145,6 +145,26 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 				Started: "approval", Process: prev.ProcessID, Already: true})
 			return
 		}
+		// Atlas's own `superior` approval is given its approver here: the orderer's
+		// line manager as the account records it. The model used to look them up in a
+		// directory by the orderer's principal id, which no directory knows (#1311,
+		// ADR-0470). Nobody to give it to is a
+		// refusal that names the reason, so the incident it becomes in the fulfilment
+		// says what to fix, and resolving it asks again.
+		if line.AtlasApproval() && line.Approval.Kind == "superior" {
+			var manager, why string
+			var lookErr error
+			s.do(func() { manager, why, lookErr = s.lineManagerOf(ord.Orderer) })
+			switch {
+			case lookErr != nil:
+				httpapi.Error(w, http.StatusInternalServerError, "find the line manager: "+lookErr.Error())
+				return
+			case why != "":
+				httpapi.Error(w, http.StatusConflict, "the approval of line "+position+" goes to the orderer's line manager, and "+why)
+				return
+			}
+			vars = withVariable(vars, "approvalRef", manager)
+		}
 		// An approval model of the installation's own is bound by the product, like
 		// its provisioning, and receives the answers; Atlas's own do not, and their
 		// approver reads them on the approval instead.
@@ -223,6 +243,18 @@ func lastInstanceOf(l order.Line, op string) (order.LineInstance, bool) {
 		}
 	}
 	return order.LineInstance{}, false
+}
+
+// withVariable sets one string variable in a start list, replacing it where the list
+// already holds it, so a process is never started with the same name twice.
+func withVariable(vars []model.VariableValue, name, text string) []model.VariableValue {
+	for i := range vars {
+		if vars[i].Name == name {
+			vars[i] = model.VariableValue{Name: name, Kind: model.VarString, Text: text}
+			return vars
+		}
+	}
+	return append(vars, model.VariableValue{Name: name, Kind: model.VarString, Text: text})
 }
 
 // positionStartVars are the variables a position's process is started with: the

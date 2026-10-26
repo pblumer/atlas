@@ -88,7 +88,7 @@ Die Beobachtung notiert für jeden Meilenstein die Uhrzeit, zu der er erreicht w
 | A | Ein Prozess ist deployt und mit einem Testfall gestartet, gleich wie unvollständig | Instanz in Operations |
 | B | Die Freigaberegel ist umgesetzt: 5, 20 und 45 Tage nehmen den richtigen Weg | drei Instanzen |
 | C | Die Freigabeaufgabe der Linie wird mit einem Formular im Posteingang erledigt | abgeschlossene Aufgabe |
-| D | Das Konto steht im AD-Mockup, die Mail im Postausgang | Betrieb › Mock directory, Operations › Outbox |
+| D | Das Konto steht im AD-Mockup, die Mail im Postausgang | Betrieb › Diagnostics › Mock directory, Operations › Diagnostics › Outbox |
 | E | Die Deaktivierung am Ablaufdatum ist modelliert und nachgewiesen | Nachweis nach Wahl der Teilnehmenden |
 | F | Alles ist als Applikation publiziert | Release vorhanden |
 
@@ -158,7 +158,7 @@ Je Person:
 - Anwendung der Entscheidungsregel aus Abschnitt 1;
 - jede Stelle der Kategorie D als Issue erfasst (Fehler oder Lücke im Handbuch);
 - das Ergebnis anonymisiert (P1 bis P3) festgehalten in
-  `docs/planning/lehrgang-beobachtung-ergebnis.md`.
+  `docs/training/lehrgang-beobachtung-ergebnis.md`.
 
 Dieselbe Aufgabe lösen im Pilot die Teilnehmenden nach dem Lehrgang. Der Vergleich ist
 bei so wenigen Personen qualitativ, nicht statistisch; er zeigt, ob sich die Art der

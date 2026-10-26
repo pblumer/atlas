@@ -31,7 +31,13 @@ const s3EnvPrefix = "ATLAS_S3_"
 // by anyone who can list processes — which matters here as much as anywhere, since an
 // access key is the whole of a worker's authority over a bucket.
 func s3RegistryFromEnv(env func(string) string) (*s3.Registry, []string, error) {
-	names := splitAndTrim(env(s3EnvPrefix + "CONNECTORS"))
+	return s3RegistryFor(env, splitAndTrim(env(s3EnvPrefix+"CONNECTORS")))
+}
+
+// s3RegistryFor builds the named object-store identities from their variables. The
+// s3 kind names them in ATLAS_S3_CONNECTORS; a mail worker exporting attachments also
+// reads the ones ATLAS_MAIL_STORES names (ADR-0478).
+func s3RegistryFor(env func(string) string, names []string) (*s3.Registry, []string, error) {
 	if len(names) == 0 {
 		// Unconfigured, not misconfigured — a nil registry and no error, which the caller
 		// reports as a kind this worker does not serve. A *named* identity whose bundle

@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"unicode"
@@ -298,9 +299,21 @@ func misboundAtlasExtensions(t *testing.T, path, uri string, elements map[string
 // Scoped to one example at a time, because a form is shipped with its process and
 // an example that reached into another's forms would install half of something.
 // The system bundle is checked the same way and separately, for the same reason.
+//
+// One form is the platform's and not the example's: genehmigung, the form of the
+// approval models Atlas ships. The inbox answers a task that names it with
+// Genehmigen and Ablehnen (APPROVAL_FORM in api/web/app.js), so an approval model of
+// the installation's own names it too rather than shipping a form of its own. It
+// counts as present only while the system bundle declares it.
 func TestEveryFormReferenceResolves(t *testing.T) {
-	for dir, group := range modelGroups(t) {
-		have := map[string]bool{}
+	const approvalForm = "genehmigung"
+	groups := modelGroups(t)
+	platform := false
+	if sys := groups[filepath.Join("..", "api", "systemprocesses")]; sys != nil {
+		platform = slices.Contains(sys.forms, approvalForm)
+	}
+	for dir, group := range groups {
+		have := map[string]bool{approvalForm: platform}
 		for _, f := range group.forms {
 			have[f] = true
 		}

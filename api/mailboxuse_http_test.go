@@ -190,3 +190,46 @@ func TestAnOpenServerChecksNoMailbox(t *testing.T) {
 		t.Errorf("auth off = %d, want 200: an open server is open by declaration\n%s", status, body)
 	}
 }
+
+// An export-attachment writes into a second Worker
+// (ADR-0478): the deployer must be able to read
+// the mailbox *and* write into the S3 Worker, or a bucket private in the Console
+// would be writable by anybody who can draw an export.
+func TestAnExportNeedsTheStoreAsWellAsTheMailbox(t *testing.T) {
+	ts := newServerOn(t, t.TempDir())
+	admin := signedInClient(t, ts.URL)
+	createUser(t, admin, ts.URL, "anna")
+	bertID := createUser(t, admin, ts.URL, "bert")
+	anna := signInAs(t, ts.URL, "anna", "a-password-that-is-long")
+	bert := signInAs(t, ts.URL, "bert", "a-password-that-is-long")
+	mailID := createMailWorker(t, anna, ts.URL, "annas-postfach")
+	shareConnector(t, anna, ts.URL, mailID, bertID, "user", "editor", http.StatusOK)
+
+	status, body := postAs(t, anna, ts.URL+"/api/v1/connectors",
+		`{"name":"annas-belege","kind":"s3","credentialsRef":"belege-bundle","enabled":true}`)
+	if status != http.StatusOK {
+		t.Fatalf("create s3 worker = %d: %s", status, body)
+	}
+	storeID := decodeField(t, body, "id")
+	export := func(store string) string {
+		return `connector="annas-postfach" operation="export-attachment" messageId="=mailId" attachmentId="=attId" ` +
+			`store="` + store + `" bucket="eingang" key="=mailId"`
+	}
+
+	status, body = deployAs(t, bert, ts.URL, mailTaskBPMN("bertExportiert", export("annas-belege")))
+	if status != http.StatusForbidden || !strings.Contains(body, "annas-belege") || !strings.Contains(body, "may not write into") {
+		t.Fatalf("an export into a store bert cannot write = %d, want 403 naming the store\n%s", status, body)
+	}
+	if status, body := deployAs(t, bert, ts.URL, mailTaskBPMN("bertExportiertNirgends", export("gibt-es-nicht"))); status != http.StatusForbidden ||
+		!strings.Contains(body, "no S3 worker of that name exists") {
+		t.Errorf("an export into a store nobody holds = %d\n%s", status, body)
+	}
+	shareConnector(t, anna, ts.URL, storeID, bertID, "user", "viewer", http.StatusOK)
+	if status, body := deployAs(t, bert, ts.URL, mailTaskBPMN("bertExportiertAlsLeser", export("annas-belege"))); status != http.StatusForbidden {
+		t.Errorf("an export as a viewer of the store = %d, want 403: writing into it needs editor\n%s", status, body)
+	}
+	shareConnector(t, anna, ts.URL, storeID, bertID, "user", "editor", http.StatusOK)
+	if status, body := deployAs(t, bert, ts.URL, mailTaskBPMN("bertExportiertJetzt", export("annas-belege"))); status != http.StatusOK {
+		t.Errorf("an export as an editor of both = %d, want 200\n%s", status, body)
+	}
+}

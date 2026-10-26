@@ -67,8 +67,9 @@ type Runtime struct {
 
 // Operation is one authorable operation implemented by a declared job type.
 type Operation struct {
-	ID      string `json:"id"`
-	JobType string `json:"jobType"`
+	ID           string            `json:"id"`
+	JobType      string            `json:"jobType"`
+	Capabilities []CapabilityClaim `json:"capabilities,omitempty"`
 }
 
 // Artifact identifies an executable runtime artifact by content digest.
@@ -168,6 +169,9 @@ func (m Manifest) Validate() error {
 		operations[op.ID] = struct{}{}
 		if _, exists := jobTypes[op.JobType]; !exists {
 			return fmt.Errorf("spec.operations operation %q references undeclared job type %q", op.ID, op.JobType)
+		}
+		if err := validateCapabilityClaims(op.ID, op.Capabilities); err != nil {
+			return err
 		}
 	}
 	if m.Spec.Runtime.Mode == RuntimeExternal && m.Spec.Artifact == nil {

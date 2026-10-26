@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/pblumer/atlas/api/archsketch"
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
@@ -26,6 +27,20 @@ type applicationRelease struct {
 	PublishedBy   string          `json:"publishedBy,omitempty"`
 	Note          string          `json:"note,omitempty"`
 	Members       []releaseMember `json:"members"`
+	// Architecture is the release's architecture snapshot (ADR-0471), taken in the
+	// same write that records the release, so a release never exists without one.
+	// Absent on a release recorded before snapshots existed — hence omitempty, which
+	// leaves every such record byte-identical. The architecture routes serve it, and
+	// every other answer that carries a release leaves it out (see [listing]).
+	Architecture *archsketch.Snapshot `json:"architecture,omitempty"`
+}
+
+// listing is the release as every answer but the architecture routes carries it:
+// without its snapshot, which would multiply the size of a release history by the
+// size of a sketch nobody asked for.
+func (r applicationRelease) listing() applicationRelease {
+	r.Architecture = nil
+	return r
 }
 
 // releaseMember is one artifact as it shipped in a release.

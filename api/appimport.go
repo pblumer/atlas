@@ -245,6 +245,9 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 			rel.PublishedBy = p.UserID
 		}
+		// This installation's own snapshot of the release, taken from what it has just
+		// deployed and saved in the same write (ADR-0471 §1).
+		rel.Architecture = s.architectureSnapshot(appID, members, deployedAt)
 		if err := s.releases.Save(rel); err != nil {
 			opErr = err
 			return
@@ -280,9 +283,10 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 			warnings = append(warnings, foreignAtlasNamespaceWarnings([]byte(a.XML))...)
 			warnings = append(warnings, searchableDeclarationWarnings([]byte(a.XML))...)
 		}
+		listed := rel.listing()
 		httpapi.JSON(w, http.StatusOK, importBundleResp{
 			ApplicationID: appID, Application: name, Imported: true,
-			Definitions: deployed, Release: &rel, Warnings: dedupeWarnings(warnings),
+			Definitions: deployed, Release: &listed, Warnings: dedupeWarnings(warnings),
 		})
 	}
 }

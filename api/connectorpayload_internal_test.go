@@ -12,11 +12,13 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
+	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
+	"github.com/pblumer/atlas/connector/googlecontacts"
 	"github.com/pblumer/atlas/connector/googlesheets"
 	"github.com/pblumer/atlas/connector/jira"
 	"github.com/pblumer/atlas/connector/ldap"
@@ -249,9 +251,10 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			fields: map[string]any{"connector": "contoso", "operation": "list-users"},
 		},
 		{
-			// The operation and its values travel — a FEEL list stays a list, and the
-			// compiled settings arrive as the words the compiler defaulted them to —
-			// while the tenant's app certificate does not exist here to travel.
+			// The operation and its values travel — a FEEL list stays a list, and a
+			// setting the model left out does not travel, so the worker can tell it from
+			// one the model named — while the tenant's app certificate does not exist
+			// here to travel.
 			name:      "teamsphone",
 			variables: `{"variables":{"agentIds":["a-1","a-2"]}}`,
 			element:   `<atlas:teamsPhoneConnector connector="contoso" operation="ensure-call-queue" name="CQ Support" resourceAccountId="ra-1" agents="=agentIds" resultVariable="queue"/>`,
@@ -261,8 +264,6 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 				"connector": "contoso", "operation": "ensure-call-queue", "resultVariable": "queue",
 				"args": map[string]any{
 					"name": "CQ Support", "resourceAccountId": "ra-1", "agents": []any{"a-1", "a-2"},
-					"routingMethod": "attendant", "presenceBasedRouting": "true",
-					"conferenceMode": "true", "allowOptOut": "true",
 				},
 			},
 		},
@@ -358,9 +359,27 @@ func TestEachConnectorKindResolvesItsOwnPayload(t *testing.T) {
 			jobType: compiler.SharePointJobType,
 			want:    "sharepoint",
 			fields: map[string]any{
-				"connector": "contoso", "site": "contoso.sharepoint.com,/sites/ops",
+				"connector": "contoso", "operation": "create-item", "site": "contoso.sharepoint.com,/sites/ops",
 				"list":   "Onboarding",
 				"fields": map[string]any{"Title": "cn=ada,dc=example,dc=com"},
+			},
+		},
+		{
+			// Every other operation rides its own job type — which a worker built before
+			// operations existed does not lease — and the same arm: the operation and
+			// the values it takes travel, the endpoint and the bundle do not.
+			name: "sharepoint operation",
+			element: `<atlas:sharePointConnector connector="contoso" operation="update-item" site="https://contoso.sharepoint.com/sites/ops" list="Onboarding" itemId="=itemNr" resultVariable="aktualisiert">` +
+				`<atlas:itemField name="Status" value="Erledigt"/>` +
+				`</atlas:sharePointConnector>`,
+			variables: `{"variables":{"itemNr":"17"}}`,
+			jobType:   compiler.SharePointOpsJobType,
+			want:      "sharepoint",
+			fields: map[string]any{
+				"connector": "contoso", "operation": "update-item",
+				"site": "https://contoso.sharepoint.com/sites/ops", "list": "Onboarding",
+				"itemId": "17", "fields": map[string]any{"Status": "Erledigt"},
+				"resultVariable": "aktualisiert",
 			},
 		},
 		{
@@ -636,6 +655,8 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.S3JobTypeIndex", s3.Job{}},
 		{"compiler.ExchangeJobTypeIndex", exchange.Job{}},
 		{"compiler.TeamsPhoneJobTypeIndex", teamsphone.Job{}},
+		{"compiler.GoogleContactsJobTypeIndex", googlecontacts.Job{}},
+		{"compiler.CardDAVJobTypeIndex", carddav.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -828,6 +849,10 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"S3JobTypeIndex":            compiler.S3JobTypeIndex,
 		"ExchangeJobTypeIndex":      compiler.ExchangeJobTypeIndex,
 		"TeamsPhoneJobTypeIndex":    compiler.TeamsPhoneJobTypeIndex,
+		"SharePointOpsJobTypeIndex": compiler.SharePointOpsJobTypeIndex,
+
+		"GoogleContactsJobTypeIndex": compiler.GoogleContactsJobTypeIndex,
+		"CardDAVJobTypeIndex":        compiler.CardDAVJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+

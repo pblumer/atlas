@@ -68,7 +68,7 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 	alle := createdID(t, ts, "/api/v1/groups", `{"name":"Alle Mitarbeitenden"}`)
 	bau := createdID(t, ts, "/api/v1/groups", `{"name":"Fachbereich Bau"}`)
 	geo := createdID(t, ts, "/api/v1/groups", `{"name":"Geoportal-Team"}`)
-	fm := createdID(t, ts, "/api/v1/users",
+	createdID(t, ts, "/api/v1/users",
 		`{"username":"fmeier","displayName":"Fabienne Meier","password":"a-long-password-1"}`)
 	answers := writeAnswers(t, map[string]string{
 		"zielgruppe": "Alle Mitarbeitenden", "zielgruppe-bau": "Fachbereich Bau",
@@ -84,7 +84,8 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 		`application "Beispiel: Dienstleistungen der Verwaltung" (beispiel-dienstleistungen-der-verwaltung) created: 5 processes, 10 forms, 0 decisions`,
 		"published release 1: 5 processes",
 		`zielgruppe: "Alle Mitarbeitenden" is group ` + alle,
-		`facility-management: "Fabienne Meier" is user ` + fm,
+		// A fixed approver is an account: the approval is assigned to its username.
+		`facility-management: "Fabienne Meier" is account fmeier`,
 		"shop created: catalog:cat-verwaltung-dienste, catalog:cat-fachbereich-bau, product:vd-zutrittsbadge",
 		"catalogues published: 2",
 	} {
@@ -106,15 +107,26 @@ func TestImportInstallsTheExampleShopAndAgain(t *testing.T) {
 	if bytes.Contains(raw, []byte("{{")) {
 		t.Fatalf("a placeholder was imported literally: %s", raw)
 	}
+	if _, doc := apiCall(t, ts, http.MethodGet, "/api/v1/catalogs/cat-verwaltung-dienste/document", ""); !bytes.Contains(doc, []byte(`"kind":"fixed","ref":"fmeier"`)) {
+		t.Fatalf("the parking approval does not name the approver's username: %s", doc)
+	}
 
+	// Installed again, the package changes nothing: no second application, no
+	// release for an application nothing changed in, no catalogue written or
+	// released again (ADR-0467).
 	out.Reset()
 	if err := runImport(args, &out); err != nil {
 		t.Fatalf("second import: %v\n%s", err, out.String())
 	}
-	for _, want := range []string{") updated: 5 processes", "published release 2", "shop updated: catalog:cat-verwaltung-dienste"} {
+	for _, want := range []string{"plan: 0 new, 21 unchanged, 0 behind, 0 ahead, 0 changed", ") unchanged: 5 processes",
+		"the application is unchanged, so it is not published again; release 1 stays", "shop unchanged", "catalogues published: 0"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("second import output lacks %q:\n%s", want, out.String())
 		}
+	}
+	code, raw = apiCall(t, ts, http.MethodGet, "/api/v1/applications", "")
+	if code != http.StatusOK || strings.Count(string(raw), `"key":"beispiel-dienstleistungen-der-verwaltung"`) != 1 {
+		t.Fatalf("applications after two imports = %d %s, want the one", code, raw)
 	}
 }
 
@@ -135,7 +147,7 @@ func TestImportRefusesBeforeItWrites(t *testing.T) {
 	for _, want := range []string{
 		"nothing was imported",
 		`zielgruppe: no group with the id or name "Niemand"`,
-		`facility-management: 2 users are named "Kim Muster"`,
+		`facility-management: 2 accounts are named "Kim Muster"`,
 		"zielgruppe-bau is not answered: Audience of \"Building department\" (--set zielgruppe-bau=...)",
 		"geoportal-verantwortliche is not answered",
 	} {
@@ -255,11 +267,11 @@ func TestAnAnswerCannotBreakTheDocument(t *testing.T) {
 		catalogue: []byte(`{"x":"{{free}}","y":"{{de-only}}"}`),
 		questions: map[string]packageQuestion{"de-only": {Label: map[string]string{"de": "Nur Deutsch"}}},
 	}
-	_, _, err = resolveAnswers(pkg, map[string]string{"free": "anything"}, nil)
+	_, _, _, err = resolveAnswers(pkg, map[string]string{"free": "anything"}, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "de-only is not answered: Nur Deutsch") {
 		t.Fatalf("err = %v", err)
 	}
-	resolved, notes, err := resolveAnswers(pkg, map[string]string{"free": "anything", "de-only": "ja", "extra": "1"}, nil)
+	resolved, notes, _, err := resolveAnswers(pkg, map[string]string{"free": "anything", "de-only": "ja", "extra": "1"}, nil, nil)
 	if err != nil || resolved["free"] != "anything" || len(notes) != 1 || !strings.Contains(notes[0], "does not ask for extra") {
 		t.Fatalf("resolved = %v, notes = %v, err = %v", resolved, notes, err)
 	}
@@ -278,10 +290,16 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 	reset := func() {
 		answers["/api/v1/info"] = ok(`{"version":"test"}`)
 		answers["/api/v1/principals"] = ok(`[{"type":"group","id":"g1","name":"G"},{"type":"user","id":"u1","name":"U"}]`)
+		answers["/api/v1/users/assignable"] = ok(`[{"username":"u1","displayName":"U"}]`)
+		answers["/api/v1/catalogs/import/mappings"] = ok(`[]`)
 		answers["/api/v1/applications/source"] = ok(`{"applicationId":"app1","key":"k","name":"n","untracked":["old-form"]}`)
 		answers["/api/v1/applications/app1/publish"] = ok(`{"deployed":true,"definitions":[{}],"warnings":["worker verzeichnis is not configured"],"release":{"version":4}}`)
 		answers["/api/v1/catalogs/import"] = ok(`{"created":[],"updated":["catalog:c"],"releases":[{}],
 		  "warnings":[{"subject":"product:park","problem":"the answers fahrzeug of form f reach p in the clear"}]}`)
+		answers["/api/v1/applications/app1/releases"] = ok(`[]`)
+		answers["/api/v1/applications/app1/constants"] = ok(`{"constants":[],"required":[
+		  {"name":"TENANT","type":"string","state":"missing"},{"name":"LIMIT","type":"number","state":"type-mismatch"},
+		  {"name":"LANG","type":"string","state":"fallback"}]}`)
 	}
 	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/applications/source" && r.Header.Get("Content-Type") != "application/gzip" {
@@ -337,7 +355,9 @@ func TestImportSaysWhatTheServerRefused(t *testing.T) {
 	}
 	for _, want := range []string{"left in place, not in the package: old-form", "published release 4: 1 processes",
 		"warning: worker verzeichnis is not configured", "shop updated: catalog:c", "catalogues published: 1",
-		"warning: product:park: the answers fahrzeug of form f reach p in the clear"} {
+		"warning: product:park: the answers fahrzeug of form f reach p in the clear",
+		"warning: the application reads constant TENANT (string), and this server holds no value for it",
+		"warning: the application reads constant LIMIT as number, and this server holds it with another type"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}

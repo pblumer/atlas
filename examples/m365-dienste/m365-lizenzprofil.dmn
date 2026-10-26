@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365Lizenzprofil: welche Microsoft-Lizenz (SKU) ein Lizenzprofil bedeutet.
+
+  Eingabe:  lizenzprofil  ("standard" | "erweitert" | "frontline" | "telefonie" | "ressourcenkonto")
+  Ausgaben: skuId         (GUID der SKU, wie Graph sie in assignLicense erwartet)
+            produkt       (Bezeichnung, für Menschen)
+
+  ANNAHME, VOR DEM EINSATZ PRÜFEN: Die SKU-IDs stammen aus Microsofts Liste «Product names and
+  service plan identifiers for licensing». Welche SKUs ein Tenant tatsächlich hält, zeigt
+  GET https://graph.microsoft.com/v1.0/subscribedSkus; in Tenants mit den Varianten ohne Teams
+  («no Teams») lauten die IDs anders. Eine falsche ID scheitert sichtbar (Graph antwortet 400, der
+  Job wird zum Incident); sie weist nie still die falsche Lizenz zu.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365Lizenzprofil" name="M365Lizenzprofil" namespace="http://atlas/dmn">
+  <inputData id="id_lizenzprofil" name="lizenzprofil"/>
+  <decision id="M365Lizenzprofil" name="M365Lizenzprofil">
+    <informationRequirement id="ir_lizenzprofil"><requiredInput href="#id_lizenzprofil"/></informationRequirement>
+    <decisionTable id="dt_M365Lizenzprofil" hitPolicy="UNIQUE">
+      <input id="in_lizenzprofil" label="lizenzprofil"><inputExpression id="ie_lizenzprofil" typeRef="string"><text>lizenzprofil</text></inputExpression></input>
+      <output id="out_skuId" label="skuId" name="skuId" typeRef="string"/>
+      <output id="out_produkt" label="produkt" name="produkt" typeRef="string"/>
+      <rule id="r1">
+        <description>Variante standard</description>
+        <inputEntry id="r1_i0"><text>"standard"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"05e9a617-0261-4cee-bb44-138d3ef5d965"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Microsoft 365 E3"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Variante erweitert</description>
+        <inputEntry id="r2_i0"><text>"erweitert"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"06ebc4ee-1bb5-47dd-8120-11324bc54e06"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Microsoft 365 E5"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Variante frontline</description>
+        <inputEntry id="r3_i0"><text>"frontline"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"66b55226-6b4f-492c-910c-a3b7a3c9d993"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Microsoft 365 F3"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Zusatzlizenz für die Teams-Telefonie</description>
+        <inputEntry id="r4_i0"><text>"telefonie"</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"e43b5b99-8dfb-405f-9987-dc307f34bcbd"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Microsoft Teams Phone Standard"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Lizenz des Ressourcenkontos einer Warteschlange oder Telefonzentrale, ohne die Teams ihm keine Rufnummer zuweist</description>
+        <inputEntry id="r5_i0"><text>"ressourcenkonto"</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"440eaaa8-b3e0-484b-a8be-62870b9ba70a"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Microsoft Teams Phone Resource Account"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

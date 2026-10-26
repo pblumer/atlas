@@ -401,7 +401,7 @@ about an unlink (the open question) are not.
   A picture on a bound product is the source's: the picture routes refuse to set or
   remove one.
 - **Removing a source** is refused while a product is bound to it.
-- **The screens.** `api/web/content-sources.js` is *Console › Content sources*, admin-only
+- **The screens.** `api/web/content-sources.js` is *Console › Administration › Content sources*, admin-only
   and gone with the catalogue switch: list, create, change, remove (the 409 naming the bound
   products is shown) and the check with every problem. `api/web/catalog-content.js` is the
   product editor's *Content from the wiki* panel — drawn only when the status route names a

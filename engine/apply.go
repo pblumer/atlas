@@ -397,26 +397,56 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 		// The message buffer (ADR-0370). Every field the store keys or keeps — the
 		// message's key, its expiry and its id — was frozen into the event at command
 		// time, so replay keeps and drops exactly what the live run did (I4, I6).
+		//
+		// Each also folds an event-log row (ADR-0472 §3): a message kept, taken
+		// from the buffer, or expired while it still waited — never with its payload.
 		switch h.Intent {
 		case model.IntentMessageBuffered:
-			return tx.PutBufferedMessage(h.Key, &v.message)
+			if err := tx.PutBufferedMessage(h.Key, &v.message); err != nil {
+				return err
+			}
+			bare := v.message.WithoutPayload()
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogMessageKept, &bare)
 		case model.IntentMessageIdRecorded:
 			return tx.RecordMessageId(h.Key, &v.message)
 		case model.IntentMessageConsumed:
-			return tx.ConsumeBufferedMessage(h.Key, &v.message)
+			if err := tx.ConsumeBufferedMessage(h.Key, &v.message); err != nil {
+				return err
+			}
+			bare := v.message.WithoutPayload()
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogMessageTaken, &bare)
 		case model.IntentMessageExpired:
-			return tx.ExpireMessage(h.Key, &v.message)
+			// An expiry also drops the id of a message delivered at once; only a message
+			// that still waited was never received, and only that is a row.
+			waited, err := tx.BufferedMessageWaits(h.Key, &v.message)
+			if err != nil {
+				return err
+			}
+			if err := tx.ExpireMessage(h.Key, &v.message); err != nil || !waited {
+				return err
+			}
+			bare := v.message.WithoutPayload()
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogMessageExpired, &bare)
 		}
 
 	case model.VTSignal:
 		// A signal subscription's lifecycle mirrors a message subscription's: opened
 		// when a signal catch activates, retired when a broadcast fires it. Same two
 		// intents, a separate column family (ADR-0088).
+		//
+		// A correlation is a reception and an event-log row, unless it only cleared a
+		// subscription whose element no longer waited; a start a broadcast caused is a
+		// row and nothing else (ADR-0472 §2).
 		switch h.Intent {
 		case model.IntentSubscriptionCreated:
 			return tx.PutSignalSubscription(&v.signalSub)
 		case model.IntentSubscriptionCorrelated:
-			return tx.DeleteSignalSubscription(&v.signalSub)
+			if err := tx.DeleteSignalSubscription(&v.signalSub); err != nil || v.signalSub.Stale {
+				return err
+			}
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogSignalReceived, &v.signalSub)
+		case model.IntentSignalStarted:
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogSignalStarted, &v.signalSub)
 		}
 
 	case model.VTMessageFlow:
@@ -424,8 +454,19 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// Retain the delivered message flow so the Operations collaboration view
 			// can replay it. The record carries everything (receiver, message, key);
 			// the timestamp and position come from this event's header, so replay
-			// rebuilds identical history — invariant I4, ADR-0038.
-			return tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow)
+			// rebuilds identical history — invariant I4, ADR-0038. The event log keeps
+			// the delivery too (ADR-0472 §3).
+			if err := tx.RecordMessageFlow(h.Timestamp, h.Position, &v.messageFlow); err != nil {
+				return err
+			}
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogMessageDelivered, &v.messageFlow)
+		}
+
+	case model.VTDispatch:
+		if h.Intent == model.IntentDispatched {
+			// A send, with how far it reached, frozen into the event at command time
+			// (ADR-0472 §1). It is a row of the event log and nothing else.
+			return tx.PutEventLogRow(h.PartitionId, h.Position, h.Timestamp, h.SourcePos, state.EventLogDispatched, &v.dispatch)
 		}
 
 	case model.VTActionOutcome:
@@ -444,6 +485,10 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// The cut was frozen into the event by the sweep, so replay drops exactly
 			// the rows the live run dropped (ADR-0429 §5, I4).
 			return tx.PruneFeed(h.PartitionId, v.feedRetention.Through)
+		}
+		if h.Intent == model.IntentEventLogPruned {
+			// The event log's cut, frozen the same way (ADR-0472 §4).
+			return tx.PruneEventLog(h.PartitionId, v.feedRetention.Through)
 		}
 
 	case model.VTTriggerReceipt:
@@ -475,6 +520,21 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// replay rebuilds identical history without re-running the modify command
 			// (invariants I4/I6).
 			return tx.RecordVariableAudit(h.Timestamp, h.Position, &v.variableAudit)
+		}
+
+	case model.VTAuthorization:
+		if h.Intent == model.IntentAuthorizationDecided && v.authorization != nil {
+			// A policy decision (ADR-0475 §12). It was
+			// made on the command path and frozen into the event; this only stores it, so
+			// replay rebuilds the same evidence without evaluating any policy (I4/I6).
+			return tx.RecordAuthorization(h.Position, v.authorization)
+		}
+
+	case model.VTActionApproval:
+		if h.Intent == model.IntentApprovalRecorded && v.approval != nil {
+			// One fact about an approval — requested, answered or withdrawn — frozen on
+			// the command path; stored as it is (I4/I6).
+			return tx.RecordApprovalFact(h.Position, v.approval)
 		}
 
 	case model.VTOperatorAction:

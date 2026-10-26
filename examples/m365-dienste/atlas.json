@@ -1,0 +1,216 @@
+{
+  "formatVersion": 1,
+  "key": "beispiel-m365-dienste",
+  "name": "Beispiel: Microsoft-365-Dienste",
+  "processes": [
+    {
+      "id": "proc_m365_funktionspostfach",
+      "name": "Exchange: Funktionspostfach",
+      "path": "funktionspostfach.bpmn"
+    },
+    {
+      "id": "proc_m365_genehmigung_vorgesetzter",
+      "name": "Microsoft 365: Genehmigung durch Vorgesetzte",
+      "path": "genehmigung-vorgesetzter.bpmn"
+    },
+    {
+      "id": "proc_m365_governance_pruefung",
+      "name": "Microsoft 365: Governance-Prüfung",
+      "path": "governance-pruefung.bpmn"
+    },
+    {
+      "id": "proc_m365_lizenz",
+      "name": "Microsoft 365: Lizenz und Postfach",
+      "path": "lizenz.bpmn"
+    },
+    {
+      "id": "proc_m365_partnerzugang",
+      "name": "Partnerzugang (öffentliches Formular)",
+      "path": "partnerzugang.bpmn"
+    },
+    {
+      "id": "proc_m365_postfachzugriff_entziehen",
+      "name": "Exchange: Postfachzugriff entziehen",
+      "path": "postfachzugriff-entziehen.bpmn"
+    },
+    {
+      "id": "proc_m365_postfachzugriff_erteilen",
+      "name": "Exchange: Postfachzugriff erteilen",
+      "path": "postfachzugriff-erteilen.bpmn"
+    },
+    {
+      "id": "proc_m365_raum_einrichten",
+      "name": "Exchange: Sitzungszimmer einrichten",
+      "path": "raum-einrichten.bpmn"
+    },
+    {
+      "id": "proc_m365_raum_entfernen",
+      "name": "Exchange: Sitzungszimmer entfernen",
+      "path": "raum-entfernen.bpmn"
+    },
+    {
+      "id": "proc_m365_team",
+      "name": "Microsoft Teams: Team",
+      "path": "team.bpmn"
+    },
+    {
+      "id": "proc_m365_telefonie",
+      "name": "Teams-Telefonie: persönliche Rufnummer",
+      "path": "telefonie.bpmn"
+    },
+    {
+      "id": "proc_m365_telefonzentrale",
+      "name": "Teams Phone: Telefonzentrale",
+      "path": "telefonzentrale.bpmn"
+    },
+    {
+      "id": "proc_m365_verteiler",
+      "name": "Exchange: Verteilerliste",
+      "path": "verteiler.bpmn"
+    },
+    {
+      "id": "proc_m365_verteiler_anmeldung",
+      "name": "Verteiler-Anmeldung (öffentliches Formular)",
+      "path": "verteiler-anmeldung.bpmn"
+    },
+    {
+      "id": "proc_m365_warteschlange",
+      "name": "Teams Phone: Anrufwarteschlange",
+      "path": "warteschlange.bpmn"
+    }
+  ],
+  "forms": [
+    {
+      "id": "m365-abwesenheit",
+      "name": "m365-abwesenheit",
+      "path": "m365-abwesenheit.form.json"
+    },
+    {
+      "id": "m365-funktionspostfach-bestellung",
+      "name": "m365-funktionspostfach-bestellung",
+      "path": "m365-funktionspostfach-bestellung.form.json"
+    },
+    {
+      "id": "m365-governance-befund",
+      "name": "m365-governance-befund",
+      "path": "m365-governance-befund.form.json"
+    },
+    {
+      "id": "m365-partnerzugang-antrag",
+      "name": "m365-partnerzugang-antrag",
+      "path": "m365-partnerzugang-antrag.form.json"
+    },
+    {
+      "id": "m365-partnerzugang-pruefung",
+      "name": "m365-partnerzugang-pruefung",
+      "path": "m365-partnerzugang-pruefung.form.json"
+    },
+    {
+      "id": "m365-person",
+      "name": "m365-person",
+      "path": "m365-person.form.json"
+    },
+    {
+      "id": "m365-postfach-person",
+      "name": "m365-postfach-person",
+      "path": "m365-postfach-person.form.json"
+    },
+    {
+      "id": "m365-postfachzugriff-bestellung",
+      "name": "m365-postfachzugriff-bestellung",
+      "path": "m365-postfachzugriff-bestellung.form.json"
+    },
+    {
+      "id": "m365-postfachzugriff-pruefung",
+      "name": "m365-postfachzugriff-pruefung",
+      "path": "m365-postfachzugriff-pruefung.form.json"
+    },
+    {
+      "id": "m365-raum-bestellung",
+      "name": "m365-raum-bestellung",
+      "path": "m365-raum-bestellung.form.json"
+    },
+    {
+      "id": "m365-rufnummer-dienst",
+      "name": "m365-rufnummer-dienst",
+      "path": "m365-rufnummer-dienst.form.json"
+    },
+    {
+      "id": "m365-rufnummer-person",
+      "name": "m365-rufnummer-person",
+      "path": "m365-rufnummer-person.form.json"
+    },
+    {
+      "id": "m365-team-bestellung",
+      "name": "m365-team-bestellung",
+      "path": "m365-team-bestellung.form.json"
+    },
+    {
+      "id": "m365-team-kanal",
+      "name": "m365-team-kanal",
+      "path": "m365-team-kanal.form.json"
+    },
+    {
+      "id": "m365-team-mitglied",
+      "name": "m365-team-mitglied",
+      "path": "m365-team-mitglied.form.json"
+    },
+    {
+      "id": "m365-telefonzentrale-bestellung",
+      "name": "m365-telefonzentrale-bestellung",
+      "path": "m365-telefonzentrale-bestellung.form.json"
+    },
+    {
+      "id": "m365-verteiler-anmeldung",
+      "name": "m365-verteiler-anmeldung",
+      "path": "m365-verteiler-anmeldung.form.json"
+    },
+    {
+      "id": "m365-verteiler-bestellung",
+      "name": "m365-verteiler-bestellung",
+      "path": "m365-verteiler-bestellung.form.json"
+    },
+    {
+      "id": "m365-verteiler-pruefung",
+      "name": "m365-verteiler-pruefung",
+      "path": "m365-verteiler-pruefung.form.json"
+    },
+    {
+      "id": "m365-warteschlange-agenten",
+      "name": "m365-warteschlange-agenten",
+      "path": "m365-warteschlange-agenten.form.json"
+    },
+    {
+      "id": "m365-warteschlange-bestellung",
+      "name": "m365-warteschlange-bestellung",
+      "path": "m365-warteschlange-bestellung.form.json"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dmn-m365-lizenzprofil",
+      "name": "M365Lizenzprofil",
+      "modelRef": "m365-lizenzprofil"
+    },
+    {
+      "id": "dmn-m365-namensregel",
+      "name": "M365Namensregel",
+      "modelRef": "m365-namensregel"
+    },
+    {
+      "id": "dmn-m365-postfachzugriff",
+      "name": "M365PostfachzugriffFreigabe",
+      "modelRef": "m365-postfachzugriff"
+    },
+    {
+      "id": "dmn-m365-telefonie",
+      "name": "M365TelefonieSprachregion",
+      "modelRef": "m365-telefonie"
+    },
+    {
+      "id": "dmn-m365-verteiler-zuordnung",
+      "name": "M365VerteilerZuordnung",
+      "modelRef": "m365-verteiler-zuordnung"
+    }
+  ]
+}

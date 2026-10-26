@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/mail"
 	"github.com/pblumer/atlas/connector/s3"
+	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/internal/certstore"
 	"github.com/pblumer/atlas/logging"
 )
@@ -64,8 +66,9 @@ const (
 // (their owner), like buildMailClients does.
 func (s *Server) mailWorkerEnv() []string {
 	var (
-		names []string
-		env   []string
+		names    []string
+		env      []string
+		storeEnv []string
 	)
 	s.do(func() {
 		recs, err := s.connectors.LoadAll()
@@ -108,10 +111,12 @@ func (s *Server) mailWorkerEnv() []string {
 			names = append(names, c.Name)
 			env = append(env, mailConnectorEnv(key, c, secret)...)
 		}
+		storeEnv = s.mailStoreEnvLocked(recs)
 	})
 	if len(names) == 0 {
 		return nil
 	}
+	env = append(env, storeEnv...)
 	env = append(env, mailConnectorsEnv+"="+strings.Join(names, ","))
 	if s.superviseURL != "" {
 		env = append(env, mailOutboxURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/mail/outbox")
@@ -138,6 +143,12 @@ func mailConnectorEnv(key string, c connector, secret string) []string {
 	// engine's watch reads.
 	if m := strings.TrimSpace(c.MailboxEndpoint); m != "" {
 		env = append(env, p+"MAILBOX="+m)
+	}
+	// The malware scanner, when the Worker names one: a Worker Instance handing an
+	// attachment on must scan it exactly as the engine would have
+	// (ADR-0478).
+	if sc := strings.TrimSpace(c.Scanner); sc != "" {
+		env = append(env, p+"SCANNER="+sc)
 	}
 	if secret != "" {
 		env = append(env, p+"SECRET="+secret)
@@ -214,6 +225,12 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// vault bundle, and a supervised worker with no vault of its own — so the engine
 		// renders the bundle into the variables the worker reads.
 		connectorKindTeamsPhone: s.teamsPhoneWorkerEnv,
+		// Google Contacts is Exchange's shape: the bundle says whose address book and as
+		// whom, it lives in the vault, and a supervised worker has no vault of its own.
+		connectorKindGoogleContacts: s.googleContactsWorkerEnv,
+		// CardDAV likewise: the bundle holds the password and the endpoint says which
+		// server, and a supervised worker has neither of its own.
+		connectorKindCardDAV: s.cardDAVWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else
@@ -395,12 +412,12 @@ type entraBundle struct {
 	CertificateThumbprint string `json:"certificateThumbprint"`
 }
 
-// entraCertStoreSupported says whether a supervised Entra worker on this host has a
-// certificate store to find a thumbprint in. Only Windows has one; elsewhere a thumbprint
-// bundle is left out like any that does not resolve, because handing it over would make
-// the worker refuse to start — for every tenant it serves, not only this one. A variable
-// so both answers are testable on one platform.
-var entraCertStoreSupported = certstore.Supported
+// certStoreSupported says whether a supervised Entra or SharePoint worker on this host
+// has a certificate store to find a thumbprint in. Only Windows has one; elsewhere a
+// thumbprint bundle is left out like any that does not resolve, because handing it over
+// would make the worker refuse to start — for every tenant or instance it serves, not
+// only this one. A variable so both answers are testable on one platform.
+var certStoreSupported = certstore.Supported
 
 // entraBundleParse parses a vault bundle value. An empty value, invalid JSON, a missing
 // field, more than one credential, or a thumbprint on a host without a certificate store
@@ -427,7 +444,7 @@ func entraBundleParse(raw string) (entraBundle, bool) {
 	if credentials != 1 {
 		return entraBundle{}, false // none, or more than one
 	}
-	if b.CertificateThumbprint != "" && !entraCertStoreSupported {
+	if b.CertificateThumbprint != "" && !certStoreSupported {
 		return entraBundle{}, false
 	}
 	return b, true
@@ -838,6 +855,10 @@ func remedyBundleParse(raw string) (remedyCredentials, bool) {
 const (
 	sharepointEnvPrefix     = "ATLAS_SHAREPOINT_"
 	sharepointConnectorsEnv = sharepointEnvPrefix + "CONNECTORS"
+	// sharepointMockURLEnv is where a worker forwards the operations of a mockup
+	// Worker (ATLAS_SHAREPOINT_<NAME>_MOCK=1): this server's site for it, over the API
+	// (ADR-0484).
+	sharepointMockURLEnv = sharepointEnvPrefix + "MOCK_URL"
 )
 
 // sharepointWorkerEnv renders this server's SharePoint instances as the environment a
@@ -869,6 +890,8 @@ func (s *Server) sharepointWorkerEnv() []string {
 		env       []string
 		names     []string
 		fromStore bool // a store instance contributed a name; only then must CONNECTORS be rendered
+		brokered  bool // a delegated Worker is among them; only then is the broker key handed over
+		mocked    bool // a mockup is among them; only then is the mockup's address handed over
 	)
 	seen := map[string]bool{}
 	addName := func(n string) {
@@ -907,6 +930,36 @@ func (s *Server) sharepointWorkerEnv() []string {
 					slog.String("connector", c.Name), slog.String("collidesWith", first))
 				continue
 			}
+			// A mockup has no endpoint and no credential: the child is told only that it
+			// is one, and forwards each operation to this server's site for it
+			// (ADR-0484). Without an address to forward to it
+			// could only refuse the Worker at startup, taking the other instances it
+			// serves down with it, so then it is left out and its tasks wait here.
+			if c.Provider == sharepoint.MockProvider {
+				if s.superviseURL == "" {
+					continue
+				}
+				taken[envKey] = c.Name
+				env = append(env, sharepointEnvPrefix+envKey+"_MOCK=1")
+				addName(c.Name)
+				fromStore, mocked = true, true
+				continue
+			}
+			// A delegated Worker's credential is brokered per authorized job and never
+			// handed over whole (ADR-0475 §4): the child
+			// learns only where the Graph is and that it must ask for a token, so a
+			// compromised child holds no refresh token and no app secret for it.
+			if c.Identity != nil && authz.IsDelegated(c.Identity.Mode) {
+				taken[envKey] = c.Name
+				key := sharepointEnvPrefix + envKey + "_"
+				if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+					env = append(env, key+"ENDPOINT="+endpoint)
+				}
+				env = append(env, key+"BROKERED=1")
+				addName(c.Name)
+				fromStore, brokered = true, true
+				continue
+			}
 			bundle := strings.TrimSpace(s.resolveConnectorSecret(c.CredentialsRef))
 			// An instance whose bundle does not resolve — no secret set yet — is left
 			// out rather than handed over empty: the worker refuses at startup on a
@@ -914,6 +967,13 @@ func (s *Server) sharepointWorkerEnv() []string {
 			// it serves. Left out, it is simply not served, and the Console shows it as
 			// configured-not-working.
 			if bundle == "" {
+				continue
+			}
+			// A certificate named by its thumbprint on a host without a certificate store
+			// is left out for the same reason, as an Entra tenant's is (entraBundleParse):
+			// the worker could only refuse it. buildSharePointClients reports why, so the
+			// Console shows the instance as configured-not-working (ADR-0141, amended).
+			if sharepoint.CertificateThumbprint(bundle) != "" && !certStoreSupported {
 				continue
 			}
 			taken[envKey] = c.Name
@@ -934,6 +994,14 @@ func (s *Server) sharepointWorkerEnv() []string {
 	// render the union so a host-named instance is not lost to the override.
 	if !fromStore {
 		return nil
+	}
+	// The broker key goes only to the process serving a delegated Worker: with it, and
+	// only with it, that process is handed a person's token (handleAuthorizeJob).
+	if brokered && s.brokerKey != "" {
+		env = append(env, brokerKeyEnv+"="+s.brokerKey)
+	}
+	if mocked {
+		env = append(env, sharepointMockURLEnv+"="+strings.TrimRight(s.superviseURL, "/")+"/api/v1/sharepoint/mock-sites")
 	}
 	return append(env, sharepointConnectorsEnv+"="+strings.Join(names, ","))
 }
@@ -1237,14 +1305,7 @@ func (s *Server) s3WorkerEnv() []string {
 				continue
 			}
 			taken[envKey] = c.Name
-			key := s3EnvPrefix + envKey + "_"
-			// The endpoint is optional: blank means AWS at the bundle's region, which is
-			// what buildS3Clients passes too, so a record without one builds the same
-			// client on both sides.
-			if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
-				env = append(env, key+"URL="+endpoint)
-			}
-			env = append(env, key+"CREDENTIALS="+bundle)
+			env = append(env, s3IdentityEnv(envKey, c, bundle)...)
 			addName(c.Name)
 			fromStore = true
 		}
@@ -1256,6 +1317,21 @@ func (s *Server) s3WorkerEnv() []string {
 		return nil
 	}
 	return append(env, s3ConnectorsEnv+"="+strings.Join(names, ","))
+}
+
+// s3IdentityEnv is one S3 Worker's identity as the variables a worker reads it from:
+// the same for the s3 kind's own worker and for a mail worker exporting into it, so
+// both build the identical client.
+func s3IdentityEnv(envKey string, c connector, bundle string) []string {
+	key := s3EnvPrefix + envKey + "_"
+	var env []string
+	// The endpoint is optional: blank means AWS at the bundle's region, which is what
+	// buildS3Clients passes too, so a record without one builds the same client on
+	// both sides.
+	if endpoint := strings.TrimSpace(c.Endpoint); endpoint != "" {
+		env = append(env, key+"URL="+endpoint)
+	}
+	return append(env, key+"CREDENTIALS="+bundle)
 }
 
 // s3BundleUsable reports whether an S3 Worker's vault bundle builds an identity at all.

@@ -12,6 +12,148 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-10-25
+
+**A SharePoint Worker can act as the person who asked, and only for what a policy
+permits.** A person links their Microsoft account and chooses which Workers may act as
+them; an administrator publishes versioned authorization policies; and a governed Worker
+asks Atlas before every action, which decides, records the decision on the log, and — for
+a delegated Worker — releases a short-lived token for that one action
+([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md),
+proposed). This build governs the SharePoint Worker Type only, and releases a person's
+token only to a Worker Instance Atlas supervises.
+
+**The server keeps a reserve free on its disk, and an administrator can give space
+back.** Below `--storage-reserve-mb` (1 GiB by default) the server refuses new writes with
+507, keeps answering reads and resumes by itself; an administrator sees the disk, the
+reserve and a forecast on the dashboard. A write the log could not make durable now halts
+the engine instead of being run a second time, and a server that ran its disk full starts
+again ([ADR-0481](docs/adr/0481-storage-guard.md)). An administrator deletes a process's
+finished instances from Operations and compacts the WAL once from the dashboard, which
+also works on a server below its reserve
+([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)), and a metrics
+scrape no longer re-reads every checkpoint
+([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
+
+**A release records how it meets its environment, and a mail task writes from templates.**
+Publishing an application saves a sketch of the release — the messages, workers, decisions
+and calls of its processes, and where its connections go — offered as an SVG and as an
+ArchiMate document ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)). The event
+log shows every signal and message sent and where it arrived
+([ADR-0472](docs/adr/0472-event-log.md)), and the Events page lists the names the
+deployed models throw, send and receive, with what is wrong with each. A mail task writes
+its subject and bodies from templates with a live preview
+([ADR-0487](docs/adr/0487-mail-templates.md)), forwards a message and reads or exports an
+attachment, each inspected before it leaves the mailbox
+([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)), and a task form shows a
+received mail's HTML with its remote images blocked
+([ADR-0489](docs/adr/0489-mail-html-view.md)). A task form searches a directory instead
+of listing it ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)). Google Contacts and
+CardDAV Worker Types find, keep and label contacts
+([ADR-0476](docs/adr/0476-google-contacts-worker.md),
+[ADR-0490](docs/adr/0490-carddav-worker.md)); a SharePoint Worker can be a mockup that
+needs no tenant ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)); and an experimental
+Paperless-ngx Worker reads document metadata
+([ADR-0479](docs/adr/0479-paperless-ngx-worker.md), first slice). The user list shows the
+day each account last signed in, a named BPMN element's id follows its name, and a
+PowerShell script installs atlas as a Windows service.
+
+**Read this before upgrading from 0.19.0.** These act on an existing installation as soon
+as it runs 0.20.0:
+
+- The server refuses writes once less than 1 GiB is available under the data directory —
+  507 with `Retry-After` — where 0.19.0 took them until the disk failed. Check the free
+  space before the upgrade: a smaller volume needs `--storage-reserve-mb` sized to it, or
+  `0`, which keeps the dashboard's readings and warnings and turns the freeze off. The
+  Helm chart's default volume (8 GiB) leaves 7 GiB to use.
+- A failed WAL sync, or a state commit that fails after the log has the batch, halts the
+  engine: every later write answers 503 until the server is restarted, reads go on, and
+  the log says `event=engine.halted` once. Alert on it — `/metrics` carries
+  `atlas_engine_halted`. The restart recovers exactly what was acknowledged.
+- An administrator can delete finished instances for good — from Operations,
+  `POST /api/v1/processes/{key}/history-purge` or the MCP tool
+  `atlas_delete_finished_instances` — and this is on by default. Where the history is
+  evidence, start with `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm
+  `atlas.instancePurge: false`); while it is on, every start logs a WARN,
+  `event=server.instance_purge_enabled`. On a server that takes checkpoints, an
+  administrator can also compact the WAL once (*Compact once*,
+  `POST /api/v1/checkpoints?compact=true`) without `--compact-wal`, which deletes WAL
+  segments irreversibly.
+- A mail watch hands the mail to the process as one variable, `mail`. A model that reads
+  `from`, `to`, `subject`, `messageId` or another envelope field directly must read
+  `mail.from`, `mail.messageId` and so on: change and deploy such models with the
+  upgrade. This holds for instances already running, too — a reply that reaches one after
+  the upgrade arrives as `mail` alone. A watch's correlation key is unchanged.
+- Creating a mail watch on a Worker that cannot read a mailbox is refused with 400.
+  Watches stored before are kept, report the reason as their `lastError`, and show as
+  *not reading* in the Console.
+- `GET /api/v1/message-sources` lists every deployed version rather than the newest
+  alone, and a fourth kind of row, `process-throw`. A client that read the process rows
+  as the newest versions filters on `newest`; one that assumed three kinds skips the
+  fourth.
+- A Worker that runs apart from the server needs 0.20.0 for what is new: the mail
+  operations `forward`, `get-attachment` and `export-attachment` (a 0.19.0 mail worker
+  fails such a task with «unknown operation»), a mail read with `includeBody="html"` (a
+  0.19.0 mail worker answers the text alone), the Google Contacts and CardDAV Worker
+  Types, the Paperless-ngx Worker, a task form's directory search, which a Worker
+  Instance answers through `POST /api/v1/worker-queries/activate`, and asking before a
+  governed action. Mail templates are filled in by the server, so a 0.19.0 mail worker
+  sends them as filled in. The new `endpoints` field of `POST /api/v1/jobs/activate` is
+  optional.
+
+Identity-aware execution changes nothing until an administrator governs a Worker:
+
+- Every existing Worker is *legacy* — no decision, nothing recorded, unchanged behavior —
+  and **Administration → Security** lists it as not governed.
+- Governing a Worker in `service` mode with `enforce` refuses its completions until the
+  Worker asks `POST /api/v1/jobs/{key}/authorize`. The shipped SharePoint Worker asks; a
+  Worker built against an earlier `worker` package does not, and its completions are then
+  refused with 409. Start with `shadow`, which records and never blocks.
+- With no policy published, every enforced action is refused (default deny).
+- A delegated SharePoint Worker started by Atlas receives no credential in its
+  environment, only `ATLAS_SHAREPOINT_<NAME>_BROKERED=1` and a per-start
+  `ATLAS_BROKER_KEY` it presents when it asks.
+- A governed Worker is changed or deleted only by an administrator, and a delegated
+  Worker's endpoint must be Microsoft Graph (or blank).
+- With `--in-process-connectors`, a governed SharePoint Worker's tasks park instead of
+  running inside the engine: governed Workers run only on a supervised Worker Instance.
+- A Worker's `credentialsRef` may not name a reserved vault entry
+  (`atlas:connection-credential:…`, `atlas:personal-data-key:…`).
+
+What changes on disk, and going back:
+
+- 0.20.0 reads the data directory 0.19.0 wrote. The directory gains three stores, each
+  classified in the backup's store registry: `policies` and `last-logins` with the
+  accounts, `identity` as a credential, like API tokens. The state store gains the event
+  log, the recorded authorization decisions, and the action approvals with an index of
+  the open ones. The log gains three record types — a send, an authorization decision and
+  an action approval — and two intents on types it had: a broadcast that started an
+  instance, and the event log's pruning. Two records it had carry appended fields: an
+  instance's activation event names who started it, and a subscription's correlation
+  names its sender and whether it was stale. Deleting finished instances writes the purge
+  event history retention already writes. No system process changed, so the first start
+  deploys nothing new.
+- New settings, all optional: `--storage-reserve-mb` (`ATLAS_STORAGE_RESERVE_MB`, 1024),
+  `--event-log-ttl` (`ATLAS_EVENT_LOG_TTL`, 720h), `--instance-purge`
+  (`ATLAS_INSTANCE_PURGE`, on), the four `--link-microsoft-*` flags, `ATLAS_COMPACT_WAL`
+  for `--compact-wal`, and the budget `ATLAS_LIMIT_DOCUMENT` (35 MiB). The MCP tools grow
+  from 149 to 157 (`atlas_delete_finished_instances`, `atlas_event_log`,
+  `atlas_finished_instances_deletion`, `atlas_instance_authorizations`,
+  `atlas_message_names`, `atlas_release_architecture`, `atlas_signals`, `atlas_storage`),
+  and `/metrics` gains `atlas_storage_*` and `atlas_engine_halted`. The Helm chart gains
+  one value, `atlas.instancePurge` (`true`).
+- Going back to 0.19.0 has not been tested end to end. By its code, 0.19.0 skips the
+  three new record types and the two new intents when it replays the log, reads the
+  appended fields as if they were absent, and does not open the new stores, so the event
+  log, the recorded decisions and approvals, the linked accounts, the policies and the
+  last-login days are lost to it. A deployed process with a Google Contacts or CardDAV
+  task, a mail task naming `forward`, `get-attachment` or `export-attachment`, or a mail
+  read with `includeBody="html"` does not compile under 0.19.0, which then refuses to
+  start: remove every deployed version of such a process before going back, once nothing
+  runs under it. A mail task with `templating="true"` does compile under 0.19.0, which
+  ignores the switch and sends the placeholders as written — `{{kunde.name}}` included —
+  so take such a process out as well.
+
 ### Added
 
 - **A product's description, keywords and picture can come from a wiki page.** An
@@ -34,13 +176,1119 @@ _Changed_ / _Removed_ for each version.
   product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
   and is audited. Without a configured source nothing changes
   ([ADR-draft](docs/adr/draft-service-content-from-an-external-source.md)). In the Console,
-  administrators configure and check sources under **Console › Content sources**; the
+  administrators configure and check sources under **Console › Administration › Content sources**; the
   catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
   with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
   quarantine state — draws a bound product's description, keywords and picture read-only, and
   offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
   **More in the wiki** under a description where the source allows it and only while the content
   is shown.
+- **Technical capability contracts can be checked against complete JSON Schema Draft 2020-12 offline.** Design-time input and output validation now checks schema keywords with no remote schema loading, bounded payloads and positive/negative account/contact fixtures. Reports are deliberately schema-only: they do not certify a Worker Type, publish conformance evidence, authorize a job or change runtime routing (CDA2a, governed by ADR-0483).
+
+- **A process finds, keeps and labels the people in any CardDAV address book.** A new
+  CardDAV Worker Type reaches the address book that comes with most mail accounts outside
+  Google and Microsoft — iCloud, Nextcloud, ownCloud, mailbox.org, Posteo, Infomaniak,
+  Fastmail, Synology, Radicale, Baïkal — with the operations and the flat contact of the
+  Google Contacts Worker: find a contact by e-mail address, phone number or a custom field,
+  read, search, list, create, update and delete contacts, and put a group such as *Kunden*
+  on one or take it off. A Worker names its endpoint — the address book's URL or the
+  server's, from which the address book is found — and a vault bundle with the account's
+  username, its app-specific password and whether the server keeps groups in `CATEGORIES`
+  or, as iCloud and Fastmail do, as group cards of their own. An update keeps every
+  property of the card it does not change, a photo and Apple's labels included, and a
+  repeated `create-contact` finds the contact the first round made instead of making a
+  second; a missing contact can be caught as `CARDDAV_CONTACT_NOT_FOUND`
+  ([ADR-0490](docs/adr/0490-carddav-worker.md)).
+- **A received mail's HTML can be shown to a person in a task form.** A mail task's
+  **Read message** reads the HTML body as well with `includeBody="html"` (*Include the text
+  and the HTML*), for IMAP, Gmail and Microsoft Graph; a list does not, and the compiler
+  says so. The HTML is cleaned before it becomes a variable — scripts, frames, forms, meta
+  refreshes, event handlers and addresses that run code are removed, links open in a new
+  tab — and cut to fit the variable budget, with `htmlTruncated` saying so. The new form
+  component **E-mail view** (`mailview`) shows that variable: the envelope, then the HTML
+  in a sandboxed frame that runs no script, or the text. **Remote images stay blocked**
+  until the reader presses **Load images**, so the sender does not learn when and from
+  where the task was opened, and the page's address is never sent along. The view only
+  reads: completing the task does not send the mail back, the task's holder may read the
+  variable it shows, and a public start form does not let a caller set it
+  ([ADR-0489](docs/adr/0489-mail-html-view.md)).
+
+- **Mail texts are templates, with a live preview.** With **Placeholders** switched on, a
+  mail task's subject, text body and HTML body are written in the template language
+  form text views already use: `{{kunde.name}}` inserts a value, `{{#if …}}…{{/if}}` writes
+  a section only when its condition holds and `{{#loop …}}…{{/loop}}` once per element of
+  a list, with FEEL between the braces (`templating="true"` on `<atlas:mailConnector>`,
+  also for a reply and the note above a forward). A malformed template is refused at
+  deploy with its line and column, and what a placeholder inserts into the HTML body is
+  escaped. F2 opens each field in the Developer View with a **Preview** that renders it
+  with sample variables — prefilled from a live instance — through the new
+  `POST /api/v1/feel/template`, the HTML body as a sandboxed page without scripts; an HTML
+  body without placeholders is previewed too. A task without the switch is unchanged, a
+  `{{` in its text included
+  ([ADR-0487](docs/adr/0487-mail-templates.md)).
+
+- **Finished instances can be deleted from Operations.** An administrator deletes the
+  finished instances of one version or of all versions that finished before a chosen moment,
+  from the ⋯ menu of a process row (*Delete finished instances…*), or with
+  `GET`/`POST /api/v1/processes/{key}/history-purge` and the MCP tools
+  `atlas_finished_instances_deletion` and `atlas_delete_finished_instances`. The dialog counts
+  first, deletes only once the process id is typed, runs in batches of at most 1000, newest
+  first, and can be stopped between two. Running instances are never touched, and with the
+  OpenSearch exporter on nothing is deleted before the exporter has it. Each delete is the
+  purge event history retention already uses, so recovery replays it. It reaches the history
+  no `atlas:historyTtl` covers — everything that finished before a process declared one — in
+  minutes rather than in the days the server-wide age needs per pass. It frees no disk by
+  itself: every deleted instance adds an event to the WAL until compaction removes it, and the
+  overview's Finished column, which counts every instance that ever finished, does not go
+  down. On by default; a production installation, whose history is evidence, starts with
+  `--instance-purge=false` (`ATLAS_INSTANCE_PURGE=false`, Helm `atlas.instancePurge`), and
+  while it is on every start logs a WARN, `event=server.instance_purge_enabled`
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
+- **The WAL can be compacted once from the Console.** The storage card on the dashboard now
+  says whether the WAL is compacted on every checkpoint and what the last pass did, and offers
+  *Checkpoint now* and, on a server started without `--compact-wal`, *Compact once* after a
+  confirmation. `POST /api/v1/checkpoints?compact=true` does the same: one pass with every gate
+  a scheduled one has — a verified checkpoint, the exporter and retention watermarks, no backup
+  streaming — and its answer says whether it compacted. Because that route is allowed on a
+  frozen server, a server below its storage reserve can give WAL space back without a restart.
+  `--compact-wal` also reads `ATLAS_COMPACT_WAL=true`, and `GET /api/v1/checkpoints?verify=false`
+  describes the checkpoints from their manifests instead of re-reading every state file, which
+  is what the card asks for
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
+- **A SharePoint Worker can be a mockup.** A SharePoint Worker with the provider **Mockup**
+  needs no tenant, no app registration and no credential: every operation runs against a
+  site this server keeps in its memory, in the engine and in a supervised worker alike,
+  which forwards each operation to `POST /api/v1/sharepoint/mock-sites/{worker}`. It
+  answers in Graph's shapes and refuses what SharePoint refuses — a missing item or file, a
+  list item in a document library, a file where a folder is asked for, a filter on a column
+  the list does not have — and filters in a stated subset of OData (`eq`, `ne`, `gt`, `ge`,
+  `lt`, `le`, `startswith`, `and`, `or`, `not`), refusing the rest. A list or library exists
+  from the first task that writes to it; the site is gone when the server restarts.
+  **Operations → Diagnostics → Mockups** shows each mockup's lists, libraries and newest 200
+  operations, and empties a site for the next run; it reads `GET /api/v1/mocks`, the first
+  part of the one mockup view [ADR-0216](docs/adr/0216-mockups-are-one-view.md) decided.
+  A mockup is never delegated. The new
+  `examples/sharepoint-fallakte/sharepoint-testdaten.bpmn` fills an empty site so the case
+  file example runs on a mockup Worker named `intranet`
+  ([ADR-0484](docs/adr/0484-sharepoint-mock-mode.md)).
+
+- **Technical capabilities can be described with an independently versioned semantic contract.** A design-time JSON descriptor now records resource kind, identity scope, typed input/output schema roots, semantic errors, idempotency, consistency and pagination. Strict parsing rejects malformed contracts, duplicate identities and remote JSON Schema references. Sample account and contact contracts are tests, not proof of provider conformance; no Worker routing or policy enforcement changes ([ADR-0485](docs/adr/0485-technical-capability-semantics.md)).
+
+- **The dashboard shows the disk, and the server keeps a reserve free on it.** An
+  administrator sees each file system the server writes to on the Console's dashboard: how
+  much is used and free, where the reserve begins, what the WAL and the state store hold,
+  and when the reserve will be reached at the current consumption. An alert above the
+  dashboard appears when the room runs low, when the server is frozen, or when the engine
+  has halted. Below the reserve (`--storage-reserve-mb`, default 1024, `0` turns the
+  freeze off) the server refuses new writes with 507 and `Retry-After` before they reach
+  the engine, starts no work of its own — timers wait, retention and the inbound bridge
+  pause, in-process workers lease nothing — and keeps answering reads, sign-ins,
+  checkpoints and the reports of jobs already leased; it resumes by itself once the
+  reserve and a quarter of it are free. The forecast keeps no history: two numbers per
+  file system, smoothed over about six hours. The same readings are in
+  `GET /api/v1/storage`, the `atlas_storage` MCP tool and `/metrics`
+  (`atlas_storage_*`, `atlas_engine_halted`), where `predict_linear` forecasts over as long
+  a window as Prometheus keeps
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **The PowerShell editor completes a cmdlet's parameters.** After a cmdlet, `-` offers
+  its own parameters, then the common ones (`-ErrorAction`, `-Verbose` and the rest), less
+  those it already has: `Get-ChildItem -Re` offers `-Recurse`, and `Where-Object Name -`
+  offers `-Like` and `-EQ`. In an expression — `$a -`, `if ($x -`, `{ $_.Name -` — it still
+  offers the operators. The catalogue's cmdlets carry the parameters a script reaches for,
+  as PowerShell 7.4 names them, not each one's full set; a command outside it, such as a
+  function of the script, is offered the common parameters.
+- **Worker Type operations can declare versioned technical capabilities.** A Worker Type manifest can now attach optional `capabilities` metadata (namespaced ID, semantic contract version and provider profile) to an operation. Invalid and duplicate claims are rejected at admission; existing manifests and runtime routing remain unchanged. These are descriptive claims, not a statement of cross-provider equivalence or an authorization grant ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+- **A mail task forwards a message, reads an attachment, or exports one into an S3 Worker.**
+  Three new mail operations hand a mail's document on. **Forward message** sends the mail
+  with its attachments to new recipients, with a note above it — server-side through
+  Microsoft Graph, framed by the Worker for IMAP and Gmail. **Read attachment** puts one
+  attachment base64-encoded into a variable, bounded by the variable budget and refused
+  with a pointer to the export beyond it. **Export attachment** carries one attachment from
+  the mailbox straight into a named S3 Worker without it ever entering the process, stored
+  under its detected content type, so an S3 `presign-get` can show it to a person in a user
+  task. The envelope's `attachments` list now carries an `id` per entry, which is how the
+  two attachment operations address one. Forwarding and exporting deploy only for editors
+  of the mail Worker, and an export also only for editors of the S3 Worker it names; a
+  supervised mail worker is handed exactly the S3 Workers its deployed models export into.
+  A document is bounded by a new budget, `ATLAS_LIMIT_DOCUMENT` (35 MiB)
+  ([ADR-0478](docs/adr/0478-mail-documents-leave-the-mailbox.md)).
+- **Attachments are inspected before they leave the mailbox, and a mail Worker can name a
+  malware scanner.** Every document the three operations hand on is judged from its
+  content, never its name: programs and scripts under any name, shortcuts and disk images,
+  Office documents with macros, encrypted archives and archives carrying programs, PDFs
+  with JavaScript or a launch action, a document whose name claims a format its content is
+  not, and names with bidirectional control characters are refused. A task can narrow the
+  accepted types further (`allowedTypes="application/pdf, image/*"`). A mail Worker's new
+  **Malware scanner** field names a ClamAV daemon (`clamd://host:3310` or a Unix socket);
+  every document is then scanned as well, a scanner that does not answer stops the task
+  rather than letting the document through, and **Test connection** checks it. A refused
+  document ends the task with `MAIL_ATTACHMENT_REJECTED` where the process catches that
+  code, and with an incident naming the reason otherwise; what inspection found travels in
+  the result as `inspection` and in an exported object's metadata.
+- **The user list shows when each account last signed in.** **Organization → Users** has
+  a **Last login** column beside Status and Presence: "today", "yesterday" or "N days
+  ago", with the day itself, and sorting by it puts the accounts nobody uses first — the
+  ones to disable. Password and single sign-on logins both count; refused attempts do
+  not. Atlas keeps one value per account, the UTC calendar day of its latest login, and
+  overwrites it at the next one: it says whether an account is in use, never when
+  anybody starts work, and the audit log keeps the exact time of every login. The
+  roster and `GET /api/v1/users` carry it as `lastLoginDate`; signing in still never
+  waits for the run loop, and never rewrites the account record. The data directory
+  gains a store, `last-logins`, which a whole-instance snapshot carries with the
+  accounts. Accounts show "no login recorded" until their first login after the
+  upgrade, and an account used only through an API token or an AI client never signs
+  in here ([ADR-0477](docs/adr/0477-last-login-day.md)).
+
+- **A process finds, keeps and labels the people in a Google address book.** A new
+  Google Contacts Worker Type finds a contact by e-mail address, phone number or a custom
+  field such as a customer number, reads, lists, searches, creates, updates and deletes
+  contacts, puts a label such as *Kunden* on one or takes it off, and searches the
+  Workspace directory for a colleague. A contact arrives as one flat object — `email`,
+  `phone`, `organization`, `address`, `fields`, `groups` — and is written with the same
+  keys: null leaves a value as it is, `""` clears it, `email` changes the primary address
+  and keeps the others. `find-contacts` reads the address book itself, so a process asking
+  whether a customer is known is not misled by Google's search cache. The credential — a
+  service account acting as a Workspace user, or a refresh token — lives in the vault and
+  reaches only the supervised worker; a missing contact can be caught as
+  `GOOGLECONTACTS_CONTACT_NOT_FOUND`
+  ([ADR-0476](docs/adr/0476-google-contacts-worker.md)).
+
+- **A worker reports where its workers connect.** `atlas worker` now sends, beside the
+  worker names it holds, the endpoint each one's configuration names, reduced to scheme,
+  host and port before it leaves the worker, so a credential or a path in it never
+  does; any worker may do the same through the new optional `endpoints` field of
+  `POST /api/v1/jobs/activate`. The server reduces what it is told again, keeps only
+  the endpoints of names the same poll reported, and shows them in the Workers view.
+  A release's architecture sketch draws a reported endpoint, marked as reported, for a
+  worker the server holds no configuration for; instances that report different
+  endpoints for one name are recorded as disagreeing rather than one of them being
+  drawn, and a reported endpoint is shown only to operators
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
+- **The architecture sketch shows where a release's connections go.** A release now also
+  records what the installation that recorded it had in place for it: its name and
+  environment, its external address (`--external-url`), the public start links of its
+  processes, and for each worker whether Atlas runs it itself or a worker process leases
+  the work, the worker's endpoint reduced to scheme, host and port, and the worker
+  instances seen serving it since the server started. Service tasks with a job type are
+  part of the sketch too, with the instances that leased them. The SVG draws each
+  connection from the side that opens it and names the system a worker connects to; the
+  ArchiMate document adds the worker processes, the target systems and the connections
+  between them. An endpoint is shown only to a reader who may see that worker's
+  configuration and the instances only to an operator; everybody else is told they are
+  withheld ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
+- **Approvals in the Console.** **Approvals** (account menu, and a tile on the dashboard
+  when some wait) lists the open action approvals a person may answer and the ones asked on
+  their behalf, each with the exact operation and resource, who it would run for, the
+  policy and version, the action's fingerprint and its expiry. Approving and rejecting ask
+  first, naming the action; an answer can be withdrawn while the approval is open. Behind
+  it, `GET /api/v1/me/action-approvals` reads open requests through an index by expiry, so
+  a worklist costs what is open now rather than every approval ever recorded. The answer
+  still does not run the action: the policy reads it when the action is next tried.
+
+- **A release carries its architecture sketch.** Publishing an application, and
+  importing a promoted release, now takes a snapshot of how the release meets its
+  environment and saves it with the release record: the messages its processes receive
+  (and whether they start an instance), the workers they name with their Worker Type, the
+  local decisions they evaluate and the calls they make into processes of other
+  applications, each traced to the elements that state it. **Applications → Deployments
+  → Release history → Architecture** shows it as a sketch and offers it as an SVG and as
+  an ArchiMate Open Exchange document for Archi and other tools; the API serves it at
+  `GET /api/v1/applications/{id}/releases/{version}/architecture` with `.svg` and `.xml`
+  variants. The same release always renders to the same bytes, and the image says when
+  the snapshot was taken and what it does not show. A release recorded before this
+  version has no snapshot and says so
+  ([ADR-0471](docs/adr/0471-release-architecture-sketch.md)).
+
+- **External accounts and delegated connections.** A signed-in person links a Microsoft
+  account under **Connected accounts** (account menu) with the authorization code flow and
+  PKCE; Atlas never sees a password, and the tenant's multi-factor and Conditional Access
+  rules apply. The account is recognised by tenant and object id, never by e-mail. A new
+  connection allows no Worker until its owner chooses; its owner or an administrator
+  revokes it, which deletes the credential. The refresh token lives in the vault under a
+  reserved name no secret route, API token or Worker reference can reach. Configured with
+  `--link-microsoft-tenant`, `--link-microsoft-client-id`, `--link-microsoft-client-secret`
+  and `--link-microsoft-scopes`.
+- **Authorization policies, decided before a governed action and recorded on the log.**
+  `POST /api/v1/jobs/{key}/authorize` decides for the lease a Worker holds, from versioned,
+  immutable policies of JSON matchers, FEEL conditions and DMN decisions: default deny, a
+  Deny from any policy wins, and a policy that cannot answer refuses. Each decision is an
+  engine fact naming who started the instance, for whom and as whom the action runs, the
+  policy and version, and the action's digest; it replays without being evaluated again.
+  A refusal parks the job on an incident. A governed Worker's completion without a Permit
+  is refused.
+- **Approval of the exact action.** A policy may require that people of a group approve
+  an action: the decision throws `ATLAS_APPROVAL_REQUIRED`, an approval request bound to
+  the action's digest is recorded, and a member of the group answers it at
+  `POST /api/v1/instances/{key}/action-approvals/{approval}/decide`, in their own
+  session. Nobody approves an action that would run for themselves; an approval counts
+  only for the same digest and until it expires. A variable such as `approved = true`
+  changes nothing.
+- **Administration → Security.** Which Workers are governed and how — shadow is labelled
+  as not enforcement — setting a Worker's identity policy, editing and publishing
+  policies, a simulator whose answer is labelled a simulation, and an instance's recorded
+  decisions and approvals. The MCP tool `atlas_instance_authorizations` reads the same
+  evidence.
+- **A task form can search a directory instead of listing it.** A select whose options
+  source is a remote data source is a directory field: in the Tasks app the person types a
+  name or an e-mail address, sees at most one page of matches (25 by default) from Microsoft Entra
+  ID, narrowed by another field of the form such as the department, and the task completes
+  with the chosen entry's object id — never its label, and never a listing in a process
+  variable. `POST /api/v1/tasks/{key}/form-data/{field}/query` answers only somebody who may
+  work on the task; which Worker, resource and properties are searched is read from the
+  stored form, the request may name none of them, and the search is rate-limited per
+  person. Nothing about a search is written to the log
+  ([ADR-0473](docs/adr/0473-form-remote-data-sources.md)).
+- **The Worker protocol carries a query beside the job.** A Worker Instance long-polls
+  `POST /api/v1/worker-queries/activate` and answers `POST /api/v1/worker-queries/{id}/answer`,
+  under the same `worker` scope as the job routes; a query is held only in the server's
+  memory while somebody waits on it, routed to an Instance reporting the Worker it names,
+  and fenced by a lease token. The Entra Worker answers user lookups with `startswith`
+  over allowlisted properties and equality filters, OData literals escaped, one page and
+  Graph's own continuation, sealed into an opaque cursor before it reaches the browser.
+- **Forms may search, per Worker.** An Entra Worker's dialog in the Console has a
+  **Forms may search** switch (`formLookups`), off until its editors turn it on: a form
+  can name any Worker, but only one opened this way answers its searches.
+- **A select's options can come from a remote data source.** In the form editor, a
+  select's **Options source ▸ Type** offers **Remote data source** beside Static, Input data
+  and Expression, and the same group chooses the source, the Worker, the properties
+  searched, after how many characters and how many results per page; **Remote filters**
+  binds the search to another field or a fixed value, **Option display** says what each
+  result shows, and **Validation** how the choice is checked when the task is completed.
+  The palette's **Directory picker** adds such a select, already searching through a
+  Worker open to forms. The Validate tab and the Design preview search made-up people and
+  say so; no directory is asked while a form is designed. A directory field saved as a
+  text field keeps working everywhere, and the editor offers **Convert to select** for it.
+- **Example: pick a person and read their manager.** `examples/entra-benutzerauswahl` is the
+  process `Process_mvjoqvisfajk` without its `list-users` step: a department, a directory
+  search, the object id into `user`, and `get-user-manager` with `userId="= user"`.
+- **The event log shows what was sent and where it arrived.** *Operations → Diagnostics →
+  Event log* lists every signal thrown and every message sent, newest first: the sender, the
+  moment, how many waiting elements it reached and how many instances it started, and under
+  it each reception, each start and, for a message with a time to live, its keeping, handing
+  over and expiry. A send that reached nobody is marked. Filters narrow to a channel, a name or
+  an instance, Live follows the log, and each name on the *Events* page links to it. Nothing an
+  instance held is stored: names, keys and moments only. A row is read as its instance is: an
+  operator or an administrator reads every row, a project member the rows of their projects'
+  definitions, and a row that names no definition only the former. The route is
+  `GET /api/v1/event-log` (`before`, `after`, `limit`, `channel`, `name`, `instance`), the MCP
+  tool `atlas_event_log`, so the tool count is 152, and rows are kept for `--event-log-ttl`
+  (`ATLAS_EVENT_LOG_TTL`, 720h). Underneath, a send leaves a record of its own (`VTDispatch`), a
+  signal's reception names its sender, a broadcast records each instance it starts, and a
+  correlation that only cleared a subscription whose element no longer waited is marked stale
+  and is no reception. The log starts at the upgrade. A version before this one skips the new
+  records on replay, so going back loses the log and nothing else
+  ([ADR-0472](docs/adr/0472-event-log.md)).
+- **The Events page shows the signals and messages of this installation.** Beside the
+  catalogue of what atlas emits, the Console's *Events* page has a second section that
+  lists every signal and message name the deployed models throw, send and receive: who
+  throws or sends it and who receives it, with process, version, project, element and role,
+  and for a message also the inbound watches and product actions that send it. Each name
+  carries what is wrong with it, read from the newest version of each process:
+  `signal.unreceived` (thrown, and no newest, active definition receives it),
+  `signal.unthrown` (received, and nothing deployed throws it), `signal.crosses-projects`
+  and `message.crosses-projects` (every variable of the sending instance arrives in another
+  project), `signal.reserved-name` and `message.reserved-name` (a model outside atlas's system
+  processes uses an `atlas.*` name), and `message.unreceived`. The section is derived from the
+  definitions on every request and stores nothing; it does not see running instances, and it
+  never says that nothing sends a message, because `POST /api/v1/messages` may send any
+  name. The routes are `GET /api/v1/signals` and `GET /api/v1/message-names`, for `modeler`
+  and above; the MCP tools are `atlas_signals` and `atlas_message_names`, so the tool count
+  is 151. In the Modeler, a receiving signal element is offered the names deployed models
+  throw, a receiving message element the names they send, and a throwing or sending element
+  says how many deployed processes receive its name, or that none does, with a link to the
+  page ([ADR-0447](docs/adr/0447-the-signals-deployed-models-throw-and-receive.md),
+  [ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **A SharePoint Worker can name its certificate by thumbprint.** On a Windows server the
+  vault bundle may carry `certificateThumbprint` in place of `clientSecret` or
+  `certificate`: a certificate in the worker host's `CurrentUser\My` or
+  `LocalMachine\My`, whose key signs there and is never read, so a non-exportable key
+  serves as it does for the Entra ID Worker and for PowerShell. A bundle gives one of the
+  three, and a thumbprint in a `refreshToken` bundle is refused as a certificate already
+  is. The worker tries the certificate when it starts and refuses to start, naming the
+  instance and the account, when the store does not hold it or the account may not use
+  its key. The engine does not open the store while it builds the client on its run loop,
+  but at the first token request. On a server that is not Windows a thumbprint bundle is
+  shown as the Worker's problem and is not handed to the supervised worker. The Secrets
+  panel checks the new field ([ADR-0141](docs/adr/0141-sharepoint-connector.md),
+  amended).
+- **An example for the SharePoint operations: the case file.** `examples/sharepoint-fallakte`
+  turns a request entered in a SharePoint list into a case file — it reads the request
+  (`get-item`), creates its folder (`create-folder`), fills in a letter template from a
+  library (`download-file` and FEEL `replace`), files the letter with properties unless
+  `get-file` finds it there already (`upload-file`), updates the request with typed
+  columns (`update-item`) and writes a log entry (`create-item`). A second process finds
+  settled requests page by page with an OData filter (`list-items`) and deletes each
+  one's folder and entry in a parallel multi-instance (`delete-file`, `delete-item`).
+  Both run end to end in `connector/sharepoint/example_test.go` against a site kept in
+  memory, with the real compiler, engine and Graph client. The handbook's examples
+  chapter has its card.
+- **A PowerShell script installs atlas as a Windows service, upgrades it and removes it.**
+  `deploy/windows/install-atlas-service.ps1` does in one run what the install guide's
+  Windows Server section does by hand: it wraps `atlas.exe` in WinSW, runs the service as
+  the virtual account `NT SERVICE\atlas`, sets the access lists, tries the binary in the
+  foreground with a throw-away data directory, prepares the bootstrap administrator and
+  the vault key, and takes the bootstrap password out of the configuration once the
+  service is ready. Run again where the service exists, it stops it, backs the data
+  directory up, replaces the binary and starts it again; `-Uninstall` removes it. It runs
+  under Windows PowerShell 5.1 and PowerShell 7, and `Get-Help
+  .\install-atlas-service.ps1 -Full` lists its parameters.
+- **An experimental Paperless-ngx Worker reads document metadata.** `atlas worker
+  --connector paperless` serves the job type `paperless.v1` for a plain service task: it
+  searches documents (at most 25 per page), reads one document's metadata, returns the
+  address of a document in Paperless's own interface — which grants nobody access — lists
+  correspondents, and adds one by name without rewriting one that exists. The task names
+  its Worker and operation in a variable `paperless`, which holds metadata only, and the
+  answer reaches the process only under the `resultVariable` it names; no document
+  content, OCR text or file leaves Paperless. A Worker Instance is configured from its
+  environment (`ATLAS_PAPERLESS_CONNECTORS`, `ATLAS_PAPERLESS_<NAME>_URL` and `…_TOKEN`),
+  and plain HTTP needs `…_ALLOW_HTTP=true`. It has no Modeler entry, no Worker record in
+  the Console and no reserved job type yet, and it has been tested against a fake
+  Paperless server only (`docs/planning/paperless-worker-v1.md`,
+  [ADR-0479](docs/adr/0479-paperless-ngx-worker.md)).
+
+### Changed
+
+- **The engine halts after a write it could not make durable.** A failed WAL sync, or a
+  failure to commit state after the log has the batch, stops the engine: every later write
+  is answered 503 until the server is restarted, reads go on, and the log says
+  `event=engine.halted` once. It had carried on, and ran the failed batch's commands again
+  with the next request — after their callers had been told they failed. The restart
+  recovers exactly what was acknowledged
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **The server stops taking writes below a 1 GiB storage reserve by default.** A disk
+  with less than that available under the data directory now answers writes with 507
+  where it used to take them until it failed. Set `--storage-reserve-mb` to size the
+  reserve, or `0` to keep the old behaviour with the dashboard's warnings.
+
+- **The vendored form-js bundles are built from a lockfile, and checked.**
+  `form-viewer.js` and `form-playground.js` are now built from
+  `api/web/vendor/form-js/src/` — the entries, Atlas's form-js modules and a
+  `package-lock.json` — by the recipe in `ATLAS-VENDORED.txt`, and a test holds both to
+  the checksums recorded there. Two builds give the same bytes. The bundles they replace
+  were built without a lockfile and cannot be rebuilt byte for byte.
+- **A mail watch hands the mail to the process as one object, `mail`.** The instance
+  receives `mail.from`, `mail.subject`, `mail.to`, `mail.auth.dmarc`, `mail.messageId`
+  and the other envelope fields under one variable, instead of each as a variable of its
+  own, which overwrote a process's own `from`, `to` or `subject` when a reply arrived at a
+  catch event. **A model that reads a mail field directly must read it under `mail`
+  now** — `from` becomes `mail.from`, and a mail task's `messageId` becomes
+  `mail.messageId`. A watch's correlation key is unchanged: it sees the flat names as
+  before, and `mail` beside them ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
+- **A governed SharePoint Worker asks before it acts.** When its Worker has an identity
+  policy, the SharePoint Worker asks Atlas before each action, and in delegated mode
+  calls Graph only with the token Atlas released for that action.
+- **An instance records who started it.** The instance's activation event carries the
+  signed-in account that started it; a `delegated-per-job` Worker acts as that person.
+- **New BPMN elements get readable ids.** A task, event, gateway, flow, pool, lane, data
+  object, message, signal, error or escalation drawn in the Modeler, and a new diagram's
+  process, is named `<type>_<yyyymmdd>_<researcher>` — `activity_20261023_heisenberg` —
+  instead of `Activity_0jmndkk` or `Process_<timestamp>`. No id is handed out twice in a
+  diagram: every candidate is checked against the ids the diagram holds, and once every
+  researcher is taken for a type on a day a counter follows the name (`heisenberg2`). A
+  process id is also checked against the drafts and deployed processes of the
+  installation and the server's availability check, and a draft save that still collides
+  is refused as before. Ids already in a diagram are not changed
+  ([ADR-0474](docs/adr/0474-readable-element-ids.md)).
+- **Naming an element names its id.** Typing "Microsoft Teams bestellen" as an element's
+  name, in the properties panel or on the canvas, renames its id to
+  `activity_microsoft_teams_bestellen`; a second element of the same type with the same
+  name gets `_01`, a third `_02`. The id follows later renames, and one undo takes back
+  name and id together. It moves only while it is automatic — the readable placeholder,
+  bpmn-js's random id, or the one the previous name produced — and never when a deployed
+  version of the process carries it, so instances, migration and bindings keep their
+  handle. An id typed by the author and a process's own id are not touched
+  ([ADR-0474](docs/adr/0474-readable-element-ids.md), amended 2026-10-23).
+- **Completing a task checks a directory field's value first.** A value that is not an
+  object id, or an object where an id was expected, is refused with 400; by default the
+  entry is looked up once more under the field's filters, and one the directory no longer
+  holds is refused with 422, while a directory that cannot be asked is a 503 that completes
+  nothing. A form without a directory field completes exactly as before.
+- **A public link refuses a form with a directory field.** Nobody is signed in there to
+  search, and checking a typed id would tell an anonymous visitor who is in the directory.
+- **A form is checked for its directory fields when it is saved.** An `atlasDataSource`
+  naming a source, a property or a version this server cannot honour is refused with the
+  reason.
+- **Message sources name what a model sends, and every deployed version.**
+  `GET /api/v1/message-sources` has a fourth kind of row, `process-throw`: a deployed
+  process that sends the name with a message throw or end event or a send task. A message
+  event subprocess is listed among the processes that wait, and so is it in the
+  administrator's view of who listens to atlas's events, where a message receiver's role is
+  now `start`, `catch`, `boundary` or `event-subprocess`. A process row carries
+  `processName`, `version`, `newest`, `definitionKey`, `projectId`, `system`, `role` and, for
+  a boundary or an event subprocess, `interrupting`, and every deployed version is listed
+  rather than the newest alone. A client that read the process rows as the newest versions
+  filters on `newest`; one that assumed three kinds skips the fourth. A name a deployed
+  model sends no longer reads as unfed in the Modeler
+  ([ADR-0446](docs/adr/0446-the-messages-deployed-models-send-and-receive.md)).
+- **The Events page opens a row's detail in a dialog, and its sections fold away.** The
+  detail of an event or of a name used to be drawn below its list, where under the second
+  list it opened out of sight. It now opens over the page and closes with Escape, the close
+  button or a click beside it, back on the row it was opened from. Each of the two sections
+  folds away on its own, the browser remembers which, and a folded section still says how
+  many entries it holds and what it warns about. A name no longer breaks over two lines at
+  its hyphens.
+- **The Events page speaks the Console's language.** Its headings, column titles, hints,
+  filters, summaries and dialogs come from the Console's message catalogue, in German
+  unless English was chosen under Display, and so do the words for the ids the server sends:
+  an event's kind and stability, an element's role, a finding's rule. An event's meaning and
+  each payload field's are shown in the same language, from the catalogue that writes them
+  in both. The sentences the server composes in English (who produces an event, who may
+  receive it, what a finding names) stay English and are marked as such.
+
+### Fixed
+
+- **A metrics scrape no longer re-reads every checkpoint.** The checkpoint gauges on
+  `/metrics` verified every published checkpoint on every scrape, which re-hashes all of
+  its state files: on a store of 23 GiB with three checkpoints kept, up to 70 GiB of reading
+  per scrape, long past any scrape timeout. A verdict is now remembered per checkpoint,
+  keyed by its files' names, sizes and modification times, and renewed at least daily; a
+  checkpoint the server publishes counts as verified, because publishing hashed it. A
+  replaced or rewritten file is still reported at the next scrape, rot that changes no
+  metadata within a day. `GET /api/v1/checkpoints` still verifies afresh
+  ([ADR-0488](docs/adr/0488-checkpoint-verdicts-are-remembered.md)).
+- **The storage card appears again on a large store.** `GET /api/v1/checkpoints?verify=false`
+  verified every checkpoint before answering from the manifests, so each dashboard load
+  re-read the state files of every checkpoint — tens of GiB on a store of 23 GiB — and the
+  storage card, which waited for that answer, did not appear. The listing now reads the
+  manifests only, and the card shows the disk at once and adds *Giving space back* when the
+  checkpoint status arrives
+  ([ADR-0486](docs/adr/0486-operator-history-purge-and-compaction.md)).
+- **A server that ran its disk full restarts again.** A WAL write cut short by a full
+  disk left its torn bytes in the segment, and the next batch was written behind them;
+  the restart then found damage with data after it and refused to start until the log was
+  repaired by hand. A failed write is now cut off again and its batch dropped, a failed
+  fsync stops the log, and nothing is written behind a torn batch. A batch that failed is
+  also no longer written a second time with the next one
+  ([ADR-0481](docs/adr/0481-storage-guard.md)).
+- **A PowerShell command name completes past its dash.** The script editor read every
+  `-` as the start of an operator, so `Get-` offered `-and`, `-eq` and the rest, and
+  choosing `Get-ChildItem` after `Get-Ch` wrote `GetGet-ChildItem`. A dash glued to a
+  word now continues the command name; after a space, a bracket or a value such as
+  `$a-` it still offers the operators.
+- **A pill keeps to one line.** A status pill in a column narrower than its label folded
+  inside itself, and its round ends turned the two lines into a tall blob: the expiry and
+  vault pills on *API tokens*, the findings on *Events* and the marks on the *Event log*.
+  A pill now stays on one line, as a chip already did, and moves under the cell's text
+  when the column is narrow; the *Event log*'s marks also stand a size smaller.
+- **Authorization evidence has its own key space.** It had been given the event log's
+  column family byte, so a range read or prefix delete of one could reach the other's
+  records. It moved; evidence recorded by a development build before the move is no longer
+  read. A test now holds every column family to a value of its own.
+- **A message or signal that reaches only a left-behind subscription is no delivery.** The
+  losing branch of an event-based gateway and a boundary whose host finished leave their
+  subscription behind until the next matching send clears it. That send counted as
+  delivered: a message with `timeToLiveMs` that only such a subscription matched was not
+  kept and was lost, and the send wrote its variables into the instance, which may have
+  moved on — a running instance read values of a message or signal it never received. Now
+  such a correlation only clears the subscription: no variables, no completion, no flow in
+  the collaboration replay, and a message with a time to live is kept for the subscription
+  that opens later. What earlier versions wrote stays as it was
+  ([ADR-0370](docs/adr/0370-durable-message-buffer.md), amended 2026-10-23).
+- **An inbound watch says why it is not reading.** A watch whose Worker had no mailbox,
+  no client or was switched off was skipped at every poll, and a read or first read its
+  source refused was retried every tick, all without a word: from outside it looked
+  exactly like a source with nothing new. Each such watch now carries `lastError` and
+  `failingSince` (unix seconds) in `GET /api/v1/connectors/{id}/inbound-subscriptions`
+  and, for a viewer of its Worker, in its `inbound-watch` row of the message sources; the
+  Console shows it as *not reading*, and the log has `inbound_watch.failing` once when it
+  begins and `inbound_watch.recovered` when a read succeeds again. The state is kept in
+  memory, not in the watch, and is learned again at the first read after a restart
+  ([ADR-0438](docs/adr/0438-mailbox-worker.md)).
+- **A mail watch on a Worker with no mailbox is refused.** An SMTP Worker without an IMAP
+  endpoint, a Preview Worker or a Graph Worker without a sender cannot read a mailbox, and
+  a watch created on one was stored and then never read anything. Creating one is now a
+  400 that says what is missing. Watches stored before are kept and report the reason as
+  their `lastError`.
+- **A SharePoint task that names `create-item` keeps its list and columns in the
+  Modeler.** The panel showed the list and the column table only for a task with no
+  operation, so a model spelling `operation="create-item"` out lost both on its next
+  save, and the compiler then refused the task.
+
+
+## [0.19.0] — 2026-10-22
+
+**A `superior` approval reaches the orderer's line manager, and a SharePoint task does
+more than create a list item.** An account names its line manager — set by an
+administrator under **Console → Administration → Organization** or filled by the Entra
+mirror when its model selects `manager` — and a `superior` approval starts with it; its
+escalation moves one level up the line from whoever holds the approval now
+([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)). The shipped approval
+model no longer searches a directory for a principal id no directory holds, which is why
+such an approval reached nobody before (#1311). The Entra Worker reads a person's manager
+(`get-user-manager`), and the Microsoft 365 example uses it to ask the manager of the
+person a position is for ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended
+2026-10-22). A SharePoint task reads, changes, finds and deletes list items, and uploads,
+downloads, lists, creates and deletes files and folders in a document library; it
+addresses a site by its URL, keeps the type of a FEEL value in a column, names Graph's
+error and the missing permission when a call fails, and its Worker can sign in with a
+certificate ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended 2026-10-22). The
+replay's Variables tab names the person, group, process or product an id stands for.
+
+**Read this before upgrading from 0.18.0.** These act on an existing installation:
+
+- A `superior` approval needs the orderer's line manager on the orderer's account. Where
+  there is none, where the manager's account is disabled or gone, or where the directory
+  names somebody who has no account yet, the approval refuses to start and the
+  fulfilment process shows the refusal as an incident; resolving it after the manager is
+  set starts the approval. Fill the relation before the first such order: with an Entra
+  mirror, add `manager` to the mirror model's `select`, as
+  `examples/entra-verzeichnis-abgleich.bpmn` now does, and deploy it again; without one,
+  an administrator sets *Line manager* in the Console or `managerId` with
+  `PATCH /api/v1/users/{id}`. While the mirror reports a manager, the field belongs to
+  the directory and a hand edit answers 409. The approval no longer needs an `ad` Worker
+  called `verzeichnis`. Approvals already running keep the 0.18.0 model and its
+  directory steps.
+- Upgrade a SharePoint Worker that runs apart from the server together with the server.
+  A 0.19.0 server sends a column value with the type of its FEEL value; a 0.18.0 Worker
+  reads every value as text, so a create-item task whose value computes a number, a
+  boolean, a list or a context fails with «cannot read the resolved detail», retries and
+  ends as an incident. The new operations ride a job type of their own,
+  `io.atlas.sharepoint`, which a 0.18.0 Worker does not lease: such a task waits for a
+  0.19.0 Worker rather than creating an item. A create-item task that computed a number
+  into a *text* column now relies on Graph converting it — check such a task against
+  your site.
+- A model that uses `get-user-manager`, such as the Microsoft 365 example's approval
+  model `proc_m365_genehmigung_vorgesetzter`, needs a 0.19.0 Entra Worker; a 0.18.0 one
+  fails the task with «unknown operation». The operation needs `User.Read.All`, which
+  the user reads already need.
+- Not yet confirmed against a live tenant: Graph's `manager@delta` shape on the mirror's
+  delta read, and for SharePoint a number written into a text column, the column update
+  of a document (`PATCH …/listItem/fields`), the expanded read of a path-addressed file
+  and the ceiling of 999 items per page. The tests run against a fake Graph endpoint.
+- 0.19.0 reads the data directory 0.18.0 wrote: nothing under the log, the state or the
+  record format changed. The first start deploys one new version of the system process
+  `atlas-genehmigung-vorgesetzter`. An account's record may carry `managerId` and
+  `managerDirectoryId`. No route was added: `PATCH /api/v1/users/{id}` takes `managerId`
+  (`""` clears it), and `POST /api/v1/orders/{id}/lines/{item}/escalate` takes
+  `lineManager`, which is refused together with `superior`. `vorgesetzter` in
+  `atlas.approval.requested` is now the line manager as the orderer's account records
+  it. The Entra task takes the operation `get-user-manager`; the SharePoint task takes
+  `operation` and the attributes its operations use (`itemId`, `path`, `content`,
+  `encoding`, `filter`, `select`, `pageToken`, `maxResults`), and a SharePoint vault
+  bundle may carry `certificate` in place of `clientSecret`. The MCP tools (149), the
+  `/metrics` series, the Helm chart's values and the budgets are unchanged.
+- Going back to 0.18.0 starts on the same directory only while no deployed process uses
+  `get-user-manager` or a SharePoint task that names no list: 0.18.0 cannot compile
+  either and refuses to start. It is worse for a SharePoint task that names a list:
+  0.18.0 knows only create-item and compiles such a task as one whatever its operation,
+  so a `delete-item` or `update-item` would create an item. Remove every deployed
+  version of such a process before going back, once nothing runs under it. 0.18.0
+  ignores an account's line manager, and an account it saves again loses it; its
+  `superior` approval returns to the directory lookup that reaches nobody, and an
+  approval started under 0.19.0 that escalates under 0.18.0 stalls, because 0.18.0 does
+  not read `lineManager`.
+
+### Added
+
+- **SharePoint reads, changes, finds and deletes list items, and works with document
+  libraries.** Beside creating a list item, a SharePoint task can now read one by its id
+  (`get-item`), change some of its columns (`update-item`), delete it (`delete-item`) and
+  find items by an OData filter one page at a time (`list-items`, with a
+  `nextPageToken` to carry on), and in a document library upload a file — optionally
+  with properties — (`upload-file`), download a small one into a variable
+  (`download-file`), ask whether one is there (`get-file`), list a folder
+  (`list-folder`), create a case folder with every missing one above it
+  (`create-folder`) and delete a file or folder (`delete-file`). The site may be named
+  as the browser shows it (`https://contoso.sharepoint.com/sites/hr`) or as
+  `host:/sites/name`, not only by Graph's site id; a document's content is bounded by
+  the process variable's budget and Graph's pre-authenticated download link never
+  reaches a variable. A task naming no operation is the create-item it always was. The
+  new operations ride a job type of their own, `io.atlas.sharepoint`, so a worker built
+  before them leaves those jobs for one that knows them instead of creating an item for
+  each ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **A SharePoint Worker can sign in with a certificate.** The vault bundle may carry
+  `certificate` — the certificate and its unencrypted private key as one PEM text — in
+  place of `clientSecret`; the token comes from the same client-credentials grant with
+  a signed client assertion, so the private key never leaves the worker. A bundle
+  naming no `method` is a client-credentials bundle.
+- **The Entra Worker reads a person's manager.** A new operation, `get-user-manager`,
+  writes the manager's directory object for a `userId` into a result variable; an optional
+  `select` names which of the manager's properties come back. A person without a manager
+  is `null`, so a process can route an approval to a fallback approver; an id that belongs
+  to nobody still fails the task, because the worker reads the manager through the user
+  (`$expand=manager`) rather than from `/users/{id}/manager`, which answers 404 to both.
+  A process that catches the BPMN error `ENTRA_USER_NOT_FOUND` — an error boundary on the
+  task — gets the unknown id as that error instead, at once and without retries, and can
+  route it as well; uncaught, it stays a failure and then an incident
+  ([ADR-0172](docs/adr/0172-entra-id-connector.md), amended 2026-10-22).
+
+- **An account can name its line manager.** `managerId` on an account is the principal id
+  of the person's line manager. An administrator sets it under Console → Administration →
+  Organization (field *Line manager*) or with `PATCH /api/v1/users/{id}`. The Entra mirror
+  fills it when its model selects `manager`: it reads `manager@delta`, or a plain `manager`
+  object, keeps the manager's object id in `managerDirectoryId`, and resolves it to the
+  manager's account on the run that reads that account. While the directory reports it,
+  the field belongs to the directory, the Console shows it read-only and an edit is refused
+  with a 409. Only ids are stored, no names
+  ([ADR-0470](docs/adr/0470-the-line-manager-is-on-the-account.md)).
+
+- **The replay's Variables tab says what an id stands for.** A string value that is a
+  principal id (`usr_…`, `grp_…`), a deployed process id or a catalogue product or
+  position id gets a chip beside it with the person's, group's, process's or product's
+  name. Hovering it or tabbing to it opens a card that names the kind and the id, and
+  says that the name is today's. A process links to the live view of its newest version
+  for an operator, a product to its home catalogue for a product manager. The value
+  itself is unchanged and is still what the row copies. Only a whole value counts.
+  Names are read from the directories the server already serves to the caller
+  (`/api/v1/principals`, `/api/v1/processes`, `/api/v1/catalog-products`), once per
+  view, and are stored nowhere: an instance keeps people as ids so that an erasure has
+  nothing to reach ([ADR-0314](docs/adr/0314-portal-personal-data.md)), and the name is
+  resolved when the screen is drawn, as that record says it should be. A user id with no
+  enabled account behind it is marked *no account*, and a group id nobody lists any more
+  *no group*. A directory that cannot be read leaves its ids as they were.
+
+### Changed
+
+- **A SharePoint column value keeps the type of its FEEL value.** A value that
+  evaluates to a number is sent to Graph as a number, a boolean as Yes/No, a list as a
+  multi-choice and null as null, which clears the column; before, every value was sent
+  as its text, which left multi-choice, lookup and Yes/No columns unreachable. A literal
+  is still its text. A create-item task that computed a number into a *text* column now
+  relies on Graph converting it — check such a task against your site
+  ([ADR-0141](docs/adr/0141-sharepoint-connector.md), amended).
+- **SharePoint failures say what to do.** A failed Graph call names the operation and
+  Graph's own error code and message; a 401 or 403 names the permission to grant, and a
+  throttled call quotes the wait Graph asked for. Every answer is read under the process
+  variable's budget — the read used to be unbounded.
+
+- **The Microsoft 365 example asks the manager of the person a position is for.** Licence,
+  team, shared mailbox and mailbox access in `examples/m365-dienste` were approved with the
+  built-in kind `superior`, which asks the line manager of the person who *ordered*, as
+  that person's account names it. They now name the example's own approval model,
+  `proc_m365_genehmigung_vorgesetzter`: it receives the order form's answers (ADR-0441),
+  reads the manager of `upn`, `besitzer` or `person` from Entra ID with the Entra Worker's
+  `get-user-manager` through `ucc_entra`, assigns the task to the manager's Atlas account,
+  and falls back to `approval.ref` or the group `M365-Administration` when there is no
+  manager, no such person (`ENTRA_USER_NOT_FOUND`, caught by an error boundary) or no
+  account. It mails the approver, reminds after three days and escalates to the next
+  manager after seven. The answers are declared personal data in that model, so the Entra
+  task's `userId`, evaluated when its job is handed to the worker, and the mail worker are
+  the only places they are read in the clear. The mailbox-access order form's justification
+  is now keyed `anlass` rather than `begruendung`, the variable the inbox writes a
+  refusal's reason to. The README lists what the operator sets up; beyond the `ucc_entra`
+  Worker the other products already use, the lookup needs nothing new.
+  `TestEveryFormReferenceResolves` accepts the platform's approval form `genehmigung`,
+  which an installation's own approval model names to get the inbox's Genehmigen and
+  Ablehnen, for as long as the system bundle declares it.
+
+### Fixed
+
+- **A `superior` approval reaches the orderer's line manager.** The system process
+  `atlas-genehmigung-vorgesetzter` searched the directory with
+  `(userPrincipalName=<principal id>)`, which no directory holds, and assigned its task to
+  the `manager` distinguished name it read back, which no task can be held by (#1311). The
+  server now starts the approval with `approvalRef` set to the orderer's line manager, and
+  refuses to start it with the reason when there is none, when the manager's account is
+  disabled or gone, or when the directory names somebody who has no account yet; the
+  fulfilment process shows that refusal as an incident, and resolving it after the manager
+  is set starts the approval. The escalation calls `POST …/escalate` with
+  `{"lineManager": true}` and moves one level up from whoever holds the approval now; a body
+  naming `superior` means what it did. The model reads no directory and needs no `ad`
+  Worker called `verzeichnis` any more, and it still writes `vorgesetzter` for listeners of
+  `atlas.approval.requested`. Approvals already running keep the old model.
+  `examples/entra-verzeichnis-abgleich.bpmn` now selects `manager`.
+
+## [0.18.0] — 2026-10-22
+
+**An application can leave an installation with everything it owns, and the Console
+moves it between installations with its catalogues.** Deleting an application offers to
+delete what it owns on the server as well — its deployed versions after cancelling their
+running instances, its decision deployments, drafts, forms, decision references and models
+— after a preview of what goes and of what outside it stops working; a deployed process
+can be deleted with `force=true` whatever still holds it
+([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)). An administrator
+can delete a catalogue or a product for good, with the orders placed from it, the
+instances still working them and the rights they granted — on by default, meant for
+development and test installations, and switched off with `--catalogue-purge=false`
+([ADR-0469](docs/adr/0469-catalogue-purge.md)). The Console's
+**Export application…** and **Import application…** write and read the package
+`atlas export` and `atlas import` use, catalogues included, and ask only for the names the
+target's directory does not answer; what a person chose for such a name is remembered on
+the target, so the next import takes it without asking, and `atlas import` reads a
+package's `antworten.json` ([ADR-0467](docs/adr/0467-application-package-export.md),
+amendment 2026-10-21). API tokens are minted, listed and revoked in **Console →
+Administration → API tokens**, can be sealed straight into the vault, and are flagged
+30 days before they expire, in the Console and on `/metrics` for an alert rule
+([ADR-0194](docs/adr/0194-api-tokens.md), amendments 2026-10-21 and 2026-10-22). The
+Console's and Operations' seldom-opened pages moved behind **Administration ▾** and
+**Diagnostics ▾**, and neither bar wraps any more. Among the
+fixes, a fixed approver a package names is assigned by username, so the approval reaches
+somebody, and a refused process delete says why.
+
+**Read this before upgrading from 0.17.0.** These act on an existing installation:
+
+- A production installation must start 0.18.0 with `--catalogue-purge=false`
+  (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`). The catalogue
+  purge is on by default: without the switch, an administrator can delete a catalogue or a
+  product for good, with its releases, the orders placed from it, the process instances
+  still working them and the rights they granted. Cancelled instances do not undo what
+  they did in a target system, and the rights leave the inventory without being
+  deprovisioned. Every start with the purge on logs a WARN,
+  `event=server.catalogue_purge_enabled`, which an alert can match; a value the switch does
+  not read stops the start. With it off, the delete answers 403 and the preview still
+  answers. Unlike `application.purged`, a catalogue purge writes no line of its own to the
+  security audit trail.
+- A fixed approver that a package filled in under 0.17.0 is a user id, and the approval
+  it asks for reaches nobody: the order waits. The approver report
+  (`GET /api/v1/catalog-products/approver-report`, `atlas_catalog_approver_report`) names
+  every product whose fixed approver no account answers to; set the approver to the
+  username there. A package exported with 0.17.0 still asks for that approver as a person
+  (`"kind": "user"` in `fragen.json`) and is answered with a user id under 0.18.0 too:
+  export it again, or change the question's kind to `account`. A package exported with
+  0.18.0 asks for an account, and an answers file or `--set` that gives a user id for it
+  is reported as unknown — `atlas import` stops before it writes anything; answer with
+  the username or the display name.
+- `atlas import` now answers a package's questions from its `antworten.json` without
+  `--answers`: a name the target's directory or its table of names answers is taken
+  without asking, where 0.17.0 refused with «not all answered» and imported nothing.
+  Answers passed with `--answers` or `--set` still win. A pipeline that relied on that
+  refusal to review the answers should run `--dry-run` first.
+- Upgrade the server before the CLI. `atlas import` of 0.18.0 records the names a person
+  chose on the server once the catalogues are in (`POST /api/v1/catalogs/import/mappings`),
+  which 0.17.0 does not know: against a 0.17.0 server the application, its constants, its
+  release and the catalogues are imported, and the command then fails with 404 instead of
+  reporting the constants still missing.
+- The guards that keep a deployed process an order line or the current catalogue release
+  still needs ([ADR-0427](docs/adr/0427-converting-a-product-to-a-lifecycle-process.md))
+  can now be overridden: whoever may delete a process — the modeler role — may delete it
+  with `force=true` while nothing runs under it, and an application's owner may purge it
+  with everything it owns, also what a catalogue product or another application's process
+  still needs. Cancelling running instances on the way needs `operator` or `admin`, and a
+  protected system process stays protected. Both are audited, as
+  `deployment.force_deleted` and `application.purged`. A plain process delete's refusal
+  now ends with a hint at `force=true`.
+- 0.18.0 reads the data directory 0.17.0 wrote: nothing under the log, the state or the
+  record format changed, and the first start deploys nothing new. One store is added on
+  the first start, `package-mappings`; it travels with a whole-instance snapshot and not
+  with an export. An API token's record names the vault secret it was sealed as
+  (`vaultSecret`). The routes added are `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`,
+  `POST /api/v1/catalogs/import/answers`, `GET /api/v1/applications/{id}/package`,
+  `GET /api/v1/applications/{id}/deletion-preview`, `GET /api/v1/catalogs/{id}/deletion`,
+  `GET /api/v1/catalog-products/{id}/deletion`, `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}`, the last four for administrators only;
+  `DELETE /api/v1/applications/{id}` takes `?purge=true`, `DELETE /api/v1/processes/{key}`
+  takes `?force=true`, and `POST /api/v1/api-tokens` takes `vaultSecret`. Five MCP tools
+  were added — `atlas_application_deletion_preview`, `atlas_catalog_deletion`,
+  `atlas_delete_catalog`, `atlas_catalog_product_deletion` and
+  `atlas_delete_catalog_product` — so the tool count is 149; `atlas_delete_application`
+  takes `purge` and `atlas_delete_process` `force`. `/metrics` carries three new series
+  without labels, `atlas_api_tokens_expiring_soon`, `atlas_api_tokens_expired` and
+  `atlas_api_token_next_expiry_timestamp_seconds`. The Helm chart has a new value,
+  `atlas.catalogue.purge` (default `true`), which it passes as `--catalogue-purge`. No
+  budget was added.
+- Going back to 0.17.0 starts on the same directory, but not with the 0.18.0 Helm chart or
+  a service definition that sets `--catalogue-purge`: 0.17.0 does not know the flag and
+  refuses to start. Go back with the 0.17.0 chart, and take the flag out of the command
+  line. 0.17.0 does not read the table of names, so an import there asks again for what
+  was remembered; the tokens minted in the Console stay valid, but 0.17.0 has no page for
+  them. What a purge of an application or a catalogue, or a forced delete, removed stays
+  removed.
+
+### Added
+
+- **A catalogue can be deleted for good.** An administrator deletes a catalogue, or a single
+  product, with its releases, its own products, the orders placed from it, the process
+  instances still working them and the rights they granted — so a catalogue imported, ordered
+  from and tried out can be cleared and imported again. **On by default (opt-out); switch it
+  off on a production installation** with `--catalogue-purge=false`
+  (`ATLAS_CATALOGUE_PURGE=false`, Helm `atlas.catalogue.purge: false`), and the delete answers
+  403 there. While it is on, every start logs a WARN, `event=server.catalogue_purge_enabled`,
+  so an installation upgraded without the flag says so and an alert can match it.
+  `GET /api/v1/catalogs/{id}/deletion` and `GET /api/v1/catalog-products/{id}/deletion` show
+  what would go and what it means —
+  cancelled instances do not undo what they did in a target system, and rights leave the
+  inventory without any deprovisioning — and `DELETE /api/v1/catalogs/{id}` and
+  `DELETE /api/v1/catalog-products/{id}` carry it out only with `?confirm=` repeating the
+  id. The Console's catalogue page has a **Delete for good** card for administrators, and
+  MCP four tools (`atlas_catalog_deletion`, `atlas_delete_catalog`,
+  `atlas_catalog_product_deletion`, `atlas_delete_catalog_product`). On a server started
+  with `--catalogue-purge=false` nothing changes: a product is withdrawn and a catalogue kept
+  ([ADR-0469](docs/adr/0469-catalogue-purge.md), amending ADR-0312 and
+  answering ADR-0376's open question).
+
+- **API-token expiry can be alerted on.** `/metrics` carries `atlas_api_tokens_expiring_soon`
+  (tokens still accepted with less than 30 days left — the Console's warning window, held equal
+  to it by a test), `atlas_api_tokens_expired` (expired, not yet revoked) and
+  `atlas_api_token_next_expiry_timestamp_seconds` (`+Inf` when none expires), so an alert rule
+  catches a token before the machine holding it starts failing with 401, without anybody
+  opening the Console. The series carry no labels: which token is the Console's answer, not
+  something a `metrics`-scoped scraper reads
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-22).
+
+- **An application can be deleted with everything it owns.** Deleting an application now asks
+  how: keep its contents, which then read as Not assigned (as before), or delete everything it owns
+  on this server — its deployed versions after cancelling their running instances, its decision
+  deployments, BPMN drafts, decision drafts, DMN references and their stored models, forms, test
+  scenarios, Panorama and information models. Before the second runs, the dialog shows the server's
+  preview of what goes and what outside the application stops working — catalogue products whose
+  current release binds one of its processes, order lines that could still start one, other
+  applications' processes that evaluate one of its decisions — says that it cannot be undone, and
+  asks for the application's name to be typed. Cancelling instances needs the operator or admin role.
+  `DELETE /api/v1/applications/{id}?purge=true`, `GET /api/v1/applications/{id}/deletion-preview`;
+  MCP: `atlas_delete_application` takes `purge`, `atlas_application_deletion_preview` reads the
+  preview ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)).
+
+- **A deployed process can be deleted whatever holds it.** `DELETE /api/v1/processes/{key}?force=true`
+  cancels the version's running instances and removes it even while an order line or the current
+  catalogue release still needs it, overriding the ADR-0427 guard; a protected system process stays
+  protected. The Modeler offers it after a refused delete, with the server's reason and what forcing
+  does. MCP: `atlas_delete_process` takes `force`
+  ([ADR-0468](docs/adr/0468-deleting-an-application-with-its-contents.md)).
+
+- **An installation remembers what another's names mean.** When a package names a group, a
+  person or an approver the target does not carry by that name, the choice made on import — in
+  the Console's dialog, or with `atlas import --set` — is kept on the target once the catalogues
+  are in, and the next import takes it without asking. The table is read before the directory,
+  shown on the catalogue list with entries to correct, remove or add before the first import,
+  and served at `GET`/`POST`/`DELETE /api/v1/catalogs/import/mappings`. `atlas import` now also
+  reads a package's `antworten.json`, so an exported package installs without `--answers`
+  wherever its names are found or remembered
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
+
+- **An API token about to expire is flagged before it stops working.** A token with less
+  than 30 days left is marked in **Console → Administration → API tokens** with the days it has, listed
+  above the tokens, and named on the Console's dashboard to administrators, with the vault
+  secret it was sealed as — until it is replaced and revoked. An expired token is refused
+  like an unknown one, so without the warning the first sign was a machine failing
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
+
+- **API tokens are minted, listed and revoked in the Console.** **Console → Administration → API tokens**,
+  offered to administrators only, lists every token with its scope, roles, reach, expiry
+  and who minted it when, and marks an expired one rather than hiding it. The form says
+  what each scope reaches and which roles the token will carry before it is minted, asks
+  for a confirmation before a token that never expires, shows the secret once with a copy
+  button and takes it off the page when the reader leaves; revoking asks first and says it
+  is immediate. `POST /api/v1/api-tokens` takes an optional `vaultSecret`: the server seals
+  the secret in its vault under that name — `atlas`, for the shop's system processes — and
+  returns none, so it never leaves the server; without a vault, or when the vault refuses
+  the write, no token is minted
+  ([ADR-0194](docs/adr/0194-api-tokens.md), amendment 2026-10-21).
+
+- **The Console moves an application with its catalogues.** **Export application…** (formerly
+  Download source…) offers the catalogues you maintain, those selling the application ticked, and
+  downloads the same package `atlas export` writes: the source tree, the constants when asked, and
+  the catalogues as `katalog.json` with their groups and people as questions answered by name
+  (`GET /api/v1/applications/{id}/package`, `?preview=true` for what it would hold and warn about).
+  **Import application…** (formerly Import source tree…) reads such a package or a plain source
+  tree: it answers the questions from this server's directory and asks only for what it cannot find
+  (`POST /api/v1/catalogs/import/answers`), shows one plan for the application, its constants and
+  the catalogues, then imports the application, publishes it and imports the catalogues, as
+  `atlas import` does. What turns catalogues into a package is now one implementation for the
+  command and the server ([ADR-0467](docs/adr/0467-application-package-export.md), amendment
+  2026-10-21).
+
+### Changed
+
+- **The Console and Operations put their seldom-opened pages behind one entry.** In the
+  Console, Engine, Logs, Backup, Organization, API tokens and Audit log moved into
+  **Administration ▾**, which only administrators see; Dashboard, Workers, Events, AI access
+  and Display stay on the bar. In Operations, Messages, Outbox and Call activities — and, for
+  administrators, Mock directory and Mock database — moved into **Diagnostics ▾**; Instances,
+  Incidents with its count, Workers, Decisions and Reconciliation stay. The pages keep their
+  addresses, so bookmarks and the handbook's links still open them, and the handbook, the
+  docs and the worker dialogs now say **Console → Administration → …** and
+  **Operations → Diagnostics → …**.
+
+### Fixed
+
+- **A refused process delete says why.** The Modeler threw away the server's refusal and showed
+  *"Could not delete 1 version(s) — running instances?"* — also for a process that had never been
+  started and was refused because a catalogue release binds it. It now shows the server's reason,
+  and every refusal of a plain delete names the forced delete as the way through.
+
+- **The menu bar no longer wraps its names or cuts off its buttons.** In a window narrower
+  than about 1300 pixels an administrator's Console bar broke two-word names onto two lines,
+  shortened the organisation's name to «A…» and clipped the account button. Names now stay
+  on one line at every width, the bar scrolls within itself where they do not fit, and the
+  organisation's name gives way first. On a phone the app's name beside the logo gives way
+  too: there the view names had no room left at all, and in Operations the account button
+  was pushed off the screen. An end-to-end test measures the Console's and the
+  Operations bar at 1440, 1280 and 1024 pixels, for an administrator and an operator, and on
+  a phone.
+
+- **A fixed approver in a package is assigned by username.** A `fixed` approval is a task
+  assigned to a username, but `atlas import`, the example's `facility-management` question and the
+  shop handbook's installer answered it with a user id, so the approval reached nobody. The package
+  now asks for an account: answered by a username or by a display name one account carries, and
+  filled with the username ([ADR-0467](docs/adr/0467-application-package-export.md)).
+
+## [0.17.0] — 2026-10-21
+
+**An application and its shop move between installations as a package, and an import
+asks before it replaces work done on the server.** `atlas export --application` writes an
+application with its constants and its catalogues as a directory `atlas import` installs
+elsewhere; the groups and people a catalogue names become questions answered by name,
+and the decision models the server keeps travel with the source. The Console's source
+download carries the constants when asked, and the Console's download and import,
+`atlas export` and `atlas import` name what the target still lacks: the server constants
+and application constants the processes read and the workers they name. Every import —
+the source import, the catalogue import, `atlas import` and the Console's — compares each
+artifact with the server's version and with the one the last import brought: what is
+still as the last import left it is updated, what was edited here since is kept, and only
+what both sides moved is asked about, so the same package installed twice changes nothing
+([ADR-0467](docs/adr/0467-application-package-export.md)). Teams Phone gives out phone
+numbers (`ensure-phone-number`, `remove-phone-number`), lists the free ones
+(`list-free-phone-numbers`), removes a whole hotline in one task (`remove-hotline`),
+reconciles an existing queue's routing and authorized users, and gives eight refusals a
+code an error boundary can catch; the script is still tested against a stand-in module,
+not a tenant
+([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendments 2026-10-20 and 2026-10-21).
+`examples/m365-dienste/` is a shop for Microsoft 365 services built on the Entra, Exchange
+and Teams Phone Worker Types. The Tasks app's Start view groups its processes by
+application, filters them and keeps favourites
+([ADR-0466](docs/adr/0466-start-view-groups-and-favourites.md)), and a step's form opens
+from the canvas. Among the fixes, a product whose order form asks for a number can be
+ordered, a position ordered in a variant starts its process again, and a Worker task keeps
+only the fields its operation uses.
+
+**Read this before upgrading from 0.16.0.** These act on an existing installation:
+
+- An import no longer replaces an artifact that differs from the server's unasked. A
+  script that posts a source tree or a catalogue document and relied on it replacing
+  changed artifacts now gets 409 with the plan until it passes `?overwrite=` (`*` for
+  all) or `?keep=`. `atlas import` in a pipeline stops before the first write while a
+  change is undecided; pass `--overwrite` or `--keep`. `atlas_import_catalog` on MCP
+  answers 409 the same way and takes `overwrite`, `keep` and `dryRun`. No import before
+  this release was remembered, so the first import of a package after the upgrade asks
+  about every artifact that differs from the server's; from the second on, it tells an
+  update from an edit made here.
+- Upgrade the server before the CLI. `atlas import` of 0.17.0 asks the server for its plan
+  with `?dryRun=true`, which 0.16.0 does not know: a 0.16.0 server imports on the request
+  meant only to plan, also under `--dry-run`, and replaces what differs without asking. A
+  package that carries decision models it refuses outright.
+- A deployed model whose `ensure-call-queue` names a routing method, presence-based
+  routing, conference mode, opt-out or authorized users now sets that on an existing
+  queue on every run, overwriting what was changed in the Teams admin center since. This
+  includes models built from the Repository template before 1.2.0, which named
+  `routingMethod="attendant"`; choose *Keep* where the admin center keeps a setting. A
+  required list that resolves to nothing, such as a `resolve-users` whose variable nobody
+  set, now fails the task instead of answering with no ids, and `remove-resource-account`
+  releases the account's phone numbers before it deletes the account. These are the
+  worker's: a Teams Phone worker you run yourself with `atlas worker` behaves so once it
+  runs 0.17.0, and until then it does not know the four new operations and does not
+  throw the new codes. Upgrade the server first, or both together: a 0.16.0 server writes
+  every setting's default into an `ensure-call-queue` task, and a 0.17.0 worker would set
+  those defaults on every existing queue it ensures.
+- The first start deploys a new version of the shop's fulfilment process and its three
+  approval processes (`atlas-auftrag-erfuellung`, `atlas-genehmigung-fix`,
+  `atlas-genehmigung-rolle`, `atlas-genehmigung-vorgesetzter`); a server started with
+  `--catalogue=false` deploys none. An instance that already stopped on «a line cannot be
+  set to here» for a position with a variant stays on the version it started on: the
+  upgrade alone does not clear it.
+- 0.17.0 reads the data directory 0.16.0 wrote: nothing under the log, the state or the
+  record format changed. Two stores are added on the first start, `import-baselines` and
+  `start-favourites`; both travel with a whole-instance snapshot and neither with an
+  export. The routes added are `/api/v1/me/start-favourites`,
+  `POST /api/v1/applications/{id}/constants/import` and
+  `GET /api/v1/applications/{id}/needs`; the source download takes `?constants=true`, and
+  `GET /api/v1/processes` names each row's application in `applicationName`. The
+  `StartFavourites` budget (100) is new. No MCP tool was added or removed, so the tool
+  count stays.
+- Going back to 0.16.0 starts on the same directory unless a model that uses
+  `ensure-phone-number`, `remove-phone-number`, `list-free-phone-numbers` or
+  `remove-hotline` is deployed: 0.16.0's compiler does not know the operation, and a
+  stored model that does not compile stops its start. Delete those deployments before
+  going back; the `examples/m365-dienste/` package installs some. A source tree that
+  carries decision models or constants (format version 2 or 3) is refused by 0.16.0, an
+  import made under 0.16.0 is not remembered when you come back, and the Start view's
+  favourites are not shown there.
+
+### Added
+
+- **A source download carries its constants when asked, and names what the target needs.**
+  In the Console, **Download source…** asks whether the application's constant values travel
+  (`GET /api/v1/applications/{id}/source?constants=true` writes them as `constants.json`, source
+  format 3) and lists what the processes read from the installation and no download carries:
+  server constants, application constants and configured workers, each with the processes that
+  read it (`GET /api/v1/applications/{id}/needs`; the manifest names them under `needs`).
+  **Import source tree…** offers the constants like any other artifact — new set, behind
+  updated, ahead kept, changed asked — and sets them only for an administrator; afterwards it
+  names what this server still lacks, before anybody publishes. `atlas export` prints the list,
+  and `atlas import` shows in its plan what the target lacks and sets the constants before it
+  publishes, so the publish warns only about what is really missing
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amendment 2026-10-21).
+- **Teams Phone lists the free phone numbers to choose from.** `list-free-phone-numbers`
+  answers the numbers in the tenant's inventory that nobody holds, that are activated and
+  not blocked, of the type named and assignable to a person or to a voice app's resource
+  account (`assignableTo`), sorted, at most `max` (1–500, 100 by default), optionally under
+  a `numberPrefix`; `truncated` says when there were more, and `entries` add each number's
+  city and country. Nothing is reserved: `ensure-phone-number` still refuses a number given
+  out in the meantime with `TEAMSPHONE_NUMBER_IN_USE`. A Direct Routing number is listed
+  only once it has been uploaded to the tenant's inventory. In mock mode, the free numbers
+  are those `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names that nobody holds
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-21).
+- **A Teams Phone hotline comes down in one task.** `remove-hotline` takes the hotline's
+  resource accounts and removes everything in the order that never leaves a caller ringing
+  into nothing: the auto attendants, then the queues, then each account's phone numbers
+  and the account. When one of its voice apps also answers for an account the task does
+  not name, it is refused before anything changes (`TEAMSPHONE_ACCOUNT_IN_USE`); optional
+  `names` find a voice app an earlier run left without its account, and a repeat answers
+  `removed: false`. A required list that resolves to nothing is now refused for every Teams
+  Phone operation, so a `resolve-users` whose variable nobody set no longer answers with no
+  ids ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **Teams Phone gives out phone numbers.** `ensure-phone-number` gives a person or a
+  resource account a Direct Routing, Calling Plan or Operator Connect number — a queue's
+  hotline and an employee's direct line alike — and `remove-phone-number` takes one or all
+  of them away again. A holder that has the number already is left alone; another number it
+  holds is replaced and reported as `previousNumber`. A number somebody else holds is
+  refused (`TEAMSPHONE_NUMBER_IN_USE`), and so is a Calling Plan or Operator Connect number
+  the tenant does not have (`TEAMSPHONE_NUMBER_NOT_FOUND`). A number is read as people write
+  one, spaces and dashes included; a `(0)` after the country code is refused.
+  `remove-resource-account` releases the account's numbers before it detaches and deletes
+  the account, and answers them as `phoneNumbers`, so a leaver path is one task. In mock mode,
+  `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names the tenant's numbers
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **A Teams Phone refusal can take an error boundary's path.** Eight refusals a process
+  may have a path for carry a fixed code: `TEAMSPHONE_UPN_TAKEN` (the address belongs to a
+  person), `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH`, `TEAMSPHONE_ACCOUNT_IN_USE`,
+  `TEAMSPHONE_ACCOUNT_NOT_VISIBLE`, `TEAMSPHONE_WOULD_EMPTY_LIST`,
+  `TEAMSPHONE_TOO_MANY_AGENTS`, `TEAMSPHONE_NUMBER_IN_USE` and
+  `TEAMSPHONE_NUMBER_NOT_FOUND`. When the task's process catches the code with an error
+  boundary or an error event subprocess, the instance takes that path at once, with no retry
+  spent; a code the process does not catch fails and is retried as before. Until now an
+  error boundary on a Teams Phone task never fired
+  ([ADR-0463](docs/adr/0463-teams-phone-worker.md), amendment 2026-10-20).
+- **The handbook explains every Teams Phone operation.** A reference card lists each
+  operation with what it needs, what it answers, how an existing queue is reconciled, the
+  error codes and what to do with each, and the BPMN attributes a model deployed over the
+  API or MCP writes. The properties panel links to it beside the setup card.
+- **An application and its shop are written as a package.** `atlas export --application KEY
+  [--catalog ID]... DIR` writes the directory `atlas import` installs on another installation:
+  the application's processes, forms, decisions and the decision models this server keeps,
+  its constants (`konstanten.json`), and the catalogues with their products (`katalog.json`).
+  Every group and person the catalogues name becomes a question (`fragen.json`), answered in
+  `antworten.json` with the name it carries here, since ids differ per server and names do not.
+  A process a product is bound to and the application does not hold travels in `katalog.json`.
+  A form outside the application, a process deployed nowhere and a home catalogue left out are
+  named. Exporting again into the same directory updates it in place, keeping a README and
+  questions reworded by hand, so a package can be kept in git
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- **An application's own decision models travel with its source.** The source tree
+  (`GET /api/v1/applications/{id}/source`, *Download source…*) carries every decision model the
+  server keeps in its own model folder as `decisions/<handle>.dmn` (format version 2). An
+  application with decisions imported on another server used to point at handles that were not
+  there and refused to publish. The import compiles each model first, and refuses to replace a
+  model that a decision outside the application uses. A server whose models come from temis
+  keeps the references and names the models it did not write
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- **A shop for Microsoft 365 services, with governance built into the models.**
+  `examples/m365-dienste/` is a package that offers what an IT department delivers through
+  the Entra, Exchange and Teams Phone Worker Types: a licence with mailbox, Teams telephony,
+  teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call
+  queues and auto attendants, in two catalogues, with fourteen processes, five decision
+  tables and 21 forms, bilingual. A naming rule kept as a decision builds every name and
+  rejects reserved and overlong ones with a reason; every Exchange object is tagged with its
+  order and owner, and returns and changes find it by that tag; a weekly process reports what
+  exists outside the tag or the rule. Two public forms let externals request partner access
+  and subscribe to a list, and nothing is created before a person has reviewed it. Install
+  scripts for sh and PowerShell upload the decision models, import and publish the
+  application and fill the catalogue's placeholders; the handbook's examples chapter has
+  its card. Telephony, call queue and auto attendant leave only the choice of a number to
+  the phone team: Entra licenses a queue's or auto attendant's resource account, the Teams
+  Phone Worker assigns the number, releases it on return, and hands a number somebody else
+  holds back to the team through an error boundary.
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by
@@ -65,6 +1313,46 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Ensure call queue also reconciles routing and authorized users.** A queue that already
+  exists is brought to the authorized users, routing, presence-based routing, conference
+  mode and opt-out its task names, in one call to Teams, and the answer lists what it set in
+  `changed`; `agentsChanged` stays. What the task leaves out is kept: the Modeler's first
+  choice for each setting is now *Keep*, a default applies only to a new queue, and the
+  compiler no longer fills a default into the compiled task. An empty list of authorized users for a
+  queue that has some is refused like an empty list of agents, and one that resolved to
+  nothing is refused. A deployed model whose task names a setting now sets it on an existing
+  queue — also one built from the Repository template before 1.2.0, which named
+  `routingMethod="attendant"`; choose *Keep* there to leave the queue's routing alone.
+- **An import tells an update from an edit made here.** Every import remembers, per artifact,
+  the version it brought, and compares the next one with that as well as with the server. A
+  process, form, decision, model, catalogue, product or constant the server still holds as the
+  last import left it is updated when the package brings it newer (`behind`); one edited on the
+  server while the package brings it as before is kept (`ahead`); only what both sides moved, or
+  what no import has brought yet, is asked about. A decision to keep is remembered, so the same
+  package does not ask again. Constants are imported through the new
+  `POST /api/v1/applications/{id}/constants/import`, which sets a value only for an
+  administrator and names the rest under `notSet`. A hand-written file without a trailing
+  newline no longer reads as changed on every import
+  ([ADR-0467](docs/adr/0467-application-package-export.md), amended).
+- **An import asks before it replaces what changed on the server.** The source import, the
+  catalogue import, `atlas import` and the Console's imports compare every artifact with the
+  server's version — processes, forms, decisions and their models, constants, catalogues,
+  products, and the processes a document deploys — and class it new, unchanged or changed.
+  Unchanged is no longer written. Changed is replaced only when decided:
+  `?overwrite=`/`?keep=` on the routes (refs such as `process:ID` or `product:ID`, or `*`), one
+  question per artifact in `atlas import` at a terminal (Enter keeps the server's version), and
+  `--overwrite`/`--keep` in a pipeline, where an undecided change stops the run before the
+  first write. The Console shows one box per changed artifact, unticked meaning keep.
+  `?dryRun=true` and `atlas import --dry-run` show the plan alone. A script that relied on an
+  import replacing changed artifacts now gets 409, with the plan, until it passes
+  `overwrite=*` ([ADR-0467](docs/adr/0467-application-package-export.md)).
+- **A package installed again changes nothing.** `atlas import` publishes the application only
+  when the import changed it or it was never published there, rather than on every run. A
+  publishing catalogue import releases a catalogue only when it has no release yet or the
+  import changed it or a product it offers. Constants in the package are set where the target
+  holds none; a value it holds otherwise is decided like any other change. The run then
+  reports every constant the application reads that the target lacks
+  ([ADR-0467](docs/adr/0467-application-package-export.md)).
 - **The undeclared namespace members in the Variables panel collapse.** The Modeler's
   Variables panel lists, under the process's own variables, what the process could read
   from the `application` and `server` namespaces but does not declare yet. On an
@@ -80,6 +1368,27 @@ _Changed_ / _Removed_ for each version.
   unfiltered list.
 
 ### Fixed
+
+- **A product whose order form asks for a number can be ordered.** The order takes each
+  answer as text (`POST /api/v1/orders`, config is a map of strings), and the shop sent
+  what the form held as it held it: a number field a number, a checkbox a boolean, a
+  multiple choice a list. The form rendered and checked out, and «order» failed with 400
+  «cannot unmarshal number into … placeReq.config of type string» for the whole basket.
+  The shop now sends every answer as text — `"5"`, `"true"`, the choices joined by a
+  comma — on ordering and on correcting a held position, and a correction opens its form
+  on the stored answers in each field's own kind, so an earlier multiple choice is still
+  chosen instead of dropped. `e2e/shop-config-answers.spec.mjs` orders and corrects through
+  the real shop page.
+
+- **A position ordered in a variant is started again.** A position's key joins the
+  product and its variant with `#` (`lizenz#standard`), and the shop's fulfilment model and
+  its three approval models put that key into the URL they call unencoded. In a URL `#`
+  opens the fragment, so `POST …/lines/lizenz#standard/start` reached the server as
+  `POST …/lines/lizenz` — the route that sets a line's status — without one, and was
+  refused with «a line cannot be set to here». The orchestration raised an incident a retry
+  could not clear, and every product with variants stopped before its process started.
+  The four models now encode the key (`#` as `%23`); two tests order a product in a
+  variant, with and without an approval, and wait for its process to run.
 
 - **A form created from a step is filed under the process's application.** **＋ New form**
   on a start event, a user task or a repair form opened the form editor without naming the
@@ -15306,7 +16615,11 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
+[0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
+[0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
+[0.17.0]: https://github.com/pblumer/atlas/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pblumer/atlas/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pblumer/atlas/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pblumer/atlas/compare/v0.13.0...v0.14.0

@@ -2,8 +2,10 @@ package sharepoint
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -13,21 +15,21 @@ import (
 )
 
 // ProcessLookup resolves a process-definition key to its compiled process. The
-// worker uses it to find the worker name, site, list, and item fields a
-// SharePoint job belongs to, so one handler serves every deployed process.
+// worker uses it to find the worker name, operation and authored values a SharePoint
+// job belongs to, so one handler serves every deployed process.
 type ProcessLookup func(defKey uint64) *compiler.CompiledProcess
 
 // Handler builds a job handler that performs a SharePoint worker task. Register it
-// with a [job.Runner] under the reserved [compiler.SharePointJobTypeIndex] via
+// with a [job.Runner] under both reserved SharePoint job types —
+// [compiler.SharePointJobTypeIndex] and [compiler.SharePointOpsJobTypeIndex] — via
 // HandleWithOutput; the runner then pulls activatable SharePoint jobs, and for each
-// the handler resolves the task's connector/site/list/fields from the compiled
+// the handler resolves the task's connector, operation and values from the compiled
 // process — evaluating any FEEL value over the variables the task sees, up its scope
-// chain (the fx toggle,
-// ADR-0067) — resolves the named worker's Graph client from reg, creates the list
-// item, and (when the task names a result variable) returns the created item's JSON
-// as that variable to be written back on completion. Returning an error leaves the
-// job pending (retry, then an incident, ADR-0061); the runner completes it only on
-// success.
+// chain (the fx toggle, ADR-0067) — resolves the named worker's Graph client from reg,
+// performs the one operation, and (when the task names a result variable) returns what
+// Graph answered as that variable to be written back on completion. Returning an error
+// leaves the job pending (retry, then an incident, ADR-0061); the runner completes it
+// only on success.
 func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
@@ -61,8 +63,8 @@ func Handler(store state.Reader, lookup ProcessLookup, reg *Registry) job.Output
 }
 
 // builtinProcessInstanceKey is the reserved FEEL name that binds to the instance's
-// own key (mirrors the engine/REST builtin), so a site/list/field expression can
-// reference processInstanceKey.
+// own key (mirrors the engine/REST builtin), so any authored expression can reference
+// processInstanceKey.
 const builtinProcessInstanceKey = "processInstanceKey"
 
 // resolveValue turns a worker field value into a string: a literal verbatim, or a
@@ -82,17 +84,58 @@ func resolveValue(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model
 	return text
 }
 
-// resolveKVs resolves a list of named worker values (item fields) into a map,
-// evaluating any FEEL values. Returns nil for an empty list.
-func resolveKVs(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]string {
+// resolveFields resolves the task's column values, keeping each value's JSON shape
+// rather than flattening everything to a string.
+//
+// The shape is what Graph reads a column from: a Number column wants a number, a Yes/No
+// column a boolean, a multi-choice column a list, and a lookup a number under its
+// <Name>LookupId — none of which survives being turned into its text. The shape follows
+// from the FEEL value's *kind*, not from what its text looks like, for the reason the
+// Discord worker gives: parsing a resolved string as JSON would turn a title that
+// happened to begin with "[" into a different kind of value. A literal stays the text
+// it was written as, and a FEEL null — an absent variable or a failed evaluation — is
+// sent as null, which clears the column rather than writing an empty string into it.
+func resolveFields(kvs []compiler.RestKV, piKey uint64, scopeVars map[string]model.VariableValue) map[string]any {
 	if len(kvs) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(kvs))
+	out := make(map[string]any, len(kvs))
 	for _, kv := range kvs {
-		out[kv.Name] = resolveValue(kv.Val, piKey, scopeVars)
+		out[kv.Name] = resolveField(kv.Val, piKey, scopeVars)
 	}
 	return out
+}
+
+// resolveField resolves one column value to the JSON value it is sent as.
+func resolveField(rv compiler.RestExpr, piKey uint64, scopeVars map[string]model.VariableValue) any {
+	if rv.Expr == nil {
+		return rv.Literal
+	}
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
+	if err != nil {
+		return nil
+	}
+	kind, b, text := expr.Classify(v)
+	switch kind {
+	case expr.KindBool:
+		return b
+	case expr.KindNumber:
+		return json.Number(text)
+	case expr.KindJSON:
+		var decoded any
+		dec := json.NewDecoder(strings.NewReader(text))
+		dec.UseNumber()
+		if err := dec.Decode(&decoded); err != nil {
+			// Classify said JSON, so this cannot normally happen; sending the text is
+			// still better than sending nothing and calling the column set.
+			return text
+		}
+		return decoded
+	case expr.KindNull:
+		return nil
+	default:
+		return text
+	}
 }
 
 // bindVars turns the named variables the task sees into a FEEL binding. A name absent

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Microsoft 365: Lizenz und Postfach. Lebenszyklus-Prozess mit vier Nachrichtenstarts (zuweisen, entziehen, Abwesenheit setzen und beenden).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_lizenz" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <message id="m_m365_lizenz_zuweisen" name="m365.lizenz.zuweisen"/>
+  <message id="m_m365_lizenz_entziehen" name="m365.lizenz.entziehen"/>
+  <message id="m_m365_postfach_abwesenheit" name="m365.postfach.abwesenheit"/>
+  <message id="m_m365_postfach_anwesend" name="m365.postfach.anwesend"/>
+  <process id="proc_m365_lizenz" name="Microsoft 365: Lizenz und Postfach" isExecutable="true" atlas:personal="upn,abwesenheitstext" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus der Microsoft-365-Lizenz einer Person, mit dem Postfach, das die Lizenz in Exchange Online mitbringt.
+Ein Prozess, Form pro Operation (ADR-0425/0429): Jede Aktion des Produkts m365-lizenz startet eine eigene Instanz über ihren Nachrichtenstart.
+
+- Zuweisen: Die Variante (standard, erweitert, frontline) bestimmt über die Entscheidung M365Lizenzprofil die SKU. Vorher wird der Nutzungsort gesetzt, ohne den Graph keine Lizenz zuweist.
+- Entziehen: dieselbe SKU, als removeLicenses. Achtung: Mit der Lizenz verliert die Person ihr Postfach; Exchange Online hält es danach noch 30 Tage.
+- Abwesenheitsnotiz setzen und beenden: Services an der gehaltenen Lizenz, ausgeführt vom Exchange-Worker. Ein Produkt, zwei Worker: Die Lizenz gehört zu Entra, das Postfach zu Exchange.
+
+Startvariablen aus dem Shop: orderId, positionId, itemId, recipient, variantId und die Antwort upn des Bestellformulars m365-person. upn ist als Personendatum der empfangenden Person deklariert (atlas:personal, atlas:dataSubject="recipient") und wird verschlüsselt gespeichert; die Worker werten ihre Ausdrücke selbst aus und sehen den Klartext nur für die Dauer eines Aufrufs.
+
+Worker: ucc_entra (Entra), ucc_exchange (Exchange). Konstante USAGE_LOCATION (Applikation, Fallback CH).</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+        <atlas:constant name="USAGE_LOCATION" type="string" source="application" value="CH"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s_zuweisen" name="Lizenz bestellt"><documentation>Start der Operation provision; die Bestellung startet ihn nach der Genehmigung durch die vorgesetzte Person.</documentation><outgoing>f_s_zuweisen__br_profil</outgoing><messageEventDefinition messageRef="m_m365_lizenz_zuweisen"/></startEvent>
+    <businessRuleTask id="br_profil" name="Lizenzprofil bestimmen"><documentation>Die Entscheidung M365Lizenzprofil bildet die Variante der Bestellung (variantId) auf die SKU-ID ab. Eine Tabelle statt einer Bedingung im Prozess: Welche SKU eine Variante bedeutet, ändert sich mit dem Lizenzvertrag, nicht mit dem Ablauf.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Lizenzprofil" resultVariable="lizenz"/><zeebe:ioMapping><zeebe:input source="=variantId" target="lizenzprofil"/></zeebe:ioMapping></extensionElements><incoming>f_s_zuweisen__br_profil</incoming><outgoing>f_br_profil__sc_add</outgoing></businessRuleTask>
+    <scriptTask id="sc_add" name="Zuweisung vorbereiten"><documentation>Baut den Body von assignLicense: addLicenses mit der SKU, removeLicenses leer. Graph verlangt beide Listen. Eine reine Rechnung aus der Entscheidung, ohne Personendaten, deshalb darf sie die Engine ausführen.</documentation><extensionElements><zeebe:script expression="={addLicenses: [{skuId: lizenz.skuId, disabledPlans: []}], removeLicenses: []}" resultVariable="lizenzAenderung"/></extensionElements><incoming>f_br_profil__sc_add</incoming><outgoing>f_sc_add__st_ort</outgoing></scriptTask>
+    <serviceTask id="st_ort" name="Nutzungsort setzen"><documentation>update-user setzt usageLocation aus der Applikationskonstante USAGE_LOCATION. Graph weist eine Lizenz nur einem Konto mit Nutzungsort zu; der Schritt ist idempotent.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-user" userId="=upn" attributes='{"usageLocation": "=application.USAGE_LOCATION"}'/></extensionElements><incoming>f_sc_add__st_ort</incoming><outgoing>f_st_ort__st_lizenz</outgoing></serviceTask>
+    <serviceTask id="st_lizenz" name="Lizenz zuweisen"><documentation>assign-license an das Konto der empfangenden Person (userId = UPN). Der Body kommt aus lizenzAenderung.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="assign-license" userId="=upn" attributesVariable="lizenzAenderung"/></extensionElements><incoming>f_st_ort__st_lizenz</incoming><outgoing>f_st_lizenz__st_done</outgoing></serviceTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit erhält die empfangende Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Bereitstellen und Rückgabe das Recht ändern. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_lizenz__st_done</incoming><outgoing>f_st_done__e_zugewiesen</outgoing></serviceTask>
+    <endEvent id="e_zugewiesen" name="Lizenz zugewiesen"><incoming>f_st_done__e_zugewiesen</incoming></endEvent>
+    <startEvent id="s_entziehen" name="Rückgabe angefordert"><documentation>Start der Operation deprovision: Rückgabe durch die Person oder den Betrieb.</documentation><outgoing>f_s_entziehen__br_profil2</outgoing><messageEventDefinition messageRef="m_m365_lizenz_entziehen"/></startEvent>
+    <businessRuleTask id="br_profil2" name="Lizenzprofil bestimmen"><documentation>Dieselbe Entscheidung wie beim Zuweisen: Die Variante der Position bestimmt, welche SKU entzogen wird.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Lizenzprofil" resultVariable="lizenz"/><zeebe:ioMapping><zeebe:input source="=variantId" target="lizenzprofil"/></zeebe:ioMapping></extensionElements><incoming>f_s_entziehen__br_profil2</incoming><outgoing>f_br_profil2__sc_remove</outgoing></businessRuleTask>
+    <scriptTask id="sc_remove" name="Entzug vorbereiten"><documentation>removeLicenses mit der SKU, addLicenses leer.</documentation><extensionElements><zeebe:script expression="={addLicenses: [], removeLicenses: [lizenz.skuId]}" resultVariable="lizenzAenderung"/></extensionElements><incoming>f_br_profil2__sc_remove</incoming><outgoing>f_sc_remove__st_entzug</outgoing></scriptTask>
+    <serviceTask id="st_entzug" name="Lizenz entziehen"><documentation>assign-license mit removeLicenses. Das Postfach bleibt nach dem Entzug 30 Tage wiederherstellbar; wer es länger braucht, wandelt es vorher in ein geteiltes Postfach um (siehe examples/exchange-austritt.bpmn).</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="assign-license" userId="=upn" attributesVariable="lizenzAenderung"/></extensionElements><incoming>f_sc_remove__st_entzug</incoming><outgoing>f_st_entzug__st_returned</outgoing></serviceTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_entzug__st_returned</incoming><outgoing>f_st_returned__e_entzogen</outgoing></serviceTask>
+    <endEvent id="e_entzogen" name="Lizenz entzogen"><incoming>f_st_returned__e_entzogen</incoming></endEvent>
+    <startEvent id="s_abw" name="Abwesenheit gemeldet"><documentation>Start der Aktion abwesenheit (Service). Das Formular m365-abwesenheit liefert von, bis und abwesenheitstext.</documentation><outgoing>f_s_abw__st_abw</outgoing><messageEventDefinition messageRef="m_m365_postfach_abwesenheit"/></startEvent>
+    <serviceTask id="st_abw" name="Abwesenheit setzen"><documentation>set-auto-reply mit AutoReplyState Scheduled für den Zeitraum von bis bis. Interne und externe Nachricht sind derselbe Text; ExternalAudience All antwortet auch Absendern ausserhalb der Organisation.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="set-auto-reply" parameters='{"Identity": "=upn", "AutoReplyState": "Scheduled", "StartTime": "=von", "EndTime": "=bis", "InternalMessage": "=abwesenheitstext", "ExternalMessage": "=abwesenheitstext", "ExternalAudience": "All"}'/></extensionElements><incoming>f_s_abw__st_abw</incoming><outgoing>f_st_abw__sd_abw</outgoing></serviceTask>
+    <sendTask id="sd_abw" name="Service als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion «abwesenheit» erledigt ist. Der Katalog verlangt beim Veröffentlichen, dass jede Änderung und jeder Service so beantwortet wird; das Recht selbst bleibt bestehen.</documentation><extensionElements><atlas:shopTask mode="outcome" action="abwesenheit" outcome="completed"/></extensionElements><incoming>f_st_abw__sd_abw</incoming><outgoing>f_sd_abw__e_abw</outgoing></sendTask>
+    <endEvent id="e_abw" name="Abwesenheitsnotiz gesetzt"><incoming>f_sd_abw__e_abw</incoming></endEvent>
+    <startEvent id="s_anw" name="Rückkehr gemeldet"><documentation>Start der Aktion abwesenheit-beenden (Service).</documentation><outgoing>f_s_anw__st_anw</outgoing><messageEventDefinition messageRef="m_m365_postfach_anwesend"/></startEvent>
+    <serviceTask id="st_anw" name="Abwesenheit beenden"><documentation>set-auto-reply mit AutoReplyState Disabled.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="set-auto-reply" parameters='{"Identity": "=upn", "AutoReplyState": "Disabled"}'/></extensionElements><incoming>f_s_anw__st_anw</incoming><outgoing>f_st_anw__sd_anw</outgoing></serviceTask>
+    <sendTask id="sd_anw" name="Service als erledigt melden"><documentation>Eine Shop-Aufgabe (Modus outcome) meldet, dass die Aktion «abwesenheit-beenden» erledigt ist. Der Katalog verlangt beim Veröffentlichen, dass jede Änderung und jeder Service so beantwortet wird; das Recht selbst bleibt bestehen.</documentation><extensionElements><atlas:shopTask mode="outcome" action="abwesenheit-beenden" outcome="completed"/></extensionElements><incoming>f_st_anw__sd_anw</incoming><outgoing>f_sd_anw__e_anw</outgoing></sendTask>
+    <endEvent id="e_anw" name="Abwesenheitsnotiz beendet"><incoming>f_sd_anw__e_anw</incoming></endEvent>
+    <sequenceFlow id="f_s_zuweisen__br_profil" sourceRef="s_zuweisen" targetRef="br_profil"/>
+    <sequenceFlow id="f_br_profil__sc_add" sourceRef="br_profil" targetRef="sc_add"/>
+    <sequenceFlow id="f_sc_add__st_ort" sourceRef="sc_add" targetRef="st_ort"/>
+    <sequenceFlow id="f_st_ort__st_lizenz" sourceRef="st_ort" targetRef="st_lizenz"/>
+    <sequenceFlow id="f_st_lizenz__st_done" sourceRef="st_lizenz" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_zugewiesen" sourceRef="st_done" targetRef="e_zugewiesen"/>
+    <sequenceFlow id="f_s_entziehen__br_profil2" sourceRef="s_entziehen" targetRef="br_profil2"/>
+    <sequenceFlow id="f_br_profil2__sc_remove" sourceRef="br_profil2" targetRef="sc_remove"/>
+    <sequenceFlow id="f_sc_remove__st_entzug" sourceRef="sc_remove" targetRef="st_entzug"/>
+    <sequenceFlow id="f_st_entzug__st_returned" sourceRef="st_entzug" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_entzogen" sourceRef="st_returned" targetRef="e_entzogen"/>
+    <sequenceFlow id="f_s_abw__st_abw" sourceRef="s_abw" targetRef="st_abw"/>
+    <sequenceFlow id="f_st_abw__sd_abw" sourceRef="st_abw" targetRef="sd_abw"/>
+    <sequenceFlow id="f_sd_abw__e_abw" sourceRef="sd_abw" targetRef="e_abw"/>
+    <sequenceFlow id="f_s_anw__st_anw" sourceRef="s_anw" targetRef="st_anw"/>
+    <sequenceFlow id="f_st_anw__sd_anw" sourceRef="st_anw" targetRef="sd_anw"/>
+    <sequenceFlow id="f_sd_anw__e_anw" sourceRef="sd_anw" targetRef="e_anw"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_lizenz_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_lizenz_plane" bpmnElement="proc_m365_lizenz">
+      <bpmndi:BPMNShape id="s_zuweisen_di" bpmnElement="s_zuweisen"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_profil_di" bpmnElement="br_profil"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_add_di" bpmnElement="sc_add"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ort_di" bpmnElement="st_ort"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lizenz_di" bpmnElement="st_lizenz"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="880" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_zugewiesen_di" bpmnElement="e_zugewiesen"><omgdc:Bounds x="1062" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_entziehen_di" bpmnElement="s_entziehen"><omgdc:Bounds x="162" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_profil2_di" bpmnElement="br_profil2"><omgdc:Bounds x="280" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_remove_di" bpmnElement="sc_remove"><omgdc:Bounds x="430" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_entzug_di" bpmnElement="st_entzug"><omgdc:Bounds x="580" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="730" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_entzogen_di" bpmnElement="e_entzogen"><omgdc:Bounds x="912" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_abw_di" bpmnElement="s_abw"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_abw_di" bpmnElement="st_abw"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_abw_di" bpmnElement="sd_abw"><omgdc:Bounds x="430" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abw_di" bpmnElement="e_abw"><omgdc:Bounds x="612" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_anw_di" bpmnElement="s_anw"><omgdc:Bounds x="162" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_anw_di" bpmnElement="st_anw"><omgdc:Bounds x="280" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_anw_di" bpmnElement="sd_anw"><omgdc:Bounds x="430" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_anw_di" bpmnElement="e_anw"><omgdc:Bounds x="612" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_zuweisen__br_profil_di" bpmnElement="f_s_zuweisen__br_profil"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_profil__sc_add_di" bpmnElement="f_br_profil__sc_add"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_add__st_ort_di" bpmnElement="f_sc_add__st_ort"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="580" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ort__st_lizenz_di" bpmnElement="f_st_ort__st_lizenz"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="730" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lizenz__st_done_di" bpmnElement="f_st_lizenz__st_done"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_zugewiesen_di" bpmnElement="f_st_done__e_zugewiesen"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1062" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_entziehen__br_profil2_di" bpmnElement="f_s_entziehen__br_profil2"><omgdi:waypoint x="198" y="270"/><omgdi:waypoint x="280" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_profil2__sc_remove_di" bpmnElement="f_br_profil2__sc_remove"><omgdi:waypoint x="380" y="270"/><omgdi:waypoint x="430" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_remove__st_entzug_di" bpmnElement="f_sc_remove__st_entzug"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="580" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_entzug__st_returned_di" bpmnElement="f_st_entzug__st_returned"><omgdi:waypoint x="680" y="270"/><omgdi:waypoint x="730" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_entzogen_di" bpmnElement="f_st_returned__e_entzogen"><omgdi:waypoint x="830" y="270"/><omgdi:waypoint x="912" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_abw__st_abw_di" bpmnElement="f_s_abw__st_abw"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_abw__sd_abw_di" bpmnElement="f_st_abw__sd_abw"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="430" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_abw__e_abw_di" bpmnElement="f_sd_abw__e_abw"><omgdi:waypoint x="530" y="410"/><omgdi:waypoint x="612" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_anw__st_anw_di" bpmnElement="f_s_anw__st_anw"><omgdi:waypoint x="198" y="550"/><omgdi:waypoint x="280" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_anw__sd_anw_di" bpmnElement="f_st_anw__sd_anw"><omgdi:waypoint x="380" y="550"/><omgdi:waypoint x="430" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_anw__e_anw_di" bpmnElement="f_sd_anw__e_anw"><omgdi:waypoint x="530" y="550"/><omgdi:waypoint x="612" y="550"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

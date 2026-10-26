@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Postfachzugriff erteilen. DMN-gesteuerte Zusatzfreigabe, dann die Berechtigung nach Zugriffsart.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_postfachzugriff_erteilen" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_postfachzugriff_erteilen" name="Exchange: Postfachzugriff erteilen" isExecutable="true" atlas:personal="postfach,person,anlass" atlas:dataSubject="recipient">
+    <documentation>Erteilt einer Person Zugriff auf ein bestehendes Postfach: Vollzugriff, «Senden als» oder «Senden im Auftrag». Bereitstellungsprozess des Produkts m365-postfachzugriff (getrennte Prozesse, Form 1).
+
+Die Entscheidung M365PostfachzugriffFreigabe sagt, ob über die Genehmigung der vorgesetzten Person hinaus die Informationssicherheit zustimmen muss: Vollzugriff und «Senden als» auf ein persönliches Postfach ja, ein Funktionspostfach nein. Unbekannte Kombinationen verlangen die Zusatzfreigabe vorsorglich (fail-closed). Lehnt die Informationssicherheit ab, wird die Position über die Entscheidungsroute abgelehnt, nicht als Störung gemeldet.
+
+Das Recht ist im Katalog auf 365 Tage befristet (maxDays): Ein Zugriff auf fremde Korrespondenz endet, statt still weiterzubestehen.
+
+Personendaten: postfach, person und anlass sind als Personendaten der empfangenden Person deklariert; postfachtyp und zugriffsart benennen niemanden und steuern die Gateways.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Position gestartet"><documentation>Die Bestellung startet den Prozess pro Position, nach der Genehmigung durch die vorgesetzte Person.</documentation><outgoing>f_s__br_frei</outgoing></startEvent>
+    <businessRuleTask id="br_frei" name="Freigaberegel bestimmen"><documentation>M365PostfachzugriffFreigabe: postfachtyp und zugriffsart ergeben zusatzfreigabe (Wahrheitswert) und einen hinweis, den die prüfende Stelle liest.</documentation><extensionElements><zeebe:calledDecision decisionId="M365PostfachzugriffFreigabe" resultVariable="freigabe"/><zeebe:ioMapping><zeebe:input source="=postfachtyp" target="postfachtyp"/><zeebe:input source="=zugriffsart" target="zugriffsart"/></zeebe:ioMapping></extensionElements><incoming>f_s__br_frei</incoming><outgoing>f_br_frei__sc_hinweis</outgoing></businessRuleTask>
+    <scriptTask id="sc_hinweis" name="Hinweis übernehmen"><documentation>Übernimmt den Hinweis der Entscheidung als eigene Variable hinweis, die das Prüfformular anzeigt.</documentation><extensionElements><zeebe:script expression="=freigabe.hinweis" resultVariable="hinweis"/></extensionElements><incoming>f_br_frei__sc_hinweis</incoming><outgoing>f_sc_hinweis__gw_zusatz</outgoing></scriptTask>
+    <exclusiveGateway id="gw_zusatz" name="Zusatzfreigabe nötig?" default="f_gw_zusatz__ut_pruefen"><documentation>Default ist die Zusatzfreigabe: Nur ein ausdrückliches false der Entscheidung überspringt sie.</documentation><incoming>f_sc_hinweis__gw_zusatz</incoming><outgoing>f_gw_zusatz__gw_ok</outgoing><outgoing>f_gw_zusatz__ut_pruefen</outgoing></exclusiveGateway>
+    <userTask id="ut_pruefen" name="Zugriff prüfen"><documentation>Die Informationssicherheit sieht Postfach, Person, Zugriffsart, Begründung und den Hinweis der Entscheidung und entscheidet mit Kommentar.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="Informationssicherheit"/><zeebe:formDefinition formId="m365-postfachzugriff-pruefung"/></extensionElements><incoming>f_gw_zusatz__ut_pruefen</incoming><outgoing>f_ut_pruefen__gw_frei</outgoing></userTask>
+    <exclusiveGateway id="gw_frei" name="Freigegeben?" default="f_gw_frei__st_ablehnen"><documentation>Nur «freigeben» führt weiter; alles andere ist eine Ablehnung (fail-closed).</documentation><incoming>f_ut_pruefen__gw_frei</incoming><outgoing>f_gw_frei__gw_ok</outgoing><outgoing>f_gw_frei__st_ablehnen</outgoing></exclusiveGateway>
+    <serviceTask id="st_ablehnen" name="Ablehnung melden"><documentation>POST /api/v1/orders/{orderId}/lines/{itemId}/decision mit der Stelle, die entschieden hat, und ihrem Kommentar. Eine Ablehnung ist eine Entscheidung mit Urheber, keine Provisionierungsstörung.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + itemId + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Informationssicherheit"' target="by"/><zeebe:input source='="Informationssicherheit: " + pruefkommentar' target="reason"/></zeebe:ioMapping></extensionElements><incoming>f_gw_frei__st_ablehnen</incoming><outgoing>f_st_ablehnen__e_abgelehnt</outgoing></serviceTask>
+    <endEvent id="e_abgelehnt" name="Abgelehnt"><incoming>f_st_ablehnen__e_abgelehnt</incoming></endEvent>
+    <exclusiveGateway id="gw_ok"><incoming>f_gw_zusatz__gw_ok</incoming><incoming>f_gw_frei__gw_ok</incoming><outgoing>f_gw_ok__gw_art</outgoing></exclusiveGateway>
+    <exclusiveGateway id="gw_art" name="Welche Zugriffsart?" default="f_gw_art__st_auftrag"><documentation>zugriffsart benennt niemanden und darf deshalb ein Gateway steuern.</documentation><incoming>f_gw_ok__gw_art</incoming><outgoing>f_gw_art__st_voll</outgoing><outgoing>f_gw_art__st_sendas</outgoing><outgoing>f_gw_art__st_auftrag</outgoing></exclusiveGateway>
+    <serviceTask id="st_voll" name="Vollzugriff erteilen"><documentation>add-full-access, ohne AutoMapping: Ein fremdes Postfach soll nicht ungefragt in Outlook erscheinen.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-full-access" parameters='{"Identity": "=postfach", "User": "=person", "AutoMapping": false}'/></extensionElements><incoming>f_gw_art__st_voll</incoming><outgoing>f_st_voll__gw_artjoin</outgoing></serviceTask>
+    <serviceTask id="st_sendas" name="«Senden als» erteilen"><documentation>add-send-as.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-send-as" parameters='{"Identity": "=postfach", "User": "=person"}'/></extensionElements><incoming>f_gw_art__st_sendas</incoming><outgoing>f_st_sendas__gw_artjoin</outgoing></serviceTask>
+    <serviceTask id="st_auftrag" name="«Senden im Auftrag» erteilen"><documentation>grant-send-on-behalf: Der Empfänger sieht, wer im Auftrag gesendet hat.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="grant-send-on-behalf" parameters='{"Identity": "=postfach", "User": "=person"}'/></extensionElements><incoming>f_gw_art__st_auftrag</incoming><outgoing>f_st_auftrag__gw_artjoin</outgoing></serviceTask>
+    <exclusiveGateway id="gw_artjoin"><incoming>f_st_voll__gw_artjoin</incoming><incoming>f_st_sendas__gw_artjoin</incoming><incoming>f_st_auftrag__gw_artjoin</incoming><outgoing>f_gw_artjoin__st_done</outgoing></exclusiveGateway>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit erhält die empfangende Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Bereitstellen und Rückgabe das Recht ändern. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_artjoin__st_done</incoming><outgoing>f_st_done__e_ok</outgoing></serviceTask>
+    <endEvent id="e_ok" name="Zugriff erteilt"><incoming>f_st_done__e_ok</incoming></endEvent>
+    <sequenceFlow id="f_s__br_frei" sourceRef="s" targetRef="br_frei"/>
+    <sequenceFlow id="f_br_frei__sc_hinweis" sourceRef="br_frei" targetRef="sc_hinweis"/>
+    <sequenceFlow id="f_sc_hinweis__gw_zusatz" sourceRef="sc_hinweis" targetRef="gw_zusatz"/>
+    <sequenceFlow id="f_gw_zusatz__gw_ok" sourceRef="gw_zusatz" targetRef="gw_ok" name="nein"><conditionExpression>=freigabe.zusatzfreigabe = false</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_zusatz__ut_pruefen" sourceRef="gw_zusatz" targetRef="ut_pruefen" name="ja"/>
+    <sequenceFlow id="f_ut_pruefen__gw_frei" sourceRef="ut_pruefen" targetRef="gw_frei"/>
+    <sequenceFlow id="f_gw_frei__gw_ok" sourceRef="gw_frei" targetRef="gw_ok" name="freigeben"><conditionExpression>=entscheid = "freigeben"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_frei__st_ablehnen" sourceRef="gw_frei" targetRef="st_ablehnen" name="ablehnen"/>
+    <sequenceFlow id="f_st_ablehnen__e_abgelehnt" sourceRef="st_ablehnen" targetRef="e_abgelehnt"/>
+    <sequenceFlow id="f_gw_ok__gw_art" sourceRef="gw_ok" targetRef="gw_art"/>
+    <sequenceFlow id="f_gw_art__st_voll" sourceRef="gw_art" targetRef="st_voll" name="Vollzugriff"><conditionExpression>=zugriffsart = "vollzugriff"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_art__st_sendas" sourceRef="gw_art" targetRef="st_sendas" name="Senden als"><conditionExpression>=zugriffsart = "senden-als"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_art__st_auftrag" sourceRef="gw_art" targetRef="st_auftrag" name="Im Auftrag"/>
+    <sequenceFlow id="f_st_voll__gw_artjoin" sourceRef="st_voll" targetRef="gw_artjoin"/>
+    <sequenceFlow id="f_st_sendas__gw_artjoin" sourceRef="st_sendas" targetRef="gw_artjoin"/>
+    <sequenceFlow id="f_st_auftrag__gw_artjoin" sourceRef="st_auftrag" targetRef="gw_artjoin"/>
+    <sequenceFlow id="f_gw_artjoin__st_done" sourceRef="gw_artjoin" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_ok" sourceRef="st_done" targetRef="e_ok"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_postfachzugriff_erteilen_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_postfachzugriff_erteilen_plane" bpmnElement="proc_m365_postfachzugriff_erteilen">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_frei_di" bpmnElement="br_frei"><omgdc:Bounds x="280" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_hinweis_di" bpmnElement="sc_hinweis"><omgdc:Bounds x="430" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_zusatz_di" bpmnElement="gw_zusatz" isMarkerVisible="true"><omgdc:Bounds x="605" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="730" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_frei_di" bpmnElement="gw_frei" isMarkerVisible="true"><omgdc:Bounds x="905" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ablehnen_di" bpmnElement="st_ablehnen"><omgdc:Bounds x="1030" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="1212" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ok_di" bpmnElement="gw_ok" isMarkerVisible="true"><omgdc:Bounds x="1055" y="245" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_art_di" bpmnElement="gw_art" isMarkerVisible="true"><omgdc:Bounds x="1205" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1133" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_voll_di" bpmnElement="st_voll"><omgdc:Bounds x="1330" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_sendas_di" bpmnElement="st_sendas"><omgdc:Bounds x="1330" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_auftrag_di" bpmnElement="st_auftrag"><omgdc:Bounds x="1330" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_artjoin_di" bpmnElement="gw_artjoin" isMarkerVisible="true"><omgdc:Bounds x="1505" y="245" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="1630" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok"><omgdc:Bounds x="1812" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1780" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__br_frei_di" bpmnElement="f_s__br_frei"><omgdi:waypoint x="198" y="270"/><omgdi:waypoint x="280" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_frei__sc_hinweis_di" bpmnElement="f_br_frei__sc_hinweis"><omgdi:waypoint x="380" y="270"/><omgdi:waypoint x="430" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_hinweis__gw_zusatz_di" bpmnElement="f_sc_hinweis__gw_zusatz"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="605" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_zusatz__gw_ok_di" bpmnElement="f_gw_zusatz__gw_ok"><omgdi:waypoint x="655" y="270"/><omgdi:waypoint x="1055" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="248" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_zusatz__ut_pruefen_di" bpmnElement="f_gw_zusatz__ut_pruefen"><omgdi:waypoint x="630" y="295"/><omgdi:waypoint x="630" y="410"/><omgdi:waypoint x="730" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="345" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_frei_di" bpmnElement="f_ut_pruefen__gw_frei"><omgdi:waypoint x="830" y="410"/><omgdi:waypoint x="905" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_frei__gw_ok_di" bpmnElement="f_gw_frei__gw_ok"><omgdi:waypoint x="955" y="410"/><omgdi:waypoint x="1080" y="410"/><omgdi:waypoint x="1080" y="295"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="388" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_frei__st_ablehnen_di" bpmnElement="f_gw_frei__st_ablehnen"><omgdi:waypoint x="930" y="435"/><omgdi:waypoint x="930" y="550"/><omgdi:waypoint x="1030" y="550"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="485" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="1130" y="550"/><omgdi:waypoint x="1212" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ok__gw_art_di" bpmnElement="f_gw_ok__gw_art"><omgdi:waypoint x="1105" y="270"/><omgdi:waypoint x="1205" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_voll_di" bpmnElement="f_gw_art__st_voll"><omgdi:waypoint x="1255" y="270"/><omgdi:waypoint x="1330" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="1261" y="248" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_sendas_di" bpmnElement="f_gw_art__st_sendas"><omgdi:waypoint x="1230" y="245"/><omgdi:waypoint x="1230" y="130"/><omgdi:waypoint x="1330" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="1236" y="180" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_auftrag_di" bpmnElement="f_gw_art__st_auftrag"><omgdi:waypoint x="1230" y="295"/><omgdi:waypoint x="1230" y="410"/><omgdi:waypoint x="1330" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="1236" y="345" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_voll__gw_artjoin_di" bpmnElement="f_st_voll__gw_artjoin"><omgdi:waypoint x="1430" y="270"/><omgdi:waypoint x="1505" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_sendas__gw_artjoin_di" bpmnElement="f_st_sendas__gw_artjoin"><omgdi:waypoint x="1430" y="130"/><omgdi:waypoint x="1530" y="130"/><omgdi:waypoint x="1530" y="245"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_auftrag__gw_artjoin_di" bpmnElement="f_st_auftrag__gw_artjoin"><omgdi:waypoint x="1430" y="410"/><omgdi:waypoint x="1530" y="410"/><omgdi:waypoint x="1530" y="295"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_artjoin__st_done_di" bpmnElement="f_gw_artjoin__st_done"><omgdi:waypoint x="1555" y="270"/><omgdi:waypoint x="1630" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_ok_di" bpmnElement="f_st_done__e_ok"><omgdi:waypoint x="1730" y="270"/><omgdi:waypoint x="1812" y="270"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

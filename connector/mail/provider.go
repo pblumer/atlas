@@ -48,6 +48,11 @@ type ProviderConfig struct {
 	// mailbox it sends from (ADR-0438). Gmail and Graph read through
 	// the API they send through and ignore it.
 	Mailbox string
+	// Scanner is the malware scanner every document this Worker hands on is scanned by
+	// ("clamd://host:3310"); "" scans nothing beyond the built-in inspection
+	// (ADR-0478). It belongs to the Worker rather than
+	// to a provider, so every provider takes it.
+	Scanner string
 }
 
 // NewProviderClient builds the mail client for a managed worker, dispatching on its
@@ -55,7 +60,23 @@ type ProviderConfig struct {
 // and build an OAuth token source. A misconfigured worker returns an error so the
 // caller can skip it (its tasks park) rather than sending wrongly. This is the single
 // place a new provider is added.
+//
+// A Worker that names a scanner gets its client wrapped with it; a scanner endpoint
+// that does not parse refuses the Worker like any other misconfiguration, because a
+// Worker that was meant to scan and silently does not is worse than one that stops.
 func NewProviderClient(cfg ProviderConfig) (Client, error) {
+	client, err := newProviderClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	scanner, err := NewScanner(cfg.Scanner)
+	if err != nil {
+		return nil, fmt.Errorf("mail: %w", err)
+	}
+	return WithScanner(client, scanner), nil
+}
+
+func newProviderClient(cfg ProviderConfig) (Client, error) {
 	switch strings.ToLower(strings.TrimSpace(cfg.Provider)) {
 	case "", ProviderSMTP:
 		// Normalized here, not only where a worker is saved: a record written

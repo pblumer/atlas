@@ -1,7 +1,7 @@
 # ADR-0447: Atlas shows the signals its deployed models throw and receive
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-22)
+- **Implementation:** Landed
 - **Date:** 2026-10-02
 - **Deciders:** Atlas maintainers
 - **Open question:** whether deployed definitions are meant to stay readable by every signed-in
@@ -255,6 +255,51 @@ The cost is accepted: a modeler with bad intent finds a name to catch faster.
   message throw ([ADR-0112](0112-send-tasks.md)) and belongs there too.
 - **Cross-partition broadcast** ([ADR-0006](0006-partition-routing-and-cross-partition.md),
   ADR-0088). The inventory reads definitions, which are server-wide, so it is unaffected.
+
+### As built
+
+Everything of §1 to §6 landed in one change, together with ADR-0446.
+
+- **The route.** `GET /api/v1/signals` (`modeler`, `api/modelevents.go`) answers `signals`, one per
+  name, each with its `points` and its `findings`. A point carries what §1 lists, and its definition
+  key beside it, so the Console links a point to the deployed version. `interrupting` is present for a
+  boundary or an event subprocess only, so its absence never reads as "non-interrupting".
+  `compiler.SignalPoint` gained `Interrupting` for it.
+- **Which points.** Every point of a name outside `atlas.*`. Of an `atlas.*` name only a throw by a
+  definition that is not atlas's own, which is a definition that is neither a system process nor
+  filed in the system project. A throw by a system process is the catalogue's, and a receiver stays in
+  the listener view (§2).
+- **The findings, precisely.** One function, `signalFindings`, reads the points of one name.
+  - `signal.unreceived`: a newest version throws the name, and no newest version that is not
+    deactivated receives it. A deactivated newest version still counts as a thrower, because its
+    running instances can still throw.
+  - `signal.unthrown`: a newest version receives the name, and no deployed version of any process
+    throws it.
+  - `signal.crosses-projects`: a newest thrower and a newest receiver differ in project. A
+    definition without a project counts as a project of its own, so a thrower in a project and a
+    receiver without one cross, and two definitions without a project do not. The sentence names an
+    interrupting receiver among them, because that is where the work is cancelled.
+  - `signal.reserved-name`: a newest version outside atlas's own throws an `atlas.*` name. It is the
+    only finding computed for such a name: the others would be read from receivers this route does
+    not show.
+- **The one rule (§5).** `definitionReadable` is the check every listing derived from definitions
+  passes each one through, and `GET /api/v1/processes/{key}/xml` now reads its definition through
+  the same check. It admits every signed-in caller today, so nothing narrows; if definitions become
+  object-gated, both narrow together.
+- **The Console.** The *Events* page opens with a sentence that says which list is which, keeps the
+  catalogue as *Events atlas emits*, and adds *Signals and messages of this installation* with a
+  channel filter, a filter for names with a finding, and a detail per name that states the version
+  limit (§3). `#/console/events?name=…&channel=…` opens a name, which is how the Modeler links.
+- **The Modeler.** A receiving signal element's picker has the group *Signals deployed models
+  throw*: the names a newest version throws, without `atlas.*` names, labelled with the processes
+  that throw them. A throwing element says "Received by N deployed processes", counting newest
+  versions that are not deactivated, or that none does, with a link to the page. It says nothing for
+  an `atlas.*` name, where the catalogue's note already warns. The inventory is asked for once per
+  panel render, not once per page as the catalogue is, because it changes with every deploy.
+- **MCP.** `atlas_signals` proxies the route; the README counts 151 tools with it and
+  `atlas_message_names`.
+- **The handbook.** The chapter *Ereignisse / Events* has the section *Signale und Nachrichten
+  dieser Installation*, in both languages, with the findings of both records.
 
 ### Consequences
 

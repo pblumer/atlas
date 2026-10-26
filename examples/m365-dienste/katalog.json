@@ -1,0 +1,641 @@
+{
+  "publish": true,
+  "catalogs": [
+    {
+      "id": "cat-m365-mitarbeitende",
+      "texts": {
+        "de": "Microsoft 365 für Mitarbeitende",
+        "en": "Microsoft 365 for staff"
+      },
+      "rank": 500,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "m365-lizenz",
+        "m365-telefonie",
+        "m365-team",
+        "m365-funktionspostfach",
+        "m365-verteiler",
+        "m365-postfachzugriff"
+      ],
+      "groups": [
+        "{{zielgruppe}}"
+      ],
+      "edges": [
+        {
+          "from": "m365-telefonie",
+          "to": "m365-lizenz",
+          "kind": "requires"
+        }
+      ]
+    },
+    {
+      "id": "cat-m365-ucc",
+      "texts": {
+        "de": "Microsoft 365: Kommunikation und Telefonie",
+        "en": "Microsoft 365: communication and telephony"
+      },
+      "rank": 510,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "m365-lizenz",
+        "m365-telefonie",
+        "m365-team",
+        "m365-funktionspostfach",
+        "m365-verteiler",
+        "m365-postfachzugriff",
+        "m365-raum",
+        "m365-warteschlange",
+        "m365-telefonzentrale"
+      ],
+      "groups": [
+        "{{zielgruppe-ucc}}"
+      ],
+      "edges": [
+        {
+          "from": "m365-telefonie",
+          "to": "m365-lizenz",
+          "kind": "requires"
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "m365-lizenz",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "texts": {
+        "de": "Microsoft 365: Lizenz mit Postfach",
+        "en": "Microsoft 365: licence with mailbox"
+      },
+      "descriptions": {
+        "de": "Die Microsoft-365-Lizenz einer Person mit Office, Teams und dem Postfach in Exchange Online. Die Variante bestimmt die Lizenzstufe.",
+        "en": "A person's Microsoft 365 licence with Office, Teams and the mailbox in Exchange Online. The variant sets the licence tier."
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "texts": {
+            "de": "Standard (E3)",
+            "en": "Standard (E3)"
+          }
+        },
+        {
+          "id": "erweitert",
+          "texts": {
+            "de": "Erweitert (E5)",
+            "en": "Extended (E5)"
+          }
+        },
+        {
+          "id": "frontline",
+          "texts": {
+            "de": "Frontline (F3)",
+            "en": "Frontline (F3)"
+          }
+        }
+      ],
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_lizenz",
+      "configForm": "m365-person",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.lizenz.zuweisen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.lizenz.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Lizenz zurückgeben",
+            "en": "Return the licence"
+          }
+        },
+        {
+          "key": "abwesenheit",
+          "message": "m365.postfach.abwesenheit",
+          "effect": "service",
+          "triggers": [
+            "customer"
+          ],
+          "labels": {
+            "de": "Abwesenheitsnotiz setzen",
+            "en": "Set an automatic reply"
+          },
+          "form": "m365-abwesenheit"
+        },
+        {
+          "key": "abwesenheit-beenden",
+          "message": "m365.postfach.anwesend",
+          "effect": "service",
+          "triggers": [
+            "customer"
+          ],
+          "labels": {
+            "de": "Abwesenheitsnotiz beenden",
+            "en": "End the automatic reply"
+          }
+        }
+      ],
+      "keywords": [
+        "M365",
+        "Office",
+        "Lizenz",
+        "Licence",
+        "E3",
+        "E5",
+        "F3",
+        "Postfach",
+        "Mailbox"
+      ],
+      "category": "identitaet",
+      "categoryTexts": {
+        "de": "Identität und Lizenzen",
+        "en": "Identity and licences"
+      }
+    },
+    {
+      "id": "m365-telefonie",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "texts": {
+        "de": "Teams-Telefonie mit eigener Rufnummer",
+        "en": "Teams telephony with own number"
+      },
+      "descriptions": {
+        "de": "Telefonieren in Microsoft Teams mit einer persönlichen Rufnummer. Setzt die Microsoft-365-Lizenz voraus.",
+        "en": "Calling in Microsoft Teams with a personal phone number. Requires the Microsoft 365 licence."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{telefonie-team}}"
+      },
+      "lifecycleProcess": "proc_m365_telefonie",
+      "configForm": "m365-person",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.telefonie.einrichten",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.telefonie.aufheben",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Telefonie aufheben",
+            "en": "Cancel telephony"
+          }
+        }
+      ],
+      "keywords": [
+        "Teams Phone",
+        "Telefon",
+        "Phone",
+        "Rufnummer",
+        "Number"
+      ],
+      "category": "telefonie",
+      "categoryTexts": {
+        "de": "Telefonie",
+        "en": "Telephony"
+      }
+    },
+    {
+      "id": "m365-team",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Microsoft Teams: Team",
+        "en": "Microsoft Teams: team"
+      },
+      "descriptions": {
+        "de": "Ein Team für ein Projekt oder einen Bereich, benannt nach der Namensregel (TM-<BEREICH> …), mit einer verantwortlichen Person als Besitzer.",
+        "en": "A team for a project or a department, named by the naming rule (TM-<DEPT> …), owned by a responsible person."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_team",
+      "configForm": "m365-team-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.team.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.team.archivieren",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Team archivieren",
+            "en": "Archive the team"
+          }
+        },
+        {
+          "key": "mitglied",
+          "message": "m365.team.mitglied",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Person aufnehmen",
+            "en": "Add a person"
+          },
+          "form": "m365-team-mitglied"
+        },
+        {
+          "key": "kanal",
+          "message": "m365.team.kanal",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kanal anlegen",
+            "en": "Create a channel"
+          },
+          "form": "m365-team-kanal"
+        }
+      ],
+      "keywords": [
+        "Teams",
+        "Team",
+        "Gruppe",
+        "Group",
+        "Zusammenarbeit"
+      ],
+      "category": "zusammenarbeit",
+      "categoryTexts": {
+        "de": "Zusammenarbeit",
+        "en": "Collaboration"
+      }
+    },
+    {
+      "id": "m365-funktionspostfach",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Funktionspostfach",
+        "en": "Shared mailbox"
+      },
+      "descriptions": {
+        "de": "Ein gemeinsames Postfach für eine Funktion oder ein Team, z.B. info@ oder bewerbung@. Name und Adresse folgen der Namensregel (FP-…).",
+        "en": "A mailbox shared by a function or a team. Name and address follow the naming rule (FP-…)."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_funktionspostfach",
+      "configForm": "m365-funktionspostfach-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.funktionspostfach.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.funktionspostfach.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Funktionspostfach entfernen",
+            "en": "Remove the shared mailbox"
+          }
+        },
+        {
+          "key": "zugriff-erteilen",
+          "message": "m365.funktionspostfach.zugriff-erteilen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zugriff erteilen",
+            "en": "Grant access"
+          },
+          "form": "m365-postfach-person"
+        },
+        {
+          "key": "zugriff-entziehen",
+          "message": "m365.funktionspostfach.zugriff-entziehen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zugriff entziehen",
+            "en": "Revoke access"
+          },
+          "form": "m365-postfach-person"
+        }
+      ],
+      "keywords": [
+        "Shared Mailbox",
+        "Postfach",
+        "Mailbox",
+        "Exchange",
+        "Funktionsadresse"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
+      "id": "m365-verteiler",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Verteilerliste",
+        "en": "Distribution list"
+      },
+      "descriptions": {
+        "de": "Eine Verteilerliste mit verantwortlicher Person; Mitglieder kommen über die Aktionen im Shop dazu. Name und Adresse folgen der Namensregel (VL-…).",
+        "en": "A distribution list with a responsible person; members are added through the shop's actions. Name and address follow the naming rule (VL-…)."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_verteiler",
+      "configForm": "m365-verteiler-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.verteiler.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.verteiler.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Verteiler entfernen",
+            "en": "Remove the list"
+          }
+        },
+        {
+          "key": "mitglied-aufnehmen",
+          "message": "m365.verteiler.mitglied-aufnehmen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mitglied aufnehmen",
+            "en": "Add a member"
+          },
+          "form": "m365-postfach-person"
+        },
+        {
+          "key": "mitglied-entfernen",
+          "message": "m365.verteiler.mitglied-entfernen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mitglied entfernen",
+            "en": "Remove a member"
+          },
+          "form": "m365-postfach-person"
+        }
+      ],
+      "keywords": [
+        "Verteiler",
+        "Distribution List",
+        "DL",
+        "Exchange"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
+      "id": "m365-postfachzugriff",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 365,
+      "texts": {
+        "de": "Zugriff auf ein Postfach",
+        "en": "Access to a mailbox"
+      },
+      "descriptions": {
+        "de": "Vollzugriff, «Senden als» oder «Senden im Auftrag» auf ein bestehendes Postfach, befristet auf ein Jahr. Für persönliche Postfächer prüft je nach Zugriffsart zusätzlich die Informationssicherheit.",
+        "en": "Full access, send-as or send-on-behalf to an existing mailbox, limited to one year. For personal mailboxes, information security also reviews depending on the access type."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "provisionProcess": "proc_m365_postfachzugriff_erteilen",
+      "deprovisionProcess": "proc_m365_postfachzugriff_entziehen",
+      "configForm": "m365-postfachzugriff-bestellung",
+      "keywords": [
+        "Stellvertretung",
+        "Delegate",
+        "Vollzugriff",
+        "Full Access",
+        "Send As"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
+      "id": "m365-raum",
+      "homeCatalog": "cat-m365-ucc",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Sitzungszimmer (Raumpostfach)",
+        "en": "Meeting room (room mailbox)"
+      },
+      "descriptions": {
+        "de": "Ein in Outlook und Teams buchbares Sitzungszimmer; Buchungen werden automatisch angenommen. Name nach der Namensregel (RM-…).",
+        "en": "A meeting room bookable in Outlook and Teams; bookings are accepted automatically. Named by the naming rule (RM-…)."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{facility-management}}"
+      },
+      "provisionProcess": "proc_m365_raum_einrichten",
+      "deprovisionProcess": "proc_m365_raum_entfernen",
+      "configForm": "m365-raum-bestellung",
+      "keywords": [
+        "Raum",
+        "Room",
+        "Sitzungszimmer",
+        "Meeting",
+        "Kalender"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
+      "id": "m365-warteschlange",
+      "homeCatalog": "cat-m365-ucc",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Anrufwarteschlange (Hotline)",
+        "en": "Call queue (hotline)"
+      },
+      "descriptions": {
+        "de": "Eine Hotline-Nummer, deren Anrufe an eine Gruppe von Agenten verteilt werden, mit eigenem Ressourcenkonto und Dienstnummer. Name nach der Namensregel (CQ-…).",
+        "en": "A hotline number whose calls are distributed to a group of agents, with its own resource account and service number. Named by the naming rule (CQ-…)."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{telefonie-team}}"
+      },
+      "lifecycleProcess": "proc_m365_warteschlange",
+      "configForm": "m365-warteschlange-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.warteschlange.einrichten",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.warteschlange.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Warteschlange entfernen",
+            "en": "Remove the call queue"
+          }
+        },
+        {
+          "key": "agenten-aendern",
+          "message": "m365.warteschlange.agenten",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Agenten ändern",
+            "en": "Change agents"
+          },
+          "form": "m365-warteschlange-agenten"
+        }
+      ],
+      "keywords": [
+        "Call Queue",
+        "Hotline",
+        "Teams Phone",
+        "Warteschlange"
+      ],
+      "category": "telefonie",
+      "categoryTexts": {
+        "de": "Telefonie",
+        "en": "Telephony"
+      }
+    },
+    {
+      "id": "m365-telefonzentrale",
+      "homeCatalog": "cat-m365-ucc",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Telefonzentrale (Auto Attendant)",
+        "en": "Auto attendant"
+      },
+      "descriptions": {
+        "de": "Eine Hauptnummer mit Ansage, die Anrufe an eine Warteschlange weiterleitet. Name nach der Namensregel (AA-…).",
+        "en": "A main number with a greeting that transfers calls to a call queue. Named by the naming rule (AA-…)."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{telefonie-team}}"
+      },
+      "lifecycleProcess": "proc_m365_telefonzentrale",
+      "configForm": "m365-telefonzentrale-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.telefonzentrale.einrichten",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.telefonzentrale.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Telefonzentrale entfernen",
+            "en": "Remove the auto attendant"
+          }
+        }
+      ],
+      "keywords": [
+        "Auto Attendant",
+        "Zentrale",
+        "IVR",
+        "Teams Phone"
+      ],
+      "category": "telefonie",
+      "categoryTexts": {
+        "de": "Telefonie",
+        "en": "Telephony"
+      }
+    }
+  ]
+}

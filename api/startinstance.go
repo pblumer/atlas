@@ -129,7 +129,11 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 		}
 		// Reporting, so the answer can name the instance it started and an order
 		// position can be told which instance works it (ADR-0416).
-		s.proc.CreateInstanceReporting(key, &instKey, startVars...)
+		//
+		// Who asked rides along and is frozen into the activation event: it is the one
+		// trusted answer to "who initiated this" a later authorization decision can read
+		// (ADR-0475 §3).
+		s.proc.CreateInstanceStartedBy(key, &instKey, startedByOf(r), startVars...)
 		driveNeeded = true
 	})
 	// The handlers run off the run loop (ADR-0157 step 6), so the drive and the
@@ -188,4 +192,13 @@ func namesPosition(vars []model.VariableValue) bool {
 		}
 	}
 	return false
+}
+
+// startedByOf is the stable principal id of whoever asked for a start, or "" when
+// nobody authenticated did (an open server).
+func startedByOf(r *http.Request) string {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		return p.UserID
+	}
+	return ""
 }

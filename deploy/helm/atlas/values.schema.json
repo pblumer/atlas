@@ -67,8 +67,9 @@
         },
         "catalogue": {
           "type": "object",
-          "properties": { "enabled": { "type": "boolean" } }
+          "properties": { "enabled": { "type": "boolean" }, "purge": { "type": "boolean" } }
         },
+        "instancePurge": { "type": "boolean" },
         "script": {
           "type": "object",
           "properties": {

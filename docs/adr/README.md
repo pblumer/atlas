@@ -226,7 +226,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0138](0138-adhoc-subprocesses.md) | Ad-hoc subprocesses (on-demand, unordered contained activities) | Accepted | Landed |
 | [0139](0139-csv-to-json-connector.md) | A first-class "CSV to JSON" connector kind with model-authored layout | Accepted (amended) | Landed |
 | [0140](0140-live-collaborative-modeling-sessions.md) | Live collaborative modeling sessions — real-time co-editing of drafts by people and AI agents | Accepted | Landed |
-| [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted | Landed |
+| [0141](0141-sharepoint-connector.md) | A SharePoint connector (create list item, via Microsoft Graph) | Accepted (amended) | Landed |
 | [0142](0142-prometheus-metrics.md) | Operational metrics over a Prometheus endpoint | Accepted | Landed |
 | [0143](0143-process-documentation-export.md) | Process documentation export | Accepted | Landed |
 | [0144](0144-per-definition-history-ttl.md) | Per-definition history TTL — retention the model declares | Accepted | Landed |
@@ -301,7 +301,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0213](0213-ad-mock-directory-in-the-console.md) | The mock Active Directory is visible in the Console | Accepted | Landed |
 | [0214](0214-jira-inbound-issue-watch.md) | Jira as an inbound event source — a polled issue watch, deduplicated per issue | Accepted | Landed |
 | [0215](0215-modeler-playground.md) | The Modeler Playground — batch simulation and analysis of a draft | Accepted | Landed |
-| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Not started |
+| [0216](0216-mockups-are-one-view.md) | Mockups are one view, not one per kind | Accepted | Partial |
 | [0217](0217-openapi-mock-server.md) | A mock REST API served from an OpenAPI document | Accepted (amended) | Landed |
 | [0218](0218-jira-default-offload.md) | Jira runs on a worker by default | Accepted | Landed |
 | [0219](0219-variable-write-attribution.md) | Variable write attribution | Accepted | Landed |
@@ -421,7 +421,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0333](0333-inventory-commissioning-load.md) | The inventory is taken before it is enforced, and what it records says Atlas did not grant it | Accepted | Landed |
 | [0334](0334-reconciliation.md) | Reconciliation reads absence as a finding, and only inside a scope somebody promised was complete | Accepted | Landed |
 | [0335](0335-starting-an-instance-returns-its-key.md) | Starting an instance returns its key | Accepted | Partial |
-| [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted | Landed |
+| [0336](0336-cleaning-up-the-decision-store.md) | Cleaning up the decision store | Accepted (amended) | Landed |
 | [0337](0337-incident-floods.md) | An incident flood is read by cause and resolved in bulk | Accepted | Landed |
 | [0338](0338-where-a-business-object-is-used.md) | Where a business object is used | Accepted | Landed |
 | [0339](0339-the-definition-key-space-never-goes-backwards.md) | The definition key space never goes backwards | Accepted | Landed |
@@ -512,7 +512,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md) | A Playground rule can demand the cases it speaks about | Proposed | Not started |
 | [0425](0425-a-product-lifecycle-is-one-process-with-message-triggers.md) | A product's lifecycle is one process, and each operation is a message start it is triggered at | Accepted | Landed |
 | [0426](0426-an-untriggered-create-never-seeds-several-start-events.md) | An untriggered create never seeds several start events | Accepted | Landed |
-| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted | Landed |
+| [0427](0427-converting-a-product-to-a-lifecycle-process.md) | Converting a product to a lifecycle process keeps the old processes alive until nothing needs them | Accepted (amended) | Landed |
 | [0428](0428-a-product-lifecycle-may-run-as-one-instance-per-position.md) | A product lifecycle may run as one instance per position, and its later operations are delivered to that instance | Accepted (amended) | Landed |
 | [0429](0429-product-actions-are-commands-with-published-outcomes.md) | A product declares its actions, each a command whose outcome is a fact published beyond Atlas | Accepted (amended) | Partial |
 | [0430](0430-the-event-feed-has-its-own-role-and-token-scope.md) | The event feed has its own role and its own token scope | Accepted | Landed |
@@ -531,8 +531,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0443](0443-publishing-warns-about-answers-in-the-clear.md) | Publishing warns about answers in the clear | Accepted | Landed |
 | [0444](0444-release-notes-from-the-changelog.md) | The Console shows the CHANGELOG as release notes, read while the server runs | Accepted | Landed |
 | [0445](0445-feel-assistant.md) | A FEEL expression is written in a conversation, and checked by the engine before anybody reads it | Accepted | Landed |
-| [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Proposed | Not started |
-| [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Proposed | Not started |
+| [0446](0446-the-messages-deployed-models-send-and-receive.md) | Atlas shows the messages its deployed models send and receive | Accepted | Landed |
+| [0447](0447-the-signals-deployed-models-throw-and-receive.md) | Atlas shows the signals its deployed models throw and receive | Accepted | Landed |
 | [0448](0448-trusted-proxies.md) | Trusted proxies — the client's address behind a load balancer, and the health check that is not news | Accepted | Landed |
 | [0449](0449-a-wizard-is-a-subprocess-one-filler-walks-through.md) | A wizard is a subprocess one filler walks through | Accepted | Landed |
 | [0450](0450-a-scope-drains-only-when-no-token-is-in-transit.md) | A scope drains only when no token is in transit into it | Accepted | Landed |
@@ -552,6 +552,30 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
 | [0466](0466-start-view-groups-and-favourites.md) | The Start view groups by application and keeps favourites per person | Accepted | Landed |
+| [0467](0467-application-package-export.md) | An application and its shop move as a package, and an import asks before it replaces | Accepted (amended) | Landed |
+| [0468](0468-deleting-an-application-with-its-contents.md) | Deleting an application with everything it owns | Accepted | Landed |
+| [0469](0469-catalogue-purge.md) | An administrator can delete a catalogue for good, unless the server opts out | Accepted | Landed |
+| [0470](0470-the-line-manager-is-on-the-account.md) | The line manager is a reference on the account | Accepted | Landed |
+| [0471](0471-release-architecture-sketch.md) | A release carries its architecture sketch, and a worker publishes it to Confluence | Accepted (amended) | Partial |
+| [0472](0472-event-log.md) | Atlas keeps a log of the signals and messages that were sent | Accepted (2026-10-22) | Landed |
+| [0473](0473-form-remote-data-sources.md) | A form looks remote data up through an ephemeral worker query | Accepted (amended) | Landed |
+| [0474](0474-readable-element-ids.md) | Readable ids for new BPMN elements | Accepted (amended) | Landed |
+| [0475](0475-identity-aware-worker-execution.md) | Identity-aware Worker execution and policy-based authorization | Proposed | Partial |
+| [0476](0476-google-contacts-worker.md) | A Google Contacts Worker Type — a process finds, keeps and labels the people it works with | Accepted | Landed |
+| [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
+| [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
+| [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
+| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
+| [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
+| [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
+| [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Accepted | Partial |
+| [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
+| [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
+| [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
+| [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
+| [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
 
 ## The two states of a record
 

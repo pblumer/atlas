@@ -1,0 +1,63 @@
+{
+  "type": "default",
+  "id": "m365-partnerzugang-antrag",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugang für Partner beantragen · Request partner access**\n\nIhr Antrag wird geprüft; erst danach entsteht ein Konto. · Your request is reviewed; an account is created only afterwards."
+    },
+    {
+      "key": "firma",
+      "type": "textfield",
+      "label": "Firma · Company",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname · First name",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname · Last name",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail · Email",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "ansprechperson",
+      "type": "textfield",
+      "label": "Interne Ansprechperson (E-Mail) · Internal contact (email)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Wofür brauchen Sie den Zugang? · What do you need access for?",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "type": "default",
+  "id": "m365-verteiler-pruefung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Anmeldung prüfen · Review the subscription**"
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail · Email",
+      "disabled": true
+    },
+    {
+      "key": "liste",
+      "type": "textfield",
+      "label": "Liste · List",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bestaetigt",
+      "type": "radio",
+      "label": "Anmeldung bestätigen · Confirm subscription",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

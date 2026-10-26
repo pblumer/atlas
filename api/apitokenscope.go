@@ -165,12 +165,24 @@ var apiScopeAllowed = map[string][]string{
 	},
 	apiScopeWorker: {
 		"POST /api/v1/jobs/activate",
+		// A governed job's action is authorized for the lease its worker holds
+		// (ADR-0475 §5): a worker makes this call
+		// before it acts, so a worker credential must be able to.
+		"POST /api/v1/jobs/{key}/authorize",
 		"POST /api/v1/jobs/{key}/complete",
 		"POST /api/v1/jobs/{key}/fail",
 		"POST /api/v1/jobs/{key}/error",
+		// The query twin of the job pull and its answer
+		// (ADR-0473): the same Instances, the same Workers,
+		// and nothing an Instance does not already do for a job.
+		"POST /api/v1/worker-queries/activate",
+		"POST /api/v1/worker-queries/{id}/answer",
 		"POST /api/v1/mail/outbox",
 		"POST /api/v1/ad/mock-directory",
 		"POST /api/v1/sql/mock-journal",
+		// A worker in SharePoint mockup mode performs its operations here: the site is
+		// the server's, so it outlives the worker (ADR-0484).
+		"POST /api/v1/sharepoint/mock-sites/{worker}",
 	},
 	// One route, and not one of /api/v1's: the exposition is mounted beside the
 	// probes. A scope is a set of mounted patterns, not of API operations, which is

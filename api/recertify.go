@@ -81,11 +81,11 @@ type recertifyOpen struct {
 	// Reviewers names who answers for whom: principal id (or directory id, or mail)
 	// of the holder, to the principal of the person who reviews their rights.
 	//
-	// Atlas does not derive it. api/escalation.go settled that argument for the
-	// line-manager lookup: it is a directory question, and directory questions
-	// belong to a modelled process — the `superior` approval rule already works
-	// this way. So the process that opens a campaign resolves the managers and
-	// names them here.
+	// Atlas does not derive it, although an account may now carry its line manager
+	// (ADR-0470): a reviewer is whoever the
+	// campaign's own process says answers for a holder, and that need not be the
+	// line. So the process that opens a campaign resolves the reviewers and names
+	// them here.
 	//
 	// A holder this map does not name is not an error. The row is unassigned, which
 	// is the answer "nobody", and it lands with the campaign's owner rather than

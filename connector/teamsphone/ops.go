@@ -9,14 +9,15 @@ import "sort"
 //
 // Required and Optional name authored values: each is a literal or, with a leading '=',
 // a FEEL expression evaluated over the variables the task sees at call time. Settings
-// name static values the compiler validates against [Settings] and defaults, because
-// each decides the shape of what is created rather than its content.
+// name static values the compiler validates against [Settings], because each decides the
+// shape of what is created rather than its content.
 //
-// Reconciled names the optional values an operation also brings an existing object to,
-// not only a new one. For those, not naming the value and naming an empty one mean
-// different things — leave it as it is, and make it empty — so [Prepare] passes such a
-// value on only when the model named it, and refuses one that resolved to nothing rather
-// than reading a variable nobody set as "empty".
+// Reconciled names the optional values and settings an operation also brings an existing
+// object to, not only a new one. For those, not naming a value and naming an empty or a
+// default one mean different things — leave it as it is, and make it so — so [Prepare]
+// lists in [Request.Reconcile] only what the model named, passes a reconciled list on
+// only when the model named it, and refuses one that resolved to nothing rather than
+// reading a variable nobody set as "nobody".
 type Op struct {
 	Label       string
 	Required    []string
@@ -47,11 +48,12 @@ var Ops = map[string]Op{
 		Required: []string{"name", "resourceAccountId"},
 		Optional: []string{"agents", "authorizedUsers", "languageId"},
 		Settings: []string{"routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
-		// The agents a model names are the queue's agents: a process run again after a
-		// change of staff means the new list, and a queue that kept the old one while the
-		// task reported success would be the failure nobody sees (ADR-0463, amendment
-		// 2026-10-19).
-		Reconciled:  []string{"agents"},
+		// What a model names is what the queue is: a process run again after a change of
+		// staff or of routing means the new values, and a queue that kept the old ones
+		// while the task reported success would be the failure nobody sees (ADR-0463,
+		// amendments 2026-10-19 and 2026-10-20). The language is not reconciled: it only
+		// changes what the queue's announcements say.
+		Reconciled:  []string{"agents", "authorizedUsers", "routingMethod", "presenceBasedRouting", "conferenceMode", "allowOptOut"},
 		NeedsResult: true,
 	},
 	"ensure-auto-attendant": {
@@ -79,6 +81,42 @@ var Ops = map[string]Op{
 		Label:    "remove a resource account",
 		Required: []string{"resourceAccountId"},
 	},
+	// A phone number is given to a user or a resource account alike: a queue's hotline
+	// and a person's direct line are the same assignment to Teams. identity is either's
+	// user principal name or object id. The number type is the tenant's way of reaching
+	// the telephone network and decides what Teams checks, so it is fixed in the model.
+	"ensure-phone-number": {
+		Label:       "ensure a phone number",
+		Required:    []string{"identity", "phoneNumber"},
+		Optional:    []string{"locationId"},
+		Settings:    []string{"numberType"},
+		NeedsResult: true,
+	},
+	// Without a phoneNumber, every number the identity holds is removed: a leaver path
+	// should not have to know them.
+	"remove-phone-number": {
+		Label:    "remove a phone number",
+		Required: []string{"identity"},
+		Optional: []string{"phoneNumber"},
+	},
+	// A whole hotline in one task, in the one order that never leaves a caller ringing
+	// into nothing: auto attendants, then queues, then each account's numbers and the
+	// account. names finds a voice app an earlier run left without its account.
+	"remove-hotline": {
+		Label:    "remove a hotline",
+		Required: []string{"resourceAccountIds"},
+		Optional: []string{"names"},
+	},
+	// The numbers in the tenant's inventory nobody holds, that Teams would give to the
+	// kind of holder named — what a person choosing a number for ensure-phone-number
+	// picks from. The type is the one that ensure-phone-number will assign under, so it
+	// is fixed in the model like there.
+	"list-free-phone-numbers": {
+		Label:       "list free phone numbers",
+		Optional:    []string{"numberPrefix", "max"},
+		Settings:    []string{"numberType", "assignableTo"},
+		NeedsResult: true,
+	},
 }
 
 // OpNames lists the operations, sorted, for the messages that have to say what was
@@ -104,35 +142,50 @@ const (
 	// Holidays is a list of {name, start, end} objects with ISO dates, as a FEEL list
 	// of contexts or as the JSON text of one.
 	Holidays
+	// PhoneNumber is one telephone number, written as people write one — with spaces,
+	// dashes or brackets, or as a tel: URI — and handed on as Teams takes it: digits with
+	// an optional leading + and an optional ;ext= extension.
+	PhoneNumber
+	// Limit is how many entries an answer may hold: a whole number from 1 to
+	// MaxFreeNumbers, DefaultFreeNumbers when the model names none.
+	Limit
 )
 
 // Attributes are every authored value an operation can name, with the shape it is read
 // as. An attribute absent here cannot be authored at all.
 var Attributes = map[string]Shape{
-	"users":             List,
-	"userPrincipalName": Text,
-	"displayName":       Text,
-	"name":              Text,
-	"resourceAccountId": Text,
-	"transferTarget":    Text,
-	"agents":            List,
-	"authorizedUsers":   List,
-	"languageId":        Text,
-	"timeZone":          Text,
-	"holidays":          Holidays,
+	"users":              List,
+	"userPrincipalName":  Text,
+	"displayName":        Text,
+	"name":               Text,
+	"resourceAccountId":  Text,
+	"transferTarget":     Text,
+	"agents":             List,
+	"authorizedUsers":    List,
+	"languageId":         Text,
+	"timeZone":           Text,
+	"holidays":           Holidays,
+	"identity":           Text,
+	"phoneNumber":        PhoneNumber,
+	"locationId":         Text,
+	"resourceAccountIds": List,
+	"names":              List,
+	"numberPrefix":       PhoneNumber,
+	"max":                Limit,
 }
 
-// Setting is one static value: the values it may take, and the one a model that
-// authors none gets. An empty Default makes the setting required.
+// Setting is one static value: the values it may take, and the one an object the request
+// creates gets when the model authors none. An empty Default makes the setting required.
 type Setting struct {
 	Values  []string
 	Default string
 }
 
 // Settings are the static values an operation may carry. They are compiled structure,
-// not authored content: the compiler refuses a value outside Values and applies the
-// default, so a job always carries one of these words and the runtime interprets
-// nothing (I5).
+// not authored content: the compiler refuses a value outside Values (I5). It does not
+// apply the default — whether the model named a setting is what tells an existing
+// object's setting to change from one to keep — so [Prepare] applies it, for an object
+// the request creates.
 var Settings = map[string]Setting{
 	// accountType decides the application the resource account is created for, and so
 	// which kind of voice app it can later be associated with. It has no default: a
@@ -142,7 +195,39 @@ var Settings = map[string]Setting{
 	"presenceBasedRouting": {Values: []string{"true", "false"}, Default: "true"},
 	"conferenceMode":       {Values: []string{"true", "false"}, Default: "true"},
 	"allowOptOut":          {Values: []string{"true", "false"}, Default: "true"},
+	// numberType has no default: Direct Routing, a Calling Plan and Operator Connect are
+	// three ways a tenant reaches the telephone network, and a guess would hand Teams a
+	// number under the wrong one.
+	"numberType": {Values: []string{NumberDirectRouting, NumberCallingPlan, NumberOperatorConnect}},
+	// assignableTo has no default either: Teams gives a number to a person or to a voice
+	// app's account only when the number carries that capability, and a list for the
+	// wrong kind of holder offers numbers that are then refused.
+	"assignableTo": {Values: []string{AssignableToUser, AssignableToResourceAccount}},
 }
+
+// The two kinds of holder a free number is listed for, and the capability Teams names
+// each by.
+const (
+	AssignableToUser            = "user"
+	AssignableToResourceAccount = "resource-account"
+)
+
+// How many free numbers one list-free-phone-numbers answers: a person choosing one
+// needs a page, not the inventory, and Teams answers 500 at a time unless told
+// otherwise. An answer that stopped short says so in truncated.
+const (
+	DefaultFreeNumbers = 100
+	MaxFreeNumbers     = 500
+)
+
+// The three kinds of phone number, by how the tenant reaches the telephone network. A
+// Direct Routing number is the operator's own carrier's and needs no inventory in the
+// tenant; the other two must be numbers the tenant has.
+const (
+	NumberDirectRouting   = "direct-routing"
+	NumberCallingPlan     = "calling-plan"
+	NumberOperatorConnect = "operator-connect"
+)
 
 // The two kinds of resource account.
 const (

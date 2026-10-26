@@ -2695,7 +2695,62 @@ function answersFor(rel, shown) {
   for (const x of shown) {
     if (!configFormOf(rel, x.id)) continue;
     const given = state.config[x.id];
-    if (given && Object.keys(given).length) out[x.id] = given;
+    if (given && Object.keys(given).length) out[x.id] = asText(given);
+  }
+  return out;
+}
+
+// fromText is the way back, for a form opened on answers an order already holds —
+// a correction starts from what was answered, and the order kept it as text. A
+// field that holds something else is handed its own kind again: a number field
+// the number, a checkbox true for "true" and false otherwise, a multiple choice the
+// list asText joined — handed the joined text, it opened with nothing chosen, and
+// saving the correction dropped the earlier choice. What the person typed in this
+// page is already of its kind and passes as it is.
+function fromText(schema, answers) {
+  const kinds = {};
+  const walk = (components) => {
+    for (const c of components || []) {
+      if (c.key) kinds[c.key] = c.type;
+      walk(c.components);
+    }
+  };
+  walk(schema && schema.components);
+  const out = { ...answers };
+  for (const [key, value] of Object.entries(answers)) {
+    if (typeof value !== 'string') continue;
+    switch (kinds[key]) {
+      case 'number':
+        out[key] = value.trim() === '' || Number.isNaN(Number(value)) ? null : Number(value);
+        break;
+      case 'checkbox':
+        out[key] = value === 'true';
+        break;
+      case 'checklist':
+      case 'taglist':
+        out[key] = value === '' ? [] : value.split(',');
+        break;
+      default:
+    }
+  }
+  return out;
+}
+
+// asText is a form's answers as an order carries them: text. The order takes each
+// answer as a string (ADR-0358) and the process reads it as one, while the form
+// hands back what its field holds — a number field a number, a checkbox a boolean,
+// a multiple choice a list. Sent as they are, those three made the product
+// impossible to order: the server refused the whole basket with 400 over a field
+// the form editor offers like any other. A list is its values joined by a comma,
+// which is what FEEL's split() takes apart again; an empty answer is the empty
+// string the server would have made of it anyway.
+function asText(answers) {
+  const out = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (value == null) out[key] = '';
+    else if (Array.isArray(value)) out[key] = value.map(String).join(',');
+    else if (typeof value === 'object') out[key] = JSON.stringify(value);
+    else out[key] = String(value);
   }
   return out;
 }
@@ -2733,9 +2788,8 @@ async function mountConfigForms() {
       const form = new Form({ container: host });
       // Handed back what was typed before the last redraw, which is what makes the
       // basket survivable: adding a second product must not empty the first's form.
-      await form.importSchema(
-        typeof schema === 'string' ? JSON.parse(schema) : schema,
-        state.config[itemID] || {});
+      const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
+      await form.importSchema(parsed, fromText(parsed, state.config[itemID] || {}));
       mounted.set(itemID, form);
     } catch {
       // A form id that no longer resolves is a stale binding in the catalogue, not
@@ -3503,7 +3557,7 @@ async function saveDetails(order, line) {
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: state.config[key] || {} }),
+        body: JSON.stringify({ config: asText(state.config[key] || {}) }),
       });
     state.editing = '';
     delete state.config[key];

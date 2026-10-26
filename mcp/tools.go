@@ -350,6 +350,23 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_authorizations",
+			Description: "Read one process instance's recorded authorization decisions " +
+				"(ADR-0475): for each governed Worker action, who initiated the " +
+				"instance, for whom and as which external identity the action ran, the Worker and Worker Instance, " +
+				"the resource and action digest, the deciding policy and version, the effect and reason code, " +
+				"whether it was enforced or shadow, and the trace that explains it. This is how to answer why an " +
+				"action was refused. An instance with no governed actions (or an unknown key) returns [].",
+			InputSchema: keyArg("The instance key (from atlas_list_instances) whose authorization decisions to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/authorizations"))
+			},
+		},
+		{
 			Name: "atlas_instance_data_objects",
 			Description: "Read one process instance's BPMN data objects — each with its name, current data " +
 				"state, typed value, declared class (itemSubjectRef) and collection flag, plus the trail of " +
@@ -490,17 +507,113 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
-			Name: "atlas_delete_process",
-			Description: "Delete a deployed process definition by its key, removing it from the engine " +
-				"and from disk. Refused with a conflict error if the definition still has running " +
-				"instances — cancel them with atlas_cancel_instance first. Returns a confirmation.",
-			InputSchema: keyArg("The process definition key (from atlas_list_processes) to delete."),
+			Name: "atlas_finished_instances_deletion",
+			Description: "Read what deleting a process version's finished instances FOR GOOD would " +
+				"consider, without deleting anything: how many finished before the cut-off 'before' " +
+				"(RFC 3339 or unix nanoseconds, default now — the answer repeats the moment it used), " +
+				"how many are still running and stay, the gate a purge waits on ('exporter': only what " +
+				"OpenSearch already holds; 'durable': no exporter runs), the version's atlas:historyTtl " +
+				"and the server-wide retention age, whether this server allows the purge ('enabled') and " +
+				"what 'confirm' must repeat. Pass the small DEFINITION key from atlas_list_processes. " +
+				"Administrators only. Call it before atlas_delete_finished_instances and tell the person " +
+				"the count. For a process that runs again and again, atlas:historyTtl on the model deletes " +
+				"its finished instances without anybody asking.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":    map[string]any{"type": "integer", "description": "The process DEFINITION key (from atlas_list_processes)."},
+					"before": stringProp("Optional cut-off: instances that finished strictly before it. RFC 3339 or unix nanoseconds; default now."),
+				},
+				"required": []any{"key"},
+			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				key, err := argUint(args, "key")
 				if err != nil {
 					return "", err
 				}
-				body, err := c.del("/api/v1/processes/" + strconv.FormatUint(key, 10))
+				q := url.Values{}
+				if before := optString(args, "before"); before != "" {
+					q.Set("before", before)
+				}
+				return asText(c.get(historyPurgePath(key, q)))
+			},
+		},
+		{
+			Name: "atlas_delete_finished_instances",
+			Description: "Delete one batch of a process version's finished instances FOR GOOD — those " +
+				"that finished before 'before' (default now), newest first, at most 'limit' (default " +
+				"1000, max 5000). There is no undo. Running instances are never touched, and an instance " +
+				"whose events the OpenSearch exporter does not have yet is passed over and counted in " +
+				"'held'. Returns {purged, held, remaining, nextCursor}: while 'remaining' is true, call " +
+				"again with the same arguments and 'after' set to 'nextCursor'. Meant for development and " +
+				"test installations, for clearing the runs of a test; refused with 403 on a server started " +
+				"with --instance-purge=false. Administrators only. 'confirm' must repeat the process id. " +
+				"Only call this when the person asked for these instances to be deleted and has seen the " +
+				"count from atlas_finished_instances_deletion. It does not free disk by itself: the log " +
+				"keeps every event until WAL compaction removes it.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":     map[string]any{"type": "integer", "description": "The process DEFINITION key (from atlas_list_processes)."},
+					"confirm": stringProp("The process id of that definition. Anything else deletes nothing."),
+					"before":  stringProp("Optional cut-off: instances that finished strictly before it. RFC 3339 or unix nanoseconds; default now. Repeat the preview's 'before' so both mean the same instances."),
+					"limit":   map[string]any{"type": "integer", "minimum": 1, "description": "Most instances to delete in this call (default 1000, capped at 5000)."},
+					"after":   stringProp("The 'nextCursor' of the previous call, to continue where it stopped."),
+				},
+				"required": []any{"key", "confirm"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				confirm, err := argString(args, "confirm")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{"confirm": {confirm}}
+				for _, name := range []string{"before", "after"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				if limit, ok, err := optPositiveUint(args, "limit"); err != nil {
+					return "", err
+				} else if ok {
+					q.Set("limit", strconv.FormatUint(limit, 10))
+				}
+				return asText(c.post(historyPurgePath(key, q), "application/json", []byte("{}")))
+			},
+		},
+		{
+			Name: "atlas_delete_process",
+			Description: "Delete a deployed process definition by its key, removing it from the engine " +
+				"and from disk. Refused with a conflict error if the definition still has running " +
+				"instances, if an order line could still start it, or if the current catalogue release " +
+				"binds it — the error says which. force=true overrides all three: it cancels the running " +
+				"instances (that needs the operator or admin role) and removes the definition even though " +
+				"an order or a catalogue product still needs it, irreversibly. Use it only when the person " +
+				"you work for has decided the process is to go. A protected system process is never " +
+				"deleted. Returns a confirmation.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{"type": "integer", "description": "The process definition key (from atlas_list_processes) to delete."},
+					"force": map[string]any{"type": "boolean",
+						"description": "Cancel its running instances and override the order and catalogue guards. Irreversible."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10)
+				if args["force"] == true {
+					path += "?force=true"
+				}
+				body, err := c.del(path)
 				if err != nil {
 					return "", err
 				}
@@ -589,6 +702,19 @@ func runtimeTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/stats"))
+			},
+		},
+		{
+			Name: "atlas_storage",
+			Description: "Read the disk under the server's data directory: each file system it writes to with " +
+				"its size and free space, the reserve below which the server refuses new writes (HTTP 507) " +
+				"until space is back, the resulting state (ok, warn, frozen, halted, unknown), what the WAL " +
+				"and the state store hold, and a forecast of when the reserve is reached. Ask it when a write " +
+				"is refused with 507 or 503: frozen means free space and retry; halted means a write to disk " +
+				"failed and the server needs a restart. Administrators only.",
+			InputSchema: noArgs(),
+			Handler: func(c *Client, _ map[string]any) (string, error) {
+				return asText(c.get("/api/v1/storage"))
 			},
 		},
 		{
@@ -918,6 +1044,91 @@ func runtimeTools() []Tool {
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				return asText(c.get("/api/v1/event-catalog/listeners"))
+			},
+		},
+		{
+			Name: "atlas_signals",
+			Description: "The signals this installation's own models throw and receive (ADR-0447) — not the " +
+				"events atlas emits, which are atlas_event_catalog. Grouped by name ('signals'), each with its " +
+				"'points' (processId, processName, version, 'newest', definitionKey, projectId, 'system', " +
+				"'inactive', elementId, 'role' — throw, start, catch, boundary or event-subprocess — and, for a " +
+				"boundary or an event subprocess, 'interrupting') and its 'findings', each a 'rule' and a " +
+				"'message': signal.unreceived (thrown, and no newest, active definition receives it: every " +
+				"throw is lost), signal.unthrown (received, and no deployed definition throws it), " +
+				"signal.crosses-projects (thrown in one project and received in another: every variable of " +
+				"the throwing instance goes with it) and signal.reserved-name (a model outside atlas's system " +
+				"processes throws an atlas.* name). An atlas.* name is listed only for such a throw; who " +
+				"receives one is atlas_event_listeners. Every deployed version is listed; findings read the " +
+				"newest version of each process and know nothing of running instances.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/signals"))
+			},
+		},
+		{
+			Name: "atlas_message_names",
+			Description: "The messages of this installation (ADR-0446), grouped by name ('messages'): each name's " +
+				"'sources' — the deployed processes that wait for it ('process') or send it ('process-throw', " +
+				"a message throw or end event or a send task), with version, 'newest', projectId, 'system', " +
+				"'role' and 'interrupting'; the inbound watches of Workers that publish it ('inbound-watch', " +
+				"with 'lastError' and 'failingSince' while the watch cannot read its source); " +
+				"and the product actions that send it ('product-action', for the catalogues you maintain) — " +
+				"and its 'findings': message.unreceived (a process throw, an enabled watch or an active " +
+				"product action sends a name no newest, active definition waits for, so what it sends is " +
+				"lost), message.crosses-projects (sent in one project and waited for in another) and " +
+				"message.reserved-name (a model outside atlas's system processes sends an atlas.* name). It " +
+				"never says that nothing sends a name: atlas_publish_message may send any. Findings read the " +
+				"newest version of each process.",
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				return asText(c.get("/api/v1/message-names"))
+			},
+		},
+		{
+			Name: "atlas_event_log",
+			Description: "The event log (ADR-0472): what was actually sent and where it arrived, newest " +
+				"first — the runtime counterpart of atlas_signals and atlas_message_names. Each row has a 'kind': " +
+				"'signal.thrown' or 'message.sent' (a send: its 'source' — process, publish, inbound or directed — " +
+				"its 'sender' for a process, and 'reached' and 'started', both 0 for a send nobody received), " +
+				"'signal.received', 'signal.started', 'message.received', 'message.started' (a delivery: the " +
+				"'receiver' instance, definition and element, and the sending instance), or 'message.kept', " +
+				"'message.taken', 'message.expired' (the buffer). Rows sharing a 'cause' belong to one send. No " +
+				"payload is ever logged. Optional 'channel' (signal or message), 'name' and 'instance' (a process " +
+				"instance key, sending or receiving) narrow the page; 'limit' is 1–500 (default 100); 'before' " +
+				"continues to older rows from a page's 'next', 'after' to newer ones from its 'latest'. Rows are " +
+				"read as their instances are: an operator or administrator reads every row, a project member the " +
+				"rows of their projects' definitions.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"channel":  stringProp("signal or message: only rows of that channel."),
+					"name":     stringProp("Only rows of this signal or message name, exactly."),
+					"instance": stringProp("A process instance key: only rows it sent or received."),
+					"limit":    map[string]any{"type": "integer", "minimum": 1, "maximum": 500, "description": "Maximum rows to return (default 100, at most 500)."},
+					"before":   stringProp("The 'next' of a previous page, to read older rows."),
+					"after":    stringProp("The 'latest' of a previous page, to read newer rows."),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, name := range []string{"channel", "name", "instance", "before", "after"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				if v, ok := args["limit"]; ok {
+					switch n := v.(type) {
+					case float64:
+						q.Set("limit", strconv.Itoa(int(n)))
+					case string:
+						q.Set("limit", n)
+					}
+				}
+				path := "/api/v1/event-log"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
 			},
 		},
 		{
@@ -1358,4 +1569,14 @@ func asText(body []byte, err error) (string, error) {
 // json.Number-typed key arguments.
 func parseUint(s string) (uint64, error) {
 	return strconv.ParseUint(s, 10, 64)
+}
+
+// historyPurgePath is the route the two history-purge tools proxy
+// (ADR-0486), with its query.
+func historyPurgePath(key uint64, q url.Values) string {
+	path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/history-purge"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	return path
 }

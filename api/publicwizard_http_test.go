@@ -290,3 +290,29 @@ func TestAnEmbeddedPageMaySendThePass(t *testing.T) {
 		t.Error("credentials were allowed")
 	}
 }
+
+// TestAPublicWizardStepRefusesADirectoryField: forms are not versioned, so a screen's
+// form can gain a directory field while a visitor sits on it. The step then refuses the
+// answer as the public start link does — nobody there is signed in to search, and a
+// check would tell an anonymous visitor who is in the directory — and the screen stays
+// open.
+func TestAPublicWizardStepRefusesADirectoryField(t *testing.T) {
+	ts := newTestServer(t)
+	token := publishPublicWizard(t, ts, ts.Client())
+	pass, first := startPublic(t, ts, token)
+	if code, body := cReq(t, ts.Client(), ts, "POST", "/api/v1/forms",
+		`{"id":"pw-eins","name":"Eins","schema":{"type":"default","components":[
+		  {"type":"textfield","key":"weiter",
+		   "atlasDataSource":{"version":1,"workerType":"entra","worker":"ucc_entra","resource":"users"}},
+		  {"type":"textfield","key":"customer"}]}}`); code != http.StatusOK {
+		t.Fatalf("save form: %d (%s)", code, body)
+	}
+	code, body := anon(t, ts, "POST", fmt.Sprintf("/public/wizard/steps/%d/complete", first), pass,
+		`{"variables":{"weiter":"11111111-0000-0000-0000-000000000001"}}`)
+	if code != http.StatusBadRequest || !strings.Contains(string(body), "directory field") {
+		t.Fatalf("a screen with a directory field: %d (%s), want 400", code, body)
+	}
+	if got := anonAnswer(t, ts, "GET", "/public/wizard/step", pass, ""); got.Step == nil || got.Step.TaskKey != first {
+		t.Errorf("the screen is no longer open: %+v", got)
+	}
+}

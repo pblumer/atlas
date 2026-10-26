@@ -363,7 +363,7 @@ var Entries = []Entry{
 			{Name: "provisionProcess", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process that provisions the position once it is approved.", DE: "Der Prozess, der die Position nach der Genehmigung bereitstellt."}},
 			{Name: "atlasApiBase", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "This server's own API address.", DE: "Die eigene API-Adresse dieses Servers."}},
 			{Name: "portalBaseUrl", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The external address of the portal; empty where none is set.", DE: "Die externe Adresse des Portals; leer, wo keine gesetzt ist."}},
-			{Name: "vorgesetzter", Type: "string", Data: NotPersonal, Meaning: Text{EN: "For superior only: the line manager found in the directory, the same as approver.", DE: "Nur bei superior: die im Verzeichnis gefundene vorgesetzte Person, dieselbe wie approver."}},
+			{Name: "vorgesetzter", Type: "string", Data: NotPersonal, Meaning: Text{EN: "For superior only: the orderer's line manager as their account records it, the same as approver.", DE: "Nur bei superior: die vorgesetzte Person der bestellenden Person, wie ihr Konto sie nennt, dieselbe wie approver."}},
 		},
 		NeverSecret: "TestTheApprovalProcessesAnnounceTheRequestAsASignal",
 		Since:       "0.9.0", Stability: Experimental,

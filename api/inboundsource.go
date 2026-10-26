@@ -41,9 +41,22 @@ type inboundEvent struct {
 	// Seq is the sequence the engine compares against that mark. A replay carries the
 	// same value and is skipped; anything at or below the mark is already applied.
 	Seq uint64
-	// Fields is the binding environment for the correlation key and the payload the
-	// started or woken instance receives.
+	// Fields is the binding environment for the correlation key and, unless Payload
+	// says otherwise, the payload the started or woken instance receives.
 	Fields map[string]any
+	// Payload is what the instance receives when that is not Fields itself. A mail
+	// watch hands the mail over as one object, so a sender, a subject or a recipient
+	// list never lands on a process variable of the same name, while its correlation
+	// key keeps binding the flat names it always did (ADR-0438). Nil means Fields.
+	Payload map[string]any
+}
+
+// payload is what the instance receives for this event.
+func (ev inboundEvent) payload() map[string]any {
+	if ev.Payload != nil {
+		return ev.Payload
+	}
+	return ev.Fields
 }
 
 // inboundSource reads one kind of watch. Read returns a bounded page and the resume
@@ -868,6 +881,10 @@ func discordFields(rec inboundSubscription, m map[string]any) map[string]any {
 // inside the worker budget. Fifty is a busy morning's mail.
 const mailWatchBatch = 50
 
+// mailWatchVariable is the one variable a mail watch hands a process: the mail, as an
+// object — mail.from, mail.subject, mail.auth.dmarc.
+const mailWatchVariable = "mail"
+
 // mailWatchBudget bounds one read of a mail watch: a few calls under the shared
 // worker budget each, since a Gmail page is one history read and a get per message.
 const mailWatchBudget = 3 * nettimeout.Default
@@ -906,7 +923,17 @@ func (s mailSource) Read(ctx context.Context, rec inboundSubscription, limit int
 		}
 		fields := it.Envelope.Fields(rec.IncludeBody)
 		fields["eventType"] = "mail.received"
-		out = append(out, inboundEvent{MarkKey: it.MarkKey, Seq: it.Seq, Fields: fields})
+		// The object is the envelope as it stands here, copied before the fields gain
+		// the object itself: a correlation key may name either the flat field or the
+		// object's (internetMessageId, mail.internetMessageId), the instance gets the
+		// object alone.
+		obj := make(map[string]any, len(fields))
+		for k, v := range fields {
+			obj[k] = v
+		}
+		fields[mailWatchVariable] = obj
+		out = append(out, inboundEvent{MarkKey: it.MarkKey, Seq: it.Seq, Fields: fields,
+			Payload: map[string]any{mailWatchVariable: obj}})
 	}
 	return out, page.Cursor, nil
 }

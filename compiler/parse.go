@@ -2447,6 +2447,16 @@ type xmlServiceTask struct {
 	// resource account, a call queue or an auto attendant, or remove one — against a
 	// tenant an operator configured.
 	TeamsPhone *xmlTeamsPhoneConnector `xml:"extensionElements>teamsPhoneConnector"`
+	// GoogleContacts, when present, marks this service task a Google Contacts task
+	// (ADR-0476): one operation on an address book — find, read,
+	// list, create, update or delete a contact, label one, or search the organization's
+	// directory — through an account a *worker* holds the credential for.
+	GoogleContacts *xmlGoogleContactsConnector `xml:"extensionElements>googleContactsConnector"`
+	// CardDAV, when present, marks this service task a CardDAV task
+	// (ADR-0490): one operation on a CardDAV address book — find, read,
+	// search, list, create, update or delete a contact, or change its groups — through a
+	// server a *worker* holds the credential for.
+	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2722,6 +2732,50 @@ type xmlExchangeConnector struct {
 	Retries string `xml:"retries,attr"`
 }
 
+// xmlGoogleContactsConnector is the <atlas:googleContactsConnector> extension on a
+// service task (ADR-0476). connector names the Google Contacts
+// Worker (literal-or-FEEL); there is no credential attribute, because none enters the
+// engine. operation is a row of connector/googlecontacts/catalog. contactId, query,
+// field and group are literal-or-FEEL values; contact is the contact object as a JSON
+// object whose string leaves may be =FEEL, and contactVariable names a variable holding
+// that object instead. maxResults bounds a listing; resultVariable receives the answer.
+type xmlGoogleContactsConnector struct {
+	Connector       string `xml:"connector,attr"`
+	Operation       string `xml:"operation,attr"`
+	ContactID       string `xml:"contactId,attr"`
+	Query           string `xml:"query,attr"`
+	Field           string `xml:"field,attr"`
+	Group           string `xml:"group,attr"`
+	Contact         string `xml:"contact,attr"`
+	ContactVariable string `xml:"contactVariable,attr"`
+	MaxResults      string `xml:"maxResults,attr"`
+	ResultVariable  string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlCardDAVConnector is the <atlas:carddavConnector> extension on a service task
+// (ADR-0490). It has <atlas:googleContactsConnector>'s attributes, read
+// the same way: connector names the CardDAV Worker (literal-or-FEEL), and there is no
+// credential attribute, because none enters the engine. operation is a row of
+// connector/carddav/catalog.
+type xmlCardDAVConnector struct {
+	Connector       string `xml:"connector,attr"`
+	Operation       string `xml:"operation,attr"`
+	ContactID       string `xml:"contactId,attr"`
+	Query           string `xml:"query,attr"`
+	Field           string `xml:"field,attr"`
+	Group           string `xml:"group,attr"`
+	Contact         string `xml:"contact,attr"`
+	ContactVariable string `xml:"contactVariable,attr"`
+	MaxResults      string `xml:"maxResults,attr"`
+	ResultVariable  string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
 // xmlLdapConnector is the <atlas:ldapConnector> extension on a service task
 // (ADR-0154). url is the server; bindDN/bindSecret authenticate the bind (bindSecret
 // a reference, never a value, ADR-0041); startTLS upgrades a plain connection.
@@ -2783,6 +2837,12 @@ type xmlMailConnector struct {
 	// which stays the plain-text alternative; blank means the message is text-only,
 	// exactly as before the field existed.
 	BodyHtml string `xml:"bodyHtml,attr"`
+	// Templating switches the subject and both bodies to the template language of
+	// form-js's text views — {{ FEEL }} placeholders, {{#if}} and {{#loop}} sections
+	// (ADR-0487). Blank or false keeps every value literal-or-FEEL, as
+	// it was before templates existed, so a deployed body that happens to contain {{
+	// keeps meaning what it meant.
+	Templating string `xml:"templating,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`
@@ -2798,6 +2858,15 @@ type xmlMailConnector struct {
 	IncludeBody    string `xml:"includeBody,attr"`
 	UnreadOnly     string `xml:"unreadOnly,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// The operations that hand a document on (ADR-0478):
+	// attachmentId addresses an attachment by the id the envelope listed it under, and
+	// allowedTypes narrows the media types the task accepts; store names the S3 Worker
+	// export-attachment puts the document into, and bucket and key where in it.
+	AttachmentID string `xml:"attachmentId,attr"`
+	AllowedTypes string `xml:"allowedTypes,attr"`
+	Store        string `xml:"store,attr"`
+	Bucket       string `xml:"bucket,attr"`
+	Key          string `xml:"key,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning
@@ -2952,18 +3021,38 @@ func csvHasHeader(attr string) bool {
 }
 
 // A SharePoint task's parameters, carried on a service task as an
-// <atlas:sharepointConnector connector="..." site="..." list="..."> extension
-// element (ADR-0141). worker names a server-registered SharePoint provider (its
-// Graph base and OAuth credential live on the server, never in the model). site
-// (required) addresses the SharePoint site ("host,/sites/path" or a site id); list
-// (required) is the list name or id the item is created in; resultVariable, if set,
-// receives the created item's JSON. Each ItemField child is one column value of the
-// created item. Every value is literal or, with a leading '=', a FEEL expression
-// evaluated over the instance's variables at call time (the fx toggle, ADR-0067).
+// <atlas:sharepointConnector connector="..." operation="..." site="..."> extension
+// element (ADR-0141, amended). connector names a server-registered SharePoint
+// provider (its Graph base and OAuth credential live on the server, never in the
+// model) and operation the step the task takes; a task naming none creates a list
+// item, which is what every model authored before operations existed does.
+//
+// Which of the remaining attributes apply is decided by the operation, and only by it:
+// site addresses the site every operation acts in (a Graph site id
+// "host,siteId,webId", a host and server-relative path "host:/sites/hr", or the site's
+// URL); list is the list an item operation acts on, or the document library a file
+// operation does (empty there means the site's default library); itemId addresses one
+// list item and path one file or folder inside the library; content is what an upload
+// writes and encoding whether that text is the characters or base64; filter, select,
+// pageToken and maxResults shape a listing, and select also a single read. Each
+// ItemField child is one column value — of the item created or updated, or a property
+// of the file uploaded. resultVariable receives what Graph returned. Every value is
+// literal or, with a leading '=', a FEEL expression evaluated over the instance's
+// variables at call time (the fx toggle, ADR-0067); encoding and maxResults are not,
+// because each decides the shape of the call rather than its content.
 type xmlSharePointConnector struct {
 	Connector      string      `xml:"connector,attr"`
+	Operation      string      `xml:"operation,attr"`
 	Site           string      `xml:"site,attr"`
 	List           string      `xml:"list,attr"`
+	ItemID         string      `xml:"itemId,attr"`
+	Path           string      `xml:"path,attr"`
+	Content        string      `xml:"content,attr"`
+	Encoding       string      `xml:"encoding,attr"`
+	Filter         string      `xml:"filter,attr"`
+	Select         string      `xml:"select,attr"`
+	PageToken      string      `xml:"pageToken,attr"`
+	MaxResults     string      `xml:"maxResults,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
@@ -3137,13 +3226,14 @@ type xmlS3Connector struct {
 // siblings carry, which the moddle drift guard recognizes.
 //
 // Which of the remaining attributes apply is decided by the operation, and only by it;
-// the compiler refuses one the operation does not use. users, agents and
-// authorizedUsers are lists — a FEEL list, or one text separated by commas; holidays is
-// a list of {name, start, end} with ISO dates; the rest are single values. Each is
-// literal or, with a leading '=', a FEEL expression evaluated over the variables the
-// task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
-// presenceBasedRouting, conferenceMode and allowOptOut are not: each decides the shape
-// of what is created, and a shape that could differ on every token is not a shape.
+// the compiler refuses one the operation does not use. users, agents, authorizedUsers,
+// resourceAccountIds and names are lists — a FEEL list, or one text separated by
+// commas; holidays is a list of {name, start, end} with ISO dates; the rest are single
+// values. Each is literal or, with a leading '=', a FEEL expression evaluated over the
+// variables the task sees at call time (the fx toggle, ADR-0067). accountType, routingMethod,
+// presenceBasedRouting, conferenceMode, allowOptOut and numberType are not: each decides
+// the shape of what is created, and a shape that could differ on every token is not a
+// shape.
 type xmlTeamsPhoneConnector struct {
 	Connector            string `xml:"connector,attr"`
 	Operation            string `xml:"operation,attr"`
@@ -3163,6 +3253,15 @@ type xmlTeamsPhoneConnector struct {
 	PresenceBasedRouting string `xml:"presenceBasedRouting,attr"`
 	ConferenceMode       string `xml:"conferenceMode,attr"`
 	AllowOptOut          string `xml:"allowOptOut,attr"`
+	Identity             string `xml:"identity,attr"`
+	PhoneNumber          string `xml:"phoneNumber,attr"`
+	NumberType           string `xml:"numberType,attr"`
+	LocationID           string `xml:"locationId,attr"`
+	ResourceAccountIDs   string `xml:"resourceAccountIds,attr"`
+	Names                string `xml:"names,attr"`
+	NumberPrefix         string `xml:"numberPrefix,attr"`
+	Max                  string `xml:"max,attr"`
+	AssignableTo         string `xml:"assignableTo,attr"`
 	ResultVariable       string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
@@ -3191,6 +3290,15 @@ func (c *xmlTeamsPhoneConnector) values() []struct{ attr, raw string } {
 		{"presenceBasedRouting", c.PresenceBasedRouting},
 		{"conferenceMode", c.ConferenceMode},
 		{"allowOptOut", c.AllowOptOut},
+		{"identity", c.Identity},
+		{"phoneNumber", c.PhoneNumber},
+		{"numberType", c.NumberType},
+		{"locationId", c.LocationID},
+		{"resourceAccountIds", c.ResourceAccountIDs},
+		{"names", c.Names},
+		{"numberPrefix", c.NumberPrefix},
+		{"max", c.Max},
+		{"assignableTo", c.AssignableTo},
 	}
 }
 

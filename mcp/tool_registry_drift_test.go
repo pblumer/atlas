@@ -26,17 +26,20 @@ import (
 // operation it proxies to. Every entry must be a real API route and every
 // advertised tool must appear here (both asserted below).
 var mcpToolRoutes = map[string]string{
-	"atlas_info":           "GET /api/v1/info",
-	"atlas_stats":          "GET /api/v1/stats",
+	"atlas_info":  "GET /api/v1/info",
+	"atlas_stats": "GET /api/v1/stats",
+	// The storage guard (ADR-0481): a read, and the one that explains a
+	// 507 or 503 an agent has just been given.
+	"atlas_storage":        "GET /api/v1/storage",
 	"atlas_deploy":         "POST /api/v1/deployments",
 	"atlas_list_processes": "GET /api/v1/processes",
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
 
 	// The portal catalogue an agent maintains as a product manager
-	// (ADR-0376). No delete among them, and that is
-	// the model and not an omission: a catalogue has none, and a product is
-	// withdrawn through the ordinary save because an order placed years ago still
-	// resolves through it.
+	// (ADR-0376). A product is withdrawn through the ordinary save, because an
+	// order placed years ago still resolves through it; the one delete is the
+	// administrator's purge for a development installation, refused by a server
+	// started with --catalogue-purge=false (ADR-0469).
 	"atlas_list_catalogs":             "GET /api/v1/catalogs",
 	"atlas_get_catalog":               "GET /api/v1/catalogs/{id}",
 	"atlas_create_catalog":            "POST /api/v1/catalogs",
@@ -54,6 +57,10 @@ var mcpToolRoutes = map[string]string{
 	"atlas_export_catalog":            "GET /api/v1/catalogs/{id}/document",
 	"atlas_export_catalog_products":   "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
+	"atlas_catalog_deletion":          "GET /api/v1/catalogs/{id}/deletion",
+	"atlas_delete_catalog":            "DELETE /api/v1/catalogs/{id}",
+	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
+	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
 	// A product's content from an external source
 	// (ADR-draft-service-content-from-an-external-source), maintained like the
 	// rest of the product.
@@ -119,7 +126,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_deploy_application":           "POST /api/v1/applications/{id}/deploy",
 	"atlas_publish_application":          "POST /api/v1/applications/{id}/publish",
 	"atlas_application_releases":         "GET /api/v1/applications/{id}/releases",
+	"atlas_release_architecture":         "GET /api/v1/applications/{id}/releases/{version}/architecture",
 	"atlas_application_deployments":      "GET /api/v1/applications/{id}/deployments",
+	"atlas_application_deletion_preview": "GET /api/v1/applications/{id}/deletion-preview",
 	"atlas_application_constants":        "GET /api/v1/applications/{id}/constants",
 	"atlas_server_constants":             "GET /api/v1/server/constants",
 	"atlas_list_tasks":                   "GET /api/v1/tasks",
@@ -139,6 +148,9 @@ var mcpToolRoutes = map[string]string{
 	"atlas_feed_subscriptions":           "GET /api/v1/feed-subscriptions",
 	"atlas_event_catalog":                "GET /api/v1/event-catalog",
 	"atlas_event_listeners":              "GET /api/v1/event-catalog/listeners",
+	"atlas_signals":                      "GET /api/v1/signals",
+	"atlas_message_names":                "GET /api/v1/message-names",
+	"atlas_event_log":                    "GET /api/v1/event-log",
 	"atlas_resolve_incident":             "POST /api/v1/incidents/{key}/resolve",
 	"atlas_incident_summary":             "GET /api/v1/incidents/summary",
 	"atlas_resolve_incidents":            "POST /api/v1/incidents/resolve",
@@ -156,46 +168,51 @@ var mcpToolRoutes = map[string]string{
 	"atlas_search_instances":             "GET /api/v1/instances/search",
 	"atlas_instance_data_objects":        "GET /api/v1/instances/{key}/data-objects",
 	"atlas_terminate_instances":          "POST /api/v1/instances/terminate",
-	"atlas_instance_decisions":           "GET /api/v1/instances/{key}/decisions",
-	"atlas_deployed_decisions":           "GET /api/v1/decisions/deployed",
-	"atlas_decision_deployments":         "GET /api/v1/decision-deployments",
-	"atlas_deployed_decision_model":      "GET /api/v1/decision-deployments/{key}/xml",
-	"atlas_dmnref_graph":                 "GET /api/v1/dmnrefs/{id}/graph",
-	"atlas_get_decision_model":           "GET /api/v1/dmn-models/{ref}/xml",
-	"atlas_collaboration_runtime":        "GET /api/v1/collaborations/{key}/runtime",
-	"atlas_list_drafts":                  "GET /api/v1/drafts",
-	"atlas_get_draft_xml":                "GET /api/v1/drafts/{id}/xml",
-	"atlas_compare_draft":                "GET /api/v1/drafts/{id}/comparison",
-	"atlas_delete_draft":                 "DELETE /api/v1/drafts/{id}",
-	"atlas_join_session":                 "POST /api/v1/drafts/{id}/session/join",
-	"atlas_session_poll":                 "POST /api/v1/drafts/{id}/session/poll",
-	"atlas_session_lock":                 "POST /api/v1/drafts/{id}/session/lock",
-	"atlas_session_change":               "POST /api/v1/drafts/{id}/session/change",
-	"atlas_session_presence":             "POST /api/v1/drafts/{id}/session/presence",
-	"atlas_leave_session":                "POST /api/v1/drafts/{id}/session/leave",
-	"atlas_list_forms":                   "GET /api/v1/forms",
-	"atlas_get_form":                     "GET /api/v1/forms/{id}",
-	"atlas_list_decision_refs":           "GET /api/v1/dmnrefs",
-	"atlas_list_decisions":               "GET /api/v1/decisions",
-	"atlas_decision_evaluations":         "GET /api/v1/decisions/{id}/evaluations",
-	"atlas_variable_audit":               "GET /api/v1/instances/{key}/variable-audit",
-	"atlas_assignable_users":             "GET /api/v1/users/assignable",
-	"atlas_infomodel_subset":             "GET /api/v1/infomodel/subset",
-	"atlas_list_information_models":      "GET /api/v1/infomodel/models",
-	"atlas_get_information_model":        "GET /api/v1/infomodel/models/{id}",
-	"atlas_create_information_model":     "POST /api/v1/infomodel/models",
-	"atlas_import_information_model":     "POST /api/v1/infomodel/import",
-	"atlas_save_information_model":       "PUT /api/v1/infomodel/models/{id}",
-	"atlas_delete_information_model":     "DELETE /api/v1/infomodel/models/{id}",
-	"atlas_information_model_schema":     "GET /api/v1/infomodel/models/{id}/schema",
-	"atlas_data_objects":                 "GET /api/v1/data-objects",
-	"atlas_instance_object_graph":        "GET /api/v1/instances/{key}/object-graph",
-	"atlas_instance_lifecycle":           "GET /api/v1/instances/{key}/lifecycle",
-	"atlas_derived_information_model":    "GET /api/v1/infomodel/derived",
-	"atlas_model_difference":             "GET /api/v1/infomodel/difference",
-	"atlas_validate_information_model":   "POST /api/v1/infomodel/validate",
-	"atlas_class_catalog":                "GET /api/v1/infomodel/classes",
-	"atlas_class_usage":                  "GET /api/v1/infomodel/models/{id}/usage",
+	// Clearing a test's runs (ADR-0486): the
+	// preview, and the administrator's delete a production server switches off.
+	"atlas_finished_instances_deletion": "GET /api/v1/processes/{key}/history-purge",
+	"atlas_delete_finished_instances":   "POST /api/v1/processes/{key}/history-purge",
+	"atlas_instance_decisions":          "GET /api/v1/instances/{key}/decisions",
+	"atlas_deployed_decisions":          "GET /api/v1/decisions/deployed",
+	"atlas_decision_deployments":        "GET /api/v1/decision-deployments",
+	"atlas_deployed_decision_model":     "GET /api/v1/decision-deployments/{key}/xml",
+	"atlas_dmnref_graph":                "GET /api/v1/dmnrefs/{id}/graph",
+	"atlas_get_decision_model":          "GET /api/v1/dmn-models/{ref}/xml",
+	"atlas_collaboration_runtime":       "GET /api/v1/collaborations/{key}/runtime",
+	"atlas_list_drafts":                 "GET /api/v1/drafts",
+	"atlas_get_draft_xml":               "GET /api/v1/drafts/{id}/xml",
+	"atlas_compare_draft":               "GET /api/v1/drafts/{id}/comparison",
+	"atlas_delete_draft":                "DELETE /api/v1/drafts/{id}",
+	"atlas_join_session":                "POST /api/v1/drafts/{id}/session/join",
+	"atlas_session_poll":                "POST /api/v1/drafts/{id}/session/poll",
+	"atlas_session_lock":                "POST /api/v1/drafts/{id}/session/lock",
+	"atlas_session_change":              "POST /api/v1/drafts/{id}/session/change",
+	"atlas_session_presence":            "POST /api/v1/drafts/{id}/session/presence",
+	"atlas_leave_session":               "POST /api/v1/drafts/{id}/session/leave",
+	"atlas_list_forms":                  "GET /api/v1/forms",
+	"atlas_get_form":                    "GET /api/v1/forms/{id}",
+	"atlas_list_decision_refs":          "GET /api/v1/dmnrefs",
+	"atlas_list_decisions":              "GET /api/v1/decisions",
+	"atlas_decision_evaluations":        "GET /api/v1/decisions/{id}/evaluations",
+	"atlas_variable_audit":              "GET /api/v1/instances/{key}/variable-audit",
+	"atlas_instance_authorizations":     "GET /api/v1/instances/{key}/authorizations",
+	"atlas_assignable_users":            "GET /api/v1/users/assignable",
+	"atlas_infomodel_subset":            "GET /api/v1/infomodel/subset",
+	"atlas_list_information_models":     "GET /api/v1/infomodel/models",
+	"atlas_get_information_model":       "GET /api/v1/infomodel/models/{id}",
+	"atlas_create_information_model":    "POST /api/v1/infomodel/models",
+	"atlas_import_information_model":    "POST /api/v1/infomodel/import",
+	"atlas_save_information_model":      "PUT /api/v1/infomodel/models/{id}",
+	"atlas_delete_information_model":    "DELETE /api/v1/infomodel/models/{id}",
+	"atlas_information_model_schema":    "GET /api/v1/infomodel/models/{id}/schema",
+	"atlas_data_objects":                "GET /api/v1/data-objects",
+	"atlas_instance_object_graph":       "GET /api/v1/instances/{key}/object-graph",
+	"atlas_instance_lifecycle":          "GET /api/v1/instances/{key}/lifecycle",
+	"atlas_derived_information_model":   "GET /api/v1/infomodel/derived",
+	"atlas_model_difference":            "GET /api/v1/infomodel/difference",
+	"atlas_validate_information_model":  "POST /api/v1/infomodel/validate",
+	"atlas_class_catalog":               "GET /api/v1/infomodel/classes",
+	"atlas_class_usage":                 "GET /api/v1/infomodel/models/{id}/usage",
 }
 
 // mcpOmittedRoutes lists HTTP operations intentionally not exposed as MCP tools,
@@ -204,6 +221,27 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	// Identity-aware Worker execution (ADR-0475). An
+	// agent reads the decisions (atlas_instance_authorizations); everything else here is
+	// a Worker's protocol step, a person's consent or answer, or the administration of
+	// who may do what — none of it an agent's to do.
+	"POST /api/v1/jobs/{key}/authorize":                               "the worker protocol's credential-bearing step: an agent is not a Worker Instance and must never be handed a delegated credential",
+	"GET /api/v1/instances/{key}/action-approvals":                    "a person's approval worklist, filtered per caller; an agent reads what was decided through atlas_instance_authorizations",
+	"GET /api/v1/me/action-approvals":                                 "a person's own approval worklist across instances, for the Console; an approval is answered by a person in their own session (ADR-0428), so an agent has nothing to act on there",
+	"POST /api/v1/instances/{key}/action-approvals/{approval}/decide": "an approval is a person's own answer, given in their own session (ADR-0428): deciding for a person",
+	"PUT /api/v1/configured-workers/{id}/identity":                    "decides as whom a Worker acts: an administrator's act, not an agent's",
+	"DELETE /api/v1/configured-workers/{id}/identity":                 "decides as whom a Worker acts: an administrator's act, not an agent's",
+	"GET /api/v1/security/readiness":                                  "the security administrator's migration inventory, read in the Console",
+	"GET /api/v1/security/policies":                                   "security administration: the policies decide what every Worker may do as anybody",
+	"GET /api/v1/security/policies/{id}":                              "security administration: the policies decide what every Worker may do as anybody",
+	"PUT /api/v1/security/policies/{id}/draft":                        "security administration: writing a policy is an administrator's act",
+	"POST /api/v1/security/policies/{id}/publish":                     "security administration: publishing a policy is an administrator's act",
+	"POST /api/v1/security/policies/{id}/enabled":                     "security administration: switching a policy is an administrator's act",
+	"POST /api/v1/security/policies/simulate":                         "security administration's own playground for the policies it writes",
+	"GET /api/v1/me/connections":                                      "a person's linked accounts and consent: theirs to manage, not an agent's",
+	"GET /api/v1/users/{id}/connections":                              "a person's linked accounts and consent: an administrator's view, not an agent's",
+	"POST /api/v1/connections/{id}/revoke":                            "a person's consent: withdrawn by its owner or an administrator, never by an agent",
+	"PUT /api/v1/connections/{id}/workers":                            "a person's consent to which Workers act as them: theirs alone",
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 	// The order starting its own positions (ADR-0425) is the fulfilment and approval
@@ -414,6 +452,10 @@ var mcpOmittedRoutes = map[string]string{
 	// pointed at, and never needs to hold one against other workers.
 	"POST /api/v1/jobs/{key}/activate": "worker-protocol lease, not an agent action",
 	"POST /api/v1/jobs/activate":       "worker-protocol lease (type-keyed pull), not an agent action",
+	// The query twin of the job protocol (ADR-0473): a Worker
+	// Instance's lease and answer, not an agent's action.
+	"POST /api/v1/worker-queries/activate":    "worker-protocol lease of a form lookup, not an agent action",
+	"POST /api/v1/worker-queries/{id}/answer": "worker-protocol answer to a leased form lookup, fenced by a lease an agent never holds",
 	// The same category: a mail worker running a preview worker hands the framed
 	// message back to this server's outbox (ADR-0168). An agent reads the outbox with
 	// atlas_mail_outbox; putting a message *into* it would be inventing a preview of
@@ -430,12 +472,20 @@ var mcpOmittedRoutes = map[string]string{
 	// The mock database's journal, omitted for the same two reasons as the directory
 	// above it — and the read for a third: it carries the values a process bound, which
 	// is the widest thing this surface could hand out on a hunch.
-	"POST /api/v1/sql/mock-journal":     "worker reporting the mockup run it answered, not an agent action",
-	"GET /api/v1/sql/mock-journal":      "an operator's view of a mockup run; an agent reads what a job did from the job",
-	"POST /api/v1/workers/{id}/restart": "restarts an operating-system process; an operator action, deliberately not an agent one",
-	"GET /api/v1/checkpoints":           "admin recovery-checkpoint status, not an agent action",
-	"GET /api/v1/catalogue-switch":      "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
-	"POST /api/v1/checkpoints":          "admin on-demand checkpoint/compaction, not an agent action",
+	"POST /api/v1/sql/mock-journal": "worker reporting the mockup run it answered, not an agent action",
+	"GET /api/v1/sql/mock-journal":  "an operator's view of a mockup run; an agent reads what a job did from the job",
+
+	// The SharePoint mockup's site: the operation route is a worker's transport, not an
+	// agent's action — an agent that wants a list item written models a SharePoint task —
+	// and the read and the reset are the operator's picture of a mockup run
+	// (ADR-0484).
+	"POST /api/v1/sharepoint/mock-sites/{worker}":   "worker performing a mockup Worker's operation, not an agent action",
+	"GET /api/v1/mocks":                             "an operator's view of the mockups (ADR-0216); an agent reads what a job did from the job",
+	"DELETE /api/v1/sharepoint/mock-sites/{worker}": "an operator emptying a mockup site between trial runs, not an agent action",
+	"POST /api/v1/workers/{id}/restart":             "restarts an operating-system process; an operator action, deliberately not an agent one",
+	"GET /api/v1/checkpoints":                       "admin recovery-checkpoint status, not an agent action",
+	"GET /api/v1/catalogue-switch":                  "admin diagnosis of what switching the catalogue off strands, shown on the Console's dashboard; not an agent action",
+	"POST /api/v1/checkpoints":                      "admin on-demand checkpoint/compaction, not an agent action",
 
 	// Per-server call-activity target overrides (ADR-0105): admin operator config,
 	// like workers — an agent reads the resolution via atlas_call_activities but
@@ -528,6 +578,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Expression/script sandboxes: authored inside BPMN, not called standalone.
 	"POST /api/v1/feel/validate": "modeler-time expression check, not a scenario action",
 	"POST /api/v1/feel/evaluate": "modeler-time expression check, not a scenario action",
+	"POST /api/v1/feel/template": "modeler-time preview of a mail template, not a scenario action",
 	"POST /api/v1/scripts/run":   "modeler-time script check, not a scenario action",
 
 	// CSV batch start: driven from a user task inside the process (ADR-0084).
@@ -765,7 +816,7 @@ var mcpOmittedRoutes = map[string]string{
 	"PATCH /api/v1/feed-subscriptions/{id}":  "where the event feed is pushed is administrator configuration, like the worker it names",
 	"DELETE /api/v1/feed-subscriptions/{id}": "where the event feed is pushed is administrator configuration, like the worker it names",
 	"GET /api/v1/events":                     "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
-	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name — watch configuration, product actions and deployed catches; an agent reads products with atlas_list_catalog_products and processes with atlas_get_process_xml, and publishes a message itself rather than needing one to exist",
+	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name, flat for its picker — watch configuration, product actions and deployed catches and throws; an agent reads the same rows grouped by name, with their findings, through atlas_message_names (ADR-0446 §5), and publishes a message itself rather than needing one to exist",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",
@@ -835,8 +886,9 @@ var mcpOmittedRoutes = map[string]string{
 	// Per-installation operator config in the category ADR-0105 kept read-only on MCP — an
 	// agent reads them with atlas_application_constants and atlas_server_constants to
 	// explain a refused start, and an administrator sets them.
-	"PUT /api/v1/applications/{id}/constants": "setting an application's per-installation constants is an administrator's decision, not an agent action; an agent reads them via atlas_application_constants",
-	"PUT /api/v1/server/constants":            "setting the installation's constants is an administrator's decision, not an agent action; an agent reads them via atlas_server_constants",
+	"PUT /api/v1/applications/{id}/constants":         "setting an application's per-installation constants is an administrator's decision, not an agent action; an agent reads them via atlas_application_constants",
+	"POST /api/v1/applications/{id}/constants/import": "the constants half of atlas import: it sets per-installation values when an administrator runs it, which is that administrator's decision, not an agent action; an agent reads the constants via atlas_application_constants",
+	"PUT /api/v1/server/constants":                    "setting the installation's constants is an administrator's decision, not an agent action; an agent reads them via atlas_server_constants",
 
 	// Source-tree export/import (ADR-0134): a gzip-tar file transfer of an
 	// application's whole working set, in the same category as backup/restore. An
@@ -844,8 +896,16 @@ var mcpOmittedRoutes = map[string]string{
 	// atlas_save_form, atlas_register_decision), where each change is one legible
 	// step; handing it an archive that silently rewrites every artifact of an
 	// application at once is neither reviewable nor something an agent needs.
-	"GET /api/v1/applications/{id}/source": "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
-	"POST /api/v1/applications/source":     "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+	"GET /api/v1/applications/{id}/source":                              "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
+	"GET /api/v1/applications/{id}/releases/{version}/architecture.svg": "a rendering for people to look at; atlas_release_architecture returns the same facts as data",
+	"GET /api/v1/applications/{id}/releases/{version}/architecture.xml": "a document for architecture tools; atlas_release_architecture returns the same facts as data",
+	"POST /api/v1/applications/source":                                  "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
+	"GET /api/v1/applications/{id}/needs":                               "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
+	"GET /api/v1/applications/{id}/package":                             "bulk package download, the source tree and its shop in one archive; an agent reads the application through the source tools and a catalogue through atlas_export_catalog",
+	"GET /api/v1/catalogs/import/mappings":                              "the installation's table of names a person keeps for package imports; an agent imports a catalogue document with its own ids through atlas_import_catalog and needs no translation",
+	"POST /api/v1/catalogs/import/mappings":                             "deciding which group or person here a package's name means is a person's decision, made in the Console's import or its table, not an agent action",
+	"DELETE /api/v1/catalogs/import/mappings":                           "editing the installation's table of names is a person's decision, made in the Console, not an agent action",
+	"POST /api/v1/catalogs/import/answers":                              "the Console's half of installing a package: it answers the package's questions from the directory so a person can import the filled catalogue; an agent imports a catalogue document with its own ids through atlas_import_catalog",
 
 	// Process documentation (ADR-0138): the document is *produced in the browser*,
 	// where bpmn-js holds the authoritative picture — an agent has no rendered
@@ -885,6 +945,13 @@ var mcpOmittedRoutes = map[string]string{
 	// only invite an agent to ask first and then race the answer.
 	"GET /api/v1/drafts/{id}/availability": "a live check for a field being typed; an agent learns the same thing from the save's 409",
 	"GET /api/v1/forms/{id}/availability":  "a live check for a field being typed; an agent learns the same thing from the save's 409",
+	// A person's directory search inside a task form, keystroke by keystroke and rate
+	// limited per person (ADR-0473). An agent completing the
+	// task submits the entry's id, and completion checks it against the directory the
+	// same way it checks a person's — so the agent loses nothing it needs, and the
+	// directory behind a Worker's credential is not made browsable by a tool.
+	"POST /api/v1/tasks/{key}/form-data/{field}/query": "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
+	"GET /api/v1/form-data/sources":                    "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
 
 	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else

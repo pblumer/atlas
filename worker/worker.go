@@ -175,6 +175,11 @@ type Options struct {
 	ID string
 	// Token, when set, is sent as a bearer credential on every request.
 	Token string
+	// BrokerKey, when set, is presented when this worker asks whether it may act
+	// (Authorize). A server supervising this worker hands it over (ATLAS_BROKER_KEY)
+	// only to the process serving a Worker whose credential it brokers per job; without
+	// it, the server releases no person's token to this process.
+	BrokerKey string
 	// Handlers is what this worker serves, keyed by job type. A worker with none is a
 	// misconfiguration rather than a process that polls forever over nothing.
 	Handlers map[string]Exec
@@ -200,6 +205,19 @@ type Options struct {
 	// configured nowhere (ADR-0168). Empty for a worker that serves only plain job
 	// types, which need no credential of their own.
 	Connectors []string
+	// Endpoints are where those workers connect, reduced to scheme, host and port and
+	// keyed by worker name — what lets an architecture sketch draw the system a worker
+	// reaches when the engine holds no configuration for it (ADR-0471). Reported beside
+	// Connectors on every poll; a name with no entry is drawn as holding its endpoint
+	// itself.
+	Endpoints map[string]string
+	// Queries are the form lookups this worker answers, keyed by the job type of the
+	// Worker Type answering them (ADR-0473). A query is not a
+	// job: nothing about it is durable, and it is polled on a path of its own beside the
+	// job poll, under the same identity and for the same Workers.
+	Queries map[string]QueryFunc
+	// MaxQueries is how many queries of one type this worker answers at once.
+	MaxQueries int
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
 }
@@ -212,6 +230,10 @@ const (
 	DefaultWait    = 30 * time.Second
 	DefaultMaxJobs = 1
 	DefaultRetry   = 5 * time.Second
+	// DefaultMaxQueries is higher than DefaultMaxJobs on purpose: a query is one short
+	// read that a person is waiting on, and a second person searching should not wait
+	// for the first.
+	DefaultMaxQueries = 4
 )
 
 // Worker leases jobs of the types it handles and reports what happened. Build one
@@ -220,6 +242,8 @@ type Worker struct {
 	opts  Options
 	http  *http.Client
 	types []string
+	// queryTypes are the job types this worker answers queries for, sorted.
+	queryTypes []string
 }
 
 // New builds a worker, filling in defaults.
@@ -236,6 +260,9 @@ func New(opts Options) *Worker {
 	if opts.Retry <= 0 {
 		opts.Retry = DefaultRetry
 	}
+	if opts.MaxQueries <= 0 {
+		opts.MaxQueries = DefaultMaxQueries
+	}
 	w := &Worker{opts: opts, http: opts.HTTP}
 	if w.http == nil {
 		// One request may block for a whole poll and is followed by the work itself, so
@@ -246,6 +273,10 @@ func New(opts Options) *Worker {
 		w.types = append(w.types, t)
 	}
 	sort.Strings(w.types) // stable order, so a run is reproducible
+	for t := range opts.Queries {
+		w.queryTypes = append(w.queryTypes, t)
+	}
+	sort.Strings(w.queryTypes)
 	return w
 }
 
@@ -253,7 +284,7 @@ func New(opts Options) *Worker {
 // slow queue never starves another, and each type runs up to MaxJobs jobs at once.
 // Run returns only once every job it started has returned.
 func (w *Worker) Run(ctx context.Context) error {
-	if len(w.types) == 0 {
+	if len(w.types) == 0 && len(w.queryTypes) == 0 {
 		return errors.New("worker: no job types to handle; give it at least one --handle type=command")
 	}
 	var wg sync.WaitGroup
@@ -262,6 +293,13 @@ func (w *Worker) Run(ctx context.Context) error {
 		go func() {
 			defer wg.Done()
 			w.serve(ctx, jobType)
+		}()
+	}
+	for _, jobType := range w.queryTypes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.serveQueries(ctx, jobType)
 		}()
 	}
 	wg.Wait()
@@ -377,7 +415,11 @@ func (w *Worker) pollOnce(ctx context.Context, jobType string) error {
 // sees, and a worker that swallowed the error would park the token silently. A
 // [BPMNError] is the one error that is not a failure, and it is thrown instead.
 func (w *Worker) work(ctx context.Context, j Job) {
-	out, err := runHandler(ctx, w.opts.Handlers[j.Type], j)
+	out, err := runHandler(w.withAuthorizer(ctx, j), w.opts.Handlers[j.Type], j)
+	if errors.Is(err, errPolicyRefused) {
+		// Refused by policy: the server settled the job with its decision.
+		return
+	}
 	if err != nil {
 		// Nothing else to do when a report is refused: the lease will elapse and the job
 		// is offered again.
@@ -418,6 +460,9 @@ func (w *Worker) activate(ctx context.Context, jobType string, maxJobs int) ([]J
 	// an operator is looking at when a queue is not moving (ADR-0168).
 	if len(w.opts.Connectors) > 0 {
 		body["connectors"] = w.opts.Connectors
+	}
+	if len(w.opts.Endpoints) > 0 {
+		body["endpoints"] = w.opts.Endpoints
 	}
 	var out struct {
 		Jobs []Job `json:"jobs"`
@@ -476,6 +521,11 @@ func (w *Worker) throwError(ctx context.Context, j Job, be *BPMNError) error {
 
 // call posts a JSON body and decodes a JSON reply into out (nil to discard it).
 func (w *Worker) call(ctx context.Context, path string, body, out any) error {
+	return w.callWith(ctx, path, nil, body, out)
+}
+
+// callWith is call with extra request headers.
+func (w *Worker) callWith(ctx context.Context, path string, header http.Header, body, out any) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -483,6 +533,9 @@ func (w *Worker) call(ctx context.Context, path string, body, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.opts.Server+path, bytes.NewReader(payload))
 	if err != nil {
 		return err
+	}
+	for k, v := range header {
+		req.Header[k] = v
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if w.opts.Token != "" {
@@ -497,11 +550,12 @@ func (w *Worker) call(ctx context.Context, path string, body, out any) error {
 		var msg struct {
 			Error string `json:"error"`
 		}
-		_ = json.NewDecoder(resp.Body).Decode(&msg)
-		if msg.Error != "" {
-			return fmt.Errorf("worker: %s: %s", path, msg.Error)
-		}
-		return fmt.Errorf("worker: %s: status %d", path, resp.StatusCode)
+		decodeErr := json.NewDecoder(resp.Body).Decode(&msg)
+		se := &statusError{path: path, status: resp.StatusCode, msg: msg.Error,
+			// A route the server does not have answers the mux's plain-text 404, not
+			// the API's JSON error: that is how "no such step" is told from "no such job".
+			noRoute: resp.StatusCode == http.StatusNotFound && decodeErr != nil}
+		return se
 	}
 	if out == nil {
 		return nil
@@ -548,4 +602,19 @@ func (c CmdExec) Run(ctx context.Context, j Job) (map[string]any, error) {
 		return nil, fmt.Errorf("%s: its output is not a JSON object of variables: %w", c.Name, err)
 	}
 	return vars, nil
+}
+
+// statusError is a non-200 answer from the server.
+type statusError struct {
+	path    string
+	status  int
+	msg     string
+	noRoute bool
+}
+
+func (e *statusError) Error() string {
+	if e.msg != "" {
+		return fmt.Sprintf("worker: %s: %s", e.path, e.msg)
+	}
+	return fmt.Sprintf("worker: %s: status %d", e.path, e.status)
 }

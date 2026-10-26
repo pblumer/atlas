@@ -82,8 +82,10 @@ th{color:var(--muted);font-weight:600}
   <a href="#wiki-inhalt"><span data-l="de">Inhalt aus dem Wiki</span><span data-l="en">Content from the wiki</span></a>
   <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
+  <a href="#loeschen"><span data-l="de">Ausprobieren und wieder löschen</span><span data-l="en">Trying out and deleting again</span></a>
   <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
   <a href="#terminal"><span data-l="de">Im Terminal: atlas import</span><span data-l="en">From a terminal: atlas import</span></a>
+  <a href="#export"><span data-l="de">Ein Paket schreiben: atlas export</span><span data-l="en">Writing a package: atlas export</span></a>
 </nav>
 <main>
 
@@ -247,9 +249,9 @@ th{color:var(--muted);font-weight:600}
   <table>
     <tr><th data-l="de">Art</th><th data-l="en">Kind</th><th data-l="de">Wer genehmigt</th><th data-l="en">Who approves</th></tr>
     <tr><td><code>none</code></td><td data-l="de">Niemand – die Position startet sofort.</td><td data-l="en">Nobody – the position starts at once.</td></tr>
-    <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihre ID). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their id). In the example: the parking space, by facility management.</td></tr>
+    <tr><td><code>fixed</code></td><td data-l="de">Eine bestimmte Person (<code>ref</code> = ihr Benutzername, dem die Genehmigung als Aufgabe zugewiesen wird). Im Beispiel: der Parkplatz, durch das Facility Management.</td><td data-l="en">One named person (<code>ref</code> = their username, to whom the approval is assigned as a task). In the example: the parking space, by facility management.</td></tr>
     <tr><td><code>role</code></td><td data-l="de">Ein Mitglied einer Gruppe (<code>ref</code> = Gruppen-ID); wer zuerst entscheidet, entscheidet. Im Beispiel: das Geoportal.</td><td data-l="en">A member of a group (<code>ref</code> = group id); whoever decides first decides. In the example: the geoportal.</td></tr>
-    <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der bestellenden, aus dem Verzeichnis. Braucht einen Verzeichnis-Worker namens <code>verzeichnis</code>; zum Ausprobieren genügt der AD-Mock. Im Beispiel: der Badge.</td><td data-l="en">The orderer's line manager, from the directory. Needs a directory worker named <code>verzeichnis</code>; the AD mock is enough to try it. In the example: the badge.</td></tr>
+    <tr><td><code>superior</code></td><td data-l="de">Die vorgesetzte Person der bestellenden, wie ihr Konto sie nennt. Den Linienvorgesetzten setzt eine Administratorin im Konto (Console → Administration → Organization), oder der Entra-Abgleich übernimmt ihn aus dem Verzeichnis. Hat die bestellende Person keinen, startet die Genehmigung nicht, und der Auftrag meldet einen Incident mit dem Grund. Im Beispiel: der Badge.</td><td data-l="en">The orderer's line manager, as their account records it. An administrator sets the line manager on the account (Console → Administration → Organization), or the Entra mirror takes it from the directory. When the orderer has none, the approval does not start, and the order reports an incident that says why. In the example: the badge.</td></tr>
     <tr><td data-l="de">eigener Prozess</td><td data-l="en">own process</td><td data-l="de">Jeder andere Wert ist die ID eines eigenen Genehmigungsprozesses.</td><td data-l="en">Any other value is the id of an approval process of your own.</td></tr>
   </table>
   <p data-l="de">Genehmigungen erscheinen in der Inbox der Genehmigenden; eine Bestellung mit mehreren Positionen
@@ -336,11 +338,11 @@ th{color:var(--muted);font-weight:600}
     publish; name, price, approval and processes stay in atlas. Without a configured source the catalogue
     screen does not change.</p>
   <ul>
-    <li data-l="de"><b>Quelle einrichten</b> (Rolle <code>admin</code>, <i>Console › Content sources</i>):
+    <li data-l="de"><b>Quelle einrichten</b> (Rolle <code>admin</code>, <i>Console › Administration › Content sources</i>):
       https-Adresse des Wikis, der Name des Vault-Secrets mit dem Lese-Token, das Bildfeld, die Labels, die keine
       Suchwörter sind, und ob der Shop «Mehr im Wiki» verlinkt. <i>Prüfen</i> zeigt, ob das technische Konto nur
       lesen darf und nur <code>viewer</code> ist; jedes genannte Problem stoppt das Lesen.</li>
-    <li data-l="en"><b>Setting up a source</b> (role <code>admin</code>, <i>Console › Content sources</i>): the
+    <li data-l="en"><b>Setting up a source</b> (role <code>admin</code>, <i>Console › Administration › Content sources</i>): the
       wiki's https address, the name of the vault secret holding the read token, the picture field, the labels
       that are not keywords, and whether the shop links "More in the wiki". <i>Check</i> shows whether the
       technical account may only read and is only <code>viewer</code>; every problem it names stops every fetch.</li>
@@ -417,6 +419,70 @@ th{color:var(--muted);font-weight:600}
     <code>examples/verwaltung-dienstleistungen/katalog.json</code>.</p>
 </section>
 
+<section id="loeschen">
+  <h2 data-l="de">Ausprobieren und wieder löschen</h2><h2 data-l="en">Trying out and deleting again</h2>
+  <p data-l="de">Im Betrieb wird nichts aus einem Katalog gelöscht: Ein Produkt nimmst du aus dem Angebot, indem du es
+    auf <b>zurückgezogen</b> setzt. Bestellungen von vor Jahren und Rechte, die jemand noch hält, verweisen auf das
+    Produkt, und mit ihm verschwände der Nachweis, wer was mit wessen Genehmigung erhalten hat.</p>
+  <p data-l="en">In operation nothing is deleted from a catalogue: you take a product off sale by setting it to
+    <b>withdrawn</b>. Orders placed years ago and rights somebody still holds point at the product, and deleting it
+    would delete the record of who received what under whose approval.</p>
+  <p data-l="de">Auf einer Entwicklungs- oder Testinstallation willst du dagegen einen Katalog importieren, daraus
+    bestellen, die Abwicklung beobachten und danach von vorne beginnen. Dafür gibt es das endgültige Löschen. Es ist
+    eingeschaltet, und nur Administratoren dürfen es ausführen. <b>Auf einer produktiven Installation schaltest du es
+    aus:</b> Starte den Server mit <code>--catalogue-purge=false</code> (oder <code>ATLAS_CATALOGUE_PURGE=false</code>,
+    im Helm-Chart <code>atlas.catalogue.purge: false</code>). Dann lehnt atlas das Löschen ab. Solange das Löschen
+    eingeschaltet ist, schreibt atlas bei jedem Start eine Warnung ins Log
+    (<code>event=server.catalogue_purge_enabled</code>); daran erkennst du eine Installation, bei der die Einstellung
+    fehlt.</p>
+  <p data-l="en">On a development or test installation, though, you want to import a catalogue, order from it, watch
+    the fulfilment and then start over. That is what deleting for good is for. It is switched on, and only
+    administrators may run it. <b>Switch it off on a production installation:</b> start the server with
+    <code>--catalogue-purge=false</code> (or <code>ATLAS_CATALOGUE_PURGE=false</code>, in the Helm chart
+    <code>atlas.catalogue.purge: false</code>), and atlas refuses the delete. While deleting is switched on, atlas
+    writes a warning to the log at every start (<code>event=server.catalogue_purge_enabled</code>); that is how you
+    find an installation where the setting is missing.</p>
+  <p data-l="de">In der Console findest du es auf der Seite eines Katalogs unter <b>Delete for good</b>. Zuerst zeigt
+    atlas, was alles verschwinden würde, und erst wenn du die ID des Katalogs oder Produkts noch einmal eintippst,
+    lässt sich der Knopf drücken. Mit einem Katalog werden gelöscht:</p>
+  <p data-l="en">In the Console you find it on a catalogue's page under <b>Delete for good</b>. atlas first shows
+    everything that would go, and the button can only be pressed once you type the id of the catalogue or product
+    again. Deleting a catalogue removes:</p>
+  <ul>
+    <li data-l="de">seine Releases, sein Logo und alle Produkte, deren Heimat er ist; andere Kataloge, die eines dieser
+      Produkte anbieten, verlieren es;</li>
+    <li data-l="en">its releases, its logo and every product whose home it is; other catalogues offering one of those
+      products lose it;</li>
+    <li data-l="de">alle Bestellungen aus seinen Releases und alle Bestellungen, die nur seine Produkte enthalten.
+      Eine Bestellung mit weiteren Produkten bleibt, ihre Positionen auf gelöschten Produkten werden zurückgezogen,
+      sofern sie noch nicht begonnen haben;</li>
+    <li data-l="en">every order placed from its releases and every order holding nothing but its products. An order
+      with other products stays; its positions on deleted products are withdrawn if they had not started;</li>
+    <li data-l="de">die laufenden Prozessinstanzen dieser Bestellungen. Sie werden abgebrochen, aber was sie in einem
+      Zielsystem schon getan haben, wird nicht rückgängig gemacht;</li>
+    <li data-l="en">the running process instances of those orders. They are cancelled, but what they already did in a
+      target system is not undone;</li>
+    <li data-l="de">die Rechte im Bestand, die diese Produkte oder Bestellungen betreffen. Im Zielsystem bleibt der
+      Zugriff bestehen, denn es läuft kein Deprovisionierungsprozess.</li>
+    <li data-l="en">the rights in the inventory that concern those products or orders. Access in the target system
+      remains, because no deprovisioning process runs.</li>
+  </ul>
+  <p data-l="de">Bestehen bleiben die Prozesse, an die die Produkte gebunden waren (lösche sie bei Bedarf separat),
+    ein Eintrag «korrigiert» in der Bestandshistorie für jedes entfernte Recht, und ein Release eines anderen
+    Katalogs, das ein gelöschtes Produkt noch anbietet, bis dieser Katalog neu veröffentlicht wird. Ein Produkt allein
+    löschst du auf dieselbe Weise. Einen Papierkorb gibt es nicht; wer etwas davon noch brauchen könnte, macht vorher
+    eine Sicherung (<code>GET /api/v1/backup/full</code>). Über die API heissen die Schritte
+    <code>GET /api/v1/catalogs/{id}/deletion</code> und <code>DELETE /api/v1/catalogs/{id}?confirm={id}</code>, über
+    MCP <code>atlas_catalog_deletion</code> und <code>atlas_delete_catalog</code>.</p>
+  <p data-l="en">What stays: the processes the products were bound to (delete them separately if you need to), a
+    "corrected" entry in the inventory's history for every right removed, and another catalogue's release that still
+    offers a deleted product until that catalogue is published again. You delete a single product the same way. There
+    is no recycle bin; if anything may be needed again, take a backup first (<code>GET /api/v1/backup/full</code>).
+    Over the API the steps are <code>GET /api/v1/catalogs/{id}/deletion</code> and
+    <code>DELETE /api/v1/catalogs/{id}?confirm={id}</code>, over MCP <code>atlas_catalog_deletion</code> and
+    <code>atlas_delete_catalog</code>.</p>
+</section>
+
 <section id="beispiel">
   <h2 data-l="de">Das Beispiel installieren</h2><h2 data-l="en">Installing the example</h2>
   <p data-l="de">«Dienstleistungen der Verwaltung» bringt zwei Kataloge, drei Produkte, ihre fünf Prozesse und zehn
@@ -454,12 +520,12 @@ th{color:var(--muted);font-weight:600}
   <h2 data-l="de">Im Terminal: <code>atlas import</code></h2><h2 data-l="en">From a terminal: <code>atlas import</code></h2>
   <p data-l="de">Dasselbe Paket lässt sich ohne Browser installieren – im Terminal oder in einem CI-Job, etwa um eine
     Test- und eine Produktionsinstanz gleich auszustatten. Ein <b>Paket</b> ist ein Verzeichnis: <code>atlas.json</code>,
-    das Manifest der Applikation im selben Format, das <i>Download source…</i> liefert; die Prozesse und Formulare,
+    das Manifest der Applikation im selben Format, das <i>Export application…</i> in der Console liefert; die Prozesse und Formulare,
     die es nennt; und auf Wunsch <code>katalog.json</code> mit dem Shop und <code>fragen.json</code> mit den Fragen zu
     seinen Platzhaltern. Der Befehl geht vor wie der Installer: Applikation, Veröffentlichen, Katalog.</p>
   <p data-l="en">The same package installs without a browser – in a terminal or a CI job, say to equip a test and a
     production instance alike. A <b>package</b> is a directory: <code>atlas.json</code>, the application's manifest in
-    the format <i>Download source…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
+    the format the Console's <i>Export application…</i> produces; the processes and forms it names; and optionally <code>katalog.json</code>
     with the shop and <code>fragen.json</code> with the questions its placeholders ask. The command goes about it like
     the installer: application, publish, catalogue.</p>
 <pre>atlas import --server https://atlas-test.example.com --answers antworten.json examples/verwaltung-dienstleistungen
@@ -503,15 +569,176 @@ th{color:var(--muted);font-weight:600}
       <tr><td><code>--note</code></td>
         <td data-l="de">die Notiz der Release, die das Veröffentlichen anlegt; ohne Angabe <code>atlas import</code></td>
         <td data-l="en">the note on the release publishing creates; <code>atlas import</code> when omitted</td></tr>
+      <tr><td><code>--overwrite</code></td>
+        <td data-l="de">Artefakte, die auf dem Server anders aussehen, durch die Fassung des Pakets ersetzen: Verweise wie
+          <code>process:ID</code>, <code>form:ID</code>, <code>model:HANDLE</code>, <code>constant:NAME</code> oder
+          <code>product:ID</code>, durch Komma getrennt, oder <code>all</code>; mehrfach möglich</td>
+        <td data-l="en">replace artifacts that differ on the server with the package's version: refs such as
+          <code>process:ID</code>, <code>form:ID</code>, <code>model:HANDLE</code>, <code>constant:NAME</code> or
+          <code>product:ID</code>, comma-separated, or <code>all</code>; repeatable</td></tr>
+      <tr><td><code>--keep</code></td>
+        <td data-l="de">Artefakte, die auf dem Server anders aussehen, so lassen, wie sie dort sind: Verweise oder
+          <code>all</code>; mehrfach möglich</td>
+        <td data-l="en">leave artifacts that differ on the server as they are there: refs or <code>all</code>;
+          repeatable</td></tr>
+      <tr><td><code>--dry-run</code></td>
+        <td data-l="de">nur den Plan zeigen – was neu ist, was gleich bleibt, was sich unterscheidet – und nichts
+          schreiben</td>
+        <td data-l="en">show the plan only – what is new, what stays the same, what differs – and write nothing</td></tr>
     </tbody>
   </table>
-  <p data-l="de">Ein zweiter Lauf aktualisiert, statt doppelt anzulegen: Die Applikation wird über den Schlüssel in
-    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Jeder Lauf veröffentlicht die Applikation
-    neu und legt dabei eine weitere Release an. Artefakte der Applikation, die das Paket nicht nennt, bleiben
-    unverändert und werden aufgezählt.</p>
-  <p data-l="en">A second run updates instead of creating twice: the application is found by the key in
-    <code>atlas.json</code>, catalogues and products by their ids. Each run publishes the application again and records
-    another release. The application's artifacts the package does not name stay as they are and are listed.</p>
+  <p data-l="de">Bevor der Befehl etwas schreibt, vergleicht er jedes Artefakt des Pakets mit dem Server und mit der
+    Fassung, die der letzte Import gebracht hat: Prozesse, Formulare, Entscheidungen und ihre DMN-Modelle, Konstanten,
+    Kataloge und Produkte. Neues wird angelegt, Gleiches bleibt unberührt. Ist ein Artefakt auf dem Server noch so,
+    wie der letzte Import es hinterlassen hat, und bringt das Paket eine neuere Fassung, wird es ohne Rückfrage
+    aktualisiert (<i>behind</i>). Wurde es auf dem Server bearbeitet und bringt das Paket es wie beim letzten Mal,
+    bleibt es ohne Rückfrage, wie es ist (<i>ahead</i>). Nur was <b>auf beiden Seiten</b> geändert wurde – oder was
+    noch nie ein Import gebracht hat – ist dort geleistete Arbeit, die das Paket überschreiben würde, und wird
+    <b>nie ungefragt ersetzt</b>. Sitzt jemand am Terminal, fragt der Befehl für jedes solche Artefakt einzeln nach;
+    Enter allein behält die Fassung des Servers. In einem CI-Job fragt niemand: Dort bricht der Befehl vor dem ersten
+    Schreiben ab und nennt jedes Artefakt, das du mit <code>--overwrite</code> oder <code>--keep</code> entscheidest.
+    Wie du entschieden hast, merkt sich der Server: Dasselbe Paket fragt beim nächsten Mal nicht wieder.</p>
+  <p data-l="en">Before the command writes anything, it compares every artifact of the package with the server and
+    with the version the last import brought: processes, forms, decisions and their DMN models, constants, catalogues
+    and products. What is new is created, what is the same is left alone. An artifact the server still holds as the
+    last import left it, and the package brings newer, is updated without a question (<i>behind</i>). One edited on
+    the server while the package brings it as last time stays as it is, without a question (<i>ahead</i>). Only what
+    changed <b>on both sides</b> – or what no import has brought yet – is work done there that the package would
+    overwrite, and it is <b>never replaced unasked</b>. With somebody at the terminal, the command asks for each such
+    artifact on its own; Enter alone keeps the server's version. A CI job has nobody to ask: there the command stops
+    before the first write and names every artifact, which you decide with <code>--overwrite</code> or
+    <code>--keep</code>. The server remembers how you decided: the same package does not ask again next time.</p>
+  <p data-l="de">Ein zweiter Lauf legt nichts doppelt an und ändert nichts: Die Applikation wird über den Schlüssel in
+    <code>atlas.json</code> gefunden, Kataloge und Produkte über ihre IDs. Veröffentlicht wird die Applikation nur, wenn
+    der Lauf sie geändert hat oder sie hier noch nie veröffentlicht wurde, und ein Katalog nur, wenn sich er selbst
+    oder eines seiner Produkte geändert hat. Artefakte der Applikation, die das Paket nicht nennt, bleiben unverändert
+    und werden aufgezählt.</p>
+  <p data-l="en">A second run creates nothing twice and changes nothing: the application is found by the key in
+    <code>atlas.json</code>, catalogues and products by their ids. The application is published only when the run
+    changed it or it was never published here, and a catalogue only when it or one of its products changed. The
+    application's artifacts the package does not name stay as they are and are listed.</p>
+  <p data-l="de"><b>Konstanten</b> (<code>konstanten.json</code>) sind ein Vorschlag: Fehlende Werte setzt der Befehl.
+    Einen Wert, den jemand auf diesem Server gesetzt hat – auf INT einer, auf PROD ein anderer –, lässt er stehen,
+    solange das Paket vorschlägt, was es schon beim letzten Mal vorgeschlagen hat. Gefragt wird nur, wenn sich auch
+    der Vorschlag geändert hat. Konstanten setzen darf nur, wer die Rolle <code>admin</code> hat, und ein Token trägt
+    sie nie. Mit Token nennt der Befehl deshalb, was jemand mit dieser Rolle noch setzen muss, und importiert den
+    Rest. Er setzt die Konstanten vor dem Veröffentlichen, damit dessen Warnungen nur nennen, was wirklich fehlt. Am
+    Ende meldet er jede Konstante, die die Applikation liest und dieser Server nicht hält.</p>
+  <p data-l="de"><b>Was der Server noch braucht.</b> Server-Konstanten und konfigurierte Worker reisen nie mit: Eine
+    Server-Konstante lesen alle Applikationen der Instanz, und Endpunkt und Geheimnis eines Workers gehören zur
+    Instanz. Der Plan nennt deshalb, bevor etwas geschrieben wird, was die Prozesse davon lesen und dieser Server nicht
+    hat – eine fehlende Server- oder Applikations-Konstante, eine mit anderem Typ, einen fehlenden, anders
+    konfigurierten oder nicht nutzbaren Worker – und wo er es einrichtet. Eine Konstante mit Rückfallwert fehlt nicht.
+    Der Import läuft trotzdem durch: Eine Applikation darf veröffentlicht werden, bevor ihre Umgebung steht.</p>
+  <p data-l="en"><b>Constants</b> (<code>konstanten.json</code>) are a suggestion: the command sets missing values. A
+    value somebody set on this server – one on INT, another on PROD – stays as long as the package suggests what it
+    suggested last time; you are asked only when the suggestion changed too. Only the <code>admin</code> role may set
+    constants, and a token never carries it. With a token the command therefore names what an administrator still has
+    to set, and imports the rest. It sets the constants before it publishes, so the publish warns only about what is
+    really missing. At the end it reports every constant the application reads and this server does not hold.</p>
+  <p data-l="en"><b>What the server still needs.</b> Server constants and configured workers never travel: every
+    application on the instance reads a server constant, and a worker's endpoint and secret belong to the instance. So
+    the plan names, before anything is written, what the processes read of them and this server does not have – a
+    missing server or application constant, one with another type, a worker that is missing, configured as another
+    type or not usable – and where to set it up. A constant with a fallback is not missing. The import goes through
+    regardless: an application may be published before its surroundings exist.</p>
+</section>
+
+<section id="export">
+  <h2 data-l="de">Ein Paket schreiben: <code>atlas export</code></h2><h2 data-l="en">Writing a package: <code>atlas export</code></h2>
+  <p data-l="de">Das Gegenstück zu <code>atlas import</code>: Der Befehl schreibt aus einer laufenden Instanz ein Paket,
+    das <code>atlas import</code> auf einer anderen installiert – die Applikation mit Prozessen, Formularen,
+    Entscheidungen und den DMN-Modellen, die dieser Server selbst hält, ihre Konstanten und auf Wunsch die Kataloge
+    samt Produkten. Gruppen und Personen, die die Kataloge nennen, werden zu Fragen in <code>fragen.json</code>: Ihre
+    IDs vergibt jeder Server selbst, ihre Namen sind überall gleich. Die Antworten schreibt der Befehl deshalb mit den
+    Namen dieses Servers in <code>antworten.json</code>.</p>
+  <p data-l="en">The counterpart of <code>atlas import</code>: the command writes a package from a running instance that
+    <code>atlas import</code> installs on another one – the application with its processes, forms, decisions and the
+    DMN models this server keeps itself, its constants and, if asked, the catalogues with their products. Groups and
+    people the catalogues name become questions in <code>fragen.json</code>: each server mints its own ids, while names
+    stay the same. The command therefore writes the answers, as this server names them, into
+    <code>antworten.json</code>.</p>
+<pre>atlas export --server https://atlas-test.example.com --application beispiel-dienstleistungen-der-verwaltung \
+  --catalog cat-verwaltung-dienste --catalog cat-fachbereich-bau paket
+
+atlas import --server https://atlas.example.com --answers paket/antworten.json paket</pre>
+  <table id="export-flags">
+    <thead><tr>
+      <th data-l="de">Angabe</th><th data-l="en">Flag</th>
+      <th data-l="de">Bedeutung</th><th data-l="en">Meaning</th>
+    </tr></thead>
+    <tbody>
+      <tr><td><code>--server</code></td>
+        <td data-l="de">Adresse der atlas-Instanz, aus der exportiert wird; ohne Angabe <code>http://localhost:8080</code></td>
+        <td data-l="en">Address of the atlas instance to export from; <code>http://localhost:8080</code> when omitted</td></tr>
+      <tr><td><code>--token</code></td>
+        <td data-l="de">API-Token, wenn die Anmeldung eingeschaltet ist; ohne Angabe aus <code>ATLAS_TOKEN</code>: für
+          die Applikation <code>modeler</code>, für jeden Katalog <code>productmanager</code> und seine Pflege</td>
+        <td data-l="en">API token when sign-in is on; taken from <code>ATLAS_TOKEN</code> when omitted: <code>modeler</code>
+          for the application, <code>productmanager</code> and maintaining each catalogue for the shop</td></tr>
+      <tr><td><code>--application</code></td>
+        <td data-l="de">die Applikation: ihr Schlüssel, ihre ID oder ein Name, den nur sie trägt</td>
+        <td data-l="en">the application: its key, its id, or a name only it carries</td></tr>
+      <tr><td><code>--catalog</code></td>
+        <td data-l="de">ein Katalog, der mitkommt, mit seiner ID; mehrfach möglich</td>
+        <td data-l="en">a catalogue to come along, by its id; repeatable</td></tr>
+    </tbody>
+  </table>
+  <p data-l="de">Das Verzeichnis muss leer sein oder ein Paket enthalten, das ein früherer Export geschrieben hat. So
+    lässt sich ein Paket in Git führen: Ein erneuter Export ersetzt, was der frühere schrieb, entfernt, was die
+    Applikation nicht mehr hat, und lässt alles andere stehen – eine README etwa, und Fragen, deren Wortlaut du von
+    Hand verbessert hast. Was nicht mitreisen kann, nennt der Befehl samt seiner Folge auf dem Ziel: ein Formular
+    ausserhalb der Applikation, ein Prozess, den dieser Server nirgends bereitstellt, ein Produkt, dessen Heimatkatalog
+    fehlt. Ein Prozess, an den ein Produkt gebunden ist und der nicht in der Applikation liegt, reist in
+    <code>katalog.json</code> mit.</p>
+  <p data-l="en">The directory must be empty or hold a package an earlier export wrote. That is how a package is kept in
+    git: exporting again replaces what the earlier export wrote, removes what the application no longer has, and leaves
+    everything else – a README, say, and questions whose wording you improved by hand. What cannot travel is named
+    with what it will do on the target: a form outside the application, a process this server deploys nowhere, a
+    product whose home catalogue is missing. A process a product is bound to that is not in the application travels in
+    <code>katalog.json</code>.</p>
+  <p data-l="de">Zum Schluss listet der Befehl, was das Ziel braucht und kein Paket mitbringt: die Server-Konstanten
+    und Applikations-Konstanten, die die Prozesse lesen, und die Worker, die sie nennen, jeweils mit den Prozessen, die
+    sie brauchen. Eine Konstante, deren Wert in <code>konstanten.json</code> steht, fehlt in der Liste. Dieselbe Liste
+    steht unter <code>needs</code> in <code>atlas.json</code>.</p>
+  <p data-l="en">Finally the command lists what the target needs and no package brings: the server constants and
+    application constants the processes read and the workers they name, each with the processes that need it. A
+    constant whose value is in <code>konstanten.json</code> is left out. The same list is under <code>needs</code> in
+    <code>atlas.json</code>.</p>
+  <p data-l="de"><b>Ohne Terminal.</b> In der Console schreibt <i>Export application…</i> (im Menü <b>⋯</b> der
+    Applikation) dasselbe Paket als Archiv. Der Dialog fragt, ob die Konstanten-Werte mitkommen, und bietet die
+    Kataloge an, die du pflegst; die, deren Produkte an Prozesse dieser Applikation gebunden sind, sind
+    vorgewählt. Ihre Gruppen und Personen werden zu Fragen, beantwortet mit den Namen dieser Instanz. Was auf dem
+    Ziel nicht wie hier funktionieren wird, zeigt der Dialog vor dem Herunterladen. Auf der anderen Instanz liest
+    <i>Create new → Import application…</i> das Archiv: Die Fragen beantwortet sie aus ihrem eigenen Verzeichnis
+    und fragt nur nach, was sie dort nicht findet. Dann zeigt sie einen Plan für Applikation, Konstanten und
+    Kataloge, importiert die Applikation, veröffentlicht sie, importiert die Kataloge und nennt, was noch fehlt.
+    Ein solches Archiv installiert auch <code>atlas import</code>, entpackt, und umgekehrt.</p>
+  <p data-l="en"><b>Without a terminal.</b> In the Console, <i>Export application…</i> (in the application's
+    <b>⋯</b> menu) writes the same package as an archive. The dialog asks whether the constant values come along and
+    offers the catalogues you maintain; those whose products are bound to the application's processes start
+    ticked. Their groups and people become questions, answered with this instance's names. What will not work on the
+    target as it does here is shown before anything is downloaded. On the other instance,
+    <i>Create new → Import application…</i> reads the archive: it answers the questions from its own directory and
+    asks only about what it cannot find there. It then shows one plan for the application, its constants and the
+    catalogues, imports the application, publishes it, imports the catalogues and names what is still missing.
+    <code>atlas import</code> installs such an archive too, unpacked, and the other way round.</p>
+  <p data-l="de"><b>Namen, die anders heissen.</b> Heisst eine Gruppe auf INT «Fachbereich Bau» und auf PROD
+    «FB Bau», findet der Import sie nicht und fragt nach. Die Wahl merkt sich PROD in seiner Zuordnungstabelle, sobald
+    die Kataloge importiert sind, und jeder spätere Import nimmt sie ohne Rückfrage – in der Console wie mit
+    <code>atlas import</code>, wo eine Antwort mit <code>--set</code> ebenso gemerkt wird. Die Tabelle steht auf der
+    Katalogliste unter <i>Names from other installations</i>: Dort lässt sich ein Eintrag korrigieren, entfernen oder
+    schon vor dem ersten Import anlegen. Ein Eintrag, dessen Gruppe oder Person es nicht mehr gibt, ist markiert;
+    der Import sucht den Namen dann wieder im Verzeichnis. <code>atlas import</code> liest die mitgelieferten
+    Antworten (<code>antworten.json</code>) selbst; <code>--answers</code> braucht es nur noch für Abweichungen.</p>
+  <p data-l="en"><b>Names that differ.</b> When a group is "Fachbereich Bau" on INT and "FB Bau" on PROD, the import
+    does not find it and asks. PROD keeps the choice in its table of names once the catalogues are in, and every later
+    import takes it without asking – in the Console and with <code>atlas import</code>, where an answer given with
+    <code>--set</code> is kept the same way. The table is on the catalogue list under
+    <i>Names from other installations</i>: an entry can be corrected, removed, or added before the first import. An
+    entry whose group or person no longer exists is marked, and the import looks the name up in the directory again.
+    <code>atlas import</code> reads the package's own answers (<code>antworten.json</code>); <code>--answers</code> is
+    only needed for what differs.</p>
 </section>
 
 </main>
@@ -592,15 +819,19 @@ document.getElementById("lang-en").addEventListener("click", () => setLang("en")
     const principals = (await tryList("/api/v1/principals")) || [];
     const groups = principals.filter((p) => p.type === "group");
     const people = principals.filter((p) => p.type === "user");
+    // A fixed approver is an account: the approval is a task assigned to its username.
+    const accounts = ((await tryList("/api/v1/users/assignable")) || [])
+      .map((u) => ({ id: u.username, name: u.displayName ? u.displayName + " (" + u.username + ")" : u.username }));
     qbox.innerHTML = names.map((name) => {
       const q = QUESTIONS[name] || { kind: "text" };
       const label = (q.label && (q.label[root.dataset.lang] || q.label.de || q.label.en)) || name;
       const hint = (q.hint && (q.hint[root.dataset.lang] || q.hint.de || q.hint.en)) || "";
-      const list = q.kind === "group" ? groups : q.kind === "user" ? people : null;
+      const list = q.kind === "group" ? groups : q.kind === "user" ? people : q.kind === "account" ? accounts : null;
+      const placeholder = { group: T("Gruppen-ID", "group id"), user: T("Benutzer-ID", "user id"), account: T("Benutzername", "username") }[q.kind] || "";
       const field = list && list.length
         ? '<select data-ph="' + esc(name) + '">' + list.map((g) =>
             '<option value="' + esc(g.id) + '">' + esc(g.name || g.displayName || g.username || g.id) + "</option>").join("") + "</select>"
-        : '<input data-ph="' + esc(name) + '" placeholder="' + esc(q.kind === "group" ? T("Gruppen-ID", "group id") : T("Benutzer-ID", "user id")) + '">';
+        : '<input data-ph="' + esc(name) + '" placeholder="' + esc(placeholder) + '">';
       return "<label>" + esc(label) + "</label>" + field + '<p class="hint">' + esc(hint) + "</p>";
     }).join("");
     go.disabled = false;

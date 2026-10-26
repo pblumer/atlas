@@ -509,6 +509,29 @@ func (s *Service) ModelsOnLoop() ([]Model, error) {
 	return s.store.LoadAll()
 }
 
+// ModelsForApplicationOnLoop is the models one application owns, newest first, for
+// a deletion preview. Like VocabularyOnLoop it runs inside an existing loop turn.
+func (s *Service) ModelsForApplicationOnLoop(applicationID string) ([]Model, error) {
+	return s.store.ForApplication(applicationID)
+}
+
+// DeleteForApplicationOnLoop removes every model one application owns — the purge
+// of that application
+// (ADR-0468). Like
+// VocabularyOnLoop it runs inside an existing loop turn; idempotent.
+func (s *Service) DeleteForApplicationOnLoop(applicationID string) error {
+	models, err := s.store.ForApplication(applicationID)
+	if err != nil {
+		return err
+	}
+	for _, m := range models {
+		if err := s.store.Delete(m.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 const notFound = "no such information model"
 
 func (s *Service) readModel(r *http.Request, id string) (Model, *operationRefusal, error) {

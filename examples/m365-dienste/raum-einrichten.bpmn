@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Sitzungszimmer einrichten.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_raum_einrichten" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_raum_einrichten" name="Exchange: Sitzungszimmer einrichten" isExecutable="true">
+    <documentation>Richtet ein buchbares Sitzungszimmer ein: Raumpostfach mit Kapazität, automatische Annahme von Buchungen, Herkunftskennzeichnung. Bereitstellungsprozess des Produkts m365-raum (Form 1, getrennte Prozesse).
+
+Namensregel mit Präfix RM. Die Kennzeichnung trägt in CustomAttribute4 statt einer Person den Standort.
+
+Worker: ucc_exchange. Konstante MAIL_DOMAIN.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+        <atlas:constant name="MAIL_DOMAIN" type="string" source="application" value="contoso.ch"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Position gestartet"><documentation>Die Bestellung startet den Prozess pro Position, nach der Genehmigung durch das Facility Management.</documentation><outgoing>f_s__br_name</outgoing></startEvent>
+    <businessRuleTask id="br_name" name="Namensregel anwenden"><documentation>Wendet die Namensregel M365Namensregel an (Governance). Die bestellende Person gibt nur das Bereichskürzel und eine Bezeichnung an; die Entscheidungstabelle bildet daraus Anzeigename und Alias mit dem Präfix des Objekttyps (raum), weist reservierte Bezeichnungen (admin, postmaster, security …) und zu lange Namen ab und begründet jede Abweichung. Die Eingabe slug normalisiert die Bezeichnung im Input-Mapping (Kleinbuchstaben, Umlaute ausgeschrieben, alles andere zu Bindestrichen). bereich und bezeichnung benennen niemanden und sind deshalb nicht als Personendaten deklariert; nur so darf die Engine sie auswerten. Das Ergebnis steht danach in regel (erlaubt, grund, anzeigename, alias). Die Felder werden als regel.alias usw. gelesen: Output-Mappings wertet Atlas auf einer Business-Rule-Task nicht aus.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Namensregel" resultVariable="regel"/><zeebe:ioMapping><zeebe:input source='="raum"' target="objekttyp"/><zeebe:input source="=bereich" target="bereich"/><zeebe:input source="=bezeichnung" target="bezeichnung"/><zeebe:input source='=replace(replace(replace(replace(replace(replace(replace(lower case(bezeichnung), "ä", "ae"), "ö", "oe"), "ü", "ue"), "[éèê]", "e"), "[àâ]", "a"), "[^a-z0-9]+", "-"), "^-+|-+$", "")' target="slug"/></zeebe:ioMapping></extensionElements><incoming>f_s__br_name</incoming><outgoing>f_br_name__gw_name</outgoing></businessRuleTask>
+    <exclusiveGateway id="gw_name" name="Namensregel erfüllt?" default="f_gw_name__st_ablehnen"><documentation>Nur ein ausdrücklich erlaubter Name führt weiter (fail-closed): Der Default-Fluss ist die Ablehnung, damit eine Regel, die nicht greift, nie ein Objekt mit beliebigem Namen anlegt.</documentation><incoming>f_br_name__gw_name</incoming><outgoing>f_gw_name__st_ablehnen</outgoing><outgoing>f_gw_name__st_anlegen</outgoing></exclusiveGateway>
+    <serviceTask id="st_ablehnen" name="Ablehnung melden"><documentation>Meldet die Ablehnung über POST /api/v1/orders/{orderId}/lines/{itemId}/decision, mit der Begründung, die die Namensregel geliefert hat. Eine verletzte Namensregel ist eine Entscheidung und keine Störung: Sie erzeugt keinen Incident, und die bestellende Person liest den Grund im Shop.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + itemId + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Namensregel"' target="by"/><zeebe:input source="=regel.grund" target="reason"/></zeebe:ioMapping></extensionElements><incoming>f_gw_name__st_ablehnen</incoming><outgoing>f_st_ablehnen__e_abgelehnt</outgoing></serviceTask>
+    <endEvent id="e_abgelehnt" name="Abgelehnt: Namensregel"><incoming>f_st_ablehnen__e_abgelehnt</incoming></endEvent>
+    <serviceTask id="st_anlegen" name="Raumpostfach anlegen"><documentation>create-room-mailbox mit der Kapazität aus dem Formular (als Zahl).</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="create-room-mailbox" parameters='{"Name": "=regel.anzeigename", "DisplayName": "=regel.anzeigename", "Alias": "=regel.alias", "PrimarySmtpAddress": "=regel.alias + \"@\" + application.MAIL_DOMAIN", "ResourceCapacity": "=number(kapazitaet)"}'/></extensionElements><incoming>f_gw_name__st_anlegen</incoming><outgoing>f_st_anlegen__st_kalender</outgoing></serviceTask>
+    <serviceTask id="st_kalender" name="Buchungsregeln setzen"><documentation>set-calendar-processing: Buchungen automatisch annehmen, keine Überschneidungen, 180 Tage im Voraus.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="set-calendar-processing" parameters='{"Identity": "=regel.alias + \"@\" + application.MAIL_DOMAIN", "AutomateProcessing": "AutoAccept", "AllowConflicts": false, "BookingWindowInDays": 180}'/></extensionElements><incoming>f_st_anlegen__st_kalender</incoming><outgoing>f_st_kalender__st_tag</outgoing></serviceTask>
+    <serviceTask id="st_tag" name="Herkunft kennzeichnen"><documentation>Kennzeichnet die Herkunft (Governance): CustomAttribute1 = atlas-katalog, CustomAttribute2 = Produkt, CustomAttribute3 = Auftrag/Position, CustomAttribute4 = verantwortliche Person. Die Kennzeichnung ist zweierlei: Rückgabe und Änderungen finden das Objekt darüber wieder, und die wöchentliche Governance-Prüfung erkennt jedes Objekt ohne sie als nicht über den Katalog entstanden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="update-mailbox" parameters='{"Identity": "=regel.alias + \"@\" + application.MAIL_DOMAIN", "CustomAttribute1": "atlas-katalog", "CustomAttribute2": "=itemId", "CustomAttribute3": "=orderId + \"/\" + (if positionId = null then itemId else positionId)", "CustomAttribute4": "=standort"}'/></extensionElements><incoming>f_st_kalender__st_tag</incoming><outgoing>f_st_tag__st_done</outgoing></serviceTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit erhält die empfangende Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Bereitstellen und Rückgabe das Recht ändern. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_tag__st_done</incoming><outgoing>f_st_done__e</outgoing></serviceTask>
+    <endEvent id="e" name="Sitzungszimmer buchbar"><incoming>f_st_done__e</incoming></endEvent>
+    <sequenceFlow id="f_gw_name__st_ablehnen" sourceRef="gw_name" targetRef="st_ablehnen" name="nein"/>
+    <sequenceFlow id="f_st_ablehnen__e_abgelehnt" sourceRef="st_ablehnen" targetRef="e_abgelehnt"/>
+    <sequenceFlow id="f_s__br_name" sourceRef="s" targetRef="br_name"/>
+    <sequenceFlow id="f_br_name__gw_name" sourceRef="br_name" targetRef="gw_name"/>
+    <sequenceFlow id="f_gw_name__st_anlegen" sourceRef="gw_name" targetRef="st_anlegen" name="ja"><conditionExpression>=regel.erlaubt = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_st_anlegen__st_kalender" sourceRef="st_anlegen" targetRef="st_kalender"/>
+    <sequenceFlow id="f_st_kalender__st_tag" sourceRef="st_kalender" targetRef="st_tag"/>
+    <sequenceFlow id="f_st_tag__st_done" sourceRef="st_tag" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e" sourceRef="st_done" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_raum_einrichten_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_raum_einrichten_plane" bpmnElement="proc_m365_raum_einrichten">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_name_di" bpmnElement="br_name"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_name_di" bpmnElement="gw_name" isMarkerVisible="true"><omgdc:Bounds x="455" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ablehnen_di" bpmnElement="st_ablehnen"><omgdc:Bounds x="580" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="762" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_anlegen_di" bpmnElement="st_anlegen"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_kalender_di" bpmnElement="st_kalender"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_tag_di" bpmnElement="st_tag"><omgdc:Bounds x="880" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="1030" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1212" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_gw_name__st_ablehnen_di" bpmnElement="f_gw_name__st_ablehnen"><omgdi:waypoint x="480" y="155"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="580" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="205" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="680" y="270"/><omgdi:waypoint x="762" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s__br_name_di" bpmnElement="f_s__br_name"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_name__gw_name_di" bpmnElement="f_br_name__gw_name"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="455" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_name__st_anlegen_di" bpmnElement="f_gw_name__st_anlegen"><omgdi:waypoint x="505" y="130"/><omgdi:waypoint x="580" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="108" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_anlegen__st_kalender_di" bpmnElement="f_st_anlegen__st_kalender"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="730" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_kalender__st_tag_di" bpmnElement="f_st_kalender__st_tag"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_tag__st_done_di" bpmnElement="f_st_tag__st_done"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1030" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_di" bpmnElement="f_st_done__e"><omgdi:waypoint x="1130" y="130"/><omgdi:waypoint x="1212" y="130"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -12,10 +12,12 @@
 *model.MessageFlowValue: CorrelationKey, MessageName, ReceiverElementId, ReceiverProcessDefKey, ReceiverProcessInstanceKey, SenderProcessInstanceKey
 *model.MessageSubscriptionValue: CorrelationKey, ElementId, ElementInstanceKey, MessageName, ProcessDefKey, ProcessInstanceKey
 *model.OperatorActionValue: Actor, ElementInstanceKey, ErrorCode, FromProcessDefKey, JobKey, Kind, ProcessInstanceKey, Reason
-*model.ProcessInstanceValue: CompletedAt, CompletedPosition, CorrelationKey, CreatedAt, ExpiryDueDate, ParentElementInstanceKey, PredecessorInstanceKey, ProcessDefKey, PurgeDueDate, State, SuccessorInstanceKey
+*model.ProcessInstanceValue: CompletedAt, CompletedPosition, CorrelationKey, CreatedAt, ExpiryDueDate, ParentElementInstanceKey, PredecessorInstanceKey, ProcessDefKey, PurgeDueDate, StartedBy, State, SuccessorInstanceKey
 *model.ProcessMigrationValue: FromProcessDefKey, Mapping, ProcessInstanceKey, ToProcessDefKey
-*model.SignalSubscriptionValue: ElementId, ElementInstanceKey, ProcessDefKey, ProcessInstanceKey, SignalName
+*model.SignalSubscriptionValue: ElementId, ElementInstanceKey, ProcessDefKey, ProcessInstanceKey, SenderProcessInstanceKey, SignalName, Stale
 *model.TimerValue: DueDate, ElementInstanceKey, JobKey, JobKind, ProcessDefKey, ProcessInstanceKey, Repetitions, TargetElementId
 *model.VariableAuditValue: Actor, Bool, Kind, Name, ProcessInstanceKey, ScopeKey, Text
 *model.VariableIndexValue: Indexed, Name, ProcessInstanceKey
 *model.VariableValue: Bool, Index, Indexed, Kind, Name, ProducerKey, ScopeKey, Text
+*model.AuthorizationValue: ActionDigest, ConnectionID, DecidedAt, DecisionKey, Detail, Effect, ElementInstanceKey, Enforced, ExecutedAs, ExecutedFor, IdentityMode, InitiatedBy, JobKey, LeaseEpoch, Operation, PolicyID, PolicyVersion, ProcessInstanceKey, ReasonCode, Resource, Worker, WorkerInstance, WorkerType
+*model.ActionApprovalValue: ActionDigest, ApprovalKey, Approvals, ApproverGroup, At, DecisionKey, ExpiresAt, JobKey, Kind, ObligationID, Operation, Outcome, PolicyID, PolicyVersion, Principal, ProcessInstanceKey, Reason, RequestedBy, Resource, Worker

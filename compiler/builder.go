@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // DMNJobType is the reserved job type business rule tasks carry. The in-process
@@ -141,11 +142,19 @@ const CsvImportJobType = "io.atlas.csv-import"
 // way the mail worker uses MailJobTypeIndex.
 const CsvImportJobTypeIndex int32 = 11
 
-// SharePointJobType is the reserved job type a SharePoint task carries.
+// SharePointJobType is the reserved job type a SharePoint create-item task carries.
 // The in-process SharePoint worker subscribes to it to create a list item
 // in a model-authored SharePoint site/list through a server-registered SharePoint
 // provider (Microsoft Graph) off the hot path (ADR-0141), the same way the mail
 // worker subscribes to MailJobType.
+//
+// It serves create-item and nothing else, although the Worker Type has grown every
+// other list and library operation since: those carry [SharePointOpsJobType]. The
+// split is what keeps a worker built before the operations existed from performing
+// them. Such a worker reads a job as "create an item from these fields" whatever else
+// it carries, so a get-item or a delete-item handed to it would create an item and
+// complete the job as if it had done what was asked. Under a job type it does not
+// subscribe to, the same job waits for a worker that knows it.
 const SharePointJobType = "io.atlas.sharepoint.createitem"
 
 // SharePointJobTypeIndex is the interned index SharePointJobType is guaranteed to
@@ -475,6 +484,54 @@ const TeamsPhoneJobType = "io.atlas.teamsphone"
 // in every compiled process: NewBuilder reserves it thirty-fifth, so it is always 34.
 const TeamsPhoneJobTypeIndex int32 = 34
 
+// SharePointOpsJobType is the reserved job type every SharePoint operation but
+// create-item carries (ADR-0141, amended): reading, updating, deleting and listing
+// list items, and uploading, downloading, inspecting, listing, creating and deleting
+// what a document library holds. One job type serves all of them because they share a
+// Worker, a credential and Graph's error envelope; the operation is a modelled value,
+// as it is for S3 and Jira.
+//
+// It exists beside [SharePointJobType] rather than replacing it for the reason given
+// there: the job type is the one contract an older worker can be held to, and a
+// worker that has never heard of this one leaves its jobs alone.
+const SharePointOpsJobType = "io.atlas.sharepoint"
+
+// SharePointOpsJobTypeIndex is the interned index SharePointOpsJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-sixth, so it is
+// always 35.
+const SharePointOpsJobTypeIndex int32 = 35
+
+// GoogleContactsJobType is the reserved job type a Google Contacts task carries
+// (ADR-0476). One job type serves every operation on an address
+// book — find, read, list, create, update and delete a contact, label one, and search
+// the organization's directory — because they share an account, a credential and
+// Google's error envelope; the operation is a modeled value, as it is for Google Sheets
+// (ADR-0235).
+//
+// Like Exchange's, nothing in the engine subscribes to it: the kind is worker-only, so a
+// service account that reads a person's address book never enters the engine.
+const GoogleContactsJobType = "io.atlas.googlecontacts"
+
+// GoogleContactsJobTypeIndex is the interned index GoogleContactsJobType is guaranteed to
+// occupy in every compiled process: NewBuilder reserves it thirty-seventh, so it is
+// always 36.
+const GoogleContactsJobTypeIndex int32 = 36
+
+// CardDAVJobType is the reserved job type a CardDAV task carries
+// (ADR-0490). One job type serves every operation on an address book —
+// find, read, search, list, create, update and delete a contact, and change its groups —
+// because they share a server, a credential and WebDAV's answers; the operation is a
+// modeled value, as it is for Google Contacts.
+//
+// Like Google Contacts', nothing in the engine subscribes to it: the kind is
+// worker-only, so the password that reads somebody's address book never enters the
+// engine.
+const CardDAVJobType = "io.atlas.carddav"
+
+// CardDAVJobTypeIndex is the interned index CardDAVJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it thirty-eighth, so it is always 37.
+const CardDAVJobTypeIndex int32 = 37
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -517,6 +574,11 @@ var reservedJobTypes = []string{
 	S3JobType,            // 32
 	ExchangeJobType,      // 33
 	TeamsPhoneJobType,    // 34
+	SharePointOpsJobType, // 35
+	// From here on a name longer than the column above gets a block of its own, so
+	// appending one does not realign every index before it.
+	GoogleContactsJobType, // 36
+	CardDAVJobType,        // 37
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -1796,7 +1858,13 @@ type MailConfig struct {
 	Subject   RestExpr
 	Body      RestExpr
 	BodyHTML  RestExpr
-	Retries   int32
+	// SubjectTemplate, BodyTemplate and BodyHTMLTemplate are the subject and bodies of
+	// a task that switched templating on, where they use the template language
+	// (ADR-0487); nil leaves the RestExpr beside them in charge.
+	SubjectTemplate  *feelers.Template
+	BodyTemplate     *feelers.Template
+	BodyHTMLTemplate *feelers.Template
+	Retries          int32
 	// The mailbox half (ADR-0438): the operation ("" is send) and
 	// what it takes. ResultVar names the variable list, get and move answer into.
 	Operation   string
@@ -1805,8 +1873,19 @@ type MailConfig struct {
 	Destination RestExpr
 	MaxResults  int32
 	IncludeBody bool
+	// IncludeHTML is includeBody="html": a get reads the HTML body as well
+	// (ADR-0489).
+	IncludeHTML bool
 	UnreadOnly  bool
 	ResultVar   string
+	// The documents half (ADR-0478): the attachment an
+	// operation addresses, the media types it accepts, and for an export the S3 Worker,
+	// bucket and key the document goes to.
+	Attachment   RestExpr
+	AllowedTypes []string
+	Store        string
+	Bucket       RestExpr
+	Key          RestExpr
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1839,6 +1918,9 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailSubject:     cfg.Subject,
 		Body:            cfg.Body,
 		BodyHTML:        cfg.BodyHTML,
+		MailSubjectTmpl: cfg.SubjectTemplate,
+		BodyTmpl:        cfg.BodyTemplate,
+		BodyHTMLTmpl:    cfg.BodyHTMLTemplate,
 		Retries:         cfg.Retries,
 		MailOp:          cfg.Operation,
 		MailFolder:      cfg.Folder,
@@ -1846,7 +1928,14 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailDestination: cfg.Destination,
 		MailMaxResults:  cfg.MaxResults,
 		MailIncludeBody: cfg.IncludeBody,
+		MailIncludeHTML: cfg.IncludeHTML,
 		MailUnreadOnly:  cfg.UnreadOnly,
+		// The documents half.
+		MailAttachment:   cfg.Attachment,
+		MailAllowedTypes: cfg.AllowedTypes,
+		MailStore:        cfg.Store,
+		MailBucket:       cfg.Bucket,
+		MailKey:          cfg.Key,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -1956,45 +2045,82 @@ func (b *Builder) AddCsvConnectorTask(cfg CsvConfig) int32 {
 }
 
 // SharePointConfig is the deploy-time configuration of a SharePoint task
-// (ADR-0141). Worker names the server-registered SharePoint provider (its Graph
-// base and OAuth credential live server-side, never in the model); Site and List
-// address the target list, and Fields are the created item's column values — all
-// literal-or-FEEL values (the parser compiles the FEEL ones) evaluated over the
-// instance's variables at call time. ResultVar, if set, is the process variable the
-// created item's JSON is written back into (empty = discard it).
+// (ADR-0141, amended). Worker names the server-registered SharePoint provider (its
+// Graph base and OAuth credential live server-side, never in the model) and Operation
+// the step the task takes, empty meaning create-item — which is what every task
+// authored before operations existed does. Site and List address the site and the
+// list or document library; Fields are column values; ItemID, Path, Content, Filter,
+// Select and PageToken are the values the operation takes — all literal-or-FEEL values
+// (the parser compiles the FEEL ones) evaluated over the instance's variables at call
+// time. Encoding and MaxResults are compiled structure with their defaults applied.
+// ResultVar, if set, is the process variable what Graph returned is written back into
+// (empty = discard it).
 type SharePointConfig struct {
-	Connector string
-	Site      RestExpr
-	List      RestExpr
-	Fields    []RestKV
-	ResultVar string
-	Retries   int32
+	Connector  string
+	Operation  string
+	Site       RestExpr
+	List       RestExpr
+	Fields     []RestKV
+	ItemID     RestExpr
+	Path       RestExpr
+	Content    RestExpr
+	Encoding   string
+	Filter     RestExpr
+	Select     RestExpr
+	PageToken  RestExpr
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
 }
+
+// sharePointCreateItem is the operation a SharePoint task performs when it names
+// none: the only one there was before operations existed.
+const sharePointCreateItem = "create-item"
 
 // AddSharePointConnectorTask adds a SharePoint task and returns its element
 // id. Like a service task it creates a job on activation and waits; the job carries
-// the reserved SharePointJobType so the in-process SharePoint worker picks it up,
-// evaluates any FEEL site/list/field values over the instance's variables, resolves
-// the named worker's Graph client, creates the list item, writes the created
-// item's JSON into ResultVar, and completes the job (ADR-0141). The Graph base and
+// a reserved SharePoint job type so the SharePoint worker picks it up, evaluates the
+// FEEL values over the instance's variables, resolves the named worker's Graph
+// client, performs the one operation, writes what Graph returned into ResultVar, and
+// completes the job (ADR-0141, amended). The Graph base and
 // credentials are resolved server-side from the named worker, never authored in
 // the model — mirroring the mail worker (ADR-0079).
+//
+// Create-item keeps SharePointJobType and every other operation carries
+// SharePointOpsJobType; see the latter for why the two are not one.
 func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
+	op := cfg.Operation
+	if op == "" {
+		op = sharePointCreateItem
+	}
+	jobType := SharePointOpsJobType
+	if op == sharePointCreateItem {
+		jobType = SharePointJobType
+	}
 	detail := int32(len(b.connectorTasks))
 	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
-		JobType:    b.intern(SharePointJobType),
-		Connector:  b.intern(cfg.Connector),
-		Subject:    -1, // not a clio task
-		EventType:  -1,
-		ClioQuery:  -1,
-		ReduceSpec: -1,
-		Method:     -1, // not a REST task
-		ResultVar:  b.intern(cfg.ResultVar),
-		Auth:       -1,
-		Site:       cfg.Site,
-		List:       cfg.List,
-		Fields:     cfg.Fields,
-		Retries:    cfg.Retries,
+		JobType:              b.intern(jobType),
+		Connector:            b.intern(cfg.Connector),
+		Subject:              -1, // not a clio task
+		EventType:            -1,
+		ClioQuery:            -1,
+		ReduceSpec:           -1,
+		Method:               -1, // not a REST task
+		ResultVar:            b.intern(cfg.ResultVar),
+		Auth:                 -1,
+		Site:                 cfg.Site,
+		List:                 cfg.List,
+		Fields:               cfg.Fields,
+		SharePointOp:         b.intern(op),
+		SharePointItemID:     cfg.ItemID,
+		SharePointPath:       cfg.Path,
+		SharePointContent:    cfg.Content,
+		SharePointEncoding:   b.intern(cfg.Encoding),
+		SharePointFilter:     cfg.Filter,
+		SharePointSelect:     cfg.Select,
+		SharePointPageToken:  cfg.PageToken,
+		SharePointMaxResults: cfg.MaxResults,
+		Retries:              cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }
@@ -2271,6 +2397,112 @@ func (b *Builder) AddTeamsPhoneConnectorTask(cfg TeamsPhoneConfig) int32 {
 		TeamsPhoneOp:   b.intern(cfg.Operation),
 		TeamsPhoneArgs: cfg.Args,
 		Retries:        cfg.Retries,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// GoogleContactsConfig is the deploy-time configuration of a Google Contacts task
+// (ADR-0476). Worker names the configured address book and
+// WorkerExpr carries it as literal-or-FEEL when a process picks the account at runtime;
+// Op is a row of connector/googlecontacts/catalog. ContactID, Query, Field and Group are
+// literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL
+// context, ContactVar the variable holding it instead; the compiler has refused a model
+// that sets both. MaxResults bounds a listing, with its default applied, and is zero on
+// every other operation.
+type GoogleContactsConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	ContactID  RestExpr
+	Query      RestExpr
+	Field      RestExpr
+	Group      RestExpr
+	Contact    RestExpr
+	ContactVar string
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
+}
+
+// AddGoogleContactsConnectorTask adds a Google Contacts task and returns its element id.
+// Like a service task it creates a job on activation and waits; the job carries the
+// reserved GoogleContactsJobType, which nothing in the engine subscribes to — the kind
+// is worker-only, so the job waits for a worker that holds the account's credential.
+func (b *Builder) AddGoogleContactsConnectorTask(cfg GoogleContactsConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:                  b.intern(GoogleContactsJobType),
+		Connector:                b.intern(cfg.Worker),
+		GoogleContactsConnector:  cfg.WorkerExpr,
+		Subject:                  -1, // not a clio task
+		EventType:                -1,
+		ClioQuery:                -1,
+		ReduceSpec:               -1,
+		Method:                   -1, // an address-book operation, not an HTTP method, is authored
+		Auth:                     -1, // the credential lives on the worker
+		ResultVar:                b.intern(cfg.ResultVar),
+		Retries:                  cfg.Retries,
+		GoogleContactsOp:         b.intern(cfg.Op),
+		GoogleContactsContactID:  cfg.ContactID,
+		GoogleContactsQuery:      cfg.Query,
+		GoogleContactsField:      cfg.Field,
+		GoogleContactsGroup:      cfg.Group,
+		GoogleContactsContact:    cfg.Contact,
+		GoogleContactsContactVar: b.intern(cfg.ContactVar),
+		GoogleContactsMaxResults: cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// CardDAVConfig is the deploy-time configuration of a CardDAV task
+// (ADR-0490). Worker names the configured address book and WorkerExpr
+// carries it as literal-or-FEEL when a process picks the address book at runtime; Op is
+// a row of connector/carddav/catalog. ContactID, Query, Field and Group are
+// literal-or-FEEL values. Contact is the authored contact object compiled to one FEEL
+// context, ContactVar the variable holding it instead; the compiler has refused a model
+// that sets both. MaxResults bounds a listing, with its default applied, and is zero on
+// every other operation.
+type CardDAVConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	ContactID  RestExpr
+	Query      RestExpr
+	Field      RestExpr
+	Group      RestExpr
+	Contact    RestExpr
+	ContactVar string
+	MaxResults int32
+	ResultVar  string
+	Retries    int32
+}
+
+// AddCardDAVConnectorTask adds a CardDAV task and returns its element id. Like a service
+// task it creates a job on activation and waits; the job carries the reserved
+// CardDAVJobType, which nothing in the engine subscribes to — the kind is worker-only,
+// so the job waits for a worker that holds the address book's credential.
+func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:           b.intern(CardDAVJobType),
+		Connector:         b.intern(cfg.Worker),
+		CardDAVConnector:  cfg.WorkerExpr,
+		Subject:           -1, // not a clio task
+		EventType:         -1,
+		ClioQuery:         -1,
+		ReduceSpec:        -1,
+		Method:            -1, // an address-book operation, not an HTTP method, is authored
+		Auth:              -1, // the credential lives on the worker
+		ResultVar:         b.intern(cfg.ResultVar),
+		Retries:           cfg.Retries,
+		CardDAVOp:         b.intern(cfg.Op),
+		CardDAVContactID:  cfg.ContactID,
+		CardDAVQuery:      cfg.Query,
+		CardDAVField:      cfg.Field,
+		CardDAVGroup:      cfg.Group,
+		CardDAVContact:    cfg.Contact,
+		CardDAVContactVar: b.intern(cfg.ContactVar),
+		CardDAVMaxResults: cfg.MaxResults,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

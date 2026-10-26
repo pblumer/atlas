@@ -53,6 +53,9 @@ const WORKERS = `<i>Console &rsaquo; Workers</i>`;
 // - `needs`   one line, always visible: what must exist before a task of this type runs.
 // - `steps`   the ordered setup, provider first, Atlas second, proof last.
 // - `trap`    the failure this type is actually reported with — omitted where there is none.
+// - `reference` optional { anchor, title }: a handbook card on what the tasks *do* — every
+//             operation, its result, the error codes a boundary can catch — linked beside
+//             the setup card, for a type whose operations need more than the field hints.
 export const WORKER_TYPE_DOCS = {
   worker: {
     anchor: "runbook-jobworker", title: "Job worker",
@@ -184,9 +187,11 @@ export const WORKER_TYPE_DOCS = {
       `Entra admin center &rarr; <b>App registrations</b> &rarr; new registration with a <b>certificate</b> (the module signs apps in with a certificate only). Give the service principal the role <i>Teams Administrator</i> and the Graph application permission <code>User.ReadWrite.All</code>, then <b>grant admin consent</b>.`,
       `Store the bundle in the vault: ${VAULT}, e.g. <code>teams_contoso</code> holding <code>{"tenantId": "…", "clientId": "…", "certificate": "…"}</code> — the certificate and its unencrypted private key as one PEM text — or <code>"certificateThumbprint"</code> in its place for a certificate already in the worker account's store. Never both.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft Teams Phone</b>, a name, credential reference <code>teams_contoso</code>, no endpoint.`,
-      `Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a tenant in the worker's memory, and <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people Resolve users finds.`,
+      `For phone numbers: a person needs a Teams Phone licence, a resource account the <i>Microsoft Teams Phone Resource Account</i> licence, and both a usage location. Calling Plan and Operator Connect numbers must already be the tenant's; a Direct Routing number is your own carrier's.`,
+      `Practise without a tenant: <code>ATLAS_TEAMSPHONE_MOCK=1</code> serves the same tasks from a tenant in the worker's memory, <code>ATLAS_TEAMSPHONE_MOCK_USERS</code> names the people Resolve users finds, and <code>ATLAS_TEAMSPHONE_MOCK_NUMBERS</code> the tenant's Calling Plan and Operator Connect numbers.`,
     ],
     trap: `Teams shows a new resource account only after a synchronization. A voice app waits up to two minutes for its account and is then refused before anything is created — give the model a pause between creating the accounts and the voice apps (waiting for licences is one), rather than reading the delay as a fault.`,
+    reference: { anchor: "ref-teamsphone", title: "Teams Phone operations and error codes" },
   },
 
   // The three database entries quote the connection string exactly as the Console's own
@@ -201,7 +206,7 @@ export const WORKER_TYPE_DOCS = {
       `Create a <b>technical database user</b> with rights on exactly the tables, views and procedures the processes need. No <code>db_owner</code>. Granting on views and stored procedures rather than tables makes the interface a contract instead of your schema.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft SQL Server</b>, a name, and the connection string <code>sqlserver://atlas:PASSWORT@sql.example.com:1433?database=hr</code>. Atlas seals it into the vault and keeps only a reference — the Console can never show it back.`,
       `Write the statement literally and pass every value as a <b>bound parameter</b> (<code>@p1</code>, or by name — SQL Server is the one of the three drivers that binds by name, so an object-shaped parameters variable is accepted here).`,
-      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory; what a run asked for is listed under <i>Operations &rsaquo; Mock database</i>.`,
+      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory; what a run asked for is listed under <i>Operations &rsaquo; Diagnostics &rsaquo; Mock database</i>.`,
     ],
     trap: `The <b>statement</b> field has no <code>fx</code> toggle, on purpose: a statement assembled from process data would be an injection that needs no quoting bug to work.`,
   },
@@ -214,7 +219,7 @@ export const WORKER_TYPE_DOCS = {
       `Create a <b>technical database user</b> with rights on exactly the tables and views the processes need. No <code>SUPER</code>, no <code>GRANT ALL</code>.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>MariaDB</b>, a name, and the connection string <code>atlas:PASSWORT@tcp(mariadb.example.com:3306)/hr?parseTime=true</code> — the MySQL driver's own form, which is not a URL.`,
       `Write the statement literally and pass every value as a <b>bound parameter</b>, marked <code>?</code> and bound in order. An object as the parameters variable is refused rather than put into an order nobody wrote.`,
-      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory (<i>Operations &rsaquo; Mock database</i>).`,
+      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory (<i>Operations &rsaquo; Diagnostics &rsaquo; Mock database</i>).`,
     ],
     trap: `The <b>statement</b> field has no <code>fx</code> toggle, on purpose: a statement assembled from process data would be an injection that needs no quoting bug to work.`,
   },
@@ -227,7 +232,7 @@ export const WORKER_TYPE_DOCS = {
       `Create a <b>technical database role</b> with rights on exactly the tables and views the processes need — not the owner role, and no <code>SUPERUSER</code>.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>PostgreSQL</b>, a name, and the connection string <code>postgres://atlas:PASSWORT@db.example.com:5432/hr?sslmode=require</code>. Keep <code>sslmode=require</code> unless the database is on this very host.`,
       `Write the statement literally and pass every value as a <b>bound parameter</b>, marked <code>$1</code>, <code>$2</code> and bound in order.`,
-      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory (<i>Operations &rsaquo; Mock database</i>).`,
+      `Practise without a database: switch the worker to mock mode and the same task answers from seeded rows in memory (<i>Operations &rsaquo; Diagnostics &rsaquo; Mock database</i>).`,
     ],
     trap: `The <b>statement</b> field has no <code>fx</code> toggle, on purpose: a statement assembled from process data would be an injection that needs no quoting bug to work.`,
   },
@@ -264,14 +269,15 @@ export const WORKER_TYPE_DOCS = {
     checked: "2026-09",
     needs: `A configured mail Worker in ${WORKERS} — and one of its four transports needs no mail server at all. Reading the mailbox (a watch, or a task that lists, files or answers mail) needs read access as well.`,
     steps: [
-      `<b>Start with Preview.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Mail</b>, provider <b>Preview</b>, a name, a sender address. It frames the message exactly as it would be sent and puts it in <i>Operations &rsaquo; Outbox</i> instead of delivering it — a mail task can be built and demonstrated with no credentials.`,
+      `<b>Start with Preview.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Mail</b>, provider <b>Preview</b>, a name, a sender address. It frames the message exactly as it would be sent and puts it in <i>Operations &rsaquo; Diagnostics &rsaquo; Outbox</i> instead of delivering it — a mail task can be built and demonstrated with no credentials.`,
       `<b>SMTP:</b> provider <b>SMTP</b>, endpoint <code>smtp.example.com:587</code> (587 is assumed without a port); the sender is the login, and the token reference names its password in the vault. An internal relay that admits this server by its address (often <code>relay.example.com:25</code>) needs no login: leave the token reference empty and the worker sends without one. The only route that also works with a mail server in your own basement.`,
       `<b>Gmail:</b> provider <b>Gmail API</b>, no endpoint, and a vault bundle — a service account <code>{"method": "serviceAccount", "clientEmail": "…", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "sender@your-domain"}</code> (Workspace, domain-wide delegation for the <code>gmail.send</code> scope), or <code>{"method": "refreshToken", "clientId": …, "clientSecret": …, "refreshToken": …}</code> for a single mailbox.`,
       `<b>Microsoft Graph:</b> provider <b>Microsoft Graph</b>, no endpoint, vault bundle <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> from an app registration with the <code>Mail.Send</code> application permission and admin consent. This is the route when your organisation has switched off SMTP basic authentication.`,
       `Going live is a change of <b>worker</b>, not of model: the task keeps naming the same worker name.`,
       `<b>To read the mailbox</b> — an inbound watch, or a task that lists, reads, files, marks, deletes or answers mail: <b>SMTP</b> names an <b>IMAP endpoint</b> (<code>imaps://imap.example.com:993</code>; plaintext is refused) and logs in as the sender with the same password. <b>Microsoft Graph</b> needs the application permission <code>Mail.Read</code> (<code>Mail.ReadWrite</code> to change the mailbox) — and because an application permission reaches every mailbox in the tenant, an Exchange Online <b>RBAC for Applications</b> assignment that confines the app to this one. <b>Gmail</b>'s delegation needs <code>gmail.readonly</code>, and <code>gmail.modify</code> to change the mailbox. <i>This step is written from the providers' documentation and has not yet been walked at a tenant.</i>`,
       `<b>Decide who may use it.</b> A task that reads or changes a mailbox deploys only for people the Worker is shared with — viewer to read, editor to change (Workers &rsaquo; ⋯ &rsaquo; Share). Keep a personal mailbox in a Worker of its own, apart from a shared sender, ideally with its own read-only credential.`,
-      `<b>Receive mail:</b> on the worker under <b>Events…</b> — a folder (empty is the inbox), a message name, and who may start a process: <b>Allowed senders</b> and <b>Require a DMARC pass</b>. The watch never changes the mailbox; a process files or marks a message with a task, addressing the <code>messageId</code> the watch published.`,
+      `<b>Hand attachments on</b> — forward a mail, read an attachment into a variable, export one into an S3 Worker: name a <b>malware scanner</b> on the worker (a ClamAV daemon, <code>clamd://clamav.internal:3310</code>) so every document is scanned before it leaves; without one only the built-in inspection runs. Forwarding and exporting deploy only for editors of the mail Worker, and an export also for editors of the S3 Worker. <b>Microsoft Graph</b> forwards with <code>Mail.Send</code> and reads attachments with <code>Mail.Read</code>; <b>Gmail</b> forwards with <code>gmail.send</code> and reads with <code>gmail.readonly</code>. <i>The provider half of this step is written from the providers' documentation and has not yet been walked at a tenant.</i>`,
+      `<b>Receive mail:</b> on the worker under <b>Events…</b> — a folder (empty is the inbox), a message name, and who may start a process: <b>Allowed senders</b> and <b>Require a DMARC pass</b>. The watch never changes the mailbox; the process receives the mail as one variable, <code>mail</code> (<code>mail.from</code>, <code>mail.subject</code>, <code>mail.auth.dmarc</code>, …), and files or marks it with a task addressing <code>mail.messageId</code>. A watch needs a mailbox: on an SMTP Worker without an IMAP endpoint, or a Preview Worker, it is refused. One that cannot read — a refused login, a missing permission — shows <b>not reading</b> in its row, with the reason, from its first poll on.`,
     ],
     trap: `Send the first real batch to yourself, and check that the sender address is allowed to send (SPF/DKIM). An automation sending two hundred wrong mails is faster than any correction. And a watch publishes mail from <b>anyone</b> who can write to the address: a sender address is a claim anybody can make, so restrict the watch to allowed senders <i>and</i> require a DMARC pass.`,
   },
@@ -291,13 +297,14 @@ export const WORKER_TYPE_DOCS = {
   sharepoint: {
     anchor: "runbook-sharepoint", title: "SharePoint",
     checked: "2026-09",
-    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph. No endpoint — Graph's address is the same for everyone.`,
+    needs: `A configured SharePoint Worker in ${WORKERS}: a vault bundle for Microsoft Graph with tenant, client and a secret, a certificate, or — on Windows — a certificate's thumbprint. No endpoint — Graph's address is the same for everyone. Or the <b>Mockup</b> provider, which needs none of it.`,
     steps: [
-      `The groundwork is Entra ID's: an <b>app registration</b>, a client secret, and admin consent. Note tenant id, client id and secret.`,
+      `<b>Start with the mockup.</b> ${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft SharePoint</b>, provider <b>Mockup</b>, a name. Every operation then runs against a site atlas keeps in its own memory — a list or library exists from the first task that writes to it — and <i>Operations &rsaquo; Diagnostics &rsaquo; Mockups</i> shows what a run wrote. A SharePoint process can be built and demonstrated with no tenant; going live is switching the same Worker to <b>Microsoft Graph</b>.`,
+      `The groundwork is Entra ID's: an <b>app registration</b>, a client secret or — recommended for an app that runs unattended — a certificate uploaded under <i>Certificates &amp; secrets</i>, and admin consent. Note tenant id and client id.`,
       `Grant the <b>site-specific</b> permission <code>Sites.Selected</code> and then grant this app access to the individual sites it works on. <code>Sites.ReadWrite.All</code> works too and is the grant an audit writes up.`,
-      `Store the bundle in the vault: ${VAULT}, e.g. <code>sharepoint_auth</code> holding <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>sharepoint_auth</code> holding <code>{"method": "clientCredentials", "tenantId": "…", "clientId": "…", "clientSecret": "…"}</code> — or <code>"certificate"</code>, the certificate and its unencrypted private key as one PEM text, in place of <code>clientSecret</code>. On a Windows server, <code>"certificateThumbprint"</code> may name a certificate already in the store instead (the service account's <code>CurrentUser\\My</code>, or <code>LocalMachine\\My</code>), as for Entra ID; its key signs there and may be non-exportable. One of the three.`,
       `${WORKERS} &rarr; <b>New worker</b>: type <b>Microsoft SharePoint</b>, a name, credential reference <code>sharepoint_auth</code>, no endpoint.`,
-      `In the task, the <b>Site</b> is Graph's site identifier <code>contoso.sharepoint.com,&lt;siteId&gt;,&lt;webId&gt;</code>, and the list is named by title or id.`,
+      `In the task, name the <b>Site</b> as the browser shows it (<code>https://contoso.sharepoint.com/sites/hr</code>), as <code>contoso.sharepoint.com:/sites/hr</code>, or by Graph's site id; a list or library by its title, a column by its internal name.`,
     ],
     trap: `A <code>403</code> here usually means not "a permission is missing" but "this app has no access to <i>this</i> site" — which is why the same app works on one site and not on the next.`,
   },
@@ -344,6 +351,34 @@ export const WORKER_TYPE_DOCS = {
       `<b>Share the spreadsheet with the service account.</b> It has an email address of its own and owns nothing: share every spreadsheet or folder with that address as an <b>editor</b>, exactly as you would with a colleague.`,
     ],
     trap: `The step everyone forgets is the last one: without the share, the worker answers <code>403</code> on a document you have open in front of you.`,
+  },
+
+  googlecontacts: {
+    anchor: "runbook-googlecontacts", title: "Google Contacts",
+    checked: "2026-10",
+    needs: `A configured Google Contacts Worker in ${WORKERS} per address book: a vault bundle with a service account and the Workspace user it acts as, or a refresh token. No endpoint. <i>These steps are written from Google's documentation and have not yet been walked in a Google account.</i>`,
+    steps: [
+      `<b>Google Cloud Console</b> &rarr; pick a project &rarr; <i>APIs &amp; Services</i> &rarr; enable the <b>People API</b>.`,
+      `<i>IAM &amp; Admin</i> &rarr; <b>Service accounts</b> &rarr; create one, then <i>Keys</i> &rarr; <i>Add key</i> &rarr; <b>JSON</b>. Note the account's <b>client ID</b> (the long number on its details page).`,
+      `<b>Google Workspace Admin console</b> &rarr; <i>Security</i> &rarr; <i>Access and data control</i> &rarr; <i>API controls</i> &rarr; <b>Manage domain-wide delegation</b> &rarr; add that client ID with the scope <code>https://www.googleapis.com/auth/contacts</code> — and <code>https://www.googleapis.com/auth/directory.readonly</code> beside it if a process searches the directory.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>google_contacts_verkauf</code> holding <code>{"method": "serviceAccount", "clientEmail": "…@….iam.gserviceaccount.com", "privateKey": "-----BEGIN PRIVATE KEY-----\\n…", "subject": "verkauf@firma.ch"}</code>. The <b>subject</b> is the person whose address book the Worker uses; for the directory, add <code>"scope"</code> naming both scopes, separated by a space.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>Google Contacts</b>, a name, credential reference <code>google_contacts_verkauf</code>, no endpoint. One Worker per address book.`,
+      `<b>Without a Workspace</b> (a gmail.com account): an OAuth client of type <i>Desktop app</i>, one consent with the contacts scope, and the refresh token it yields — <code>{"method": "refreshToken", "clientId": "…", "clientSecret": "…", "refreshToken": "…"}</code>.`,
+    ],
+    trap: `Delegation grants exactly the scopes listed. A scope in the bundle that is not delegated fails the token request — for every operation, not only the one that needed it. And an OAuth client still in <i>Testing</i> expires its refresh token after 7 days.`,
+  },
+
+  carddav: {
+    anchor: "runbook-carddav", title: "CardDAV contacts",
+    checked: "2026-10",
+    needs: `A configured CardDAV Worker in ${WORKERS} per address book: its endpoint, and a vault bundle with the account's username and password. <i>Walked against Radicale and Xandikos; the provider steps are written from the providers' documentation and have not yet been walked in an iCloud, Nextcloud or mail provider account.</i>`,
+    steps: [
+      `At the provider, create an <b>app-specific password</b> for the account where it issues one — <b>iCloud</b>: <i>account.apple.com</i> &rarr; <i>Sign-In and Security</i> &rarr; <b>App-Specific Passwords</b> (required); <b>Nextcloud</b>: <i>Settings</i> &rarr; <i>Security</i> &rarr; <b>Create new app password</b> (required with two-factor sign-in).`,
+      `Note the <b>endpoint</b>: <code>https://contacts.icloud.com</code> for iCloud, <code>https://&lt;server&gt;/remote.php/dav</code> for Nextcloud and ownCloud, the server's address for Radicale (<code>…/dav.php</code> for Baïkal), otherwise the CardDAV address the provider's help names. The address book is found from it; when the account has several, the first task names them, and you set the endpoint to the one this Worker uses.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>carddav_verkauf</code> holding <code>{"username": "verkauf@firma.ch", "password": "…", "groups": "categories"}</code> — <code>"groups": "group-vcards"</code> for <b>iCloud and Fastmail</b>, whose groups are cards of their own.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>CardDAV contacts</b>, a name, the endpoint, credential reference <code>carddav_verkauf</code>. One Worker per address book.`,
+    ],
+    trap: `The account's own password is refused where the provider requires an app-specific one — iCloud always, Nextcloud with two-factor sign-in — and the task fails with <code>HTTP 401</code>. A group form that does not match the server's is silent instead: an iCloud address book in the <code>categories</code> form keeps every group in a field Apple Contacts never shows.`,
   },
 
   discord: {
@@ -506,5 +541,7 @@ function renderDoc(doc) {
     </details>
     <a class="wtdoc-link" href="${handbookHref(doc)}" target="_blank" rel="noopener"
        title="The handbook this server serves itself — no internet needed">Handbook: ${doc.title} <span class="ext" aria-hidden="true">&#8599;</span></a>
+    ${doc.reference ? `<a class="wtdoc-link" href="${HANDBOOK_URL}#${doc.reference.anchor}" target="_blank" rel="noopener"
+       title="What each operation takes and answers, in the handbook this server serves itself">Handbook: ${doc.reference.title} <span class="ext" aria-hidden="true">&#8599;</span></a>` : ""}
   </div>`;
 }

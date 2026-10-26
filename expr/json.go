@@ -93,6 +93,46 @@ func FromJSON(raw any) Value {
 	}
 }
 
+// ContextOf builds a FEEL context from values that are already FEEL values — for a
+// binding whose members include something JSON has no image of, such as the instant
+// an authorization request is evaluated at (ADR-0475).
+// Members go in sorted key order, as FromJSON's do, so the context iterates the same
+// way every time.
+func ContextOf(members map[string]Value) Value {
+	keys := make([]string, 0, len(members))
+	for k := range members {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	ctx := value.NewContext()
+	for _, k := range keys {
+		ctx.Put(k, members[k])
+	}
+	return ctx
+}
+
+// ContextMember answers the member name of a FEEL context, and whether v is a
+// context that holds it. With ContextKeys it is how the template language
+// (expr/feelers) reads a loop item's fields without the rest of Atlas importing the
+// FEEL value package.
+func ContextMember(v Value, name string) (Value, bool) {
+	c, ok := v.(*value.Context)
+	if !ok {
+		return nil, false
+	}
+	return c.Get(name)
+}
+
+// ContextKeys answers a FEEL context's member names in the context's own order, and
+// whether v is a context at all.
+func ContextKeys(v Value) ([]string, bool) {
+	c, ok := v.(*value.Context)
+	if !ok {
+		return nil, false
+	}
+	return c.Keys(), true
+}
+
 // valueToGo maps a FEEL value to the Go shape encoding/json marshals into
 // canonical JSON. Numbers become json.Number so their exact decimal text is
 // emitted verbatim; a value with no JSON image (temporal, range, function)

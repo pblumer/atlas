@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Teams-Telefonie: persönliche Rufnummer. Lebenszyklus-Prozess (einrichten, aufheben).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_telefonie" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <message id="m_m365_telefonie_einrichten" name="m365.telefonie.einrichten"/>
+  <message id="m_m365_telefonie_aufheben" name="m365.telefonie.aufheben"/>
+  <error id="err_teamsphone_number_in_use" name="Rufnummer vergeben" errorCode="TEAMSPHONE_NUMBER_IN_USE"/>
+  <process id="proc_m365_telefonie" name="Teams-Telefonie: persönliche Rufnummer" isExecutable="true" atlas:personal="upn,rufnummer,zuweisung" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus der Teams-Telefonie einer Person: Zusatzlizenz Teams Phone Standard und eine persönliche Rufnummer.
+
+Die Lizenz weist der Entra-Worker zu. Die Rufnummer wählt das Team M365-Telefonie aus seinem Nummernplan (Aufgabe «Rufnummer wählen»), weil Atlas keinen Nummernbestand führt; zugewiesen und bei der Rückgabe freigegeben wird sie vom Teams-Phone-Worker (ensure-phone-number, remove-phone-number). Ist die gewählte Nummer schon vergeben, meldet der Worker TEAMSPHONE_NUMBER_IN_USE, und die Aufgabe kommt mit einem Hinweis zurück.
+
+Das Produkt setzt im Katalog die Microsoft-365-Lizenz voraus (Beziehung requires): Teams Phone ist eine Zusatzlizenz und wird erst bereitgestellt, wenn die Grundlizenz bereitgestellt ist.
+
+Personendaten: upn (aus dem Bestellformular), rufnummer (aus der Aufgabe) und zuweisung (die Antwort des Workers, die die Nummer nennt) sind als Personendaten der empfangenden Person deklariert. Worker: ucc_entra und ucc_teams.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s_ein" name="Telefonie bestellt"><documentation>Start der Operation provision.</documentation><outgoing>f_s_ein__br_profil</outgoing><messageEventDefinition messageRef="m_m365_telefonie_einrichten"/></startEvent>
+    <businessRuleTask id="br_profil" name="Lizenzprofil bestimmen"><documentation>M365Lizenzprofil mit dem festen Profil telefonie: die SKU von Teams Phone Standard.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Lizenzprofil" resultVariable="lizenz"/><zeebe:ioMapping><zeebe:input source='="telefonie"' target="lizenzprofil"/></zeebe:ioMapping></extensionElements><incoming>f_s_ein__br_profil</incoming><outgoing>f_br_profil__sc_add</outgoing></businessRuleTask>
+    <scriptTask id="sc_add" name="Zuweisung vorbereiten"><documentation>Body von assignLicense mit der Zusatzlizenz.</documentation><extensionElements><zeebe:script expression="={addLicenses: [{skuId: lizenz.skuId, disabledPlans: []}], removeLicenses: []}" resultVariable="lizenzAenderung"/></extensionElements><incoming>f_br_profil__sc_add</incoming><outgoing>f_sc_add__st_lizenz</outgoing></scriptTask>
+    <serviceTask id="st_lizenz" name="Zusatzlizenz zuweisen"><documentation>assign-license: Teams Phone Standard für die empfangende Person.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="assign-license" userId="=upn" attributesVariable="lizenzAenderung"/></extensionElements><incoming>f_sc_add__st_lizenz</incoming><outgoing>f_st_lizenz__ut_nummer</outgoing></serviceTask>
+    <userTask id="ut_nummer" name="Rufnummer wählen"><documentation>Aufgabe für M365-Telefonie: eine freie Rufnummer aus dem Nummernplan wählen und im Formular festhalten. Zugewiesen wird sie im nächsten Schritt vom Teams-Phone-Worker. Kommt die Aufgabe zurück, war die gewählte Nummer bereits vergeben; das Formular sagt es. Die Nummer ist als Personendatum deklariert.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="M365-Telefonie"/><zeebe:formDefinition formId="m365-rufnummer-person"/></extensionElements><incoming>f_st_lizenz__ut_nummer</incoming><incoming>f_sc_vergeben__ut_nummer</incoming><outgoing>f_ut_nummer__st_nummer</outgoing></userTask>
+    <serviceTask id="st_nummer" name="Rufnummer zuweisen"><documentation>ensure-phone-number: weist der Person die gewählte Nummer zu, als Direct-Routing-Nummer (Attribut numberType; ein Tenant mit Calling Plan oder Operator Connect ändert es hier). Teams schaltet die Identität dabei für Enterprise Voice frei. Hat sie die Nummer schon, ändert ein zweiter Lauf nichts; eine andere Hauptnummer ersetzt der Worker und nennt sie in previousNumber.</documentation><extensionElements><atlas:teamsPhoneConnector connector="ucc_teams" operation="ensure-phone-number" identity="=upn" phoneNumber="=rufnummer" numberType="direct-routing" resultVariable="zuweisung"/></extensionElements><incoming>f_ut_nummer__st_nummer</incoming><outgoing>f_st_nummer__st_done</outgoing></serviceTask>
+    <boundaryEvent id="b_nummer" name="Rufnummer vergeben" attachedToRef="st_nummer" cancelActivity="true"><documentation>TEAMSPHONE_NUMBER_IN_USE: Die gewählte Nummer gehört schon einer Person oder einem Ressourcenkonto. Das ist eine Frage an das Telefonie-Team und keine Störung: Die Aufgabe «Rufnummer wählen» kommt mit einem Hinweis zurück.</documentation><outgoing>f_b_nummer__sc_vergeben</outgoing><errorEventDefinition errorRef="err_teamsphone_number_in_use"/></boundaryEvent>
+    <scriptTask id="sc_vergeben" name="Hinweis setzen"><documentation>Merkt sich für das Formular, dass die zuletzt gewählte Nummer vergeben war; es zeigt dann einen Hinweis. Die Nummer selbst steht weiter im Formular.</documentation><extensionElements><zeebe:script expression="=true" resultVariable="nummerVergeben"/></extensionElements><incoming>f_b_nummer__sc_vergeben</incoming><outgoing>f_sc_vergeben__ut_nummer</outgoing></scriptTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit erhält die empfangende Person das Recht im Bestand. Eine Serviceaufgabe und keine Shop-Aufgabe, weil Bereitstellen und Rückgabe das Recht ändern. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_nummer__st_done</incoming><outgoing>f_st_done__e_ein</outgoing></serviceTask>
+    <endEvent id="e_ein" name="Telefonie eingerichtet"><incoming>f_st_done__e_ein</incoming></endEvent>
+    <startEvent id="s_aus" name="Rückgabe angefordert"><documentation>Start der Operation deprovision.</documentation><outgoing>f_s_aus__st_frei</outgoing><messageEventDefinition messageRef="m_m365_telefonie_aufheben"/></startEvent>
+    <serviceTask id="st_frei" name="Rufnummer freigeben"><documentation>remove-phone-number: nimmt der Person ihre Rufnummern. Zuerst die Nummer, dann die Lizenz: Eine Lizenz, die vor der Nummer geht, hinterlässt eine zugewiesene Nummer ohne Dienst. Hat die Person keine Nummer mehr, ändert der Schritt nichts.</documentation><extensionElements><atlas:teamsPhoneConnector connector="ucc_teams" operation="remove-phone-number" identity="=upn"/></extensionElements><incoming>f_s_aus__st_frei</incoming><outgoing>f_st_frei__br_profil2</outgoing></serviceTask>
+    <businessRuleTask id="br_profil2" name="Lizenzprofil bestimmen"><documentation>SKU von Teams Phone Standard.</documentation><extensionElements><zeebe:calledDecision decisionId="M365Lizenzprofil" resultVariable="lizenz"/><zeebe:ioMapping><zeebe:input source='="telefonie"' target="lizenzprofil"/></zeebe:ioMapping></extensionElements><incoming>f_st_frei__br_profil2</incoming><outgoing>f_br_profil2__sc_remove</outgoing></businessRuleTask>
+    <scriptTask id="sc_remove" name="Entzug vorbereiten"><documentation>removeLicenses mit der Zusatzlizenz.</documentation><extensionElements><zeebe:script expression="={addLicenses: [], removeLicenses: [lizenz.skuId]}" resultVariable="lizenzAenderung"/></extensionElements><incoming>f_br_profil2__sc_remove</incoming><outgoing>f_sc_remove__st_entzug</outgoing></scriptTask>
+    <serviceTask id="st_entzug" name="Zusatzlizenz entziehen"><documentation>assign-license mit removeLicenses.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="assign-license" userId="=upn" attributesVariable="lizenzAenderung"/></extensionElements><incoming>f_sc_remove__st_entzug</incoming><outgoing>f_st_entzug__st_returned</outgoing></serviceTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_entzug__st_returned</incoming><outgoing>f_st_returned__e_aus</outgoing></serviceTask>
+    <endEvent id="e_aus" name="Telefonie aufgehoben"><incoming>f_st_returned__e_aus</incoming></endEvent>
+    <sequenceFlow id="f_s_ein__br_profil" sourceRef="s_ein" targetRef="br_profil"/>
+    <sequenceFlow id="f_br_profil__sc_add" sourceRef="br_profil" targetRef="sc_add"/>
+    <sequenceFlow id="f_sc_add__st_lizenz" sourceRef="sc_add" targetRef="st_lizenz"/>
+    <sequenceFlow id="f_st_lizenz__ut_nummer" sourceRef="st_lizenz" targetRef="ut_nummer"/>
+    <sequenceFlow id="f_ut_nummer__st_nummer" sourceRef="ut_nummer" targetRef="st_nummer"/>
+    <sequenceFlow id="f_st_nummer__st_done" sourceRef="st_nummer" targetRef="st_done"/>
+    <sequenceFlow id="f_b_nummer__sc_vergeben" sourceRef="b_nummer" targetRef="sc_vergeben"/>
+    <sequenceFlow id="f_sc_vergeben__ut_nummer" sourceRef="sc_vergeben" targetRef="ut_nummer"/>
+    <sequenceFlow id="f_st_done__e_ein" sourceRef="st_done" targetRef="e_ein"/>
+    <sequenceFlow id="f_s_aus__st_frei" sourceRef="s_aus" targetRef="st_frei"/>
+    <sequenceFlow id="f_st_frei__br_profil2" sourceRef="st_frei" targetRef="br_profil2"/>
+    <sequenceFlow id="f_br_profil2__sc_remove" sourceRef="br_profil2" targetRef="sc_remove"/>
+    <sequenceFlow id="f_sc_remove__st_entzug" sourceRef="sc_remove" targetRef="st_entzug"/>
+    <sequenceFlow id="f_st_entzug__st_returned" sourceRef="st_entzug" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_aus" sourceRef="st_returned" targetRef="e_aus"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_telefonie_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_telefonie_plane" bpmnElement="proc_m365_telefonie">
+      <bpmndi:BPMNShape id="s_ein_di" bpmnElement="s_ein"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_profil_di" bpmnElement="br_profil"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_add_di" bpmnElement="sc_add"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lizenz_di" bpmnElement="st_lizenz"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_nummer_di" bpmnElement="ut_nummer"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="1030" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ein_di" bpmnElement="e_ein"><omgdc:Bounds x="1212" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_aus_di" bpmnElement="s_aus"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_frei_di" bpmnElement="st_frei"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_profil2_di" bpmnElement="br_profil2"><omgdc:Bounds x="430" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_remove_di" bpmnElement="sc_remove"><omgdc:Bounds x="580" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_entzug_di" bpmnElement="st_entzug"><omgdc:Bounds x="730" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="880" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_aus_di" bpmnElement="e_aus"><omgdc:Bounds x="1062" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_ein__br_profil_di" bpmnElement="f_s_ein__br_profil"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_profil__sc_add_di" bpmnElement="f_br_profil__sc_add"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_add__st_lizenz_di" bpmnElement="f_sc_add__st_lizenz"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="580" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lizenz__ut_nummer_di" bpmnElement="f_st_lizenz__ut_nummer"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="730" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_nummer__st_nummer_di" bpmnElement="f_ut_nummer__st_nummer"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_ein_di" bpmnElement="f_st_done__e_ein"><omgdi:waypoint x="1130" y="130"/><omgdi:waypoint x="1212" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_aus__st_frei_di" bpmnElement="f_s_aus__st_frei"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_frei__br_profil2_di" bpmnElement="f_st_frei__br_profil2"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="430" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_profil2__sc_remove_di" bpmnElement="f_br_profil2__sc_remove"><omgdi:waypoint x="530" y="410"/><omgdi:waypoint x="580" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_remove__st_entzug_di" bpmnElement="f_sc_remove__st_entzug"><omgdi:waypoint x="680" y="410"/><omgdi:waypoint x="730" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_entzug__st_returned_di" bpmnElement="f_st_entzug__st_returned"><omgdi:waypoint x="830" y="410"/><omgdi:waypoint x="880" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_aus_di" bpmnElement="f_st_returned__e_aus"><omgdi:waypoint x="980" y="410"/><omgdi:waypoint x="1062" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="st_nummer_di" bpmnElement="st_nummer"><omgdc:Bounds x="880" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="b_nummer_di" bpmnElement="b_nummer"><omgdc:Bounds x="912" y="152" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="948" y="178" width="90" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_vergeben_di" bpmnElement="sc_vergeben"><omgdc:Bounds x="1030" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_st_nummer__st_done_di" bpmnElement="f_st_nummer__st_done"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1030" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_b_nummer__sc_vergeben_di" bpmnElement="f_b_nummer__sc_vergeben"><omgdi:waypoint x="930" y="188"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="1030" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_vergeben__ut_nummer_di" bpmnElement="f_sc_vergeben__ut_nummer"><omgdi:waypoint x="1080" y="310"/><omgdi:waypoint x="1080" y="330"/><omgdi:waypoint x="780" y="330"/><omgdi:waypoint x="780" y="170"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

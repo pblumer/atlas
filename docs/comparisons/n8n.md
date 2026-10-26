@@ -307,6 +307,20 @@ roles, worker identities, secret management, instance visibility controls,
 backup/restore, metrics and event-related records. This is more progress
 than the previous comparison conveyed.
 
+**Acting as the person who asked.** n8n Enterprise documents
+[end-user credentials](https://docs.n8n.io/administer/manage-credentials/end-user-credentials):
+an OAuth credential resolved at run time to the account of the person who
+triggers the workflow. A per-execution executing identity is therefore **not**
+unique to Atlas. Atlas has a proposed, partly built design
+([ADR-0475](../adr/0475-identity-aware-worker-execution.md))
+in which a governed Worker asks for a decision before each action, against
+versioned policies, with approvals bound to a digest of the exact action and
+the decision recorded on the event log. It covers the SharePoint Worker Type
+only. The n8n documentation reviewed (2026-10-23) did not describe per-operation
+policy evaluation, digest-bound approval or durable decision records of that
+kind; *not found in the documentation reviewed* is not *absent from the
+product*, and an evaluation should ask the vendor.
+
 However the
 [Atlas compliance gap list](../compliance/isds-offene-punkte.md) still calls
 out risks and required work concerning:
@@ -544,6 +558,7 @@ For enterprise architecture and for Atlas project positioning:
 - [Integration catalogue](https://n8n.io/integrations/)
 - [Community versus paid-edition features](https://docs.n8n.io/hosting/community-edition-features/)
 - [Security audit](https://docs.n8n.io/hosting/securing/security-audit/)
+- [End-user credentials](https://docs.n8n.io/administer/manage-credentials/end-user-credentials) (Enterprise)
 - [Sustainable Use License](https://docs.n8n.io/sustainable-use-license/)
 
 **Maintenance rule:** Update this document whenever the Atlas licence,

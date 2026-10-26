@@ -22,14 +22,14 @@
     }
   },
   "facility-management": {
-    "kind": "user",
+    "kind": "account",
     "label": {
       "de": "Wer genehmigt Parkplätze (Facility Management)",
       "en": "Who approves parking spaces (facility management)"
     },
     "hint": {
-      "de": "Eine Person.",
-      "en": "One person."
+      "de": "Eine Person, mit ihrem Benutzernamen oder ihrem Anzeigenamen: die Genehmigung wird ihr als Aufgabe zugewiesen.",
+      "en": "One person, by username or display name: the approval is assigned to them as a task."
     }
   },
   "geoportal-verantwortliche": {

@@ -36,6 +36,7 @@ func TestNoArgToolHandlers(t *testing.T) {
 		{"atlas_list_processes", "["},
 		{"atlas_list_instances", `"truncated":false`},
 		{"atlas_stats", `"activeProcessInstances"`},
+		{"atlas_storage", `"reserveBytes"`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.tool, func(t *testing.T) {

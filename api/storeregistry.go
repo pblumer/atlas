@@ -124,6 +124,8 @@ var persistentStores = []storeEntry{
 	{name: "information-models", class: classInstance, why: "the vocabulary data objects are typed against"},
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},
+	{name: "import-baselines", class: classInstance, why: "what the last import brought to this installation, per artifact, as a hash: the base an import tells an edit made here from an update by (ADR-0467). It describes this installation's history of imports, so it means nothing on another one and never travels with an export"},
+	{name: "package-mappings", class: classInstance, why: "what the names an application package gives its catalogues' groups, people and approvers mean on this installation, as people chose them when a name was not found here (ADR-0467). It is this installation's answer to another's names, so it means nothing elsewhere and never travels with an export"},
 	{name: "application-constants", class: classInstance, why: "the constants each application holds on this installation — the tenant, app id or suffix its processes read as application.NAME here, which differ between DEV, INT and PROD and so never travel with an export (ADR-0453)"},
 	{name: "server-constants", class: classInstance, why: "the constants this installation holds for every application, read as server.NAME — like an application's, they differ between DEV, INT and PROD and never travel with an export (ADR-0456)"},
 	{name: "task-folders", class: classInstance, why: "the saved task views people work out of, and who each is shared with"},
@@ -132,11 +134,13 @@ var persistentStores = []storeEntry{
 
 	// --- identity ----------------------------------------------------------
 	{name: "users", class: classIdentity, why: "accounts and their roles"},
+	{name: "last-logins", class: classIdentity, why: "the UTC day each account last signed in, kept beside it (ADR-0477). It belongs with the accounts it describes: restored without them it would name nobody, and an installation restored without it only shows no login until each account signs in again"},
 	{name: "groups", class: classIdentity, why: "group membership, which grants project access"},
 	{name: "directory-sync", class: classIdentity, onDemand: true, why: "where the Entra mirror resumes from; without it the next run enumerates the whole tenant again, which is expensive and safe"},
 	{name: "inventory-loads", class: classIdentity, onDemand: true, why: "whether a commissioning load has ever been applied per target system; without it a restored installation cannot tell a system it loaded and found empty from one it never loaded, and those call for opposite actions"},
 	{name: "discrepancies", class: classIdentity, onDemand: true, why: "the journal of what atlas and the target systems disagreed about, and who decided what about it; it is evidence and it is not in the event log, so nothing else can rebuild it"},
 	{name: "recertification-campaigns", class: classIdentity, onDemand: true, why: "what was asked of whom, when, and by whose authority; an attestation with no campaign around it says nothing about what else was in front of the reviewer"},
+	{name: "policies", class: classIdentity, why: "the authorization policies governed Worker actions are decided by, every published version immutable (ADR-0475). A restore without them fails closed — every enforced action is refused for want of an applicable policy — and the recorded decisions in the log name versions nothing could show any more"},
 	{name: "recertification-rows", class: classIdentity, onDemand: true, why: "the attestations themselves — who judged which right still needed, and when. Separate from the campaigns because there are thousands per campaign and each is written once; losing them loses the evidence and nothing can reconstruct a judgement"},
 
 	// --- credentials -------------------------------------------------------
@@ -146,6 +150,7 @@ var persistentStores = []storeEntry{
 	{name: "oauth-grants", class: classCredential, why: "standing OAuth authorizations"},
 	{name: "grant-audit", class: classCredential, why: "the trail of who was granted what"},
 	{name: "targets", class: classCredential, why: "where workers send, and what they authenticate with"},
+	{name: "identity", class: classCredential, why: "the external accounts people linked and the delegated connections they authorize, with the Workers each owner allowed. Standing permissions to act as a person: whether a restore carries or revokes them is an operator's decision. The refresh credentials are not here but in the vault, so a restore of this without the vault leaves every connection asking its owner to sign in again"},
 
 	// --- secrets -----------------------------------------------------------
 	{name: "vault", class: classSecret, why: "the encrypted secrets themselves"},

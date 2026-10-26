@@ -1,6 +1,6 @@
 # ADR-0463: A Microsoft Teams Phone Worker Type for voice apps and their resource accounts
 
-- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents)
+- **Status:** Accepted (amended 2026-10-19: `ensure-call-queue` brings a queue it finds to the agents a model names — the directly assigned ones, in order under serial routing — and answers `agentsChanged`; agents not named are left as they are, a value that resolved to nothing is refused, and an empty list never empties a queue that has agents. Amended 2026-10-20: the queue's authorized users and routing settings are reconciled as its agents are — what a model names is set, what it leaves out is kept — so the compiler no longer writes a setting's default into the model; the answer lists what it set in `changed`; and six refusals carry `TEAMSPHONE_…` codes, thrown as BPMN errors when the process catches them; and `ensure-phone-number` / `remove-phone-number` give a user or a resource account a phone number and take it away again; and `remove-hotline` takes a whole hotline away in one task. Amended 2026-10-21: `list-free-phone-numbers` lists the inventory's numbers nobody holds, for the type and the kind of holder a model names)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -234,6 +234,208 @@ object `Get-CsCallQueue` returns; the script reads the directly assigned agents 
 non-empty list would be set again on every run — converging, but answering
 `agentsChanged: true` each time — and an empty one would never be refused. Like the rest
 of the script, this is found by the first installation that runs it against a tenant.
+
+### Amendment (2026-10-20): routing and authorized users reconciled; refusals a process can catch
+
+The 2026-10-19 amendment reconciled a queue's agents and named the rest as a follow-up:
+routing, presence-based routing, conference mode, opt-out and authorized users still
+applied only when a queue was created. And every refusal — an address that belongs to a
+person, an account of the other kind, a list that would be emptied — was retried and
+then parked on an incident. An author could draw an error boundary on the task, and
+nothing ever reached it; ADR-0461 had closed that gap for script tasks only.
+
+**Decision — reconciliation.**
+
+- `authorizedUsers`, `routingMethod`, `presenceBasedRouting`, `conferenceMode` and
+  `allowOptOut` join `agents` in `Op.Reconciled`. A queue the operation finds is brought
+  to every one of them the model names, in one `Set-CsCallQueue`.
+- **What the model leaves out is kept.** For the lists that was already absence. For the
+  settings it was not: the compiler wrote each setting's default into the compiled task, so
+  a setting the author never chose read exactly like one chosen. The compiler now leaves an
+  unauthored setting out; `Prepare` applies the default for a queue the request creates and
+  lists in `Request.Reconcile` only what the model named. The strongest case for enforcing
+  defaults is that a model then describes the whole queue. It loses to what it would do to
+  every model deployed so far: none of them could say "keep", so each would reset routing an
+  operator changed in the Teams admin center. The Modeler and the Repository template gain
+  an explicit choice for each default (*Attendant*, *On*, *Yes*) beside *Keep*.
+- **The agents' order** counts under the routing the queue has once the run is done: the
+  routing the model names, or the queue's own when it names none.
+- **Authorized users are never emptied either**, refused under the same code as agents: a
+  Resolve users that found nobody reads the same for both lists, and emptying either stays a
+  task for the admin center.
+- **The answer gains `changed`**, the sorted names the run set. `agentsChanged`, which
+  0.16.0 shipped, stays as whether `agents` is among them.
+- `languageId` and everything on an auto attendant are still applied only at creation.
+
+**Decision — codes.** A refusal a process may have a path for is a `teamsphone.Refusal`
+under one of six codes; the shipped PowerShell reports the code beside the error, and the
+mock refuses with the same code:
+
+| Code | Raised by | When |
+|---|---|---|
+| `TEAMSPHONE_UPN_TAKEN` | ensure-resource-account | the address belongs to an enabled user account |
+| `TEAMSPHONE_ACCOUNT_TYPE_MISMATCH` | ensure-resource-account, ensure-call-queue, ensure-auto-attendant | the account was made for the other kind of voice app |
+| `TEAMSPHONE_ACCOUNT_IN_USE` | ensure-call-queue, ensure-auto-attendant, remove-call-queue, remove-auto-attendant | the account is associated with the other kind of voice app |
+| `TEAMSPHONE_ACCOUNT_NOT_VISIBLE` | ensure-call-queue, ensure-auto-attendant | Teams still does not show the account after the wait |
+| `TEAMSPHONE_WOULD_EMPTY_LIST` | ensure-call-queue | an empty list would take every agent or authorized user away |
+| `TEAMSPHONE_TOO_MANY_AGENTS` | ensure-call-queue | more than 20 agents |
+
+ADR-0461's rule decides when a code is a BPMN error: when the task's process catches it.
+The codes the process catches travel with the job (`Job.ErrorCodes`, from
+`CompiledProcess.CaughtErrorCodes`), and `Run` throws a refusal under one of them as
+`job.BPMNError`; the instance takes the error path at once, spending no retry. Any other
+refusal stays a failure and keeps its retries, so a process that catches nothing behaves
+exactly as before. The worker accepts a code from the script only if it is one of the six;
+a malformed value, an unset required variable, a failed sign-in or a missing module have no
+code, because the model or the worker host is what has to change.
+
+The mock now refuses a remove of the other kind of voice app (`TEAMSPHONE_ACCOUNT_IN_USE`)
+where it answered `removed: false`; the shipped PowerShell always refused it.
+
+**Consequences.**
+
+- A deployed model whose task names a setting now sets it on an existing queue. That
+  includes models built from the Repository template before 1.2.0, which wrote
+  `routingMethod="attendant"` by default; such a model chooses *Keep* to leave the queue's
+  routing alone.
+- A job resolved before a server upgrades carries the compiled defaults, which read as
+  named; once, on an existing queue, it sets them. A job lives for minutes, so this is a
+  window at upgrade, not a state.
+- **Assumption, as for `Users`:** the script reads `RoutingMethod`,
+  `PresenceBasedRouting`, `ConferenceMode`, `AllowOptOut` and `AuthorizedUsers` from the
+  object `Get-CsCallQueue` returns, which Microsoft documents as parameters but not as
+  properties. Were one missing, a named value would be set again on every run and listed in
+  `changed` every time; the queue would still end up right.
+- The handbook gains a reference card for every operation (`#ref-teamsphone`), linked from
+  the panel beside the setup card; a test holds it to the operation table and the codes.
+
+### Amendment (2026-10-20): phone numbers for users and resource accounts
+
+The record left phone numbers out and named them a follow-up "once Microsoft documents a
+stable path". That path exists: `Set-CsPhoneNumberAssignment`,
+`Remove-CsPhoneNumberAssignment` and `Get-CsPhoneNumberAssignment` are documented module
+cmdlets for users and resource accounts alike, with the number's type and its holder in
+what the lookup answers. Without them a queue the worker provisions is reachable from
+Teams but not from the telephone network, and the commonest Teams Phone process — giving
+a joiner a direct line — stayed a script task.
+
+**Decision.** Two operations, for a person and a resource account alike, because Teams
+makes no difference between the two assignments:
+
+| Operation | Needs | Returns |
+|---|---|---|
+| `ensure-phone-number` | `identity` (UPN or object id), `phoneNumber`, `numberType` *static* (`direct-routing` \| `calling-plan` \| `operator-connect`, no default); optional `locationId` | `{phoneNumber, identity, assigned, previousNumber}` |
+| `remove-phone-number` | `identity`; optional `phoneNumber` (without it, every number the identity holds) | `{removed, phoneNumbers}` |
+
+- **Safe to repeat.** The holder's numbers are read first (`-AssignedPstnTargetId`
+  takes the UPN or the object id); a holder that has the number is answered
+  `assigned: false`.
+- **Replace, not refuse.** A holder with another primary number has it removed first and
+  reported as `previousNumber`: what the model names is the holder's number, as with a
+  queue's agents. Removing first is a choice made for want of knowledge — Microsoft does not
+  say whether an assignment replaces a primary number — and a retry after a failure between
+  the two finds the holder without a number and simply assigns. Private and alternate lines
+  are left alone.
+- **Never taken from somebody else.** A number another holder has is refused
+  (`TEAMSPHONE_NUMBER_IN_USE`); a Calling Plan or Operator Connect number the tenant does not
+  have is refused (`TEAMSPHONE_NUMBER_NOT_FOUND`). A Direct Routing number is the operator's
+  own carrier's and is in no inventory until assigned, so its absence refuses nothing.
+- **The number type is static**, like `accountType`: the three ways a tenant reaches the
+  telephone network decide what Teams checks, and a guess would hand Teams a number under
+  the wrong one.
+- **A number is read as people write one.** Spaces, dashes, dots, slashes and brackets
+  and a `tel:` prefix are dropped; the result must be digits with an optional `+` and an
+  optional `;ext=`. A `(0)` after a country code is refused: kept, it dials another number;
+  dropped, it guesses.
+- **The licence is the model's to wait for**, as the record already says for a resource
+  account's: a holder without a Teams Phone licence and a usage location fails the
+  assignment as any other fault does, because the module's words for it are not known to
+  this record and a code built on guessed words would be a promise not kept.
+- The mock keeps the same rules; `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names its Calling Plan
+  and Operator Connect inventory, every number when unset.
+
+- **The leaver path is one task.** `remove-resource-account` releases the account's numbers
+  first, then removes the association, then deletes the account, and answers the released
+  numbers as `phoneNumbers`. A number left on a deleted account is one nobody can give out
+  again until Teams notices, and a model that had to remember the order would sooner or
+  later not. The account is looked up in Entra first, so a repeat answers
+  `removed: false` before Teams is asked anything about an account that is gone. Voice
+  apps are not removed with their account: a queue or an attendant is the model's to take
+  away, by its own operation, because removing one is not implied by removing an account.
+
+**Consequences and what is not known.** Microsoft's list of cmdlets an app-only sign-in may
+not run does not name `Set-CsPhoneNumberAssignment` (checked 2026-10; the lookup and the
+removal were not checked). An absence from that list is not an affirmation, so the first
+installation confirms all three. The lookup of a number the tenant lacks is assumed to answer nothing rather
+than fail, as a filter does. A person's numbers are not released by anything but
+`remove-phone-number`: the worker deletes no user account.
+
+### Amendment (2026-10-20): a hotline removed in one task
+
+Taking a hotline down took five tasks in an order a model had to know: the auto attendant,
+the queue, then each account — and, since the phone-number amendment, each account's
+numbers before it. A model that got the order wrong left a caller ringing into a queue
+that was gone, or a number on a deleted account.
+
+**Decision.** `remove-hotline` takes `resourceAccountIds` (the hotline's accounts, a list)
+and optionally `names` (the voice apps'), and answers
+`{removed, attendants, queues, accounts, phoneNumbers}`:
+
+- **Auto attendants first, then queues, then accounts.** An attendant hands its calls to
+  a queue's account; removed first, it stops taking calls before the queue goes. Each
+  account then releases its numbers and is deleted, as `remove-resource-account` does.
+- **Refused before anything changes** when a voice app the accounts carry also answers for
+  an account the request does not name (`TEAMSPHONE_ACCOUNT_IN_USE`): that voice app is
+  another hotline's too. The check reads the voice app's `ApplicationInstances`, which
+  the orphan lookup of the single removes already relies on.
+- **Safe to repeat.** Each step is the single operation's own, and `names` finds a voice
+  app an earlier run left without its account, as the single removes' `name` does.
+- The single removes stay, for taking down part of a hotline.
+
+A required list that resolves to nothing is refused, for every operation: read as empty,
+it would make a leaver path report success having removed nothing. That also refuses a
+`resolve-users` whose `users` variable nobody set, which until now answered with no ids.
+
+### Amendment (2026-10-21): the free numbers to choose from
+
+`ensure-phone-number` gives out the number a model names, and a model had no way to
+learn which numbers were free: a person picked one from a numbering plan kept elsewhere,
+and a number somebody already held showed up only as `TEAMSPHONE_NUMBER_IN_USE` at
+assignment.
+
+**Decision.** `list-free-phone-numbers` reads the tenant's inventory with
+`Get-CsPhoneNumberAssignment` and answers `{numbers, entries, count, truncated}`:
+
+- **Free means what Teams will give out:** unassigned (`-PstnAssignmentStatus
+  Unassigned`), activated (`-ActivationState Activated`), of the type named, carrying the
+  capability of the holder named, and not blocked for assignment. Teams lists a blocked
+  number as unassigned and then refuses to give it out, and has no filter for the block,
+  so the script drops a number whose `AssignmentBlockedState` is anything but
+  `NotBlocked` or empty.
+- **Both settings are required.** `numberType` is the type `ensure-phone-number` will
+  assign under, fixed for the same reason. `assignableTo` (`user` | `resource-account`)
+  maps to the capability `UserAssignment` or `VoiceApplicationAssignment`: a number
+  listed for the wrong kind of holder is one Teams then refuses.
+- **A page, not the inventory.** `max` (1–500, 100 when unset) bounds the answer;
+  `numberPrefix`, read like a number, narrows it to a range. One more than `max` is asked
+  for, so `truncated` says whether Teams had more; with blocked numbers dropped, a page
+  that says `truncated` may hold fewer than `max`. Teams answers 500 at a time and sorts
+  by number; the script sorts again, ordinally, as the mock does.
+- **Nothing is reserved.** The answer is a choice, not a claim: a number listed now may be
+  given to somebody else before `ensure-phone-number` runs, which then refuses it with
+  `TEAMSPHONE_NUMBER_IN_USE` — the path a model already has.
+- **Direct Routing numbers are listed only once uploaded.** Microsoft's inventory holds a
+  Direct Routing number after `New-CsOnlineDirectRoutingTelephoneNumberUploadOrder` has
+  uploaded it; one that never was is the carrier's alone, and no Teams query finds it
+  free. A tenant that does not upload them keeps its numbering plan elsewhere.
+- **The mock** lists the numbers `ATLAS_TEAMSPHONE_MOCK_NUMBERS` names that nobody holds,
+  for every type and holder, since its inventory knows neither; with none named it has
+  every number and lists none.
+
+What Microsoft does not state, and this amendment assumes: that an uploaded Direct
+Routing number without `AcquiredCapability` carries the user and voice-app capabilities,
+as every Direct Routing number in the cmdlet's examples does. If it carries none, the
+capability filter lists none of them.
 
 ## Pros and cons of the options
 

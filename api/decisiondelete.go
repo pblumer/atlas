@@ -297,10 +297,17 @@ func currentVersionsWithHistory(rec persistedDecision, all []persistedDecision) 
 // live counter and the recovered one in step is the whole point: a version minted
 // after a delete must be the same one minted after a delete and a reboot.
 func (s *Server) recountDecisionVersions(all []persistedDecision, removed uint64) {
+	s.recountDecisionVersionsWithout(all, map[uint64]bool{removed: true})
+}
+
+// recountDecisionVersionsWithout is recountDecisionVersions for several removed
+// records at once — an application purge removes its whole decision history in one
+// turn.
+func (s *Server) recountDecisionVersionsWithout(all []persistedDecision, removed map[uint64]bool) {
 	next := map[string]int32{}
 	s.decisionVersionKeys = map[string]map[int32]uint64{}
 	for _, rec := range all {
-		if rec.Key == removed {
+		if removed[rec.Key] {
 			continue
 		}
 		for _, d := range rec.Decisions {

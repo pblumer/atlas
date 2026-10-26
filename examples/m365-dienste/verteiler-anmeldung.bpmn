@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Verteiler-Anmeldung (öffentliches Formular): An- und Abmeldung externer Adressen.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_verteiler_anmeldung" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <process id="proc_m365_verteiler_anmeldung" name="Verteiler-Anmeldung (öffentliches Formular)" isExecutable="true" atlas:searchable="email">
+    <documentation>Öffentliche An- und Abmeldung externer Adressen für ausgewählte Verteilerlisten. Das Startformular m365-verteiler-anmeldung wird über einen öffentlichen Link veröffentlicht (ADR-0029).
+
+Die Entscheidung M365VerteilerZuordnung bildet die öffentliche Auswahl auf den internen Verteiler ab: Die interne Adresse steht nie im öffentlichen Formular, und welche Listen öffentlich sind und welche eine Prüfung brauchen, ändert man in der Tabelle.
+
+Eine Anmeldung legt einen Mail-Kontakt an, falls es für die Adresse noch keinen gibt, und nimmt ihn in den Verteiler auf. Eine Abmeldung entfernt nur die Mitgliedschaft; der Kontakt bleibt für andere Listen bestehen.
+
+Grenze, die man kennen muss: Ein öffentliches Formular kann jede Adresse eintragen. Für Listen ohne Prüfung fehlt deshalb eine Bestätigung durch die Adresse selbst (Double-Opt-in); sie braucht einen Mail-Worker und ist hier bewusst nicht modelliert. Die Formulare nehmen nur die Adresse auf, keinen Namen: Die Adresse ist die durchsuchbare Kennung (atlas:searchable), unter der eine Löschanfrage die Instanzen findet.
+
+Worker: ucc_exchange.</documentation>
+    <startEvent id="s" name="Anfrage eingegangen"><documentation>Öffentlicher Start über das Formular m365-verteiler-anmeldung.</documentation><extensionElements><zeebe:formDefinition formId="m365-verteiler-anmeldung"/></extensionElements><outgoing>f_s__br_liste</outgoing></startEvent>
+    <businessRuleTask id="br_liste" name="Verteiler bestimmen"><documentation>M365VerteilerZuordnung: liste ergibt verteiler (Alias der internen Liste), freigabe (ob M365-Administration prüft) und die bezeichnung.</documentation><extensionElements><zeebe:calledDecision decisionId="M365VerteilerZuordnung" resultVariable="zuordnung"/><zeebe:ioMapping><zeebe:input source="=liste" target="liste"/></zeebe:ioMapping></extensionElements><incoming>f_s__br_liste</incoming><outgoing>f_br_liste__gw_aktion</outgoing></businessRuleTask>
+    <exclusiveGateway id="gw_aktion" name="An- oder Abmeldung?" default="f_gw_aktion__gw_pruef"><incoming>f_br_liste__gw_aktion</incoming><outgoing>f_gw_aktion__gw_pruef</outgoing><outgoing>f_gw_aktion__st_kontakt2</outgoing></exclusiveGateway>
+    <exclusiveGateway id="gw_pruef" name="Prüfung nötig?" default="f_gw_pruef__ut_pruefen"><documentation>Default ist die Prüfung; nur ein ausdrückliches false der Entscheidung überspringt sie.</documentation><incoming>f_gw_aktion__gw_pruef</incoming><outgoing>f_gw_pruef__gw_pjoin</outgoing><outgoing>f_gw_pruef__ut_pruefen</outgoing></exclusiveGateway>
+    <userTask id="ut_pruefen" name="Anmeldung prüfen"><documentation>M365-Administration prüft Adresse und Liste und bestätigt oder verwirft die Anmeldung.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="M365-Administration"/><zeebe:formDefinition formId="m365-verteiler-pruefung"/></extensionElements><incoming>f_gw_pruef__ut_pruefen</incoming><outgoing>f_ut_pruefen__gw_best</outgoing></userTask>
+    <exclusiveGateway id="gw_best" name="Bestätigt?" default="f_gw_best__e_verworfen"><incoming>f_ut_pruefen__gw_best</incoming><outgoing>f_gw_best__gw_pjoin</outgoing><outgoing>f_gw_best__e_verworfen</outgoing></exclusiveGateway>
+    <endEvent id="e_verworfen" name="Anmeldung verworfen"><incoming>f_gw_best__e_verworfen</incoming></endEvent>
+    <exclusiveGateway id="gw_pjoin"><incoming>f_gw_pruef__gw_pjoin</incoming><incoming>f_gw_best__gw_pjoin</incoming><outgoing>f_gw_pjoin__st_kontakt</outgoing></exclusiveGateway>
+    <serviceTask id="st_kontakt" name="Kontakt suchen"><documentation>get-mail-contact: der bestehende Kontakt zur Adresse, oder null.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mail-contact" parameters='{"Identity": "=email"}' resultVariable="kontakt"/></extensionElements><incoming>f_gw_pjoin__st_kontakt</incoming><outgoing>f_st_kontakt__gw_kontakt</outgoing></serviceTask>
+    <exclusiveGateway id="gw_kontakt" name="Kontakt vorhanden?" default="f_gw_kontakt__st_neu"><incoming>f_st_kontakt__gw_kontakt</incoming><outgoing>f_gw_kontakt__gw_kjoin</outgoing><outgoing>f_gw_kontakt__st_neu</outgoing></exclusiveGateway>
+    <serviceTask id="st_neu" name="Kontakt anlegen"><documentation>create-mail-contact. Name und Anzeigename sind die Adresse selbst: Das Formular fragt bewusst keinen Namen ab.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="create-mail-contact" parameters='{"Name": "=email", "DisplayName": "=email", "ExternalEmailAddress": "=email"}'/></extensionElements><incoming>f_gw_kontakt__st_neu</incoming><outgoing>f_st_neu__gw_kjoin</outgoing></serviceTask>
+    <exclusiveGateway id="gw_kjoin"><incoming>f_gw_kontakt__gw_kjoin</incoming><incoming>f_st_neu__gw_kjoin</incoming><outgoing>f_gw_kjoin__st_auf</outgoing></exclusiveGateway>
+    <serviceTask id="st_auf" name="In Verteiler aufnehmen"><documentation>add-distribution-group-member.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kjoin__st_auf</incoming><outgoing>f_st_auf__e_an</outgoing></serviceTask>
+    <endEvent id="e_an" name="Angemeldet"><incoming>f_st_auf__e_an</incoming></endEvent>
+    <serviceTask id="st_kontakt2" name="Kontakt suchen"><documentation>get-mail-contact.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mail-contact" parameters='{"Identity": "=email"}' resultVariable="kontakt"/></extensionElements><incoming>f_gw_aktion__st_kontakt2</incoming><outgoing>f_st_kontakt2__gw_kontakt2</outgoing></serviceTask>
+    <exclusiveGateway id="gw_kontakt2" name="Kontakt vorhanden?" default="f_gw_kontakt2__e_nie"><incoming>f_st_kontakt2__gw_kontakt2</incoming><outgoing>f_gw_kontakt2__st_ab</outgoing><outgoing>f_gw_kontakt2__e_nie</outgoing></exclusiveGateway>
+    <serviceTask id="st_ab" name="Aus Verteiler entfernen"><documentation>remove-distribution-group-member; der Kontakt selbst bleibt bestehen.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kontakt2__st_ab</incoming><outgoing>f_st_ab__e_ab</outgoing></serviceTask>
+    <endEvent id="e_ab" name="Abgemeldet"><incoming>f_st_ab__e_ab</incoming></endEvent>
+    <endEvent id="e_nie" name="War nicht angemeldet"><incoming>f_gw_kontakt2__e_nie</incoming></endEvent>
+    <sequenceFlow id="f_s__br_liste" sourceRef="s" targetRef="br_liste"/>
+    <sequenceFlow id="f_br_liste__gw_aktion" sourceRef="br_liste" targetRef="gw_aktion"/>
+    <sequenceFlow id="f_gw_aktion__gw_pruef" sourceRef="gw_aktion" targetRef="gw_pruef" name="anmelden"/>
+    <sequenceFlow id="f_gw_aktion__st_kontakt2" sourceRef="gw_aktion" targetRef="st_kontakt2" name="abmelden"><conditionExpression>=aktion = "abmelden"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_pruef__gw_pjoin" sourceRef="gw_pruef" targetRef="gw_pjoin" name="nein"><conditionExpression>=zuordnung.freigabe = false</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_pruef__ut_pruefen" sourceRef="gw_pruef" targetRef="ut_pruefen" name="ja"/>
+    <sequenceFlow id="f_ut_pruefen__gw_best" sourceRef="ut_pruefen" targetRef="gw_best"/>
+    <sequenceFlow id="f_gw_best__gw_pjoin" sourceRef="gw_best" targetRef="gw_pjoin" name="ja"><conditionExpression>=bestaetigt = "ja"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_best__e_verworfen" sourceRef="gw_best" targetRef="e_verworfen" name="nein"/>
+    <sequenceFlow id="f_gw_pjoin__st_kontakt" sourceRef="gw_pjoin" targetRef="st_kontakt"/>
+    <sequenceFlow id="f_st_kontakt__gw_kontakt" sourceRef="st_kontakt" targetRef="gw_kontakt"/>
+    <sequenceFlow id="f_gw_kontakt__gw_kjoin" sourceRef="gw_kontakt" targetRef="gw_kjoin" name="ja"><conditionExpression>=kontakt != null</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_kontakt__st_neu" sourceRef="gw_kontakt" targetRef="st_neu" name="nein"/>
+    <sequenceFlow id="f_st_neu__gw_kjoin" sourceRef="st_neu" targetRef="gw_kjoin"/>
+    <sequenceFlow id="f_gw_kjoin__st_auf" sourceRef="gw_kjoin" targetRef="st_auf"/>
+    <sequenceFlow id="f_st_auf__e_an" sourceRef="st_auf" targetRef="e_an"/>
+    <sequenceFlow id="f_st_kontakt2__gw_kontakt2" sourceRef="st_kontakt2" targetRef="gw_kontakt2"/>
+    <sequenceFlow id="f_gw_kontakt2__st_ab" sourceRef="gw_kontakt2" targetRef="st_ab" name="ja"><conditionExpression>=kontakt != null</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_kontakt2__e_nie" sourceRef="gw_kontakt2" targetRef="e_nie" name="nein"/>
+    <sequenceFlow id="f_st_ab__e_ab" sourceRef="st_ab" targetRef="e_ab"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_verteiler_anmeldung_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_verteiler_anmeldung_plane" bpmnElement="proc_m365_verteiler_anmeldung">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_liste_di" bpmnElement="br_liste"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_aktion_di" bpmnElement="gw_aktion" isMarkerVisible="true"><omgdc:Bounds x="455" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pruef_di" bpmnElement="gw_pruef" isMarkerVisible="true"><omgdc:Bounds x="605" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="730" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_best_di" bpmnElement="gw_best" isMarkerVisible="true"><omgdc:Bounds x="905" y="525" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="494" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_verworfen_di" bpmnElement="e_verworfen"><omgdc:Bounds x="1062" y="672" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="712" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pjoin_di" bpmnElement="gw_pjoin" isMarkerVisible="true"><omgdc:Bounds x="1055" y="385" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_kontakt_di" bpmnElement="st_kontakt"><omgdc:Bounds x="1180" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_kontakt_di" bpmnElement="gw_kontakt" isMarkerVisible="true"><omgdc:Bounds x="1355" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1283" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_neu_di" bpmnElement="st_neu"><omgdc:Bounds x="1480" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_kjoin_di" bpmnElement="gw_kjoin" isMarkerVisible="true"><omgdc:Bounds x="1655" y="385" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_auf_di" bpmnElement="st_auf"><omgdc:Bounds x="1780" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_an_di" bpmnElement="e_an"><omgdc:Bounds x="1962" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1930" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_kontakt2_di" bpmnElement="st_kontakt2"><omgdc:Bounds x="580" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_kontakt2_di" bpmnElement="gw_kontakt2" isMarkerVisible="true"><omgdc:Bounds x="755" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="683" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ab_di" bpmnElement="st_ab"><omgdc:Bounds x="880" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ab_di" bpmnElement="e_ab"><omgdc:Bounds x="1062" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nie_di" bpmnElement="e_nie"><omgdc:Bounds x="912" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__br_liste_di" bpmnElement="f_s__br_liste"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_liste__gw_aktion_di" bpmnElement="f_br_liste__gw_aktion"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="455" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_aktion__gw_pruef_di" bpmnElement="f_gw_aktion__gw_pruef"><omgdi:waypoint x="505" y="410"/><omgdi:waypoint x="605" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="388" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_aktion__st_kontakt2_di" bpmnElement="f_gw_aktion__st_kontakt2"><omgdi:waypoint x="480" y="385"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="580" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="320" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pruef__gw_pjoin_di" bpmnElement="f_gw_pruef__gw_pjoin"><omgdi:waypoint x="655" y="410"/><omgdi:waypoint x="1055" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="388" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pruef__ut_pruefen_di" bpmnElement="f_gw_pruef__ut_pruefen"><omgdi:waypoint x="630" y="435"/><omgdi:waypoint x="630" y="550"/><omgdi:waypoint x="730" y="550"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="485" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_best_di" bpmnElement="f_ut_pruefen__gw_best"><omgdi:waypoint x="830" y="550"/><omgdi:waypoint x="905" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_best__gw_pjoin_di" bpmnElement="f_gw_best__gw_pjoin"><omgdi:waypoint x="955" y="550"/><omgdi:waypoint x="1080" y="550"/><omgdi:waypoint x="1080" y="435"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="528" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_best__e_verworfen_di" bpmnElement="f_gw_best__e_verworfen"><omgdi:waypoint x="930" y="575"/><omgdi:waypoint x="930" y="690"/><omgdi:waypoint x="1062" y="690"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="625" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pjoin__st_kontakt_di" bpmnElement="f_gw_pjoin__st_kontakt"><omgdi:waypoint x="1105" y="410"/><omgdi:waypoint x="1180" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_kontakt__gw_kontakt_di" bpmnElement="f_st_kontakt__gw_kontakt"><omgdi:waypoint x="1280" y="410"/><omgdi:waypoint x="1355" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_kontakt__gw_kjoin_di" bpmnElement="f_gw_kontakt__gw_kjoin"><omgdi:waypoint x="1405" y="410"/><omgdi:waypoint x="1655" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="1411" y="388" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_kontakt__st_neu_di" bpmnElement="f_gw_kontakt__st_neu"><omgdi:waypoint x="1380" y="435"/><omgdi:waypoint x="1380" y="550"/><omgdi:waypoint x="1480" y="550"/><bpmndi:BPMNLabel><omgdc:Bounds x="1386" y="485" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_neu__gw_kjoin_di" bpmnElement="f_st_neu__gw_kjoin"><omgdi:waypoint x="1580" y="550"/><omgdi:waypoint x="1680" y="550"/><omgdi:waypoint x="1680" y="435"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_kjoin__st_auf_di" bpmnElement="f_gw_kjoin__st_auf"><omgdi:waypoint x="1705" y="410"/><omgdi:waypoint x="1780" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_auf__e_an_di" bpmnElement="f_st_auf__e_an"><omgdi:waypoint x="1880" y="410"/><omgdi:waypoint x="1962" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_kontakt2__gw_kontakt2_di" bpmnElement="f_st_kontakt2__gw_kontakt2"><omgdi:waypoint x="680" y="270"/><omgdi:waypoint x="755" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_kontakt2__st_ab_di" bpmnElement="f_gw_kontakt2__st_ab"><omgdi:waypoint x="805" y="270"/><omgdi:waypoint x="880" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="811" y="248" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_kontakt2__e_nie_di" bpmnElement="f_gw_kontakt2__e_nie"><omgdi:waypoint x="780" y="245"/><omgdi:waypoint x="780" y="130"/><omgdi:waypoint x="912" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="786" y="180" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ab__e_ab_di" bpmnElement="f_st_ab__e_ab"><omgdi:waypoint x="980" y="270"/><omgdi:waypoint x="1062" y="270"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -4,11 +4,14 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { copyText } from "./clipboard.js";
+import { createRefResolver, refChipHTML, refPopHTML } from "./varrefs.js";
 import { attachCodeEditor } from "./code-editor.js";
 import { moduleFor } from "./powershell.js";
 import { attachJSONEditor } from "./json-editor.js";
 import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } from "./entra-attrmask.js";
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
+import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
+import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -70,6 +73,10 @@ import { fmtCount } from "./numfmt.js";
 // is rendered beside the fields rather than left in another tab.
 import { workerTypeDocHTML } from "./workertypedocs.js";
 import { fmtDateTime, fmtTime } from "./datefmt.js";
+import {
+  installReadableIds, readableId, takenProcessIds, freshProcessId,
+  installNameDerivedIds, deployedElementIds,
+} from "./elementids.js";
 
 // JOB_LANGS are the general-purpose script languages a script task can use besides
 // inline FEEL (ADR-0047). Each runs on a job worker off the engine's hot path; the
@@ -175,20 +182,25 @@ function newModeler(BpmnJS, moddle, container, extraModules) {
 // the same process — the previous diagram would appear lost. A per-diagram id
 // keeps distinct diagrams distinct; re-opening a deployment and redeploying still
 // reuses its id, which is the intended way to cut a new version.
-function blankXML() {
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const pid = `Process_${suffix}`;
+//
+// The id is readable — process_<yyyymmdd>_<researcher> — and therefore checked rather
+// than random: against the process ids the installation already holds (known) and
+// the server's availability check (ADR-0474).
+async function blankXML(api, known) {
+  const pid = await freshProcessId(api, { taken: known });
+  const sid = readableId("event", { taken: (c) => c === pid });
+  const did = readableId("definitions", { taken: (c) => c === pid || c === sid });
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  id="${did}" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="${pid}" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+    <bpmn:startEvent id="${sid}" name="Start"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${pid}">
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+      <bpmndi:BPMNShape id="${sid}_di" bpmnElement="${sid}">
         <dc:Bounds x="180" y="160" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
@@ -201,22 +213,23 @@ function blankXML() {
 // deploy/route identity), so the "＋ create new" affordance in the call-activity
 // panel scaffolds the callee the caller already points at. Whitespace in the id is
 // collapsed to underscores so it stays a valid BPMN id; an empty id falls back to a
-// unique one, like blankXML.
+// readable one, like blankXML.
 function calleeXML(pid, name) {
-  const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const id = (pid || "").trim().replace(/\s+/g, "_") || `Process_${suffix}`;
+  const id = (pid || "").trim().replace(/\s+/g, "_") || readableId("process");
+  const sid = readableId("event", { taken: (c) => c === id });
+  const did = readableId("definitions", { taken: (c) => c === id || c === sid });
   const nm = (name || id).trim();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
-  id="Definitions_${suffix}" targetNamespace="http://atlas/bpmn">
+  id="${did}" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="${esc(id)}" name="${esc(nm)}" isExecutable="true">
-    <bpmn:startEvent id="StartEvent_1" name="Start"/>
+    <bpmn:startEvent id="${sid}" name="Start"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="${esc(id)}">
-      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+      <bpmndi:BPMNShape id="${sid}_di" bpmnElement="${sid}">
         <dc:Bounds x="180" y="160" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
@@ -847,6 +860,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       </div>
     </div>`;
 
+  // The process ids the installation already holds, so a new diagram, or a pool added
+  // to any diagram, does not mint one of them (ADR-0474). Loaded
+  // beside the modeler assets; a failure only costs this check.
+  const knownProcessIds = takenProcessIds(api).catch(() => new Set());
   let lib;
   try {
     lib = await loadBpmn();
@@ -855,11 +872,23 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       `<div class="coming"><p>${esc(e.message)}</p></div>`;
     return;
   }
+  const known = await knownProcessIds;
   if (gen !== generation) return; // a newer navigation took over while assets loaded
 
   const modeler = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"), [
     tokenSimulationModule(),
   ]);
+  // Every element drawn from here on is named <type>_<yyyymmdd>_<researcher>.
+  installReadableIds(modeler, { processTaken: (id) => known.has(id) });
+  // Naming an element names its id too, unless a deployed version of the process
+  // carries that id (ADR-0474, amended 2026-10-23). Until the deployed ids have
+  // arrived, or when not all of them could be read, every id the diagram arrived with
+  // is kept; elements drawn in this session are free from the start.
+  const nameIds = { ids: new Set(), imported: new Set(), complete: false };
+  installNameDerivedIds(modeler, {
+    isProtected: (id) => nameIds.ids.has(id) || (!nameIds.complete && nameIds.imported.has(id)),
+  });
+  modeler.atlasNameIdsReady = Promise.resolve();
   current = modeler;
   window.__atlasModeler = modeler; // exposed for scripted/end-to-end testing
 
@@ -869,12 +898,19 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       const xml = await api("GET", `/api/v1/drafts/${encodeURIComponent(draftId)}/xml`);
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     } else if (key == null) {
-      await modeler.importXML(blankXML());
+      await modeler.importXML(await blankXML(api, known));
     } else {
       const xml = await api("GET", `/api/v1/processes/${key}/xml`);
       await modeler.importXML(repairModel(typeof xml === "string" ? xml : String(xml)));
     }
     modeler.get("canvas").zoom("fit-viewport");
+    nameIds.imported = new Set(modeler.get("elementRegistry").getAll().map((el) => el.businessObject && el.businessObject.id));
+    const processIds = (modeler.getDefinitions().rootElements || [])
+      .filter((el) => el.$type === "bpmn:Process").map((el) => el.id);
+    modeler.atlasNameIdsReady = deployedElementIds(api, processIds).then((r) => {
+      nameIds.ids = r.ids;
+      nameIds.complete = r.complete;
+    });
     const pbo = rootProcess(modeler);
     if (pbo) {
       const nm = pbo.name || pbo.id || "Diagram";
@@ -2373,6 +2409,18 @@ function devViewContext(modeler, api, field) {
     if (field.dataset.fxOn === "1") ctx.lockPrefix = (v) => (/^\s*=\s*/.exec(v) || [""])[0].length;
   } else if (lang === "powershell" || lang === "python" || lang === "javascript") {
     ctx.run = (source, variables) => api("POST", "/api/v1/scripts/run", { language: lang, source, variables });
+  } else if (lang === "template" || lang === "html-template") {
+    // A mail template is previewed by the server that will render it, with the rules
+    // a deploy applies (ADR-0487).
+    ctx.preview = (template, variables) => api("POST", "/api/v1/feel/template", { template, variables, html: lang === "html-template" });
+    ctx.previewKind = lang === "html-template" ? "html" : "text";
+  } else if (lang === "html") {
+    // An HTML body without placeholders is its own preview; one written as FEEL ('=')
+    // is evaluated by the server, as the mail will be.
+    ctx.preview = (template, variables) => (template.trimStart().startsWith("=")
+      ? api("POST", "/api/v1/feel/template", { template, variables, html: true })
+      : Promise.resolve({ ok: true, result: template, problems: [] }));
+    ctx.previewKind = "html";
   }
   return ctx;
 }
@@ -3316,15 +3364,33 @@ export function attachExpressionToggle(el, opts = {}) {
   else el.insertAdjacentElement("beforebegin", btn);
 
   let feelHandle = null;
+  // opts.literal makes the literal side a code field of its own — a mail template, whose
+  // placeholders are coloured and completed and which F2 lifts into the Developer View
+  // with a preview (ADR-0487). { lang: devLang descriptor, title }.
+  let literalHandle = null;
   const isExpr = () => el.value.trimStart().startsWith("=");
 
   function render() {
     const expr = isExpr();
     btn.classList.toggle("active", expr);
     btn.setAttribute("aria-pressed", expr ? "true" : "false");
-    // Only an expression field is a code field: a literal value has nothing for the
-    // Developer View to help with, so F2 stays inert until fx is on.
+    // One editor wraps the field at a time: the one leaving goes before the other comes.
+    if (expr && literalHandle) {
+      literalHandle.destroy();
+      literalHandle = null;
+    }
+    if (!expr && feelHandle) {
+      feelHandle.destroy();
+      feelHandle = null;
+    }
+    if (!expr && opts.literal && !literalHandle) {
+      literalHandle = attachCodeEditor(el, { lang: opts.literal.lang.module, variables: opts.variables, gutter: false, wrap: true });
+    }
+    // Only an expression field is a code field, unless its literal is a template: a
+    // plain literal has nothing for the Developer View to help with, so F2 stays inert
+    // until fx is on.
     if (expr) markDevField(el, "feel");
+    else if (opts.literal) markDevField(el, opts.literal.lang.id, { title: opts.literal.title });
     else delete el.dataset.devlang;
     if (expr && !feelHandle) {
       // The leading '=' stays in the field value (the save wiring and compiler key on
@@ -3336,9 +3402,6 @@ export function attachExpressionToggle(el, opts = {}) {
         validate: opts.validate,
         lockPrefix: (v) => (/^\s*=\s*/.exec(v) || [""])[0].length,
       });
-    } else if (!expr && feelHandle) {
-      feelHandle.destroy();
-      feelHandle = null;
     } else if (expr && feelHandle) {
       feelHandle.setVariables(opts.variables || []);
     }
@@ -3928,6 +3991,7 @@ const SERVICE_TASK_KINDS = [
         options: [
           { v: "create-user", l: "Create user" },
           { v: "get-user", l: "Read user" },
+          { v: "get-user-manager", l: "Read manager (Vorgesetzte/r)" },
           { v: "list-users", l: "List users" },
           { v: "delta-users", l: "Delta users (Änderungen)" },
           { v: "update-user", l: "Update user" },
@@ -3958,7 +4022,7 @@ const SERVICE_TASK_KINDS = [
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
         hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
@@ -4010,8 +4074,10 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
-        hint: (v) => ["get-user", "get-group"].includes(v.operation)
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        hint: (v) => v.operation === "get-user-manager"
+          ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
+          : ["get-user", "get-group"].includes(v.operation)
           ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
           : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
@@ -4095,7 +4161,7 @@ const SERVICE_TASK_KINDS = [
   },
   {
     id: "teamsphone", name: "Microsoft Teams Phone", group: "Directory & identity",
-    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls — and remove them again — without authoring PowerShell",
+    desc: "Provision a call queue and the auto attendant in front of it, with the resource accounts that answer their calls and the phone numbers people and voice apps are reached at — and remove them again — without authoring PowerShell",
     icon: "T",
     // A handset on Teams purple: a voice app is a telephone number's front door, and the
     // tile should read as Microsoft's next to Entra's blue.
@@ -4115,6 +4181,10 @@ const SERVICE_TASK_KINDS = [
           { v: "remove-auto-attendant", l: "Remove auto attendant" },
           { v: "remove-call-queue", l: "Remove call queue" },
           { v: "remove-resource-account", l: "Remove resource account" },
+          { v: "list-free-phone-numbers", l: "List free phone numbers" },
+          { v: "ensure-phone-number", l: "Ensure phone number" },
+          { v: "remove-phone-number", l: "Remove phone number" },
+          { v: "remove-hotline", l: "Remove hotline (everything)" },
         ],
       },
       {
@@ -4147,7 +4217,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "resourceAccountId", label: "Resource account id", placeholder: "=konten.queue.objectId", fx: true,
-        showIf: (v) => v.operation && v.operation !== "resolve-users" && v.operation !== "ensure-resource-account",
+        showIf: (v) => v.operation && !["resolve-users", "ensure-resource-account", "list-free-phone-numbers", "ensure-phone-number", "remove-phone-number", "remove-hotline"].includes(v.operation),
         hint: "The object id an Ensure resource account answered with. Every voice-app operation is addressed by the account it is associated with.",
       },
       {
@@ -4158,12 +4228,14 @@ const SERVICE_TASK_KINDS = [
       {
         key: "agents", label: "Agents", placeholder: "=benutzer.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused, because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
+        hint: "Optional. Ids from Resolve users, at most 20. When set, a queue that already exists is brought to exactly this list — a change of staff is one more run of this task — but never emptied: an empty list for a queue with agents is refused (TEAMSPHONE_WOULD_EMPTY_LIST), because a Resolve users that found nobody reads the same. Leave it empty to keep the agents a queue has. Larger queues are served from a group or a channel, which this Worker Type does not offer.",
       },
       {
         key: "authorizedUsers", label: "Authorized users", placeholder: "=verantwortliche.ids", fx: true,
         showIf: (v) => v.operation === "ensure-call-queue" || v.operation === "ensure-auto-attendant",
-        hint: "Optional. Ids from Resolve users of the people allowed to change this voice app's settings in Teams.",
+        hint: (v) => (v.operation === "ensure-call-queue"
+          ? "Optional. Ids from Resolve users of the people allowed to change this queue's settings in Teams. When set, an existing queue is brought to exactly this list, never emptied; left empty, an existing queue keeps the ones it has."
+          : "Optional. Ids from Resolve users of the people allowed to change this auto attendant's settings in Teams. Applied when the auto attendant is created."),
       },
       {
         key: "languageId", label: "Language", placeholder: "de-CH", fx: true,
@@ -4183,29 +4255,89 @@ const SERVICE_TASK_KINDS = [
         hint: "Optional. A list of {name, start, end} with dates as YYYY-MM-DD, on which calls are disconnected; end is the day after the last holiday and may be left out for a single day. Every other call goes to the queue.",
       },
       {
+        key: "resourceAccountIds", label: "Resource accounts", placeholder: "=[konten.attendant.objectId, konten.queue.objectId]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "The hotline's resource accounts, usually the auto attendant's and the queue's. Everything goes: the auto attendants first, then the queues, then each account's numbers and the account. Refused before anything changes when a voice app also answers for an account not named here.",
+      },
+      {
+        key: "names", label: "Voice app names", placeholder: "=[\"AA \" + team, \"CQ \" + team]", fx: true,
+        showIf: (v) => v.operation === "remove-hotline",
+        hint: "Optional. The voice apps' names, which find one again that an earlier run already left without its account.",
+      },
+      {
+        key: "identity", label: "User or resource account", placeholder: "=person.userPrincipalName", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: "Who holds the number: a person's or a resource account's user principal name or object id — =konten.queue.objectId for a queue's hotline.",
+      },
+      {
+        key: "phoneNumber", label: "Phone number", placeholder: "+41 44 123 45 67", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "remove-phone-number",
+        hint: (v) => (v.operation === "remove-phone-number"
+          ? "Optional. The number to take away; left empty, every number the user or account holds is removed."
+          : "The number, written as people write one — spaces, dashes and a tel: prefix are dropped; a (0) after the country code is refused. A Direct Routing number may carry ;ext=. One the person or account already has is left alone; another number they hold is replaced."),
+      },
+      {
+        key: "numberType", label: "Number type", type: "select",
+        options: [
+          { v: "direct-routing", l: "Direct Routing" },
+          { v: "calling-plan", l: "Calling Plan" },
+          { v: "operator-connect", l: "Operator Connect" },
+        ],
+        showIf: (v) => v.operation === "ensure-phone-number" || v.operation === "list-free-phone-numbers",
+        hint: (v) => (v.operation === "list-free-phone-numbers"
+          ? "The type the listed numbers are of — the one Ensure phone number will give them out under. A Direct Routing number is in the tenant's inventory only once it has been uploaded to it (New-CsOnlineDirectRoutingTelephoneNumberUploadOrder)."
+          : "How this tenant reaches the telephone network for the number. Calling Plan and Operator Connect numbers must be the tenant's already; a Direct Routing number is your own carrier's."),
+      },
+      {
+        key: "assignableTo", label: "Numbers for", type: "select",
+        options: [{ v: "user", l: "a person" }, { v: "resource-account", l: "a resource account (voice app)" }],
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Teams gives a number to a person or to a voice app's resource account only when the number carries that capability, so only those are listed.",
+      },
+      {
+        key: "numberPrefix", label: "Starting with", placeholder: "+41 44 555", fx: true,
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Optional. Only numbers that start with this, written as people write one — a site's or a department's range.",
+      },
+      {
+        key: "max", label: "At most", placeholder: "100", fx: true,
+        showIf: (v) => v.operation === "list-free-phone-numbers",
+        hint: "Optional. How many numbers to answer, from 1 to 500; 100 when empty. =antwort.truncated says when there were more.",
+      },
+      {
+        key: "locationId", label: "Emergency location", placeholder: "=standort.locationId", fx: true,
+        showIf: (v) => v.operation === "ensure-phone-number",
+        hint: "Optional. The LocationId of the emergency address the number is registered at (Get-CsOnlineLisLocation).",
+      },
+      // A setting chosen here is what the queue is, also one that already exists; the
+      // first choice names nothing, so a new queue gets the default and an existing one
+      // keeps what it has (ADR-0463, amendment 2026-10-20).
+      {
         key: "routingMethod", label: "Routing", type: "select",
         options: [
-          { v: "", l: "Attendant — ring every agent (default)" },
+          { v: "", l: "Keep — attendant for a new queue" },
+          { v: "attendant", l: "Attendant — ring every agent" },
           { v: "serial", l: "Serial" },
           { v: "round-robin", l: "Round robin" },
           { v: "longest-idle", l: "Longest idle" },
         ],
         showIf: (v) => v.operation === "ensure-call-queue",
+        hint: "A routing chosen here is also set on a queue that already exists. Keep leaves an existing queue's routing as it is.",
       },
       {
         key: "presenceBasedRouting", label: "Presence-based routing", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
-        hint: "On: a call is offered only to agents whose presence is Available.",
+        hint: "On: a call is offered only to agents whose presence is Available. On or Off is also set on a queue that already exists.",
       },
       {
         key: "conferenceMode", label: "Conference mode", type: "select",
-        options: [{ v: "", l: "On (default)" }, { v: "false", l: "Off" }],
+        options: [{ v: "", l: "Keep — on for a new queue" }, { v: "true", l: "On" }, { v: "false", l: "Off" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       {
         key: "allowOptOut", label: "Agents may opt out", type: "select",
-        options: [{ v: "", l: "Yes (default)" }, { v: "false", l: "No" }],
+        options: [{ v: "", l: "Keep — yes for a new queue" }, { v: "true", l: "Yes" }, { v: "false", l: "No" }],
         showIf: (v) => v.operation === "ensure-call-queue",
       },
       { group: "Output" },
@@ -4220,9 +4352,19 @@ const SERVICE_TASK_KINDS = [
             case "ensure-resource-account":
               return "Required. =antwort.objectId is the account a voice app is associated with; =antwort.created says whether this run made it, and =antwort.source where it was found (created, entra or teams).";
             case "ensure-call-queue":
-              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.agentsChanged whether it set an existing queue's agents to the list named here.";
+              return "Required. =antwort.id and =antwort.name identify the queue; =antwort.created says whether this run made it, and =antwort.changed lists what it set on an existing queue — agents, authorizedUsers, routingMethod and the like — empty when nothing differed; =antwort.agentsChanged says whether the agents were among them.";
             case "ensure-auto-attendant":
               return "Required. =antwort.id and =antwort.name identify the voice app; =antwort.created says whether this run made it.";
+            case "list-free-phone-numbers":
+              return "Required. =antwort.numbers are the free numbers, sorted, in the form Ensure phone number takes; =antwort.entries the same with numberType, city and isoCountryCode each; =antwort.count how many; =antwort.truncated whether there were more than were answered.";
+            case "ensure-phone-number":
+              return "Required. =antwort.assigned says whether this run gave the number out — false when the holder had it already — and =antwort.previousNumber the number it replaced, empty when none.";
+            case "remove-phone-number":
+              return "Optional. =antwort.removed is false when the holder had nothing to remove; =antwort.phoneNumbers lists what was taken away.";
+            case "remove-hotline":
+              return "Optional. =antwort.removed is false when nothing was left; =antwort.attendants, =antwort.queues, =antwort.accounts and =antwort.phoneNumbers list what was taken away.";
+            case "remove-resource-account":
+              return "Optional. =antwort.removed is false when the account was already gone; =antwort.phoneNumbers lists the numbers released with it — the account's numbers go first, then its association, then the account.";
             default:
               return "Optional. =antwort.removed is false when there was nothing left to remove, which a repeated leaver path meets.";
           }
@@ -4307,19 +4449,46 @@ const SERVICE_TASK_KINDS = [
           { v: "mark-unread", l: "Mark as unread" },
           { v: "delete", l: "Delete message (to the trash)" },
           { v: "reply", l: "Reply to message" },
+          // The three that hand a document on (ADR-0478).
+          { v: "forward", l: "Forward message (with its attachments)" },
+          { v: "get-attachment", l: "Read attachment into a variable" },
+          { v: "export-attachment", l: "Export attachment to an S3 Worker" },
         ],
       },
-      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" },
-      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Comma-separated recipients. A value may be a FEEL expression (fx)." },
-      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Delivered but never shown in the message headers." },
+      { group: "Message", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward" },
+      { key: "to", label: "To", placeholder: "ops@example.com, =customer.email", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: (v) => (v.operation === "forward"
+        ? "Who receives the forwarded message, attachments included. Comma-separated; a person or group this server knows may be named by reference. Forwarding writes from the mailbox, so a deploy needs editor access to the Worker."
+        : "Comma-separated recipients. A value may be a FEEL expression (fx).") },
+      { key: "cc", label: "Cc", placeholder: "team@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward" },
+      { key: "bcc", label: "Bcc", placeholder: "audit@example.com", fx: true, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "forward", hint: "Delivered but never shown in the message headers." },
       { key: "from", label: "From", placeholder: "leave empty for the Worker's default sender", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, showIf: (v) => !v.operation || v.operation === "send" },
-      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: (v) => (v.operation === "reply"
+      {
+        // Placeholders (ADR-0487): the subject and both bodies become
+        // templates in the language form text views use — {{ }} placeholders, {{#if}}
+        // and {{#loop}} sections. Off is every mail task authored before templates
+        // existed, so an untouched task keeps meaning what it meant.
+        key: "templating", label: "Placeholders", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Off — literal text, or FEEL with fx" },
+          { v: "true", l: "On — {{ }} placeholders, {{#if}} and {{#loop}}" },
+        ],
+        showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward",
+        hint: (v) => (v.templating === "true"
+          ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
+          : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
+      },
+      { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
+      { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
-        : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
-      { key: "bodyHtml", label: "HTML body", type: "html", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply", hint: "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view." },
-      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" },
+        : v.operation === "forward"
+          ? "Optional. The note written above the forwarded message, which follows under \"Fwd: \" and its subject. Every attachment is inspected before anything is sent; one that is refused stops the whole forward."
+          : v.templating === "true"
+            ? "Plain-text body with placeholders: Hallo {{kunde.name}}. Press F2 for the editor with a live preview, Ctrl+Space inside {{ }} for variables and functions."
+            : "Plain-text body, or a FEEL expression (fx) composed from the instance's variables — switch on fx, then press Ctrl+Space for variable completion.") },
+      { key: "bodyHtml", label: "HTML body", type: "html", template: "html-template", rows: 10, placeholder: "<p>Your order is <b>on its way</b>.</p>", showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.templating === "true"
+        ? "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. Placeholders work as in the text, and what they insert is escaped. Press F2 for the editor with a live preview of the mail."
+        : "Optional. With both bodies the mail goes out as multipart/alternative — this markup for clients that render HTML, the plain text above for those that don't. A leading '=' makes it a FEEL expression composing the markup from variables. Press F2 for the developer view with a preview.") },
+      { group: "Mailbox", showIf: (v) => !!v.operation && v.operation !== "send" && v.operation !== "reply" && v.operation !== "forward" },
       {
         key: "folder", label: "Folder", placeholder: "INBOX", fx: true, showIf: (v) => v.operation === "list",
         hint: "The folder to list — an IMAP folder name, a Gmail label id (INBOX, Label_…) or a Microsoft folder id or well-known name (inbox, archive). Empty is the inbox.",
@@ -4342,21 +4511,59 @@ const SERVICE_TASK_KINDS = [
         options: [{ v: "", l: "All messages" }, { v: "true", l: "Unread messages only" }],
       },
       {
-        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list" || v.operation === "get",
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "list",
         options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }],
-        hint: "The envelope is sender, recipients, subject, date, attachment names and sizes and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is never read. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB; attachment content is read only by the attachment operations. What a process receives, every operator of a shared server can read — include the text only where the process needs it.",
       },
-      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" },
+      {
+        // A get may read the HTML body as well (ADR-0489); a list may
+        // not, since its hundred answers share one variable — the compiler refuses it.
+        key: "includeBody", label: "Text", type: "select", showIf: (v) => v.operation === "get",
+        options: [{ v: "", l: "Envelope only" }, { v: "true", l: "Include the text" }, { v: "html", l: "Include the text and the HTML" }],
+        hint: "The envelope is sender, recipients, subject, date, each attachment's id, name and size and the receiving server's SPF/DKIM/DMARC verdict. The text is cut at 64 KiB. The HTML version is cleaned of scripts, forms and everything else that runs, and cut to fit the variable; show it to a person with an E-mail view in a task form, which keeps remote images blocked until they are asked for. What a process receives, every operator of a shared server can read — include the text, let alone the HTML, only where the process needs it.",
+      },
+      { group: "Attachment", showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment" },
+      {
+        key: "attachmentId", label: "Attachment", placeholder: "=mail.attachments[1].id", fx: true,
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "The attachment to read: the id an envelope's attachments list carries — usually a FEEL expression (fx), e.g. =mail.attachments[1].id, or an item of a multi-instance loop over them.",
+      },
+      {
+        key: "allowedTypes", label: "Accepted types", placeholder: "application/pdf, image/*",
+        showIf: (v) => v.operation === "get-attachment" || v.operation === "export-attachment",
+        hint: "Optional. Comma-separated media types the task accepts, judged from the document's content rather than from what the sender called it. Anything else ends the task with the error code MAIL_ATTACHMENT_REJECTED. Programs, scripts, macro documents, encrypted archives and PDFs that run code are refused in any case, and a Worker with a malware scanner scans every attachment first.",
+      },
+      { group: "Object store", showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "store", label: "S3 Worker", datalist: "s3", placeholder: "belege", showIf: (v) => v.operation === "export-attachment",
+        hint: "The S3 Worker the attachment is put into, by its name under Workers. Written as a name, not an expression: a deploy needs editor access to it as well as to the mailbox. The document goes from the mailbox to the store without passing through the process.",
+      },
+      { key: "bucket", label: "Bucket", placeholder: "eingang", fx: true, showIf: (v) => v.operation === "export-attachment" },
+      {
+        key: "key", label: "Object key", placeholder: "=\"rechnungen/\" + mail.messageId + \".pdf\"", fx: true, showIf: (v) => v.operation === "export-attachment",
+        hint: "Where the attachment is stored. Build it from values that stay the same on a retry — a key computed from now() writes a second object when the task runs again.",
+      },
+      { group: "Output", showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment" },
       {
         key: "resultVariable", label: "Result variable",
         resultType: (v) => (v.operation === "list" ? "array" : v.operation === "move" ? "string" : "object"),
         placeholder: "mail",
-        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move",
+        showIf: (v) => v.operation === "list" || v.operation === "get" || v.operation === "move" || v.operation === "get-attachment" || v.operation === "export-attachment",
         hint: (v) => (v.operation === "move"
           ? "Optional. Receives the message's id in its new folder — the same id for Gmail and Microsoft, a new one for IMAP."
-          : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+          : v.operation === "get-attachment"
+            ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
+            : v.operation === "export-attachment"
+              ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
+              : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
       },
     ],
+    // Only a get reads a message's HTML body (ADR-0489): a get turned
+    // into a list keeps its text and loses the HTML, rather than leaving a value the
+    // compiler refuses.
+    normalize: (props) => {
+      if (props.includeBody === "html" && props.operation !== "get") props.includeBody = "true";
+    },
   },
   {
     id: "csv", name: "Text File", group: "Files", desc: "Read or write a table in a text file: delimited (CSV), fixed-width, or attribute-value pairs", icon: "T",
@@ -4412,23 +4619,144 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "sharepoint", name: "SharePoint", group: "Applications", desc: "Create a list item in a SharePoint site", icon: "S",
+    id: "sharepoint", name: "SharePoint", group: "Applications",
+    desc: "Record, find and change list items, and put documents into a library and get them back",
+    icon: "S",
     // A list/grid mark on a Microsoft-teal tile reads "SharePoint list" at a glance —
     // this Worker Type's counterpart to REST's globe and mail's envelope. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white list rows.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#038387"/><rect x="3" y="3.6" width="10" height="8.8" rx="1" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M3.4 6.2h9.2M6 3.9v8.2" stroke="#fff" stroke-width="1.1"/></svg>`,
     ext: "atlas:SharePointConnector",
+    // The operation's first option is create-item under the empty value: a task authored
+    // before operations existed carries no operation attribute and means exactly that,
+    // and the compiler reads an empty operation the same way, so such a model keeps its
+    // meaning whatever the panel writes for it. A model that spells create-item out is
+    // the same task, so every field it shows for the empty value it shows for that too —
+    // a field hidden here would be dropped on the next save.
     fields: [
       { group: "SharePoint worker" },
-      { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task creates the item through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
-      { group: "Target" },
-      { key: "site", label: "Site", placeholder: "contoso.sharepoint.com,<siteId>,<webId>", fx: true, hint: "The Microsoft Graph site identifier. A value may be a FEEL expression (fx)." },
-      { key: "list", label: "List", placeholder: "Incidents", fx: true, hint: "The list name or id the item is created in." },
-      { group: "Item" },
-      { key: "fields", label: "Item fields", type: "map", childType: "atlas:ItemField", fx: true, hint: "Column values of the created list item. A value may be a FEEL expression (fx) over the instance's variables." },
+      { key: "connector", label: "Worker", datalist: "sharepoint", placeholder: "contoso", hint: "The configured SharePoint Worker this task acts through, by the name it has under Workers in the Console. Its Graph base and OAuth credential live on the server, never in the model." },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: [
+          { v: "", l: "Create list item" },
+          { v: "get-item", l: "Read list item" },
+          { v: "update-item", l: "Update list item" },
+          { v: "delete-item", l: "Delete list item" },
+          { v: "list-items", l: "Find list items" },
+          { v: "upload-file", l: "Upload file" },
+          { v: "download-file", l: "Download file" },
+          { v: "get-file", l: "Check file" },
+          { v: "list-folder", l: "List folder" },
+          { v: "create-folder", l: "Create folder" },
+          { v: "delete-file", l: "Delete file or folder" },
+        ],
+      },
+      {
+        key: "site", label: "Site", placeholder: "https://contoso.sharepoint.com/sites/hr", fx: true,
+        hint: "The site's address as the browser shows it, host:/sites/name, or a Graph site id (host,siteId,webId). Name the site itself, not a page or a list in it. May be a FEEL expression (fx).",
+      },
+      {
+        key: "list", label: "List", placeholder: "Incidents", fx: true,
+        showIf: (v) => ["", "create-item", "get-item", "update-item", "delete-item", "list-items"].includes(v.operation || ""),
+        hint: "The list's title or id, as the site shows it.",
+      },
+      {
+        key: "list", label: "Library", placeholder: "Verträge", fx: true,
+        showIf: (v) => ["upload-file", "download-file", "get-file", "list-folder", "create-folder", "delete-file"].includes(v.operation || ""),
+        hint: "Optional. The document library's title or id; empty means the site's default library (Documents).",
+      },
+      {
+        key: "itemId", label: "Item id", placeholder: "=auftrag.id", fx: true,
+        showIf: (v) => ["get-item", "update-item", "delete-item"].includes(v.operation || ""),
+        hint: "The list item's id — usually from an earlier step: =angelegt.id after Create list item, or =seite.items[1].id after Find list items.",
+      },
+      {
+        key: "path", label: "Path", placeholder: "=\"Akten/\" + fall.nummer + \"/antrag.pdf\"", fx: true,
+        showIf: (v) => ["upload-file", "download-file", "get-file", "list-folder", "create-folder", "delete-file"].includes(v.operation || ""),
+        hint: (v) => {
+          switch (v.operation) {
+            case "list-folder":
+              return "Optional. The folder to list, from the library's top level; empty lists the top level itself.";
+            case "create-folder":
+              return "The folder to create, from the library's top level. Missing folders above it are created too, and a folder that is already there counts as created — so a retry is harmless.";
+            case "delete-file":
+              return "The file or folder to delete. A folder goes with everything inside it; both land in the site's recycle bin. Something that is not there answers deleted=false rather than failing.";
+            case "upload-file":
+              return "Where the file goes, from the library's top level, with its name. A file already there is replaced (the library keeps the old one as a version), and missing folders on the way are created.";
+            default:
+              return "The file, from the library's top level, with its name. A retry re-runs the task with the same variables, so a path built from a timestamp names a different file the second time.";
+          }
+        },
+      },
+      {
+        key: "fields", label: "Columns", type: "map", childType: "atlas:ItemField", fx: true,
+        showIf: (v) => ["", "create-item", "update-item", "upload-file"].includes(v.operation || ""),
+        hint: (v) => (v.operation === "upload-file"
+          ? "Optional. Column values the uploaded file gets as its properties, by the columns' internal names."
+          : "Column values by the columns' internal names. A FEEL value keeps its type: =42 is sent as a number, =true as Yes, =[\"A\", \"B\"] as a multi-choice; a lookup or person column takes the item's id under <Name>LookupId. A value that evaluates to null clears the column."),
+      },
+      {
+        key: "content", label: "Content", placeholder: "=brief", fx: true,
+        showIf: (v) => v.operation === "upload-file",
+        hint: "What to store. It travels through a process variable, so it is capped at that variable's own budget — 1 MiB unless this installation raised it.",
+      },
+      {
+        key: "encoding", label: "Content is", type: "select",
+        options: [{ v: "", l: "Text — the characters as they are" }, { v: "base64", l: "Base64 — a binary file, e.g. a PDF" }],
+        showIf: (v) => v.operation === "upload-file" || v.operation === "download-file",
+        hint: "Text is right for JSON, CSV, XML and a letter. Base64 is what a binary needs to survive a process variable at all, and what a form's uploaded file already is. On a download, a file that is not text needs base64.",
+      },
+      {
+        key: "filter", label: "Filter", placeholder: "=\"fields/Status eq '\" + status + \"'\"", fx: true,
+        showIf: (v) => v.operation === "list-items",
+        hint: "Optional. An OData filter over the columns, e.g. fields/Status eq 'Offen'. A list past 5000 items needs the filtered column indexed; a smaller one does not.",
+      },
+      {
+        key: "select", label: "Columns to read", placeholder: "Title,Status,Kunde",
+        showIf: (v) => v.operation === "get-item" || v.operation === "list-items",
+        hint: "Optional. The columns' internal names, separated by commas. Empty reads every column, which makes each item much larger.",
+      },
+      {
+        key: "pageToken", label: "Continue from", placeholder: "=seite.nextPageToken", fx: true,
+        showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
+        hint: "Optional. The nextPageToken an earlier page answered with, passed back unchanged; empty starts at the first page.",
+      },
+      {
+        key: "maxResults", label: "Page size", placeholder: "100",
+        showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
+        hint: "How many entries one page holds. Empty uses 100; at most 999.",
+      },
       { group: "Output" },
-      { key: "resultVariable", label: "Result variable", resultType: "object", placeholder: "createdItem", hint: "The created item's JSON is written into this process variable (leave empty to discard it)." },
+      {
+        key: "resultVariable", label: "Result variable", resultType: () => "object", placeholder: "antwort",
+        hint: (v) => {
+          switch (v.operation) {
+            case "get-item":
+              return "The item lands here: =antwort.id, and its columns under =antwort.fields.Title.";
+            case "update-item":
+              return "Optional. The item's columns after the change land here.";
+            case "delete-item":
+            case "delete-file":
+              return "Optional. =antwort.deleted is false when there was nothing to delete.";
+            case "list-items":
+            case "list-folder":
+              return "The page lands here: =antwort.items is the list (1-based, so the first is =antwort.items[1]), =antwort.hasMore whether there is more, and =antwort.nextPageToken where to carry on.";
+            case "upload-file":
+              return "Optional. The stored file lands here: =antwort.id, =antwort.webUrl — a link that opens it for anybody allowed to — and its properties under =antwort.listItem.fields.";
+            case "download-file":
+              return "The file lands in =antwort.content, with =antwort.contentType and =antwort.size beside it. A file larger than a process variable's budget fails the task rather than arriving cut short — hand a person its webUrl instead.";
+            case "get-file":
+              return "=antwort.exists says whether it is there; when it is, =antwort.webUrl, =antwort.size and its properties under =antwort.listItem.fields come with it.";
+            case "create-folder":
+              return "Optional. The folder lands here, with =antwort.created false when it was already there.";
+            default:
+              return "Optional. The created item's JSON lands here — =antwort.id is what the other item operations address it by.";
+          }
+        },
+      },
     ],
   },
   {
@@ -4664,6 +4992,146 @@ const SERVICE_TASK_KINDS = [
               return "What Google returned is written into this process variable (leave empty to discard it).";
           }
         },
+      },
+    ],
+  },
+  {
+    id: "googlecontacts", name: "Google Contacts", group: "Applications",
+    desc: "Find, read, list, create, update and delete contacts in a Google address book, put a label such as Kunden on one or take it off, and search the organization's Workspace directory",
+    icon: "C",
+    // A person on Google blue: the contact this Worker Type is about, beside Sheets'
+    // grid in the same group.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#1a73e8"/><circle cx="8" cy="6.2" r="2.3" fill="#fff"/><path d="M3.8 12.6c.5-2.2 2.2-3.4 4.2-3.4s3.7 1.2 4.2 3.4z" fill="#fff"/></svg>`,
+    ext: "atlas:GoogleContactsConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "googlecontacts", placeholder: "verkauf",
+        hint: "The configured Google Contacts Worker whose address book this task uses, by its name under Workers in the Console. Its credential — a service account acting as a Workspace user, or a person's refresh token — reaches that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime, e.g. the account manager's.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: googleContactsOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (people/c…). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "query"),
+        hint: (v) => googleContactsQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field (as Google Contacts shows it under \"Custom field\"), e.g. Kundennummer: the query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Label", placeholder: "Kunden", fx: true,
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The label, by the name Google Contacts shows it under, e.g. Kunden. It must exist: a misspelt name is refused rather than created."
+          : "Optional. Only the contacts with this label, by the name Google Contacts shows it under, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => googleContactsContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (labels by name)." : "; labels change through Add to label and Remove from label.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the primary entry and keep the others, emails, phones and addresses replace the list.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => googleContactsMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => googleContactsResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!googleContactsResultType(v.operation || "find-contacts"),
+        hint: (v) => googleContactsResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "carddav", name: "CardDAV contacts", group: "Applications",
+    desc: "Find, read, search, list, create, update and delete contacts in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and most mail providers' — and put a group such as Kunden on one or take it off",
+    icon: "V",
+    // An address-book card on teal: the open standard beside Google's blue person, so
+    // the two contact Worker Types are told apart at a glance.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f766e"/><rect x="2.8" y="3.5" width="10.4" height="9" rx="1.2" fill="#fff"/><circle cx="6.3" cy="7" r="1.5" fill="#0f766e"/><path d="M4.1 11.1c.3-1.3 1.2-2 2.2-2s1.9.7 2.2 2z" fill="#0f766e"/><rect x="9.4" y="6.1" width="2.6" height=".9" fill="#0f766e"/><rect x="9.4" y="8.1" width="2.6" height=".9" fill="#0f766e"/></svg>`,
+    ext: "atlas:CarddavConnector",
+    fields: [
+      { group: "Address book" },
+      {
+        key: "connector", label: "Worker", datalist: "carddav", placeholder: "verkauf",
+        hint: "The configured CardDAV Worker whose address book this task uses, by its name under Workers in the Console. The server's address and the account's password reach that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the address book at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: cardDAVOperationOptions(),
+      },
+      {
+        key: "contactId", label: "Contact", placeholder: "=kunde.id", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contactId"),
+        hint: "The contact, by the id a read, a find or a create answered with (…vcf, its name in the address book). Usually a FEEL expression (fx) naming that variable, e.g. =kunde.id.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "=anfrage.absender", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "query"),
+        hint: (v) => cardDAVQueryHint(v.operation || "find-contacts"),
+      },
+      {
+        key: "field", label: "Custom field", placeholder: "Kundennummer",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "field"),
+        hint: "Optional. The name of a custom field — the card's X- property without X-, so Kundennummer is X-Kundennummer; letters, digits and hyphens. The query is then compared with that field's value instead of with the e-mail addresses and phone numbers.",
+      },
+      {
+        key: "group", label: "Group", placeholder: "Kunden", fx: true,
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "group"),
+        hint: (v) => (["add-to-group", "remove-from-group"].includes(v.operation)
+          ? "The group, by its name, e.g. Kunden. Where the Worker keeps groups as cards of their own (iCloud, Fastmail) it must exist, and a misspelt name is refused; where it keeps them in CATEGORIES, a group exists by being on a contact."
+          : "Optional. Only the contacts in this group, by its name, e.g. Kunden."),
+      },
+      {
+        key: "contact", label: "Contact values", type: "json", rows: 8,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
+        placeholder: (v) => cardDAVContactPlaceholder(v.operation || "create-contact"),
+        hint: (v) => "Keys: displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses (streetAddress, extendedAddress, poBox, postalCode, city, region, country, type), birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
+          (v.operation === "create-contact" ? " and groups (by name)." : "; groups change through Add to group and Remove from group.") +
+          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the preferred entry and keep the others, emails, phones and addresses replace the list. Every other property of the card — a photo included — is kept.",
+      },
+      {
+        key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
+        showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contact,
+        hint: "Instead of the values above: a process variable holding the contact object, for a process that assembles it itself — a form's answers, say. Its keys are checked when the task runs rather than at deploy.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVMaxPlaceholder(v.operation || "find-contacts"),
+        hint: (v) => cardDAVMaxHint(v.operation || "find-contacts"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "kunden",
+        resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
+        showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
+        hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
       },
     ],
   },
@@ -5735,6 +6203,12 @@ function settleKindFields(kind, stored, props) {
     if (!f.showIf) return true;
     try { return !!f.showIf(values); } catch { return true; }
   };
+  // A mode field can belong to a mode itself: the mail task's placeholders switch means
+  // nothing to a list. One the operation hides is dropped like any other field, or it
+  // would stay in the XML, where the compiler refuses it.
+  for (const f of kind.fields) {
+    if (f.reRender && f.showIf && !shown(f, mode) && value(f.key) !== undefined) props[f.key] = undefined;
+  }
   // An attribute may be described more than once — CSV's columns are names for a
   // delimited file and name:width for a fixed-width one — so it is unused only when
   // every field that writes it is hidden.
@@ -5752,6 +6226,16 @@ function settleKindFields(kind, stored, props) {
     }
     const select = fields.find((f) => f.type === "select" && shown(f, all));
     if (select && !value(key) && firstOption(select)) props[key] = firstOption(select);
+  }
+  // A map the panel hid is saved empty already, but one it still showed is not: when
+  // this save is the change of operation, the panel on screen is the previous
+  // operation's, and its rows are read as they stand. The new operation may not take
+  // them — S3 metadata on a read, SharePoint columns on a file check, Jira fields on a
+  // comment — and the compiler refuses a task that carries them.
+  for (const f of kind.fields) {
+    if (f.type === "map" && Array.isArray(props[f.key]) && props[f.key].length && !shown(f, mode) && !shown(f, all)) {
+      props[f.key] = [];
+    }
   }
   return props;
 }
@@ -6403,7 +6887,11 @@ function messageFieldsHTML(modeler, med, hint) {
 // too, so the author sees every source of the name in one place: the product action that
 // owns it, and the deployed processes waiting for it. Only watches are counted as
 // publishing it, which is what the line has always meant.
-function fillMessageSources(api, el, name, sources) {
+//
+// A deployed process that sends the name is a source too (ADR-0446 §1): a name a model
+// sends no longer reads as unfed. On an element that sends (sends), the line ends with
+// who receives what it sends, or that nobody does, and links to the Console's overview.
+function fillMessageSources(api, el, name, sources, sends) {
   if (!api || !el) return;
   const want = (name || "").trim();
   if (!want) return;
@@ -6412,20 +6900,31 @@ function fillMessageSources(api, el, name, sources) {
     const named = (s) => (s.messageName || "").trim() === want;
     const watches = messageSourcesOf(list, "inbound-watch").filter(named);
     const actions = messageSourcesOf(list, "product-action").filter(named);
-    const waiting = messageSourcesOf(list, "process").filter(named);
-    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0)
+    const waiting = messageSourcesOf(list, "process").filter(named).filter(newestRow);
+    const senders = messageSourcesOf(list, "process-throw").filter(named).filter(newestRow);
+    el.innerHTML = watchSourcesHTML(want, watches, actions.length > 0, senders.length > 0)
       + productOwnersHTML(actions, watches.some((s) => s.enabled))
-      + waitingProcessesHTML(waiting);
+      + sendingProcessesHTML(senders)
+      + (sends ? messageReceiversHTML(want, waiting) : waitingProcessesHTML(waiting));
   }).catch(() => { /* no hint; the field works the same */ });
+}
+
+// newestRow reports whether a process row is the newest deployed version of its process.
+// The listing names every version (ADR-0446 §1), and the Modeler asks who waits or sends
+// now. A server older than the field listed the newest version alone, so a row without a
+// version is one.
+function newestRow(s) {
+  return !!s && (s.newest === true || s.version === undefined || s.version === null);
 }
 
 // watchSourcesHTML is the hint's account of the inbound watches publishing a name. With
 // none, it says where watches are configured — unless a product action owns the name: no
 // watch may publish an action's message (ADR-0429 §1), so that advice would send the author
-// to a door that refuses them.
-function watchSourcesHTML(want, watches, ownedByProduct) {
+// to a door that refuses them — or a deployed model sends it, which is the answer the
+// advice was looking for.
+function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
   if (!watches.length) {
-    if (ownedByProduct) return "";
+    if (ownedByProduct || sentByModel) return "";
     return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
       + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
       + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
@@ -6454,6 +6953,26 @@ function productOwnersHTML(actions, alsoWatched) {
     : "";
   return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
     + ` — the order sends it.${clash}</div>`;
+}
+
+// sendingProcessesHTML names the deployed processes whose newest version sends a message
+// name (ADR-0446 §1): a throw, an end event or a send task naming it.
+function sendingProcessesHTML(senders) {
+  if (!senders.length) return "";
+  const named = [...new Set(senders.map((s) => s.processId || "?"))].sort().map((pid) => `<code>${esc(pid)}</code>`);
+  return `<div style="margin-top:4px">Sent by deployed process${named.length > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+}
+
+// messageReceiversHTML is a sending element's line (ADR-0446 §5): the deployed processes
+// whose newest version waits for the name, or that none does, linked to the Console's
+// overview. Nothing waiting is said plainly: a message is not buffered unless it is
+// published with a time to live, and a throw has none.
+function messageReceiversHTML(want, waiting) {
+  const active = waiting.filter((s) => s.enabled !== false);
+  if (!active.length) {
+    return `<div style="margin-top:4px">No deployed process waits for <b>${esc(want)}</b>: what this element sends is lost. ${eventsPageLink(want, "message")}</div>`;
+  }
+  return waitingProcessesHTML(active).replace(/<\/div>$/, ` ${eventsPageLink(want, "message")}</div>`);
 }
 
 // waitingProcessesHTML names the deployed processes whose newest version waits for a
@@ -6581,7 +7100,14 @@ function productActionChoices(sources, declared) {
 // waitingProcessChoices offers each name a deployed process waits for, labelled with the
 // process and where its newest version waits: "billing · catch".
 function waitingProcessChoices(sources, declared) {
-  return sourceChoices(messageSourcesOf(sources, "process"), declared, (s) =>
+  return sourceChoices(messageSourcesOf(sources, "process").filter(newestRow), declared, (s) =>
+    [s.processId, s.element].filter(Boolean).join(" · "));
+}
+
+// sendingProcessChoices offers each name the newest version of a deployed process sends,
+// labelled with the process: "billing · throw" (ADR-0446 §5).
+function sendingProcessChoices(sources, declared) {
+  return sourceChoices(messageSourcesOf(sources, "process-throw").filter(newestRow), declared, (s) =>
     [s.processId, s.element].filter(Boolean).join(" · "));
 }
 
@@ -6622,9 +7148,10 @@ function offerWorkerEvents(select, sources, declared, productBound) {
 
 // offerMessageSources puts the names the server knows in front of the author who would
 // otherwise have to type them, grouped by where they come from (ADR-0429 §6). An element
-// that waits for a message is offered the Worker events and the product actions; one that
-// throws is offered the deployed processes waiting for a name, and never a product action,
-// whose message is the order's to send. The name field suggests the same names, declared
+// that waits for a message is offered the Worker events, the product actions and the
+// names deployed models send (ADR-0446 §5); one that throws is offered the deployed
+// processes waiting for a name, and never a product action, whose message is the order's
+// to send. The name field suggests the same names, declared
 // ones included. Picking one declares a message of that name; the field stays free text,
 // because a message may be modelled before its source exists, and the publish checks
 // remain the last word. It runs once the listing arrives, so the picker is usable at once
@@ -6635,9 +7162,11 @@ function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
   if (receivesMessages(bo)) {
     offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
     addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
+    addSourceGroup(select, "sending-processes", "Messages deployed models send", sendingProcessChoices(sources, declared));
     suggested = [
       ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
       ...productActionChoices(sources, null),
+      ...sendingProcessChoices(sources, null),
     ];
   } else if (throwsMessages(bo)) {
     addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
@@ -6836,7 +7365,7 @@ function messageCorrelationKey(msg) {
 function createMessage(modeler, name) {
   const moddle = modeler.get("moddle");
   const msg = moddle.create("bpmn:Message");
-  msg.id = "Message_" + Math.random().toString(36).slice(2, 8);
+  msg.id = moddle.ids.nextPrefixed("Message_", msg);
   msg.name = name || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -6907,7 +7436,7 @@ function listSignals(modeler) {
 function createSignal(modeler, name) {
   const moddle = modeler.get("moddle");
   const sig = moddle.create("bpmn:Signal");
-  sig.id = "Signal_" + Math.random().toString(36).slice(2, 8);
+  sig.id = moddle.ids.nextPrefixed("Signal_", sig);
   sig.name = name || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -6952,23 +7481,73 @@ function signalFieldsHTML(modeler, sed, hint, listens) {
     <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
   // A receiving element is offered the events atlas emits as signals (ADR-0435); the
   // group is filled from the event catalogue once it answers, and #f-sigevent says
-  // what the chosen atlas.* name means and what it carries.
+  // what the chosen atlas.* name means and what it carries. It is offered the names
+  // the deployed models throw too (ADR-0447), and a throwing element is told who
+  // receives its name (#f-sigreceivers).
   return `<h3>Signal</h3>
     <label class="field"><span>Signal</span>
       <select id="f-sigref" data-listens="${listens ? "1" : ""}">
         <option value="">— none —</option>
         ${options}
         ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
+        ${listens ? `<optgroup label="Signals deployed models throw" id="f-sig-deployed"></optgroup>` : ""}
         <option value="__new__">＋ New signal…</option>
       </select></label>
     ${fields}
     <div id="f-sigevent"></div>
+    ${!listens && current ? `<p class="muted" style="font-size:12px" id="f-sigreceivers"></p>` : ""}
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
 
-// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event rather than
-// a signal of this model; choosing it reuses or creates the model's signal of that name.
+// SIGNAL_EVENT_PREFIX marks a picker option that names a catalogued event, or a signal
+// a deployed model throws, rather than a signal of this model; choosing it reuses or
+// creates the model's signal of that name.
 const SIGNAL_EVENT_PREFIX = "__event__:";
+
+// signalInventory asks for the signals the deployed models throw and receive
+// (ADR-0447), once per panel render: unlike the catalogue it changes with every deploy.
+// A refusal, a failure or a server without the route is an empty inventory, and the
+// picker works as it did.
+function signalInventory(api) {
+  try {
+    return Promise.resolve(api("GET", "/api/v1/signals"))
+      .then((r) => (r && Array.isArray(r.signals) ? r.signals : []), () => []);
+  } catch { return Promise.resolve([]); }
+}
+
+// deployedSignalChoices offers each name the newest version of a deployed model throws,
+// labelled with the processes that throw it. An atlas.* name is not offered here: the
+// inventory lists one only where a model speaks for atlas, and the events atlas emits
+// have their own group.
+function deployedSignalChoices(signals) {
+  return signals.filter((g) => g && g.name && !String(g.name).startsWith("atlas."))
+    .map((g) => ({ name: g.name, by: [...new Set((g.points || [])
+      .filter((p) => p.role === "throw" && p.newest).map((p) => p.processId))].sort() }))
+    .filter((c) => c.by.length)
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+// eventsPageLink links a name to its row on the Console's Events page.
+function eventsPageLink(name, channel) {
+  const href = `/#/console/events?name=${encodeURIComponent(name)}&channel=${channel}`;
+  return `<a href="${esc(href)}" target="_blank" rel="noopener">Events ↗</a>`;
+}
+
+// signalReceiversHTML is a throwing element's one line (ADR-0447 §6): how many deployed
+// processes receive its name — the newest, active version of each — or that none does.
+// An atlas.* name says nothing here: signalEventNote already says the name is atlas's,
+// and who receives one is an administrator's view.
+function signalReceiversHTML(signals, name) {
+  const n = String(name || "").trim();
+  if (!n || n.startsWith("atlas.")) return "";
+  const g = signals.find((x) => x && x.name === n);
+  const by = [...new Set(((g && g.points) || [])
+    .filter((p) => p.role !== "throw" && p.newest && !p.inactive).map((p) => p.processId))].sort();
+  if (!by.length) {
+    return `No deployed process receives it: a signal is not buffered, so every throw is lost until one is deployed. ${eventsPageLink(n, "signal")}`;
+  }
+  return `Received by ${by.length} deployed process${by.length > 1 ? "es" : ""}: ${by.map(esc).join(", ")}. ${eventsPageLink(n, "signal")}`;
+}
 
 // eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
 // may read it; a refusal or a server without it leaves the picker as it was.
@@ -7067,7 +7646,7 @@ function listErrors(modeler) {
 function createError(modeler, code) {
   const moddle = modeler.get("moddle");
   const err = moddle.create("bpmn:Error");
-  err.id = "Error_" + Math.random().toString(36).slice(2, 8);
+  err.id = moddle.ids.nextPrefixed("Error_", err);
   err.errorCode = code || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -7214,7 +7793,7 @@ function listEscalations(modeler) {
 function createEscalation(modeler, code) {
   const moddle = modeler.get("moddle");
   const esc_ = moddle.create("bpmn:Escalation");
-  esc_.id = "Escalation_" + Math.random().toString(36).slice(2, 8);
+  esc_.id = moddle.ids.nextPrefixed("Escalation_", esc_);
   esc_.escalationCode = code || "";
   const defs = definitionsOf(modeler);
   if (defs) {
@@ -9572,10 +10151,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (stKind.normalize) stKind.normalize(props);
       upsertExt(modeler, element, stKind.ext, props);
     });
+    // An attribute two fields describe (a list's and a get's text, CSV's columns) is one
+    // element on screen; it is wired once, or each change would save twice.
+    const wiredKindFields = new Set();
     for (const f of stKind.fields) {
       if (f.group || f.type === "map") continue;
       const el = body.querySelector("#f-st-" + f.key);
-      if (!el) continue;
+      if (!el || wiredKindFields.has(el)) continue;
+      wiredKindFields.add(el);
       el.addEventListener("change", () => {
         saveKindFields();
         if (f.reRender) show(element); // e.g. auth type: reveal the scheme's fields
@@ -9592,12 +10175,18 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // field element, so no save/load change is needed.
     const stFeelVars = variablesForCompletion(modeler, element);
     const stValidate = api ? (expression) => api("POST", "/api/v1/feel/validate", { expression }) : null;
-    const stAttachFx = (el) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate }); };
+    const stAttachFx = (el, literal) => { if (el) attachExpressionToggle(el, { variables: stFeelVars, validate: stValidate, literal }); };
+    // A mail task with placeholders on writes its subject and bodies as templates
+    // (ADR-0487): a field the catalog marks `template` is then a
+    // template editor on its literal side, and stays FEEL with fx on.
+    const stTemplating = (body.querySelector("#f-st-templating") || {}).value === "true";
+    const stTemplateLang = (f) => (stTemplating && f.template ? devLang(f.template) : null);
     // Every fx-capable text field (REST url, mail recipients/subject/body, the Remedy
     // form, …) gets the value-or-expression toggle; map value cells are handled below.
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
-      stAttachFx(body.querySelector("#f-st-" + f.key));
+      const tl = stTemplateLang(f);
+      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: f.label } : undefined);
     }
     // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
@@ -9609,8 +10198,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // Wrapped and gutterless, like the FEEL fields inline: markup lines are long and
       // the property column is narrow, so horizontal scrolling would hide most of the
       // template. The Developer View is where it gets a gutter and the full width.
-      attachCodeEditor(el, { lang: htmlLang.module, variables: stFeelVars, gutter: false, wrap: true });
-      markDevField(el, "html", { title: f.label });
+      const markup = stTemplateLang(f) || htmlLang;
+      attachCodeEditor(el, { lang: markup.module, variables: stFeelVars, gutter: false, wrap: true });
+      markDevField(el, markup.id, { title: f.label });
     }
     // JSON fields (the Entra attributes template) get the shared JSON editor:
     // highlighting, live validation and auto-format. A '=' inside a string value is
@@ -10434,13 +11024,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     }
     const fmsgname = body.querySelector("#f-msgname");
     if (fmsgname) {
-      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
+      const sends = throwsMessages(msgBo);
+      fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources, sends);
       fmsgname.addEventListener("change", () => {
         const med = messageRefHolder(element.businessObject);
         if (med && med.messageRef) med.messageRef.name = (fmsgname.value || "").trim();
         // Renaming the message changes which watches feed it, so the line is redrawn for
         // the new name from the same listing, rather than left describing the old one.
-        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources);
+        fillMessageSources(api, body.querySelector("#f-msgsources"), fmsgname.value, msgSources, sends);
       });
     }
     const fcorrkey = body.querySelector("#f-corrkey");
@@ -10451,9 +11042,26 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       });
     }
     const fsigref = body.querySelector("#f-sigref");
+    // The deployed models' signals serve the picker's group and the throw's line, so a
+    // render asks once.
+    const sigInventory = fsigref ? signalInventory(api) : null;
     if (fsigref) {
       const listens = fsigref.dataset.listens === "1";
       const sigNote = body.querySelector("#f-sigevent");
+      sigInventory.then((signals) => {
+        if (!fsigref.isConnected) return;
+        const group = fsigref.querySelector("#f-sig-deployed");
+        if (group) {
+          const mine = new Set(listSignals(modeler).map((x) => x.name));
+          group.innerHTML = deployedSignalChoices(signals)
+            .map((c) => `<option value="${esc(SIGNAL_EVENT_PREFIX + c.name)}">${
+              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — new"}</option>`).join("");
+          if (!group.children.length) group.remove();
+        }
+        const line = body.querySelector("#f-sigreceivers");
+        const sed = signalDefOf(element.businessObject);
+        if (line && sed && sed.signalRef) line.innerHTML = signalReceiversHTML(signals, sed.signalRef.name);
+      });
       eventCatalog(api).then((entries) => {
         if (!fsigref.isConnected) return;
         const group = fsigref.querySelector("#f-sig-events");
@@ -10477,7 +11085,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           } else if (v === "") {
             linkSignal(modeler, element, sed, null);
           } else if (v.startsWith(SIGNAL_EVENT_PREFIX)) {
-            // A catalogued event: the model's signal of that name, made once.
+            // A catalogued event or a deployed model's signal: the model's signal of
+            // that name, made once.
             const name = v.slice(SIGNAL_EVENT_PREFIX.length);
             linkSignal(modeler, element, sed, listSignals(modeler).find((x) => x.name === name) || createSignal(modeler, name));
           } else {
@@ -10499,6 +11108,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           eventCatalog(api).then((entries) => {
             if (note.isConnected) note.innerHTML = signalEventNote(entries, fsigname.value, sel.dataset.listens === "1");
           });
+        }
+        // And who receives it is asked of the renamed signal, from the same inventory.
+        const line = body.querySelector("#f-sigreceivers");
+        if (line && sigInventory) {
+          sigInventory.then((signals) => { if (line.isConnected) line.innerHTML = signalReceiversHTML(signals, fsigname.value); });
         }
       });
     }
@@ -13694,7 +14308,11 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // cross-highlights both and shows that element instance's facts and the variables
 // as they stood when it activated. The timeline is polled so a still-running
 // instance keeps gaining steps live.
-export async function mountInstanceReplay(root, { api, toast, key }) {
+// mayUse is the Console's role check (app.js). The Variables tab asks it before
+// offering a reference as a link; left out, every link is offered — the answer the
+// Console gives when nothing is enforced, and the server refuses a page the caller
+// may not open either way.
+export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
@@ -13767,6 +14385,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
         </div>
       </div>
       <div class="dec-pop" id="dec-pop" hidden></div>
+      <div class="dec-pop ref-pop" id="ref-pop" role="tooltip" hidden></div>
     </div>`;
 
   let lib;
@@ -13826,7 +14445,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
       fromProcessDefKey: tl.processDefKey,
       // The replay is a fold of the instance's history and the migration changes what
       // that history means, so it is re-read from scratch rather than patched.
-      onDone: () => mountInstanceReplay(root, { api, toast, key }),
+      onDone: () => mountInstanceReplay(root, { api, toast, key, mayUse }),
     }));
   }
 
@@ -13869,7 +14488,11 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   const decEl = root.querySelector("#tab-decisions");
   const dataEl = root.querySelector("#tab-data");
   const decPop = root.querySelector("#dec-pop");
+  const refPop = root.querySelector("#ref-pop");
   const speedSel = root.querySelector("#speed");
+  // What the Variables tab's values name — a person, a process, a product — read once
+  // for this view, and drawn again when a directory arrives (varrefs.js).
+  const refs = createRefResolver({ api, mayUse, onLoad: () => renderVarRows() });
 
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
@@ -14414,7 +15037,10 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
           <span class="peek">${esc(jsonPeek(v.value))}</span></button>`;
     } else {
       const cls = v.kind === "boolean" ? "bool" : v.kind === "number" ? "num" : v.kind === "null" ? "null" : "str";
-      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>`;
+      // A value that is somebody's or something's id keeps its place and is named beside
+      // it: the stored value is still what the row shows first and what it copies.
+      const ref = v.kind === "string" ? refChipHTML(refs.refOf(v.value)) : "";
+      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
     }
     const typeBadge = complex
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
@@ -14513,6 +15139,7 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (!body) return;
     const f = varFilter.trim().toLowerCase();
     const shown = shownVars();
+    refs.want(shown.filter((v) => v.kind === "string").map((v) => v.value));
     varsEl.querySelector("#v-count").textContent = `${shown.length} variable${shown.length === 1 ? "" : "s"}`;
     body.innerHTML = shown.length
       ? shown.map(varRow).join("")
@@ -14617,6 +15244,8 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
     if (ctx !== varsContext) {
       varsContext = ctx;
       expandedVars.clear();
+      // The chip a reference card was explaining is not in the next set of rows.
+      refPop.hidden = true;
     }
     varsEl.querySelector("#v-scope").innerHTML = scope;
     varsEl.querySelector("#v-copyall").innerHTML = copyAllBtn(curVarList);
@@ -16007,6 +16636,31 @@ export async function mountInstanceReplay(root, { api, toast, key }) {
   });
   decEl.addEventListener("focusin", (e) => { const row = e.target.closest(".res-row.hoverable"); if (row) showDecPop(row); });
   decEl.addEventListener("focusout", hideDecPop);
+
+  // Variables tab: hovering (or focusing) a reference says what its id names. The card
+  // is built from the resolver, not from the chip's markup, so it says what the
+  // directory says.
+  const showRefPop = (chip) => {
+    const html = refPopHTML(refs.refOf(chip.dataset.ref));
+    if (!html) return;
+    refPop.innerHTML = html;
+    refPop.hidden = false;
+    const box = chip.getBoundingClientRect();
+    const top = box.top - refPop.offsetHeight - 8;
+    refPop.style.left = Math.max(8, Math.min(box.left, window.innerWidth - refPop.offsetWidth - 8)) + "px";
+    refPop.style.top = (top < 8 ? box.bottom + 8 : top) + "px";
+  };
+  const hideRefPop = () => { refPop.hidden = true; };
+  varsEl.addEventListener("pointerover", (e) => {
+    const chip = e.target.closest(".c-ref");
+    if (chip && varsEl.contains(chip)) showRefPop(chip);
+  });
+  varsEl.addEventListener("pointerout", (e) => {
+    const chip = e.target.closest(".c-ref");
+    if (chip && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest(".c-ref") === chip)) hideRefPop();
+  });
+  varsEl.addEventListener("focusin", (e) => { const chip = e.target.closest(".c-ref"); if (chip) showRefPop(chip); });
+  varsEl.addEventListener("focusout", hideRefPop);
 
   await poll();
   renderInspector();

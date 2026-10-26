@@ -56,6 +56,19 @@
         posted.textContent = "—";
         resultBox.textContent = String(await testWorkerFlow({ api, toast, worker }));
       };
+      // An Entra Worker's edit dialog, for the form-lookup switch
+      // (ADR-0473).
+      window.__editEntra = async (formLookups) => {
+        window.__posted = [];
+        const { editWorkerFlow } = await import("/workerdialog.js");
+        const ENTRA = { id: "c3", name: "ucc_entra", kind: "entra", enabled: true, credentialsRef: "entra-ucc", formLookups };
+        editWorkerFlow({ api, toast, worker: ENTRA, reload: () => {} });
+      };
+      window.__editMail = async () => {
+        window.__posted = [];
+        const { editWorkerFlow } = await import("/workerdialog.js");
+        editWorkerFlow({ api, toast, worker: MAIL, reload: () => {} });
+      };
       document.getElementById("check-mail").addEventListener("click", run(MAIL));
       document.getElementById("check-sql").addEventListener("click", run(SQL));
       window.__ready = true;

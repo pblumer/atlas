@@ -72,7 +72,8 @@ const (
 	KindFixed ApprovalKind = "fixed"
 	// KindRole routes to whoever holds a named group; any one of them may approve.
 	KindRole ApprovalKind = "role"
-	// KindSuperior routes to the orderer's line manager, resolved from the directory.
+	// KindSuperior routes to the orderer's line manager, as the orderer's account
+	// records it (ADR-0470).
 	KindSuperior ApprovalKind = "superior"
 )
 

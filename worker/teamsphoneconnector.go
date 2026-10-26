@@ -25,6 +25,10 @@ const (
 	// teamsPhoneMockUsersEnv names the users resolve-users finds in mock mode; unset,
 	// every name resolves.
 	teamsPhoneMockUsersEnv = teamsPhoneEnvPrefix + "MOCK_USERS"
+	// teamsPhoneMockNumbersEnv names the Calling Plan and Operator Connect numbers the
+	// mock tenant has, which are also the inventory list-free-phone-numbers offers from;
+	// unset, it has every number and lists none.
+	teamsPhoneMockNumbersEnv = teamsPhoneEnvPrefix + "MOCK_NUMBERS"
 	// teamsPhoneTimeoutEnv bounds one job's PowerShell run.
 	teamsPhoneTimeoutEnv = teamsPhoneEnvPrefix + "TIMEOUT"
 	// teamsPhonePwshEnv names the PowerShell 7 executable; unset, pwsh on the PATH.
@@ -76,7 +80,8 @@ func teamsPhoneRegistryFromEnv(env func(string) string) (*teamsphone.Registry, [
 			// The model is identical either way; what differs is which worker leases its
 			// jobs. So a mock tenant needs no credential — that is the point of trying a
 			// process before anybody has registered an app.
-			reg.Register(name, teamsphone.NewMockTenant(splitAndTrim(env(teamsPhoneMockUsersEnv))...))
+			reg.Register(name, teamsphone.NewMockTenant(splitAndTrim(env(teamsPhoneMockUsersEnv))...).
+				WithNumbers(splitAndTrim(env(teamsPhoneMockNumbersEnv))...))
 			continue
 		}
 		cred, err := teamsPhoneCredential(name, key, env)

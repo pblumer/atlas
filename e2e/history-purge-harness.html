@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas history purge and storage reclaim e2e harness</title>
+    <!-- Drives the real api/web/historypurge.js dialog and the real api/web/storage.js
+         card against a mock `api` that answers the way the server does
+         (ADR-0486): the preview counts and changes
+         nothing, the delete hands back bounded batches with `remaining` and a cursor, and
+         the checkpoint control answers one pass. The page scaffolding is the test's own —
+         app.js boots the whole console on import and cannot be loaded here — so this
+         proves the flows, not app.js's wiring of them. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="toast" hidden></div>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="purge">Delete finished (two versions)</button>
+      <button class="btn" id="purge-off">Delete finished (switched off)</button>
+      <button class="btn" id="purge-fail">Delete finished (fails on batch 2)</button>
+      <button class="btn" id="purge-slow">Delete finished (slow batches)</button>
+      <button class="btn" id="storage-off">Storage card (compaction off)</button>
+      <button class="btn" id="storage-on">Storage card (compaction on)</button>
+      <button class="btn" id="storage-hang">Storage card (checkpoint status never answers)</button>
+    </div>
+    <div id="storage-alert-slot"></div>
+    <div id="storage-card-slot"></div>
+    <script type="module">
+      import { purgeFinishedFlow } from "/historypurge.js";
+      import { renderStorage } from "/storage.js";
+
+      const VERSIONS = [
+        { key: 101, processId: "bulk", version: 1 },
+        { key: 102, processId: "bulk", version: 2, versionTag: "fix" },
+      ];
+      // How many finished instances each version holds, and how many are running.
+      const FINISHED = { 101: 3, 102: 2 };
+      const RUNNING = { 101: 0, 102: 4 };
+
+      window.__calls = [];
+      window.__toasts = [];
+      window.__confirms = [];
+      const toast = (msg, kind) => window.__toasts.push({ msg, kind });
+
+      const makeAPI = ({ enabled = true, failOn = 0, slow = false, compaction = false, hang = false } = {}) => {
+        const left = { ...FINISHED };
+        let posts = 0;
+        return async (method, url) => {
+          window.__calls.push({ method, url });
+          const u = new URL(url, location.origin);
+          const m = u.pathname.match(/^\/api\/v1\/processes\/(\d+)\/history-purge$/);
+          if (m && method === "GET") {
+            const key = Number(m[1]);
+            return {
+              processDefKey: key, processId: "bulk", version: key - 100,
+              before: 1, finished: left[key], running: RUNNING[key],
+              gate: "durable", historyTtlSeconds: 0, retentionMaxAgeSeconds: 0,
+              enabled, confirm: "bulk",
+            };
+          }
+          if (m && method === "POST") {
+            posts++;
+            if (failOn && posts === failOn) {
+              const err = new Error("the server is shutting down");
+              err.status = 503;
+              throw err;
+            }
+            if (slow) await new Promise((r) => setTimeout(r, 150));
+            const key = Number(m[1]);
+            const take = Math.min(2, left[key]);
+            left[key] -= take;
+            return {
+              processDefKey: key, processId: "bulk", version: key - 100, before: 1,
+              purged: take, held: 0, remaining: left[key] > 0,
+              nextCursor: left[key] > 0 ? `${1000 + posts}:${key * 10 + posts}` : undefined,
+            };
+          }
+          if (u.pathname === "/api/v1/storage") {
+            return {
+              state: "ok", reserveBytes: 1 << 30, resumeBytes: 1.25 * (1 << 30),
+              fileSystems: [{ paths: ["/data"], totalBytes: 400e9, usedBytes: 160e9, availableBytes: 240e9, usedPercent: 40, decides: true }],
+              atlas: { walBytes: 97e9, walSegments: 1449, stateBytes: 25e9 },
+            };
+          }
+          if (u.pathname === "/api/v1/checkpoints" && method === "GET") {
+            // A server re-reading tens of GiB of checkpoints answers after minutes, or a
+            // proxy gives up first: the card must not wait for it.
+            if (hang) return new Promise(() => {});
+            return {
+              enabled: true, intervalSeconds: 300, keep: 3, compaction, root: "/data/checkpoints",
+              checkpoints: [{ position: 900, createdAt: 1 }], walSegments: 1449, walBytes: 97e9,
+              lastPass: { at: 1761390000000000000, position: 900, compaction, segmentsRemoved: 0 },
+            };
+          }
+          if (u.pathname === "/api/v1/checkpoints" && method === "POST") {
+            const compacted = compaction || u.searchParams.get("compact") === "true";
+            return { at: 1761390000000000000, position: 920, compaction: compacted, segmentsRemoved: compacted ? 140 : 0 };
+          }
+          throw new Error("unexpected " + method + " " + url);
+        };
+      };
+
+      const open = (opts) => async () => {
+        window.__calls = [];
+        window.__result = await purgeFinishedFlow({
+          api: makeAPI(opts), toast, processId: "bulk", processName: "Bulk check", versions: VERSIONS,
+          onDone: () => { window.__reloaded = true; },
+        });
+      };
+      document.getElementById("purge").addEventListener("click", open({}));
+      document.getElementById("purge-off").addEventListener("click", open({ enabled: false }));
+      document.getElementById("purge-fail").addEventListener("click", open({ failOn: 2 }));
+      document.getElementById("purge-slow").addEventListener("click", open({ slow: true }));
+
+      const storage = (compaction) => async () => {
+        window.__calls = [];
+        await renderStorage({
+          alertSlot: document.getElementById("storage-alert-slot"),
+          cardSlot: document.getElementById("storage-card-slot"),
+          api: makeAPI({ compaction }),
+          confirm: (msg) => { window.__confirms.push(msg); return window.__confirmAnswer !== false; },
+        });
+        window.__storageReady = true;
+      };
+      document.getElementById("storage-off").addEventListener("click", storage(false));
+      document.getElementById("storage-on").addEventListener("click", storage(true));
+      document.getElementById("storage-hang").addEventListener("click", () => {
+        window.__calls = [];
+        // Not awaited: the reading never completes, and the card has to be drawn anyway.
+        renderStorage({
+          alertSlot: document.getElementById("storage-alert-slot"),
+          cardSlot: document.getElementById("storage-card-slot"),
+          api: makeAPI({ hang: true }),
+        });
+      });
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>

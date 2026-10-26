@@ -3,6 +3,7 @@ package sharepoint
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/expr"
@@ -31,7 +32,7 @@ func TestRegistry(t *testing.T) {
 
 type stubTokensClient struct{}
 
-func (stubTokensClient) CreateItem(context.Context, ItemRequest) (any, error) { return nil, nil }
+func (stubTokensClient) Do(context.Context, Request) (any, error) { return nil, nil }
 
 // TestToExprKind covers every stored-variable-kind branch of the FEEL binding map.
 func TestToExprKind(t *testing.T) {
@@ -72,5 +73,35 @@ func TestItemVariableKinds(t *testing.T) {
 		if got.Kind != c.want {
 			t.Errorf("%s: kind = %v, want %v", c.name, got.Kind, c.want)
 		}
+	}
+}
+
+// TestMockContentBudget holds the mockup to its content budget: an upload that would
+// pass it is refused, a replacement counts only what it adds, and a delete gives back
+// what it frees.
+func TestMockContentBudget(t *testing.T) {
+	m := NewMockSites(nil).Site("intranet")
+	m.budget = 10
+	up := func(path, content string) error {
+		_, err := m.Do(context.Background(), Request{Operation: "upload-file", Site: "contoso.sharepoint.com", Path: path, Content: content})
+		return err
+	}
+	if err := up("a.txt", "123456"); err != nil {
+		t.Fatal(err)
+	}
+	if err := up("b.txt", "12345"); err == nil || !strings.Contains(err.Error(), "at most") {
+		t.Fatalf("upload past the budget = %v, want a refusal", err)
+	}
+	if err := up("a.txt", "1234567890"); err != nil {
+		t.Fatalf("replacing a file within the budget: %v", err)
+	}
+	if _, err := m.Do(context.Background(), Request{Operation: "delete-file", Site: "contoso.sharepoint.com", Path: "a.txt"}); err != nil {
+		t.Fatal(err)
+	}
+	if m.stored != 0 {
+		t.Errorf("stored = %d after the only file went, want 0", m.stored)
+	}
+	if err := up("b.txt", "12345"); err != nil {
+		t.Errorf("upload after a delete freed the budget: %v", err)
 	}
 }

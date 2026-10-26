@@ -1,0 +1,87 @@
+{
+  "type": "default",
+  "id": "m365-postfachzugriff-pruefung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugriff prüfen · Review access**\n\nDie Entscheidungstabelle verlangt für diese Kombination eine Zusatzfreigabe. · The decision table requires an additional approval for this combination."
+    },
+    {
+      "key": "hinweis",
+      "type": "textfield",
+      "label": "Hinweis der Regel · Rule note",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "postfach",
+      "type": "textfield",
+      "label": "Postfach · Mailbox",
+      "disabled": true
+    },
+    {
+      "key": "postfachtyp",
+      "type": "textfield",
+      "label": "Art · Type",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zugriffsart",
+      "type": "textfield",
+      "label": "Zugriffsart · Access type",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "person",
+      "type": "textfield",
+      "label": "Person",
+      "disabled": true
+    },
+    {
+      "key": "anlass",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "disabled": true
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Freigeben · Approve",
+          "value": "freigeben"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "ablehnen"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "pruefkommentar",
+      "type": "textarea",
+      "label": "Kommentar (wird der bestellenden Person gezeigt) · Comment (shown to the orderer)",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

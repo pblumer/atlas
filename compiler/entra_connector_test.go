@@ -184,6 +184,10 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"advancedQuery on a delta query", `connector="c" operation="delta-groups" resultVariable="r" advancedQuery="true"`, "not a listing"},
 		{"deltaLink on a listing", `connector="c" operation="list-users" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
 		{"deltaLink on a single-object read", `connector="c" operation="get-user" userId="u" deltaLink="https://x"`, "not a change-tracking query"},
+		{"get-user-manager without a user", `connector="c" operation="get-user-manager" resultVariable="r"`, "userId"},
+		{"get-user-manager without a result variable", `connector="c" operation="get-user-manager" userId="u"`, "resultVariable"},
+		{"filter on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" filter="x eq 1"`, "applies to list-users"},
+		{"maxUsers on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" maxUsers="10"`, "applies to list-users"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
@@ -225,7 +229,7 @@ func TestEntraConnectorListUsers(t *testing.T) {
 // A single-object read may name the properties it wants: Graph's default set for a
 // user leaves out assignedLicenses and employeeId (ADR-0172, amended).
 func TestEntraConnectorGetUserTakesASelect(t *testing.T) {
-	for _, op := range []string{`operation="get-user" userId="=ResourceAccounts.CallQueueObjectId"`, `operation="get-group" groupId="g"`} {
+	for _, op := range []string{`operation="get-user" userId="=ResourceAccounts.CallQueueObjectId"`, `operation="get-group" groupId="g"`, `operation="get-user-manager" userId="=antrag.upn"`} {
 		cp, d := entraDetail(t, `connector="c" `+op+` resultVariable="r" select="id,assignedLicenses,employeeId"`)
 		if got := cp.Intern(d.EntraSelect); got != "id,assignedLicenses,employeeId" {
 			t.Errorf("%s: select = %q", op, got)

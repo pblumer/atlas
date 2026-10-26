@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "m365-rufnummer-dienst",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Dienstnummer wählen · Choose a service number**\n\nEine freie Dienstnummer aus dem Nummernplan wählen und hier festhalten; der Teams-Phone-Worker weist sie dem Ressourcenkonto danach zu. · Choose a free service number from the numbering plan and record it here; the Teams Phone worker then assigns it to the resource account."
+    },
+    {
+      "type": "text",
+      "text": "**Die zuletzt gewählte Nummer ist bereits vergeben.** Bitte eine andere wählen. · **The number chosen last is already assigned.** Please choose another one.",
+      "conditional": {
+        "hide": "=nummerVergeben != true"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ressourcenkonto",
+      "type": "textfield",
+      "label": "Ressourcenkonto · Resource account",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "rufnummer",
+      "type": "textfield",
+      "label": "Rufnummer (E.164) · Phone number (E.164)",
+      "validate": {
+        "required": true,
+        "pattern": "^\\+[0-9]{8,15}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

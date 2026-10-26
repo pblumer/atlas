@@ -69,16 +69,18 @@ func TestTeamsPhoneTaskCompiles(t *testing.T) {
 	}
 }
 
-// The static settings are compiled structure: the compiler applies each default, so a
-// job always carries the word, and the runtime interprets nothing (I5).
-func TestTeamsPhoneSettingsAreDefaultedAtDeploy(t *testing.T) {
+// A static setting the model authored is compiled to its canonical word; one it left
+// out does not travel at all. Whether the model named a setting is what tells an
+// existing queue's setting to change from one to leave alone, so the compiler must not
+// invent the default the worker applies to a new queue (ADR-0463, amendment 2026-10-20).
+func TestTeamsPhoneSettingsTravelOnlyWhenAuthored(t *testing.T) {
 	_, d := teamsPhoneDetail(t, `connector="c" operation="ensure-call-queue" name="CQ Support" resourceAccountId="id-1" routingMethod="Round-Robin" resultVariable="q"`)
-	for name, want := range map[string]string{
-		"routingMethod": "round-robin", "presenceBasedRouting": "true", "conferenceMode": "true", "allowOptOut": "true",
-	} {
-		v, ok := teamsPhoneArg(d, name)
-		if !ok || v.Literal != want || v.Expr != nil {
-			t.Errorf("%s = %+v (present %v), want the literal %q", name, v, ok, want)
+	if v, ok := teamsPhoneArg(d, "routingMethod"); !ok || v.Literal != "round-robin" || v.Expr != nil {
+		t.Errorf("routingMethod = %+v (present %v), want the literal round-robin", v, ok)
+	}
+	for _, name := range []string{"presenceBasedRouting", "conferenceMode", "allowOptOut"} {
+		if v, ok := teamsPhoneArg(d, name); ok {
+			t.Errorf("%s travels as %+v, though the model did not author it", name, v)
 		}
 	}
 }

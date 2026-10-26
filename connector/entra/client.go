@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/connector/clientreg"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -145,6 +147,34 @@ func NewGraphClient(tokens oauth2.TokenSource, baseURL string, httpc *http.Clien
 // BaseURL returns the Graph root this client calls.
 func (c *GraphClient) BaseURL() string { return c.baseURL }
 
+// GraphError is a request Graph answered with a non-2xx status: the status, and Graph's
+// own error code and message when the body carried its envelope. It is a type rather
+// than a formatted string because one answer is something a process may have a path
+// for — a user that does not exist (see [CodeUserNotFound]) — and telling it apart by
+// matching text would break on the first change of wording.
+type GraphError struct {
+	Method string
+	Path   string
+	Status int
+	// Code and Message are Graph's, empty when the body was not its envelope; Body is
+	// the raw body then.
+	Code    string
+	Message string
+	Body    string
+	// RetryAfter is Graph's Retry-After advice on a throttled (429) or unavailable
+	// (503) answer, zero when it gave none. Graph keeps counting a throttled client's
+	// requests, so waiting what it says is the fastest way back — and for a form lookup
+	// it is the one useful thing to tell the person.
+	RetryAfter time.Duration
+}
+
+func (e *GraphError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("entra: %s %s returned HTTP %d: %s: %s", e.Method, e.Path, e.Status, e.Code, e.Message)
+	}
+	return fmt.Sprintf("entra: %s %s returned HTTP %d: %s", e.Method, e.Path, e.Status, e.Body)
+}
+
 // graphError is the error envelope Graph returns. Surfacing its code and message is
 // the difference between "HTTP 400" and "Request_BadRequest: Property netId is
 // invalid", which is the whole of what an operator needs from a failed provisioning
@@ -208,7 +238,7 @@ func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
 		return nil, fmt.Errorf("entra: read %s %s response: %w", r.Method, r.Path, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, graphFailure(r.Method, r.Path, resp.StatusCode, raw)
+		return nil, graphFailure(r.Method, r.Path, resp, raw)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, nil
@@ -241,7 +271,7 @@ func (c *GraphClient) readBinary(r Request, resp *http.Response) (any, error) {
 		return nil, fmt.Errorf("entra: read %s %s response: %w", r.Method, r.Path, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return nil, graphFailure(r.Method, r.Path, resp.StatusCode, data)
+		return nil, graphFailure(r.Method, r.Path, resp, data)
 	}
 	if int64(len(data)) > max {
 		return nil, fmt.Errorf("entra: %s %s returned more than the %d byte limit; it is refused rather than cut short, because a truncated image passes every format check and is still broken",
@@ -289,10 +319,33 @@ func (c *GraphClient) resolve(path string) (string, error) {
 }
 
 // graphFailure turns a non-2xx response into the most specific error the body allows.
-func graphFailure(method, path string, status int, raw []byte) error {
+func graphFailure(method, path string, resp *http.Response, raw []byte) error {
+	e := &GraphError{Method: method, Path: path, Status: resp.StatusCode,
+		RetryAfter: retryAfter(resp.Header.Get("Retry-After"), time.Now())}
 	var ge graphError
 	if err := json.Unmarshal(raw, &ge); err == nil && ge.Error.Code != "" {
-		return fmt.Errorf("entra: %s %s returned HTTP %d: %s: %s", method, path, status, ge.Error.Code, ge.Error.Message)
+		e.Code, e.Message = ge.Error.Code, ge.Error.Message
+		return e
 	}
-	return fmt.Errorf("entra: %s %s returned HTTP %d: %s", method, path, status, strings.TrimSpace(string(raw)))
+	e.Body = strings.TrimSpace(string(raw))
+	return e
+}
+
+// retryAfter reads a Retry-After header: a number of seconds, which is what Graph
+// sends, or an HTTP date. Anything else, a date in the past included, is no advice.
+func retryAfter(h string, now time.Time) time.Duration {
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(h); err == nil {
+		if secs <= 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if at, err := http.ParseTime(h); err == nil && at.After(now) {
+		return at.Sub(now).Round(time.Second)
+	}
+	return 0
 }

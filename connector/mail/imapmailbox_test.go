@@ -82,7 +82,7 @@ func TestIMAPWatchReadsForwardFromTheCursor(t *testing.T) {
 	if !e.Unread || e.Body != "Grüezi miteinand" || e.BodyTruncated {
 		t.Errorf("unread %v, body %q, cut %v", e.Unread, e.Body, e.BodyTruncated)
 	}
-	if len(e.Attachments) != 1 || e.Attachments[0] != (Attachment{Name: "Rechnung.pdf", ContentType: "application/pdf", Size: 1000}) {
+	if len(e.Attachments) != 1 || e.Attachments[0] != (Attachment{ID: "2", Name: "Rechnung.pdf", ContentType: "application/pdf", Size: 1000}) {
 		t.Errorf("attachments = %+v", e.Attachments)
 	}
 	if got := page.Items[1].Envelope.Body; got != "Hallo Bob" {

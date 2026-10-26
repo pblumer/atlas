@@ -390,3 +390,46 @@ func TestTheTwoHeadingsSurviveAnAgentsReadModifyWrite(t *testing.T) {
 		t.Errorf("the category did not survive: %q", after)
 	}
 }
+
+// TestImportingACatalogueAsksBeforeItReplaces: the tool forwards the plan and the
+// decisions, so an agent can show a person what differs and import only what they
+// chose (ADR-0467).
+func TestImportingACatalogueAsksBeforeItReplaces(t *testing.T) {
+	ts := newAtlas(t)
+	doc := func(name string) map[string]any {
+		return map[string]any{
+			"catalogs": []any{map[string]any{"id": "cat-mcp", "texts": map[string]any{"de": "MCP"}, "rank": 7,
+				"languages": []any{"de"}, "items": []any{"p-mcp"}}},
+			"products": []any{map[string]any{"id": "p-mcp", "homeCatalog": "cat-mcp", "state": "active",
+				"texts": map[string]any{"de": name}, "approval": map[string]any{"kind": "none"}}},
+		}
+	}
+	if text, isErr := callText(t, ts, "atlas_import_catalog", doc("Eins")); isErr {
+		t.Fatalf("first import = %q", text)
+	}
+	// The product is renamed on the server, and the document renames it too: both
+	// sides moved, so the import asks (ADR-0467, amended).
+	edit := `{"id":"p-mcp","homeCatalog":"cat-mcp","state":"active","texts":{"de":"Hier"},"approval":{"kind":"none"}}`
+	resp, err := ts.Client().Post(ts.URL+"/api/v1/catalog-products", "application/json", strings.NewReader(edit))
+	if err != nil || resp.StatusCode >= 300 {
+		t.Fatalf("edit the product: %v %v", resp, err)
+	}
+	_ = resp.Body.Close()
+	changed := doc("Zwei")
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); !isErr || !strings.Contains(text, "product:p-mcp") {
+		t.Fatalf("an undecided change = (%q, isErr=%v), want a refusal naming the product", text, isErr)
+	}
+	changed["dryRun"] = true
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"status":"changed"`) {
+		t.Fatalf("the plan = (%q, isErr=%v)", text, isErr)
+	}
+	delete(changed, "dryRun")
+	changed["overwrite"] = []any{"product:p-mcp"}
+	if text, isErr := callText(t, ts, "atlas_import_catalog", changed); isErr || !strings.Contains(text, `"updated":["product:p-mcp"]`) {
+		t.Fatalf("overwriting the product = (%q, isErr=%v)", text, isErr)
+	}
+	// Moved on in the document alone, the product is taken without a question.
+	if text, isErr := callText(t, ts, "atlas_import_catalog", doc("Drei")); isErr || !strings.Contains(text, `"status":"behind"`) {
+		t.Fatalf("a product only the document moved = (%q, isErr=%v)", text, isErr)
+	}
+}

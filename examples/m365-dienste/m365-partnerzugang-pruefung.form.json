@@ -1,0 +1,109 @@
+{
+  "type": "default",
+  "id": "m365-partnerzugang-pruefung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Partnerzugang prüfen · Review partner access**"
+    },
+    {
+      "key": "firma",
+      "type": "textfield",
+      "label": "Firma · Company",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname · First name",
+      "disabled": true
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname · Last name",
+      "disabled": true
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail · Email",
+      "disabled": true
+    },
+    {
+      "key": "ansprechperson",
+      "type": "textfield",
+      "label": "Interne Ansprechperson · Internal contact",
+      "disabled": true
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "disabled": true
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Freigeben · Approve",
+          "value": "freigeben"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "ablehnen"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "gueltigkeit",
+      "type": "radio",
+      "label": "Gültig für · Valid for",
+      "values": [
+        {
+          "label": "3 Monate · 3 months",
+          "value": "P90D"
+        },
+        {
+          "label": "6 Monate · 6 months",
+          "value": "P180D"
+        },
+        {
+          "label": "12 Monate · 12 months",
+          "value": "P365D"
+        }
+      ],
+      "defaultValue": "P180D",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initialpasswort · Initial password",
+      "description": "Muss bei der ersten Anmeldung geändert werden. · Must be changed at first sign-in.",
+      "validate": {
+        "required": true,
+        "minLength": 12
+      },
+      "conditional": {
+        "hide": "=entscheid != \"freigeben\""
+      }
+    }
+  ]
+}

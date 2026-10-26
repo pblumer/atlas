@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/importplan"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -31,7 +32,10 @@ const maxSourceEntries = 2000
 
 // handleExportApplicationSource streams an application's source tree as a
 // gzip-compressed tar. Viewer access is enough: this is the same content the
-// Modeler already shows whoever may open the application.
+// Modeler already shows whoever may open the application, and ?constants=true adds
+// the constants the application holds here, which its viewers may read as well
+// (ADR-0453). The records are read on the run loop and the tree rendered off it,
+// because naming what the drafts need compiles them.
 func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	proj, code, msg := s.authorizeProject(r, id, ScopeRoleViewer)
@@ -39,13 +43,23 @@ func (s *Server) handleExportApplicationSource(w http.ResponseWriter, r *http.Re
 		httpapi.Error(w, code, msg)
 		return
 	}
+	withConstants, err := boolQuery(r.URL.Query().Get("constants"), "constants")
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var (
-		files    []sourceFile
-		buildErr error
+		rec     sourceRecords
+		loadErr error
 	)
-	s.do(func() { files, buildErr = s.exportApplicationSource(proj) })
-	if buildErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "export source: "+buildErr.Error())
+	s.do(func() { rec, loadErr = s.loadApplicationSource(proj, withConstants) })
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "export source: "+loadErr.Error())
+		return
+	}
+	files, err := rec.tree()
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "export source: "+err.Error())
 		return
 	}
 	name := sourceArchiveName(files)
@@ -153,12 +167,28 @@ func cleanSourcePath(name string) (string, bool) {
 // point of the key being that a repository cloned into a server that has never
 // seen the application still knows what it is (ADR-0134).
 //
-// The archive is decoded off the run loop; resolving the application, authorizing
-// against it, and writing every artifact happen together in one turn of the loop.
+// ?dryRun=true answers the plan and writes nothing. An artifact that differs from
+// this server's is written only when ?overwrite= names it, kept when ?keep= names
+// it, and stops the import with 409 and the plan when neither does.
+//
+// The constants a tree carries are planned with the rest and set only for an
+// administrator. The answer names what the tree's processes need from this server —
+// server constants, application constants, configured workers — and how it answers
+// each once the import is in, so whoever imports learns before the first publish what
+// is still to be set up here.
+//
+// The archive is decoded, its decision models and its processes compiled off the run
+// loop; resolving the application, authorizing against it, planning, writing and
+// answering the needs happen together in one turn of the loop.
 func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.budgets().AppBundle)
 	defer r.Body.Close()
 
+	decide, err := importplan.Parse(r.URL.Query())
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	files, err := s.readSourceArchive(r.Body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
@@ -169,17 +199,24 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	ownerID := ""
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
-		ownerID = p.UserID
+	if err := s.checkSourceModels(r.Context(), man, byPath); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
 	}
-	var (
-		res      sourceImportResult
-		applyErr error
-	)
-	s.do(func() {
-		res, applyErr = s.applySourceTree(man, byPath, ownerID, func(app project) (int, string) {
+
+	sources := make([]needSource, 0, len(man.Processes))
+	for _, p := range man.Processes {
+		sources = append(sources, needSource{ID: p.ID, XML: byPath[p.Path]})
+	}
+	needs, unread := needsOf(sources)
+	offered, err := treeConstants(man, byPath)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	caller := sourceCaller{
+		authorize: func(app project) (int, string) {
 			// Editor is the bar: an import rewrites the application's artifacts. An
 			// application this server has never seen is created instead, which needs no
 			// role — it is the same act as creating one through the API.
@@ -191,15 +228,71 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 				msg = "no application with that key"
 			}
 			return code, msg
-		})
+		},
+		admin: s.isAdmin(r),
+		audit: func(appID string, changes []constantChange) error {
+			return s.recordConstantChanges(r, appID, changes)
+		},
+	}
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+		caller.ownerID = p.UserID
+	}
+	var (
+		res      sourceImportResult
+		applyErr error
+	)
+	s.do(func() {
+		res, applyErr = s.applySourceTree(man, byPath, caller, decide)
+		answer := func(plan *sourceImportResult) {
+			plan.Needs = s.answerNeedsOnLoop(plan.ApplicationID, needs, pendingConstants(*plan, offered))
+			plan.NeedsUnread = unread
+		}
+		var undecided sourceUndecided
+		switch {
+		case applyErr == nil:
+			answer(&res)
+		case errors.As(applyErr, &undecided):
+			answer(&undecided.plan)
+			applyErr = undecided
+		}
 	})
-	var refusal sourceRefusal
+	var (
+		refusal   sourceRefusal
+		undecided sourceUndecided
+	)
 	switch {
 	case errors.As(applyErr, &refusal):
 		httpapi.Error(w, refusal.status, refusal.msg)
+	case errors.As(applyErr, &undecided):
+		httpapi.JSON(w, http.StatusConflict, map[string]any{
+			"error": undecided.Error(), "undecided": undecided.refs, "plan": undecided.plan,
+		})
 	case applyErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "import source: "+applyErr.Error())
 	default:
 		httpapi.JSON(w, http.StatusOK, res)
 	}
+}
+
+// pendingConstants is what an import's plan sets that the stores do not hold yet:
+// the offered constants whose outcome writes, for a caller who may write them. After
+// a real import they are held already, and answering them again changes nothing.
+func pendingConstants(plan sourceImportResult, offered []heldConstant) map[string]heldConstant {
+	notSet := map[string]bool{}
+	for _, name := range plan.ConstantsNotSet {
+		notSet[name] = true
+	}
+	writes := map[string]bool{}
+	for _, a := range plan.Artifacts {
+		if name, ok := strings.CutPrefix(a.Ref, "constant:"); ok && importplan.Writes(a.Outcome) && !notSet[name] {
+			writes[name] = true
+		}
+	}
+	out := map[string]heldConstant{}
+	for _, c := range offered {
+		if writes[c.Name] {
+			out[c.Name] = c
+		}
+	}
+	return out
 }

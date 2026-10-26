@@ -364,3 +364,9 @@ recovery behaves exactly as it did before.
    Both are admin-gated like backup/restore, and both are deliberately **not** MCP tools:
    this is storage housekeeping over the data directory, not something an agent drives a
    scenario with, and the control deletes WAL segments when compaction is on.
+
+   *Extended by ADR-0486:* `POST
+   /api/v1/checkpoints?compact=true` compacts on that one pass on a server started without
+   `--compact-wal`, with every gate above; `--compact-wal` also reads `ATLAS_COMPACT_WAL`; and
+   `GET /api/v1/checkpoints?verify=false` describes the checkpoints from their manifests
+   without re-hashing their state files. The control stays off MCP.

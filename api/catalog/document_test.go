@@ -87,18 +87,42 @@ func TestADocumentImportsAWholeShopAndPublishesIt(t *testing.T) {
 	}
 }
 
+// importDocWith is importDoc with a query: the plan, and the decisions.
+func importDocWith(t *testing.T, s *Service, p *httpapi.Principal, query, body string) (int, map[string]any) {
+	t.Helper()
+	rec := call(t, s.HandleImportDocument, p, "POST", "/x"+query, body)
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return rec.Code, out
+}
+
 // TestImportingTheSameDocumentAgainUpdatesWhatItCreated: the ids are the document's,
-// so a second import finds its records and updates them — revisions move on, the owner
-// and the creation stay — and nothing is created twice.
+// so a second import finds its records — nothing is created twice. What is as the
+// document has it is not written again; what differs is written only when the
+// importer says so, and then the revision moves on while the owner and the creation
+// stay (ADR-0467).
 func TestImportingTheSameDocumentAgainUpdatesWhatItCreated(t *testing.T) {
 	s := newService(t)
 	if code, out := importDoc(t, s, importer, shopDocument); code != http.StatusOK {
 		t.Fatalf("first import = %d %v", code, out)
 	}
+	if code, out := importDoc(t, s, importer, shopDocument); code != http.StatusOK || len(out["updated"].([]any)) != 0 || len(out["created"].([]any)) != 0 {
+		t.Fatalf("the same document again = %d %v, want nothing written", code, out)
+	}
 	changed := strings.Replace(shopDocument, `"texts":{"de":"Parkplatz"}`, `"texts":{"de":"Parkplatz Nord"}`, 1)
-	code, out := importDoc(t, s, importer, changed)
-	if code != http.StatusOK || len(out["updated"].([]any)) != 4 || len(out["created"].([]any)) != 0 {
-		t.Fatalf("second import = %d %v, want four updated", code, out)
+	if code, out := importDoc(t, s, importer, changed); code != http.StatusConflict || asJSON(out["undecided"]) != `["product:parking"]` {
+		t.Fatalf("a change nobody decided = %d %v, want 409 naming the product", code, out)
+	}
+	if code, out := importDocWith(t, s, importer, "?dryRun=true", changed); code != http.StatusOK || out["dryRun"] != true ||
+		!strings.Contains(asJSON(out["artifacts"]), `"outcome":"undecided","ref":"product:parking","status":"changed"`) {
+		t.Fatalf("the plan = %d %v", code, out)
+	}
+	if code, out := importDocWith(t, s, importer, "?keep=product:parking", changed); code != http.StatusOK || len(out["updated"].([]any)) != 0 {
+		t.Fatalf("keeping the product = %d %v, want nothing written", code, out)
+	}
+	code, out := importDocWith(t, s, importer, "?overwrite=product:parking", changed)
+	if code != http.StatusOK || asJSON(out["updated"]) != `["product:parking"]` || len(out["created"].([]any)) != 0 {
+		t.Fatalf("second import = %d %v, want the product updated", code, out)
 	}
 	var (
 		parking Item
@@ -110,7 +134,7 @@ func TestImportingTheSameDocumentAgainUpdatesWhatItCreated(t *testing.T) {
 		cat, _, _ = s.store.Catalog("cat-verwaltung")
 		all, _ = s.store.Catalogs()
 	})
-	if parking.Texts["de"] != "Parkplatz Nord" || parking.Revision != 2 || cat.Revision != 2 || cat.OwnerID != "usr_pm" || len(all) != 2 {
+	if parking.Texts["de"] != "Parkplatz Nord" || parking.Revision != 2 || cat.Revision != 1 || cat.OwnerID != "usr_pm" || len(all) != 2 {
 		t.Fatalf("after the second import: parking %+v, catalogue %+v, %d catalogues", parking, cat, len(all))
 	}
 }
@@ -249,7 +273,7 @@ func TestADocumentCannotWriteWhatItsImporterDoesNotMaintain(t *testing.T) {
 	// may not change who maintains it.
 	shared := strings.Replace(shopDocument, `"groups":["grp-alle"],`,
 		`"groups":["grp-alle"],"members":[{"ref":{"type":"user","id":"usr_editor"},"role":"editor"}],`, 1)
-	if code, out := importDoc(t, s, owner, shared); code != http.StatusOK {
+	if code, out := importDocWith(t, s, owner, "?overwrite=catalog:cat-verwaltung", shared); code != http.StatusOK {
 		t.Fatalf("sharing = %d %v", code, out)
 	}
 	only := `{"catalogs":[` + catalogOf(t, shared, "cat-verwaltung") + `]}`
@@ -264,7 +288,7 @@ func TestADocumentCannotWriteWhatItsImporterDoesNotMaintain(t *testing.T) {
 	// Reading a catalogue is not maintaining it: a viewer sees the home and is still
 	// refused a product in it.
 	viewed := strings.Replace(shared, `"role":"editor"}]`, `"role":"editor"},{"ref":{"type":"user","id":"usr_pm"},"role":"viewer"}]`, 1)
-	if code, out := importDoc(t, s, owner, viewed); code != http.StatusOK {
+	if code, out := importDocWith(t, s, owner, "?overwrite=catalog:cat-verwaltung", viewed); code != http.StatusOK {
 		t.Fatalf("granting a viewer = %d %v", code, out)
 	}
 	if code, out := importDoc(t, s, importer, `{"products":[{"id":"x","homeCatalog":"cat-verwaltung"}]}`); code != http.StatusForbidden ||

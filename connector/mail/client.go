@@ -60,6 +60,11 @@ type Message struct {
 	// are empty for every message that is not a reply (ADR-0438).
 	InReplyTo  string
 	References string
+	// Raw, when set, is the whole message already framed — a forward an IMAP mailbox
+	// built from the original (ADR-0478) — and is
+	// submitted as it is, to the envelope To, Cc and Bcc make. Only the SMTP transport
+	// is ever handed one: it is the one an IMAP mailbox sends through.
+	Raw []byte
 }
 
 // Client sends a Message through one configured mail provider. It is an interface so
@@ -142,8 +147,7 @@ func (c *SMTPClient) Mailbox() (Mailbox, error) {
 		return nil, c.mailboxErr
 	}
 	if c.mailbox == nil {
-		return nil, fmt.Errorf("mail: this SMTP worker has no IMAP endpoint, so it cannot read a mailbox " +
-			"(set the worker's mailbox endpoint, e.g. imaps://imap.example.com:993)")
+		return nil, errNoIMAPEndpoint
 	}
 	return c.mailbox, nil
 }
@@ -205,7 +209,11 @@ func (c *SMTPClient) Send(ctx context.Context, m Message) error {
 	if len(rcpts) == 0 {
 		return fmt.Errorf("mail: message has no recipients")
 	}
-	if err := c.send(ctx, c.conn.Endpoint, c.auth(), from, rcpts, buildRFC822(m, from)); err != nil {
+	msg := m.Raw
+	if msg == nil {
+		msg = buildRFC822(m, from)
+	}
+	if err := c.send(ctx, c.conn.Endpoint, c.auth(), from, rcpts, msg); err != nil {
 		return fmt.Errorf("mail: send via %s: %w", c.conn.Endpoint, err)
 	}
 	return nil

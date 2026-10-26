@@ -108,11 +108,7 @@ func (s *Server) handleEventListeners(w http.ResponseWriter, _ *http.Request) {
 			}
 			for _, mp := range d.cp.MessageReceivers() {
 				if eventcatalog.IsAtlasName(mp.MessageName) {
-					role := "catch"
-					if mp.Start {
-						role = "start"
-					}
-					add(mp.MessageName, eventcatalog.Message, mp.Element, role)
+					add(mp.MessageName, eventcatalog.Message, mp.Element, string(mp.Role))
 				}
 			}
 		}

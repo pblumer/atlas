@@ -1,11 +1,22 @@
 # ADR-0216: Mockups are one view, not one per kind
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 
-> **Implementation status (2026-10-11).** Not started. There is no `MockReport` store, no
+> **Implementation status (2026-10-23).** Partial. The view and the read exist for
+> mockups the server holds itself: `GET /api/v1/mocks` serves one report per mockup in
+> this record's envelope (kind, source, target, at, summary, data), collected at read
+> time, and Operations › Diagnostics › **Mockups** draws them through a `kind → renderer`
+> map with a plain fallback (`api/web/mockups.js`). Its first and only kind is the
+> SharePoint mockup ([ADR-0484](0484-sharepoint-mock-mode.md)), a
+> provider on the Worker record as this record designed for Jira. Not built: `POST
+> /api/v1/mocks` and the report store for worker-held mockups, the move of the AD and SQL
+> pages into this view (Mock directory and Mock database still have their own entries),
+> and the Jira mock.
+>
+> **Earlier status (2026-10-11).** Not started. There is no `MockReport` store, no
 > `/api/v1/mocks`, no Operations › Mockups view and no Jira mock; the Console still has one
 > page per kind (Mock directory, Mock database), the option this record rejected. The only
 > related code is the OpenAPI mock's `GET /__mock/report`

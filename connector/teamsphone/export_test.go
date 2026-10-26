@@ -7,15 +7,26 @@ func (p *Pwsh) WithEndpoints(loginRoot, graphRoot string) *Pwsh {
 	return p
 }
 
-// AgentsOf answers the agents the mock tenant holds for a call queue, so a test sees
-// what a reconciliation left behind and not only what it reported.
-func (m *MockTenant) AgentsOf(queueID string) []string {
+// MockQueue is what the mock tenant holds for a call queue, so a test sees what a
+// reconciliation left behind and not only what it reported.
+type MockQueue struct {
+	Agents, AuthorizedUsers                           []string
+	RoutingMethod                                     string
+	PresenceBasedRouting, ConferenceMode, AllowOptOut bool
+}
+
+// QueueOf answers what the mock tenant holds for the call queue with the given id.
+func (m *MockTenant) QueueOf(queueID string) MockQueue {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if app, ok := m.apps[queueID]; ok {
-		return append([]string(nil), app.agents...)
+	app, ok := m.apps[queueID]
+	if !ok {
+		return MockQueue{}
 	}
-	return nil
+	return MockQueue{
+		Agents: append([]string(nil), app.agents...), AuthorizedUsers: append([]string(nil), app.authorized...),
+		RoutingMethod: app.routing, PresenceBasedRouting: app.presence, ConferenceMode: app.conference, AllowOptOut: app.optOut,
+	}
 }
 
 var (

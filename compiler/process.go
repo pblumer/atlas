@@ -15,6 +15,7 @@ import (
 	"sort"
 
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // BpmnType is the kind of a BPMN element. It is stored in element-instance state
@@ -515,10 +516,12 @@ type UserTaskDetail struct {
 //     (ADR-0067, revising ADR-0036 for REST); a method that carries one gets the body
 //     described below; ResultVar, if set, is the process variable the JSON response is
 //     written back into on completion.
-//   - SharePoint (JobType == SharePointJobType): Worker names the
-//     server-registered SharePoint provider; Site and List address the target list
-//     and Fields are the created item's column values (all literal-or-FEEL); the
-//     created item's JSON is written into ResultVar when set (ADR-0141).
+//   - SharePoint (JobType == SharePointJobType for create-item,
+//     SharePointOpsJobType for every other operation): Worker names the
+//     server-registered SharePoint provider; SharePointOp is the operation, Site
+//     addresses the site, List the list or document library, and the SharePoint*
+//     fields below the rest of what the operation takes (all literal-or-FEEL); what
+//     Graph returned is written into ResultVar when set (ADR-0141, amended).
 //   - BMC Remedy (JobType == RemedyJobType): Worker names the server-registered
 //     Remedy instance; RemedyForm and RemedyFields are the form and the entry's field
 //     values (literal-or-FEEL) an incident/entry is created with through the AR System
@@ -586,6 +589,14 @@ type ConnectorTaskDetail struct {
 	MailSubject RestExpr
 	Body        RestExpr
 	BodyHTML    RestExpr
+	// MailSubjectTmpl, BodyTmpl and BodyHTMLTmpl are set in place of the literal in
+	// MailSubject, Body and BodyHTML when the task switched templating on and the value
+	// uses the template language (ADR-0487). The worker renders them
+	// over the scope's variables, escaping what a placeholder inserts into the HTML
+	// body; nil means the RestExpr beside it is the value, as it always was.
+	MailSubjectTmpl *feelers.Template
+	BodyTmpl        *feelers.Template
+	BodyHTMLTmpl    *feelers.Template
 	// Mailbox fields (JobType == MailJobType, ADR-0438). MailOp is the
 	// operation, "" being send — every mail task authored before mailboxes existed.
 	// MailFolder is the folder a list reads, MailMessage the message an operation
@@ -599,7 +610,20 @@ type ConnectorTaskDetail struct {
 	MailDestination RestExpr
 	MailMaxResults  int32
 	MailIncludeBody bool
+	// MailIncludeHTML is a get's includeBody="html": the HTML body is read as well
+	// (ADR-0489).
+	MailIncludeHTML bool
 	MailUnreadOnly  bool
+	// The documents half (ADR-0478). MailAttachment is
+	// the attachment get-attachment and export-attachment address, literal-or-FEEL;
+	// MailAllowedTypes the media types the task accepts, normalized here (I5); MailStore
+	// the S3 Worker an export puts the document into — a literal name, so the deploy
+	// check can see it — and MailBucket and MailKey where in it.
+	MailAttachment   RestExpr
+	MailAllowedTypes []string
+	MailStore        string
+	MailBucket       RestExpr
+	MailKey          RestExpr
 	// CSV worker fields (JobType == CsvImportJobType, ADR-0139). CsvSource is the
 	// interned name of the process variable holding the raw CSV text (-1 → the
 	// default "csvText"); CsvResult the variable the parsed rows are written to
@@ -621,16 +645,41 @@ type ConnectorTaskDetail struct {
 	CsvFormat    int32
 	CsvOperation int32
 	CsvWidths    []int32
-	// SharePoint worker fields (JobType == SharePointJobType, ADR-0141). Worker
-	// (above) names the server-registered SharePoint provider (its Graph base and
-	// OAuth credential live server-side). Site and List address the target list (a
-	// site host/path or id, and a list name or id); Fields are the created item's
-	// column values. Each is a literal-or-FEEL value evaluated over the instance's
-	// variables at call time; Site/List are the zero RestExpr and Fields is nil for a
-	// non-SharePoint task. ResultVar (above), if set, receives the created item's JSON.
-	Site   RestExpr
-	List   RestExpr
-	Fields []RestKV
+	// SharePoint worker fields (JobType == SharePointJobType or SharePointOpsJobType,
+	// ADR-0141, amended). Worker (above) names the server-registered SharePoint
+	// provider (its Graph base and OAuth credential live server-side). SharePointOp is
+	// the interned operation ("create-item" for every model authored before
+	// operations existed), and it decides which of the rest are populated; the
+	// compiler refuses a value on an operation that does not use it.
+	//
+	// Site addresses the site (a Graph site id, a host and path, or the site's URL)
+	// and List the list an item operation acts on — or, for a file operation, the
+	// document library, which SharePoint keeps as a list too; empty there means the
+	// site's default library. Fields are column values: what an item is created or
+	// updated with, or the properties an uploaded file is given. SharePointItemID
+	// addresses one list item and SharePointPath one file or folder inside the
+	// library. SharePointContent is what an upload writes, in the form
+	// SharePointEncoding names. SharePointFilter and SharePointSelect are a listing's
+	// OData filter and the columns a read returns; SharePointPageToken resumes a
+	// listing where an earlier page stopped.
+	//
+	// SharePointEncoding and SharePointMaxResults are compiled structure rather than
+	// authored values, with their defaults already applied, so the runtime interprets
+	// nothing (I5). Each RestExpr is a literal-or-FEEL value evaluated over the
+	// variables the task sees at call time; all are the zero value for a
+	// non-SharePoint task. ResultVar (above), if set, receives what Graph returned.
+	Site                 RestExpr
+	List                 RestExpr
+	Fields               []RestKV
+	SharePointOp         int32
+	SharePointItemID     RestExpr
+	SharePointPath       RestExpr
+	SharePointContent    RestExpr
+	SharePointEncoding   int32
+	SharePointFilter     RestExpr
+	SharePointSelect     RestExpr
+	SharePointPageToken  RestExpr
+	SharePointMaxResults int32
 	// Remedy worker fields (JobType == RemedyJobType, ADR-0106). Worker (above)
 	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
 	// receives the created entry's id. RemedyForm is the Remedy form the entry is
@@ -1092,6 +1141,42 @@ type ConnectorTaskDetail struct {
 	// task; ResultVar (above) receives the operation's answer.
 	TeamsPhoneOp   int32
 	TeamsPhoneArgs []RestKV
+	// Google Contacts fields (JobType == GoogleContactsJobType,
+	// ADR-0476). Connector (above) names the configured address
+	// book, and GoogleContactsConnector carries it as literal-or-FEEL when a model picks
+	// the account at runtime. GoogleContactsOp is the interned operation — a row of
+	// connector/googlecontacts/catalog. ContactID, Query, Field and Group are the
+	// literal-or-FEEL values the operation takes; GoogleContactsContact is the authored
+	// contact object compiled from the model's JSON template to one FEEL context at
+	// deploy (I5), and GoogleContactsContactVar names the variable holding it instead.
+	// GoogleContactsMaxResults bounds a listing, with its default applied, and is zero on
+	// every other operation. All are the zero value for a task of another kind.
+	GoogleContactsConnector  RestExpr
+	GoogleContactsOp         int32
+	GoogleContactsContactID  RestExpr
+	GoogleContactsQuery      RestExpr
+	GoogleContactsField      RestExpr
+	GoogleContactsGroup      RestExpr
+	GoogleContactsContact    RestExpr
+	GoogleContactsContactVar int32
+	GoogleContactsMaxResults int32
+	// CardDAV fields (JobType == CardDAVJobType, ADR-0490): Google
+	// Contacts' fields, for the CardDAV Worker Type's own task. Connector (above) names
+	// the configured address book, and CardDAVConnector carries it as literal-or-FEEL.
+	// CardDAVOp is the interned operation — a row of connector/carddav/catalog.
+	// CardDAVContact is the authored contact object compiled to one FEEL context at
+	// deploy (I5), and CardDAVContactVar names the variable holding it instead.
+	// CardDAVMaxResults bounds a listing, with its default applied, and is zero on every
+	// other operation. All are the zero value for a task of another kind.
+	CardDAVConnector  RestExpr
+	CardDAVOp         int32
+	CardDAVContactID  RestExpr
+	CardDAVQuery      RestExpr
+	CardDAVField      RestExpr
+	CardDAVGroup      RestExpr
+	CardDAVContact    RestExpr
+	CardDAVContactVar int32
+	CardDAVMaxResults int32
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a
@@ -2224,12 +2309,87 @@ func (p *CompiledProcess) ReceivableMessageNames() []string {
 	return out
 }
 
+// MessageReceipt is one element that waits for a message by name: a place a message
+// published to this server under that name can reach.
+type MessageReceipt struct {
+	ElementId   string
+	MessageName string
+	// Starts is set on a root-scope message start event, where a message arriving
+	// under this name creates an instance rather than continuing one.
+	Starts bool
+}
+
+// MessageReceipts lists every element that receives a message, in node order — the
+// same five places [CompiledProcess.ReceivableMessageNames] reads, one entry per
+// element rather than one per name, so a reader can trace a name back to the element
+// that states it (ADR-0471).
+//
+// A message start nested in an event subprocess is not listed on its own: the event
+// subprocess carries the trigger, and it is listed once, as the subprocess element.
+func (p *CompiledProcess) MessageReceipts() []MessageReceipt {
+	var out []MessageReceipt
+	for i := range p.nodes {
+		n := &p.nodes[i]
+		var name string
+		starts := false
+		switch {
+		case n.EventSub >= 0:
+			if d := p.eventSubProcesses[n.EventSub]; d.Kind == BoundaryMessage {
+				name = d.MessageName
+			}
+		case n.Type == TypeMessageStartEvent:
+			if n.FlowScope == -1 {
+				name, starts = p.messageStarts[n.Detail].MessageName, true
+			}
+		case n.Type == TypeMessageCatchEvent:
+			name = p.messageCatches[n.Detail].MessageName
+		case n.Type == TypeReceiveTask:
+			name = p.receiveTasks[n.Detail].MessageName
+		case n.Type == TypeBoundaryEvent:
+			if d := p.boundaryEventDets[n.Detail]; d.Kind == BoundaryMessage {
+				name = d.MessageName
+			}
+		}
+		if name != "" {
+			out = append(out, MessageReceipt{ElementId: p.ElementBpmnId(int32(i)), MessageName: name, Starts: starts})
+		}
+	}
+	return out
+}
+
+// JobTypeRef is one service or send task and the job type it creates: work any
+// worker that subscribes to that type may lease (ADR-0007).
+type JobTypeRef struct {
+	ElementId string
+	JobType   string
+}
+
+// JobTypeRefs lists the authored job types of the process's service and send tasks,
+// in node order. A connector task is not listed: it names its worker instead of a
+// type, and [CompiledProcess.ConnectorRefs] reports it (ADR-0471).
+func (p *CompiledProcess) JobTypeRefs() []JobTypeRef {
+	var out []JobTypeRef
+	for i := range p.nodes {
+		if t := p.nodes[i].Type; t != TypeServiceTask && t != TypeSendTask {
+			continue
+		}
+		if jobType := p.Intern(p.serviceTasks[p.nodes[i].Detail].JobType); jobType != "" {
+			out = append(out, JobTypeRef{ElementId: p.ElementBpmnId(int32(i)), JobType: jobType})
+		}
+	}
+	return out
+}
+
 // MailboxUse is one mail task that reads or changes its Worker's mailbox rather than
 // sending through it: the Worker it names and the operation.
 type MailboxUse struct {
 	ElementID string
 	Worker    string
 	Operation string
+	// Store is the S3 Worker an export-attachment writes into, "" for every other
+	// operation: a second Worker the task uses, and so a second one the deployer must
+	// be able to reach (ADR-0478).
+	Store string
 }
 
 // MailboxUses lists the mail tasks whose operation is not send, in node order. It is
@@ -2246,7 +2406,7 @@ func (p *CompiledProcess) MailboxUses() []MailboxUse {
 		if d.JobType != MailJobTypeIndex || d.MailOp == "" {
 			continue
 		}
-		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp})
+		out = append(out, MailboxUse{ElementID: p.ElementBpmnId(int32(i)), Worker: p.Intern(d.Connector), Operation: d.MailOp, Store: d.MailStore})
 	}
 	return out
 }

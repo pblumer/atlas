@@ -47,10 +47,10 @@ Das Formular zeigt, worum es geht, und verlangt bei einer Ablehnung eine Begrün
     </bpmn:exclusiveGateway>
 
     <bpmn:serviceTask id="Provisionieren" name="Provisionierung starten">
-      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start mit approvedBy. Der Auftrag hält die Zustimmung fest — wer zugestimmt hat, steht damit im Nachweis — und startet im selben Schritt die Provisionierung, an die das Produkt gebunden war: einen von Hand gestarteten Prozess oder den Startpunkt „provision“ seines Lebenszyklusprozesses (ADR-0425). Welcher Prozess das ist, weiss der Auftrag; dieses Modell muss es nicht wissen.</bpmn:documentation>
+      <bpmn:documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/start mit approvedBy. Der Auftrag hält die Zustimmung fest — wer zugestimmt hat, steht damit im Nachweis — und startet im selben Schritt die Provisionierung, an die das Produkt gebunden war: einen von Hand gestarteten Prozess oder den Startpunkt „provision“ seines Lebenszyklusprozesses (ADR-0425). Welcher Prozess das ist, weiss der Auftrag; dieses Modell muss es nicht wissen. Die Positions-ID steht kodiert in der Adresse: Eine Position mit Variante heisst „&lt;Produkt&gt;#&lt;Variante&gt;“, und ein unkodiertes „#“ machte den Rest der Adresse zum Fragment — der Aufruf landete ohne „/start“ auf der Route, die den Status einer Position setzt.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:restConnector method="POST"
-          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + positionId + &#34;/start&#34;"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + replace(positionId, &#34;#&#34;, &#34;%23&#34;) + &#34;/start&#34;"
           authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
           <zeebe:input source="=&#34;provision&#34;" target="operation" />

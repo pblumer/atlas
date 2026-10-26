@@ -1,0 +1,78 @@
+{
+  "type": "default",
+  "id": "m365-telefonzentrale-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Telefonzentrale · Auto attendant**\n\nName und Ressourcenkonto entstehen nach der Namensregel: AA-<BEREICH> <Bezeichnung>. · Name and resource account follow the naming rule: AA-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterleitung",
+      "type": "textfield",
+      "label": "Weiterleitung an (Ressourcenkonto) · Transfer to (resource account)",
+      "description": "Adresse des Ressourcenkontos einer Warteschlange, z.B. cq-fin-hotline@… · Address of a call queue's resource account.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sprachregion",
+      "type": "radio",
+      "label": "Sprache der Ansagen · Prompt language",
+      "values": [
+        {
+          "label": "Deutsch · German",
+          "value": "de"
+        },
+        {
+          "label": "Französisch · French",
+          "value": "fr"
+        },
+        {
+          "label": "Italienisch · Italian",
+          "value": "it"
+        },
+        {
+          "label": "Englisch · English",
+          "value": "en"
+        }
+      ],
+      "defaultValue": "de",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

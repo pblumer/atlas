@@ -80,8 +80,8 @@ func TestWorkerHoldingsReflectsWhatWorkersReported(t *testing.T) {
 		t.Fatalf("an empty registry = %v/%v, want nothing held and nobody polled", held, polled)
 	}
 
-	s.workers.holdsConnectors("worker-a", []string{"directory", "ops-mail"})
-	s.workers.holdsConnectors("worker-b", []string{"ops-mail"})
+	s.workers.holdsConnectors("worker-a", []string{"directory", "ops-mail"}, nil)
+	s.workers.holdsConnectors("worker-b", []string{"ops-mail"}, nil)
 	held, polled = s.workerHoldings()
 	if !polled {
 		t.Fatal("workers have polled and the registry says otherwise")

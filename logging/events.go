@@ -91,6 +91,13 @@ var (
 	// when there are any: it names how many and which, so the operator meets the
 	// consequence before the incidents do.
 	ServerCatalogueInFlight = newEvent("server.catalogue_disabled_in_flight")
+	// ServerCataloguePurgeEnabled is a server that lets an administrator delete a
+	// catalogue or a product for good, with its orders and held rights
+	// (ADR-0469). The purge is an opt-out, so this is every server
+	// started without --catalogue-purge=false — which a production installation must
+	// be. A WARN at every start, so an installation upgraded without the flag says so
+	// in the log, and an alert can match it.
+	ServerCataloguePurgeEnabled = newEvent("server.catalogue_purge_enabled")
 	// The operator-supplied certificate, where this server terminates TLS itself
 	// (ADR-0191). ServerTLSReloaded is one line per renewal picked up without a
 	// restart; ServerTLSReloadFailed is the pair that changed on disk and could not
@@ -130,6 +137,11 @@ var (
 	AuthLoginFailed    = newEvent("auth.login_failed")
 	AuthLoginThrottled = newEvent("auth.login_throttled")
 	AuthLogout         = newEvent("auth.logout")
+	// AuthLoginDateUnrecorded is a login day that could not be written, read or
+	// removed (ADR-0477). The login itself had succeeded;
+	// what is missing or stale is the roster's "last login", which the account's next
+	// login writes again.
+	AuthLoginDateUnrecorded = newEvent("auth.login_date_unrecorded")
 	// AuthDenied is an authenticated caller refused for lacking a role — an
 	// administration attempt by somebody who may not administer, which is a
 	// different and much rarer signal than an anonymous request being asked to log
@@ -313,6 +325,26 @@ var (
 	WALCompactionSegmentsDeleted = newEvent("wal_compaction.segments_deleted")
 )
 
+// The storage monitor and the engine halt (ADR-0481).
+var (
+	// StorageLow is the disk crossing into the warning band: less room above the
+	// reserve than the warning margin, or a forecast that reaches the reserve within a
+	// week. Logged once per crossing, not on every reading.
+	StorageLow = newEvent("storage.low")
+	// StorageFrozen is the disk falling below the reserve: from here the server refuses
+	// new writes until there is room again. An error, because work is being turned away.
+	StorageFrozen = newEvent("storage.frozen")
+	// StorageResumed is the disk regaining the reserve and its margin, and the server
+	// taking writes again.
+	StorageResumed = newEvent("storage.resumed")
+	// StorageUnreadable is a reading of the file system failing. Nothing changes on it —
+	// a frozen server stays frozen, an open one stays open — so it is a warning.
+	StorageUnreadable = newEvent("storage.unreadable")
+	// EngineHalted is the engine stopping after a batch could not be made durable. It
+	// processes nothing more until the server is restarted.
+	EngineHalted = newEvent("engine.halted")
+)
+
 // Backup, restore, and streaming exports (ADR-0107/0108/0109).
 var (
 	RestoreApplied                = newEvent("restore.applied")
@@ -334,6 +366,13 @@ var (
 	// (ADR-0438). Warned because it is a delivery gap that otherwise
 	// looks exactly like a quiet mailbox.
 	InboundWatchGap = newEvent("inbound_watch.gap")
+	// InboundWatchFailing reports a watch that cannot read its source — its Worker has
+	// no mailbox or no client, is switched off, or the source refused or did not answer
+	// the read. Logged once when the failure begins, not on every tick it repeats; the
+	// watch's listing carries the newest reason as lastError for as long as it lasts.
+	InboundWatchFailing = newEvent("inbound_watch.failing")
+	// InboundWatchRecovered reports a failing watch that read its source again.
+	InboundWatchRecovered = newEvent("inbound_watch.recovered")
 )
 
 // Push delivery of the event feed
@@ -388,6 +427,21 @@ var (
 	ExporterTickFailed = newEvent("exporter.tick_failed")
 )
 
+// Deleting finished instances and compacting the WAL on an administrator's request
+// (ADR-0486).
+var (
+	// HistoryPurged is one batch of finished instances an administrator deleted for
+	// good, with who asked, the version and how many went.
+	HistoryPurged = newEvent("history.purged")
+	// ServerInstancePurgeEnabled is a server on which an administrator may delete
+	// finished instances for good: said at every start, like the catalogue purge,
+	// because the switch is an opt-out a production installation has to set.
+	ServerInstancePurgeEnabled = newEvent("server.instance_purge_enabled")
+	// WALCompactionRequested is a compaction pass an administrator asked for on a
+	// server not started with --compact-wal.
+	WALCompactionRequested = newEvent("wal_compaction.requested")
+)
+
 // Identity, secrets, and provisioning (ADR-0044/0070/0123).
 var (
 	VaultKeyGenerated = newEvent("vault.key_generated")
@@ -435,6 +489,18 @@ var (
 	// week" is exactly the question an audit line answers.
 	DeploymentDiagramUpdated = newEvent("deployment.diagram_updated")
 
+	// DeploymentForceDeleted reports a deployed version removed with force=true
+	// (ADR-0468): its running instances
+	// were cancelled and the guards that protect a process still needed by an order or
+	// a catalogue release were overridden. Audited because it ends work other people
+	// may be waiting on, and "who stopped my instance" must have an answer.
+	DeploymentForceDeleted = newEvent("deployment.force_deleted")
+
+	// ApplicationPurged reports an application deleted together with everything it
+	// owned on this server: deployed versions and their instances, decision
+	// deployments, drafts, forms and models (same record).
+	ApplicationPurged = newEvent("application.purged")
+
 	ScriptWorkerEnabled      = newEvent("script_worker.enabled")
 	ScriptWorkerMissing      = newEvent("script_worker.binary_missing")
 	CallOverrideSkipped      = newEvent("call_override.skipped")
@@ -472,6 +538,36 @@ var (
 	// without erasing it — the same effect as an erasure, with no intent to do it and no
 	// record that it happened — so the attempt is refused and the refusal is audited.
 	PersonalDataKeyWriteRefused = newEvent("personal_data.key_write_refused")
+)
+
+// Identity-aware Worker execution (ADR-0475). The
+// decisions themselves are engine facts, durable in the log; these lines are the
+// operational trail of what happened around them — a link, a revocation, a refusal at
+// the edge — and name principals by id, never a token or a credential.
+var (
+	// ConnectionLinked is a person linking an external account and authorizing a
+	// delegated connection, or re-authenticating one.
+	ConnectionLinked = newEvent("identity.connection_linked")
+	// ConnectionLinkFailed is a linking flow that did not end in a connection: which
+	// check refused it is in the reason, as a failed login's is.
+	ConnectionLinkFailed = newEvent("identity.connection_link_failed")
+	// ConnectionRevoked is a connection withdrawn by its owner or an administrator.
+	ConnectionRevoked = newEvent("identity.connection_revoked")
+	// ConnectionRefreshFailed is the broker failing to obtain an access token; a
+	// refusal by the provider marks the connection for re-authentication.
+	ConnectionRefreshFailed = newEvent("identity.connection_refresh_failed")
+	// ConnectionCredentialRefused is an attempt to reach a connection's credential
+	// through an operator surface.
+	ConnectionCredentialRefused = newEvent("identity.connection_credential_refused")
+	// PolicyPublished is an administrator publishing a new version of a policy, or
+	// switching one on or off.
+	PolicyPublished = newEvent("authz.policy_published")
+	// AuthorizationRefused is an enforcement point refusing an external action; the
+	// decision itself is in the instance's log.
+	AuthorizationRefused = newEvent("authz.action_refused")
+	// ApprovalAnswered is an approver answering, or withdrawing an answer to, an
+	// approval of an action.
+	ApprovalAnswered = newEvent("authz.approval_answered")
 )
 
 // The FEEL assistant (ADR-0445).

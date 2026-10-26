@@ -381,10 +381,26 @@ func (p *mimePart) attachments() []Attachment {
 		default:
 			name = "attachment"
 		}
-		out = append(out, Attachment{Name: name, ContentType: n.contentType(), Size: n.Size})
+		out = append(out, Attachment{ID: n.Section, Name: name, ContentType: n.contentType(), Size: n.Size})
 	}
 	walk(p)
 	return out
+}
+
+// htmlFromPart decodes a message's HTML part for a read that asked for the HTML body,
+// or answers "" for a message that has none.
+func htmlFromPart(htmlPart *mimePart, read func(*mimePart) ([]byte, error)) (string, error) {
+	if htmlPart == nil {
+		return "", nil
+	}
+	raw := htmlPart.Data
+	if raw == nil && read != nil {
+		var err error
+		if raw, err = read(htmlPart); err != nil {
+			return "", err
+		}
+	}
+	return decodeContent(raw, htmlPart.Encoding, htmlPart.charset()), nil
 }
 
 // bodyFromParts makes a body out of a message's text parts: the plain-text part when

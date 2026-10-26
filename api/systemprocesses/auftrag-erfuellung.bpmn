@@ -70,10 +70,10 @@ Steht eine Genehmigung aus, startet er den Genehmigungsprozess der Position; der
 
 Ein zweiter Aufruf für dieselbe Position startet nichts Zweites, sondern antwortet mit der Instanz, die schon läuft.
 
-Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden.</bpmn:documentation>
+Parallele Mehrfachausführung, weil nichts in dieser Menge auf etwas anderes darin wartet: das hat die Vorbedingungsprüfung bereits entschieden. Die Positions-ID steht kodiert in der Adresse: Eine Position mit Variante heisst „&lt;Produkt&gt;#&lt;Variante&gt;“, und ein unkodiertes „#“ machte den Rest der Adresse zum Fragment — der Aufruf landete ohne „/start“ auf der Route, die den Status einer Position setzt.</bpmn:documentation>
       <bpmn:extensionElements>
         <atlas:restConnector method="POST"
-          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + position.id + &#34;/start&#34;"
+          url="=atlasApiBase + &#34;/api/v1/orders/&#34; + orderId + &#34;/lines/&#34; + replace(position.id, &#34;#&#34;, &#34;%23&#34;) + &#34;/start&#34;"
           authType="bearer" authSecret="atlas" />
         <zeebe:ioMapping>
           <zeebe:input source="=&#34;provision&#34;" target="operation" />

@@ -84,7 +84,10 @@ type createConnectorParams struct {
 	// MailboxEndpoint is an SMTP mail Worker's IMAP endpoint
 	// (ADR-0438); cleared for every other kind.
 	MailboxEndpoint string `json:"mailboxEndpoint"`
-	Enabled         *bool  `json:"enabled"`
+	// Scanner is a mail Worker's malware scanner
+	// (ADR-0478); cleared for every other kind.
+	Scanner string `json:"scanner"`
+	Enabled *bool  `json:"enabled"`
 	// ConnectionString is a SQL worker's whole configuration, sealed into the vault
 	// by the create handler which then stores only the reference — so the record still
 	// holds no secret (I6). It exists because for these kinds the credential *is* the
@@ -97,6 +100,9 @@ type createConnectorParams struct {
 	// (ADR-0255). Not a secret, so it travels as
 	// itself and is echoed back — it is the setting an operator changes most often.
 	Model string `json:"model"`
+	// FormLookups lets task forms search through the Worker
+	// (ADR-0473); only a kind a form can search may set it.
+	FormLookups bool `json:"formLookups"`
 }
 
 // managedConnectorKinds is the ordered registry of managed worker kinds. Order is
@@ -180,7 +186,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		},
 		registerHandlers: func(s *Server, store *state.Store) {
 			s.jobRunner.HandleWithOutput(compiler.MailJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return mail.Handler(rd, s.processLookup, s.mailRegistry, mailDirectory{s})
+				return mail.HandlerWith(rd, s.processLookup, s.mailRegistry, mailDirectory{s}, serverDocuments{s})
 			})
 		},
 		rebuild: func(s *Server) error {
@@ -200,18 +206,28 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes: []int32{compiler.MailJobTypeIndex},
 	},
 	{
-		// A SharePoint task creates a list item through a server-registered
-		// Microsoft Graph provider (ADR-0141) and writes the created item's JSON into the
-		// task's result variable (HandleWithOutput). The Graph base and OAuth credential
-		// live in the managed worker store; the credential is resolved from the vault
-		// at build time (ADR-0041).
+		// A SharePoint task performs one list or library operation through a
+		// server-registered Microsoft Graph provider (ADR-0141, amended) and writes what
+		// Graph answered into the task's result variable (HandleWithOutput). Two job
+		// types, one handler: create-item keeps the one it always had and every other
+		// operation rides its own, so a worker built before the operations existed is
+		// never handed one (compiler.SharePointOpsJobType). The Graph base and OAuth
+		// credential live in the managed worker store; the credential is resolved from
+		// the vault at build time (ADR-0041).
 		name:           connectorKindSharePoint,
 		validateCreate: validateSharePointConnector,
-		newRegistry:    func(s *Server) { s.sharePointRegistry = sharepoint.NewRegistry() },
+		newRegistry: func(s *Server) {
+			s.sharePointRegistry = sharepoint.NewRegistry()
+			// The mockups outlive every rebuild, as the preview outbox does: a rebuild
+			// re-binds the clients and must not empty a site a run has written to.
+			s.sharePointMocks = sharepoint.NewMockSites(nil)
+		},
 		registerHandlers: func(s *Server, store *state.Store) {
-			s.jobRunner.HandleWithOutput(compiler.SharePointJobTypeIndex, func(rd state.Reader) job.OutputHandler {
-				return sharepoint.Handler(rd, s.processLookup, s.sharePointRegistry)
-			})
+			for _, jobType := range []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex} {
+				s.jobRunner.HandleWithOutput(jobType, func(rd state.Reader) job.OutputHandler {
+					return sharepoint.Handler(rd, s.processLookup, s.sharePointRegistry)
+				})
+			}
 		},
 		rebuild: func(s *Server) error {
 			clients, problems, err := s.buildSharePointClients()
@@ -225,9 +241,13 @@ var managedConnectorKinds = append([]managedConnectorKind{
 			if s.sharePointRegistry == nil {
 				return "", false
 			}
-			return s.sharePointRegistry.Problem(name)
+			why, ok := s.sharePointRegistry.Problem(name)
+			if ok && why == problemGovernedInProcess {
+				return "", false
+			}
+			return why, ok
 		},
-		jobTypes: []int32{compiler.SharePointJobTypeIndex},
+		jobTypes: []int32{compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	},
 	{
 		// A BMC Remedy task creates an entry (e.g. an incident) in a Remedy
@@ -420,6 +440,31 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.TeamsPhoneJobTypeIndex},
 	},
 	{
+		// A Google Contacts task finds, reads, lists, creates, updates or deletes a
+		// contact in an address book, labels one, or searches the organization's
+		// directory (ADR-0476). Worker-only for Exchange's
+		// reason: the credential reads a person's whole address book — a service account
+		// with domain-wide delegation, or that person's own refresh token — and has no
+		// business on the engine's run loop. The record exists so an operator can add an
+		// address book in the Console and the supervised worker be provisioned from it
+		// (googleContactsWorkerEnv).
+		name:           connectorKindGoogleContacts,
+		workerOnly:     true,
+		validateCreate: validateGoogleContactsConnector,
+		jobTypes:       []int32{compiler.GoogleContactsJobTypeIndex},
+	},
+	{
+		// A CardDAV task finds, reads, searches, lists, creates, updates or deletes a
+		// contact in a CardDAV address book — iCloud, Nextcloud, mailbox.org, Radicale and
+		// most mail providers' — or changes its groups (ADR-0490).
+		// Worker-only for Google Contacts' reason: the password reads somebody's whole
+		// address book and has no business on the engine's run loop.
+		name:           connectorKindCardDAV,
+		workerOnly:     true,
+		validateCreate: validateCardDAVConnector,
+		jobTypes:       []int32{compiler.CardDAVJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -555,7 +600,7 @@ var offloadableKinds = map[string][]int32{
 	connectorKindTemis:        {compiler.TemisDecisionJobTypeIndex},
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
-	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
@@ -681,7 +726,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -895,11 +940,24 @@ func validateS3Connector(p *createConnectorParams) string {
 
 // validateSharePointConnector validates a SharePoint create request: it defaults its
 // Graph API base (endpoint is an optional override) and needs a credentialsRef
-// naming a vault OAuth auth bundle (ADR-0141). Provider/Sender are mail-only.
+// naming a vault OAuth auth bundle (ADR-0141) — unless the provider is the mockup,
+// which needs neither (ADR-0484). Sender is mail-only.
 func validateSharePointConnector(p *createConnectorParams) string {
-	p.Provider, p.Sender = "", ""
+	p.Sender = ""
+	if p.Provider == sharepoint.MockProvider {
+		// A mockup reaches no tenant and authenticates against nothing, so an endpoint
+		// or a credential written into the form would be dead configuration that reads
+		// as if it were in use — the preview mail provider's rule
+		// (ADR-0484).
+		p.Endpoint, p.CredentialsRef = "", ""
+		return ""
+	}
+	// Anything else is Microsoft Graph, which has no provider name of its own: a record
+	// stored before the mockup existed has none, and a client that sends one — the
+	// Console once sent the mail form's — must still create the same Worker.
+	p.Provider = ""
 	if p.CredentialsRef == "" {
-		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle"
+		return "a sharepoint worker requires a credentialsRef naming a vault auth bundle (or provider \"mock\" for a mockup that reaches no tenant)"
 	}
 	return ""
 }
@@ -970,6 +1028,35 @@ func validateTeamsPhoneConnector(p *createConnectorParams) string {
 	return ""
 }
 
+// validateGoogleContactsConnector checks an address book a Console operator is adding.
+// Whose address book it is and as whom lives in the vault bundle the credentialsRef
+// names — a service account with the Workspace user it acts as, or a refresh token — so
+// a record without one has nothing to read with. The endpoint is optional: empty is the
+// People API itself.
+func validateGoogleContactsConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.CredentialsRef == "" {
+		return "a googlecontacts worker requires a credentialsRef naming a vault bundle: {method: serviceAccount, clientEmail, privateKey, subject} or {method: refreshToken, clientId, clientSecret, refreshToken}"
+	}
+	return ""
+}
+
+// validateCardDAVConnector checks an address book a Console operator is adding. Unlike
+// Google Contacts it needs an endpoint — CardDAV has no one address for everyone — and,
+// like Jira, a credentialsRef naming the vault bundle with the account's username and
+// password. Whether the endpoint is https and the bundle well-formed is decided where
+// the client is built (carddav.CheckBundle), which is also what supervision asks.
+func validateCardDAVConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a carddav worker requires an endpoint: the address book's URL, or the server's (https://cloud.example.ch/remote.php/dav, https://contacts.icloud.com)"
+	}
+	if p.CredentialsRef == "" {
+		return "a carddav worker requires a credentialsRef naming a vault bundle: {username, password, groups}"
+	}
+	return ""
+}
+
 // validateExchangeConnector checks an Exchange organization a Console operator is
 // adding. Everything that says which organization and as whom lives in the vault bundle
 // the credentialsRef names — Online's {organization, clientId, certificate or
@@ -1012,6 +1099,10 @@ func normalizeConnectorUpdate(rec *connector) string {
 		validate = validateAgentConnector
 	case connectorKindCloudEvents:
 		validate = validateCloudEventsConnector
+	case connectorKindSharePoint:
+		// Switching to or from the mockup changes what is required: Graph needs a
+		// credential, the mockup takes none.
+		validate = validateSharePointConnector
 	default:
 		return ""
 	}
@@ -1024,6 +1115,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 		Sender:          strings.TrimSpace(rec.Sender),
 		Model:           strings.TrimSpace(rec.Model),
 		MailboxEndpoint: strings.TrimSpace(rec.MailboxEndpoint),
+		Scanner:         strings.TrimSpace(rec.Scanner),
 	}
 	if msg := validate(&p); msg != "" {
 		return msg
@@ -1031,6 +1123,7 @@ func normalizeConnectorUpdate(rec *connector) string {
 	rec.Endpoint, rec.CredentialsRef = p.Endpoint, p.CredentialsRef
 	rec.Provider, rec.Sender, rec.Model = p.Provider, p.Sender, p.Model
 	rec.MailboxEndpoint = p.MailboxEndpoint
+	rec.Scanner = p.Scanner
 	return ""
 }
 
@@ -1052,6 +1145,18 @@ func validateMailConnector(p *createConnectorParams) string {
 	}
 	if p.Sender == "" {
 		return "mail worker sender (default From address) is required"
+	}
+	// The scanner is the Worker's, whatever its provider — except preview, which has
+	// no mailbox and so hands nothing on. Normalized here so a typo is found while
+	// typing rather than at the first attachment.
+	if p.Provider == mail.ProviderPreview {
+		p.Scanner = ""
+	} else if p.Scanner != "" {
+		scanner, err := mail.NormalizeScannerEndpoint(p.Scanner)
+		if err != nil {
+			return err.Error()
+		}
+		p.Scanner = scanner
 	}
 	switch p.Provider {
 	case mail.ProviderSMTP:

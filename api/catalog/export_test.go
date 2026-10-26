@@ -174,7 +174,7 @@ func TestOnlyAMaintainerExportsACatalogue(t *testing.T) {
 	}
 	viewed := strings.Replace(shopDocument, `"groups":["grp-alle"],`,
 		`"groups":["grp-alle"],"members":[{"ref":{"type":"user","id":"usr_x"},"role":"viewer"}],`, 1)
-	if code, out := importDoc(t, s, importer, viewed); code != http.StatusOK {
+	if code, out := importDocWith(t, s, importer, "?overwrite=catalog:cat-verwaltung", viewed); code != http.StatusOK {
 		t.Fatalf("granting a viewer = %d %v", code, out)
 	}
 	if rec := call(t, s.HandleExportCatalog, stranger, "GET", "/x", "", "id", "cat-verwaltung"); rec.Code != http.StatusForbidden {
@@ -378,7 +378,7 @@ func TestTheEdgesOfExportAndImport(t *testing.T) {
 	s = seeded(t)
 	viewed := strings.Replace(shopDocument, `"groups":["grp-alle"],`,
 		`"groups":["grp-alle"],"members":[{"ref":{"type":"user","id":"usr_x"},"role":"viewer"}],`, 1)
-	if code, out := importDoc(t, s, importer, viewed); code != http.StatusOK {
+	if code, out := importDocWith(t, s, importer, "?overwrite=catalog:cat-verwaltung", viewed); code != http.StatusOK {
 		t.Fatalf("granting a viewer = %d %v", code, out)
 	}
 	rec := call(t, s.HandleImportDocument, user("usr_x"), "POST", "/x?into=cat-verwaltung", `{"products":[{"id":"n"}]}`)

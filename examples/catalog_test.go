@@ -155,7 +155,7 @@ var catalogSources = []catalogSource{
 	// button: its first screen is a supervisor's, so a bare start would only park it.
 	{ID: "arbeitsplatz", App: "Beispiel: Arbeitsplatz-Ausstattung", Dir: "arbeitsplatz"},
 	{ID: "bewerbermanagement", App: "Bewerbermanagement", Dir: "bewerbermanagement", Main: "bewerbermanagement/bewerbung.bpmn"},
-	// The course's guiding case (docs/planning/lehrgang-prozessentwicklung.md, phase 3):
+	// The course's guiding case (docs/training/lehrgang-prozessentwicklung.md, phase 3):
 	// one onboarding process the six reference modules all hang on. No Start button — the
 	// konto-anlegen job parks for a worker, which a bare start would leave hanging.
 	{ID: "lehrgang", App: "Lehrgang: Mitarbeitereintritt", Dir: "lehrgang", Main: "lehrgang/eintritt.bpmn"},
@@ -199,6 +199,8 @@ var catalogSources = []catalogSource{
 		ID: "mssql-eintrittsmeldung", App: "Beispiel: Eintrittsmeldung (MS SQL)",
 		Files: []string{"mssql-eintrittsmeldung.bpmn"},
 	},
+	{ID: "sharepoint-fallakte", App: "Beispiel: Fallakte (SharePoint)", Dir: "sharepoint-fallakte",
+		Main: "sharepoint-fallakte/sharepoint-fallakte.bpmn"},
 
 	// --- Identität & Verzeichnis ---
 	{
@@ -257,6 +259,9 @@ var catalogSources = []catalogSource{
 		Files: []string{"exchange-austritt.bpmn"},
 	},
 	{ID: "entra-onboarding-selfservice", App: "Beispiel: Onboarding-Self-Service (Entra)", Dir: "entra-onboarding-selfservice"},
+	// A person picked from the directory by a search in the task form, not from a listing
+	// the process read first (ADR-0473).
+	{ID: "entra-benutzerauswahl", App: "Beispiel: Person wählen (Entra)", Dir: "entra-benutzerauswahl"},
 	{ID: "account-bestellung", App: "Beispiel: Account-Bestellung (Entra)", Dir: "account-bestellung"},
 	// No install: these three ship inside the binary and are deployed into the
 	// protected system project at server start, so their forms are protected system
@@ -273,6 +278,12 @@ var catalogSources = []catalogSource{
 	// groups and the approvers the catalogue document leaves open.
 	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
 		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
+		Shop: true},
+	// A shop for Microsoft 365: nine products over the Entra, Exchange and Teams Phone
+	// Worker Types, five decisions, two public forms and a governance check. It installs
+	// with `atlas import` once its decision models are uploaded (its README says how).
+	{ID: "m365-dienste", Dir: "m365-dienste", NoInstall: true,
+		Main: "m365-dienste/funktionspostfach.bpmn",
 		Shop: true},
 }
 

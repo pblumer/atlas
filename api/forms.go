@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
@@ -82,6 +83,14 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if !isJSONObject(payload.Schema) {
 		httpapi.Error(w, http.StatusBadRequest, "schema must be a JSON form-js document (an object)")
+		return
+	}
+	// A directory field's data source is checked now, against what this server can
+	// honour, rather than discovered by the first person who searches
+	// (ADR-0473). Every other part of the schema stays
+	// form-js's own business.
+	if err := formlookup.Check(payload.Schema); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
 		return
 	}
 	name := strings.TrimSpace(payload.Name)

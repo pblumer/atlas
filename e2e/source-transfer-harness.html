@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas source-transfer e2e harness</title>
+    <!-- Drives the real api/web/sourceneeds.js: the dialog a source download asks
+         through, and the one an import shows when the target lacks what the processes
+         need (ADR-0467). The page scaffolding is the test's own, because app.js boots
+         the whole console on import and cannot be loaded here. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <pre id="result">—</pre>
+    </div>
+    <script type="module">
+      import { openSourceDownload, needsReport, showImportNeeds } from "/sourceneeds.js";
+      import { importPackage, packageSummary } from "/packageimport.js";
+
+      // What GET /api/v1/applications/{id}/needs answers for an application whose
+      // process reads TENANT_ID from its application, MAIL_DOMAIN and LANGUAGE from the
+      // installation, and sends mail through Postausgang.
+      window.NEEDS = {
+        applicationId: "a1",
+        constants: 1,
+        unread: ["halb"],
+        needs: [
+          { kind: "server-constant", name: "LANGUAGE", type: "string", processes: ["bedarf"], fallback: true, state: "fallback" },
+          { kind: "server-constant", name: "MAIL_DOMAIN", type: "string", processes: ["bedarf"], state: "set" },
+          { kind: "application-constant", name: "TENANT_ID", type: "string", processes: ["bedarf"], state: "set" },
+          { kind: "worker", name: "Postausgang", type: "mail", processes: ["bedarf"], state: "configured" },
+        ],
+      };
+
+      const result = document.getElementById("result");
+      // The preview a package download asks for first; every URL it was asked with.
+      window.__previews = [];
+      window.__download = async (info, previewAnswer) => {
+        const preview = async (url) => { window.__previews.push(url); return previewAnswer || { warnings: [] }; };
+        const url = await openSourceDownload({ id: "a 1", info, preview });
+        result.textContent = url == null ? "cancelled" : url;
+      };
+
+      // A package import against answers the spec gives, route by route: each entry of
+      // routes is "METHOD path" (query included) → { status, data }, or a list of them
+      // answered in turn. Every request is recorded in window.__calls.
+      window.__calls = [];
+      window.__importPackage = async (base64, routes) => {
+        const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const file = new File([bytes], "paket.tar.gz", { type: "application/gzip" });
+        const call = async (method, path, body) => {
+          const key = method + " " + path;
+          // A copy: the body is what was sent then, as a request serializes it.
+          window.__calls.push({ key, body: body instanceof Uint8Array ? "<archive>" : JSON.parse(JSON.stringify(body ?? null)) });
+          let answer = routes[key];
+          if (Array.isArray(answer)) answer = answer.length > 1 ? answer.shift() : answer[0];
+          return answer || { status: 404, data: { error: "no route " + key } };
+        };
+        try {
+          const out = await importPackage(file, { call });
+          result.textContent = out == null ? "cancelled" : "done: " + packageSummary(out);
+          window.__out = out;
+        } catch (e) {
+          result.textContent = "failed: " + e.message;
+        }
+      };
+      window.__report = (answer) => needsReport(answer);
+      window.__importNeeds = async (answer) => {
+        await showImportNeeds(answer);
+        result.textContent = "closed";
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

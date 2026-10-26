@@ -52,7 +52,74 @@
       // edited the document and nothing else. The chip used to show one id and the
       // properties panel the other; now there is one id, and it is the stored one on
       // open (ADR-0222). Saves are captured rather than sent.
+      // A form with a department select and a plain text field, against a server that
+      // offers the Entra users source and two Workers — one open to forms, one not
+      // (ADR-0473). Saves and every call are captured.
+      window.__calls = [];
+      // __mountDirectory opens a form with a static select (the department), a second
+      // static select to turn into a remote one, a radio group and — with legacy — a
+      // directory field saved as a textfield, the shape such fields were saved in first.
+      window.__mountDirectory = ({ legacy } = {}) => {
+        const sources = {
+          providers: [{ workerType: "entra", resource: "users", label: "Microsoft Entra ID — users",
+            valueProperty: "id",
+            searchable: ["displayName", "givenName", "surname", "mail", "userPrincipalName"],
+            filterable: ["department", "jobTitle"],
+            readable: ["id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"],
+            defaultLabel: "displayName", defaultDescription: "mail", fallback: "userPrincipalName", valueFormat: "an Entra object id (a GUID)" }],
+          workers: [
+            { name: "contoso", workerType: "entra", enabled: true, formLookups: false },
+            { name: "ucc_entra", workerType: "entra", enabled: true, formLookups: true },
+          ],
+        };
+        const api = async (method, url, body) => {
+          window.__calls.push({ method, url });
+          if (url.endsWith("/api/v1/form-data/sources")) return sources;
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "form-dir", available: true };
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return { id: "form-dir", name: "Person", projectId: "", schema: { type: "default", id: "form-dir", components: [
+              { type: "select", id: "Field_abteilung", key: "abteilung", label: "Abteilung",
+                values: [{ label: "IT", value: "IT" }, { label: "Finanzen", value: "Finance" }] },
+              { type: "select", id: "Field_wer", key: "wer", label: "Wer",
+                values: [{ label: "Value", value: "value" }] },
+              { type: "radio", id: "Field_dringlichkeit", key: "dringlichkeit", label: "Dringlichkeit",
+                values: [{ label: "Hoch", value: "high" }, { label: "Normal", value: "normal" }] },
+              ...(legacy ? [{ type: "textfield", id: "Field_alt", key: "alt", label: "Alt",
+                validate: { required: true, validationType: "email", minLength: 2 },
+                appearance: { prefixAdorner: "@" },
+                atlasDataSource: { version: 1, workerType: "entra", worker: "ucc_entra", resource: "users" } }] : []),
+            ] } };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-dir" });
+      };
       window.__saved = null;
+      // __mountMailView opens a form with an e-mail view (ADR-0489) and a
+      // text field; saves are captured.
+      window.__mountMailView = () => {
+        const api = async (method, url, body) => {
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "form-mail", available: true };
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return { id: "form-mail", name: "Mail prüfen", projectId: "", schema: { type: "default", id: "form-mail", components: [
+              { type: "mailview", id: "Field_mail", key: "mail", label: "E-Mail" },
+              { type: "textfield", id: "Field_note", key: "note", label: "Notiz" },
+            ] } };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-mail" });
+      };
       window.__mountDivergent = () => {
         const api = async (method, url, body) => {
           if (/\/forms\/[^/]+\/availability$/.test(url)) {

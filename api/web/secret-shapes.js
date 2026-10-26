@@ -11,7 +11,8 @@
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
 // connector/jira/rest.go's, connector/googlesheets/oauth.go's,
 // connector/discord/rest.go's and connector/s3/rest.go's credentialBundle, and
-// connector/exchange/config.go's Bundle. A field added there is a field added here.
+// connector/exchange/config.go's, connector/googlecontacts/config.go's and
+// connector/carddav/config.go's Bundle. A field added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -47,6 +48,12 @@ export const SECRET_SHAPES = {
     what: "a Microsoft Graph OAuth credential bundle (JSON)",
     oauth: "microsoft",
     skeleton: { method: "clientCredentials", tenantId: "…", clientId: "…", clientSecret: "…" },
+    note: "An app that runs unattended may prove itself with a certificate instead: <code>\"certificate\"</code> — the certificate and its unencrypted private key as one PEM text — in place of <code>clientSecret</code>. On a Windows server, <code>\"certificateThumbprint\"</code> may instead name a certificate already in the worker host's <code>CurrentUser\\My</code> or <code>LocalMachine\\My</code>, as for an Entra ID worker; its key signs there and may be non-exportable. Give one of the three. A <code>refreshToken</code> bundle keeps its client secret.",
+    // connector/sharepoint/oauth.go reads a bundle without a method as clientCredentials,
+    // and a clientCredentials bundle may carry a certificate in place of the secret —
+    // as PEM, or by the thumbprint of one in the Windows certificate store.
+    certificate: true,
+    thumbprint: true,
   },
   "remedy:": {
     what: "the AR System username and password (JSON)",
@@ -74,6 +81,27 @@ export const SECRET_SHAPES = {
       privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
     },
     note: "Copied out of the JSON key file Google hands out for a service account (<code>client_email</code> and <code>private_key</code>, camel-cased here). Atlas fills in <code>tokenUrl</code> and the Sheets and Drive <code>scope</code>. Add <code>\"subject\"</code> to act as a Workspace user through domain-wide delegation. Pasting the whole key file is the common mistake: it is that file's two fields, not the file.",
+  },
+  "googlecontacts:": {
+    what: "a Google OAuth credential bundle (JSON): a service account's signing key with the Workspace user whose address book it reads, or a consumer account's refresh token",
+    oauth: "google",
+    // anyOf for Google Sheets' reason — two grants — with the subject required beside the
+    // key: a service account has no address book of its own, and the worker refuses one
+    // without it.
+    anyOf: [["clientEmail", "privateKey", "subject"], ["clientId", "clientSecret", "refreshToken"]],
+    skeleton: {
+      method: "serviceAccount",
+      clientEmail: "atlas@\u2026.iam.gserviceaccount.com",
+      privateKey: "-----BEGIN PRIVATE KEY-----\u2026",
+      subject: "verkauf@firma.ch",
+    },
+    note: "<code>clientEmail</code> and <code>privateKey</code> are <code>client_email</code> and <code>private_key</code> from the service account's JSON key file. <code>subject</code> is the Workspace user whose contacts the Worker reads and changes; the service account needs <b>domain-wide delegation</b> for <code>https://www.googleapis.com/auth/contacts</code> (Admin console &rsaquo; Security &rsaquo; API controls). Search directory also needs <code>directory.readonly</code>: name both in <code>\"scope\"</code>, separated by a space, and delegate both. A gmail.com account has no delegation: store <code>{\"method\": \"refreshToken\", \"clientId\", \"clientSecret\", \"refreshToken\"}</code> instead.",
+  },
+  "carddav:": {
+    what: "the CardDAV account's username and password (JSON), and which form its groups take",
+    fields: ["username", "password"],
+    skeleton: { username: "verkauf@firma.ch", password: "\u2026", groups: "categories" },
+    note: "Use an <b>app-specific password</b> where the provider issues one: iCloud requires it, and Fastmail, mailbox.org and a Nextcloud with two-factor sign-in offer it. <code>\"groups\"</code> is <code>\"categories\"</code> (the default: Nextcloud, ownCloud, most servers) or <code>\"group-vcards\"</code> for iCloud and Fastmail, whose groups are cards of their own. The server's address is the Worker's endpoint, not part of this bundle.",
   },
   "entra:": {
     what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret, a certificate or a certificateThumbprint",
@@ -163,19 +191,38 @@ export function checkSecretValue(shape, value) {
     const gone = missing(shape.fields);
     return gone.length ? `Missing ${gone.map((k) => `"${k}"`).join(" and ")}.` : "";
   }
+  const method = parsed.method || (shape.certificate ? "clientCredentials" : "");
+  // A worker that takes a certificate takes it in place of the client secret, never
+  // beside it — the server refuses a bundle carrying two rather than pick one. Where the
+  // shape allows it, the certificate may be named by its thumbprint instead of given as
+  // PEM, and that counts as a second certificate, not as the same one.
+  const given = (k) => String(parsed[k] || "").trim() !== "";
+  const certFields = shape.certificate ? ["certificate", ...(shape.thumbprint ? ["certificateThumbprint"] : [])] : [];
+  const quote = (ks) => ks.map((k) => `"${k}"`);
+  if (method === "refreshToken" && certFields.some(given)) {
+    return `A "refreshToken" bundle signs in with "clientSecret"; a certificate belongs to a "clientCredentials" bundle.`;
+  }
+  const certs = method === "clientCredentials" ? certFields.filter(given) : [];
+  const credentials = [...(given("clientSecret") ? ["clientSecret"] : []), ...certs];
+  if (credentials.length === 2) return `The bundle carries ${quote(credentials).join(" and ")}; give one, not both.`;
+  if (credentials.length > 2) return `The bundle carries ${quote(credentials).join(", ")}; give one of them.`;
   const need = {
     refreshToken: ["clientId", "clientSecret", "refreshToken"],
-    clientCredentials: ["clientId", "clientSecret"],
+    clientCredentials: certs.length ? ["clientId", certs[0]] : ["clientId", "clientSecret"],
     serviceAccount: ["clientEmail", "privateKey"],
-  }[parsed.method];
+  }[method];
   if (!need) {
-    return `"method" is ${parsed.method ? `"${parsed.method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
+    return `"method" is ${method ? `"${method}"` : "missing"} — it must be "refreshToken", "clientCredentials" or "serviceAccount".`;
   }
-  const gone = missing(need);
-  if (gone.length) return `A "${parsed.method}" bundle also needs ${gone.map((k) => `"${k}"`).join(" and ")}.`;
+  // A missing secret is named with the certificates that could stand in for it.
+  const gone = missing(need).map((k) =>
+    k === "clientSecret" && method === "clientCredentials" && certFields.length
+      ? `one of ${quote(["clientSecret", ...certFields.slice(0, -1)]).join(", ")} or "${certFields[certFields.length - 1]}"`
+      : `"${k}"`);
+  if (gone.length) return `A "${method}" bundle also needs ${gone.join(" and ")}.`;
   // Microsoft builds its token endpoint from the tenant; without either there is
   // nothing to call, which the server reports much later as "no token URL".
-  if (shape.oauth === "microsoft" && parsed.method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
+  if (shape.oauth === "microsoft" && method === "clientCredentials" && !parsed.tenantId && !parsed.tokenUrl) {
     return `A Microsoft bundle needs "tenantId" (or an explicit "tokenUrl").`;
   }
   return "";

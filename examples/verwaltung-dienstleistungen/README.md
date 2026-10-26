@@ -49,8 +49,11 @@ Befehl nichts. Das Token (`--token` oder `ATLAS_TOKEN`) braucht die Rollen
 - **Ein API-Token mit der Rolle `operator`**, im Vault unter `atlas` oder in
   `ATLAS_CONNECTOR_ATLAS_TOKEN`: Die Prozesse melden ihre Position über
   `POST /api/v1/orders/{orderId}/lines/{positionId}`.
-- **Für die Badge-Genehmigung** (Vorgesetzte) einen Verzeichnis-Worker namens
-  `verzeichnis`; zum Ausprobieren genügt der AD-Mock.
+- **Für die Badge-Genehmigung** (Vorgesetzte) bei jedem Konto, das bestellt, einen
+  Linienvorgesetzten: unter Console → Administration → Organization im Konto, oder
+  aus dem Entra-Abgleich, wenn er `manager` mitliest. Ein Verzeichnis-Worker ist
+  dafür nicht mehr nötig. Fehlt der Linienvorgesetzte, startet die Genehmigung nicht,
+  und der Erfüllungsprozess meldet einen Incident, der den Grund nennt.
 
 ## Was die Tests prüfen
 

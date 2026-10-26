@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/connector/mail"
+	"github.com/pblumer/atlas/expr"
 	"github.com/pblumer/atlas/model"
 )
 
@@ -49,6 +50,10 @@ func (f *fakeMailbox) Move(context.Context, string, string) (string, error) { re
 func (f *fakeMailbox) SetRead(context.Context, string, bool) error          { return nil }
 func (f *fakeMailbox) Delete(context.Context, string) error                 { return nil }
 func (f *fakeMailbox) Reply(context.Context, string, mail.Reply) error      { return nil }
+func (f *fakeMailbox) Forward(context.Context, string, mail.Forward) error  { return nil }
+func (f *fakeMailbox) Attachment(context.Context, string, string) (mail.Document, error) {
+	return mail.Document{}, nil
+}
 
 func received(seq uint64, from, dmarc, subject string) mail.Received {
 	return mail.Received{MarkKey: "INBOX#7", Seq: seq, Envelope: mail.Envelope{
@@ -76,6 +81,16 @@ func TestMailSourcePassesTheMailboxMarksThrough(t *testing.T) {
 	if fields["eventType"] != "mail.received" || fields["from"] != "a@example.com" || fields["body"] != "Text eins" {
 		t.Errorf("fields = %v", fields)
 	}
+	// What the instance receives is the mail as one object, so a sender, a subject or
+	// a recipient list never lands on a process variable of the same name.
+	payload := events[0].Payload
+	obj, _ := payload["mail"].(map[string]any)
+	if len(payload) != 1 || obj == nil || obj["from"] != "a@example.com" || obj["eventType"] != "mail.received" {
+		t.Errorf("payload = %v; want one object, mail", payload)
+	}
+	if fields["mail"] == nil {
+		t.Error("a correlation key cannot reach the mail object: mail is missing from the fields it binds")
+	}
 	asked := f.asked[0]
 	if asked.Cursor != "7:11" || asked.Folder != "INBOX" || !asked.IncludeBody || asked.Limit != mailWatchBatch {
 		t.Errorf("asked = %+v; the bridge's cap of 256 must be held to the mail batch", asked)
@@ -85,6 +100,9 @@ func TestMailSourcePassesTheMailboxMarksThrough(t *testing.T) {
 	events, _, _ = mailSource{mb: f}.Read(context.Background(), rec, 10)
 	if _, ok := events[0].Fields["body"]; ok {
 		t.Error("a body reached the event on a watch that did not ask for it")
+	}
+	if _, ok := events[0].Payload["mail"].(map[string]any)["body"]; ok {
+		t.Error("a body reached the instance on a watch that did not ask for it")
 	}
 }
 
@@ -268,8 +286,25 @@ func TestMailWatchStartsAProcessEndToEnd(t *testing.T) {
 		t.Fatalf("active = %d, want 1: one admitted message, one refused", n)
 	}
 	vars := soleInstanceVars(t, srv)
-	if vars["subject"] != "Bestellung" || vars["from"] != "kunde@example.com" || vars["body"] != "Text Bestellung" {
-		t.Errorf("instance variables = %v", vars)
+	if len(vars) != 1 {
+		t.Errorf("instance variables = %v; want the mail as one variable and nothing beside it", vars)
+	}
+	var got struct {
+		EventType string `json:"eventType"`
+		MessageID string `json:"messageId"`
+		From      string `json:"from"`
+		Subject   string `json:"subject"`
+		Body      string `json:"body"`
+		Auth      struct {
+			DMARC string `json:"dmarc"`
+		} `json:"auth"`
+	}
+	if err := json.Unmarshal([]byte(vars["mail"]), &got); err != nil {
+		t.Fatalf("mail = %q: %v", vars["mail"], err)
+	}
+	if got.EventType != "mail.received" || got.MessageID != "7/Bestellung" || got.From != "kunde@example.com" ||
+		got.Subject != "Bestellung" || got.Body != "Text Bestellung" || got.Auth.DMARC != "pass" {
+		t.Errorf("mail = %+v", got)
 	}
 	if fake.asked[0].Cursor != "7:10" {
 		t.Errorf("the first read resumed from %q, want the primed tip", fake.asked[0].Cursor)
@@ -284,6 +319,25 @@ func TestMailWatchStartsAProcessEndToEnd(t *testing.T) {
 	srv.do(func() { stored, _, _ = srv.inboundSubs.Get(sub.ID) })
 	if stored.LastEventID != "7:14" {
 		t.Errorf("cursor = %q, want 7:14: a page the watch refused whole must still be consumed", stored.LastEventID)
+	}
+}
+
+// A watch's correlation key keeps meaning what it meant when the mail was flat —
+// internetMessageId — and can name the object the instance receives just as well.
+func TestAMailWatchsCorrelationKeySeesTheFieldsAndTheObject(t *testing.T) {
+	f := &fakeMailbox{pages: []mail.WatchPage{{Cursor: "7:12", Items: []mail.Received{received(12, "a@example.com", "pass", "eins")}}}}
+	events, _, err := mailSource{mb: f}.Read(context.Background(), mailWatch("7:11"), 10)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("Read = %d events, %v", len(events), err)
+	}
+	for _, key := range []string{"from", "mail.from"} {
+		compiled, err := expr.CompileAuto(key)
+		if err != nil {
+			t.Fatalf("compile %q: %v", key, err)
+		}
+		if got := correlationKeyOf(compiled, events[0].Fields); got != "a@example.com" {
+			t.Errorf("correlation key %q = %q, want the sender", key, got)
+		}
 	}
 }
 

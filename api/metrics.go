@@ -54,6 +54,12 @@ type durabilityCollector struct {
 	breakerTrips     *prometheus.Desc
 	breakerProbes    *prometheus.Desc
 	breakerRefused   *prometheus.Desc
+	storageCapacity  *prometheus.Desc
+	storageAvailable *prometheus.Desc
+	storageReserve   *prometheus.Desc
+	storageFrozen    *prometheus.Desc
+	storageRate      *prometheus.Desc
+	engineHalted     *prometheus.Desc
 }
 
 func newDurabilityCollector(s *Server) *durabilityCollector {
@@ -65,9 +71,9 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 		appliedPosition: d("applied_log_position", "Highest log position the state store has durably applied."),
 		checkpoints:     d("checkpoints", "Recovery checkpoints currently published on disk."),
 		checkpointPos: d("checkpoint_position",
-			"Applied log position of the newest checkpoint that still verifies; 0 when there is none."),
+			"Applied log position of the newest checkpoint that still verifies; 0 when there is none. Verified again when its files change, and at least daily."),
 		checkpointAge: d("checkpoint_age_seconds",
-			"Age of the newest checkpoint that still verifies; the log past it is what a restart replays."),
+			"Age of the newest checkpoint that still verifies; the log past it is what a restart replays. Verified again when its files change, and at least daily."),
 		lastPassAt:      d("checkpoint_last_pass_timestamp_seconds", "When the last checkpoint pass ran, in unix seconds."),
 		lastPassFailed:  d("checkpoint_last_pass_failed", "1 when the last checkpoint pass reported an error, else 0."),
 		lastPassRemoved: d("checkpoint_last_pass_segments_removed", "WAL segments the last pass compacted away."),
@@ -105,6 +111,23 @@ func newDurabilityCollector(s *Server) *durabilityCollector {
 			"Jobs admitted as a probe to test whether a held target has recovered."),
 		breakerRefused: d("worker_breaker_refused_total",
 			"Dispatch attempts turned away because their target was being held back."),
+		// The storage guard (ADR-0481), for the file system with the least
+		// room. The forecast is deliberately left to Prometheus as well:
+		// predict_linear(atlas_storage_available_bytes[1d], 7*86400) < atlas_storage_reserve_bytes
+		// alerts a week ahead over as long a window as retention holds, while the rate
+		// below is the server's own six-hour estimate, which starts over on every restart.
+		storageCapacity: d("storage_capacity_bytes",
+			"Size of the file system with the least room among those the server writes to."),
+		storageAvailable: d("storage_available_bytes",
+			"Bytes the server may still write on that file system."),
+		storageReserve: d("storage_reserve_bytes",
+			"The storage reserve: below it the server refuses new writes until space is back; 0 when the freeze is off."),
+		storageFrozen: d("storage_frozen",
+			"1 while less than the reserve is available and new writes are refused, else 0."),
+		storageRate: d("storage_consumption_bytes_per_second",
+			"Net consumption of that file system, smoothed over about six hours; absent until an hour has been observed."),
+		engineHalted: d("engine_halted",
+			"1 once the engine halted after a batch could not be made durable; it processes nothing more until restarted."),
 	}
 }
 
@@ -131,6 +154,12 @@ func (c *durabilityCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.breakerTrips
 	ch <- c.breakerProbes
 	ch <- c.breakerRefused
+	ch <- c.storageCapacity
+	ch <- c.storageAvailable
+	ch <- c.storageReserve
+	ch <- c.storageFrozen
+	ch <- c.storageRate
+	ch <- c.engineHalted
 	// The exporter descriptors are deliberately absent: they are only collected when an
 	// exporter exists, and an unchecked collector is how Prometheus permits that.
 }
@@ -150,7 +179,10 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 		gauge(c.appliedPosition, float64(applied))
 	}
 
-	published := s.publishedCheckpoints()
+	// Remembered verdicts, not a fresh read: verifying re-hashes every checkpoint's state
+	// files, which on a large store is minutes of disk per scrape
+	// (ADR-0488).
+	published := s.rememberedCheckpoints()
 	gauge(c.checkpoints, float64(len(published)))
 	// "Newest that still verifies" rather than "newest": an unverifiable checkpoint
 	// licenses no compaction and would not carry a restore, so counting it here would
@@ -201,6 +233,33 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 	// What the last startup recovery cost (ADR-0142 slice 6). Reported only once it has
 	// happened: a zero on a processor that has not recovered would read as an instant
 	// recovery rather than as no recovery at all.
+	// The storage guard, from the monitor's last reading rather than a reading of its
+	// own: a scrape must not cost a statfs per file system, and the monitor's reading is
+	// the one the freeze was decided on. A reading that failed is omitted.
+	snap := s.storage.Snapshot()
+	gauge(c.storageReserve, float64(snap.ReserveBytes))
+	frozen, halted := 0.0, 0.0
+	if s.storage.Frozen() {
+		frozen = 1
+	}
+	if s.proc.Halted() != nil {
+		halted = 1
+	}
+	gauge(c.storageFrozen, frozen)
+	gauge(c.engineHalted, halted)
+	if snap.Error == "" {
+		for _, fs := range snap.FileSystems {
+			if !fs.Decides {
+				continue
+			}
+			gauge(c.storageCapacity, float64(fs.TotalBytes))
+			gauge(c.storageAvailable, float64(fs.AvailableBytes))
+			if fs.Forecast != nil {
+				gauge(c.storageRate, fs.Forecast.BytesPerSecond)
+			}
+		}
+	}
+
 	if rec := s.proc.LastRecovery(); rec.Done {
 		gauge(c.recoverySeconds, rec.Seconds)
 		gauge(c.recoveryReplayed, float64(rec.Replayed))
@@ -277,13 +336,14 @@ func (c *durabilityCollector) Collect(ch chan<- prometheus.Metric) {
 // Prometheus conventions use.
 const nanosPerSecond = 1_000_000_000
 
-// buildMetrics assembles the registry this server exports: the build info and the
-// durability collector. It runs at construction, so a duplicate or inconsistent
-// registration fails the boot rather than a scrape.
+// buildMetrics assembles the registry this server exports: the build info, the
+// durability collector and the API tokens' lifetimes. It runs at construction, so a
+// duplicate or inconsistent registration fails the boot rather than a scrape.
 func (s *Server) buildMetrics() error {
 	reg := metrics.NewRegistry()
 	b := Build()
-	if err := reg.Register(metrics.BuildInfo(b.Version, b.Revision), newDurabilityCollector(s)); err != nil {
+	if err := reg.Register(metrics.BuildInfo(b.Version, b.Revision), newDurabilityCollector(s),
+		newAPITokenCollector(s)); err != nil {
 		return err
 	}
 	// The engine's hot-path counters, pushed from the batch loop rather than read at

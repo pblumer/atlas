@@ -117,7 +117,79 @@ func TestMailOperationsRefuseWhatTheyDoNotUse(t *testing.T) {
 
 func TestMailOperationsListIsSorted(t *testing.T) {
 	ops := MailOperations()
-	if strings.Join(ops, ",") != "delete,get,list,mark-read,mark-unread,move,reply,send" {
+	if strings.Join(ops, ",") != "delete,export-attachment,forward,get,get-attachment,list,mark-read,mark-unread,move,reply,send" {
 		t.Errorf("MailOperations = %v", ops)
+	}
+}
+
+// The three operations that hand a document on
+// (ADR-0478).
+func TestMailDocumentOperationsCompile(t *testing.T) {
+	cp, d := mailDetail(t, `connector="m" operation="forward" messageId="=mail.messageId" to="=approver" cc="c@x.ch" body="Zur Ablage"`)
+	if d.MailOp != "forward" || d.To.Expr == nil || d.Cc.Literal != "c@x.ch" || d.Body.Literal != "Zur Ablage" || d.ResultVar != -1 {
+		t.Errorf("forward detail = op %q to %+v cc %+v body %+v result %d", d.MailOp, d.To, d.Cc, d.Body, d.ResultVar)
+	}
+	if uses := cp.MailboxUses(); len(uses) != 1 || uses[0].Operation != "forward" || uses[0].Store != "" {
+		t.Errorf("forward MailboxUses = %+v", uses)
+	}
+
+	cp, d = mailDetail(t, `connector="m" operation="get-attachment" messageId="x" attachmentId="=a.id" allowedTypes="application/pdf, Image/*" resultVariable="doc"`)
+	if d.MailAttachment.Expr == nil || strings.Join(d.MailAllowedTypes, ",") != "application/pdf,image/*" || cp.Intern(d.ResultVar) != "doc" {
+		t.Errorf("get-attachment detail = attachment %+v types %v result %q", d.MailAttachment, d.MailAllowedTypes, cp.Intern(d.ResultVar))
+	}
+
+	cp, d = mailDetail(t, `connector="m" operation="export-attachment" messageId="x" attachmentId="2" store="belege" bucket="eingang" key="=k"`)
+	if d.MailStore != "belege" || d.MailBucket.Literal != "eingang" || d.MailKey.Expr == nil || d.MailAttachment.Literal != "2" || d.ResultVar != -1 {
+		t.Errorf("export detail = store %q bucket %+v key %+v attachment %+v", d.MailStore, d.MailBucket, d.MailKey, d.MailAttachment)
+	}
+	if uses := cp.MailboxUses(); len(uses) != 1 || uses[0].Store != "belege" {
+		t.Errorf("an export names its store to the deploy check: %+v", uses)
+	}
+	if _, d = mailDetail(t, `connector="m" operation="export-attachment" messageId="x" attachmentId="2" store="belege" bucket="b" key="k" resultVariable="where"`); d.ResultVar < 0 {
+		t.Error("an export may keep where its document went")
+	}
+}
+
+func TestMailDocumentOperationsRefuseWhatTheyDoNotUse(t *testing.T) {
+	for attrs, want := range map[string]string{
+		`operation="forward" messageId="x"`:                                                                 "needs a to recipient",
+		`operation="forward" to="a@b.ch"`:                                                                   "needs a messageId",
+		`operation="forward" messageId="x" to="a@b.ch" subject="s"`:                                         "does not use subject",
+		`operation="forward" messageId="x" to="a@b.ch" from="x@y.ch"`:                                       "does not use from",
+		`operation="forward" messageId="x" to="a@b.ch" resultVariable="r"`:                                  "does not use resultVariable",
+		`operation="get-attachment" messageId="x" resultVariable="d"`:                                       "needs a attachmentId",
+		`operation="get-attachment" messageId="x" attachmentId="1"`:                                         "needs a resultVariable",
+		`operation="get-attachment" messageId="x" attachmentId="1" resultVariable="d" store="s"`:            "does not use store",
+		`operation="get-attachment" messageId="x" attachmentId="1" resultVariable="d" allowedTypes="pdf"`:   "is not a media type",
+		`operation="get-attachment" messageId="x" attachmentId="1" resultVariable="d" allowedTypes="*/pdf"`: "is not a media type",
+		`operation="export-attachment" messageId="x" attachmentId="1" bucket="b" key="k"`:                   "needs a store",
+		`operation="export-attachment" messageId="x" attachmentId="1" store="s" key="k"`:                    "needs a bucket",
+		`operation="export-attachment" messageId="x" attachmentId="1" store="s" bucket="b"`:                 "needs a key",
+		`operation="export-attachment" messageId="x" attachmentId="1" store="=s" bucket="b" key="k"`:        "names its store with an expression",
+		`operation="export-attachment" messageId="x" attachmentId="1" store="s" bucket="b" key="k" to="a"`:  "does not use to",
+		`operation="get" messageId="x" resultVariable="m" attachmentId="1"`:                                 "does not use attachmentId",
+		`to="a@b.ch" allowedTypes="application/pdf"`:                                                        "does not use allowedTypes",
+	} {
+		_, err := Parse(1, 1, strings.NewReader(mailTaskBPMN(`connector="m" `+attrs)))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s = %v, want an error containing %q", attrs, err, want)
+		}
+	}
+}
+
+// includeBody="html" reads a message's HTML body as well — on a get, never on a list,
+// whose hundred answers share one variable (ADR-0489).
+func TestMailGetReadsTheHTMLBodyOnRequest(t *testing.T) {
+	_, d := mailDetail(t, `connector="m" operation="get" messageId="=mail.messageId" includeBody="html" resultVariable="mail"`)
+	if !d.MailIncludeBody || !d.MailIncludeHTML {
+		t.Errorf("includeBody=html = text %v, html %v; want both", d.MailIncludeBody, d.MailIncludeHTML)
+	}
+	_, d = mailDetail(t, `connector="m" operation="get" messageId="x" includeBody="true" resultVariable="mail"`)
+	if !d.MailIncludeBody || d.MailIncludeHTML {
+		t.Errorf("includeBody=true = text %v, html %v; want the text alone", d.MailIncludeBody, d.MailIncludeHTML)
+	}
+	_, err := Parse(1, 1, strings.NewReader(mailTaskBPMN(`connector="m" operation="list" includeBody="HTML" resultVariable="mails"`)))
+	if err == nil || !strings.Contains(err.Error(), "only a get reads a message's HTML body") {
+		t.Errorf("a list with includeBody=html = %v; want it refused, pointing at get", err)
 	}
 }

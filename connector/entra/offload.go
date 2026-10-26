@@ -5,14 +5,18 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
@@ -64,15 +68,32 @@ type Op struct {
 	// it wants (ADR-0172, amended). A listing and a delta query take one as well; this
 	// flag is for the reads that return one object.
 	Selects bool
+	// Expands names the single-valued navigation property a read expands on the user it
+	// addresses and returns in the user's place: "manager" for get-user-manager (ADR-0172,
+	// amended 2026-10-22). The read goes through the user rather than to
+	// /users/{id}/manager, because Graph answers that path 404 both for a person who has
+	// no manager and for an id that is nobody's. Through the user, an unknown id is still
+	// a 404 and fails the job, while a missing manager is a missing property and reads as
+	// null. A select projects the expanded object, since that is what the result
+	// variable receives.
+	Expands string
 	// Describes the operation for an error message.
 	Label string
 }
 
+// needsResult reports whether the operation is a read whose answer has to land
+// somewhere: a collection, a delta, bytes or an expanded object. A run of one that
+// discards its result is one nothing asked for.
+func (o Op) needsResult() bool {
+	return o.IsList || o.IsDelta || o.IsBinary || o.Expands != ""
+}
+
 // Ops is the operation table. The set covers a joiner/mover/leaver lifecycle across the
-// three objects an identity process manages: the account (create, read, list, update,
-// enable, disable, reset-password, delete), the group (create, read, list, update,
-// delete, and members and owners), and the Team a group backs (create, add members and
-// owners, create a channel, archive) — plus licence and directory-role assignment.
+// three objects an identity process manages: the account (create, read, read its photo
+// and its manager, list, update, enable, disable, reset-password, delete), the group
+// (create, read, list, update, delete, and members and owners), and the Team a group
+// backs (create, add members and owners, create a channel, archive) — plus licence and
+// directory-role assignment.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
@@ -81,6 +102,7 @@ var Ops = map[string]Op{
 	// indistinguishable here from "this person has no photo", so asking for one
 	// would trade a bounded cost for a silent wrong answer.
 	"get-user-photo":      {Method: "GET", NeedsUser: true, IsBinary: true, Label: "read a user's photo"},
+	"get-user-manager":    {Method: "GET", NeedsUser: true, Selects: true, Expands: "manager", Label: "read a user's manager"},
 	"list-users":          {Method: "GET", IsList: true, ListPath: "/users", Label: "list users"},
 	"delta-users":         {Method: "GET", IsDelta: true, ListPath: "/users/delta", Label: "delta-query users"},
 	"update-user":         {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "update a user"},
@@ -172,7 +194,23 @@ type Job struct {
 	// filter that needed the header, which is how this was found.
 	Advanced       bool   `json:"advancedQuery,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// ErrorCodes are the codes an error boundary or error event subprocess of the task's
+	// process catches. An answer under one of them is thrown as a BPMN error; anything
+	// else is a failure (ADR-0461). They travel with the job because a worker has no
+	// compiled process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
 }
+
+// CodeUserNotFound is the BPMN error get-user-manager ends with when the user it reads
+// through does not exist — Graph's 404 with Request_ResourceNotFound — and the task's
+// process catches the code (ADR-0172, amended 2026-10-22). A process asking for a
+// person's manager usually has a path for that answer: the person was typed into an
+// order form, and somebody should decide instead. Uncaught, it stays the failure it
+// always was, with its retries and then an incident.
+const CodeUserNotFound = "ENTRA_USER_NOT_FOUND"
+
+// Codes lists every code an operation of this worker can throw.
+var Codes = []string{CodeUserNotFound}
 
 // Resolve turns a compiled Entra task into a [Job]: the authored ids
 // evaluated against the instance's variables, and the attributes object read up the
@@ -217,6 +255,7 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		Search:         resolveValue(detail.EntraSearch, elementInstanceKey, vars),
 		Advanced:       detail.EntraAdvanced,
 		ResultVariable: cp.Intern(detail.ResultVar),
+		ErrorCodes:     cp.CaughtErrorCodes(),
 	}
 	if spec.NeedsAttributes {
 		// Inline attributes (a FEEL context compiled from the modeler's JSON template)
@@ -324,15 +363,66 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 	}
 	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
 	if err != nil {
-		return nil, err
+		return nil, thrown(j, spec, err)
 	}
 	if spec.IsBinary {
 		return map[string]any{j.ResultVariable: photoResult(res)}, nil
+	}
+	if spec.Expands != "" {
+		v, err := expandedObject(res, spec.Expands, j.Operation)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{j.ResultVariable: v}, nil
 	}
 	if j.ResultVariable == "" {
 		return nil, nil
 	}
 	return map[string]any{j.ResultVariable: res}, nil
+}
+
+// thrown is err as the job ends with it. A read through the user that Graph answers
+// with Request_ResourceNotFound says the user does not exist, and becomes
+// [CodeUserNotFound] when the task's process catches that code, so the instance takes
+// its path at once instead of spending retries on an answer that will not change.
+// Anything else stays a failure (ADR-0461's rule).
+//
+// Graph's code is required as well as the 404: a 404 from a proxy or a wrong base URL
+// is not Graph saying the person does not exist, and routing it as if it were would
+// send every order to the fallback in silence. The message names no user, because it
+// is kept with the error and the id is often a value the process keeps enciphered.
+func thrown(j Job, spec Op, err error) error {
+	var ge *GraphError
+	if spec.Expands == "" || !errors.As(err, &ge) || ge.Status != http.StatusNotFound || ge.Code != "Request_ResourceNotFound" {
+		return err
+	}
+	if !slices.Contains(j.ErrorCodes, CodeUserNotFound) {
+		return err
+	}
+	return &job.BPMNError{Code: CodeUserNotFound, Message: "entra: " + j.Operation + ": the user does not exist in Entra ID"}
+}
+
+// expandedObject takes the expanded navigation property out of the user it was read
+// through, so the result variable holds the manager and not the user carrying it.
+//
+// An absent or null property is the answer "there is none" and returns nil, so a model
+// asks `= chef = null` to route to a fallback. Anything else that is not an object
+// there is an error rather than a null: a malformed answer read as "no manager" is a
+// wrong answer a process would route an approval on.
+func expandedObject(res any, nav, op string) (any, error) {
+	user, ok := res.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("entra: %s expected the user object, got %T", op, res)
+	}
+	v, present := user[nav]
+	if !present || v == nil {
+		return nil, nil
+	}
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("entra: %s response has a %q that is a %T, not an object", op, nav, v)
+	}
+	return obj, nil
 }
 
 // photoResult turns what a binary read returned into what a process variable can
@@ -589,7 +679,7 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
-	if (spec.IsList || spec.IsDelta || spec.IsBinary) && strings.TrimSpace(j.ResultVariable) == "" {
+	if spec.needsResult() && strings.TrimSpace(j.ResultVariable) == "" {
 		return fmt.Errorf("entra: operation %q resolved no resultVariable; a directory read that discards its result is one nothing asked for", j.Operation)
 	}
 	return nil
@@ -606,12 +696,6 @@ func (j Job) advanced() bool {
 	return j.Advanced || strings.TrimSpace(j.Search) != ""
 }
 
-// request builds the Graph request for one operation. baseURL is needed by the
-// operations whose *body* carries an absolute URL — the $ref adds and the Team member
-// binds.
-//
-// Only a listing can ask for eventual consistency: every other operation addresses
-// one object by id, where an advanced query has nothing to mean.
 // selectQuery is the $select a single-object read carries, or nothing. The parameter
 // name is written literally, as listPath writes it, so the $ stays readable in a log.
 func selectQuery(j Job) string {
@@ -621,6 +705,25 @@ func selectQuery(j Job) string {
 	return ""
 }
 
+// expandQuery is the query of a read that returns a navigation property of the user
+// instead of the user: the user cut down to its id, which is all of it the read
+// discards, and the property expanded. An authored select applies to the expanded
+// object, because that is what the result variable receives. Only the immediate
+// object is expanded; without $levels Graph needs no advanced query support for it.
+func expandQuery(j Job, nav string) string {
+	expand := nav
+	if sel := strings.TrimSpace(j.Select); sel != "" {
+		expand += "($select=" + url.QueryEscape(sel) + ")"
+	}
+	return "?$select=id&$expand=" + expand
+}
+
+// request builds the Graph request for one operation. baseURL is needed by the
+// operations whose *body* carries an absolute URL — the $ref adds and the Team member
+// binds.
+//
+// Only a listing can ask for eventual consistency: every other operation addresses
+// one object by id, where an advanced query has nothing to mean.
 func request(j Job, spec Op, baseURL string) Request {
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
@@ -649,6 +752,8 @@ func request(j Job, spec Op, baseURL string) Request {
 		r.Path = "/users/" + user
 	case "get-user-photo":
 		r.Path = "/users/" + user + "/photo/$value"
+	case "get-user-manager":
+		r.Path = "/users/" + user + expandQuery(j, spec.Expands)
 	case "update-user":
 		r.Path, r.Body = "/users/"+user, j.Attributes
 	case "reset-password":

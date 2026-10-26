@@ -4,7 +4,7 @@ Deploys the single-binary [atlas](https://github.com/pblumer/atlas) BPMN workflo
 engine — the engine, HTTP API, web UI and MCP endpoint in one container.
 
 > ⚠️ Atlas is in early development (`0.x`) — APIs and on-disk formats are
-> unstable. By default this chart deploys the pinned `0.16.0` release image; set
+> unstable. By default this chart deploys the pinned `0.20.0` release image; set
 > `image.tag` to move to another release (or to the rolling `main` tag).
 
 ## Why a StatefulSet with one replica
@@ -21,14 +21,14 @@ not pods.
 
 ```bash
 # From the OCI registry (no checkout needed):
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.16.0
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.20.0
 
 # ...or from a checkout of the repo:
 helm install atlas ./deploy/helm/atlas
 
 # Pin an image tag and give it real storage:
-helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.16.0 \
-  --set image.tag=0.16.0 \
+helm install atlas oci://ghcr.io/pblumer/charts/atlas --version 0.20.0 \
+  --set image.tag=0.20.0 \
   --set persistence.size=20Gi \
   --set persistence.storageClass=fast-ssd
 ```
@@ -120,7 +120,7 @@ provider. Set it to the origin your Ingress serves, not the Service name.
 
 Keep the bootstrap administrator above — it is the way back in when the
 provider is unreachable. Which atlas roles the provider's groups grant is
-configured in the running instance, under Console → Organization → Single
+configured in the running instance, under Console → Administration → Organization → Single
 sign-on, and is off until somebody turns it on. See
 [`docs/install.md`](../../../docs/install.md#single-sign-on-with-an-identity-provider).
 
@@ -204,12 +204,14 @@ common knobs:
 | `image.repository` | `ghcr.io/pblumer/atlas` | Image to run |
 | `image.tag` | `""` (chart `appVersion`) | Image tag; pin in production |
 | `persistence.enabled` | `true` | Use a PersistentVolume (never `false` for real use) |
-| `persistence.size` | `8Gi` | PVC size for WAL + state store |
-| `persistence.storageClass` | `""` (cluster default) | StorageClass for the PVC |
+| `persistence.size` | `8Gi` | PVC size for WAL + state store. The server keeps 1 GiB of it free and refuses new writes below that (`--storage-reserve-mb`); the Console's dashboard shows the rest and a forecast |
+| `persistence.storageClass` | `""` (cluster default) | StorageClass for the PVC. Prefer one backed by a block device: on `local-path`/`hostPath` and network filesystems the free space the server reads is the node's or the pool's, not the claim's |
 | `atlas.auth.enabled` | `false` | Require login for API/UI |
 | `atlas.vault.enabled` | `true` | Encrypted secret vault |
 | `atlas.docs.enabled` | `true` | Serve OpenAPI + API explorer |
 | `atlas.catalogue.enabled` | `true` | Serve the shop, catalogue, orders and inventory; `false` switches the whole area off, keeping its data |
+| `atlas.catalogue.purge` | `true` | Let an administrator delete a catalogue or product for good, with its orders and holds (`--catalogue-purge`); set `false` on production |
+| `atlas.instancePurge` | `true` | Let an administrator delete a process version's finished instances for good, up to a cut-off (`--instance-purge`); set `false` on production |
 | `atlas.tls.enabled` | `false` | Terminate TLS in the pod. Needs `atlas.tls.existingSecret`; the probes switch to HTTPS with it |
 | `atlas.tls.existingSecret` | `""` | `kubernetes.io/tls` Secret with the certificate and key (what cert-manager writes) |
 | `atlas.tls.caKey` | `""` | Key in that Secret holding a CA bundle to trust when publishing to another atlas (`--tls-ca`) |

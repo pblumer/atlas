@@ -91,7 +91,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindClio:         {compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex},
 	connectorKindMail:         {compiler.MailJobTypeIndex},
 	"csv":                     {compiler.CsvImportJobTypeIndex},
-	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex},
+	connectorKindSharePoint:   {compiler.SharePointJobTypeIndex, compiler.SharePointOpsJobTypeIndex},
 	connectorKindRemedy:       {compiler.RemedyJobTypeIndex},
 	connectorKindJira:         {compiler.JiraJobTypeIndex},
 	connectorKindGoogleSheets: {compiler.GoogleSheetsJobTypeIndex},
@@ -100,6 +100,10 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindExchange:     {compiler.ExchangeJobTypeIndex},
 	"webscrape":               {compiler.WebScrapeJobTypeIndex},
 	"userconnector":           {compiler.UserConnectorJobTypeIndex},
+
+	// Keyed by the kind's name, like Teams Phone's above.
+	connectorKindGoogleContacts: {compiler.GoogleContactsJobTypeIndex},
+	connectorKindCardDAV:        {compiler.CardDAVJobTypeIndex},
 
 	// A script task's language (ADR-0047). One entry per language, not one for
 	// "script": see above.

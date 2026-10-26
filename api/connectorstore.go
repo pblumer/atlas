@@ -19,8 +19,9 @@ import (
 // connectorKindSharePoint is the SharePoint Worker Type (ADR-0141): a managed
 // record of this kind resolves to a live Microsoft Graph client whose OAuth
 // credential is read from the vault. Like mail, its Graph base and secret are managed
-// here, never in the model; only the target (site, list, item fields) is
-// model-authored. See sharepoint.NewProviderClient, which owns provider dispatch.
+// here, never in the model; only the operation and its target (site, list or
+// library, item or path, column values) are model-authored. See
+// sharepoint.NewProviderClient, which owns provider dispatch.
 // connectorKindRemedy is the BMC Remedy Worker Type (ADR-0106): a managed record
 // of this kind resolves to a live Remedy AR System client whose credential bundle
 // (username/password JSON) is read from the vault. Like clio and mail, its base URL
@@ -82,6 +83,18 @@ const (
 	// certificate thumbprint. Worker-only like Entra: the engine never signs in, so the
 	// app never enters it.
 	connectorKindTeamsPhone = "teamsphone"
+	// connectorKindGoogleContacts is the Google Contacts Worker Type
+	// (ADR-0476). Worker-only like Exchange: a record holds an
+	// optional endpoint — a People API base for an operator behind a proxy — and a
+	// credentialsRef naming the vault bundle that says whose address book it is and as
+	// whom (connector/googlecontacts.Bundle). The engine builds no client from it.
+	connectorKindGoogleContacts = "googlecontacts"
+	// connectorKindCardDAV is the CardDAV Worker Type (ADR-0490).
+	// Worker-only like Google Contacts: a record holds the endpoint — the address book's
+	// URL or the server's — and a credentialsRef naming the vault bundle with the
+	// account's username and password (connector/carddav.Bundle). The engine builds no
+	// client from it.
+	connectorKindCardDAV = "carddav"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names
@@ -134,6 +147,13 @@ type configuredWorker struct {
 	// uses the sender and the credential above as login. Empty for a Worker that only
 	// sends, and for Gmail and Microsoft, which read through the API they send with.
 	MailboxEndpoint string `json:"mailboxEndpoint,omitempty"`
+	// Scanner is a mail Worker's malware scanner ("clamd://host:3310"): every
+	// attachment the Worker hands on — forwarded, read into a variable, exported into a
+	// store — is scanned by it first, and a scanner that does not answer stops the task
+	// rather than letting the document through
+	// (ADR-0478). Empty scans nothing beyond the
+	// built-in inspection.
+	Scanner string `json:"scanner,omitempty"`
 
 	// Model is which model an agent Worker asks (Kind == connectorKindAgent,
 	// ADR-0255). It is the first piece of a Worker's
@@ -148,6 +168,15 @@ type configuredWorker struct {
 	// Worker already means. The Chat-Completions adapter has no default and says so at
 	// startup, which is why validateAgentConnector insists on one for that protocol.
 	Model string `json:"model,omitempty"`
+
+	// FormLookups lets a task form search through this Worker: a person typing into a
+	// directory field of a form that names it sees entries of its directory
+	// (ADR-0473). It is the Worker's editors' decision, off
+	// until one of them makes it, because it puts the Worker's credential behind every
+	// task form that names it — and being able to see or edit a form is not
+	// permission to search a directory with somebody else's credential. Only a kind a
+	// remote data source is offered for (entra) may carry it.
+	FormLookups bool `json:"formLookups,omitempty"`
 
 	// Ownership and sharing (ADR-0205, measure M11). The three fields are ADR-0071's
 	// for a project, reused verbatim rather than reinvented, so a group grant
@@ -166,6 +195,13 @@ type configuredWorker struct {
 	Visibility string          `json:"visibility,omitempty"` // "private" | "shared"
 	Members    []projectMember `json:"members,omitempty"`
 	UpdatedAt  int64           `json:"updatedAt,omitempty"`
+
+	// Identity is the Worker's identity policy
+	// (ADR-0475 §11): as whom its actions run, for
+	// whom, and whether a decision is enforced or only recorded. Unlike the ownership
+	// fields above, the runtime does consult it — through the enforcement point. Nil
+	// is a legacy Worker, which behaves as every Worker did before.
+	Identity *workerIdentity `json:"identity,omitempty"`
 }
 
 // connector is the compatibility name used by the existing connector-oriented API

@@ -91,6 +91,9 @@ state/      State store wrapper, transactions, indexes (column families)
 wal/        Write-ahead log: segmented append, group commit, replay
 checkpoint/ Recovery checkpoints and WAL compaction (ADR-0131)
 expr/       FEEL expression compilation and evaluation
+  feelers/    The template language of form-js's text views — {{ FEEL }}, {{#if}}, {{#loop}} —
+              compiled at deploy and rendered on the server, for mail texts
+              (ADR-0487)
 job/        Job store, worker subscription, gRPC streaming protocol
 dmn/        DMN registry, resolver, validation, and the business-rule-task worker
 connector/  Worker Type implementations — one package per type (ADR-0203)
@@ -111,6 +114,14 @@ api/        HTTP API, web UI, command submission and queries
               whose stages they perform, with the realisation edge resolved at read
               time and the gap report computed against what this server runs
               (ADR-0305)
+  formlookup/ A task form's remote data sources: the directory field's schema, the
+              provider registry, the task-bound lookup route and the check before
+              completion (ADR-0473)
+  workerquery/ The Worker protocol's non-durable query beside the job: an in-memory
+              broker Worker Instances lease from, never the log
+  storage/    The disk under the data directory: the monitor that reads it off the run
+              loop, the reserve below which writes are refused, and the forecast
+              (ADR-0481)
   formgen/    Writing a form from a description and from the process it belongs to
               (ADR-0260) — design-time authoring against the agent
               Worker an operator configured; it owns no state, so it holds no run loop
@@ -130,6 +141,8 @@ internal/trustedproxy/ The client's address behind a load balancer: --trusted-pr
 internal/sysproxy/ The outbound proxy, chosen as .NET chooses it: a proxy variable, else on
             Windows the account's PAC, WPAD or Internet Options settings
             (ADR-0464)
+internal/diskspace/ How large a directory's file system is and how much this process may
+            still write: statfs on Unix, GetDiskFreeSpaceExW on Windows
 internal/certstore/ Signing with a key in the Windows certificate store, named by its
             certificate's thumbprint, without reading the key out (ADR-0172, amended)
 ```
@@ -143,12 +156,14 @@ Atlas supervises is an operator's choice, not the model's (ADR-0164/0168):
 ```
 connector/rest/        HTTP REST outbound (ADR-0067)
 connector/mail/        Outbound mail: SMTP, Gmail, Microsoft Graph (ADR-0079/0093)
-connector/sharepoint/  SharePoint list items via Graph (ADR-0141)
+connector/sharepoint/  SharePoint lists and document libraries via Graph (ADR-0141), and its mockup (ADR-0484)
 connector/remedy/      BMC Remedy AR System (ADR-0106)
 connector/jira/        Atlassian Jira issues (ADR-0201)
 connector/googlesheets/ Google Sheets and Drive (ADR-0235)
 connector/s3/          S3-compatible object storage (ADR-0442)
 connector/exchange/    Microsoft Exchange Online and Exchange Server administration (ADR-0462)
+connector/googlecontacts/ Google Contacts: find, keep and label contacts, search the directory (ADR-0476)
+connector/carddav/     CardDAV address books (iCloud, Nextcloud, mail providers): Google Contacts' operations (ADR-0490)
 connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)
@@ -219,6 +234,14 @@ guard their own conventions with tests in the mandatory sweep and assign their o
 numbers (`docs/adr/number.go`, `make adr-number`).
 
 ## How to approach a task
+
+**Programme work (mandatory for multi-PR or multi-agent initiatives):** Start at the
+[all-programmes registry](docs/programs/README.md), read the programme manifest
+and delivery plan, and follow the [Programme Delivery Protocol](docs/development/program-delivery.md).
+Confirm the responsible owner, dependency and accepted ADR gates before beginning a
+slice. An agent must leave a durable post-merge handoff, update the manifest and
+regenerate the index; a green or merged PR alone does not complete a slice.
+Do not start additional parallel slices for a programme with no accountable owner.
 
 1. **Locate it on the roadmap.** [`ROADMAP.md`](ROADMAP.md) is organized by milestone. Confirm the task belongs to the current milestone and isn't blocked by an unstarted dependency.
 2. **Read the relevant deep-dive(s)** for the package you're touching, plus any ADR they reference.

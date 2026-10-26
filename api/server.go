@@ -48,12 +48,16 @@ import (
 	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/collab"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/identity"
 	"github.com/pblumer/atlas/api/infomodel"
 	"github.com/pblumer/atlas/api/panorama"
+	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
+	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
+	"github.com/pblumer/atlas/authz"
 	"github.com/pblumer/atlas/checkpoint"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -78,6 +82,7 @@ import (
 	"github.com/pblumer/atlas/connector/webscrape"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/internal/diskspace"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/jobtype"
 	"github.com/pblumer/atlas/limits"
@@ -95,12 +100,14 @@ import (
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
 	"github.com/pblumer/atlas/api/formgen"
+	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/releasenotes"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
+	"github.com/pblumer/atlas/api/workerquery"
 )
 
 // dmnResolverFromEnv picks the DMN model source. When ATLAS_DMN_RESOLVER_URL is
@@ -146,11 +153,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.16.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.20.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.16.0-dev"
+var Version = "0.20.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -197,6 +204,12 @@ type Server struct {
 	// endpoints (ADR-0107) read and write the design-time subtree of it; nothing
 	// else needs it, so it is set once at construction and read-only thereafter.
 	dataDir string
+
+	// nodeID is this installation's stable runtime id (ADR-0189 §6), read once at
+	// construction and read-only thereafter. A CardDAV create derives its contact's name
+	// from it and the job key (ADR-0490), which is why it is kept here
+	// rather than read from the settings store on the run loop for every job handed out.
+	nodeID string
 
 	// runLoop is the single-writer goroutine that owns the processor, the store
 	// and the registries; every handler reaches them through it (I3, ADR-0002).
@@ -333,6 +346,17 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// identity holds linked external accounts and delegated connections and brokers
+	// their credentials; policies is the policy administration point; governed is the
+	// in-memory view of which Workers carry an identity policy, read by the
+	// enforcement point and the completion guard without a store read
+	// (ADR-0475). identity is nil when the vault is
+	// disabled: a delegated credential has nowhere else it may live.
+	identity *identity.Service
+	policies *policy.Service
+	governed atomic.Pointer[map[string]governedWorker]
+	// msLink is the Microsoft account-linking configuration, nil when not configured.
+	msLink *microsoftLink
 	// catalogs serves the self-service portal's product catalogues and the releases
 	// published from them (ADR-0312). Another
 	// area service on the ADR-0147 shape: its own store, the run loop for every
@@ -372,6 +396,16 @@ type Server struct {
 	// loop, because it owns no state: it stores nothing, and the three closures in
 	// formgeneration.go are its whole reach into this server.
 	formGen *formgen.Service
+	// formLookup serves a task form's remote data sources, and workerQueries the
+	// Worker Instances that answer them through queryBroker — the protocol's
+	// non-durable message kind beside the job (ADR-0473).
+	// None of the three holds a run loop or reaches the log: a lookup is a query that
+	// lives as long as the request waiting on it. formlookups.go is their whole
+	// reach into this server.
+	formLookup    *formlookup.Service
+	workerQueries *workerquery.Service
+	queryBroker   *workerquery.Broker
+	lookupRate    *rateLimiter
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -443,6 +477,8 @@ type Server struct {
 	connectors       *connectorStore           // durable sidecar for managed workers (ADR-0041)
 	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
+	baselines        *importBaselineStore      // what the last import brought, per artifact: the base an import compares with (ADR-0467)
+	mappings         *packageMappingStore      // what a package's names mean on this installation (ADR-0467)
 	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
 	repository       []repositoryPackage       // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore          // durable sidecar for installed repository templates (ADR-0081)
@@ -459,6 +495,11 @@ type Server struct {
 	// is touched from concurrent handler goroutines, so it guards itself with a
 	// mutex; it is not engine state and does not persist (ADR-0044).
 	sessions *sessionStore
+
+	// lastLogins is the day each account last signed in, beside the account rather
+	// than on it. Written by the sign-in path off the run loop and serialised by its
+	// own mutex, like sessions (ADR-0477, lastlogin.go).
+	lastLogins *lastLoginStore
 
 	// collab holds live collaborative-editing sessions on drafts in memory
 	// (ADR-0140). Like sessions it is reached from concurrent handler goroutines
@@ -491,6 +532,14 @@ type Server struct {
 	// way to act as this principal without presenting anything
 	// (ADR-0196).
 	internalToken string
+	// brokerKey is what a supervised Worker Instance presents, beside the internal
+	// token, when it asks for a person's delegated credential
+	// (ADR-0475 §11). Every supervised child holds the
+	// internal token; only the one serving a brokered Worker Type is handed this key, so
+	// a compromised child of another kind cannot obtain a person's token by leasing a
+	// job it does not serve. Minted per start, kept in memory only; empty when auth is
+	// off.
+	brokerKey string
 
 	// dmnResolver turns a DMN reference handle into model XML; dmnValidator wraps
 	// it with a temis compile for the deploy-time validation gate (ADR-0034).
@@ -569,6 +618,15 @@ type Server struct {
 	// the run loop, so it needs no lock.
 	sharePointRegistry *sharepoint.Registry
 
+	// sharePointMocks holds the site of every SharePoint Worker whose provider is the
+	// mockup (ADR-0484). It is created with the registry but never
+	// swapped with it: a rebuild re-binds the clients and must not throw away what a run
+	// wrote into a site. It holds its own lock — a supervised worker forwards its
+	// operations here off the run loop while the engine's own handler writes from the job
+	// goroutine — and is deliberately not durable, like the preview outbox: nothing in it
+	// exists anywhere else, so nothing survives a restart.
+	sharePointMocks *sharepoint.MockSites
+
 	// remedyRegistry resolves a worker name to a BMC Remedy AR System client for
 	// Remedy tasks (ADR-0106), built from the managed worker store at
 	// startup and rebuilt on every worker change, with each instance's credential
@@ -604,8 +662,11 @@ type Server struct {
 	// inboundSubs holds the operator-configured clio inbound subscriptions the
 	// inbound bridge polls (ADR-0075). Owned by the run-loop goroutine. inboundPoll
 	// is that bridge's poll cadence (WithInboundPollInterval; 0 disables the bridge).
-	inboundSubs *inboundSubStore
-	inboundPoll time.Duration
+	// inboundHealth is why each watch that cannot read its source is not reading —
+	// runtime only, like feedPushes below.
+	inboundSubs   *inboundSubStore
+	inboundPoll   time.Duration
+	inboundHealth *inboundHealth
 	// feedSubs holds the event feed's push subscriptions and feedPush the cadence they
 	// are delivered at (WithFeedPushInterval; 0 disables delivery). feedPushes is each
 	// subscription's runtime hold after a failed delivery, feedPushClient and
@@ -676,6 +737,11 @@ type Server struct {
 	// keeps the default of 30 days. lastFeedPrune paces its prune like the receipts'.
 	eventFeedTTL  time.Duration
 	lastFeedPrune int64
+	// eventLogTTL is how long a row of the event log is kept (ADR-0472 §4);
+	// zero keeps the default of 30 days. lastEventLogPrune paces its prune like the
+	// feed's.
+	eventLogTTL       time.Duration
+	lastEventLogPrune int64
 	// messageTTLMax is the longest time to live a published message may ask for
 	// (ADR-0370); zero keeps the default of seven days. A buffered message is data a
 	// caller makes this server hold, so how long it may be held is bounded like how
@@ -721,7 +787,15 @@ type Server struct {
 	// The snapshot itself runs on the run loop (via do), which is what makes its
 	// position exact: no batch can be half-applied while it is taken (invariant I3).
 	// Pruning runs off the loop — it only removes directories this goroutine published.
-	checkpointRoot     string
+	checkpointRoot string
+	// verifyCheckpoint re-hashes one published checkpoint's state files against its
+	// manifest — checkpoint.Verify, held here so a test can count the whole-store reads
+	// a request costs (ADR-0486). Set in New.
+	verifyCheckpoint func(root string, pos uint64) (*checkpoint.Manifest, error)
+	// verdicts remembers whether each published checkpoint verified, for the /metrics
+	// gauges, which would otherwise re-hash every checkpoint on every scrape
+	// (ADR-0488).
+	verdicts           checkpointVerdicts
 	checkpointInterval time.Duration
 	checkpointKeep     int
 	// checkpointTicks, when non-nil, replaces the checkpoint loop's real ticker so a
@@ -752,11 +826,21 @@ type Server struct {
 	// goroutine* is the point: an operator's pass and a scheduled one then serialize by
 	// construction rather than by a lock, and both run the same code. It is nil when
 	// checkpointing is off, which is what makes the endpoint's refusal honest.
-	checkpointRequests chan chan checkpointPass
+	checkpointRequests chan checkpointRequest
 	// lastPass is the most recent pass's outcome, for the status endpoint. Written by the
 	// checkpoint goroutine, read by handler goroutines, hence the mutex.
 	lastPassMu sync.Mutex
 	lastPass   *checkpointPass
+
+	// storage watches the disk under the data directory and, below the reserve,
+	// freezes new writes until there is room again (ADR-0481).
+	// storageReserve is that reserve: 0 unless WithStorageReserve set one, so a server
+	// built without it watches and warns but never refuses — the binary's flag is what
+	// turns the freeze on by default. storageRead, when non-nil, replaces the real
+	// file-system reading so a test can script a disk filling up.
+	storage        *storage.Monitor
+	storageReserve uint64
+	storageRead    func(dir string) (diskspace.Usage, error)
 
 	// backupsInFlight counts whole-instance snapshots currently streaming (ADR-0109).
 	// A snapshot reads the WAL files off the run loop, so a compaction underneath one
@@ -805,6 +889,19 @@ type Server struct {
 	// tests build a Server as a literal and expect the whole surface. Set once before
 	// Handler is mounted; read-only thereafter.
 	catalogueOff bool
+	// cataloguePurgeOff is the administrator's permanent delete of a catalogue or a
+	// product switched off with --catalogue-purge=false / WithoutCataloguePurge
+	// (ADR-0469). Spelled as "off" for catalogueOff's reason: the
+	// zero value is the shipped default, and the default is opt-out — an installation
+	// that must not be able to delete orders and holds says so. Set once before
+	// Handler is mounted.
+	cataloguePurgeOff bool
+	// instancePurgeOff is an administrator's delete of a version's finished instances
+	// switched off with --instance-purge=false / WithoutInstancePurge
+	// (ADR-0486). "off" for the same reason as
+	// cataloguePurgeOff: the purge is an opt-out, so the zero value allows it. Set once
+	// before Handler is mounted.
+	instancePurgeOff bool
 	// catalogueReporting is every process id that calls the order routes, read once
 	// at start when the catalogue is off (processesReportingToOrders); nil otherwise.
 	catalogueReporting map[string]bool
@@ -1273,6 +1370,22 @@ func WithCheckpointRetention(keep int) Option {
 	}
 }
 
+// WithStorageReserve sets the disk space the server keeps free for itself
+// (ADR-0481). While less than this is available under the data
+// directory, the server refuses new writes — the HTTP layer answers 507 — and starts
+// no work of its own, so the state store and the checkpoints that give WAL space back
+// still have room to write; it resumes by itself once the reserve and a quarter of it
+// are free. 0 keeps the monitoring and the warnings and turns the freeze off.
+func WithStorageReserve(bytes uint64) Option {
+	return func(s *Server) { s.storageReserve = bytes }
+}
+
+// withStorageReader replaces the file-system reading the storage monitor takes, so a
+// test can script a disk filling and draining without filling one.
+func withStorageReader(read func(dir string) (diskspace.Usage, error)) Option {
+	return func(s *Server) { s.storageRead = read }
+}
+
 // WithoutMetrics turns off the Prometheus exposition at /metrics (ADR-0142). It is
 // served by default — a system meant to be operated should be observable without extra
 // configuration, and the exposition carries only bounded-cardinality aggregates — so
@@ -1497,6 +1610,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	lastLogins, err := newLastLoginStore(filepath.Join(dataDir, "last-logins"), users)
+	if err != nil {
+		return nil, err
+	}
 	groups, err := newGroupStore(filepath.Join(dataDir, "groups"))
 	if err != nil {
 		return nil, err
@@ -1528,6 +1645,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		return nil, err
 	}
 	appConstants, err := newApplicationConstantStore(filepath.Join(dataDir, "application-constants"))
+	if err != nil {
+		return nil, err
+	}
+	baselines, err := newImportBaselineStore(filepath.Join(dataDir, "import-baselines"))
+	if err != nil {
+		return nil, err
+	}
+	mappings, err := newPackageMappingStore(filepath.Join(dataDir, "package-mappings"))
 	if err != nil {
 		return nil, err
 	}
@@ -1567,7 +1692,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// somebody's GET, and a data directory this server cannot write to is an
 	// operator's problem to see at startup rather than weeks later on a request
 	// (ADR-0189 §6).
-	if _, err := ensureNodeIdentity(settings); err != nil {
+	node, err := ensureNodeIdentity(settings)
+	if err != nil {
 		return nil, err
 	}
 	// DMN reference models are resolved either from a temis model service (when
@@ -1581,6 +1707,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		proc:             proc,
 		store:            store,
 		dataDir:          dataDir,
+		nodeID:           node.ID,
 		limits:           limits.Default(), // WithLimits overrides; there is no "no budget"
 		remoteNodes:      newRemoteNodeCache(),
 		remoteLandscapes: newRemoteLandscapeCache(),
@@ -1645,10 +1772,13 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		connectors:        connectors,
 		callOverrides:     callOverrides,
 		appConstants:      appConstants,
+		baselines:         baselines,
+		mappings:          mappings,
 		srvConstants:      srvConstants,
 		repository:        repositoryCatalog,
 		repositoryStore:   repositoryStore,
 		inboundSubs:       inboundSubs,
+		inboundHealth:     newInboundHealth(),
 		feedSubs:          feedSubs,
 		feedPushes:        newFeedPushState(),
 		settings:          settings,
@@ -1663,6 +1793,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		checkpointKeep:    checkpointKeepDefault,    // published checkpoints kept; WithCheckpointRetention overrides (ADR-0131)
 		vaultEnabled:      true,                     // opt-out: built unless WithoutVault is passed (ADR-0070)
 		users:             users,
+		lastLogins:        lastLogins,
 		groups:            groups,
 		directorySync:     directorySync,
 		inventoryLoads:    inventoryLoads,
@@ -1688,6 +1819,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// path through checkpoint.Dir, and a knob here could only make them disagree
 	// (ADR-0131). Set outside the literal for the same alignment reason as above.
 	s.checkpointRoot = checkpoint.Dir(dataDir)
+	s.verifyCheckpoint = checkpoint.Verify
 	// The documentation area is a service rather than a set of Server methods
 	// (ADR-0147). It is built here, after the Server exists, because two of its
 	// collaborators are the server's: the shared public-route rate limiter, and the
@@ -1761,12 +1893,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		// Whose name an order may carry (ADR-0349).
 		//
-		// The operator role, and not a manager relationship, because Atlas cannot
-		// answer what a manager relationship *is*: the escalation path has the
-		// caller name a superior precisely because a directory lookup belongs to a
-		// modelled process and not to the engine. Gating on something this server
-		// cannot evaluate would mean inventing a hierarchy, and an invented
-		// hierarchy decides who may act in whose name.
+		// The operator role, and not a manager relationship. When ADR-0349 was
+		// written Atlas held no such relationship; an account may now carry its line
+		// manager (ADR-0470), but that record
+		// decided only whom an approval goes to. Whether a line manager may order
+		// in their people's name is ADR-0349's open question, and a gate does not
+		// widen itself because the data for a different rule arrived.
 		//
 		// With enforcement off there is nobody to be, exactly as everywhere else.
 		func(p *httpapi.Principal) bool {
@@ -1938,6 +2070,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	for _, opt := range opts {
 		opt(s)
 	}
+	s.storage = s.newStorageMonitor()
+	s.newFormLookups()
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
@@ -1966,6 +2100,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Forms = processLookup{s: s}
 	s.catalogs.Models = processLookup{s: s}
 	s.catalogs.Deployer = catalogDeployer{s: s}
+	s.catalogs.Baselines = catalogBaselines{s: s}
 	s.catalogs.Personal = processLookup{s: s}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	// The content sources: the credential is resolved on the loop like every
@@ -2008,6 +2143,32 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 				slog.String("path", filepath.Join(dataDir, "vault.key")))
 		}
 	}
+	// Identity-aware Worker execution (ADR-0475). The
+	// policy store opens whatever state it is in — a set that will not build leaves
+	// every governed action refused rather than the server down — and the identity
+	// service exists only with a vault, where a delegated credential has to live.
+	if s.policies, err = policy.Open(s.runLoop, filepath.Join(dataDir, "policies"), time.Now); err != nil {
+		return nil, err
+	}
+	s.policies.Limits = s.budgets()
+	s.policies.SetSubjectResolver(func(id string) (authz.Subject, bool) {
+		subj, err := s.subjectOf(id)
+		return subj, err == nil && subj.Known
+	})
+	if s.vault != nil {
+		identityStores, err := identity.OpenStores(filepath.Join(dataDir, "identity"))
+		if err != nil {
+			return nil, err
+		}
+		s.identity = identity.New(s.runLoop, identityStores, s.vault, s.refreshDelegatedToken,
+			s.configuredWorkerExists, time.Now)
+		s.identity.Limits = s.budgets()
+		if s.msLink != nil {
+			s.identity.SetLinkable(identity.LinkOption{Provider: identity.ProviderMicrosoft, Start: linkMicrosoftStartPath})
+		}
+	}
+	s.refreshGoverned()
+
 	// When enforcement is on, make sure a fresh instance has an admin to log in
 	// with (ADR-0044) and mint the internal service token the in-process MCP
 	// adapter uses to authenticate its loopback calls (ADR-0049). Both run before
@@ -2024,11 +2185,21 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		if err := s.upgradeLegacyRoles(time.Now().Unix()); err != nil {
 			return nil, err
 		}
+		// A login day left behind by an account that is gone is removed before anybody
+		// can sign in (lastlogin.go). Reported and not fatal: it is a convenience
+		// column, and it must not be what keeps a server from starting.
+		if err := s.lastLogins.prune(); err != nil {
+			logging.Warn(logging.AuthLoginDateUnrecorded, "login days of deleted accounts could not be pruned",
+				slog.String("error", err.Error()))
+		}
 		token, err := randomHex(32)
 		if err != nil {
 			return nil, err
 		}
 		s.internalToken = token
+		if s.brokerKey, err = randomHex(32); err != nil {
+			return nil, err
+		}
 	}
 	// Ensure the protected system project exists (ADR-0122). Like bootstrapAdmin,
 	// this runs on the constructing goroutine before the loop serves traffic, so it
@@ -2301,6 +2472,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		s.supervisor.start()
 	}
 	go s.timerScheduler(time.Second)
+	// The storage monitor reads the disk on its own goroutine — a statfs, off the run
+	// loop — and its first reading is taken at once, so the admission check below the
+	// routes has an answer before the first write arrives (ADR-0481).
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.storage.Run(quit, storage.DefaultInterval)
+	}()
 	// The collaboration reaper evicts idle detached session participants (MCP
 	// agents that stopped polling) and releases their locks (ADR-0140). It runs off
 	// the run loop — the collab registry is its own mutex-guarded, engine-independent
@@ -2369,7 +2548,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		}
 	}
 	if s.checkpointInterval > 0 {
-		s.checkpointRequests = make(chan chan checkpointPass)
+		s.checkpointRequests = make(chan checkpointRequest)
 		s.wg.Add(1)
 		go s.checkpointLoop(s.checkpointInterval)
 	}
@@ -2441,8 +2620,12 @@ func (s *Server) retentionSweeper(every time.Duration) {
 		case <-s.quit:
 			return
 		case <-ticks:
-			now := s.now()
-			s.do(func() { s.sweepRetention(now) })
+			// A purge writes its events before it frees anything, so it waits while the
+			// disk is below the reserve; finished instances stay eligible meanwhile.
+			if !s.writesPaused() {
+				now := s.now()
+				s.do(func() { s.sweepRetention(now) })
+			}
 			if s.retentionSwept != nil {
 				select {
 				case s.retentionSwept <- struct{}{}:
@@ -2495,6 +2678,7 @@ type purgeTarget struct {
 func (s *Server) sweepRetention(now int64) {
 	s.pruneTriggerReceipts(now)
 	s.pruneEventFeed(now)
+	s.pruneEventLog(now)
 	// A transient read error just skips this tick (retried on the next), matching the
 	// silent, best-effort style of the other run-loop pollers (timerScheduler).
 	safePos, err := s.retentionSafePosition()
@@ -2644,18 +2828,18 @@ func (s *Server) checkpointLoop(every time.Duration) {
 		select {
 		case <-s.quit:
 			return
-		case reply := <-s.checkpointRequests:
+		case req := <-s.checkpointRequests:
 			// An operator asked for a pass (ADR-0131 slice 8). It runs *here*, on the same
 			// goroutine as the cadence, so an on-demand pass and a scheduled one can never
 			// overlap — and it is the same pass, not a second code path.
-			res := s.runCheckpointPass(&last)
+			res := s.runCheckpointPass(&last, req.compact)
 			select {
-			case reply <- res:
+			case req.reply <- res:
 			case <-s.quit:
 				return
 			}
 		case <-ticks:
-			s.runCheckpointPass(&last)
+			s.runCheckpointPass(&last, false)
 			if s.checkpointDone != nil {
 				select {
 				case s.checkpointDone <- struct{}{}:
@@ -2672,11 +2856,16 @@ func (s *Server) checkpointLoop(every time.Duration) {
 // two together keeps them in one order. It records the result for the status endpoint
 // and returns it for the operator who asked.
 //
+// compact asks for compaction on this one pass when the server does not compact on its
+// own: an administrator's request, after a confirmation, is the choice --compact-wal
+// leaves to a person (ADR-0486). It changes
+// nothing about the cut — the same checkpoint, watermarks and backup gate decide it.
+//
 // last carries the position most recently *logged* as published. An idle server
 // re-publishes nothing (Publish is a no-op at an existing position), so tracking it keeps
 // the cadence from logging the same line forever. Only the checkpoint goroutine touches
 // it, so it needs no lock.
-func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
+func (s *Server) runCheckpointPass(last *uint64, compact bool) checkpointPass {
 	res := checkpointPass{At: s.now()}
 	pos, err := s.takeCheckpoint()
 	res.Position = pos
@@ -2688,7 +2877,8 @@ func (s *Server) runCheckpointPass(last *uint64) checkpointPass {
 		logging.Info(logging.CheckpointPublished, "published a recovery checkpoint; recovery replays only past it",
 			slog.Uint64("position", pos))
 	}
-	if s.compactWAL {
+	if s.compactWAL || compact {
+		res.Compaction = true
 		removed, note, cerr := s.compactLog()
 		res.SegmentsRemoved = removed
 		res.Note = note
@@ -2749,6 +2939,12 @@ func (s *Server) takeCheckpoint() (uint64, error) {
 		return 0, err
 	}
 	pos := staged.AppliedPosition()
+	// The commit just hashed exactly the files it published, which is the verification
+	// a metrics scrape would otherwise repeat (ADR-0488).
+	// A position that was already published hashed nothing, so it renews no verdict.
+	if !staged.AlreadyPublished() {
+		s.rememberPublished(pos)
+	}
 	if err := checkpoint.Prune(s.checkpointRoot, s.checkpointKeep); err != nil {
 		// The checkpoint is published either way; a failed prune costs disk, not recovery,
 		// so it is reported without discarding the position that was captured.
@@ -2982,6 +3178,12 @@ func (s *Server) drive() error {
 		s.driveMu.Lock()
 		s.do(func() {
 			if err = s.proc.RunUntilIdle(); err != nil {
+				return
+			}
+			// Below the storage reserve the in-process workers lease nothing new: a
+			// leased job is new work, and its result would have to be written. What is
+			// already leased finishes (ADR-0481).
+			if s.storage.Frozen() {
 				return
 			}
 			if jobs, err = s.jobRunner.Claim(); err != nil || len(jobs) == 0 {
@@ -3238,6 +3440,12 @@ func (s *Server) timerScheduler(every time.Duration) {
 			// timer leading into a business rule task) OFF it: this tick runs every
 			// second, and before ADR-0157 step 6 it was the path that could hold the
 			// single writer for a worker call nobody had asked for.
+			// Below the storage reserve, or once the engine has halted, a due timer
+			// stays due: firing it is new work, and it fires on the first tick after
+			// writes resume (ADR-0481).
+			if s.writesPaused() {
+				continue
+			}
 			ticked := false
 			s.do(func() { ticked = s.proc.TickTimers() == nil })
 			if ticked {
@@ -3387,7 +3595,7 @@ func (s *Server) Close() {
 // /api/v1/openapi.json and the Scalar API explorer at /api/docs.
 func (s *Server) Handler() http.Handler {
 	mux, policy := s.mountRoutes()
-	return s.withAuth(policy, mux)
+	return s.withAuth(policy, s.withStorageAdmission(mux))
 }
 
 // mountRoutes registers every route this server serves and, in the same pass,
@@ -3473,6 +3681,13 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 		// check in oidctoken.go.
 		mountFunc(accessPublic, roleAny, "GET "+oidcStartPath, s.handleOIDCStart)
 		mountFunc(accessPublic, roleAny, "GET "+oidcCallbackPath, s.handleOIDCCallback)
+	}
+	// Linking a Microsoft account (ADR-0475 §4). Not
+	// public, unlike a login: only a person already signed in links an account, and
+	// the callback must reach the session that started it.
+	if s.msLink != nil {
+		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftStartPath, s.handleLinkMicrosoftStart)
+		mountFunc(accessAuthenticated, RoleUser, "GET "+linkMicrosoftCallbackPath, s.handleLinkMicrosoftCallback)
 	}
 
 	// Every /api/v1 route is registered from the single-source-of-truth route

@@ -371,6 +371,13 @@ type ProcessInstanceValue struct {
 	// cannot be turned back into the pass, but a verifier of a credential has no
 	// reader outside the one route that checks it.
 	PublicPassHash string `json:"-"`
+	// StartedBy is the stable principal id ("usr_…") of whoever created the instance
+	// through an authenticated API call, frozen into the activation event from the
+	// request's principal (ADR-0475 §3). It is the
+	// one trusted answer to "who initiated this": a variable naming the starter can be
+	// rewritten by any later step, this cannot. Empty when nobody authenticated did —
+	// a timer, a message, an open server — and on every record written before it.
+	StartedBy string
 }
 
 // processInstanceLegacySize is the original fixed layout (ProcessDefKey, State,
@@ -393,7 +400,8 @@ func (v *ProcessInstanceValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, uint64(v.PurgeDueDate))
 	dst = binary.LittleEndian.AppendUint64(dst, v.PredecessorInstanceKey)
 	dst = binary.LittleEndian.AppendUint64(dst, v.SuccessorInstanceKey)
-	return appendString(dst, v.PublicPassHash)
+	dst = appendString(dst, v.PublicPassHash)
+	return appendString(dst, v.StartedBy)
 }
 
 func (v *ProcessInstanceValue) decode(src []byte) error {
@@ -448,12 +456,22 @@ func (v *ProcessInstanceValue) decode(src []byte) error {
 	// The public pass hash is the newest appended field: a record written before it
 	// ends after the successor key and leaves it empty — an instance no public start
 	// handed a pass for (ADR-0449).
+	v.StartedBy = ""
 	if len(tail) > 48 {
-		hash, _, err := readString(tail[48:])
+		hash, rest, err := readString(tail[48:])
 		if err != nil {
 			return err
 		}
 		v.PublicPassHash = hash
+		// The starter follows the pass hash: a record written before it ends there and
+		// was started by nobody this log can name.
+		if len(rest) > 0 {
+			who, _, err := readString(rest)
+			if err != nil {
+				return err
+			}
+			v.StartedBy = who
+		}
 	}
 	return nil
 }
@@ -1253,6 +1271,14 @@ type SignalSubscriptionValue struct {
 	// own state index entry (invariant I4), mirroring MessageSubscriptionValue.
 	ProcessDefKey uint64
 	ElementId     int32
+	// SenderProcessInstanceKey is the instance whose throw a correlation delivered,
+	// set on SubscriptionCorrelated and on IntentSignalStarted (ADR-0472 §2).
+	// Stale marks a correlation that only cleared a subscription whose element no
+	// longer waited: no delivery, so no row in the event log. Both are appended
+	// fields: a record written before them ends after ElementId and decodes them as
+	// zero, and a version before them stops reading where they begin.
+	SenderProcessInstanceKey uint64
+	Stale                    bool
 }
 
 func (*SignalSubscriptionValue) ValueType() ValueType { return VTSignal }
@@ -1262,7 +1288,12 @@ func (v *SignalSubscriptionValue) encode(dst []byte) []byte {
 	dst = binary.LittleEndian.AppendUint64(dst, v.ElementInstanceKey)
 	dst = appendString(dst, v.SignalName)
 	dst = binary.LittleEndian.AppendUint64(dst, v.ProcessDefKey)
-	return binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint32(dst, uint32(v.ElementId))
+	dst = binary.LittleEndian.AppendUint64(dst, v.SenderProcessInstanceKey)
+	if v.Stale {
+		return append(dst, 1)
+	}
+	return append(dst, 0)
 }
 
 func (v *SignalSubscriptionValue) decode(src []byte) error {
@@ -1282,6 +1313,11 @@ func (v *SignalSubscriptionValue) decode(src []byte) error {
 	}
 	v.ProcessDefKey = binary.LittleEndian.Uint64(rest[0:])
 	v.ElementId = int32(binary.LittleEndian.Uint32(rest[8:]))
+	// The sender and the stale mark are appended fields (above).
+	if rest = rest[12:]; len(rest) >= 9 {
+		v.SenderProcessInstanceKey = binary.LittleEndian.Uint64(rest[0:])
+		v.Stale = rest[8] != 0
+	}
 	return nil
 }
 
@@ -1474,6 +1510,13 @@ const (
 	// spent, or the throw itself — and an error still uncaught parks again on a fresh
 	// incident rather than leaving the token parked behind none.
 	IncidentUnhandledError IncidentReason = 7
+	// IncidentAuthorizationDenied marks a job whose external action a policy refused
+	// (ADR-0475 §5): the decision is recorded beside it
+	// and its message names the reason and the decision. Retrying would only be refused
+	// again, so the job parks here with its retries spent; resolving it re-offers the
+	// job, and the next lease is decided afresh — under whatever the policies, the
+	// account and the connection say by then.
+	IncidentAuthorizationDenied IncidentReason = 8
 )
 
 func (*IncidentValue) ValueType() ValueType { return VTIncident }
@@ -1606,6 +1649,12 @@ func newValue(vt ValueType) Value {
 		return &TriggerReceiptValue{}
 	case VTMessage:
 		return &MessageValue{}
+	case VTDispatch:
+		return &DispatchValue{}
+	case VTAuthorization:
+		return &AuthorizationValue{}
+	case VTActionApproval:
+		return &ActionApprovalValue{}
 	default:
 		return nil
 	}

@@ -10,11 +10,11 @@ import (
 // out of the vault bundle, into the supervised worker's environment — but only where
 // there is a store to find it in.
 
-func withEntraCertStore(t *testing.T, supported bool) {
+func withCertStore(t *testing.T, supported bool) {
 	t.Helper()
-	prev := entraCertStoreSupported
-	entraCertStoreSupported = supported
-	t.Cleanup(func() { entraCertStoreSupported = prev })
+	prev := certStoreSupported
+	certStoreSupported = supported
+	t.Cleanup(func() { certStoreSupported = prev })
 }
 
 func saveEntraBundle(t *testing.T, srv *Server, bundle map[string]string) {
@@ -32,7 +32,7 @@ func saveEntraBundle(t *testing.T, srv *Server, bundle map[string]string) {
 }
 
 func TestEntraBundleParseWithAThumbprint(t *testing.T) {
-	withEntraCertStore(t, true)
+	withCertStore(t, true)
 	b, ok := entraBundleParse(`{"tenantId":"t","clientId":"c","certificateThumbprint":" 02CB6038F2E91693AE8D31C983569366034B2100 "}`)
 	if !ok || b.CertificateThumbprint != "02CB6038F2E91693AE8D31C983569366034B2100" {
 		t.Errorf("a thumbprint bundle should parse with its thumbprint trimmed, got %+v, %v", b, ok)
@@ -47,7 +47,7 @@ func TestEntraBundleParseWithAThumbprint(t *testing.T) {
 		}
 	}
 
-	withEntraCertStore(t, false)
+	withCertStore(t, false)
 	if _, ok := entraBundleParse(`{"tenantId":"t","clientId":"c","certificateThumbprint":"AB"}`); ok {
 		t.Error("a thumbprint bundle parsed on a host without a certificate store; the worker could only refuse it")
 	}
@@ -56,7 +56,7 @@ func TestEntraBundleParseWithAThumbprint(t *testing.T) {
 // A Console tenant whose bundle names a thumbprint is handed CLIENT_CERTIFICATE_THUMBPRINT
 // and neither of the other two credentials.
 func TestAConsoleEntraTenantWithAThumbprintIsHandedIt(t *testing.T) {
-	withEntraCertStore(t, true)
+	withCertStore(t, true)
 	srv, _ := newValidateServer(t)
 	saveEntraBundle(t, srv, map[string]string{"tenantId": "tid-1", "clientId": "cid-1", "certificateThumbprint": "02CB6038F2E91693AE8D31C983569366034B2100"})
 	env := envOf(t, srv.entraWorkerEnv())
@@ -82,7 +82,7 @@ func TestAConsoleEntraTenantWithAThumbprintIsHandedIt(t *testing.T) {
 // not resolve — rather than handed to a worker that would refuse it and, refusing,
 // stop serving every other tenant with it.
 func TestAConsoleEntraTenantWithAThumbprintIsLeftOutWithoutAStore(t *testing.T) {
-	withEntraCertStore(t, false)
+	withCertStore(t, false)
 	srv, _ := newValidateServer(t)
 	saveEntraBundle(t, srv, map[string]string{"tenantId": "tid-1", "clientId": "cid-1", "certificateThumbprint": "02CB6038F2E91693AE8D31C983569366034B2100"})
 	if env := srv.entraWorkerEnv(); len(env) != 0 {

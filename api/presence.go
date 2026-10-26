@@ -214,6 +214,10 @@ func (s *Server) handleUserPresence(w http.ResponseWriter, _ *http.Request) {
 type rosterUser struct {
 	publicUser
 	Presence userPresence `json:"presence"`
+	// LastLoginDate is the UTC day the account last signed in, empty when none is
+	// recorded. Unlike presence it is stored, beside the account (lastlogin.go,
+	// ADR-0477).
+	LastLoginDate string `json:"lastLoginDate,omitempty"`
 }
 
 // withPresence annotates a roster with what the session map knows.

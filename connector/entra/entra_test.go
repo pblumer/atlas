@@ -274,6 +274,11 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "get-user-photo", job: Job{UserID: "u1", ResultVariable: "foto"},
 			method: "GET", path: "/users/u1/photo/$value",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		// The manager is read through the user it belongs to, so an unknown id still
+		// fails and only a missing manager reads as null (see manager_test.go).
+		{op: "get-user-manager", job: Job{UserID: "u1", ResultVariable: "chef"},
+			method: "GET", path: "/users/u1?$select=id&$expand=manager",
+			wantBodyIs: func(b any) bool { return b == nil }},
 		{op: "get-group", job: Job{GroupID: "g1"},
 			method: "GET", path: "/groups/g1",
 			wantBodyIs: func(b any) bool { return b == nil }},
@@ -339,7 +344,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 27 {
+	if len(Ops) != 28 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }
@@ -754,7 +759,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 		}
 		// A listing or a delta query has nowhere to put a collection without one, which
 		// both halves enforce — the compiler at deploy, checkRequired on the worker.
-		if (spec.IsList || spec.IsDelta || spec.IsBinary) && omit != "result" {
+		if spec.needsResult() && omit != "result" {
 			parts = append(parts, `resultVariable="leute"`)
 		}
 		return strings.Join(parts, " ")
@@ -774,7 +779,7 @@ func TestEntraOpsMatchTheConnector(t *testing.T) {
 					(omit == "group" && spec.NeedsGroup) ||
 					(omit == "attributes" && spec.NeedsAttributes) ||
 					(omit == "password" && spec.NeedsPassword) ||
-					(omit == "result" && (spec.IsList || spec.IsDelta || spec.IsBinary))
+					(omit == "result" && spec.needsResult())
 				if !required {
 					continue
 				}

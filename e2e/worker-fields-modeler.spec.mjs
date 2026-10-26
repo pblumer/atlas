@@ -125,3 +125,50 @@ test("switching a CSV task to fixed width keeps its columns and drops its delimi
   expect(task).not.toContain("delimiter");
   expect(page.__errors).toEqual([]);
 });
+
+test("a SharePoint task authored before operations existed is saved as the create-item it was", async ({ page }) => {
+  // The operation select shows Create list item for a task with no operation, and
+  // what the panel writes for it names no other operation: the compiler reads an empty
+  // operation as the create-item such a model always was.
+  await select(page, "Activity_sharepoint");
+  await expect(page.locator("#f-st-operation")).toHaveValue("");
+  await page.locator("#f-st-resultVariable").fill("eintrag");
+  await page.locator("#f-st-resultVariable").blur();
+
+  const task = await taskXML(page, "Activity_sharepoint");
+  expect(task).not.toMatch(/operation="[^"]/);
+  expect(task).toContain('list="Auftraege"');
+  expect(task).toContain('name="Title"');
+  expect(task).toContain('resultVariable="eintrag"');
+  expect(page.__errors).toEqual([]);
+});
+
+test("switching a SharePoint task to a file operation drops what an item operation carried", async ({ page }) => {
+  await select(page, "Activity_sharepoint");
+  await page.locator("#f-st-operation").selectOption("get-file");
+
+  // The list becomes the library, which a file operation may leave empty; the columns
+  // a create carried are nothing a check of a file reads, and the compiler refuses them.
+  await expect(page.locator("#f-st-path")).toBeVisible();
+  const task = await taskXML(page, "Activity_sharepoint");
+  expect(task).toContain('operation="get-file"');
+  expect(task).not.toContain("itemField");
+  expect(task).toContain('site="https://contoso.sharepoint.com/sites/hr"');
+  expect(page.__errors).toEqual([]);
+});
+
+test("a SharePoint task that names create-item outright keeps its list and columns", async ({ page }) => {
+  // operation="create-item" is the same task as no operation at all. Were the panel to
+  // show the list and the columns only for the empty value, the next save would drop
+  // them as fields the operation does not use, and the compiler would refuse the task.
+  await select(page, "Activity_sp_explicit");
+  await expect(page.locator("#f-st-list")).toHaveValue("Protokoll");
+  await page.locator("#f-st-resultVariable").fill("eintrag");
+  await page.locator("#f-st-resultVariable").blur();
+
+  const task = await taskXML(page, "Activity_sp_explicit");
+  expect(task).toContain('list="Protokoll"');
+  expect(task).toContain('name="Title"');
+  expect(task).not.toMatch(/operation="(?!create-item"|")/);
+  expect(page.__errors).toEqual([]);
+});

@@ -175,6 +175,93 @@ reviewed as a set the way a named scope can.
   split once roles per endpoint group exist: at that point a token should be able
   to carry a role rather than a scope, and these two ideas should merge.
 
+## Amendment (2026-10-21): a token can be sealed in the vault instead of returned
+
+Two things changed together, and only the second changes the API.
+
+**The Console mints, lists and revokes API tokens** (Console → API tokens). Until now
+the answer to "how do I give a machine a credential" was the `curl` in the install
+guide, run with a session cookie copied out of a browser. The page shows each token's
+scope, roles, reach, expiry and provenance, marks an expired one, shows before minting
+which roles the token will carry, shows the secret once with a copy button and drops it
+from the page when the reader leaves, and asks before revoking. A token with less than 30
+days left is flagged on the page and, for administrators, on the dashboard, because an
+expiry is otherwise silent until the machine holding the token starts failing. The
+threshold is the Console's, computed from `expiresAt`; the server has no notion of
+"soon" (until the amendment of 2026-10-22, which gives `/metrics` the same window). It
+adds nothing the three routes did not already do.
+
+**`POST /api/v1/api-tokens` takes an optional `vaultSecret`.** The shop's system
+processes call Atlas with `authSecret="atlas"` (ADR-0411), so the token they need has to
+end up as the vault secret of that name. The only way there was to mint the token,
+receive the secret, and `PUT /api/v1/secrets/atlas` it: the secret crossed the wire
+twice and sat in somebody's clipboard in between, for a value no person ever needs to
+read. With `vaultSecret` the server seals the secret itself and the response carries no
+`token` at all.
+
+- **All or nothing.** No vault (`--vault=false`) is a `503` before anything is minted.
+  A vault that refuses the write gets the token record deleted again, so no token exists
+  whose secret nobody holds. The record is written first and the secret sealed second:
+  the reverse order would leave a refused record write with the vault already
+  overwritten.
+- **An existing secret is replaced.** Rotation is the ordinary case — mint the new token
+  under the same name, then revoke the old one — and revoking a token never touches the
+  vault, because the name may already hold its successor.
+- **The record says where the token went.** `vaultSecret` is kept on the record and shown
+  in the listing, so whoever rotates the secret behind `atlas` can tell which token that
+  was. It records the mint, not the present: the secret may have been overwritten since.
+- **Invariant I6 holds.** The secret is sealed by the vault (ciphertext in its own
+  sidecar directory, never the WAL, an event or a variable); the token store keeps only
+  the hash, as before; the audit line names the vault secret, never its value.
+- **The workers follow.** As with `PUT /api/v1/secrets`, the worker registries are
+  rebuilt and the supervised workers refreshed in the same step, because a vault secret
+  can be the credential behind a Worker. A rebuild that fails comes after the token
+  exists, and the `500` says so rather than reading as a refusal.
+- **Refused names.** A name of only spaces, and a data subject's personal-data key, for
+  the reason `PUT /api/v1/secrets` refuses it (ADR-0314).
+
+Rejected: having the Console mint the token and then write it with
+`PUT /api/v1/secrets/{name}`. It needs no API change, but it is the same two crossings
+with a browser in the middle instead of a person, and it is not all or nothing — a
+failed second call leaves a token whose secret the page holds and nobody else.
+
+## Amendment (2026-10-22): token expiry on `/metrics`
+
+The Console's warning reaches whoever opens the Console, and a token held by a machine
+tends to run out when nobody is looking. So the same warning now also goes where an
+alert can read it: three gauges on `/metrics`, read at scrape time from the in-memory
+index authentication already uses, and none of them with a label.
+
+- **`atlas_api_tokens_expiring_soon`** — tokens still accepted with less than 30 days
+  left. Same window and same boundaries as the page: the window is a server constant
+  now (`apiTokenExpiryWarning`), and a test holds the page's `EXPIRY_WARN_DAYS` equal to
+  it, so the page and an alert never disagree about which tokens are in trouble.
+- **`atlas_api_tokens_expired`** — tokens past their expiry and not yet revoked. It is
+  there because of the first one: a token leaves "soon" by expiring, so an alert on
+  `expiring_soon` alone resolves at exactly the moment the machine starts failing. A
+  token whose expiry is this very second counts here, as it does for `match`.
+- **`atlas_api_token_next_expiry_timestamp_seconds`** — the earliest expiry among the
+  tokens still accepted, for an operator whose margin is not thirty days. `+Inf` when
+  none runs out: "never" is a known answer, and ADR-0142 reserves an absent series for
+  a number that could not be read.
+
+**No series names a token.** A token's name is a value an administrator invents, which
+is what ADR-0142's cardinality rule keeps out of labels — and `/metrics` is readable
+with a `metrics`-scoped token (ADR-0198), whose holder would otherwise read the
+server's credential inventory off it. What such a holder does learn is how many tokens
+are about to expire and when the next one does: the shape of the estate, not a
+credential or its owner, and judged acceptable on those grounds. Which token is the
+listing's answer, to an administrator.
+
+Nothing is counted as tokens are used, and the run loop is not involved: the index is
+the handler-side structure authentication reads under its own lock (I1, I3). The clock
+is the server's, which in production is the wall clock `match` reads.
+
+Rejected: one series per token, labelled with its name — the shape certificate
+exporters use, and the one the cardinality rule exists to forbid. Rejected: Atlas
+raising the alarm itself; it does not alert on its own (ADR-0142), and an alert rule on
+these gauges is one line of the operator's Prometheus configuration.
+
 ## Pros and cons of the options
 
 ### The credential

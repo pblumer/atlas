@@ -9,14 +9,14 @@ import (
 	"github.com/pblumer/atlas/connector/sharepoint"
 )
 
-// recordingSharePointClient stands in for a Graph site: it records the item a
-// resolved job asked to create and answers with what Graph would.
+// recordingSharePointClient stands in for a Graph site: it records the request a
+// resolved job made and answers with what Graph would.
 type recordingSharePointClient struct {
-	got  sharepoint.ItemRequest
+	got  sharepoint.Request
 	item any
 }
 
-func (c *recordingSharePointClient) CreateItem(_ context.Context, req sharepoint.ItemRequest) (any, error) {
+func (c *recordingSharePointClient) Do(_ context.Context, req sharepoint.Request) (any, error) {
 	c.got = req
 	return c.item, nil
 }
@@ -49,7 +49,7 @@ func TestRunSharePointJobCreatesWhatTheEngineResolved(t *testing.T) {
 		Connector: "intranet",
 		Site:      "https://contoso.sharepoint.com/sites/hr",
 		List:      "Onboarding",
-		Fields:    map[string]string{"Title": "Anna"},
+		Fields:    map[string]any{"Title": "Anna", "Headcount": json.Number("3")},
 		RequestID: "7",
 		Result:    "created",
 	})
@@ -61,6 +61,11 @@ func TestRunSharePointJobCreatesWhatTheEngineResolved(t *testing.T) {
 	if client.got.Site != "https://contoso.sharepoint.com/sites/hr" || client.got.List != "Onboarding" ||
 		client.got.Fields["Title"] != "Anna" {
 		t.Errorf("request = %+v, want the resolved site, list and fields", client.got)
+	}
+	// A column value keeps its JSON shape across the hop to the worker, so a Number
+	// column receives a number rather than its text.
+	if n, ok := client.got.Fields["Headcount"].(float64); !ok || n != 3 {
+		t.Errorf("Headcount = %#v, want the number 3", client.got.Fields["Headcount"])
 	}
 	// The job key travels as the request id, so a retry after an elapsed lease is
 	// recognizable to Graph as the same request rather than a second one.
@@ -148,6 +153,38 @@ func TestSharePointRegistryFromEnvRefusesANamedInstanceItCannotBuild(t *testing.
 	}
 }
 
+// A mockup instance needs no credential, only the server that keeps its site; it is
+// built as the forwarder to that site, and named without the address it is a startup
+// error rather than a worker whose every job fails (ADR-0484).
+func TestSharePointRegistryFromEnvBuildsAMockup(t *testing.T) {
+	env := map[string]string{
+		"ATLAS_SHAREPOINT_CONNECTORS":    "intranet",
+		"ATLAS_SHAREPOINT_INTRANET_MOCK": "1",
+		"ATLAS_SHAREPOINT_MOCK_URL":      "http://atlas.example/api/v1/sharepoint/mock-sites",
+	}
+	reg, names, err := sharepointRegistryFromEnv(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatalf("sharepointRegistryFromEnv: %v", err)
+	}
+	if len(names) != 1 {
+		t.Fatalf("names = %v", names)
+	}
+	if c, _ := reg.Client("intranet"); c == nil {
+		t.Fatal("the mockup was not registered")
+	} else if _, ok := c.(*sharepoint.RemoteMock); !ok {
+		t.Errorf("client = %T, want the forwarder to the server's site", c)
+	}
+
+	delete(env, "ATLAS_SHAREPOINT_MOCK_URL")
+	if _, _, err := sharepointRegistryFromEnv(func(k string) string { return env[k] }); err == nil || !strings.Contains(err.Error(), "ATLAS_SHAREPOINT_MOCK_URL") {
+		t.Errorf("a mockup without the server's address = %v, want a startup error naming the variable", err)
+	}
+	env["ATLAS_SHAREPOINT_INTRANET_MOCK"] = "vielleicht"
+	if _, _, err := sharepointRegistryFromEnv(func(k string) string { return env[k] }); err == nil {
+		t.Error("a MOCK value that is not yes or no was accepted")
+	}
+}
+
 // No CONNECTORS is unconfigured, not misconfigured: a nil registry and no error, which
 // the caller reports as a kind this worker does not serve.
 func TestSharePointRegistryFromEnvIsUnconfiguredWithoutNames(t *testing.T) {
@@ -184,5 +221,37 @@ func TestRunSharePointJobRefusesAPayloadItCannotRead(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cannot read the resolved detail") {
 		t.Errorf("error = %v, want it to say the resolved detail could not be read", err)
+	}
+}
+
+// A job from an engine built before operations existed carries none, and is a
+// create-item — the only thing such an engine could have resolved. A job that names an
+// operation reaches the client with it and with the values it takes.
+func TestRunSharePointJobCarriesTheOperation(t *testing.T) {
+	client := &recordingSharePointClient{item: map[string]any{"deleted": true}}
+	legacy := Job{Connector: &ConnectorPayload{Kind: "sharepoint", Fields: map[string]any{
+		"connector": "intranet", "site": "s", "list": "l", "fields": map[string]any{"Title": "x"},
+		"requestId": "7", "resultVariable": "created",
+	}}}
+	if _, err := RunSharePointJob(context.Background(), legacy, sharePointRegistryWith("intranet", client)); err != nil {
+		t.Fatalf("RunSharePointJob: %v", err)
+	}
+	if client.got.Operation != "" || client.got.Fields["Title"] != "x" {
+		t.Errorf("legacy request = %+v, want the create-item it always was", client.got)
+	}
+
+	job := sharePointJobFrom(t, sharepoint.Job{
+		Connector: "intranet", Operation: "delete-file", Site: "s", List: "Akten",
+		Path: "2026/a.pdf", Result: "geloescht",
+	})
+	out, err := RunSharePointJob(context.Background(), job, sharePointRegistryWith("intranet", client))
+	if err != nil {
+		t.Fatalf("RunSharePointJob: %v", err)
+	}
+	if client.got.Operation != "delete-file" || client.got.Path != "2026/a.pdf" || client.got.List != "Akten" {
+		t.Errorf("request = %+v, want the operation and its path", client.got)
+	}
+	if res, _ := out["geloescht"].(map[string]any); res["deleted"] != true {
+		t.Errorf("geloescht = %#v, want the answer under the result variable", out["geloescht"])
 	}
 }

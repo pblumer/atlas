@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/expr"
 )
@@ -174,5 +175,47 @@ func TestClassifyListContainingTemporal(t *testing.T) {
 	}
 	if text == "" {
 		t.Error("text is empty")
+	}
+}
+
+// A context assembled from values already built — an instant among them, which has no
+// JSON image to come from — reads its members back by name.
+func TestAContextOfBuiltValuesReadsBack(t *testing.T) {
+	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
+	ctx := expr.ContextOf(map[string]expr.Value{"time": expr.DateTime(at), "who": expr.String("alice")})
+	c, err := expr.Compile(`context.who = "alice" and context.time = date and time("2026-10-23T09:00:00Z")`, "context")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := c.Eval(map[string]expr.Value{"context": ctx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !expr.IsTrue(v) {
+		t.Fatalf("result = %v", v)
+	}
+}
+
+// TestContextMemberAndKeys pins the two readers the template language uses on a loop
+// item: a context answers its members and its keys in order, anything else answers
+// that it is not a context.
+func TestContextMemberAndKeys(t *testing.T) {
+	ctx := expr.FromJSON(map[string]any{"name": "Ada", "age": json.Number("36")})
+	v, ok := expr.ContextMember(ctx, "name")
+	if !ok || v.String() != "Ada" {
+		t.Fatalf("expr.ContextMember(name) = %v, %v; want Ada, true", v, ok)
+	}
+	if _, ok := expr.ContextMember(ctx, "missing"); ok {
+		t.Error("expr.ContextMember(missing) reported a member")
+	}
+	if _, ok := expr.ContextMember(expr.String("x"), "name"); ok {
+		t.Error("ContextMember on a string reported a member")
+	}
+	keys, ok := expr.ContextKeys(ctx)
+	if !ok || len(keys) != 2 || keys[0] != "age" || keys[1] != "name" {
+		t.Fatalf("ContextKeys = %v, %v; want [age name], true", keys, ok)
+	}
+	if _, ok := expr.ContextKeys(expr.ListOf(expr.Number(1))); ok {
+		t.Error("ContextKeys on a list reported a context")
 	}
 }

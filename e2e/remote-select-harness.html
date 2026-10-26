@@ -1,0 +1,124 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas directory field e2e harness</title>
+    <!-- Drives the real api/web/remote-select.js on the real vendored form-js viewer,
+         the way the Tasks app mounts it: the example form, a Form instance given the
+         search as its atlasRemote adapter, and the same search attached to a directory
+         field saved as a textfield. __mount({ kind }) renders the field as a select (the
+         shape the editor writes) or as a textfield (the shape forms were saved in
+         first). The transport is the test's own, so a spec decides when each request
+         answers and with what — the only way to prove debouncing, cancellation and
+         out-of-order answers rather than hope for them. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div style="padding: 18px; max-width: 640px">
+      <div id="host"></div>
+    </div>
+    <script type="module">
+      import { loadFormViewer } from "/formviewer.js";
+      import { attachRemoteSelects, previewTransport, remoteAdapter } from "/remote-select.js";
+
+      // The shipped example form (examples/entra-benutzerauswahl), inlined because the
+      // e2e server serves api/web and not examples/.
+      window.__schema = {
+        type: "default",
+        id: "entra-benutzerauswahl",
+        components: [
+          { type: "select", id: "Field_abteilung", key: "abteilung", label: "Abteilung",
+            validate: { required: true },
+            values: [{ label: "IT", value: "IT" }, { label: "Finanzen", value: "Finance" }] },
+          { type: "select", id: "Field_user", key: "user", label: "Person", validate: { required: true },
+            atlasDataSource: {
+              version: 1, workerType: "entra", worker: "ucc_entra", resource: "users",
+              searchFields: ["displayName", "mail", "userPrincipalName"],
+              filters: [{ property: "department", field: "abteilung", required: true }],
+              option: { label: "displayName", description: "mail", details: ["department"] },
+              pageSize: 25, minSearchLength: 2,
+            } },
+          { type: "textfield", id: "Field_note", key: "note", label: "Notiz" },
+        ],
+      };
+
+      // Every request the widget makes, in order, with a way to answer it.
+      window.__requests = [];
+      const transport = (field, body, signal) => new Promise((resolve, reject) => {
+        const req = { field, body: JSON.parse(JSON.stringify(body)), aborted: false, resolve, reject };
+        signal.addEventListener("abort", () => {
+          req.aborted = true;
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+        });
+        window.__requests.push(req);
+      });
+      window.__respond = (i, items, nextCursor) => window.__requests[i].resolve({ items, nextCursor: nextCursor || null });
+      window.__fail = (i, code, retryAfter) =>
+        window.__requests[i].reject(Object.assign(new Error(code), { code, status: 503, retryAfter: retryAfter || 0 }));
+      window.__reqs = () => window.__requests.map(({ field, body, aborted }) => ({ field, body, aborted }));
+
+      let form = null;
+      let handle = null;
+      window.__submitEvents = 0;
+      // Manual debounce timers: a spec says when the wait runs out.
+      window.__timers = [];
+      const timers = {
+        set: (fn, ms) => { window.__timers.push({ fn, ms, live: true }); return window.__timers.length - 1; },
+        clear: (id) => { if (window.__timers[id]) window.__timers[id].live = false; },
+      };
+      window.__elapse = () => {
+        const due = window.__timers.filter((t) => t.live);
+        due.forEach((t) => { t.live = false; t.fn(); });
+        return due.map((t) => t.ms);
+      };
+      window.__pendingTimers = () => window.__timers.filter((t) => t.live).length;
+      // schemaFor renders the directory field as the kind asked for.
+      const schemaFor = (kind) => {
+        const schema = JSON.parse(JSON.stringify(window.__schema));
+        schema.components.find((c) => c.key === "user").type = kind || "select";
+        return schema;
+      };
+      let kindNow = "select";
+      window.__mount = async ({ kind, data, preview, debounceMs, manualTimers } = {}) => {
+        if (handle) handle.destroy();
+        if (form) form.destroy();
+        window.__requests = [];
+        window.__mounted = false;
+        kindNow = kind || "select";
+        const host = document.getElementById("host");
+        host.innerHTML = "";
+        const { Form } = await loadFormViewer();
+        const lookups = {
+          transport: preview ? previewTransport() : transport,
+          preview: !!preview,
+          debounceMs: debounceMs === undefined ? 0 : debounceMs,
+          data: data || {},
+          timers: manualTimers ? timers : undefined,
+        };
+        // Both, as the Tasks app does: the select mounts the adapter itself, and the
+        // attachment finds only a directory field saved as a textfield.
+        form = new Form({ container: host, atlasRemote: remoteAdapter(lookups) });
+        form.on("submit", () => { window.__submitEvents++; });
+        await form.importSchema(schemaFor(kindNow), data || {});
+        handle = attachRemoteSelects(form, host, lookups);
+        window.__attached = handle.fields;
+        window.__mounted = true;
+      };
+      window.__submit = () => {
+        const { data, errors } = form.submit();
+        return { data, errors: Object.keys(errors || {}) };
+      };
+      // __carrier is the value the field holds: a select's in the form's data, a
+      // textfield's in the input form-js renders for it.
+      window.__carrier = () => {
+        if (kindNow === "select") {
+          const v = form._getState().data.user;
+          return v == null ? "" : v;
+        }
+        const el = [...document.querySelectorAll("input.fjs-input")].find((i) => i.id.endsWith("-Field_user"));
+        return el ? el.value : null;
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

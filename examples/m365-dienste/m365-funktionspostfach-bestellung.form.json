@@ -1,0 +1,45 @@
+{
+  "type": "default",
+  "id": "m365-funktionspostfach-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Funktionspostfach · Shared mailbox**\n\nName und Adresse entstehen nach der Namensregel: FP-<BEREICH> <Bezeichnung>. · Name and address follow the naming rule: FP-<DEPT> <name>."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Verantwortliche Person (UPN) · Responsible person (UPN)",
+      "description": "Erhält Vollzugriff und «Senden als». · Receives full access and send-as.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

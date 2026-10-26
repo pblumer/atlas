@@ -1,0 +1,118 @@
+{
+  "id": "cda",
+  "name": "Capability-driven Automation",
+  "summary": "Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-25",
+  "plan": "../../planning/capability-driven-automation-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
+  "next_action": "Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two).",
+  "slices": [
+    {
+      "id": "CDA0",
+      "title": "Declarative operation claims",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1343
+      ],
+      "note": "PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing."
+    },
+    {
+      "id": "CDA1",
+      "title": "Semantic contract envelope",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA0"
+      ],
+      "issues": [],
+      "prs": [
+        1346
+      ],
+      "note": "PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim."
+    },
+    {
+      "id": "CDA2",
+      "title": "Contract governance and conformance",
+      "status": "active",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA1"
+      ],
+      "issues": [
+        1358
+      ],
+      "prs": [
+        1357,
+        1360
+      ],
+      "note": "ADR-0483 Accepted (option 3). CDA2a schema-only validation merged in PR #1357; content digests PR #1360 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified."
+    },
+    {
+      "id": "CDA3",
+      "title": "Verified Worker Type mappings",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Prove account versus contact distinction; source-derived provider mappings with no drift."
+    },
+    {
+      "id": "CDA4",
+      "title": "Cross-layer architecture graph",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2",
+        "CDA3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility."
+    },
+    {
+      "id": "CDA5",
+      "title": "Panorama and API/MCP discovery",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Read-only impact, coverage and gap queries; no unsupported runtime claims."
+    },
+    {
+      "id": "CDA6",
+      "title": "Capability-aware BPMN binding",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA2",
+        "CDA3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Approve binding ADR; pin one verified Worker at deployment without changing runtime."
+    },
+    {
+      "id": "CDA7",
+      "title": "Policy-gated governed execution",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CDA6"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Require provider-specific ADR-0475 enforcement, fsync-gated effects and recovery equality; no dynamic fallback."
+    }
+  ]
+}

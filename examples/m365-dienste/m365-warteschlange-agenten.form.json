@@ -1,0 +1,18 @@
+{
+  "type": "default",
+  "id": "m365-warteschlange-agenten",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Agenten ändern · Change agents**\n\nDie Liste ersetzt die bisherigen Agenten. · The list replaces the current agents."
+    },
+    {
+      "key": "agenten",
+      "type": "textarea",
+      "label": "Agenten (UPN, je Zeile eine) · Agents (UPN, one per line)",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

@@ -50,3 +50,28 @@ When Atlas matures, areas of particular security relevance will include:
 - **The exported-log stream**: ensuring it does not leak sensitive variable data without controls.
 
 These will be addressed as the corresponding milestones land (see the [roadmap](ROADMAP.md)).
+
+## Identity-aware Worker execution: what is enforced where
+
+[ADR-0475](docs/adr/0475-identity-aware-worker-execution.md)
+(proposed, partly built) lets a governed Worker act only after Atlas decides and records a
+Permit. How strong that guarantee is depends on the mode, and a report about it should
+say which mode it concerns:
+
+| Mode | What Atlas enforces | What it does not |
+|---|---|---|
+| *legacy* (no identity policy) | nothing new | — |
+| `service` + `shadow` | nothing: decisions are recorded and never block | this is **not** enforcement |
+| `service` + `enforce` | a refusal fails the job; a completion without a recorded Permit is refused | the Worker Instance holds its own credential, so a modified Worker can still call the target system; enforcement is cooperative |
+| `delegated-fixed`, `delegated-per-job` (always enforced) | the person's credential is released only after a recorded Permit, for one action, only to the supervised process serving that Worker Type (it presents a per-start broker key), and only for an endpoint that is Microsoft Graph | a released access token is valid at the provider until it expires (typically about an hour); Atlas cannot recall it. A compromise of the SharePoint Worker process itself obtains what it is released |
+
+Changing or deleting a governed Worker is an administrator's act, like its identity
+policy. Approving an action and allowing a Worker to act as you need your own session; an
+application you granted access to your account can do neither.
+
+In scope: a way to obtain a delegated credential without a recorded Permit, to have an
+approval count for a different action, to approve an action that runs for yourself, to
+reach a connection credential through any route, to redirect a delegated Worker's
+traffic, or to make a refused action's consequence disappear on restart. Out of scope for this build, because it is not
+claimed: brokering to external Worker Instances (refused), Worker Types other than
+SharePoint (not governed), and egress control of a Worker Instance's network traffic.

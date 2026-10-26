@@ -510,6 +510,11 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 			return err
 		}
 	}
+	// The open-approval index is keyed by expiry, not by instance, so its entries are
+	// found through the approval facts before those go below.
+	if err := t.deleteApprovalExpiries(piKey); err != nil {
+		return err
+	}
 	for _, prefix := range [][]byte{
 		// The terminal history record is a full key, a strict prefix of no other, so a
 		// prefix delete over it removes exactly that record — uniform with the families.
@@ -525,6 +530,11 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 		dataObjectPrefix(piKey),
 		dataObjectSnapshotScopePrefix(piKey),
 		compensableScopePrefix(piKey),
+		// Authorization evidence and approval facts explain this instance's history and
+		// are retained exactly as long as it is
+		// (ADR-0475 §12).
+		authorizationInstancePrefix(piKey),
+		approvalInstancePrefix(piKey),
 	} {
 		if err := t.deletePrefix(prefix); err != nil {
 			return err

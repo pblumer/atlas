@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "entra-benutzerauswahl",
+  "schemaVersion": 16,
+  "components": [
+    {
+      "type": "text",
+      "id": "Text_einleitung",
+      "text": "**Person auswählen · Select a person**\n\nWähle zuerst die Abteilung und suche dann nach Name oder E-Mail-Adresse. Die Suche läuft im Verzeichnis, nicht in diesem Formular. · Choose the department first, then search by name or e-mail address. The search runs in the directory, not in this form."
+    },
+    {
+      "type": "select",
+      "id": "Field_abteilung",
+      "key": "abteilung",
+      "label": "Abteilung · Department",
+      "description": "Die Werte müssen so geschrieben sein wie das Attribut «department» im Verzeichnis. · The values must be spelled as the directory's department attribute.",
+      "validate": { "required": true },
+      "values": [
+        { "label": "IT", "value": "IT" },
+        { "label": "Finanzen · Finance", "value": "Finance" },
+        { "label": "Personal · HR", "value": "HR" },
+        { "label": "Vertrieb · Sales", "value": "Sales" }
+      ],
+      "properties": { "personal": "false" }
+    },
+    {
+      "type": "select",
+      "id": "Field_user",
+      "key": "user",
+      "label": "Person",
+      "description": "Name oder E-Mail-Adresse, mindestens zwei Zeichen. · Name or e-mail address, at least two characters.",
+      "validate": { "required": true },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": ["displayName", "mail", "userPrincipalName"],
+        "filters": [{ "property": "department", "field": "abteilung", "required": true }],
+        "option": { "label": "displayName", "description": "mail", "details": ["department"] },
+        "pageSize": 25,
+        "minSearchLength": 2,
+        "verify": "lookup"
+      }
+    }
+  ]
+}
