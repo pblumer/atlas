@@ -186,7 +186,7 @@ test("a package asks what the directory cannot answer, plans everything at once,
   const choices = page.locator(".import-choices");
   await expect(choices.locator('.import-pick[value="catalog:c"]')).not.toBeChecked();
   await choices.locator("[data-ok]").click();
-  await expect(result(page)).toHaveText("done: published as release 1 · shop: 1 new, 0 updated, 0 published · 1 answered as this server remembers · 1 kept for the next import");
+  await expect(result(page)).toHaveText("done: als Release 1 veröffentlicht · Shop: 1 neu, 0 aktualisiert, 0 veröffentlicht · 1 beantwortet, wie dieser Server sie kennt · 1 für den nächsten Import gemerkt");
 
   const calls = await page.evaluate(() => window.__calls);
   expect(calls.map((c) => c.key)).toEqual([

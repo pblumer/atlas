@@ -525,7 +525,7 @@ test("a deploy names the deployed processes that will not follow it", async ({ p
   await page.locator("#dmn-deploy").click();
   await expect(page.locator("#dmn-status")).toHaveText("Deployed v2 · key 7");
   await expect(page.locator("#toast")).toContainText(
-    "One deployed process does not follow this version: Orders v2 (Decision_stored runs v1, the newest is v2)");
+    "Ein deployter Prozess folgt dieser Version nicht: Orders v2 (Decision_stored wertet v1 aus, das Neueste ist v2)");
   await expect(page.locator("#toast")).not.toContainText("Billing");
   // And the chip no longer promises what ADR-0319 did: latest follows the version.
   await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /what a business rule task bound to latest evaluates when it runs/);

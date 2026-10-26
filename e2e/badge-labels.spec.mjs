@@ -170,8 +170,8 @@ test("the live view marks a definition whose decision was frozen when it was dep
   // version (ADR-0423).
   const mark = page.locator(".crumbs .frozen-mark");
   await expect(mark).toBeVisible();
-  await expect(mark).toHaveText("Decision frozen · newer deployed");
+  await expect(mark).toHaveText("Entscheidung eingefroren · neuere deployt");
   await expect(mark).toHaveClass(/\bwarn\b/);
-  await expect(mark).toHaveAttribute("title", /freigabe runs v1, the newest is v3/);
-  await expect(mark).toHaveAttribute("title", /Deploy the process again/);
+  await expect(mark).toHaveAttribute("title", /freigabe wertet v1 aus, das Neueste ist v3/);
+  await expect(mark).toHaveAttribute("title", /Deploye den Prozess erneut/);
 });

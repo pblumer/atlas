@@ -20,6 +20,7 @@
 // whole console on import, so anything left inside it is only ever exercised by hand.
 
 import { decisionQuery, needsAsking, openImportChoices } from "./importchoices.js";
+import { t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -66,27 +67,26 @@ export function openAnswers(problems, directory) {
       const rest = all.filter((e) => !(p.candidates || []).includes(e.id));
       const opt = (e) => `<option value="${esc(e.id)}">${esc(e.name)} (${esc(e.id)})</option>`;
       return `<select class="package-answer" data-name="${esc(p.name)}">
-          <option value="">— choose —</option>${first.map(opt).join("")}${rest.map(opt).join("")}</select>`;
+          <option value="">${esc(t("package.answers.choose"))}</option>${first.map(opt).join("")}${rest.map(opt).join("")}</select>`;
     };
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal package-answers" role="dialog" aria-modal="true" aria-label="Answer the package's questions">
+      <div class="modal package-answers" role="dialog" aria-modal="true" aria-label="${esc(t("package.answers.title"))}">
         <div class="modal-head">
-          <h2>Answer the package's questions</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+          <h2>${esc(t("package.answers.title"))}</h2>
+          <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
-          <p>The catalogues name groups and people by the names the exporting server gives them. These could
-            not be found here; choose who each means on this server.</p>
+          <p>${esc(t("package.answers.intro"))}</p>
           ${problems.map((p) => `<div class="package-question" data-name="${esc(p.name)}">
             <label><b>${esc(p.question || p.name)}</b>
-              <span class="muted small">${esc(p.answer ? `“${p.answer}”: ${p.detail}` : p.detail)}</span>
+              <span class="muted small">${esc(p.answer ? t("package.answers.detail", { answer: p.answer, detail: p.detail }) : p.detail)}</span>
               ${field(p)}</label></div>`).join("")}
         </div>
         <div class="modal-foot"><span></span><span class="modal-actions">
-          <button type="button" class="btn ghost" data-cancel>Cancel</button>
-          <button type="button" class="btn" data-ok>Continue</button></span></div>
+          <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+          <button type="button" class="btn" data-ok>${esc(t("package.answers.continue"))}</button></span></div>
       </div>`;
     document.body.appendChild(ov);
     let settled = false;
@@ -116,7 +116,7 @@ export function openAnswers(problems, directory) {
 // request — body raw bytes with a type, or anything else as JSON — and resolves to
 // { status, data }, the answer decoded. Resolves to what each step did, or null when
 // the person cancelled; nothing is written before the last question is answered.
-export async function importPackage(file, { call, title = "Import application" }) {
+export async function importPackage(file, { call, title = t("package.title") }) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const files = await readArchive(bytes);
   const json = (name) => (files.has(name) ? JSON.parse(text(files.get(name))) : null);
@@ -134,7 +134,7 @@ export async function importPackage(file, { call, title = "Import application" }
   };
   const q = (query, sep = "?") => (query ? sep + query : "");
   const source = async (query) => ok(await call("POST", "/api/v1/applications/source" + q(query), bytes, "application/gzip"),
-    "the application");
+    t("package.what.application"));
   const constantsPath = (appId, query) => `/api/v1/applications/${encodeURIComponent(appId)}/constants/import${q(query)}`;
 
   // The plans.
@@ -144,7 +144,7 @@ export async function importPackage(file, { call, title = "Import application" }
     // An application this server has never seen holds no constants: every one is new.
     constantsPlan = plan.created || !plan.applicationId
       ? { artifacts: constants.constants.map((c) => ({ ref: "constant:" + c.name, name: c.name, status: "new", outcome: "created" })) }
-      : ok(await call("POST", constantsPath(plan.applicationId, "dryRun=true"), constants), "the constants");
+      : ok(await call("POST", constantsPath(plan.applicationId, "dryRun=true"), constants), t("package.what.constants"));
   }
   let filled = null;
   let shopPlan = null;
@@ -166,17 +166,17 @@ export async function importPackage(file, { call, title = "Import application" }
         remembered = res.data.remembered || [];
         break;
       }
-      if (res.status !== 422) ok(res, "the package's questions");
+      if (res.status !== 422) ok(res, t("package.what.questions"));
       if (!directory) {
-        const accounts = ok(await call("GET", "/api/v1/users/assignable"), "the accounts").map((u) =>
+        const accounts = ok(await call("GET", "/api/v1/users/assignable"), t("package.what.accounts")).map((u) =>
           ({ type: "account", id: u.username, name: u.displayName || u.username }));
-        directory = [...ok(await call("GET", "/api/v1/principals"), "the directory"), ...accounts];
+        directory = [...ok(await call("GET", "/api/v1/principals"), t("package.what.directory")), ...accounts];
       }
       const picked = await openAnswers(res.data.problems || [], directory);
       if (!picked) return null;
       Object.assign(chosen, picked);
     }
-    shopPlan = ok(await call("POST", "/api/v1/catalogs/import?dryRun=true", filled), "the catalogues");
+    shopPlan = ok(await call("POST", "/api/v1/catalogs/import?dryRun=true", filled), t("package.what.catalogues"));
   }
 
   // One dialog for everything that differs from what is here.
@@ -194,26 +194,26 @@ export async function importPackage(file, { call, title = "Import application" }
     remembered, learned: [] };
   const appId = out.source.applicationId;
   if (constantsPlan) {
-    out.constants = ok(await call("POST", constantsPath(appId, query), constants), "the constants");
+    out.constants = ok(await call("POST", constantsPath(appId, query), constants), t("package.what.constants"));
     if ((out.constants.notSet || []).length) {
       out.source.constantsNotSet = [...(out.source.constantsNotSet || []), ...out.constants.notSet];
     }
   }
   if (shop) {
-    const releases = ok(await call("GET", `/api/v1/applications/${encodeURIComponent(appId)}/releases`), "the releases");
+    const releases = ok(await call("GET", `/api/v1/applications/${encodeURIComponent(appId)}/releases`), t("package.what.releases"));
     const changed = out.source.created || (out.source.artifacts || []).some((a) =>
       (a.outcome === "created" || a.outcome === "updated") && !String(a.ref).startsWith("constant:"));
     if (!releases.length || changed) {
       const pub = ok(await call("POST", `/api/v1/applications/${encodeURIComponent(appId)}/publish`,
-        { note: "Console package import" }), "the publish");
-      if (!pub.deployed) throw new Error("the application was not published: " + (pub.reason || "refused"));
+        { note: "Console package import" }), t("package.what.publish"));
+      if (!pub.deployed) throw new Error(t("package.notPublished", { reason: pub.reason || t("package.refused") }));
       out.published = pub;
       out.warnings.push(...(pub.warnings || []));
     }
-    out.catalogue = ok(await call("POST", "/api/v1/catalogs/import" + q(query), filled), "the catalogues");
+    out.catalogue = ok(await call("POST", "/api/v1/catalogs/import" + q(query), filled), t("package.what.catalogues"));
     // Only now, with the catalogues in, are the choices kept for the next import.
     if (learned.length) {
-      ok(await call("POST", "/api/v1/catalogs/import/mappings", { mappings: learned }), "the table of names");
+      ok(await call("POST", "/api/v1/catalogs/import/mappings", { mappings: learned }), t("package.what.mappings"));
       out.learned = learned;
     }
     out.warnings.push(...(out.catalogue.warnings || []).map((w) => (w.subject ? `${w.subject}: ${w.problem}` : String(w.problem || w))));
@@ -224,12 +224,12 @@ export async function importPackage(file, { call, title = "Import application" }
 // packageSummary says in a few words what a package import did.
 export function packageSummary(out) {
   const parts = [];
-  if (out.published) parts.push(`published as release ${(out.published.release || {}).version}`);
+  if (out.published) parts.push(t("package.summary.published", { version: (out.published.release || {}).version }));
   if (out.catalogue) {
     const n = (k) => (out.catalogue[k] || []).length;
-    parts.push(`shop: ${n("created")} new, ${n("updated")} updated, ${n("releases")} published`);
+    parts.push(t("package.summary.shop", { created: n("created"), updated: n("updated"), releases: n("releases") }));
   }
-  if ((out.remembered || []).length) parts.push(`${out.remembered.length} answered as this server remembers`);
-  if ((out.learned || []).length) parts.push(`${out.learned.length} kept for the next import`);
+  if ((out.remembered || []).length) parts.push(t("package.summary.remembered", { n: out.remembered.length }));
+  if ((out.learned || []).length) parts.push(t("package.summary.learned", { n: out.learned.length }));
   return parts.join(" · ");
 }

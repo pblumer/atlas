@@ -10530,7 +10530,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         aus einem Zeit-, Nachrichten- oder Signal-Start-Event. Ein <b>ausdrücklicher</b> Start über die API oder die
         Oberfläche bleibt möglich, und laufende Instanzen laufen unberührt weiter. Es wirkt je Version, nicht je
         Prozess-Id; eine neue Version startet unabhängig davon aktiv. In der Konsole trägt die pausierte Version im
-        Modeler die Marke <i>Inactive</i> und einen Knopf <i>Activate</i> / <i>Deactivate</i>.</p>
+        Modeler die Marke <i>Inaktiv</i> und einen Knopf <i>Aktivieren</i> / <i>Deaktivieren</i>.</p>
       <p data-l="en">A deployed version can be <b>paused</b> without deleting it
         (<code>PUT /api/v1/processes/{key}/active</code> with <code>{"active":false}</code>, role
         <code>operator</code>). Paused means the version <b>no longer starts new instances on its own</b> – from a

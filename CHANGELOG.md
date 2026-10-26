@@ -14,18 +14,20 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
-- **The Modeler's application page speaks German.** The page and everything it opens
-  read from the message catalogue
+- **The Modeler's application landscape and application page speak German.** Both
+  pages and everything they open read from the message catalogue
   ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): the "Neu erstellen" menu
   ("Prozessdiagramm (BPMN)", "Entscheidungsdiagramm (DMN)", "Entscheidungsmodell
-  hochladen (.dmn)", "Formular", also on the application landscape), the artifact table
-  and its row actions, the Artefakte, Deployments and Konstanten tabs, publishing,
-  promoting and the architecture sketch, importing a file or a MIM workflow, exporting,
-  sharing and deleting an application, and the confirm for deleting a DMN reference.
-  Three shared pieces follow, so they read the same everywhere: the column filters of
-  every table, the buttons of the pick dialog, and the Server constants section of
-  Admin → Engine. Messages the server composes stay in its English. `?lang=en` keeps the
-  English page.
+  hochladen (.dmn)", "Formular"), the list of applications and of deployed processes
+  with activating, deactivating and deleting one, the artifact table and its row
+  actions, the Artefakte, Deployments and Konstanten tabs, publishing, promoting and the
+  architecture sketch, importing a file, a MIM workflow or an application package,
+  exporting, sharing and deleting an application, and the confirm for deleting a DMN
+  reference. Shared pieces follow, so they read the same everywhere: the column filters
+  of every table, the buttons of the pick dialog, the import choices of a catalogue
+  import, the Server constants section of Admin → Engine, and the mark on a definition
+  whose decisions were frozen at deploy, also in the editors. Messages the server
+  composes stay in its English. `?lang=en` keeps the English pages.
 
 ## [0.20.0] — 2026-10-25
 

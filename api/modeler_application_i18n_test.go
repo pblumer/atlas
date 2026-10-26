@@ -7,14 +7,15 @@ import (
 	"testing"
 )
 
-// TestEveryMessageTheApplicationPageAsksForExists holds the Modeler's application page
-// and everything it opens — the "Create new" menu (also on the application landscape),
-// the artifact table, the Deployments and Constants tabs, publishing, importing and
-// exporting, sharing and deleting — to the catalogue (ADR-0267): every key these
-// modules name is in both locales. A key is named three ways: looked up directly,
-// looked up as a plural (which needs both forms), or held as a literal in a table or a
-// ternary and looked up later, which has to be one or the other. A typo in any of them
-// otherwise reaches the author as a raw id in place of a button, a confirm or a warning.
+// TestEveryMessageTheApplicationPageAsksForExists holds the Modeler's application
+// landscape and application page, and everything they open — the "Create new" menu,
+// the artifact table, the deployed processes, the Deployments and Constants tabs,
+// publishing, importing and exporting, sharing and deleting — to the catalogue
+// (ADR-0267): every key these modules name is in both locales. A key is named three
+// ways: looked up directly, looked up as a plural (which needs both forms), or held as
+// a literal in a table or a ternary and looked up later, which has to be one or the
+// other. A typo in any of them otherwise reaches the author as a raw id in place of a
+// button, a confirm or a warning.
 func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	catalogue, err := os.ReadFile("web/i18n.js")
 	if err != nil {
@@ -22,7 +23,7 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	}
 	// A key ends in a letter or digit: a literal ending in a dot is the prefix of a
 	// family of ids the server sends ("share.role."), resolved one id at a time.
-	const key = `((?:create|application|artifact|dmnref|deployments|constants|import|share|appDelete|transfer|pick|table)\.[A-Za-z0-9.]*[A-Za-z0-9])`
+	const key = `((?:create|application|artifact|dmnref|deployments|constants|import|share|appDelete|transfer|pick|table|home|choices|package|frozen)\.[A-Za-z0-9.]*[A-Za-z0-9])`
 	lookups := regexp.MustCompile(`\b(?:t|tr)\("` + key + `"`)
 	plurals := regexp.MustCompile(`\b(?:plural|trPlural)\("` + key + `"`)
 	literals := regexp.MustCompile(`"` + key + `"`)
@@ -31,6 +32,7 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	for _, file := range []string{
 		"web/app.js", "web/deletedialog.js", "web/dmnref-impact.js",
 		"web/sourceneeds.js", "web/pickmodal.js", "web/table.js",
+		"web/importchoices.js", "web/packageimport.js", "web/frozen-decisions.js",
 	} {
 		src, err := os.ReadFile(file)
 		if err != nil {
@@ -46,7 +48,7 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 			named[m[1]] = true
 		}
 	}
-	if len(direct)+len(counted) < 250 {
+	if len(direct)+len(counted) < 300 {
 		t.Fatalf("found only %d message keys; the scan no longer matches how the modules look them up", len(direct)+len(counted))
 	}
 

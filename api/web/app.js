@@ -3407,7 +3407,7 @@ function toggleSection(id, btn) {
 async function viewModelerHome() {
   view.innerHTML = `
     <div class="between">
-      <h1>Applications</h1>
+      <h1>${esc(tr("home.title"))}</h1>
       ${dropdown(tr("create.button"), "btn", [
         { label: tr("create.newApplication"), icon: "📦", act: "new-project" },
         { sep: true },
@@ -3422,13 +3422,13 @@ async function viewModelerHome() {
     </div>
     <div class="card" style="padding:0; margin-top:14px">
       <table data-dt-key="projects">
-        <thead><tr><th>Name</th><th>Artifacts</th><th>Last changed</th><th></th></tr></thead>
-        <tbody id="proj-rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        <thead><tr><th>${esc(tr("application.th.name"))}</th><th>${esc(tr("home.th.artifacts"))}</th><th>${esc(tr("application.th.changed"))}</th><th></th></tr></thead>
+        <tbody id="proj-rows"><tr><td colspan="4" class="empty">${esc(tr("application.loading"))}</td></tr></tbody>
       </table>
     </div>
-    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="Show or hide the deployed processes">Deployed</button></h2>
+    <h2 style="margin:22px 0 10px"><button class="section-toggle" aria-expanded="${sectionState("deployed")}" data-section="deployed" title="${esc(tr("home.deployedTitle"))}">${esc(tr("home.deployed"))}</button></h2>
     <div class="section-body" id="sec-deployed"${sectionState("deployed") ? "" : ' hidden'}>
-      <div id="rows"><p class="muted" style="padding:14px 2px">Loading…</p></div>
+      <div id="rows"><p class="muted" style="padding:14px 2px">${esc(tr("application.loading"))}</p></div>
     </div>`;
   for (const t of view.querySelectorAll(".section-toggle"))
     t.addEventListener("click", () => toggleSection(t.dataset.section, t));
@@ -3459,12 +3459,12 @@ async function viewModelerHome() {
       const n = countIn(p.id);
       const href = `#/modeler/p/${encodeURIComponent(p.id)}`;
       const owner = p.myRole === "owner";
-      const items = [{ label: "Open", icon: "→", href }];
-      if (AUTH.enabled && owner) items.push({ label: "Share…", icon: "👤", act: "share", data: { id: p.id } });
+      const items = [{ label: tr("application.row.open"), icon: "→", href }];
+      if (AUTH.enabled && owner) items.push({ label: tr("application.menu.share"), icon: "👤", act: "share", data: { id: p.id } });
       if (owner) items.push(
-        { label: "Rename", icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
+        { label: tr("home.rename"), icon: "✎", act: "rename", data: { id: p.id, name: p.name } },
         { sep: true },
-        { label: "Delete", icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
+        { label: tr("common.delete"), icon: "🗑", act: "del", data: { id: p.id, name: p.name }, danger: true },
       );
       return `<tr>
         <td data-filter="${esc(p.name)}"><div class="artifact-name"><span class="mi-icon">📦</span><a href="${href}"><b>${esc(p.name)}</b></a>${visBadge(p)}</div></td>
@@ -3475,12 +3475,12 @@ async function viewModelerHome() {
     };
     const ungroupedRow = ungrouped.length ? `<tr>
         <td><div class="artifact-name"><span class="mi-icon">🗂</span><a href="#/modeler/p/ungrouped">${esc(tr("application.notAssigned"))}</a>
-          <span class="muted" style="font-size:12px">· not in an application</span></div></td>
+          <span class="muted" style="font-size:12px">· ${esc(tr("home.notInApplication"))}</span></div></td>
         <td class="muted">${ungrouped.length}</td><td class="muted">—</td><td></td>
       </tr>` : "";
 
     projRows.innerHTML = (projects.map(projectRow).join("") + ungroupedRow) ||
-      `<tr><td colspan="4" class="empty">No applications yet. Use <b>Create new</b> to add one.</td></tr>`;
+      `<tr><td colspan="4" class="empty">${tr("home.empty", { create: esc(tr("create.button")) })}</td></tr>`;
     onMenuAction(projRows, (act, b) => {
       if (act === "rename") renameProject(b.dataset.id, b.dataset.name, renderProjects);
       if (act === "del") deleteProject(b.dataset.id, b.dataset.name, renderProjects);
@@ -3498,7 +3498,7 @@ async function viewModelerHome() {
   // groupByProcess collapsed them, so the row shows the latest and a version count.
   const deployRow = (g) => {
     const older = g.versions.length > 1
-      ? ` <span class="muted">· ${g.versions.length} versions</span>` : "";
+      ? ` <span class="muted">· ${esc(trPlural("home.versions", g.versions.length))}</span>` : "";
     const label = g.latest.name || g.processId;
     const sub = g.latest.name
       ? `<div class="muted" style="font-size:12px">${esc(g.processId)}</div>` : "";
@@ -3508,7 +3508,7 @@ async function viewModelerHome() {
     const inactive = g.latest.active === false;
     const frozen = frozenMark(g.latest);
     const badge = (inactive
-      ? ` <span class="pill warn" title="Deployed but paused: no new instances auto-start from its timer, message, or signal start events">Inactive</span>`
+      ? ` <span class="pill warn" title="${esc(tr("home.inactiveTitle"))}">${esc(tr("home.inactive"))}</span>`
       : "") +
       // A definition whose latest-bound decisions were frozen at its deploy does not
       // do what its binding reads (ADR-0423), and this row is where its owner would
@@ -3516,24 +3516,22 @@ async function viewModelerHome() {
       (frozen
         ? ` <span class="pill${frozen.behind ? " warn" : ""} frozen-mark" title="${esc(frozen.title)}">${esc(frozen.label)}</span>`
         : "");
-    const toggleLabel = inactive ? "Activate" : "Deactivate";
-    const toggleTitle = inactive
-      ? "Resume automatic starts (timer/message/signal start events)"
-      : "Pause automatic starts: keep it deployed but stop new instances from starting on their own";
+    const toggleLabel = tr(inactive ? "home.activate" : "home.deactivate");
+    const toggleTitle = tr(inactive ? "home.activateTitle" : "home.deactivateTitle");
     return `<tr>
       <td><a href="#/modeler/d/${g.latest.key}"><b>${esc(label)}</b></a>${starButton("process", g.processId)}${badge}${sub}</td>
       <td>v${g.latest.version}${older}</td>
       <td class="muted">${esc(fmtTime(g.latest.deployedAt))}</td>
       <td style="text-align:right; white-space:nowrap">
-        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${toggleTitle}">${toggleLabel}</button>
-        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">Open</a>
-        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="Delete this deployed process and all its versions">Delete</button>
+        <button class="btn ghost" data-toggle="${g.latest.key}" data-active="${inactive ? "1" : "0"}" title="${esc(toggleTitle)}">${esc(toggleLabel)}</button>
+        <a class="btn ghost" href="#/modeler/d/${g.latest.key}">${esc(tr("application.row.open"))}</a>
+        <button class="btn ghost danger" data-del="${esc(g.processId)}" title="${esc(tr("home.deleteTitle"))}">${esc(tr("common.delete"))}</button>
       </td>
     </tr>`;
   };
   const deployTable = (gs) => `<div class="card" style="padding:0">
       <table class="no-enhance">
-        <thead><tr><th>Process</th><th>Latest</th><th>Deployed</th><th></th></tr></thead>
+        <thead><tr><th>${esc(tr("home.th.process"))}</th><th>${esc(tr("home.th.latest"))}</th><th>${esc(tr("deployments.th.deployed"))}</th><th></th></tr></thead>
         <tbody>${gs.map(deployRow).join("")}</tbody>
       </table>
     </div>`;
@@ -3547,7 +3545,7 @@ async function viewModelerHome() {
       const groups = groupByProcess(procs);
       if (!groups.length) {
         rows.innerHTML = `<p class="empty" style="padding:14px">
-          Nothing deployed yet. <a href="#/modeler/new">Create a diagram</a>, save it as a draft, then Deploy &amp; run.</p>`;
+          ${tr("home.nothingDeployed", { link: `<a href="#/modeler/new">${esc(tr("home.createDiagram"))}</a>` })}</p>`;
         return;
       }
       // Group deployed definitions into the same project folders as design-time
@@ -4221,7 +4219,7 @@ async function deleteProcess(processId, groups, reload) {
   const group = groups.find((g) => g.processId === processId);
   if (!group) return;
   const n = group.versions.length;
-  if (!window.confirm(`Delete process "${processId}"${n > 1 ? ` and all ${n} versions` : ""}? This cannot be undone.`)) return;
+  if (!window.confirm(tr(n > 1 ? "home.process.confirmDeleteAll" : "home.process.confirmDelete", { id: processId, n }))) return;
   let refused = [];
   for (const v of group.versions) {
     try { await api("DELETE", `/api/v1/processes/${v.key}`); }
@@ -4230,8 +4228,8 @@ async function deleteProcess(processId, groups, reload) {
   const forcible = refused.filter((r) => r.e.status === 409);
   if (forcible.length) {
     const reasons = [...new Set(forcible.map((r) => forceReason(r.e.message)))].join("\n\n");
-    const ask = `The server refused to delete ${forcible.length === 1 ? "a version" : `${forcible.length} versions`} of "${processId}":\n\n${reasons}\n\n` +
-      "Delete anyway? Its running instances are cancelled, and it is removed even if a catalogue product or an order still needs it. This cannot be undone.";
+    const ask = `${trPlural("home.process.refused", forcible.length, { id: processId })}\n\n${reasons}\n\n` +
+      tr("home.process.force");
     if (window.confirm(ask)) {
       const still = [];
       for (const r of forcible) {
@@ -4242,9 +4240,9 @@ async function deleteProcess(processId, groups, reload) {
     }
   }
   if (refused.length) {
-    toast(`Could not delete ${refused.length} version(s) of "${processId}": ${forceReason(refused[0].e.message)}`, "err");
+    toast(trPlural("home.process.deleteFailed", refused.length, { id: processId, error: forceReason(refused[0].e.message) }), "err");
   } else {
-    toast(`Deleted "${processId}"`, "ok");
+    toast(tr("home.process.deleted", { id: processId }), "ok");
   }
   await reload();
 }
@@ -4257,9 +4255,9 @@ async function toggleProcessActive(key, inactive, reload) {
   const activate = inactive; // clicking "Activate" on an inactive one activates it
   try {
     await api("PUT", `/api/v1/processes/${key}/active`, { active: activate });
-    toast(activate ? "Process activated" : "Process deactivated — automatic starts paused", "ok");
+    toast(tr(activate ? "home.process.activated" : "home.process.deactivated"), "ok");
   } catch (e) {
-    toast("could not change activation: " + e.message, "err");
+    toast(tr("home.process.toggleFailed", { error: e.message }), "err");
   }
   await reload();
 }
@@ -6225,21 +6223,20 @@ function importApplicationSource(reload) {
     const file = picker.files[0];
     if (!file) return;
     try {
-      const out = await importPackage(file, { call: packageCall, title: "Import application" });
+      const out = await importPackage(file, { call: packageCall, title: tr("package.title") });
       if (!out) return;
       const data = out.source;
       const shop = packageSummary(out);
-      toast(
-        `${data.created ? "Created" : "Imported"} ${data.name} — ${outcomeSummary(data.artifacts)}` +
-        (data.untracked && data.untracked.length
-          ? ` · ${data.untracked.length} local artifact${data.untracked.length === 1 ? "" : "s"} not in the tree, kept`
-          : "") + (shop ? ` · ${shop}` : ""),
-        "ok");
+      const parts = [tr(data.created ? "home.import.created" : "home.import.imported",
+        { name: data.name, summary: outcomeSummary(data.artifacts) })];
+      if (data.untracked && data.untracked.length) parts.push(trPlural("home.import.untracked", data.untracked.length));
+      if (shop) parts.push(shop);
+      toast(parts.join(" · "), "ok");
       await reload();
       const report = { ...data, warnings: out.warnings };
       if (needsReport(report)) await showImportNeeds(report);
     } catch (e) {
-      toast("Import failed: " + (e && e.message || e), "err");
+      toast(tr("import.failed", { error: e && e.message || e }), "err");
     }
   });
   picker.click();
