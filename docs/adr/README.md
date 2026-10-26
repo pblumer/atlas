@@ -453,7 +453,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0365](0365-a-number-is-a-counter-or-a-walk.md) | A number an operations view states is a counter or a walk, never the length of a page | Accepted | Landed |
 | [0366](0366-the-live-diagram-counts-every-parked-token.md) | The live diagram counts every parked token, not the ones a bounded scan reached | Accepted | Landed |
 | [0367](0367-directory-photo.md) | A directory photo arrives the way every other directory fact does | Accepted | Landed |
-| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted | Landed |
+| [0368](0368-user-avatar.md) | A picture of a person belongs to the account, in two provenances and one place | Accepted (amended) | Landed |
 | [0369](0369-cross-instance-message-addressing.md) | Addressing and the envelope for a message that leaves the node | Accepted | Not started |
 | [0370](0370-durable-message-buffer.md) | A published message waits for its subscriber | Accepted (amended) | Partial |
 | [0371](0371-participant-binds-a-published-interface.md) | A participant names an interface; the server says which node | Proposed | Not started |
@@ -476,7 +476,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0388](0388-a-call-that-can-only-be-null-is-refused-at-deploy.md) | A call that can only be null is refused at deploy | Accepted (amended) | Landed |
 | [0389](0389-forked-instance-migration.md) | Forked instance migration | Accepted | Landed |
 | [0390](0390-position-progress.md) | The orderer is told where their position stands, from a route of their own | Accepted | Landed |
-| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted | Landed |
+| [0391](0391-product-picture.md) | A product is shown, and its picture is not part of what was promised | Accepted (amended) | Landed |
 | [0392](0392-the-same-refusal-at-every-door-that-already-refuses.md) | The same refusal at every door that already refuses | Accepted | Landed |
 | [0393](0393-a-rule-added-later-is-a-gate-on-deploy.md) | A rule the compiler gains later is a gate on deploy, whatever stage it lives in | Accepted | Landed |
 | [0394](0394-approval-in-the-inbox.md) | An approval is read and decided where the work already is | Accepted | Landed |
