@@ -3,6 +3,8 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { t as tr, plural as trPlural } from "./i18n.js";
+import { translateModule } from "./lib-translate.js";
 import { copyText } from "./clipboard.js";
 import { createRefResolver, refChipHTML, refPopHTML } from "./varrefs.js";
 import { attachCodeEditor } from "./code-editor.js";
@@ -171,8 +173,9 @@ function patchZeebeModdle(zeebe) {
 // newModeler/newViewer construct a bpmn-js instance with the moddle extensions
 // (zeebe + atlas) wired.
 function newModeler(BpmnJS, moddle, container, extraModules) {
-  const opts = { container, moddleExtensions: moddle };
-  if (extraModules && extraModules.length) opts.additionalModules = extraModules;
+  // translateModule puts bpmn-js's own words — the palette, the context pad, the
+  // replace menu — through the console's catalogue (lib-translate.js).
+  const opts = { container, moddleExtensions: moddle, additionalModules: [translateModule, ...(extraModules || [])] };
   return new BpmnJS(opts);
 }
 
@@ -708,8 +711,8 @@ function editorCrumbs(project, current) {
   const proj = project
     ? `${sep}<a href="#/modeler/p/${encodeURIComponent(project.id)}">${esc(project.name)}</a>`
     : "";
-  return `<nav class="crumbs" aria-label="Breadcrumb">` +
-    `<a href="#/modeler">Home</a>${proj}${sep}` +
+  return `<nav class="crumbs" aria-label="${esc(tr("bpmn.crumb.label"))}">` +
+    `<a href="#/modeler">${esc(tr("bpmn.crumb.home"))}</a>${proj}${sep}` +
     `<span class="crumb-current">${esc(current)}</span></nav>`;
 }
 
@@ -751,41 +754,41 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
 
-  const crumb = draftId != null ? "Draft" : key == null ? "New diagram" : "Deployment " + key;
+  const crumb = draftId != null ? tr("bpmn.crumb.draft") : key == null ? tr("bpmn.crumb.new") : tr("bpmn.crumb.deployment", { key });
   root.innerHTML = `
     <div class="editor">
       <div class="editor-bar">
         ${editorCrumbs(project, crumb)}
         <div class="shown-version" id="shown-version" hidden></div>
         <div class="etabs">
-          <button data-tab="design" class="active" title="Draw the diagram and its flow">Design</button>
-          <button data-tab="implement" title="Configure the technical details of each element">Implement</button>
-          <button data-tab="playground" title="Run this diagram on the real engine in a throwaway sandbox — no deploy, no side effects">Playground</button>
+          <button data-tab="design" class="active" title="${esc(tr("bpmn.tab.designTitle"))}">${esc(tr("bpmn.tab.design"))}</button>
+          <button data-tab="implement" title="${esc(tr("bpmn.tab.implementTitle"))}">${esc(tr("bpmn.tab.implement"))}</button>
+          <button data-tab="playground" title="${esc(tr("bpmn.tab.playgroundTitle"))}">${esc(tr("bpmn.tab.playground"))}</button>
         </div>
         <div style="flex:1"></div>
-        <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="Show the variables this diagram writes, and who writes them (F4)">Variables</button>
+        <button class="btn neutral toggle" id="vars-toggle" type="button" aria-pressed="false" title="${esc(tr("bpmn.varsTitle"))}">${esc(tr("bpmn.vars"))}</button>
         <span class="bar-div" aria-hidden="true"></span>
-        <button class="btn neutral" id="save" title="Save this diagram as a draft">Save</button>
-        <button class="btn" id="deploy" title="Deploy this single diagram. A draft is saved first, so it stays what runs; a deployed version opened here is deployed as a new version and leaves the draft alone. To ship a whole process application, use Publish on the application (ADR-0128).">Deploy</button>
+        <button class="btn neutral" id="save" title="${esc(tr("bpmn.saveTitle"))}">${esc(tr("bpmn.save"))}</button>
+        <button class="btn" id="deploy" title="${esc(tr("bpmn.deployTitle"))}">${esc(tr("bpmn.deploy"))}</button>
         <div class="dropdown">
-          <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="More actions" title="Everything else this diagram can do">&#8943;</button>
+          <button class="icon-btn bar-more" id="bar-more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="${esc(tr("bpmn.more"))}" title="${esc(tr("bpmn.moreTitle"))}">&#8943;</button>
           <div class="dropdown-menu" id="bar-menu" hidden>
-            <button id="sim-toggle" type="button" aria-pressed="false" title="Play tokens through the diagram to see how the control flow moves — no deploy, just a walkthrough"><span class="mi-icon">&#9654;</span>Token simulation</button>
+            <button id="sim-toggle" type="button" aria-pressed="false" title="${esc(tr("bpmn.simTitle"))}"><span class="mi-icon">&#9654;</span>${esc(tr("bpmn.sim"))}</button>
             <div class="sep"></div>
-            <button id="autolayout" type="button" title="Re-flow the diagram into a clean left-to-right layout (F8)"><span class="mi-icon">&#8649;</span>Auto-layout</button>
-            <button id="savelayout" type="button" hidden title="Save this layout onto the deployed definition — the picture changes, the process does not: same key, same version, same running instances"><span class="mi-icon">&#128190;</span>Save layout to deployment</button>
-            <button id="export" type="button" title="Download this diagram as BPMN XML"><span class="mi-icon">&#8595;</span>Export XML</button>
-            <button id="xmlsource" type="button" title="Show this diagram as BPMN XML, and correct it in place"><span class="mi-icon mi-code">&lt;/&gt;</span>XML source</button>
-            <button id="docexport" type="button" title="Publish this process as a structured PDF — the diagram plus every element's documentation and notes — as a numbered version you can share (ADR-0143)"><span class="mi-icon">&#128196;</span>Documentation</button>
+            <button id="autolayout" type="button" title="${esc(tr("bpmn.autolayoutTitle"))}"><span class="mi-icon">&#8649;</span>${esc(tr("bpmn.autolayout"))}</button>
+            <button id="savelayout" type="button" hidden title="${esc(tr("bpmn.saveLayoutTitle"))}"><span class="mi-icon">&#128190;</span>${esc(tr("bpmn.saveLayout"))}</button>
+            <button id="export" type="button" title="${esc(tr("bpmn.exportTitle"))}"><span class="mi-icon">&#8595;</span>${esc(tr("bpmn.export"))}</button>
+            <button id="xmlsource" type="button" title="${esc(tr("bpmn.xmlSourceTitle"))}"><span class="mi-icon mi-code">&lt;/&gt;</span>${esc(tr("bpmn.xmlSource"))}</button>
+            <button id="docexport" type="button" title="${esc(tr("bpmn.docTitle"))}"><span class="mi-icon">&#128196;</span>${esc(tr("bpmn.doc"))}</button>
           </div>
         </div>
       </div>
       <div class="sim-bar" id="sim-bar" hidden>
-        <button class="btn play" id="sim-play" title="Play the token simulation">&#9654; Play</button>
-        <button class="btn neutral" id="sim-step" title="Advance one token by a single step">Step</button>
-        <button class="btn neutral" id="sim-reset" title="Clear all tokens">Reset</button>
-        <label class="sim-speed">Speed
-          <select class="speed" id="sim-speed" aria-label="Simulation speed">
+        <button class="btn play" id="sim-play" title="${esc(tr("bpmn.sim.playTitle"))}">${esc(tr("bpmn.sim.play"))}</button>
+        <button class="btn neutral" id="sim-step" title="${esc(tr("bpmn.sim.stepTitle"))}">${esc(tr("bpmn.sim.step"))}</button>
+        <button class="btn neutral" id="sim-reset" title="${esc(tr("bpmn.sim.resetTitle"))}">${esc(tr("bpmn.sim.reset"))}</button>
+        <label class="sim-speed">${esc(tr("bpmn.sim.speed"))}
+          <select class="speed" id="sim-speed" aria-label="${esc(tr("bpmn.sim.speedLabel"))}">
             <option value="0.25">0.25&times;</option>
             <option value="0.5">0.5&times;</option>
             <option value="1" selected>1&times;</option>
@@ -793,25 +796,25 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
             <option value="4">4&times;</option>
           </select>
         </label>
-        <label class="sim-auto" title="Let Play run end-to-end: gateways take their default (or every branch), and message/timer/signal events fire on their own — no clicking required.">
-          <input type="checkbox" id="sim-auto"/> Auto-decide
+        <label class="sim-auto" title="${esc(tr("bpmn.sim.autoTitle"))}">
+          <input type="checkbox" id="sim-auto"/> ${esc(tr("bpmn.sim.auto"))}
         </label>
-        <label class="sim-mi" title="How many instances a multi-instance activity runs in the simulation. A modelled fixed loop cardinality overrides this.">Instances
+        <label class="sim-mi" title="${esc(tr("bpmn.sim.miTitle"))}">${esc(tr("bpmn.sim.mi"))}
           <input type="number" id="sim-mi" min="1" max="20" step="1" value="3"/>
         </label>
         <span class="sim-hint" id="sim-hint"></span>
         <span style="flex:1"></span>
         <span class="sim-stats" id="sim-stats"></span>
-        <button class="btn neutral" id="sim-exit" title="Stop the walkthrough and go back to editing the diagram">Exit simulation</button>
+        <button class="btn neutral" id="sim-exit" title="${esc(tr("bpmn.sim.exitTitle"))}">${esc(tr("bpmn.sim.exit"))}</button>
       </div>
       <div class="start-panel" id="doc-panel" hidden>
-        <label class="field"><span>Title</span>
-          <input id="doc-title" placeholder="Leave empty to use the process name"/></label>
-        <label class="field"><span>Note for this version</span>
-          <input id="doc-note" placeholder="What changed, or what this version was signed off for"/></label>
+        <label class="field"><span>${esc(tr("bpmn.doc.title"))}</span>
+          <input id="doc-title" placeholder="${esc(tr("bpmn.doc.titlePlaceholder"))}"/></label>
+        <label class="field"><span>${esc(tr("bpmn.doc.note"))}</span>
+          <input id="doc-note" placeholder="${esc(tr("bpmn.doc.notePlaceholder"))}"/></label>
         <div class="row">
-          <button class="btn" id="doc-publish" title="Publish a new documentation version as a PDF">Publish version</button>
-          <button class="btn neutral" id="doc-cancel" title="Close the documentation panel">Close</button>
+          <button class="btn" id="doc-publish" title="${esc(tr("bpmn.doc.publishTitle"))}">${esc(tr("bpmn.doc.publish"))}</button>
+          <button class="btn neutral" id="doc-cancel" title="${esc(tr("bpmn.doc.closeTitle"))}">${esc(tr("bpmn.close"))}</button>
           <span class="err" id="doc-err"></span>
         </div>
         <div class="doc-history" id="doc-history"></div>
@@ -819,43 +822,43 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
       <div class="start-panel" id="deploy-panel" hidden>
         <div id="deploy-body"></div>
         <div class="row" id="deploy-actions">
-          <button class="btn" id="deploy-run" title="Deploy this diagram and start an instance">Deploy &amp; run</button>
-          <button class="btn neutral" id="deploy-only" title="Deploy this diagram without starting an instance">Deploy only</button>
-          <button class="btn neutral" id="deploy-cancel" title="Close without deploying">Cancel</button>
+          <button class="btn" id="deploy-run" title="${esc(tr("bpmn.deploy.runTitle"))}">${esc(tr("bpmn.deploy.run"))}</button>
+          <button class="btn neutral" id="deploy-only" title="${esc(tr("bpmn.deploy.onlyTitle"))}">${esc(tr("bpmn.deploy.only"))}</button>
+          <button class="btn neutral" id="deploy-cancel" title="${esc(tr("bpmn.deploy.cancelTitle"))}">${esc(tr("bpmn.cancel"))}</button>
           <span class="err" id="deploy-err"></span>
         </div>
       </div>
       <div class="editor-body">
         <div id="canvas"></div>
         <aside class="vars-panel" id="vars-panel" hidden>
-          <div class="vars-head"><b>Variables</b>
-            <button class="icon-btn" id="vars-close" title="Close" aria-label="Close">✕</button></div>
-          <input class="vars-filter" id="vars-filter" placeholder="Filter by name or origin…"/>
+          <div class="vars-head"><b>${esc(tr("bpmn.vars"))}</b>
+            <button class="icon-btn" id="vars-close" title="${esc(tr("bpmn.vars.close"))}" aria-label="${esc(tr("bpmn.vars.close"))}">✕</button></div>
+          <input class="vars-filter" id="vars-filter" placeholder="${esc(tr("bpmn.vars.filter"))}"/>
           <div class="vars-sample" id="vars-sample" hidden></div>
           <div class="vars-list" id="vars-list"></div>
         </aside>
-        <div class="props-resizer" id="props-resizer" title="Drag to resize the properties panel"></div>
+        <div class="props-resizer" id="props-resizer" title="${esc(tr("bpmn.props.resize"))}"></div>
         <aside class="props" id="props">
           <div class="phead"><span class="ptype" id="p-icon">–</span>
-            <div><div class="kv" id="p-typename">No selection</div><b id="p-name">—</b></div></div>
+            <div><div class="kv" id="p-typename">${esc(tr("bpmn.props.noSelection"))}</div><b id="p-name">—</b></div></div>
           <div class="psec" id="p-body">
-            <p class="muted">Select an element to see its properties.</p>
+            <p class="muted">${esc(tr("bpmn.props.selectHint"))}</p>
           </div>
         </aside>
       </div>
       <div class="prob-list" id="prob-list" hidden></div>
       <div class="problems" id="problems-bar" role="button" tabindex="0"
            aria-expanded="false" aria-controls="prob-list"
-           title="Show validation problems">
-        <span class="badge" id="prob-count">0</span> Problems
+           title="${esc(tr("bpmn.prob.title"))}">
+        <span class="badge" id="prob-count">0</span> ${esc(tr("bpmn.prob.problems"))}
         <span class="prob-summary" id="prob-summary"></span>
         <span style="flex:1"></span>
         <span class="prob-filters" id="prob-filters" hidden>
-          <button type="button" data-sev="all" class="active" title="Show all validation messages">All</button>
-          <button type="button" data-sev="error" title="Show only errors">Errors</button>
-          <button type="button" data-sev="warning" title="Show only warnings">Warnings</button>
+          <button type="button" data-sev="all" class="active" title="${esc(tr("bpmn.prob.allTitle"))}">${esc(tr("bpmn.prob.all"))}</button>
+          <button type="button" data-sev="error" title="${esc(tr("bpmn.prob.errorsTitle"))}">${esc(tr("bpmn.prob.errors"))}</button>
+          <button type="button" data-sev="warning" title="${esc(tr("bpmn.prob.warningsTitle"))}">${esc(tr("bpmn.prob.warnings"))}</button>
         </span>
-        <span class="muted" id="prob-version">Checked against the atlas compiler</span>
+        <span class="muted" id="prob-version">${esc(tr("bpmn.prob.checkedBy"))}</span>
         <span class="prob-caret" id="prob-caret" aria-hidden="true">▾</span>
       </div>
     </div>`;
@@ -913,12 +916,12 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
     });
     const pbo = rootProcess(modeler);
     if (pbo) {
-      const nm = pbo.name || pbo.id || "Diagram";
+      const nm = pbo.name || pbo.id || tr("bpmn.crumb.diagram");
       root.querySelector(".crumb-current").textContent = nm;
       docTitle(`${nm} · Modeler`);
     }
   } catch (e) {
-    toast("could not open diagram: " + e.message, "err");
+    toast(tr("bpmn.openFailed", { error: e.message }), "err");
   }
   // A deployment whose latest-bound decisions were frozen when it was deployed says
   // so beside its name (ADR-0423). The binding field on its tasks reads what a deploy
@@ -995,10 +998,10 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
   // opened from the properties panel rather than from here — so this mount publishes
   // the question the panel has to ask before it navigates, and the identity it must
   // read the draft's id back off afterwards.
-  leaveForDecision = async () => (await makeKeepEdits(modeler, identity, saveDraft, "authoring a decision", true)())
+  leaveForDecision = async () => (await makeKeepEdits(modeler, identity, saveDraft, tr("bpmn.keep.authoringDecision"), true)())
     ? { ok: true, processId: identity.draftId || "" }
     : { ok: false, processId: "" };
-  leaveForForm = async () => (await makeKeepEdits(modeler, identity, saveDraft, "opening the form editor", true)())
+  leaveForForm = async () => (await makeKeepEdits(modeler, identity, saveDraft, tr("bpmn.keep.openingForm"), true)())
     ? { ok: true, processId: identity.draftId || "" }
     : { ok: false, processId: "" };
   pendingAdopt = adopt || null;
@@ -1039,8 +1042,8 @@ export async function mountEditor(root, { api, toast, key, draftId, projectId, p
 // surprised at Deploy/Validate. Keep in sync with the compiler's rejections and unrun
 // elements (compiler/scope_compile.go, compiler/parse.go).
 const UNSUPPORTED_TYPES = {
-  "bpmn:ComplexGateway": "Complex gateways aren't supported yet",
-  "bpmn:DataStoreReference": "Data stores aren't supported yet",
+  "bpmn:ComplexGateway": "bpmn.unsup.complexGateway",
+  "bpmn:DataStoreReference": "bpmn.unsup.dataStore",
 };
 const UNSUPPORTED_EVENT_DEFS = {};
 
@@ -1048,9 +1051,11 @@ const UNSUPPORTED_EVENT_DEFS = {};
 // null if it can. It keys off the element type and any event definitions it carries.
 function unsupportedReason(bo) {
   if (!bo || !bo.$type) return null;
-  if (UNSUPPORTED_TYPES[bo.$type]) return UNSUPPORTED_TYPES[bo.$type];
+  // The tables hold catalogue keys, read when asked, so the reason is in the language
+  // the console speaks now rather than the one it spoke when this module loaded.
+  if (UNSUPPORTED_TYPES[bo.$type]) return tr(UNSUPPORTED_TYPES[bo.$type]);
   for (const d of (bo.eventDefinitions || [])) {
-    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return UNSUPPORTED_EVENT_DEFS[d.$type];
+    if (UNSUPPORTED_EVENT_DEFS[d.$type]) return tr(UNSUPPORTED_EVENT_DEFS[d.$type]);
   }
   return conditionalStartReason(bo) || eventGatewayReason(bo);
 }
@@ -1066,7 +1071,7 @@ function eventGatewayReason(bo) {
   const instantiate = String(bo.instantiate).toLowerCase() === "true";
   const parallel = String(bo.eventGatewayType || "").toLowerCase() === "parallel";
   if (!instantiate && !parallel) return null;
-  return "atlas runs an event-based gateway only as the exclusive deferred choice inside a running instance: the first event wins and the others are withdrawn. An instantiating or parallel event gateway is refused at deploy; to start the process on any of several events, use message, timer or signal start events";
+  return tr("bpmn.unsup.eventGateway");
 }
 
 // conditionalStartReason flags the one event definition whose support depends on where
@@ -1078,7 +1083,7 @@ function conditionalStartReason(bo) {
   if (bo.$type !== "bpmn:StartEvent") return null;
   if (!(bo.eventDefinitions || []).some((d) => d.$type === "bpmn:ConditionalEventDefinition")) return null;
   if (bo.$parent && bo.$parent.triggeredByEvent) return null;
-  return "A conditional start event runs only inside an event subprocess: before an instance exists there are no variables for its condition to read. Use a conditional catch, boundary event or event subprocess, or start with the message or timer that observes the condition";
+  return tr("bpmn.unsup.conditionalStart");
 }
 
 // A data object's declared type is BPMN's itemSubjectRef, and it is a *reference*
@@ -1265,13 +1270,13 @@ function wireProblems(root, modeler, api, applicationId) {
       try {
         unsupIds.push(overlays.add(f.element, "atlas-unsupported", {
           position: { top: -8, right: -8 },
-          html: `<span class="unsup-badge" title="${esc(f.message)} — remove it or the diagram won't run">⚠</span>`,
+          html: `<span class="unsup-badge" title="${esc(tr("bpmn.prob.unsupBadge", { reason: f.message }))}">⚠</span>`,
         }));
       } catch { /* shape without graphics (mid-import) — skip */ }
     }
   };
 
-  const SEV_LABEL = { error: "Error", warning: "Warning" };
+  const SEV_LABEL = { error: tr("bpmn.prob.error"), warning: tr("bpmn.prob.warning") };
   const sevIcon = (s) => (s === "error" ? "✕" : s === "warning" ? "!" : "•");
 
   const clearMark = () => {
@@ -1311,14 +1316,12 @@ function wireProblems(root, modeler, api, applicationId) {
       // is skipped rather than passed. Reporting that as a clean bill is the one
       // reading a reader must not be given, because it is indistinguishable from
       // having earned it.
-      summaryEl.textContent = applicationId ? "No problems" : "No problems found — data not checked";
-      summaryEl.title = applicationId ? ""
-        : "This diagram is not filed under an application, so there is no information model to check "
-          + "its data objects against. Open it from its application, or deploy it from there.";
+      summaryEl.textContent = applicationId ? tr("bpmn.prob.none") : tr("bpmn.prob.noneUnchecked");
+      summaryEl.title = applicationId ? "" : tr("bpmn.prob.noneUncheckedTitle");
     } else {
       const parts = [];
-      if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
-      if (warnings) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+      if (errors) parts.push(trPlural("bpmn.prob.errorCount", errors));
+      if (warnings) parts.push(trPlural("bpmn.prob.warningCount", warnings));
       summaryEl.textContent = parts.join(", ");
     }
 
@@ -1327,12 +1330,12 @@ function wireProblems(root, modeler, api, applicationId) {
 
     const shown = problems.filter((p) => filter === "all" || p.severity === filter);
     listEl.innerHTML = shown.length === 0
-      ? `<p class="prob-empty muted">No ${filter === "all" ? "" : filter + " "}problems.</p>`
+      ? `<p class="prob-empty muted">${esc(tr(filter === "error" ? "bpmn.prob.emptyError" : filter === "warning" ? "bpmn.prob.emptyWarning" : "bpmn.prob.emptyAll"))}</p>`
       : shown.map((p) => `<div class="prob-row prob-${esc(p.severity)}"${p.element ? ` data-el="${esc(p.element)}"` : ""}>
           <span class="prob-sev" title="${esc(SEV_LABEL[p.severity] || p.severity)}">${sevIcon(p.severity)}</span>
           <span class="prob-msg">${esc(p.message)}</span>
-          ${p.element ? `<span class="prob-el" title="Element id">${esc(p.element)}</span>` : ""}
-          <span class="prob-rule" title="Rule">${esc(p.rule)}</span>
+          ${p.element ? `<span class="prob-el" title="${esc(tr("bpmn.prob.elementId"))}">${esc(p.element)}</span>` : ""}
+          <span class="prob-rule" title="${esc(tr("bpmn.prob.rule"))}">${esc(p.rule)}</span>
         </div>`).join("");
   };
 
@@ -1371,7 +1374,7 @@ function wireProblems(root, modeler, api, applicationId) {
     // finding quotes that id — avoiding a doubled row for the same element.
     problems = [...server, ...unsupported.filter((u) =>
       !flagged.has(u.element) && !server.some((p) => (p.message || "").includes(`"${u.element}"`)))];
-    if (res.version) versionEl.textContent = `Checked against atlas ${res.version}`;
+    if (res.version) versionEl.textContent = tr("bpmn.prob.checkedAgainst", { version: res.version });
     render();
   };
   const scheduleValidate = () => {
@@ -1453,14 +1456,14 @@ function wireTokenSim(root, modeler) {
   // gateway is waiting for a path to be picked; `waiting` means a message/timer/signal
   // event is parked, ready to be fired.
   modeler.get("eventBus").on("atlasSim.changed", (s) => {
-    playBtn.innerHTML = s.playing ? "&#9208; Pause" : "&#9654; Play";
-    statsEl.textContent = `${s.live} live · ${s.completed} completed`;
+    playBtn.textContent = tr(s.playing ? "bpmn.sim.pause" : "bpmn.sim.play");
+    statsEl.textContent = tr("bpmn.sim.stats", { live: s.live, completed: s.completed });
     hintEl.textContent = s.deciding
-      ? "Pick a path: click a glowing flow (an inclusive gateway takes several — click the gateway to confirm)."
+      ? tr("bpmn.sim.hint.deciding")
       : s.waiting
-        ? "An event is waiting: click its ⚡ to fire it, or turn on Auto-decide."
+        ? tr("bpmn.sim.hint.waiting")
         : s.live === 0
-          ? "Click a start event ▶ to drop a token, then Play."
+          ? tr("bpmn.sim.hint.start")
           : "";
   });
   // Seed the initial control state (counts at zero, opening hint).
@@ -1684,7 +1687,7 @@ function implMarker(bo) {
   // rounds against a task asking once.
   if (bo.$type === "bpmn:AdHocSubProcess") {
     if (!agentConnectorOf(bo)) return null; // a plain ad-hoc: its ~ is its own marker
-    return { label: "AI agent (runs rounds)", icon: AGENT_CONTAINER_GLYPH };
+    return { label: tr("bpmn.mark.agent"), icon: AGENT_CONTAINER_GLYPH };
   }
   if (bo.$type === "bpmn:ScriptTask") {
     const js = findExt(bo, "atlas:JobScript");
@@ -1750,13 +1753,13 @@ function drawImplBadges(modeler) {
 // panel says so.
 const WIZARD_KINDS = {
   internal: {
-    option: "Yes — for signed-in people",
-    title: "Wizard: one sitting of one signed-in person (ADR-0449)",
+    option: "bpmn.wizard.internal.option",
+    title: "bpmn.wizard.internal.title",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#2a7f8f"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
   },
   public: {
-    option: "Yes — for the anonymous visitor of a public start link",
-    title: "Public wizard: one sitting of the anonymous visitor who started it (ADR-0449)",
+    option: "bpmn.wizard.public.option",
+    title: "bpmn.wizard.public.title",
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#b8641e"/><path d="M4 8h8" stroke="#fff" stroke-width="1.2"/><circle cx="4" cy="8" r="1.8" fill="#fff"/><circle cx="8" cy="8" r="1.8" fill="#fff"/><circle cx="12" cy="8" r="1.8" fill="#fff"/></svg>`,
   },
 };
@@ -1779,7 +1782,7 @@ function drawWizardBadges(modeler) {
     try {
       ids.push(overlays.add(el.id, "wizard-badge", {
         position: WIZARD_BADGE_SPOT,
-        html: `<span class="wizard-badge" title="${esc(kind.title)}">${kind.glyph}</span>`,
+        html: `<span class="wizard-badge" title="${esc(tr(kind.title))}">${kind.glyph}</span>`,
       }));
     } catch { /* shape without graphics (e.g. mid-import) — skip */ }
   });
@@ -1797,8 +1800,8 @@ function wizardHTML(bo) {
     <label class="field"><span>One sitting of one person</span>
       <select id="f-wizard">
         ${opt("", "No — an ordinary subprocess")}
-        ${opt("internal", WIZARD_KINDS.internal.option)}
-        ${opt("public", WIZARD_KINDS.public.option)}
+        ${opt("internal", esc(tr(WIZARD_KINDS.internal.option)))}
+        ${opt("public", esc(tr(WIZARD_KINDS.public.option)))}
         ${unknown}
       </select></label>
     <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; the visitor of a public start link is carried the same way on the public page.</p>`;
@@ -1850,13 +1853,13 @@ function shopBadgeOf(bo, owners) {
   if (bo.$type === "bpmn:SendTask") {
     const shop = findExt(bo, SEND_SHOP_KIND.ext);
     if (!shop) return null;
-    return shop.mode === "command" ? "Shop: commands a product action" : "Shop: states how a product action ended";
+    return tr(shop.mode === "command" ? "bpmn.mark.shopCommand" : "bpmn.mark.shopOutcome");
   }
   if (bo.$type === "bpmn:ReceiveTask") {
     const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
     const own = name && owners ? owners.get(name) : null;
     if (!own || !own.length) return null;
-    return `Shop: waits for product action ${own.map((o) => `${o.action} of ${o.product}`).join(", ")}`;
+    return tr("bpmn.mark.shopWaits", { actions: own.map((o) => tr("bpmn.mark.shopActionOf", { action: o.action, product: o.product })).join(", ") });
   }
   return null;
 }
@@ -1962,7 +1965,7 @@ function drawPoolProcessCaptions(modeler) {
     const pid = (proc.id || "").trim();
     const main = name || pid; // name leads; a nameless process shows its id
     if (!main) return;
-    const title = name ? `Process: ${name}${pid ? ` (${pid})` : ""}` : `Process: ${pid}`;
+    const title = name && pid ? tr("bpmn.mark.poolProcess", { name, id: pid }) : tr("bpmn.mark.poolProcessId", { id: name || pid });
     try {
       ids.push(overlays.add(el.id, "atlas-pool-process", {
         // Centered ~46px from the pool's left edge so the label's near edge clears the ~30px
@@ -2043,8 +2046,8 @@ function drawDataStateLabels(modeler) {
     const written = (el.incoming || []).some(
       (c) => ((c.businessObject || {}).$type || "") === "bpmn:DataOutputAssociation");
     const title = written
-      ? `Data state: ${state} — a write here moves the object into it, and the deploy checks it against the class's lifecycle.`
-      : `Data state: ${state} — nothing writes it here. A state on a box that is only read is dropped when the model compiles, so it documents what this step expects; the engine never acts on it and no check reads it.`;
+      ? tr("bpmn.mark.stateWritten", { state })
+      : tr("bpmn.mark.stateRead", { state });
     // Sit the caption directly under the name. The label's own bounds give both the
     // baseline to clear and the centre to hang from; without a label there is only the
     // symbol, and the caption goes under that.
@@ -2226,7 +2229,7 @@ function wireCallDrilldown(viewer, open) {
         // words, and words rendered at 200% run off the canvas they are explaining.
         // Held near their own size, they stay a label at any zoom.
         scale: { min: 0.8, max: 1 },
-        html: `<span class="ca-drill-tip">Double-click to open</span>`,
+        html: `<span class="ca-drill-tip">${esc(tr("bpmn.mark.drillTip"))}</span>`,
       });
       cue.push(tipId);
     } catch { tipId = null; /* shape gone mid-hover */ }
@@ -2590,7 +2593,7 @@ function returnFromForm(modeler, trip, toast) {
   const now = (fd && fd.formId) || "";
   if (trip.formId && trip.formId !== now && now === (trip.linked || "") && takesForm(bo)) {
     upsertExt(modeler, el, "zeebe:FormDefinition", { formId: trip.formId });
-    if (toast) toast(`Linked the form “${trip.formId}” — save the diagram to keep it.`, "ok");
+    if (toast) toast(tr("bpmn.form.linked", { id: trip.formId }), "ok");
   }
   try {
     modeler.get("selection").select(el);
@@ -2665,7 +2668,7 @@ async function openLinkedForm(api, toast, element) {
     await api("GET", "/api/v1/forms/" + encodeURIComponent(formId));
   } catch (e) {
     if (e && e.status === 404) {
-      if (toast) toast(`There is no form “${formId}” on this server — pick another in the panel, or create one.`, "err");
+      if (toast) toast(tr("bpmn.form.missing", { id: formId }), "err");
       return;
     }
     // Anything else is the server failing to answer, not the form missing: the form
@@ -2692,7 +2695,7 @@ function registerFormContextPad(modeler, api, toast) {
         "atlas-open-form": {
           group: "edit",
           className: "atlas-cp-form",
-          title: `Open the form “${formId}”`,
+          title: tr("bpmn.form.openTitle", { id: formId }),
           action: {
             click: (ev, el) => {
               // A modified click opens the form where the browser would open a link,
@@ -2743,7 +2746,9 @@ function drawFormBadges(modeler, open) {
     const a = document.createElement("a");
     a.className = "form-badge";
     a.href = formEditHref(formId);
-    a.title = `${bo.$type === "bpmn:StartEvent" ? "Start form" : "Form"}: ${name === formId ? `“${formId}”` : `${name} (“${formId}”)`} — click to open it`;
+    a.title = tr(bo.$type === "bpmn:StartEvent" ? "bpmn.form.badgeStart" : "bpmn.form.badge", {
+      form: name === formId ? tr("bpmn.form.badgeId", { id: formId }) : tr("bpmn.form.badgeNamed", { name, id: formId }),
+    });
     a.innerHTML = FORM_GLYPH;
     a.addEventListener("click", (ev) => {
       if (modifiedClick(ev)) return;
@@ -2860,6 +2865,43 @@ function collectDiagramVariables(modeler) {
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// varSourceLabel is the panel's name for where a variable comes from. The collected
+// rows keep their English source as data — completion and the dev view read it, and
+// the panel compares against it — so the words are chosen where they are shown.
+const VAR_SOURCES = {
+  "start variable": "bpmn.vars.src.start",
+  "process constant": "bpmn.vars.src.processConstant",
+  "application constant": "bpmn.vars.src.applicationConstant",
+  "server constant": "bpmn.vars.src.serverConstant",
+  "application info": "bpmn.vars.src.applicationInfo",
+  "server info": "bpmn.vars.src.serverInfo",
+  "FEEL script": "bpmn.vars.src.feelScript",
+  "decision result": "bpmn.vars.src.decisionResult",
+  "worker result": "bpmn.vars.src.workerResult",
+  "output mapping": "bpmn.vars.src.outputMapping",
+  "data object": "bpmn.vars.src.dataObject",
+  "form field": "bpmn.vars.src.formField",
+};
+function varSourceLabel(source) {
+  const s = source || "";
+  if (VAR_SOURCES[s]) return tr(VAR_SOURCES[s]);
+  let m = /^data object · \[(.*)\]$/.exec(s);
+  if (m) return tr("bpmn.vars.src.dataObjectState", { state: m[1] });
+  m = /^(\S+) script$/.exec(s);
+  if (m) return tr("bpmn.vars.src.jobScript", { language: m[1] });
+  return s;
+}
+
+// varPlaceLabel names the fixed places a variable is written from, and the groups the
+// panel sorts them into; an element's own name is shown as it is.
+const VAR_PLACES = {
+  Start: "bpmn.vars.place.start",
+  Process: "bpmn.vars.place.process",
+  "Data object": "bpmn.vars.place.dataObject",
+  Form: "bpmn.vars.place.form",
+};
+function varPlaceLabel(place) { return VAR_PLACES[place] ? tr(VAR_PLACES[place]) : place; }
+
 // wireEditorVars drives the design-time Variables panel: a toolbar toggle opens it,
 // it lists the diagram's variables (origin is click-to-select), a filter narrows
 // the list, and it refreshes as the diagram changes while open — a modeling aid
@@ -2926,19 +2968,19 @@ function wireEditorVars(root, modeler, api) {
     // (also click-to-select). Other sources name the writing element.
     let meta;
     if (v.source === "form field") {
-      meta = `form field · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
+      meta = `${esc(varSourceLabel(v.source))} · <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`;
     } else if (v.origin === "Data object") {
-      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(v.source)}</span>`;
+      meta = `<span class="var-origin" data-el="${esc(v.originId)}">${esc(varSourceLabel(v.source))}</span>`;
     } else {
-      meta = `${esc(v.source)}${v.originId
-        ? ` · written by <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
-        : ` · ${esc(v.origin)}`}`;
+      meta = `${esc(varSourceLabel(v.source))}${v.originId
+        ? ` · ${esc(tr("bpmn.vars.writtenBy"))} <span class="var-origin" data-el="${esc(v.originId)}">${esc(v.origin)}</span>`
+        : ` · ${esc(varPlaceLabel(v.origin))}`}`;
     }
     const t = typeOf(v);
     const badge = t.type
-      ? `<span class="vtag${/^(object|array|json)$/.test(t.type) ? " obj" : ""}" title="${t.observed
-        ? `What this variable held on the run below${v.type ? ` — the model declares ${esc(v.type)}` : ""}`
-        : "What the model declares this variable holds"}">${esc(t.type)}</span>`
+      ? `<span class="vtag${/^(object|array|json)$/.test(t.type) ? " obj" : ""}" title="${esc(t.observed
+        ? (v.type ? tr("bpmn.vars.observedDeclared", { type: v.type }) : tr("bpmn.vars.observed"))
+        : tr("bpmn.vars.declared"))}">${esc(t.type)}</span>`
       : "";
 
     // The observed value, when there is one. A structure opens in place — the shape of
@@ -2952,15 +2994,15 @@ function wireEditorVars(root, modeler, api) {
       const open = expanded.has(v.name);
       const arr = jsonTypeLabel(s.value) === "array";
       valHTML = `<button type="button" class="var-peek" data-open="${esc(v.name)}" aria-expanded="${open}"
-        title="Show what ${esc(v.name)} held"><span class="vp-chev" aria-hidden="true">▸</span>
+        title="${esc(tr("bpmn.vars.peek", { name: v.name }))}"><span class="vp-chev" aria-hidden="true">▸</span>
         <span class="vp-sum">${arr ? "[" : "{"}${esc(jsonSummary(s.value))}${arr ? "]" : "}"}</span>
         <span class="vp-peek">${esc(jsonPeek(s.value))}</span></button>`;
       structHTML = `<pre class="var-json"${open ? "" : " hidden"}>${highlightJSON(s.value)}</pre>`;
     } else if (s) {
-      valHTML = `<div class="var-val" title="What ${esc(v.name)} held on the run below">${esc(jsonPeek(s.value))}</div>`;
+      valHTML = `<div class="var-val" title="${esc(tr("bpmn.vars.held", { name: v.name }))}">${esc(jsonPeek(s.value))}</div>`;
     }
     return `<div class="var-row${expanded.has(v.name) ? " open" : ""}" draggable="true" data-var="${esc(v.name)}"
-        title="Drag into a field to insert">
+        title="${esc(tr("bpmn.vars.drag"))}">
       <div class="var-head"><div class="var-name">${esc(v.name)}</div>${badge}</div>
       <div class="var-meta">${meta}</div>${valHTML}${structHTML}</div>`;
   };
@@ -2987,10 +3029,10 @@ function wireEditorVars(root, modeler, api) {
     if (!sampleBox) return;
     if (!sample) { sampleBox.hidden = true; sampleBox.innerHTML = ""; return; }
     sampleBox.hidden = false;
-    sampleBox.innerHTML = `<span class="vs-text">Values from instance
+    sampleBox.innerHTML = `<span class="vs-text">${esc(tr("bpmn.vars.sample"))}
       <b>${esc(String(sample.key))}</b> · ${esc(sample.state)}${sample.version
         ? ` · v${esc(String(sample.version))}` : ""}</span>
-      <button type="button" class="vars-reload" id="vars-reload" title="Re-read the values from the server">↻</button>`;
+      <button type="button" class="vars-reload" id="vars-reload" title="${esc(tr("bpmn.vars.reloadTitle"))}">↻</button>`;
   };
 
   const render = () => {
@@ -3004,7 +3046,8 @@ function wireEditorVars(root, modeler, api) {
     if (!q) filterClosed.clear();
     const vars = collectDiagramVariables(modeler).filter((v) =>
       !q || v.name.toLowerCase().includes(q) || (v.origin || "").toLowerCase().includes(q) ||
-      (v.source || "").toLowerCase().includes(q));
+      varPlaceLabel(v.origin || "").toLowerCase().includes(q) ||
+      (v.source || "").toLowerCase().includes(q) || varSourceLabel(v.source).toLowerCase().includes(q));
     // What the process could read from its namespaces and does not declare yet — the
     // constants this installation holds and the facts each namespace carries — under the
     // list, each with the one click that declares it (ADR-0456).
@@ -3018,19 +3061,18 @@ function wireEditorVars(root, modeler, api) {
       ? `<div class="vars-group vars-available${availCol ? " collapsed" : ""}" id="vars-available">
           <button type="button" class="vars-group-head" aria-expanded="${availCol ? "false" : "true"}">
             <span class="vg-chevron" aria-hidden="true">▸</span>
-            <span class="vg-title">Available, not declared yet</span>
+            <span class="vg-title">${esc(tr("bpmn.vars.available"))}</span>
             <span class="vg-count">${available.length}</span>
           </button>
           <div class="vars-group-body">${available.map((m) => `<div class="var-row var-row-available" data-avail="${esc(m.path)}">
             <div class="var-head"><div class="var-name">${esc(m.path)}</div><span class="vtag">${esc(m.type)}</span>
               <button type="button" class="btn neutral var-declare" data-declare="${esc(m.path)}"
-                title="Declare ${esc(m.path)} on this process, so its instances carry it">Declare</button></div>
-            <div class="var-meta">${esc(m.ns)} ${m.info ? "info" : "constant"}</div></div>`).join("")}</div>
+                title="${esc(tr("bpmn.vars.declareTitle", { path: m.path }))}">${esc(tr("bpmn.vars.declare"))}</button></div>
+            <div class="var-meta">${esc(varSourceLabel(`${m.ns} ${m.info ? "info" : "constant"}`))}</div></div>`).join("")}</div>
         </div>`
       : "";
     if (!vars.length) {
-      list.innerHTML = `<p class="vars-empty">${q ? "No matching variables." :
-        "No variables yet. They appear as you add start variables, a linked form's fields, script or decision result variables, output mappings, and data objects."}</p>${availableHTML}`;
+      list.innerHTML = `<p class="vars-empty">${esc(tr(q ? "bpmn.vars.noMatch" : "bpmn.vars.none"))}</p>${availableHTML}`;
       return;
     }
     // Group by category so a linked form's fields read as their own section
@@ -3052,7 +3094,7 @@ function wireEditorVars(root, modeler, api) {
           return `<div class="vars-group${col ? " collapsed" : ""}" data-cat="${esc(cat)}">
             <button type="button" class="vars-group-head" aria-expanded="${col ? "false" : "true"}">
               <span class="vg-chevron" aria-hidden="true">▸</span>
-              <span class="vg-title">${esc(cat)}</span>
+              <span class="vg-title">${esc(varPlaceLabel(cat))}</span>
               <span class="vg-count">${groups.get(cat).length}</span>
             </button>
             <div class="vars-group-body">${groups.get(cat).map(rowHTML).join("")}</div>
@@ -11451,9 +11493,9 @@ export function parseStartVariables(raw) {
   if (!s) return {};
   let obj;
   try { obj = JSON.parse(s); }
-  catch (e) { throw new Error("not valid JSON: " + e.message); }
+  catch (e) { throw new Error(tr("bpmn.start.notJSON", { error: e.message })); }
   if (obj === null || typeof obj !== "object" || Array.isArray(obj)) {
-    throw new Error('expected a JSON object, e.g. { "amount": 100, "customer": { "name": "acme" } }');
+    throw new Error(tr("bpmn.start.notObject"));
   }
   return { variables: obj };
 }
@@ -11465,11 +11507,11 @@ export function parseStartVariables(raw) {
 function startVarsFormHTML(declared) {
   if (!declared.length) {
     return `<label class="field">
-      <span>Start variables — optional. A JSON object the instance starts with. Scalar and structured values (objects, arrays) are supported. Leave empty to start with none.</span>
+      <span>${esc(tr("bpmn.start.freeForm"))}</span>
       <textarea class="sv-json" rows="3" spellcheck="false" placeholder='{ "amount": 100, "customer": { "name": "acme", "tags": ["a", "b"] } }'></textarea>
     </label>`;
   }
-  return `<p class="muted" style="font-size:12px;margin:0 0 8px">Start variables for this run — declared on the process. Required are marked <span class="req-star">*</span>; leave an optional one blank to omit it.</p>`
+  return `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("bpmn.start.typed")).replace("{star}", '<span class="req-star">*</span>')}</p>`
     + declared.map(typedDeployFieldHTML).join("");
 }
 
@@ -11492,23 +11534,23 @@ function readStartFormBody(bodyEl) {
 // the Live view's Start instance asks before starting. `texts` names what Send and
 // Cancel do on the surface that opened it, and the way out when the form cannot load.
 function askStartForm(api, formId, declared, texts = {}) {
-  const sendTitle = texts.send || "Deploy this diagram and start an instance with these values";
-  const cancelTitle = texts.cancel || "Close without deploying or starting anything";
-  const fallback = texts.fallback || "Deploy only still works, and the process can be started from the Tasks app once its form loads.";
+  const sendTitle = texts.send || tr("bpmn.sf.sendTitle");
+  const cancelTitle = texts.cancel || tr("bpmn.sf.cancelTitle");
+  const fallback = texts.fallback || tr("bpmn.sf.fallback");
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="Start form">
-        <div class="modal-head"><h2>Start values</h2></div>
+      <div class="modal startform-modal" role="dialog" aria-modal="true" aria-label="${esc(tr("bpmn.sf.label"))}">
+        <div class="modal-head"><h2>${esc(tr("bpmn.sf.heading"))}</h2></div>
         <div class="modal-body">
           <div class="startform-host" id="sf-host"></div>
           <div class="startform-extra" id="sf-extra"></div>
           <p class="err" id="sf-err"></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-sf-cancel title="${esc(cancelTitle)}">Cancel</button>
-          <button class="btn" data-sf-send disabled title="${esc(sendTitle)}">Send</button>
+          <button class="btn neutral" data-sf-cancel title="${esc(cancelTitle)}">${esc(tr("bpmn.cancel"))}</button>
+          <button class="btn" data-sf-send disabled title="${esc(sendTitle)}">${esc(tr("bpmn.sf.send"))}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -11539,12 +11581,13 @@ function askStartForm(api, formId, declared, texts = {}) {
       // A retry after a half-built form (the viewer came, the schema did not) would
       // otherwise wipe its container out from under it and leave it running.
       if (form) { try { form.destroy(); } catch { /* noop */ } form = null; }
-      host.innerHTML = `<p class="muted">Loading form…</p>`;
+      host.innerHTML = `<p class="muted">${esc(tr("bpmn.sf.loading"))}</p>`;
       extraHost.innerHTML = "";
       errEl.textContent = "";
       Promise.all([
         loadFormViewer(),
-        withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)), "The form definition"),
+        withLoadDeadline(api("GET", "/api/v1/forms/" + encodeURIComponent(formId)),
+          (seconds) => tr("bpmn.sf.definitionLate", { seconds })),
       ])
         .then(async ([{ Form }, def]) => {
           // Cancelled while it loaded: instantiating form-js now would put a live
@@ -11567,10 +11610,10 @@ function askStartForm(api, formId, declared, texts = {}) {
           // The form is the way in and it did not load. Say so, offer the retry that
           // costs nothing (whatever did arrive is cached), and name the way out that
           // still works rather than a Send that would start with nothing.
-          host.innerHTML = `<p class="err">Could not load the start form: ${esc(e.message)}</p>
+          host.innerHTML = `<p class="err">${esc(tr("bpmn.sf.loadFailed", { error: e.message }))}</p>
             <p class="muted">${esc(fallback)}</p>
             <button type="button" class="btn ghost small" data-sf-retry
-              title="Load the start form again">Try again</button>`;
+              title="${esc(tr("bpmn.sf.retryTitle"))}">${esc(tr("bpmn.sf.retry"))}</button>`;
           host.querySelector("[data-sf-retry]").addEventListener("click", loadIntoHost);
         });
     };
@@ -11587,8 +11630,8 @@ function askStartForm(api, formId, declared, texts = {}) {
         // names come from the shared helper and the sentence around them is this
         // screen's.
         const { shown, rest } = formRefusalNames(form, errors);
-        const more = rest > 0 ? ` and ${rest} more field${rest === 1 ? "" : "s"}` : "";
-        errEl.textContent = `Still to fill in: ${shown.join(", ")}${more}.`;
+        const more = rest > 0 ? trPlural("bpmn.sf.more", rest) : "";
+        errEl.textContent = tr("bpmn.sf.stillToFill", { names: shown.join(", "), more });
         scrollToFirstInvalidField("sf-host");
         return;
       }
@@ -11659,7 +11702,7 @@ function makeKeepEdits(modeler, identity, saveDraft, what, saveNew) {
     if (!dirty) return true;
     if (identity.draftId != null) return await saveDraft(false);
     if (saveNew && !identity.fromDeployment) return await saveDraft(false);
-    return window.confirm(`This diagram has unsaved changes, and ${what} discards them.\n\nContinue?`);
+    return window.confirm(tr("bpmn.keep.confirm", { what }));
   };
 }
 
@@ -11690,8 +11733,8 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         (projectId ? "&projectId=" + encodeURIComponent(projectId) : "");
       const d = await api("POST", path, xml, true);
       identity.savedXML = xml;
-      root.querySelector(".crumb-current").textContent = d.name || d.processId || "Draft";
-      docTitle(`${d.name || d.processId || "Draft"} · Modeler`);
+      root.querySelector(".crumb-current").textContent = d.name || d.processId || tr("bpmn.crumb.draft");
+      docTitle(`${d.name || d.processId || tr("bpmn.crumb.draft")} · Modeler`);
       // Draft is now persisted: clear the collab unsaved-work guard so a co-editor's
       // deferred change (held back to protect these edits) can sync in (ADR-0140).
       if (collab && collab.markSaved) collab.markSaved();
@@ -11700,12 +11743,12 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         // session (ADR-0140), the project the crumbs resolved — so reopen it under the
         // new id rather than patching each in place. What the server holds is what was
         // just saved, so the reload costs nothing but the undo history.
-        toast(`Renamed draft “${d.renamedFrom}” → “${d.processId}”`, "ok");
+        toast(tr("bpmn.toast.renamed", { from: d.renamedFrom, to: d.processId }), "ok");
         identity.draftId = d.processId;
         location.hash = "#/modeler/draft/" + encodeURIComponent(d.processId);
         return true;
       }
-      toast(`Saved draft “${d.name || d.processId}”`, "ok");
+      toast(tr("bpmn.toast.saved", { name: d.name || d.processId }), "ok");
       if (identity.draftId !== d.processId) {
         // First save of a new diagram: this session now addresses a stored draft, so the
         // next save is a plain update and the URL points at it. replaceState rather than
@@ -11725,12 +11768,12 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       // refusal stands.
       const proc = draftKeyProcess(modeler);
       if (e.status === 409 && identity.fromDeployment && !retried && proc && proc.id) {
-        if (window.confirm(`${e.message}\n\nThis diagram is the deployed “${proc.id}”. Overwrite that draft with it?`)) {
+        if (window.confirm(tr("bpmn.confirm.overwriteDraft", { error: e.message, id: proc.id }))) {
           identity.draftId = proc.id; // the retry is then a plain update of that draft
           return await saveDraft(true);
         }
       }
-      toast("save failed: " + e.message, "err");
+      toast(tr("bpmn.toast.saveFailed", { error: e.message }), "err");
       return false;
     } finally {
       saveBtn.disabled = false;
@@ -11756,9 +11799,9 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       await importOver(modeler, typeof relaid === "string" ? relaid : String(relaid));
       markImportedEdit(identity);
       modeler.get("canvas").zoom("fit-viewport");
-      toast("Diagram auto-laid out", "ok");
+      toast(tr("bpmn.toast.laidOut"), "ok");
     } catch (e) {
-      toast("auto-layout failed: " + e.message, "err");
+      toast(tr("bpmn.toast.layoutFailed", { error: e.message }), "err");
     } finally {
       layoutBtn.disabled = false;
     }
@@ -11805,12 +11848,12 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const saved = await api("PUT", `/api/v1/processes/${deploymentKey}/diagram`, xml, true);
       const n = (saved && saved.updated && saved.updated.length) || 1;
       toast(n > 1
-        ? `Layout saved to all ${n} pools of this deployment`
-        : "Layout saved to the deployment", "ok");
+        ? tr("bpmn.toast.layoutSavedPools", { n })
+        : tr("bpmn.toast.layoutSaved"), "ok");
     } catch (e) {
       toast(e.status === 409
         ? e.message
-        : "saving the layout failed: " + e.message, "err");
+        : tr("bpmn.toast.layoutSaveFailed", { error: e.message }), "err");
     } finally {
       layoutSaveBtn.disabled = false;
     }
@@ -11825,7 +11868,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       a.download = "diagram.bpmn";
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (e) { toast("export failed: " + e.message, "err"); }
+    } catch (e) { toast(tr("bpmn.toast.exportFailed", { error: e.message }), "err"); }
   });
 
   // XML source: the diagram as BPMN XML, read off the canvas — so it is what the author
@@ -11862,7 +11905,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
   // row carries its own control.
   const renderDocHistory = (versions) => {
     if (!versions.length) {
-      docHistory.innerHTML = `<p class="muted doc-empty">No version published yet.</p>`;
+      docHistory.innerHTML = `<p class="muted doc-empty">${esc(tr("bpmn.doc.none"))}</p>`;
       return;
     }
     docHistory.innerHTML = versions.map((v) => {
@@ -11870,19 +11913,19 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       const by = v.createdBy ? " · " + esc(v.createdBy) : "";
       const note = v.note ? `<div class="doc-note">${esc(v.note)}</div>` : "";
       const share = v.shareUrl
-        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">Public link</a>
-           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="Revoke the shared link for this version">Revoke</button>`
-        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="Share a link to this documentation version">Share…</button>`;
+        ? `<a class="doc-link" href="${esc(v.shareUrl)}" target="_blank" rel="noopener">${esc(tr("bpmn.doc.publicLink"))}</a>
+           <button class="btn neutral small" data-unshare="${esc(v.id)}" title="${esc(tr("bpmn.doc.revokeTitle"))}">${esc(tr("bpmn.doc.revoke"))}</button>`
+        : `<button class="btn neutral small" data-share="${esc(v.id)}" title="${esc(tr("bpmn.doc.shareTitle"))}">${esc(tr("bpmn.doc.share"))}</button>`;
       return `<div class="doc-version">
         <div class="doc-version-head">
           <b>v${v.version}</b>
-          <span class="muted">${esc(when)}${by} · ${v.elementCount} elements</span>
+          <span class="muted">${esc(when)}${by} · ${esc(trPlural("bpmn.doc.elements", v.elementCount))}</span>
         </div>
         ${note}
         <div class="row">
-          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">Open PDF</a>
+          <a class="doc-link" href="${esc(v.pdfUrl)}" target="_blank" rel="noopener">${esc(tr("bpmn.doc.openPdf"))}</a>
           ${share}
-          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="Delete this version and its PDF">Delete</button>
+          <button class="btn neutral small" data-delete="${esc(v.id)}" data-version="${v.version}" title="${esc(tr("bpmn.doc.deleteTitle"))}">${esc(tr("bpmn.doc.delete"))}</button>
         </div>
       </div>`;
     }).join("");
@@ -11891,9 +11934,9 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // enough history to be worth trimming.
     if (versions.length > 1) {
       docHistory.innerHTML += `<div class="doc-prune row">
-        <span class="muted">Keep newest</span>
+        <span class="muted">${esc(tr("bpmn.doc.keepNewest"))}</span>
         <input id="doc-keep" type="number" min="1" value="5" style="width:4em"/>
-        <button class="btn neutral small" id="doc-prune" title="Delete older documentation versions">Prune older versions</button>
+        <button class="btn neutral small" id="doc-prune" title="${esc(tr("bpmn.doc.pruneTitle"))}">${esc(tr("bpmn.doc.prune"))}</button>
       </div>`;
     }
   };
@@ -11917,7 +11960,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     const bo = rootProcess(modeler);
     const titleField = root.querySelector("#doc-title");
     if (!titleField.value) titleField.value = (bo && bo.name) || "";
-    docHistory.innerHTML = `<p class="muted doc-empty">Loading…</p>`;
+    docHistory.innerHTML = `<p class="muted doc-empty">${esc(tr("bpmn.doc.loading"))}</p>`;
     await loadDocHistory();
   };
 
@@ -11934,7 +11977,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         note: root.querySelector("#doc-note").value.trim(),
       });
       root.querySelector("#doc-note").value = "";
-      toast("Documentation version published", "ok");
+      toast(tr("bpmn.toast.docPublished"), "ok");
       await loadDocHistory();
     } catch (e) {
       docErr.textContent = e.message;
@@ -11955,7 +11998,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
 
     // Deleting a version and pruning both destroy a published artifact and its
     // PDF, so both confirm first — this is not a click to make lightly.
-    if (deleteId && !confirm(`Delete documentation v${attr("data-version")}? This removes the version and its PDF for good.`)) return;
+    if (deleteId && !confirm(tr("bpmn.doc.confirmDelete", { version: attr("data-version") }))) return;
 
     let keep = 0;
     let processId = "";
@@ -11964,7 +12007,7 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
       keep = Math.max(1, parseInt(keepField && keepField.value, 10) || 1);
       processId = collectDocumentation(modeler).processId;
       if (!processId) return;
-      if (!confirm(`Keep the newest ${keep} version${keep === 1 ? "" : "s"} and delete the rest? The deleted versions and their PDFs are gone for good.`)) return;
+      if (!confirm(trPlural("bpmn.doc.confirmPrune", keep))) return;
     }
 
     e.target.disabled = true;
@@ -12013,15 +12056,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // one: the draft — what the application publishes — stays as it was. Said here,
     // before the deploy, because afterwards is when it would be missed.
     const fromVersion = identity.fromDeployment
-      ? `<p class="deploy-from-version" id="deploy-from-version">This diagram was opened from a deployed
-          version, not from the draft. Deploying makes a new version and leaves the draft as it is — publishing
-          the application would deploy the draft again. <b>Save</b> first if the draft should hold this diagram.</p>`
+      ? `<p class="deploy-from-version" id="deploy-from-version">${tr("bpmn.deploy.fromVersion")}</p>`
       : "";
     dbody.innerHTML = fromVersion + (fid
-      ? `<p class="muted" style="margin:0">This process starts with the form
-          <b>${esc((formFieldCache.get(fid) || {}).name || fid)}</b>. <b>Deploy &amp; run</b> opens it,
-          and what you submit becomes the instance's start variables.${declared.length
-            ? " The start variables declared on the process that the form does not ask for are asked beneath it."
+      ? `<p class="muted" style="margin:0">${tr("bpmn.deploy.withForm", { form: esc((formFieldCache.get(fid) || {}).name || fid) })}${declared.length
+            ? esc(tr("bpmn.deploy.withFormExtra"))
             : ""}</p>`
       : startVarsFormHTML(declared));
     wireStartJSONEditors(dbody);
@@ -12068,15 +12107,15 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
     // does not refuse it (deploying before the workers exist is legitimate), so
     // this is the moment to say it, while the author is still here (ADR-0158).
     const warned = (warnings || []).length
-      ? `<div class="deploy-warnings"><b>⚠ Deployed, but this will not run as written:</b>
+      ? `<div class="deploy-warnings"><b>${esc(tr("bpmn.deploy.warned"))}</b>
           <ul>${warnings.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></div>`
       : "";
     dbody.innerHTML = `<div class="deploy-success">
       <p class="deploy-success-msg">✓ ${esc(message)}</p>
       ${warned}
       <div class="row">
-        <a class="btn" href="${href}">Open in Operations →</a>
-        <button type="button" class="btn neutral" id="deploy-done" title="Close this dialog">Close</button>
+        <a class="btn" href="${href}">${esc(tr("bpmn.deploy.openOps"))}</a>
+        <button type="button" class="btn neutral" id="deploy-done" title="${esc(tr("bpmn.deploy.closeTitle"))}">${esc(tr("bpmn.close"))}</button>
       </div>
     </div>`;
     const done = dbody.querySelector("#deploy-done");
@@ -12119,11 +12158,11 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         // the new id — a deploy cannot ride along with that navigation.
         const pid = (draftKeyProcess(modeler) || {}).id || "";
         if (identity.draftId != null && pid && pid !== identity.draftId) {
-          derr.textContent = "The process id changed since the last save. Save first (it renames the draft), then deploy.";
+          derr.textContent = tr("bpmn.deploy.idChanged");
           return;
         }
         if (!(await saveDraft(false))) {
-          derr.textContent = "Not deployed: the draft could not be saved first.";
+          derr.textContent = tr("bpmn.deploy.notSaved");
           return;
         }
       }
@@ -12137,18 +12176,20 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
         // A collaboration deploys one definition per pool; which pool to start is
         // ambiguous, so just report what was deployed (start pools from Operations).
         // Start variables don't apply here — there's no single instance to seed.
-        const msg = `Deployed ${all.length} pools: ${all.map((d) => d.processId).join(", ")}`;
+        const msg = tr("bpmn.deploy.pools", { n: all.length, ids: all.map((d) => d.processId).join(", ") });
         toast(msg, "ok");
         showDeploySuccess(msg, "#/operations", dep.warnings);
       } else if (run) {
         await api("POST", `/api/v1/processes/${dep.key}/instances`, body);
         const n = body.variables ? Object.keys(body.variables).length : 0;
-        const msg = `Deployed ${dep.processId} v${dep.version} and started an instance${n ? ` with ${n} variable${n === 1 ? "" : "s"}` : ""}`;
+        const msg = n
+          ? trPlural("bpmn.deploy.startedWith", n, { id: dep.processId, version: dep.version })
+          : tr("bpmn.deploy.started", { id: dep.processId, version: dep.version });
         toast(msg, "ok");
         showDeploySuccess(msg, await resolveInstanceLink(dep.key), dep.warnings);
       } else {
-        const msg = `Deployed ${dep.processId} v${dep.version}`;
-        toast((dep.warnings || []).length ? msg + ` — with ${dep.warnings.length} warning${dep.warnings.length === 1 ? "" : "s"}` : msg,
+        const msg = tr("bpmn.deploy.done", { id: dep.processId, version: dep.version });
+        toast((dep.warnings || []).length ? trPlural("bpmn.deploy.withWarnings", dep.warnings.length, { message: msg }) : msg,
           (dep.warnings || []).length ? "warn" : "ok");
         showDeploySuccess(msg, `#/operations/p/${dep.key}`, dep.warnings);
       }
@@ -12186,12 +12227,12 @@ function wireActions(root, modeler, api, toast, projectId, identity, deploymentK
 // one that does not (a deployed definition opened read-only, or a diagram never saved)
 // has nowhere to put them without inventing a draft, so it asks before discarding.
 function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
-  const keepEdits = makeKeepEdits(modeler, identity, saveDraft, "opening the called process");
+  const keepEdits = makeKeepEdits(modeler, identity, saveDraft, tr("bpmn.keep.openingCallee"));
 
   const openCallee = async (pid) => {
     pid = (pid || "").trim();
     if (!pid) {
-      toast("This call activity does not name a called process yet — set its Process ID first.", "err");
+      toast(tr("bpmn.callee.noId"), "err");
       return;
     }
     // Drafts first: a callee that is being authored is what the modeller means by
@@ -12202,7 +12243,7 @@ function wireCalleeNavigation(root, modeler, api, toast, identity, saveDraft) {
     ]);
     const draft = (drafts || []).find((d) => (d.processId || "") === pid) || null;
     if (!draft && !deployed) {
-      toast(`No process “${pid}” here yet — “＋ Create new process” scaffolds it.`, "err");
+      toast(tr("bpmn.callee.missing", { id: pid }), "err");
       return;
     }
     if (!(await keepEdits())) return;

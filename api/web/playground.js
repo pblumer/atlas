@@ -19,6 +19,7 @@
 // A batch run's counts reach five and six digits, and they are printed in the same
 // badges the runtime views use — so they are grouped the same way (numfmt.js).
 import { fmtCount } from "./numfmt.js";
+import { t, plural } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -26,26 +27,29 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
 // STUB_DURATIONS are the answering speeds offered for every job the diagram
 // creates. "Instant" is for walking the control flow; the longer ones make the
 // simulated clock move so timers and deadlines become visible.
+//
+// This table and the ones below hold catalogue keys (ADR-0267) rather than words, so
+// the labels are read when they are drawn, in the language the console speaks then.
 const STUB_DURATIONS = [
-  { label: "instant", ms: 0 },
-  { label: "1 min", ms: 60_000 },
-  { label: "1 h", ms: 3_600_000 },
-  { label: "4 h", ms: 14_400_000 },
+  { label: "pg.dur.instant", ms: 0 },
+  { label: "pg.dur.1m", ms: 60_000 },
+  { label: "pg.dur.1h", ms: 3_600_000 },
+  { label: "pg.dur.4h", ms: 14_400_000 },
 ];
 
 // HUMAN_DURATIONS are the same for user tasks, plus the one answer a stub cannot
 // give: leave it parked for the person at the keyboard. That is what Step mode
 // wants and what a batch cannot use, which is why the choice is offered rather
 // than assumed.
-const HUMAN_DURATIONS = [{ label: "leave for me", ms: -1 }, ...STUB_DURATIONS];
+const HUMAN_DURATIONS = [{ label: "pg.dur.leave", ms: -1 }, ...STUB_DURATIONS];
 
 // ARRIVALS is how a dataset is spread over simulated time. The parameter each
 // mode needs is asked for only when that mode is chosen.
 const ARRIVALS = [
-  { mode: "allAtOnce", label: "all at once", param: null },
-  { mode: "sequential", label: "one after another", param: null },
-  { mode: "every", label: "one every", param: "minutes" },
-  { mode: "poisson", label: "a stream of", param: "per hour" },
+  { mode: "allAtOnce", label: "pg.arrival.allAtOnce", param: null },
+  { mode: "sequential", label: "pg.arrival.sequential", param: null },
+  { mode: "every", label: "pg.arrival.every", param: "pg.arrival.everyParam" },
+  { mode: "poisson", label: "pg.arrival.poisson", param: "pg.arrival.poissonParam" },
 ];
 
 // TASK_TYPES are the elements a pool can be attached to: the ones that hold a
@@ -76,23 +80,23 @@ const HEAT_LEVELS = 5;
 // "nothing failed here", which is the ordinary case: drawing those dashed and faded
 // says "never reached" about most of a healthy diagram, which is a lie.
 const OVERLAYS = [
-  { key: "runs", label: "Runs", title: "How many tokens passed through", flows: true, cold: true },
-  { key: "work", label: "Duration", title: "How long the work took, in total", flows: false, cold: false },
-  { key: "wait", label: "Waiting", title: "How long cases queued before being worked on", flows: false, cold: false },
-  { key: "incidents", label: "Incidents", title: "How many tokens are parked behind a failure", flows: false, cold: false },
+  { key: "runs", label: "pg.overlay.runs", title: "pg.overlay.runsTitle", flows: true, cold: true },
+  { key: "work", label: "pg.overlay.work", title: "pg.overlay.workTitle", flows: false, cold: false },
+  { key: "wait", label: "pg.overlay.wait", title: "pg.overlay.waitTitle", flows: false, cold: false },
+  { key: "incidents", label: "pg.overlay.incidents", title: "pg.overlay.incidentsTitle", flows: false, cold: false },
 ];
 
 // FIELD_KINDS is what a generated field can be. The labels say what the field
 // produces rather than naming a type: somebody describing a dataset is thinking
 // about orders and amounts, not about int64.
 const FIELD_KINDS = [
-  { kind: "int", label: "whole number" },
-  { kind: "decimal", label: "decimal" },
-  { kind: "bool", label: "true or false" },
-  { kind: "choice", label: "one of a list" },
-  { kind: "constant", label: "the same value" },
-  { kind: "sequence", label: "case number" },
-  { kind: "timestamp", label: "a date" },
+  { kind: "int", label: "pg.kind.int" },
+  { kind: "decimal", label: "pg.kind.decimal" },
+  { kind: "bool", label: "pg.kind.bool" },
+  { kind: "choice", label: "pg.kind.choice" },
+  { kind: "constant", label: "pg.kind.constant" },
+  { kind: "sequence", label: "pg.kind.sequence" },
+  { kind: "timestamp", label: "pg.kind.timestamp" },
 ];
 
 const DAY_MS = 86_400_000;
@@ -129,24 +133,24 @@ const fmtWhen = (iso) => (iso || "").replace("T", " ").replace(/(:\d\d)?Z$/, "")
 // the two play modes look like siblings rather than two unrelated toolbars.
 function barHTML() {
   const opts = STUB_DURATIONS
-    .map((d, i) => `<option value="${d.ms}"${i === 1 ? " selected" : ""}>${esc(d.label)}</option>`)
+    .map((d, i) => `<option value="${d.ms}"${i === 1 ? " selected" : ""}>${esc(t(d.label))}</option>`)
     .join("");
   const human = HUMAN_DURATIONS
-    .map((d, i) => `<option value="${d.ms}"${i === 0 ? " selected" : ""}>${esc(d.label)}</option>`)
+    .map((d, i) => `<option value="${d.ms}"${i === 0 ? " selected" : ""}>${esc(t(d.label))}</option>`)
     .join("");
   return `
-    <button class="btn play" id="pg-start" title="Compile the diagram on screen and open a sandbox for it">&#9654; Start sandbox</button>
-    <button class="btn neutral" id="pg-case" title="Start one case with the start variables below" hidden>+ Case</button>
-    <button class="btn neutral" id="pg-step" title="Carry out exactly one thing: a job answered, or a timer fired" hidden>Step</button>
-    <button class="btn neutral" id="pg-run" title="Run until the case comes to rest" hidden>Run</button>
-    <button class="btn neutral" id="pg-clock" title="Jump the simulated clock forward one hour and fire what came due" hidden>&#9201; +1 h</button>
-    <button class="btn play" id="pg-batch" title="Run the dataset in the panel" hidden>&#9654; Run batch</button>
-    <button class="btn neutral" id="pg-cancel" title="Stop the batch, leaving what it did readable" hidden>Stop</button>
-    <button class="btn neutral" id="pg-stop" title="Discard the sandbox" hidden>Discard</button>
-    <label class="sim-speed" id="pg-dur-wrap" title="How long every stubbed job takes in simulated time">Tasks
+    <button class="btn play" id="pg-start" title="${esc(t("pg.startTitle"))}">${esc(t("pg.start"))}</button>
+    <button class="btn neutral" id="pg-case" title="${esc(t("pg.caseTitle"))}" hidden>${esc(t("pg.case"))}</button>
+    <button class="btn neutral" id="pg-step" title="${esc(t("pg.stepTitle"))}" hidden>${esc(t("pg.step"))}</button>
+    <button class="btn neutral" id="pg-run" title="${esc(t("pg.runTitle"))}" hidden>${esc(t("pg.run"))}</button>
+    <button class="btn neutral" id="pg-clock" title="${esc(t("pg.clockTitle"))}" hidden>${esc(t("pg.clock"))}</button>
+    <button class="btn play" id="pg-batch" title="${esc(t("pg.batchTitle"))}" hidden>${esc(t("pg.batch"))}</button>
+    <button class="btn neutral" id="pg-cancel" title="${esc(t("pg.cancelTitle"))}" hidden>${esc(t("pg.cancel"))}</button>
+    <button class="btn neutral" id="pg-stop" title="${esc(t("pg.discardTitle"))}" hidden>${esc(t("pg.discard"))}</button>
+    <label class="sim-speed" id="pg-dur-wrap" title="${esc(t("pg.durTitle"))}">${esc(t("pg.dur"))}
       <select class="speed" id="pg-dur">${opts}</select>
     </label>
-    <label class="sim-speed" id="pg-human-wrap" title="How user tasks are answered. Left for you they park, which is Step mode; a batch needs a duration">User tasks
+    <label class="sim-speed" id="pg-human-wrap" title="${esc(t("pg.humanTitle"))}">${esc(t("pg.human"))}
       <select class="speed" id="pg-human">${human}</select>
     </label>
     <span class="sim-hint" id="pg-hint"></span>
@@ -168,15 +172,15 @@ function barHTML() {
 // setupPanelHTML is the left column: everything that decides what runs.
 function setupPanelHTML() {
   return `
-    <div class="vars-head"><b>Run setup</b></div>
+    <div class="vars-head"><b>${esc(t("pg.setup"))}</b></div>
     <div class="vars-list" id="pg-setup-body"></div>`;
 }
 
 // panelHTML is the right column: what the run did.
 function panelHTML() {
   return `
-    <div class="vars-head"><b>Analysis</b>
-      <button class="icon-btn" id="pg-panel-close" title="Back to Design" aria-label="Back to Design">&#10005;</button></div>
+    <div class="vars-head"><b>${esc(t("pg.analysis"))}</b>
+      <button class="icon-btn" id="pg-panel-close" title="${esc(t("pg.backToDesign"))}" aria-label="${esc(t("pg.backToDesign"))}">&#10005;</button></div>
     <div class="vars-list" id="pg-body"></div>`;
 }
 
@@ -335,7 +339,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     try {
       await fn();
     } catch (e) {
-      toast(`${what}: ${e.message}`, "err");
+      toast(t("pg.failed", { what, error: e.message }), "err");
     } finally {
       state.busy = false;
       render();
@@ -434,7 +438,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   }
 
   async function startCase() {
-    const c = await api("POST", path("/cases"), { variables: parseJSON(state.startVars, "start variables") });
+    const c = await api("POST", path("/cases"), { variables: parseJSON(state.startVars, "start") });
     state.caseKey = c.instanceKey;
     state.result = c;
     await refresh();
@@ -443,14 +447,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
   async function step() {
     const occ = await api("POST", path("/step"));
     state.simTime = occ.simTime;
-    if (!occ.happened) toast("Nothing left to do — the case has come to rest.", "");
+    if (!occ.happened) toast(t("pg.restNothing"), "");
     await refresh();
   }
 
   async function run() {
     const prog = await api("POST", path("/run"));
     state.simTime = prog.simTime;
-    if (!prog.quiescent) toast("Stopped on the run budget — press Run again to carry on.", "");
+    if (!prog.quiescent) toast(t("pg.budget"), "");
     await refresh();
   }
 
@@ -462,17 +466,20 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   async function complete(jobKey) {
     await api("POST", path(`/tasks/${encodeURIComponent(jobKey)}/complete`),
-      { variables: parseJSON(state.outputs, "output variables") });
+      { variables: parseJSON(state.outputs, "outputs") });
     await refresh();
   }
 
   // parseJSON reports the mistake against the field it was made in, so "not valid
   // JSON" names which box to look at.
-  function parseJSON(text, what) {
+  // parseJSON reads one of the three JSON boxes; `which` names the box, and with it
+  // what an empty one means and how a broken one is reported.
+  const JSON_BOXES = { start: "pg.json.start", outputs: "pg.json.outputs", dataset: "pg.json.dataset" };
+  function parseJSON(text, which) {
     try {
-      return JSON.parse(text || (what === "the dataset" ? "[]" : "{}"));
+      return JSON.parse(text || (which === "dataset" ? "[]" : "{}"));
     } catch (e) {
-      throw new Error(`the ${what} are not valid JSON (${e.message})`);
+      throw new Error(t(JSON_BOXES[which], { error: e.message }));
     }
   }
 
@@ -481,7 +488,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // scenario cannot differ.
   function runBody() {
     if (state.source === "generated") return { generate: genBody(), arrival: arrivalBody() };
-    return { cases: parseJSON(state.cases, "the dataset"), arrival: arrivalBody() };
+    return { cases: parseJSON(state.cases, "dataset"), arrival: arrivalBody() };
   }
 
   // typedValue reads what was typed as the value it looks like: 1200 as a number,
@@ -620,7 +627,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.results = null;
     closeCase();
     if (state.source === "csv") {
-      if (!state.csv) throw new Error("choose a CSV file, or take the dataset from the list or the generator");
+      if (!state.csv) throw new Error(t("pg.csvMissing"));
       const form = new FormData();
       form.append("file", state.csv);
       form.append("arrival", JSON.stringify(arrivalBody()));
@@ -631,7 +638,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     } else {
       const body = runBody();
       if (body.cases && !body.cases.length) {
-        throw new Error("the dataset is a list of cases, and it needs at least one");
+        throw new Error(t("pg.emptyDataset"));
       }
       state.run = await api("POST", path("/runs"), body);
     }
@@ -800,7 +807,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       await readResults(0);
       drawCanvas();
     } catch (e) {
-      toast(`read the report: ${e.message}`, "err");
+      toast(t("pg.reportFailed", { error: e.message }), "err");
     }
     render();
   }
@@ -832,7 +839,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (state.session) await stop();
     const s = await api("POST", "/api/v1/playground/sessions", sc.spec.open);
     state.session = {
-      id: s.id, processId: s.processId, seed: s.seed, stubLabel: "from the scenario",
+      id: s.id, processId: s.processId, seed: s.seed, stubLabel: t("pg.fromScenario"),
       xml: (sc.spec.open && sc.spec.open.xml) || "",
     };
     state.simTime = s.simTime;
@@ -867,10 +874,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // is why there is nothing here that has to be kept in step with the endpoints.
   async function saveScenario() {
     if (state.source === "csv") {
-      throw new Error("a run from an uploaded CSV cannot be saved as a scenario: its rows are parsed on the server and are not in the browser to store — describe the dataset instead and it can be");
+      throw new Error(t("pg.scenario.csv"));
     }
     const name = (state.scenarioName || "").trim();
-    if (!name) throw new Error("give the scenario a name");
+    if (!name) throw new Error(t("pg.scenario.noName"));
     const id = state.scenarioId || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     // The seed the sandbox actually used is pinned into what is stored. Without it
     // the scenario would be re-seeded from the clock every time it is opened, and a
@@ -885,7 +892,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     state.scenarioId = saved.id;
     state.pickedScenario = saved.id;
     await loadScenarios();
-    toast(`Saved the scenario "${saved.name}".`, "ok");
+    toast(t("pg.scenario.saved", { name: saved.name }), "ok");
   }
 
   async function deleteScenario() {
@@ -903,13 +910,13 @@ export function attachPlayground(root, { api, toast, modeler }) {
   async function keepBaseline() {
     if (!state.scenarioId || !state.report) return;
     if (state.verdict && !state.verdict.passed) {
-      throw new Error("this run did not pass, and a failing baseline would hide the failure from every run after it");
+      throw new Error(t("pg.baseline.failing"));
     }
     await api("PUT", `/api/v1/playground/scenarios/${encodeURIComponent(state.scenarioId)}/baseline`, state.report);
     state.baseline = state.report;
     state.comparison = null;
     await loadScenarios();
-    toast("Kept as this scenario's baseline.", "ok");
+    toast(t("pg.baseline.kept"), "ok");
   }
 
   // refresh re-reads what the Step view shows. One round trip per view; the
@@ -999,7 +1006,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
           html: `<div class="token-badges"><div class="token-badge history"
-            title="step ${at.map((n) => fmtCount(n)).join(", ")} of this case">${at.map((n) => fmtCount(n)).join(", ")}</div></div>`,
+            title="${esc(t("pg.mark.steps", { steps: at.map((n) => fmtCount(n)).join(", ") }))}">${at.map((n) => fmtCount(n)).join(", ")}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1020,7 +1027,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       try {
         drawn.overlays.push(overlays.add(id, "pg-visits", {
           position: { bottom: 4, right: 4 },
-          html: `<div class="token-badges"><div class="token-badge history" title="${fmtCount(count)} token(s) passed through">${fmtCount(count)}</div></div>`,
+          html: `<div class="token-badges"><div class="token-badge history" title="${esc(plural("pg.mark.passed", count, { n: fmtCount(count) }))}">${fmtCount(count)}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1084,7 +1091,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         drawn.overlays.push(overlays.add(id, "pg-heat", {
           position: { top: -10, right: -6 },
           html: `<div class="token-badges"><div class="token-badge heat"
-            title="${esc(spec.title)}: ${esc(text)}">${esc(text)}</div></div>`,
+            title="${esc(t("pg.mark.heat", { measure: t(spec.title), value: text }))}">${esc(text)}</div></div>`,
         }));
       } catch { /* shape without graphics */ }
     }
@@ -1097,25 +1104,25 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   // ---- panel ----------------------------------------------------------------
 
-  function taskRowHTML(t) {
-    const kind = t.human ? "user task" : "job";
+  function taskRowHTML(task) {
+    const kind = t(task.human ? "pg.task.user" : "pg.task.job");
     return `<div class="pg-task">
-      <div><b>${esc(t.element)}</b> <span class="muted">${esc(kind)}</span></div>
-      <button class="btn neutral small" data-job="${esc(t.jobKey)}"
-        title="Complete this task with the output variables below">Complete</button>
+      <div><b>${esc(task.element)}</b> <span class="muted">${esc(kind)}</span></div>
+      <button class="btn neutral small" data-job="${esc(task.jobKey)}"
+        title="${esc(t("pg.task.completeTitle"))}">${esc(t("pg.task.complete"))}</button>
     </div>`;
   }
 
   function resultHTML(c) {
-    if (!c) return `<p class="muted">No case yet. Press <b>+ Case</b> to start one.</p>`;
+    if (!c) return `<p class="muted">${t("pg.case.none")}</p>`;
     const vars = Object.entries(c.variables || {})
       .map(([k, v]) => `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`).join("");
     return `
       <div class="pg-result">
-        <div><span class="muted">state</span> <b>${esc(c.state)}</b>
-          ${c.incidents ? `<span class="pg-inc">${c.incidents} incident(s)</span>` : ""}</div>
-        <div><span class="muted">path</span> <span class="mono">${esc((c.path || []).join(" → ")) || "—"}</span></div>
-        ${vars ? `<table class="pg-vars">${vars}</table>` : `<p class="muted">No variables yet.</p>`}
+        <div><span class="muted">${esc(t("pg.case.state"))}</span> <b>${esc(c.state)}</b>
+          ${c.incidents ? `<span class="pg-inc">${esc(plural("pg.case.incidents", c.incidents))}</span>` : ""}</div>
+        <div><span class="muted">${esc(t("pg.case.path"))}</span> <span class="mono">${esc((c.path || []).join(" → ")) || "—"}</span></div>
+        ${vars ? `<table class="pg-vars">${vars}</table>` : `<p class="muted">${esc(t("pg.case.noVars"))}</p>`}
       </div>`;
   }
 
@@ -1125,28 +1132,25 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // policy behind them is the same.
   function setupHTML() {
     const tasks = tasksInDiagram();
-    const rows = tasks.map((t) => {
-      const cfg = state.pools[t.id] || {};
+    const rows = tasks.map((task) => {
+      const cfg = state.pools[task.id] || {};
       return `<div class="pg-pool">
-        <label title="${esc(t.id)}">${esc(t.name)}</label>
-        <input type="text" data-pool="${esc(t.id)}" value="${esc(cfg.pool || "")}"
-          placeholder="pool" title="Which pool this task draws on. Two tasks with the same name share one." />
-        <input type="number" min="1" step="1" data-seats="${esc(t.id)}" value="${esc(cfg.seats || "")}"
-          placeholder="seats" title="How many can be worked at once. Empty means no limit." />
+        <label title="${esc(task.id)}">${esc(task.name)}</label>
+        <input type="text" data-pool="${esc(task.id)}" value="${esc(cfg.pool || "")}"
+          placeholder="${esc(t("pg.pool.placeholder"))}" title="${esc(t("pg.pool.title"))}" />
+        <input type="number" min="1" step="1" data-seats="${esc(task.id)}" value="${esc(cfg.seats || "")}"
+          placeholder="${esc(t("pg.seats.placeholder"))}" title="${esc(t("pg.seats.title"))}" />
       </div>`;
     }).join("");
     return `
-      <p class="muted">Runs the diagram on screen with the real compiler and the real
-        processor, on a clock the sandbox owns — a three-day timer takes no time at all.
-        Nothing is deployed and no worker can be called: the sandbox has none.</p>
+      <p class="muted">${esc(t("pg.setup.intro"))}</p>
       ${scenarioPickerHTML()}
-      <div class="pg-sec"><b>Resources</b> <span class="muted">optional</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.resources"))}</b> <span class="muted">${esc(t("pg.optional"))}</span></div>
       ${tasks.length
         ? `${rows}<label class="pg-check"><input type="checkbox" id="pg-hours" ${state.hours ? "checked" : ""} />
-             Business hours only (08:00-17:00, Mon-Fri)</label>`
-        : `<p class="muted">The diagram has no tasks to put a pool on.</p>`}
-      <p class="muted">Without a pool every case is worked the moment it arrives, and the
-        report's waiting time is zero by construction.</p>`;
+             ${esc(t("pg.businessHours"))}</label>`
+        : `<p class="muted">${esc(t("pg.noTasks"))}</p>`}
+      <p class="muted">${esc(t("pg.noPoolNote"))}</p>`;
   }
 
   // scenarioPickerHTML offers this diagram's saved runs. Opening one replaces the
@@ -1157,15 +1161,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (!state.scenarios.length) return "";
     const opts = state.scenarios.map((sc) =>
       `<option value="${esc(sc.id)}"${sc.id === state.pickedScenario ? " selected" : ""}>${esc(sc.name)}${
-        sc.hasBaseline ? " · has a baseline" : ""}</option>`).join("");
+        sc.hasBaseline ? esc(t("pg.scenario.hasBaseline")) : ""}</option>`).join("");
     return `
-      <div class="pg-sec"><b>Saved scenarios</b> <span class="muted">${state.scenarios.length}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.scenario.saved.heading"))}</b> <span class="muted">${state.scenarios.length}</span></div>
       <div class="pg-timing">
-        <select id="pg-scenario-pick"><option value="">pick one…</option>${opts}</select>
-        <button class="btn neutral small" id="pg-scenario-open">Open</button>
+        <select id="pg-scenario-pick"><option value="">${esc(t("pg.scenario.pick"))}</option>${opts}</select>
+        <button class="btn neutral small" id="pg-scenario-open">${esc(t("pg.scenario.open"))}</button>
       </div>
-      <p class="muted">A scenario carries its own stub and pool policy, so opening one
-        starts a fresh sandbox with it.</p>`;
+      <p class="muted">${esc(t("pg.scenario.openNote"))}</p>`;
   }
 
   // expectHTML is what the run has to show. It is the same set the `atlas
@@ -1176,18 +1179,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
       .map((c) => (c.pool || "").trim()).filter(Boolean);
     const seen = new Set();
     const queueRows = pools.filter((p) => !seen.has(p) && seen.add(p)).map((p) => `
-      <div class="pg-timing"><span class="muted" style="flex:1">queue at ${esc(p)} at most</span>
+      <div class="pg-timing"><span class="muted" style="flex:1">${esc(t("pg.x.queue", { pool: p }))}</span>
         <input type="number" min="0" step="1" data-queue="${esc(p)}" value="${esc(state.expect.queue[p] || "")}" /></div>`).join("");
     return `
       ${stepHeadHTML(3)}
       <label class="pg-check"><input type="checkbox" id="pg-x-finish" ${state.expect.allFinish ? "checked" : ""} />
-        every case finishes</label>
+        ${esc(t("pg.x.finish"))}</label>
       <label class="pg-check"><input type="checkbox" id="pg-x-inc" ${state.expect.noIncidents ? "checked" : ""} />
-        no incidents</label>
-      <div class="pg-timing"><span class="muted" style="flex:1">p90 under</span>
+        ${esc(t("pg.x.noIncidents"))}</label>
+      <div class="pg-timing"><span class="muted" style="flex:1">${esc(t("pg.x.p90"))}</span>
         <input type="number" min="0" step="0.5" id="pg-x-p90" value="${esc(state.expect.p90Hours)}" />
-        <span class="muted">hours</span></div>
-      <label class="field"><span>Must reach (element ids, comma separated)</span>
+        <span class="muted">${esc(t("pg.x.hours"))}</span></div>
+      <label class="field"><span>${esc(t("pg.x.reach"))}</span>
         <textarea id="pg-x-reach" rows="1" spellcheck="false">${esc(state.expect.mustReach)}</textarea></label>
       ${queueRows}
       ${rulesHTML()}`;
@@ -1202,12 +1205,10 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function rulesHTML() {
     const rows = (state.expect.rules || []).map(ruleRowHTML).join("");
     return `
-      <div class="pg-sec"><b>Per case</b> <span class="muted">FEEL, optional</span></div>
-      ${rows || `<p class="muted">A rule holds a class of cases to an outcome —
-        <span class="mono">betrag &lt; 50000</span> must end at <span class="mono">genehmigt</span>.
-        A bound on the run cannot say that.</p>`}
+      <div class="pg-sec"><b>${esc(t("pg.rules.heading"))}</b> <span class="muted">${esc(t("pg.rules.feel"))}</span></div>
+      ${rows || `<p class="muted">${t("pg.rules.intro")}</p>`}
       <div class="pg-timing">
-        <button class="btn neutral small" id="pg-rule-add">Add a rule</button>
+        <button class="btn neutral small" id="pg-rule-add">${esc(t("pg.rules.add"))}</button>
       </div>`;
   }
 
@@ -1218,18 +1219,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
     return `
       <div class="pg-rule">
         <div class="pg-rule-head">
-          <span class="muted">when</span>
+          <span class="muted">${esc(t("pg.rule.when"))}</span>
           <input type="text" data-rule="when" data-i="${i}" value="${esc(r.when)}"
-            placeholder="every case" aria-label="Which cases the rule is about" />
-          <button class="icon-btn" data-rule-del="${i}" title="Remove this rule"
-            aria-label="Remove this rule">&#10005;</button>
+            placeholder="${esc(t("pg.rule.whenPlaceholder"))}" aria-label="${esc(t("pg.rule.whenLabel"))}" />
+          <button class="icon-btn" data-rule-del="${i}" title="${esc(t("pg.rule.remove"))}"
+            aria-label="${esc(t("pg.rule.remove"))}">&#10005;</button>
         </div>
         <div class="pg-rule-head">
-          <span class="muted">then</span>
+          <span class="muted">${esc(t("pg.rule.then"))}</span>
           <input type="text" data-rule="then" data-i="${i}" value="${esc(r.then)}"
-            placeholder="end = &quot;approved&quot;" aria-label="What those cases have to show" />
-          ${ends.length ? `<select data-rule-end="${i}" aria-label="Insert an end event">
-            <option value="">ends at…</option>${options}</select>` : ""}
+            placeholder="end = &quot;approved&quot;" aria-label="${esc(t("pg.rule.thenLabel"))}" />
+          ${ends.length ? `<select data-rule-end="${i}" aria-label="${esc(t("pg.rule.insertEnd"))}">
+            <option value="">${esc(t("pg.rule.endsAt"))}</option>${options}</select>` : ""}
         </div>
       </div>`;
   }
@@ -1244,23 +1245,20 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // scenarioSaveHTML is how a run becomes repeatable by somebody who is not here.
   function scenarioSaveHTML() {
     if (state.source === "csv") {
-      return `<div class="pg-sec"><b>Scenario</b></div>
-        <p class="muted">A run from an uploaded CSV cannot be saved as a scenario: its
-          rows are parsed on the server, by the same code a real import uses, and are
-          not in the browser to store. A described dataset can be — that is what
-          <b>Generated</b> is for.</p>`;
+      return `<div class="pg-sec"><b>${esc(t("pg.scenario"))}</b></div>
+        <p class="muted">${t("pg.scenario.csvNote")}</p>`;
     }
     return `
-      <div class="pg-sec"><b>Scenario</b>
-        <span class="muted">${state.scenarioId ? esc(state.scenarioId) : "unsaved"}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.scenario"))}</b>
+        <span class="muted">${state.scenarioId ? esc(state.scenarioId) : esc(t("pg.scenario.unsaved"))}</span></div>
       <div class="pg-timing">
-        <input type="text" id="pg-scenario-name" placeholder="name it" value="${esc(state.scenarioName)}" style="flex:1" />
-        <button class="btn neutral small" id="pg-scenario-save">Save</button>
-        ${state.scenarioId ? `<button class="btn neutral small" id="pg-scenario-delete">Delete</button>` : ""}
+        <input type="text" id="pg-scenario-name" placeholder="${esc(t("pg.scenario.namePlaceholder"))}" value="${esc(state.scenarioName)}" style="flex:1" />
+        <button class="btn neutral small" id="pg-scenario-save">${esc(t("pg.scenario.save"))}</button>
+        ${state.scenarioId ? `<button class="btn neutral small" id="pg-scenario-delete">${esc(t("pg.scenario.delete"))}</button>` : ""}
       </div>
       ${state.baseline
-        ? `<p class="muted">A baseline is stored: the next run is set beside it.</p>`
-        : `<p class="muted">Run it, then keep the run as a baseline to compare the next one against.</p>`}`;
+        ? `<p class="muted">${esc(t("pg.baseline.stored"))}</p>`
+        : `<p class="muted">${esc(t("pg.baseline.hint"))}</p>`}`;
   }
 
   // verdictHTML is the run judged. A verdict with no checks is a pass, and says so
@@ -1269,24 +1267,23 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const v = state.verdict;
     if (!v) return "";
     if (!v.checks || !v.checks.length) {
-      return `<div class="pg-sec"><b>Verdict</b></div>
-        <p class="muted">Nothing was expected of this run, so there was nothing to check.</p>`;
+      return `<div class="pg-sec"><b>${esc(t("pg.verdict"))}</b></div>
+        <p class="muted">${esc(t("pg.verdict.nothing"))}</p>`;
     }
     // The per-case rules are left out of this table and shown as their own
     // breakdown below: a rule's statement is a sentence, and four columns of a 330 px
     // panel wrap it to four lines and then truncate what it did.
     const bounds = v.checks.filter((c) => !c.rule);
     return `
-      <div class="pg-sec"><b>Verdict</b>
-        <span class="pg-verdict ${v.passed ? "ok" : "bad"}">${v.passed ? "passed" : "failed"}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.verdict"))}</b>
+        <span class="pg-verdict ${v.passed ? "ok" : "bad"}">${esc(t(v.passed ? "pg.verdict.passed" : "pg.verdict.failed"))}</span></div>
       <table class="pg-table pg-checks"><tbody>${bounds.map((c) => `<tr class="${c.passed ? "" : "pg-bad"}">
         <td>${c.passed ? "&#10003;" : "&#10007;"}</td><td>${esc(c.name)}</td>
         <td class="muted">${esc(c.want)}</td><td>${esc(c.got)}</td></tr>`).join("")}</tbody></table>
       ${ruleBreakdownHTML(v.rules)}
       ${state.scenarioId ? `<div class="pg-actions">
         <button class="btn neutral small" id="pg-keep-baseline"${v.passed ? "" : " disabled"}
-          title="${v.passed ? "Keep this run as what the next one is measured against"
-            : "A failing baseline would hide the failure from every run after it"}">Keep as baseline</button>
+          title="${esc(t(v.passed ? "pg.baseline.keepTitle" : "pg.baseline.failingTitle"))}">${esc(t("pg.baseline.keep"))}</button>
       </div>` : ""}`;
   }
 
@@ -1298,19 +1295,19 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function ruleBreakdownHTML(rules) {
     if (!rules || !rules.length) return "";
     return `
-      <div class="pg-sec"><b>Per case</b> <span class="muted">${rules.length} rule${rules.length === 1 ? "" : "s"}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.rules.heading"))}</b> <span class="muted">${esc(plural("pg.rules.count", rules.length))}</span></div>
       ${rules.map((r) => `
         <div class="pg-rule-result${r.passed ? "" : " bad"}">
           <div class="pg-rule-name">${esc(r.name)}</div>
           <div class="pg-rule-split">
-            <span><b>${r.satisfied}</b> held</span>
-            ${r.violated ? `<span class="bad"><b>${r.violated}</b> broke it</span>` : ""}
-            ${r.undecided ? `<span class="muted"><b>${r.undecided}</b> unfinished</span>` : ""}
-            <span class="muted">of ${r.matched} matched, ${r.cases} run</span>
+            <span>${t("pg.rule.held", { n: r.satisfied })}</span>
+            ${r.violated ? `<span class="bad">${t("pg.rule.broke", { n: r.violated })}</span>` : ""}
+            ${r.undecided ? `<span class="muted">${t("pg.rule.unfinished", { n: r.undecided })}</span>` : ""}
+            <span class="muted">${esc(t("pg.rule.of", { matched: r.matched, cases: r.cases }))}</span>
           </div>
-          ${r.examples && r.examples.length ? `<div class="pg-rule-cases muted">cases ${
-            r.examples.slice(0, 12).map((i) => i + 1).join(", ")}${
-            r.truncated || r.examples.length > 12 ? ", and more" : ""}</div>` : ""}
+          ${r.examples && r.examples.length ? `<div class="pg-rule-cases muted">${esc(t("pg.rule.cases", { list:
+            r.examples.slice(0, 12).map((i) => i + 1).join(", ") + (
+            r.truncated || r.examples.length > 12 ? t("pg.rule.andMore") : "") }))}</div>` : ""}
         </div>`).join("")}`;
   }
 
@@ -1345,11 +1342,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const broke = violatingCases();
     const out = [];
     if (broke.size) {
-      out.push(`${rules.some((r) => r.truncated) ? "at least " : ""}${broke.size} broke a rule`);
+      out.push(plural(rules.some((r) => r.truncated) ? "pg.dev.brokeAtLeast" : "pg.dev.broke", broke.size));
     }
     const unfinished = Math.max(0, (rep.cases || 0) - (rep.completed || 0));
-    if (unfinished) out.push(`${unfinished} unfinished`);
-    if (rep.incidents) out.push(`${rep.incidents} incident${rep.incidents === 1 ? "" : "s"}`);
+    if (unfinished) out.push(t("pg.dev.unfinished", { n: unfinished }));
+    if (rep.incidents) out.push(plural("pg.dev.incidents", rep.incidents));
     return out;
   }
 
@@ -1358,12 +1355,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (!c || !c.deltas) return "";
     const moved = c.deltas.filter((d) => d.before !== d.after);
     if (!moved.length) {
-      return `<div class="pg-sec"><b>Against the baseline</b></div>
-        <p class="muted">Nothing moved. Same dataset, same policy, same seed — the run is reproducible.</p>`;
+      return `<div class="pg-sec"><b>${esc(t("pg.cmp.heading"))}</b></div>
+        <p class="muted">${esc(t("pg.cmp.none"))}</p>`;
     }
     const cell = (unit, v) => unit === "millis" ? fmtDur(v) : unit === "percent" ? `${v}%` : String(v);
     return `
-      <div class="pg-sec"><b>Against the baseline</b> <span class="muted">${moved.length} changed</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.cmp.heading"))}</b> <span class="muted">${esc(t("pg.cmp.changed", { n: moved.length }))}</span></div>
       <table class="pg-table pg-deltas"><tbody>${moved.map((d) => `<tr>
         <td>${esc(d.name)}</td>
         <td class="muted">${esc(cell(d.unit, d.before))}</td>
@@ -1380,32 +1377,32 @@ export function attachPlayground(root, { api, toast, modeler }) {
       `<button data-source="${id}"${state.source === id ? ' class="active"' : ""}>${label}</button>`;
     const body = state.source === "csv" ? csvHTML()
       : state.source === "generated" ? generatorHTML()
-        : `<label class="field"><span>Cases (JSON list)</span>
+        : `<label class="field"><span>${esc(t("pg.data.cases"))}</span>
              <textarea id="pg-cases" rows="5" spellcheck="false">${esc(state.cases)}</textarea></label>`;
     return `
       ${stepHeadHTML(1)}
-      <div class="pg-source">${tab("list", "A list")}${tab("generated", "Generated")}${tab("csv", "A CSV file")}</div>
+      <div class="pg-source">${tab("list", esc(t("pg.data.list")))}${tab("generated", esc(t("pg.data.generated")))}${tab("csv", esc(t("pg.data.csv")))}</div>
       ${body}`;
   }
 
   function csvHTML() {
     return state.csv
       ? `<div class="pg-file"><span class="mono">${esc(state.csv.name)}</span>
-           <button class="btn neutral small" id="pg-csv-clear">Choose another</button></div>`
+           <button class="btn neutral small" id="pg-csv-clear">${esc(t("pg.csv.other"))}</button></div>`
       : `<div class="pg-file"><input type="file" id="pg-csv" accept=".csv,text/csv" />
-           <span class="muted">its header names the variables</span></div>`;
+           <span class="muted">${esc(t("pg.csv.header"))}</span></div>`;
   }
 
   // generatorHTML describes the dataset rather than listing it: a count, and a row
   // per variable saying how its value is drawn.
   function generatorHTML() {
     return `
-      <div class="pg-timing"><span class="muted" style="flex:1">how many cases</span>
+      <div class="pg-timing"><span class="muted" style="flex:1">${esc(t("pg.gen.count"))}</span>
         <input type="number" min="1" step="1" id="pg-gen-count" value="${esc(state.gen.count)}" /></div>
       <div class="pg-fields">${state.gen.fields.map(fieldRowHTML).join("")}</div>
       <div class="pg-timing">
-        <button class="btn neutral small" id="pg-gen-add">Add a field</button>
-        <button class="btn neutral small" id="pg-gen-preview">Preview</button>
+        <button class="btn neutral small" id="pg-gen-add">${esc(t("pg.gen.add"))}</button>
+        <button class="btn neutral small" id="pg-gen-preview">${esc(t("pg.gen.preview"))}</button>
       </div>
       ${previewHTML()}`;
   }
@@ -1416,15 +1413,15 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // two offsets and a checkbox is unreadable.
   function fieldRowHTML(f, i) {
     const kinds = FIELD_KINDS.map((k) =>
-      `<option value="${k.kind}"${k.kind === f.kind ? " selected" : ""}>${esc(k.label)}</option>`).join("");
+      `<option value="${k.kind}"${k.kind === f.kind ? " selected" : ""}>${esc(t(k.label))}</option>`).join("");
     return `
       <div class="pg-field">
         <div class="pg-field-head">
           <input type="text" data-gen="name" data-i="${i}" value="${esc(f.name)}"
-            placeholder="variable" aria-label="Variable name" />
-          <select data-gen="kind" data-i="${i}" aria-label="How it is drawn">${kinds}</select>
-          <button class="icon-btn" data-gen-del="${i}" title="Remove this field"
-            aria-label="Remove this field">&#10005;</button>
+            placeholder="${esc(t("pg.field.placeholder"))}" aria-label="${esc(t("pg.field.name"))}" />
+          <select data-gen="kind" data-i="${i}" aria-label="${esc(t("pg.field.kind"))}">${kinds}</select>
+          <button class="icon-btn" data-gen-del="${i}" title="${esc(t("pg.field.remove"))}"
+            aria-label="${esc(t("pg.field.remove"))}">&#10005;</button>
         </div>
         <div class="pg-field-args">${fieldParamsHTML(f, i)}</div>
       </div>`;
@@ -1433,20 +1430,20 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function fieldParamsHTML(f, i) {
     const num = (key, hint) =>
       `<input type="number" data-gen="${key}" data-i="${i}" value="${esc(f[key])}"
-         placeholder="${hint}" aria-label="${hint}" />`;
+         placeholder="${esc(hint)}" aria-label="${esc(hint)}" />`;
     const text = (key, hint) =>
       `<input type="text" data-gen="${key}" data-i="${i}" value="${esc(f[key])}"
          placeholder="${hint}" aria-label="${hint}" />`;
     switch (f.kind) {
-      case "int": return num("min", "min") + num("max", "max");
-      case "decimal": return num("min", "min") + num("max", "max") + num("decimals", "places");
-      case "bool": return num("percentTrue", "% true");
+      case "int": return num("min", t("pg.arg.min")) + num("max", t("pg.arg.max"));
+      case "decimal": return num("min", t("pg.arg.min")) + num("max", t("pg.arg.max")) + num("decimals", t("pg.arg.places"));
+      case "bool": return num("percentTrue", t("pg.arg.percentTrue"));
       case "choice": return text("choices", "gold:1, silver:3, standard:6");
-      case "constant": return text("value", "value");
+      case "constant": return text("value", t("pg.arg.value"));
       case "sequence": return text("prefix", "ORDER-");
-      default: return num("fromDays", "from (days)") + num("toDays", "to (days)") +
+      default: return num("fromDays", t("pg.arg.fromDays")) + num("toDays", t("pg.arg.toDays")) +
         `<label class="pg-check"><input type="checkbox" data-gen="onlyDate" data-i="${i}"
-           ${f.onlyDate ? "checked" : ""} /> date only</label>`;
+           ${f.onlyDate ? "checked" : ""} /> ${esc(t("pg.arg.dateOnly"))}</label>`;
     }
   }
 
@@ -1456,7 +1453,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const p = state.genPreview;
     if (!p) return "";
     if (!p.rows.length || !p.columns.length) {
-      return `<p class="muted">Nothing described yet: a field needs a name.</p>`;
+      return `<p class="muted">${esc(t("pg.preview.empty"))}</p>`;
     }
     const cell = (v) => esc(typeof v === "boolean" ? String(v) : v);
     return `
@@ -1465,7 +1462,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
         <tbody>${p.rows.map((r) =>
           `<tr>${p.columns.map((c) => `<td>${cell(r[c])}</td>`).join("")}</tr>`).join("")}</tbody>
       </table></div>
-      <p class="muted">The first ${p.rows.length} of ${p.total} — these are the cases the run carries.</p>`;
+      <p class="muted">${esc(t("pg.preview.first", { n: p.rows.length, total: p.total }))}</p>`;
   }
 
   // The setup is three steps, and each of them says where it stands.
@@ -1483,9 +1480,9 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // third never has to be, because a run nobody asserts anything about is a run
   // somebody reads rather than a mistake.
   const STEPS = [
-    { n: 1, title: "Dataset", read: () => dataStep() },
-    { n: 2, title: "Timing", read: () => timingStep() },
-    { n: 3, title: "Expectations", read: () => expectStep() },
+    { n: 1, title: "pg.step.dataset", read: () => dataStep() },
+    { n: 2, title: "pg.step.timing", read: () => timingStep() },
+    { n: 3, title: "pg.step.expect", read: () => expectStep() },
   ];
 
   function stepHeadHTML(n) {
@@ -1493,7 +1490,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const step = spec.read();
     return `<div class="pg-sec pg-step" id="pg-step-${n}">
       <span class="pg-step-n${step.ok ? " done" : ""}">${n}</span>
-      <b>${esc(spec.title)}</b>
+      <b>${esc(t(spec.title))}</b>
       <span class="pg-step-note${step.bad ? " bad" : ""}">${esc(step.note)}</span>
     </div>`;
   }
@@ -1519,9 +1516,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (!batch || batch.hidden) return;
     const blocked = setupBlocked();
     batch.disabled = state.busy || blocked;
-    batch.title = blocked
-      ? "The setup steps say what is still missing"
-      : "Run the dataset in the panel";
+    batch.title = t(blocked ? "pg.gate.blocked" : "pg.batchTitle");
   }
 
   // dataStep is what the run will carry, from whichever of the three sources is
@@ -1529,30 +1524,31 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // panel can answer without asking the server.
   function dataStep() {
     if (state.source === "csv") {
-      return state.csv ? { ok: true, note: state.csv.name } : { note: "choose a file" };
+      return state.csv ? { ok: true, note: state.csv.name } : { note: t("pg.data.chooseFile") };
     }
     if (state.source === "generated") {
       const count = plannedCases();
-      if (count < 1) return { bad: true, note: "how many cases?" };
+      if (count < 1) return { bad: true, note: t("pg.data.howMany") };
       // The same two rules the generator itself applies. A row with no name is not
       // one of them: it is a row somebody has not filled in yet, and it is left out
       // of the request rather than refused. A name used twice is a mistake — a case
       // carries one value per name — and it is the one a copied row makes.
       const named = state.gen.fields.map((f) => (f.name || "").trim()).filter(Boolean);
       const twice = named.find((name, i) => named.indexOf(name) !== i);
-      if (twice) return { bad: true, note: `two fields are called "${twice}"` };
+      if (twice) return { bad: true, note: t("pg.data.twice", { name: twice }) };
       return {
         ok: true,
-        note: `${count} generated · ${named.length
-          ? `${named.length} field${named.length === 1 ? "" : "s"}`
-          : "no variables"}`,
+        note: t("pg.data.generatedNote", {
+          n: count,
+          fields: named.length ? plural("pg.data.fields", named.length) : t("pg.data.noVars"),
+        }),
       };
     }
     let rows;
-    try { rows = JSON.parse(state.cases); } catch { return { bad: true, note: "not valid JSON" }; }
-    if (!Array.isArray(rows)) return { bad: true, note: "not a list of cases" };
-    if (!rows.length) return { bad: true, note: "the list is empty" };
-    return { ok: true, note: `${rows.length} case${rows.length === 1 ? "" : "s"} listed` };
+    try { rows = JSON.parse(state.cases); } catch { return { bad: true, note: t("pg.data.badJSON") }; }
+    if (!Array.isArray(rows)) return { bad: true, note: t("pg.data.notList") };
+    if (!rows.length) return { bad: true, note: t("pg.data.emptyList") };
+    return { ok: true, note: plural("pg.data.listed", rows.length) };
   }
 
   // timingStep is the arrival stream in words. Its validity is the server's answer
@@ -1566,8 +1562,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
     // not what a readout is watching — and the sparkline underneath shows it better
     // than words do, as the flat stretch where the stream stops overnight. Naming it
     // here only cost the line a wrap, which orphaned the last word of it.
-    const param = a && a.param ? ` ${state.arrivalN} ${a.param}` : "";
-    return { ok: true, note: `${a ? a.label : state.arrival}${param}` };
+    const param = a && a.param ? ` ${state.arrivalN} ${t(a.param)}` : "";
+    return { ok: true, note: `${a ? t(a.label) : state.arrival}${param}` };
   }
 
   // expectStep counts what the run will be judged on.
@@ -1580,16 +1576,16 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const e = state.expect;
     const rules = (e.rules || []).filter((r) => (r.when || "").trim() || (r.then || "").trim());
     if (rules.some((r) => !(r.then || "").trim())) {
-      return { bad: true, note: "a rule says nothing the case has to show" };
+      return { bad: true, note: t("pg.x.ruleEmpty") };
     }
     let checks = 0;
     for (const on of [e.allFinish, e.noIncidents]) if (on) checks++;
     for (const text of [e.p90Hours, e.mustReach]) if (String(text).trim()) checks++;
     for (const bound of Object.values(e.queue)) if (String(bound).trim()) checks++;
-    if (!checks && !rules.length) return { note: "nothing asserted — the run is read, not judged" };
+    if (!checks && !rules.length) return { note: t("pg.x.nothing") };
     const parts = [];
-    if (checks) parts.push(`${checks} check${checks === 1 ? "" : "s"}`);
-    if (rules.length) parts.push(`${rules.length} rule${rules.length === 1 ? "" : "s"}`);
+    if (checks) parts.push(plural("pg.x.checks", checks));
+    if (rules.length) parts.push(plural("pg.rules.count", rules.length));
     return { ok: true, note: parts.join(" · ") };
   }
 
@@ -1603,7 +1599,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // to show, and the scenario all three are stored in.
   function batchSetupHTML() {
     const modes = ARRIVALS.map((a) =>
-      `<option value="${a.mode}"${a.mode === state.arrival ? " selected" : ""}>${esc(a.label)}</option>`).join("");
+      `<option value="${a.mode}"${a.mode === state.arrival ? " selected" : ""}>${esc(t(a.label))}</option>`).join("");
     const arrival = ARRIVALS.find((a) => a.mode === state.arrival);
     const param = arrival ? arrival.param : null;
     return `
@@ -1612,7 +1608,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       <div class="pg-timing">
         <select id="pg-arrival">${modes}</select>
         ${param ? `<input type="number" min="1" step="1" id="pg-arrival-n" value="${esc(state.arrivalN)}" />
-                   <span class="muted">${esc(param)}</span>` : ""}
+                   <span class="muted">${esc(t(param))}</span>` : ""}
       </div>
       <div id="pg-profile">${arrivalProfileHTML()}</div>
       ${expectHTML()}
@@ -1632,8 +1628,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const p = state.profile;
     if (!p) return "";
     if (!p.scheduled) {
-      return `<p class="muted">One after another has no schedule ahead of the run: the next
-        case starts when the one before it finishes, so its shape is the run's own.</p>`;
+      return `<p class="muted">${esc(t("pg.profile.sequential"))}</p>`;
     }
     const b = p.buckets || [];
     if (b.length < 2) return "";
@@ -1651,26 +1646,25 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const hits = b.map((v, i) => {
       const at = fmtWhen(`${new Date(startMs + i * slice).toISOString().slice(0, 19)}Z`);
       return `<rect class="pg-spark-hit" x="${Math.max(0, x(i) - bw / 2).toFixed(2)}" y="0"
-        width="${bw.toFixed(2)}" height="${H}"><title>${esc(at)} · ${v} case${v === 1 ? "" : "s"}</title></rect>`;
+        width="${bw.toFixed(2)}" height="${H}"><title>${esc(plural("pg.spark.slice", v, { at }))}</title></rect>`;
     }).join("");
     return `
       <svg class="pg-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-        aria-label="${p.cases} cases arriving over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice">
+        aria-label="${esc(t("pg.spark.label", { n: p.cases, span: fmtDur(p.spanMillis), peak }))}">
         <polygon class="pg-spark-fill" points="0,${H} ${points} ${W},${H}"/>
         <polyline class="pg-spark-line" points="${points}"/>
         <line class="pg-base" x1="0" y1="${H}" x2="${W}" y2="${H}"/>
         ${hits}
       </svg>
       <div class="pg-axis"><span>${esc(fmtWhen(p.start))}</span><span>${esc(fmtWhen(p.end))}</span></div>
-      <p class="muted pg-spark-note">${p.cases} case${p.cases === 1 ? "" : "s"} ${
-        p.spanMillis ? `over ${esc(fmtDur(p.spanMillis))}, at most ${peak} in a slice` : "at once"}</p>`;
+      <p class="muted pg-spark-note">${esc(plural("pg.spark.cases", p.cases))} ${
+        esc(p.spanMillis ? t("pg.spark.over", { span: fmtDur(p.spanMillis), peak }) : t("pg.spark.atOnce"))}</p>`;
   }
 
   // batchAnalysisHTML is what the run did — read while it runs and after it stops.
   function batchAnalysisHTML() {
     if (!state.run) {
-      return `<p class="muted">Nothing has run yet. Set the dataset and the timing on the
-        left, then press <b>Run batch</b>.</p>`;
+      return `<p class="muted">${t("pg.analysis.nothing")}</p>`;
     }
     return `
       ${inspectedCaseHTML()}
@@ -1686,8 +1680,8 @@ export function attachPlayground(root, { api, toast, modeler }) {
   function inspectedCaseHTML() {
     if (!state.inspect) return "";
     return `
-      <div class="pg-sec"><b>Case ${state.inspect.index + 1}</b>
-        <span class="muted">of ${state.results ? state.results.total : 0}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.inspect.case", { n: state.inspect.index + 1 }))}</b>
+        <span class="muted">${esc(t("pg.inspect.of", { total: state.results ? state.results.total : 0 }))}</span></div>
       ${resultHTML(state.inspected)}`;
   }
 
@@ -1697,11 +1691,11 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const done = r.state !== "running";
     const pct = r.cases ? Math.round(100 * (r.completed || 0) / r.cases) : 0;
     return `
-      <div class="pg-sec"><b>Run</b> <span class="muted">${esc(r.state)}</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.run.heading"))}</b> <span class="muted">${esc(r.state)}</span></div>
       <div class="pg-progress"><div class="pg-progress-fill" style="width:${done ? 100 : pct}%"></div></div>
       <div class="pg-run-line">
-        <span>${r.completed || 0} of ${r.cases || 0} finished</span>
-        ${r.simTime ? `<span class="muted">simulated ${esc(fmtWhen(r.simTime))}</span>` : ""}
+        <span>${esc(t("pg.run.finished", { done: r.completed || 0, cases: r.cases || 0 }))}</span>
+        ${r.simTime ? `<span class="muted">${esc(t("pg.run.simulated", { at: fmtWhen(r.simTime) }))}</span>` : ""}
       </div>
       ${r.error ? `<p class="pg-inc">${esc(r.error)}</p>` : ""}`;
   }
@@ -1773,12 +1767,12 @@ export function attachPlayground(root, { api, toast, modeler }) {
     // percentages by.
     const total = rows.reduce((n, r) => n + r.count, 0);
     return `
-      <div class="pg-sec"><b>Ends</b>
-        <span class="muted">${total} of ${rep.cases} cases reached one</span></div>
-      <table class="pg-table pg-ends"><thead><tr><th>outcome</th><th>reached</th><th>share</th></tr></thead>
+      <div class="pg-sec"><b>${esc(t("pg.ends"))}</b>
+        <span class="muted">${esc(t("pg.ends.reached", { n: total, cases: rep.cases }))}</span></div>
+      <table class="pg-table pg-ends"><thead><tr><th>${esc(t("pg.ends.outcome"))}</th><th>${esc(t("pg.ends.reachedCol"))}</th><th>${esc(t("pg.ends.share"))}</th></tr></thead>
       <tbody>${rows.map((r) => `<tr${r.count ? "" : ' class="pg-unreached"'}>
         <td title="${esc(r.id)}">${esc(r.name)}</td>
-        ${meterHTML(r.count, max, String(r.count), "Against the end event this run reached most")}
+        ${meterHTML(r.count, max, String(r.count), t("pg.ends.meter"))}
         <td>${total ? Math.round((100 * r.count) / total) : 0}%</td>
       </tr>`).join("")}</tbody></table>`;
   }
@@ -1805,42 +1799,42 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const maxWait = Math.max(0, ...bottlenecks.map((b) => b.waitMillis || 0));
     const cold = coldPaths();
     return `
-      <div class="pg-sec"><b>Outcomes</b></div>
+      <div class="pg-sec"><b>${esc(t("pg.rep.outcomes"))}</b></div>
       <div class="pg-facts">
-        <div><b>${rep.completed}</b><span>of ${rep.cases} finished</span></div>
-        <div><b class="${rep.incidents ? "bad" : ""}">${rep.incidents}</b><span>incidents</span></div>
-        <div><b>${rep.maxInFlight}</b><span>peak in flight</span></div>
+        <div><b>${rep.completed}</b><span>${esc(t("pg.rep.finished", { cases: rep.cases }))}</span></div>
+        <div><b class="${rep.incidents ? "bad" : ""}">${rep.incidents}</b><span>${esc(t("pg.rep.incidents"))}</span></div>
+        <div><b>${rep.maxInFlight}</b><span>${esc(t("pg.rep.peak"))}</span></div>
       </div>
       ${outcomesHTML(rep)}
-      <div class="pg-sec"><b>Durations</b> <span class="muted">per case, simulated</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.rep.durations"))}</b> <span class="muted">${esc(t("pg.rep.perCase"))}</span></div>
       <div class="pg-facts">
-        ${factBarHTML(d.minMillis, d.maxMillis, fmtDur(d.minMillis), "fastest")}
-        ${factBarHTML(d.p50Millis, d.maxMillis, fmtDur(d.p50Millis), "median")}
-        ${factBarHTML(d.p90Millis, d.maxMillis, fmtDur(d.p90Millis), "p90")}
-        ${factBarHTML(d.maxMillis, d.maxMillis, fmtDur(d.maxMillis), "slowest")}
+        ${factBarHTML(d.minMillis, d.maxMillis, fmtDur(d.minMillis), t("pg.rep.fastest"))}
+        ${factBarHTML(d.p50Millis, d.maxMillis, fmtDur(d.p50Millis), t("pg.rep.median"))}
+        ${factBarHTML(d.p90Millis, d.maxMillis, fmtDur(d.p90Millis), t("pg.rep.p90"))}
+        ${factBarHTML(d.maxMillis, d.maxMillis, fmtDur(d.maxMillis), t("pg.rep.slowest"))}
       </div>
       ${bottlenecks.length ? `
-        <div class="pg-sec"><b>Bottlenecks</b> <span class="muted">by total waiting</span></div>
-        <table class="pg-table pg-bottlenecks"><thead><tr><th>element</th><th>runs</th><th>waiting</th><th>longest</th><th>work</th></tr></thead>
+        <div class="pg-sec"><b>${esc(t("pg.rep.bottlenecks"))}</b> <span class="muted">${esc(t("pg.rep.byWaiting"))}</span></div>
+        <table class="pg-table pg-bottlenecks"><thead><tr><th>${esc(t("pg.rep.element"))}</th><th>${esc(t("pg.rep.runs"))}</th><th>${esc(t("pg.rep.waiting"))}</th><th>${esc(t("pg.rep.longest"))}</th><th>${esc(t("pg.rep.work"))}</th></tr></thead>
         <tbody>${bottlenecks.map((b) => `<tr>
           <td class="mono">${esc(b.id)}</td><td>${b.runs}</td>
-          ${meterHTML(b.waitMillis, maxWait, fmtDur(b.waitMillis), "Total waiting, against the worst element here")}
+          ${meterHTML(b.waitMillis, maxWait, fmtDur(b.waitMillis), t("pg.rep.waitMeter"))}
           <td>${esc(fmtDur(b.maxWaitMillis))}</td>
           <td>${esc(fmtDur(b.workMillis))}</td></tr>`).join("")}</tbody></table>` : ""}
       ${pools.length ? `
-        <div class="pg-sec"><b>Pools</b></div>
-        <table class="pg-table pg-pools"><thead><tr><th>pool</th><th>seats</th><th>used</th><th>served</th><th>longest queue</th></tr></thead>
+        <div class="pg-sec"><b>${esc(t("pg.rep.pools"))}</b></div>
+        <table class="pg-table pg-pools"><thead><tr><th>${esc(t("pg.rep.pool"))}</th><th>${esc(t("pg.rep.seats"))}</th><th>${esc(t("pg.rep.used"))}</th><th>${esc(t("pg.rep.served"))}</th><th>${esc(t("pg.rep.longestQueue"))}</th></tr></thead>
         <tbody>${pools.map(([name, p]) => `<tr>
           <td class="mono">${esc(name)}</td><td>${p.capacity}</td>
-          ${meterHTML(p.utilisationPercent, 100, `${p.utilisationPercent}%`, "Share of its open time the pool was busy")}
+          ${meterHTML(p.utilisationPercent, 100, `${p.utilisationPercent}%`, t("pg.rep.useMeter"))}
           <td>${p.served}</td><td>${p.maxQueue}</td></tr>`).join("")}</tbody></table>` : ""}
       ${timelineHTML(rep.timeline)}
       ${state.heat ? `
-        <div class="pg-sec"><b>Coverage</b>
-          <span class="muted">${cold.length ? `${cold.length} never reached` : "every path used"}</span></div>
+        <div class="pg-sec"><b>${esc(t("pg.rep.coverage"))}</b>
+          <span class="muted">${esc(cold.length ? t("pg.rep.neverReached", { n: cold.length }) : t("pg.rep.allUsed"))}</span></div>
         ${cold.length
           ? `<div class="pg-cold" id="pg-cold">${cold.map((c) => `<span class="mono">${esc(c)}</span>`).join("")}</div>`
-          : `<p class="muted">The data exercised every element and every sequence flow.</p>`}` : ""}
+          : `<p class="muted">${esc(t("pg.rep.allCovered"))}</p>`}` : ""}
 `;
   }
 
@@ -1865,33 +1859,33 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const flagged = deviations();
     return `
       <div class="pg-results-head">
-        <b>Results</b>
-        <span class="muted">${shown ? `${offset + 1}\u2013${offset + shown} of ${total} cases` : "no cases"}</span>
+        <b>${esc(t("pg.res.heading"))}</b>
+        <span class="muted">${esc(shown ? t("pg.res.range", { from: offset + 1, to: offset + shown, total }) : t("pg.res.none"))}</span>
         <span class="pg-dev${flagged.length ? " bad" : ""}">${
-          flagged.length ? `&#10007; ${esc(flagged.join(" \u00b7 "))}` : "nothing flagged"}</span>
+          flagged.length ? `&#10007; ${esc(flagged.join(" \u00b7 "))}` : esc(t("pg.res.clean"))}</span>
         <span style="flex:1"></span>
-        <button class="btn neutral small" id="pg-page-prev"${offset > 0 ? "" : " disabled"}>Previous</button>
-        <button class="btn neutral small" id="pg-page-next"${offset + shown < total ? "" : " disabled"}>Next</button>
+        <button class="btn neutral small" id="pg-page-prev"${offset > 0 ? "" : " disabled"}>${esc(t("pg.res.prev"))}</button>
+        <button class="btn neutral small" id="pg-page-next"${offset + shown < total ? "" : " disabled"}>${esc(t("pg.res.next"))}</button>
         <button class="btn neutral small" id="pg-csv-out">&#8615; CSV</button>
       </div>
       ${shown ? `
         <div class="pg-results-scroll">
           <table class="pg-table pg-cases">
-            <thead><tr><th>case</th><th>outcome</th><th>duration</th><th>incidents</th>
+            <thead><tr><th>${esc(t("pg.res.case"))}</th><th>${esc(t("pg.res.outcome"))}</th><th>${esc(t("pg.res.duration"))}</th><th>${esc(t("pg.res.incidents"))}</th>
               ${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
-            <tbody>${rows.map((row) => `<tr data-case="${esc(row.index)}" title="Show this case on the diagram"
+            <tbody>${rows.map((row) => `<tr data-case="${esc(row.index)}" title="${esc(t("pg.res.showCase"))}"
               class="${row.incidents || broke.has(row.index) ? "pg-bad " : ""}${
                 state.inspect && state.inspect.index === row.index ? "pg-open" : ""}">
-              <td>${row.index + 1}${broke.has(row.index) ? ' <span title="This case broke a rule">&#10007;</span>' : ""}</td>
+              <td>${row.index + 1}${broke.has(row.index) ? ` <span title="${esc(t("pg.res.brokeRule"))}">&#10007;</span>` : ""}</td>
               <td class="mono">${esc(row.end || (row.state === "completed" ? "" : row.state))}</td>
               ${row.ended
-                ? meterHTML(row.durationMillis, slowest, fmtDur(row.durationMillis), "Against the slowest case on this page")
+                ? meterHTML(row.durationMillis, slowest, fmtDur(row.durationMillis), t("pg.res.meter"))
                 : `<td>\u2014</td>`}
               <td>${row.incidents || ""}</td>
               ${names.map((n) => `<td class="mono">${esc((row.variables || {})[n] == null ? "" : row.variables[n])}</td>`).join("")}
             </tr>`).join("")}</tbody>
           </table>
-        </div>` : `<p class="muted">The run produced no rows to show.</p>`}`;
+        </div>` : `<p class="muted">${esc(t("pg.res.empty"))}</p>`}`;
   }
 
   // variableColumns picks the columns the table shows, from the page in hand. A CSV
@@ -1933,23 +1927,23 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const line = b.map((x, i) =>
       `${(i * bw + bw / 2).toFixed(2)},${(H - 3 - (x.inFlight / maxFlight) * (H - 3)).toFixed(2)}`).join(" ");
     return `
-      <div class="pg-sec"><b>Over time</b>
-        <span class="muted">${esc(fmtDur(tl.widthMillis || 0))} per slice</span></div>
+      <div class="pg-sec"><b>${esc(t("pg.time.heading"))}</b>
+        <span class="muted">${esc(t("pg.time.slice", { width: fmtDur(tl.widthMillis || 0) }))}</span></div>
       <svg class="pg-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-        aria-label="Arrivals, completions and work in progress over simulated time">
+        aria-label="${esc(t("pg.time.label"))}">
         ${bars}<polyline class="pg-line" points="${line}"/>
         <line class="pg-base" x1="0" y1="${H}" x2="${W}" y2="${H}"/>
       </svg>
       <div class="pg-legend">
-        <span><i class="pg-key-in"></i>arrived</span>
-        <span><i class="pg-key-out"></i>finished</span>
-        <span><i class="pg-key-flight"></i>in flight (peak ${maxFlight})</span>
+        <span><i class="pg-key-in"></i>${esc(t("pg.time.arrived"))}</span>
+        <span><i class="pg-key-out"></i>${esc(t("pg.time.finished"))}</span>
+        <span><i class="pg-key-flight"></i>${esc(t("pg.time.inFlight", { peak: maxFlight }))}</span>
       </div>
       <div class="pg-axis"><span>${esc(fmtWhen(b[0].at))}</span><span>${esc(fmtWhen(b[b.length - 1].at))}</span></div>`;
   }
 
   function modeTabsHTML() {
-    const label = { step: "Step", batch: "Batch" };
+    const label = { step: esc(t("pg.mode.step")), batch: esc(t("pg.mode.batch")) };
     return `<div class="pg-modes">${["step", "batch"].map((m) =>
       `<button data-mode="${m}"${state.mode === m ? ' class="active"' : ""}>${label[m]}</button>`).join("")}</div>`;
   }
@@ -1973,18 +1967,18 @@ export function attachPlayground(root, { api, toast, modeler }) {
     el("pg-dur-wrap").hidden = open;
     el("pg-human-wrap").hidden = open;
 
-    el("pg-hint").textContent = !open
-      ? "Nothing is deployed and no worker can be called — the sandbox has none."
+    el("pg-hint").textContent = t(!open
+      ? "pg.hint.closed"
       : batching
-        ? running ? "Running the dataset. Stop leaves what it did readable."
-          : state.inspect ? "One case is on the diagram. Back to the run puts the whole run back."
-            : state.report ? "The report is in the panel; a results row puts one case on the diagram."
-              : "Give it a dataset and a timing profile, then run it."
+        ? running ? "pg.hint.running"
+          : state.inspect ? "pg.hint.inspect"
+            : state.report ? "pg.hint.report"
+              : "pg.hint.setup"
         : state.tasks.length
-          ? "A task is waiting for you: complete it in the panel."
-          : "Step one occurrence at a time, or run the case to rest.";
+          ? "pg.hint.task"
+          : "pg.hint.step");
     el("pg-stats").textContent = open
-      ? `simulated ${fmtWhen(state.simTime)} · tasks ${state.session.stubLabel} · seed ${state.session.seed}`
+      ? t("pg.stats", { at: fmtWhen(state.simTime), tasks: state.session.stubLabel, seed: state.session.seed })
       : "";
 
     // The results strip is there only when there are results to put in it: an empty
@@ -2017,30 +2011,30 @@ export function attachPlayground(root, { api, toast, modeler }) {
       const c = state.inspected || {};
       const steps = (c.path || []).length;
       return `
-        <span class="muted">Showing</span>
-        <b>case ${state.inspect.index + 1}</b>
+        <span class="muted">${esc(t("pg.ov.showing"))}</span>
+        <b>${esc(t("pg.ov.case", { n: state.inspect.index + 1 }))}</b>
         <span class="muted">${esc(c.state || "")}${
-          state.inspect.end ? ` at ${esc(state.inspect.end)}` : ""} · ${steps} step${steps === 1 ? "" : "s"}${
+          state.inspect.end ? esc(t("pg.ov.at", { end: state.inspect.end })) : ""} · ${esc(plural("pg.ov.steps", steps))}${
           state.inspect.durationMillis ? ` · ${esc(fmtDur(state.inspect.durationMillis))}` : ""}</span>
         <span style="flex:1"></span>
-        <button id="pg-case-close">Back to the run</button>`;
+        <button id="pg-case-close">${esc(t("pg.ov.back"))}</button>`;
     }
     const key = state.overlay;
     const tab = (k, label, title) =>
-      `<button data-overlay="${k}"${k === key ? ' class="active"' : ""} title="${esc(title)}">${esc(label)}</button>`;
+      `<button data-overlay="${k}"${k === key ? ' class="active"' : ""} title="${esc(t(title))}">${esc(t(label))}</button>`;
     const spec = OVERLAYS.find((o) => o.key === key);
     const steps = Array.from({ length: HEAT_LEVELS }, (_, i) =>
       `<i class="pg-heat-key-${i + 1}"></i>`).join("");
     return `
-      <span class="muted">Overlay</span>
-      ${tab("off", "Off", "Leave the diagram as it is")}
+      <span class="muted">${esc(t("pg.ov.overlay"))}</span>
+      ${tab("off", "pg.ov.off", "pg.ov.offTitle")}
       ${OVERLAYS.map((o) => tab(o.key, o.label, o.title)).join("")}
       <span style="flex:1"></span>
       ${spec ? `
-        <span class="pg-scale" title="${esc(spec.title)}">
+        <span class="pg-scale" title="${esc(t(spec.title))}">
           <span class="muted">0</span>${steps}<span class="muted">${esc(overlayFormat(key, measure(key).max))}</span>
         </span>
-        ${spec.flows ? "" : `<span class="muted">· shapes only</span>`}` : ""}`;
+        ${spec.flows ? "" : `<span class="muted">${esc(t("pg.ov.shapesOnly"))}</span>`}` : ""}`;
   }
 
   // setupColumnHTML is the left column. Before a sandbox exists it is the whole
@@ -2053,22 +2047,21 @@ export function attachPlayground(root, { api, toast, modeler }) {
 
   function stepSetupHTML() {
     return `
-      <label class="field"><span>Start variables (JSON)</span>
+      <label class="field"><span>${esc(t("pg.step.startVars"))}</span>
         <textarea id="pg-startvars" rows="3" spellcheck="false">${esc(state.startVars)}</textarea></label>
-      <div class="pg-sec"><b>Waiting for you</b> <span class="muted">${state.tasks.length}</span></div>
-      ${state.tasks.length ? state.tasks.map(taskRowHTML).join("") : `<p class="muted">Nothing is waiting.</p>`}
-      <label class="field"><span>Output variables (JSON)</span>
+      <div class="pg-sec"><b>${esc(t("pg.step.waiting"))}</b> <span class="muted">${state.tasks.length}</span></div>
+      ${state.tasks.length ? state.tasks.map(taskRowHTML).join("") : `<p class="muted">${esc(t("pg.step.nothingWaiting"))}</p>`}
+      <label class="field"><span>${esc(t("pg.step.outputs"))}</span>
         <textarea id="pg-outputs" rows="2" spellcheck="false">${esc(state.outputs)}</textarea></label>`;
   }
 
   // analysisColumnHTML is the right column: what came back, in both modes.
   function analysisColumnHTML() {
     if (!state.session) {
-      return `<p class="muted">Start the sandbox and what it does shows up here — the
-        outcomes, the durations, where the cases waited, and the run over simulated time.</p>`;
+      return `<p class="muted">${esc(t("pg.analysis.closed"))}</p>`;
     }
     if (state.mode === "batch") return batchAnalysisHTML();
-    return `<div class="pg-sec"><b>Case</b></div>${resultHTML(state.result)}`;
+    return `<div class="pg-sec"><b>${esc(t("pg.analysis.case"))}</b></div>${resultHTML(state.result)}`;
   }
 
   // ---- events ---------------------------------------------------------------
@@ -2077,14 +2070,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
     const btn = e.target.closest("button");
     if (!btn) return;
     switch (btn.id) {
-      case "pg-start": guard("start sandbox", start); break;
-      case "pg-case": guard("start case", startCase); break;
-      case "pg-step": guard("step", step); break;
-      case "pg-run": guard("run", run); break;
-      case "pg-clock": guard("advance the clock", advance); break;
-      case "pg-batch": guard("run the batch", startBatch); break;
-      case "pg-cancel": guard("stop the batch", cancelBatch); break;
-      case "pg-stop": guard("discard sandbox", stop); break;
+      case "pg-start": guard(t("pg.act.startSandbox"), start); break;
+      case "pg-case": guard(t("pg.act.startCase"), startCase); break;
+      case "pg-step": guard(t("pg.act.step"), step); break;
+      case "pg-run": guard(t("pg.act.run"), run); break;
+      case "pg-clock": guard(t("pg.act.advance"), advance); break;
+      case "pg-batch": guard(t("pg.act.batch"), startBatch); break;
+      case "pg-cancel": guard(t("pg.act.cancelBatch"), cancelBatch); break;
+      case "pg-stop": guard(t("pg.act.discard"), stop); break;
     }
   });
 
@@ -2150,24 +2143,24 @@ export function attachPlayground(root, { api, toast, modeler }) {
       return;
     }
     if (e.target.closest("#pg-gen-preview")) {
-      guard("preview the dataset", previewDataset);
+      guard(t("pg.act.preview"), previewDataset);
       return;
     }
     if (e.target.closest("#pg-scenario-open")) {
       const id = el("pg-scenario-pick")?.value;
-      if (id) guard("open the scenario", () => openScenario(id));
+      if (id) guard(t("pg.act.openScenario"), () => openScenario(id));
       return;
     }
     if (e.target.closest("#pg-scenario-save")) {
-      guard("save the scenario", saveScenario);
+      guard(t("pg.act.saveScenario"), saveScenario);
       return;
     }
     if (e.target.closest("#pg-scenario-delete")) {
-      guard("delete the scenario", deleteScenario);
+      guard(t("pg.act.deleteScenario"), deleteScenario);
       return;
     }
     if (e.target.closest("#pg-keep-baseline")) {
-      guard("keep the baseline", keepBaseline);
+      guard(t("pg.act.keepBaseline"), keepBaseline);
       return;
     }
     if (e.target.closest("#pg-case-close")) {
@@ -2179,14 +2172,14 @@ export function attachPlayground(root, { api, toast, modeler }) {
     if (caseRow) {
       const row = ((state.results && state.results.rows) || [])
         .find((r) => r.index === Number(caseRow.dataset.case));
-      if (row) guard("show the case", () => openCase(row));
+      if (row) guard(t("pg.act.showCase"), () => openCase(row));
       return;
     }
     const page = e.target.closest("#pg-page-prev, #pg-page-next");
     if (page) {
       const at = state.results ? state.results.offset : 0;
       const to = page.id === "pg-page-prev" ? at - resultsPageSize : at + resultsPageSize;
-      guard("read the results", () => readResults(to));
+      guard(t("pg.act.readResults"), () => readResults(to));
       return;
     }
     if (e.target.closest("#pg-csv-out")) {
@@ -2197,7 +2190,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
       return;
     }
     const btn = e.target.closest("button[data-job]");
-    if (btn) guard("complete task", () => complete(btn.dataset.job));
+    if (btn) guard(t("pg.act.complete"), () => complete(btn.dataset.job));
   };
 
   // Keep what is typed in state, without re-rendering: a render would move the
@@ -2271,7 +2264,7 @@ export function attachPlayground(root, { api, toast, modeler }) {
   // the canvas and the run no longer agree, so say so rather than quietly lying.
   const onEdit = () => {
     if (!state.session) return;
-    el("pg-hint").textContent = "The diagram changed — discard the sandbox and start it again to run what is on screen.";
+    el("pg-hint").textContent = t("pg.changed");
   };
   modeler.on("elements.changed", onEdit);
 

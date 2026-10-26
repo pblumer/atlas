@@ -54,7 +54,7 @@ test("the menu offers the source beside Export XML, and it is the diagram on scr
   await page.locator("#bar-more").click();
   const entry = page.locator("#bar-menu #xmlsource");
   await expect(entry).toBeVisible();
-  await expect(entry).toContainText("XML source");
+  await expect(entry).toContainText("XML-Quelltext");
   // It sits with the other acts on the document, right after Export XML.
   await expect(page.locator("#bar-menu #export + #xmlsource")).toHaveCount(1);
   await entry.click();
@@ -277,7 +277,7 @@ test("an applied source counts as an edit: leaving a deployment asks first", asy
   const marker = await page.locator('[data-element-id="Call_1"] path[data-marker="sub-process"]').boundingBox();
   await page.mouse.dblclick(marker.x + marker.width / 2, marker.y + marker.height / 2);
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("unsaved changes");
+  expect(asked[0]).toContain("ungespeicherte Änderungen");
   expect(await page.evaluate(() => location.hash)).toBe("");
   expect(page.__errors).toEqual([]);
 });
@@ -332,7 +332,7 @@ test("a collaborator's change does not overwrite an applied source", async ({ pa
 async function autoLayout(page) {
   await page.locator("#bar-more").click();
   await page.locator("#bar-menu #autolayout").click();
-  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-laid out");
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("automatisch angeordnet");
 }
 
 test("an auto-layout counts as an edit: leaving a deployment asks first", async ({ page }) => {
@@ -344,7 +344,7 @@ test("an auto-layout counts as an edit: leaving a deployment asks first", async 
   const marker = await page.locator('[data-element-id="Call_1"] path[data-marker="sub-process"]').boundingBox();
   await page.mouse.dblclick(marker.x + marker.width / 2, marker.y + marker.height / 2);
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("unsaved changes");
+  expect(asked[0]).toContain("ungespeicherte Änderungen");
   expect(await page.evaluate(() => location.hash)).toBe("");
   expect(page.__errors).toEqual([]);
 });
@@ -381,7 +381,7 @@ test("an auto-layout the modeler cannot read leaves the diagram as it was", asyn
   }, EMPTY_BPMN);
   await page.locator("#bar-more").click();
   await page.locator("#bar-menu #autolayout").click();
-  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("auto-layout failed");
+  await expect.poll(() => page.evaluate(() => window.__toasts.map((t) => t.msg).join("\n"))).toContain("Automatisches Anordnen fehlgeschlagen");
   expect(await taskName(page)).toBe("Pruefen");
   await expect(page.locator('[data-element-id="Call_1"]').first()).toBeVisible();
   expect(page.__errors).toEqual([]);

@@ -98,7 +98,7 @@ test("hovering the shape rings the +, and only the + explains itself", async ({ 
   await page.mouse.move(at.x, at.y);
   const tip = page.locator(".ca-drill-tip");
   await expect(tip).toBeVisible();
-  await expect(tip).toHaveText("Double-click to open");
+  await expect(tip).toHaveText("Doppelklick zum Öffnen");
   await expect(page.locator(".ca-drill-ring")).toHaveClass(/\bon\b/);
   expect((await tip.boundingBox()).width, "the label stays a label").toBeLessThan(180);
 
@@ -191,7 +191,7 @@ test("a deployment's unsaved edits are not discarded without a confirmation", as
   await page.locator("#f-call-open").click();
 
   await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toContain("unsaved changes");
+  expect(asked[0]).toContain("ungespeicherte Änderungen");
   expect(await page.evaluate(() => location.hash)).toBe(""); // refused: we stayed
   expect(page.__errors).toEqual([]);
 });

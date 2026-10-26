@@ -36,7 +36,7 @@ test("a start variable's declared type is a badge, not a word inside its origin"
   expect(await badge(page, "kundennr")).toBe("number");
   // It used to read "start variable · number" — the type is its own column now, so the
   // origin line says only where the variable comes from.
-  await expect(row(page, "kundennr").locator(".var-meta")).toHaveText(/^start variable · Start$/);
+  await expect(row(page, "kundennr").locator(".var-meta")).toHaveText(/^Startvariable · Start$/);
   expect(page.__errors).toEqual([]);
 });
 
@@ -45,7 +45,7 @@ test("a worker's result type comes from the catalog, before anything has run", a
   // PostgreSQL, operation "query": rows. Nothing ran, nothing was deployed — the kind
   // itself is what knows this.
   expect(await badge(page, "kunden")).toBe("array");
-  await expect(row(page, "kunden").locator(".var-meta")).toContainText("worker result");
+  await expect(row(page, "kunden").locator(".var-meta")).toContainText("Worker-Ergebnis");
   expect(page.__errors).toEqual([]);
 });
 
@@ -90,11 +90,11 @@ test("an observed value's type wins over the declaration, and names both", async
   // The script's result had no badge at all a moment ago; the run gives it one.
   expect(await badge(page, "geschrieben")).toBe("number");
   await expect(row(page, "geschrieben").locator(".vtag"))
-    .toHaveAttribute("title", /held on the run/);
+    .toHaveAttribute("title", /beim Lauf unten enthielt/);
   // Where both exist the tooltip carries the declaration too, so a run that contradicts
   // it is visible rather than quietly overwritten.
   await expect(row(page, "kundennr").locator(".vtag"))
-    .toHaveAttribute("title", /held on the run.*declares number/);
+    .toHaveAttribute("title", /beim Lauf unten enthielt.*deklariert number/);
   expect(page.__errors).toEqual([]);
 });
 

@@ -44,9 +44,9 @@ test("a shop send task and a receive task waiting for a product's message carry 
   await tab(page, "implement");
 
   await expect(shopBadge(page, "Send_shop")).toHaveCount(1);
-  await expect(shopBadge(page, "Send_shop")).toHaveAttribute("title", "Shop: states how a product action ended");
+  await expect(shopBadge(page, "Send_shop")).toHaveAttribute("title", "Shop: meldet, wie eine Produktaktion ausging");
   await expect(shopBadge(page, "Receive_extend")).toHaveCount(1);
-  await expect(shopBadge(page, "Receive_extend")).toHaveAttribute("title", "Shop: waits for product action storage-extend of Mailbox");
+  await expect(shopBadge(page, "Receive_extend")).toHaveAttribute("title", "Shop: wartet auf die Produktaktion storage-extend von Mailbox");
 
   // A receive task waiting for a watch's message is not the shop's, and a message send
   // keeps the implementation badge it always had.
@@ -154,7 +154,7 @@ test("the live view marks the same tasks, the receive task once the listing arri
   await expect(shopBadge(page, "Receive_extend")).toHaveCount(1);
   await expect(shopBadge(page, "Send_shop")).toHaveCount(1);
   await expect(implBadge(page, "Send_msg")).toHaveCount(1);
-  await expect(shopBadge(page, "Receive_extend")).toHaveAttribute("title", "Shop: waits for product action storage-extend of Mailbox");
+  await expect(shopBadge(page, "Receive_extend")).toHaveAttribute("title", "Shop: wartet auf die Produktaktion storage-extend von Mailbox");
   await expect(shopBadge(page, "Receive_plain")).toHaveCount(0);
   await envelopeBox(page, "Send_shop");
   expect(page.__errors).toEqual([]);

@@ -16,7 +16,16 @@
 // held inside an application the author cannot see comes back as a bare "taken" with no
 // name (ADR-0071). The save is the authority; this is what makes needing it rare.
 
+import { t } from "./i18n.js";
+
 const DEBOUNCE_MS = 300;
+
+// TAKEN holds the refusal for each kind of record an id can collide with, by the noun
+// its caller names: German puts the noun's gender into the sentence around it.
+const TAKEN = {
+  draft: ["idcheck.draft.taken", "idcheck.draft.takenOther"],
+  form: ["idcheck.form.taken", "idcheck.form.takenOther"],
+};
 
 // makeIdCheck builds a debounced availability check over a value the caller reads. It
 // is the shape both editors need, because only one of them has an <input> to hang it
@@ -55,9 +64,10 @@ export function makeIdCheck({ api, kind, noun, read, own, onState }) {
     }
     if (n !== seq || disposed) return;
     const state = res && res.available === false ? "taken" : "ok";
+    const words = TAKEN[noun] || TAKEN.draft;
     const text = state !== "taken" ? "" : res.usedBy
-      ? `Already taken by the ${noun} “${res.usedBy}” — pick another id.`
-      : `Already taken by another ${noun} — pick another id.`;
+      ? t(words[0], { usedBy: res.usedBy })
+      : t(words[1]);
     last = { id, state, text };
     onState(state, text);
   };

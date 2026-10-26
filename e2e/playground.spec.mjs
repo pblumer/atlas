@@ -67,7 +67,7 @@ test("starting a sandbox sends the diagram on screen, not a stored copy", async 
   expect(open.body.xml).toContain('id="credit"');
   // The whole policy is one stub duration, and it is fixed for the sandbox's life.
   expect(open.body.stubs.default.minMillis).toBe(60000);
-  await expect(page.locator("#pg-stats")).toContainText("seed 4711");
+  await expect(page.locator("#pg-stats")).toContainText("Seed 4711");
   await expect(page.locator("#pg-dur-wrap")).toBeHidden();
   expect(page.__errors).toEqual([]);
 });
@@ -80,8 +80,8 @@ test("a waiting task becomes a button, and completing it repaints the diagram", 
   // The person at the keyboard is the worker for a user task.
   const task = page.locator(".pg-task").filter({ hasText: "review" });
   await expect(task).toBeVisible();
-  await expect(task).toContainText("user task");
-  await expect(page.locator("#pg-hint")).toContainText("waiting for you");
+  await expect(task).toContainText("User-Task");
+  await expect(page.locator("#pg-hint")).toContainText("wartet auf dich");
 
   // The case's variables reached the server as JSON, not as text.
   const started = (await calls(page)).find((c) => /\/cases$/.test(c.url) && c.method === "POST");
@@ -121,7 +121,7 @@ test("editing the diagram says the run no longer matches it", async ({ page }) =
     const el = modeler.get("elementRegistry").get("review");
     modeler.get("modeling").updateProperties(el, { name: "Antrag doppelt prüfen" });
   });
-  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  await expect(page.locator("#pg-hint")).toContainText("Diagramm hat sich geändert");
   expect(page.__errors).toEqual([]);
 });
 
@@ -150,7 +150,7 @@ test("an applied XML source says the run no longer matches it, and the run stays
   await startCase(page);
   await applySource(page, (xml) => xml.replace('id="review" name="', 'id="review" name="Doppelt '));
   await expect(page.locator(".xml-modal")).toHaveCount(0);
-  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  await expect(page.locator("#pg-hint")).toContainText("Diagramm hat sich geändert");
   // The import replaced every shape; the run is painted onto the new ones.
   await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
   await expect(page.locator(".token-badge")).toHaveCount(2);
@@ -161,7 +161,7 @@ test("an auto-layout says the run no longer matches it, and the run stays drawn"
   await startCase(page);
   await page.locator("#bar-more").click();
   await page.locator("#bar-menu #autolayout").click();
-  await expect(page.locator("#pg-hint")).toContainText("diagram changed");
+  await expect(page.locator("#pg-hint")).toContainText("Diagramm hat sich geändert");
   await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
   await expect(page.locator(".token-badge")).toHaveCount(2);
   expect(page.__errors).toEqual([]);
@@ -177,7 +177,7 @@ test("a refused source puts the diagram back without claiming it changed", async
   await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
   await expect(page.locator(".token-badge")).toHaveCount(2);
   await page.waitForTimeout(300);
-  await expect(page.locator("#pg-hint")).not.toContainText("diagram changed");
+  await expect(page.locator("#pg-hint")).not.toContainText("Diagramm hat sich geändert");
   expect(await page.locator("#pg-hint").textContent()).toBe(before);
   expect(page.__errors).toEqual([]);
 });
@@ -234,8 +234,8 @@ test("a batch runs, is polled to a stop, and reports what it did", async ({ page
   expect(started.body.arrival).toEqual({ mode: "every", intervalMillis: 900000 });
 
   // The report arrives on its own, because the panel polled until the run stopped.
-  await expect(page.locator(".pg-facts").first()).toContainText("of 3 finished");
-  await expect(page.locator("#pg-hint")).toContainText("report is in the panel");
+  await expect(page.locator(".pg-facts").first()).toContainText("von 3 beendet");
+  await expect(page.locator("#pg-hint")).toContainText("Bericht steht im Panel");
 
   // The bottleneck ranking puts the queue first: review waited, score did not.
   const rows = page.locator(".pg-bottlenecks tbody tr");
@@ -246,7 +246,7 @@ test("a batch runs, is polled to a stop, and reports what it did", async ({ page
   // And the run over time is drawn rather than described.
   await expect(page.locator(".pg-chart")).toBeVisible();
   await expect(page.locator(".pg-chart .pg-line")).toHaveCount(1);
-  await expect(page.locator(".pg-legend")).toContainText("peak 3");
+  await expect(page.locator(".pg-legend")).toContainText("höchstens 3");
 
   // Polling stops when the run does: no further status calls after the report.
   const before = (await calls(page)).filter((c) => c.method === "GET" && /\/runs$/.test(c.url)).length;
@@ -300,7 +300,7 @@ test("a CSV dataset is uploaded as a file, not parsed in the browser", async ({ 
   // real CSV import uses, so the Playground and production read a file alike.
   const inline = (await calls(page)).filter((c) => c.method === "POST" && /\/runs$/.test(c.url));
   expect(inline).toHaveLength(0);
-  await expect(page.locator(".pg-facts").first()).toContainText("of 3 finished");
+  await expect(page.locator(".pg-facts").first()).toContainText("von 3 beendet");
   expect(page.__errors).toEqual([]);
 });
 
@@ -310,7 +310,7 @@ test("stopping a batch leaves what it did readable", async ({ page }) => {
   await expect(page.locator("#pg-cancel")).toBeVisible();
   await page.locator("#pg-cancel").click();
 
-  await expect(page.locator(".pg-run-line")).toContainText("of 3 finished");
+  await expect(page.locator(".pg-run-line")).toContainText("von 3 beendet");
   await expect(page.locator(".pg-facts").first()).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
@@ -336,7 +336,7 @@ test("a run is judged, and the verdict names what it missed", async ({ page }) =
   });
 
   // The verdict is a badge first and a table second, and a failed check is marked.
-  await expect(page.locator(".pg-verdict")).toHaveText("failed");
+  await expect(page.locator(".pg-verdict")).toHaveText("nicht bestanden");
   await expect(page.locator(".pg-verdict")).toHaveClass(/bad/);
   // Scoped to the verdict's own table: a case parked behind an incident is marked
   // the same way down in the results strip. The parked case breaks three of the
@@ -423,7 +423,7 @@ test("a failing run cannot be kept as the baseline", async ({ page }) => {
   await page.locator("#pg-scenario-pick").selectOption("nightly");
   await page.locator("#pg-scenario-open").click();
   await page.locator("#pg-batch").click();
-  await expect(page.locator(".pg-verdict")).toHaveText("failed");
+  await expect(page.locator(".pg-verdict")).toHaveText("nicht bestanden");
 
   // The control is there — this run belongs to a scenario — and refuses, because a
   // failing baseline would hide the failure from every run after it.
@@ -443,7 +443,7 @@ test("a CSV run says why it cannot be saved as a scenario", async ({ page }) => 
   // No name box and no Save: the rows are on the server, parsed by the same code a
   // real import uses, and are not in the browser to store.
   await expect(page.locator("#pg-scenario-save")).toHaveCount(0);
-  await expect(page.locator("#pg-setup")).toContainText("cannot be saved as a scenario");
+  await expect(page.locator("#pg-setup")).toContainText("lässt sich nicht als Szenario speichern");
   expect(page.__errors).toEqual([]);
 });
 
@@ -469,7 +469,7 @@ test("a dataset is described rather than listed, and the description is what run
   await page.locator("#pg-gen-preview").click();
   await expect(page.locator(".pg-preview th").first()).toHaveText("amount");
   await expect(page.locator(".pg-preview th").nth(1)).toHaveText("tier");
-  await expect(page.locator("#pg-setup")).toContainText("of 500");
+  await expect(page.locator("#pg-setup")).toContainText("von 500");
 
   await page.locator("#pg-batch").click();
   const started = (await calls(page)).find((c) => c.method === "POST" && /\/runs$/.test(c.url));
@@ -527,19 +527,21 @@ test("the mode lays the editor out in three columns and a strip", async ({ page 
   await switchToBatch(page);
   // What decides the run is on the left; what it did is on the right. Stacked in one
   // column, a finished run pushed the dataset off the screen.
-  await expect(page.locator("#pg-setup")).toContainText("Dataset");
-  await expect(page.locator("#pg-setup")).toContainText("Timing");
-  await expect(page.locator("#pg-panel")).not.toContainText("Timing");
+  await expect(page.locator("#pg-setup")).toContainText("Datensatz");
+  await expect(page.locator("#pg-setup")).toContainText("Zeitverlauf");
+  // The steps are headings of the setup column; the analysis column may name the
+  // timing in a sentence ("Lege links … den Zeitverlauf fest"), but carries no step.
+  await expect(page.locator("#pg-panel .pg-step")).toHaveCount(0);
   // Before anything has run the analysis column says so rather than sitting blank.
-  await expect(page.locator("#pg-panel")).toContainText("Nothing has run yet");
+  await expect(page.locator("#pg-panel")).toContainText("Noch nichts ausgeführt");
   // And the strip is not there at all: an empty band under the diagram would be a
   // promise the panel has not kept.
   await expect(page.locator("#pg-results")).toBeHidden();
 
   await page.locator("#pg-batch").click();
   await expect(page.locator(".pg-facts").first()).toBeVisible();
-  await expect(page.locator("#pg-panel")).toContainText("Outcomes");
-  await expect(page.locator("#pg-setup")).toContainText("Dataset");
+  await expect(page.locator("#pg-panel")).toContainText("Ausgang");
+  await expect(page.locator("#pg-setup")).toContainText("Datensatz");
 
   // The setup column is still readable with a report on screen — the whole point of
   // splitting them.
@@ -560,26 +562,26 @@ test("the cases are read a page at a time under the diagram", async ({ page }) =
   expect(first.url).toContain("offset=0");
   expect(first.url).toContain("limit=50");
   await expect(page.locator(".pg-cases tbody tr")).toHaveCount(50);
-  await expect(page.locator(".pg-results-head")).toContainText("1–50 of 120 cases");
+  await expect(page.locator(".pg-results-head")).toContainText("1–50 von 120 Fällen");
   await expect(page.locator("#pg-page-prev")).toBeDisabled();
   // A case parked behind an incident is marked, which is the row somebody is looking
   // for in a table of a hundred.
   await expect(page.locator(".pg-cases tr.pg-bad")).toHaveCount(16);
 
   await page.locator("#pg-page-next").click();
-  await expect(page.locator(".pg-results-head")).toContainText("51–100 of 120 cases");
+  await expect(page.locator(".pg-results-head")).toContainText("51–100 von 120 Fällen");
   await expect(page.locator("#pg-page-prev")).toBeEnabled();
 
   await page.locator("#pg-page-next").click();
-  await expect(page.locator(".pg-results-head")).toContainText("101–120 of 120 cases");
+  await expect(page.locator(".pg-results-head")).toContainText("101–120 von 120 Fällen");
   await expect(page.locator("#pg-page-next")).toBeDisabled();
 
   await page.locator("#pg-page-prev").click();
-  await expect(page.locator(".pg-results-head")).toContainText("51–100 of 120 cases");
+  await expect(page.locator(".pg-results-head")).toContainText("51–100 von 120 Fällen");
 
   // The variables each case ran with are columns of their own, so a row can be read
   // back against the dataset that produced it.
-  await expect(page.locator(".pg-cases th")).toContainText(["case", "outcome", "duration", "incidents", "amount", "kunde"]);
+  await expect(page.locator(".pg-cases th")).toContainText(["Fall", "Ausgang", "Dauer", "Incidents", "amount", "kunde"]);
   expect(page.__errors).toEqual([]);
 });
 
@@ -587,7 +589,7 @@ test("a per-case rule is written against the diagram and judged case by case", a
   await switchToBatch(page);
   // Nothing is asserted per case until an author says so — and the panel says what
   // the kind of statement is for rather than showing an empty box.
-  await expect(page.locator("#pg-setup")).toContainText("A rule holds a class of cases to an outcome");
+  await expect(page.locator("#pg-setup")).toContainText("Eine Regel bindet eine Klasse von Fällen an ein Ergebnis");
   await page.locator("#pg-rule-add").click();
 
   const rule = page.locator(".pg-rule").first();
@@ -622,9 +624,9 @@ test("a per-case rule is written against the diagram and judged case by case", a
   // What came back is shown as a split, not as one number: held, broke it, and
   // which cases did.
   await expect(page.locator(".pg-rule-result")).toHaveCount(2);
-  await expect(page.locator(".pg-rule-result").first()).toContainText("2 held");
-  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("1 broke it");
-  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("cases 3");
+  await expect(page.locator(".pg-rule-result").first()).toContainText("2 erfüllt");
+  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("1 verletzt");
+  await expect(page.locator(".pg-rule-result").nth(1)).toContainText("Fälle 3");
   await expect(page.locator(".pg-rule-result").nth(1)).toHaveClass(/bad/);
   await expect(page.locator(".pg-rule-result").first()).not.toHaveClass(/bad/);
 
@@ -680,7 +682,7 @@ test("the overlay shades the diagram by one measure at a time", async ({ page })
   await expect(page.locator('[data-container-id="start"] .token-badge')).toHaveCount(0);
   // And the flows step out: an edge has no waiting time, so shading it from the
   // token counts would put two quantities on one picture.
-  await expect(page.locator("#pg-overlay")).toContainText("shapes only");
+  await expect(page.locator("#pg-overlay")).toContainText("nur Formen");
   await expect(page.locator('.djs-element[data-element-id="f1"].pg-heat-5')).toHaveCount(0);
 
   await page.locator('#pg-overlay button[data-overlay="incidents"]').click();
@@ -716,21 +718,21 @@ test("a results row opens that case on the diagram", async ({ page }) => {
   await expect(page.locator(".pg-heat-5")).toHaveCount(0);
 
   // The strip names what is on screen instead of offering measures that are not.
-  await expect(page.locator("#pg-overlay")).toContainText("case 1");
-  await expect(page.locator("#pg-overlay")).toContainText("5 steps");
+  await expect(page.locator("#pg-overlay")).toContainText("Fall 1");
+  await expect(page.locator("#pg-overlay")).toContainText("5 Schritte");
   await expect(page.locator('#pg-overlay button[data-overlay="runs"]')).toHaveCount(0);
   // And the row stays marked, so the number in the strip and the row agree.
   await expect(page.locator(".pg-cases tbody tr").first()).toHaveClass(/pg-open/);
 
   // The case's own detail sits above the report rather than instead of it: the
   // reader came from the run and should not lose it to look at one case.
-  await expect(page.locator("#pg-panel")).toContainText("Case 1");
+  await expect(page.locator("#pg-panel")).toContainText("Fall 1");
   await expect(page.locator("#pg-panel")).toContainText("start → review → score → decide → done");
-  await expect(page.locator("#pg-panel")).toContainText("Outcomes");
+  await expect(page.locator("#pg-panel")).toContainText("Ausgang");
 
   await page.locator("#pg-case-close").click();
   await expect(page.locator('[data-container-id="review"] .token-badge')).toHaveText("3");
-  await expect(page.locator("#pg-panel")).not.toContainText("Case 1");
+  await expect(page.locator("#pg-panel")).not.toContainText("Fall 1");
   expect(page.__errors).toEqual([]);
 });
 
@@ -740,8 +742,8 @@ test("an unfinished case is drawn standing where it stopped", async ({ page }) =
   // The third row is the one parked behind an incident.
   await page.locator(".pg-cases tbody tr").nth(2).click();
 
-  await expect(page.locator("#pg-overlay")).toContainText("case 3");
-  await expect(page.locator("#pg-overlay")).toContainText("2 steps");
+  await expect(page.locator("#pg-overlay")).toContainText("Fall 3");
+  await expect(page.locator("#pg-overlay")).toContainText("2 Schritte");
   // Where it stands now is live, not merely visited — that is what somebody opens a
   // stuck case to see.
   await expect(page.locator('.djs-element[data-element-id="review"].atlas-active')).toHaveCount(1);
@@ -756,7 +758,7 @@ test("the timing draws the stream it describes, before the run", async ({ page }
   // The default dataset is a list of two, arriving all at once: one slice tall, which
   // is what "all at once" looks like.
   await expect(page.locator(".pg-spark")).toBeVisible();
-  await expect(page.locator(".pg-spark-note")).toHaveText("2 cases at once");
+  await expect(page.locator(".pg-spark-note")).toHaveText("2 Fälle auf einmal");
   const first = (await calls(page)).filter((c) => /\/arrivals$/.test(c.url));
   expect(first).toHaveLength(1);
   expect(first[0].body).toEqual({ count: 2, arrival: { mode: "allAtOnce" } });
@@ -764,7 +766,7 @@ test("the timing draws the stream it describes, before the run", async ({ page }
   // Typing a count redraws it without a render: the box being typed in keeps the
   // caret, and only the number somebody stopped on is fetched.
   await page.locator("#pg-cases").fill('[{"a":1},{"a":2},{"a":3}]');
-  await expect(page.locator(".pg-spark-note")).toHaveText("3 cases at once");
+  await expect(page.locator(".pg-spark-note")).toHaveText("3 Fälle auf einmal");
   await expect(page.locator("#pg-cases")).toHaveValue('[{"a":1},{"a":2},{"a":3}]');
 
   // Changing the timing redraws it, and the count and the calendar go with it: the
@@ -773,19 +775,19 @@ test("the timing draws the stream it describes, before the run", async ({ page }
   await expect(page.locator(".pg-spark-line")).toBeVisible();
   // A stream that is spread over time says how far, and how crowded its worst slice
   // got: a shape without a scale is a picture nobody can act on.
-  await expect(page.locator(".pg-spark-note")).toHaveText("3 cases over 9h, at most 3 in a slice");
+  await expect(page.locator(".pg-spark-note")).toHaveText("3 Fälle über 9h, höchstens 3 pro Abschnitt");
   const poisson = (await calls(page)).filter((c) => /\/arrivals$/.test(c.url));
   expect(poisson[poisson.length - 1].body.arrival).toEqual({ mode: "poisson", perHour: 10 });
 
   // A slice carries its own count, so the shape can be read exactly rather than
   // estimated off a height.
-  await expect(page.locator(".pg-spark-hit title").first()).toHaveText(/2026-03-05 08:00 · \d+ case/);
+  await expect(page.locator(".pg-spark-hit title").first()).toHaveText(/2026-03-05 08:00 · \d+ F(all|älle)/);
 
   // One after another has no schedule ahead of the run, and says so rather than
   // drawing a flat line that would read as one.
   await page.locator("#pg-arrival").selectOption("sequential");
   await expect(page.locator(".pg-spark")).toHaveCount(0);
-  await expect(page.locator("#pg-setup")).toContainText("no schedule ahead of the run");
+  await expect(page.locator("#pg-setup")).toContainText("keinen Zeitplan vor dem Lauf");
 
   // A dataset the browser cannot count has no profile to draw either: a CSV is
   // parsed on the server, so its size is not known here.
@@ -865,21 +867,21 @@ test("the setup is three numbered steps, each saying where it stands", async ({ 
 
   // Step 1 reads the dataset that is actually driving the run, whichever of the
   // three sources that is.
-  await expect(steps.nth(0)).toContainText("Dataset");
-  await expect(steps.nth(0).locator(".pg-step-note")).toHaveText("2 cases listed");
+  await expect(steps.nth(0)).toContainText("Datensatz");
+  await expect(steps.nth(0).locator(".pg-step-note")).toHaveText("2 Fälle aufgeführt");
   await expect(steps.nth(0).locator(".pg-step-n")).toHaveClass(/done/);
 
   // Step 2 is the arrival stream in words — the same one the sparkline draws.
-  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("all at once");
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("alle auf einmal");
   await page.locator("#pg-arrival").selectOption("poisson");
-  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("a stream of 10 per hour");
+  await expect(steps.nth(1).locator(".pg-step-note")).toHaveText("ein Strom von 10 pro Stunde");
 
   // Step 3 counts what the run will be judged on. Asserting nothing is not a fault:
   // it is a run somebody reads, and it does not stop the button.
-  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("2 checks");
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("2 Prüfungen");
   await page.locator("#pg-x-finish").uncheck();
   await page.locator("#pg-x-inc").uncheck();
-  await expect(steps.nth(2).locator(".pg-step-note")).toContainText("nothing asserted");
+  await expect(steps.nth(2).locator(".pg-step-note")).toContainText("nichts festgelegt");
   await expect(steps.nth(2).locator(".pg-step-n")).not.toHaveClass(/done/);
   await expect(page.locator("#pg-batch")).toBeEnabled();
 
@@ -888,12 +890,12 @@ test("the setup is three numbered steps, each saying where it stands", async ({ 
   // in, and the box keeps its caret — the head is repainted, the column is not.
   await page.locator("#pg-rule-add").click();
   await page.locator('.pg-rule [data-rule="when"]').fill("betrag < 1000");
-  await expect(steps.nth(2).locator(".pg-step-note.bad")).toContainText("says nothing the case has to show");
+  await expect(steps.nth(2).locator(".pg-step-note.bad")).toContainText("sagt nicht, was der Fall zeigen muss");
   await expect(page.locator('.pg-rule [data-rule="when"]')).toBeFocused();
   await expect(page.locator('.pg-rule [data-rule="when"]')).toHaveValue("betrag < 1000");
 
   await page.locator('.pg-rule [data-rule="then"]').fill('end = "done"');
-  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("1 rule");
+  await expect(steps.nth(2).locator(".pg-step-note")).toHaveText("1 Regel");
   expect(page.__errors).toEqual([]);
 });
 
@@ -904,32 +906,32 @@ test("a dataset the run cannot use is named, and Run stops offering to run it", 
   // A list that is not JSON is something the panel can settle without the server,
   // and saying so before the button beats a toast after it.
   await page.locator("#pg-cases").fill("[{");
-  await expect(note).toHaveText("not valid JSON");
+  await expect(note).toHaveText("kein gültiges JSON");
   await expect(page.locator("#pg-batch")).toBeDisabled();
 
   await page.locator("#pg-cases").fill("[]");
-  await expect(note).toHaveText("the list is empty");
+  await expect(note).toHaveText("die Liste ist leer");
   await expect(page.locator("#pg-batch")).toBeDisabled();
 
   // A CSV has nothing to run until a file is chosen — not a fault, but not a run.
   await page.locator('#pg-setup button[data-source="csv"]').click();
-  await expect(note).toHaveText("choose a file");
+  await expect(note).toHaveText("eine Datei wählen");
   await expect(page.locator("#pg-batch")).toBeDisabled();
 
   // A described dataset carries the generator's own two rules: it needs a count,
   // and a case carries one value per name.
   await page.locator('#pg-setup button[data-source="generated"]').click();
-  await expect(note).toHaveText("300 generated · 1 field");
+  await expect(note).toHaveText("300 generiert · 1 Feld");
   await expect(page.locator("#pg-batch")).toBeEnabled();
 
   await page.locator("#pg-gen-add").click();
   await page.locator(".pg-field").nth(1).locator('[data-gen="name"]').fill("amount");
-  await expect(note).toHaveText('two fields are called "amount"');
+  await expect(note).toHaveText("zwei Felder heissen «amount»");
   await expect(page.locator("#pg-batch")).toBeDisabled();
 
   await page.locator("[data-gen-del]").nth(1).click();
   await page.locator("#pg-gen-count").fill("");
-  await expect(note).toHaveText("how many cases?");
+  await expect(note).toHaveText("wie viele Fälle?");
   await expect(page.locator("#pg-batch")).toBeDisabled();
   expect(page.__errors).toEqual([]);
 });
@@ -944,10 +946,10 @@ test("the results strip counts what is worth looking at, over the whole run", as
   // question this line is asked — whether there is anything to page towards.
   // Incidents are counted as incidents rather than as cases, because a case can
   // carry several and the run knows the one number and not the other.
-  await expect(flagged).toContainText("1 unfinished");
-  await expect(flagged).toContainText("1 incident");
+  await expect(flagged).toContainText("1 nicht beendet");
+  await expect(flagged).toContainText("1 Incident");
   await expect(flagged).toHaveClass(/bad/);
-  await expect(page.locator(".pg-results-head")).toContainText("1–3 of 3 cases");
+  await expect(page.locator(".pg-results-head")).toContainText("1–3 von 3 Fällen");
 
   // A rule's offenders join it, counted as distinct cases from the same set the
   // rows are marked from — so the number and the ✗ beside case 3 cannot disagree.
@@ -955,7 +957,7 @@ test("the results strip counts what is worth looking at, over the whole run", as
   await page.locator('.pg-rule [data-rule="when"]').fill("betrag < 1000");
   await page.locator('.pg-rule [data-rule="then"]').fill('end = "done"');
   await page.locator("#pg-batch").click();
-  await expect(flagged).toContainText("1 broke a rule");
+  await expect(flagged).toContainText("1 hat eine Regel verletzt");
   await expect(page.locator(".pg-cases tbody tr").nth(2)).toContainText("✗");
   expect(page.__errors).toEqual([]);
 });

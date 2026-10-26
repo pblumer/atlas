@@ -11,6 +11,7 @@
 // they live here rather than in editor.js, which the Tasks app does not load.
 
 import { attachJSONEditor } from "./json-editor.js";
+import { t } from "./i18n.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -100,7 +101,7 @@ export function isNamespaceInfo(namespace, name) {
 // JSON editor after insertion. Required fields carry data-required so
 // readTypedDeployBody can enforce them.
 export function typedDeployFieldHTML(v) {
-  const req = v.required ? ' <span class="req-star" title="required">*</span>' : "";
+  const req = v.required ? ` <span class="req-star" title="${esc(t("startvars.required"))}">*</span>` : "";
   const dr = v.required ? ' data-required="1"' : "";
   const def = v.default == null ? "" : String(v.default);
   const cap = `<span>${esc(v.name)} <span class="muted">(${esc(v.type)})</span>${req}</span>`;
@@ -137,7 +138,7 @@ export function readTypedDeployBody(bodyEl) {
     if (raw === "") { if (el.dataset.required === "1") missing.push(name); return; }
     if (type === "number") {
       const n = Number(raw);
-      if (!Number.isFinite(n)) throw new Error(`"${name}" must be a number`);
+      if (!Number.isFinite(n)) throw new Error(t("startvars.notNumber", { name }));
       vars[name] = n;
     } else if (type === "boolean") {
       vars[name] = raw === "true";
@@ -145,13 +146,13 @@ export function readTypedDeployBody(bodyEl) {
       try {
         vars[name] = JSON.parse(raw);
       } catch (e) {
-        throw new Error(`"${name}": invalid JSON — ${e.message}`);
+        throw new Error(t("startvars.badJSON", { name, error: e.message }));
       }
     } else {
       vars[name] = raw;
     }
   });
-  if (missing.length) throw new Error(`required: ${missing.join(", ")}`);
+  if (missing.length) throw new Error(t("startvars.missing", { names: missing.join(", ") }));
   return Object.keys(vars).length ? { variables: vars } : {};
 }
 
@@ -198,7 +199,7 @@ export function uncoveredStartVariables(declared, schema) {
 export function extraStartFieldsHTML(extras) {
   if (!extras || !extras.length) return "";
   return `<div class="sf-extra">
-    <p class="muted sf-extra-note">Also declared as start variables on the process, and not asked by the form. Required are marked <span class="req-star">*</span>; leave an optional one blank to omit it.</p>
+    <p class="muted sf-extra-note">${esc(t("startvars.extra")).replace("{star}", '<span class="req-star">*</span>')}</p>
     ${extras.map(typedDeployFieldHTML).join("")}
   </div>`;
 }

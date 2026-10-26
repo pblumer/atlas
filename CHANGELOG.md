@@ -69,6 +69,14 @@ _Changed_ / _Removed_ for each version.
   wrote it; FEEL's keywords and the hit policies' standard names stay English on
   purpose. form-js's palette groups, search and properties panel still speak English:
   they are built into the vendored bundle without a translation hook.
+- **The BPMN editor's frame speaks German, and so does bpmn-js.** The bar, its tabs
+  (Design, Umsetzen, Playground) and its menu, the token simulation, the variables
+  panel, the problems bar, the deploy and documentation panels, the start form dialog,
+  the chip that says which record is shown, the marks on the canvas, the Playground tab
+  and the process documentation PDF read from the message catalogue. bpmn-js's palette,
+  context pad and replace menu take their words from the same catalogue through
+  `lib-translate.js`. The properties panel follows area by area; messages the server
+  composes — the compiler's problems, a verdict's checks — stay in its English.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the

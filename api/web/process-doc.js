@@ -11,6 +11,7 @@ import { PdfDocument, bytesToBase64 } from "./pdf.js";
 import { collectDecisionDocumentation, renderDecisionBody } from "./decision-doc.js";
 import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
 import { fmtDateTime } from "./datefmt.js";
+import { t } from "./i18n.js";
 
 // Re-exported because they were this module's own until the decision document
 // started sharing them, and every caller — the editor, the harness — already names
@@ -19,30 +20,32 @@ export { svgToJpeg, sizeOfSvg, trimToContent, wantsLandscape } from "./doc-graph
 
 // A readable label for each BPMN type. The raw `bpmn:ExclusiveGateway` is
 // meaningless to the audience this document is written for.
+// The table holds catalogue keys (ADR-0267), read when a document is built, so the
+// document is in the language the console speaks then.
 const TYPE_LABELS = {
-  "bpmn:StartEvent": "Start event",
-  "bpmn:EndEvent": "End event",
-  "bpmn:IntermediateCatchEvent": "Intermediate catch event",
-  "bpmn:IntermediateThrowEvent": "Intermediate throw event",
-  "bpmn:BoundaryEvent": "Boundary event",
-  "bpmn:Task": "Task",
-  "bpmn:UserTask": "User task",
-  "bpmn:ServiceTask": "Service task",
-  "bpmn:ScriptTask": "Script task",
-  "bpmn:BusinessRuleTask": "Business rule task",
-  "bpmn:SendTask": "Send task",
-  "bpmn:ReceiveTask": "Receive task",
-  "bpmn:ManualTask": "Manual task",
-  "bpmn:CallActivity": "Call activity",
-  "bpmn:SubProcess": "Subprocess",
-  "bpmn:Transaction": "Transaction",
-  "bpmn:ExclusiveGateway": "Exclusive gateway (XOR)",
-  "bpmn:ParallelGateway": "Parallel gateway (AND)",
-  "bpmn:InclusiveGateway": "Inclusive gateway (OR)",
-  "bpmn:EventBasedGateway": "Event-based gateway",
-  "bpmn:SequenceFlow": "Sequence flow",
-  "bpmn:Participant": "Pool",
-  "bpmn:Lane": "Lane",
+  "bpmn:StartEvent": "processDoc.type.StartEvent",
+  "bpmn:EndEvent": "processDoc.type.EndEvent",
+  "bpmn:IntermediateCatchEvent": "processDoc.type.IntermediateCatchEvent",
+  "bpmn:IntermediateThrowEvent": "processDoc.type.IntermediateThrowEvent",
+  "bpmn:BoundaryEvent": "processDoc.type.BoundaryEvent",
+  "bpmn:Task": "processDoc.type.Task",
+  "bpmn:UserTask": "processDoc.type.UserTask",
+  "bpmn:ServiceTask": "processDoc.type.ServiceTask",
+  "bpmn:ScriptTask": "processDoc.type.ScriptTask",
+  "bpmn:BusinessRuleTask": "processDoc.type.BusinessRuleTask",
+  "bpmn:SendTask": "processDoc.type.SendTask",
+  "bpmn:ReceiveTask": "processDoc.type.ReceiveTask",
+  "bpmn:ManualTask": "processDoc.type.ManualTask",
+  "bpmn:CallActivity": "processDoc.type.CallActivity",
+  "bpmn:SubProcess": "processDoc.type.SubProcess",
+  "bpmn:Transaction": "processDoc.type.Transaction",
+  "bpmn:ExclusiveGateway": "processDoc.type.ExclusiveGateway",
+  "bpmn:ParallelGateway": "processDoc.type.ParallelGateway",
+  "bpmn:InclusiveGateway": "processDoc.type.InclusiveGateway",
+  "bpmn:EventBasedGateway": "processDoc.type.EventBasedGateway",
+  "bpmn:SequenceFlow": "processDoc.type.SequenceFlow",
+  "bpmn:Participant": "processDoc.type.Participant",
+  "bpmn:Lane": "processDoc.type.Lane",
 };
 
 // The order elements are documented in: the reader follows the process, so the
@@ -60,7 +63,7 @@ const TYPE_ORDER = [
 ];
 
 export function typeLabel(type) {
-  return TYPE_LABELS[type] || String(type || "").replace(/^bpmn:/, "");
+  return TYPE_LABELS[type] ? t(TYPE_LABELS[type]) : String(type || "").replace(/^bpmn:/, "");
 }
 
 // documentationOf reads an element's <bpmn:documentation>. BPMN allows several
@@ -85,20 +88,20 @@ export function codeFieldsOf(bo) {
   // element (source body + language attribute).
   for (const e of ext) {
     if (e && /:JobScript$/.test(e.$type || "") && String(e.source || "").trim()) {
-      out.push({ label: "Script", language: String(e.language || "").trim(), source: String(e.source) });
+      out.push({ label: t("processDoc.code.script"), language: String(e.language || "").trim(), source: String(e.source) });
     }
   }
   // A plain BPMN <bpmn:script> body is read too, so an imported model documents
   // its scripts as well — the field is scriptFormat, not a moddle extension.
   if (String(bo.script || "").trim()) {
-    out.push({ label: "Script", language: String(bo.scriptFormat || "").trim(), source: String(bo.script) });
+    out.push({ label: t("processDoc.code.script"), language: String(bo.scriptFormat || "").trim(), source: String(bo.script) });
   }
 
   // A FEEL condition on a sequence flow — the branch rule a reader most needs to
   // understand why a token went one way and not the other.
   const cond = bo.conditionExpression;
   if (cond && String(cond.body || "").trim()) {
-    out.push({ label: "Condition", language: String(cond.language || "feel").trim() || "feel", source: String(cond.body) });
+    out.push({ label: t("processDoc.code.condition"), language: String(cond.language || "feel").trim() || "feel", source: String(cond.body) });
   }
 
   return out;
@@ -294,8 +297,8 @@ const GREY = [0.42, 0.42, 0.42];
 // and "deployment" are precise to somebody who has read ADR-0063 and opaque to
 // everybody else, and this document is written for everybody else.
 const BINDING_NOTE = {
-  latest: "latest — the newest version deployed at the time this process is deployed",
-  deployment: "deployment — pinned to the model deployed together with this process",
+  latest: "processDoc.binding.latest",
+  deployment: "processDoc.binding.deployment",
 };
 
 // resolveCalledDecisions fetches the rules behind every decision the diagram calls,
@@ -334,7 +337,7 @@ export async function resolveCalledDecisions(collection, api) {
     try {
       if (modelRef) {
         const xml = await api("GET", `/api/v1/dmn-models/${encodeURIComponent(modelRef)}/xml`);
-        out[id] = { source: `Model ${modelRef}.dmn`, collection: collectDecisionDocumentation(String(xml)) };
+        out[id] = { source: t("processDoc.source.model", { ref: modelRef }), collection: collectDecisionDocumentation(String(xml)) };
         return;
       }
       // No reference resolves it, so the only rules that exist are the ones a
@@ -345,7 +348,7 @@ export async function resolveCalledDecisions(collection, api) {
       if (!current || !current.key) return;
       const xml = await api("GET", `/api/v1/decision-deployments/${current.key}/xml`);
       out[id] = {
-        source: `Deployed decision v${current.version} (key ${current.key})`,
+        source: t("processDoc.source.deployed", { version: current.version, key: current.key }),
         collection: collectDecisionDocumentation(String(xml)),
       };
     } catch {
@@ -363,24 +366,23 @@ function renderCalledDecision(doc, call, decisions) {
   if (!call) return;
   if (call.external) {
     doc.paragraph(
-      "Evaluated by the temis worker " + (call.worker || "(unnamed)") +
-      ". The rules live in that service and are not part of this model.",
+      t("processDoc.external", { worker: call.worker || t("processDoc.unnamed") }),
       { size: 9.5, color: GREY, after: 6 },
     );
     return;
   }
   if (!call.decisionId) {
-    doc.paragraph("This business rule task names no decision yet.", { size: 9.5, color: GREY, after: 6 });
+    doc.paragraph(t("processDoc.noDecision"), { size: 9.5, color: GREY, after: 6 });
     return;
   }
 
-  doc.keyValue("Decision", call.decisionId);
-  doc.keyValue("Binding", BINDING_NOTE[call.binding] || call.binding);
-  if (call.resultVariable) doc.keyValue("Result variable", call.resultVariable);
+  doc.keyValue(t("processDoc.decision"), call.decisionId);
+  doc.keyValue(t("processDoc.binding"), BINDING_NOTE[call.binding] ? t(BINDING_NOTE[call.binding]) : call.binding);
+  if (call.resultVariable) doc.keyValue(t("processDoc.resultVariable"), call.resultVariable);
   if (call.inputs.length) {
-    doc.paragraph("Inputs", { size: 9, bold: true, after: 2 });
+    doc.paragraph(t("processDoc.inputs"), { size: 9, bold: true, after: 2 });
     doc.table(
-      [{ header: "Decision input", width: 1 }, { header: "Fed from", width: 1.6 }],
+      [{ header: t("processDoc.decisionInput"), width: 1 }, { header: t("processDoc.fedFrom"), width: 1.6 }],
       call.inputs.map((i) => [i.name || "—", i.value || "—"]),
     );
   }
@@ -388,7 +390,7 @@ function renderCalledDecision(doc, call, decisions) {
   const resolved = decisions && decisions[call.decisionId];
   if (!resolved) {
     doc.paragraph(
-      "The rules behind this decision could not be read, so they are not reproduced here.",
+      t("processDoc.rulesUnread"),
       { size: 9.5, color: GREY, after: 6 },
     );
     return;
@@ -396,12 +398,12 @@ function renderCalledDecision(doc, call, decisions) {
   const dec = (resolved.collection.decisions || []).find((d) => d.id === call.decisionId);
   if (!dec) {
     doc.paragraph(
-      `${resolved.source} does not declare ${call.decisionId}.`,
+      t("processDoc.notDeclared", { source: resolved.source, id: call.decisionId }),
       { size: 9.5, color: GREY, after: 6 },
     );
     return;
   }
-  doc.paragraph("Rules read from: " + resolved.source, { size: 8.5, color: GREY, after: 3 });
+  doc.paragraph(t("processDoc.rulesFrom", { source: resolved.source }), { size: 8.5, color: GREY, after: 3 });
   if (dec.description) doc.paragraph(dec.description, { size: 9.5, after: 4 });
   renderDecisionBody(doc, dec);
 }
@@ -424,20 +426,20 @@ export function buildDocumentationPdf(spec) {
   });
 
   doc.heading(title || collection.processName || collection.processId, 1);
-  doc.paragraph("Process documentation", { size: 11, color: GREY, after: 12 });
+  doc.paragraph(t("processDoc.subtitle"), { size: 11, color: GREY, after: 12 });
 
-  doc.keyValue("Process ID", collection.processId || "—");
-  if (collection.processName) doc.keyValue("Name", collection.processName);
-  if (version) doc.keyValue("Documentation version", "v" + version);
-  if (deploymentVersion) doc.keyValue("Deployed version", "v" + deploymentVersion);
-  doc.keyValue("Created", createdAt || fmtDateTime(Date.now()));
-  if (createdBy) doc.keyValue("Created by", createdBy);
-  doc.keyValue("Elements documented", String(collection.elements.length));
-  if (note) doc.keyValue("Note", note);
+  doc.keyValue(t("processDoc.processId"), collection.processId || "—");
+  if (collection.processName) doc.keyValue(t("processDoc.name"), collection.processName);
+  if (version) doc.keyValue(t("processDoc.version"), "v" + version);
+  if (deploymentVersion) doc.keyValue(t("processDoc.deployedVersion"), "v" + deploymentVersion);
+  doc.keyValue(t("processDoc.created"), createdAt || fmtDateTime(Date.now()));
+  if (createdBy) doc.keyValue(t("processDoc.createdBy"), createdBy);
+  doc.keyValue(t("processDoc.count"), String(collection.elements.length));
+  if (note) doc.keyValue(t("processDoc.note"), note);
   doc.rule();
 
   if (collection.processDocumentation) {
-    doc.heading("About this process", 2);
+    doc.heading(t("processDoc.about"), 2);
     doc.paragraph(collection.processDocumentation, { after: 8 });
   }
 
@@ -446,30 +448,30 @@ export function buildDocumentationPdf(spec) {
     // into an unreadable strip; the document then returns to portrait.
     const landscape = wantsLandscape(diagram, collection.elements.length);
     if (landscape) doc.landscapePage();
-    doc.heading("Diagram", 2);
+    doc.heading(t("processDoc.diagram"), 2);
     doc.image(diagram.bytes, diagram.width, diagram.height);
     if (landscape) doc.portraitPage();
   }
 
-  doc.heading("Elements", 2);
+  doc.heading(t("processDoc.elements"), 2);
   if (collection.elements.length === 0) {
-    doc.paragraph("This process has no documentable elements.", { color: GREY });
+    doc.paragraph(t("processDoc.noElements"), { color: GREY });
   }
   for (const el of collection.elements) {
     // An element's section is its title, the type/id line, and at least the
     // first line of what is written about it. Keeping those together is what
     // stops a name stranded at the foot of a page from its own description.
     doc.heading(el.name || el.id, 3, { keep: 58 });
-    const meta = [typeLabel(el.type), "id: " + el.id];
-    if (el.lane) meta.push("lane: " + el.lane);
+    const meta = [typeLabel(el.type), t("processDoc.id", { id: el.id })];
+    if (el.lane) meta.push(t("processDoc.lane", { lane: el.lane }));
     doc.paragraph(meta.join("  ·  "), { size: 8.5, color: GREY, after: 3 });
     if (el.documentation) {
       doc.paragraph(el.documentation, { size: 10, after: el.annotations.length ? 4 : 8 });
     } else if (el.annotations.length === 0) {
-      doc.paragraph("No documentation.", { size: 9.5, color: GREY, after: 8 });
+      doc.paragraph(t("processDoc.noDoc"), { size: 9.5, color: GREY, after: 8 });
     }
     for (const note of el.annotations) {
-      doc.paragraph("Note: " + note, { size: 9.5, indent: 12, after: 4 });
+      doc.paragraph(t("processDoc.elementNote", { note }), { size: 9.5, indent: 12, after: 4 });
     }
     // The code the step runs — a script, a branch condition — set verbatim so a
     // reader can audit it, not merely read its name.
@@ -483,9 +485,9 @@ export function buildDocumentationPdf(spec) {
   }
 
   if (collection.generalNotes.length) {
-    doc.heading("Unattached notes", 2);
+    doc.heading(t("processDoc.loose"), 2);
     doc.paragraph(
-      "Annotations in the diagram that are not associated with a particular element.",
+      t("processDoc.looseText"),
       { size: 9.5, color: GREY, after: 6 },
     );
     for (const note of collection.generalNotes) doc.paragraph("• " + note, { indent: 8, after: 4 });
@@ -499,7 +501,7 @@ export function buildDocumentationPdf(spec) {
 // the created version as the API rendered it.
 export async function exportDocumentation({ modeler, api, title, note, createdBy }) {
   const collection = collectDocumentation(modeler);
-  if (!collection.processId) throw new Error("the diagram has no process to document");
+  if (!collection.processId) throw new Error(t("processDoc.nothing"));
 
   const { svg } = await modeler.saveSVG();
   const diagram = await svgToJpeg(svg);
