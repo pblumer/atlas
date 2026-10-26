@@ -2399,7 +2399,7 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   never silently reassigned. The cutover is durable before visibility and
   independently acknowledged per partition; incomplete rollouts, old-target
   incidents and rollback revisions must remain observable. See
-  [ADR-draft-controlled-worker-rebinding](docs/adr/draft-controlled-worker-rebinding.md).
+  [ADR-0492](docs/adr/0492-controlled-worker-rebinding.md).
   **Depends on CDA6/CDA7**, acceptance of this ADR and reviewed event/recovery,
   policy/identity, package and target compatibility semantics. This is not
   autonomous failover or selecting a different Worker on every job.

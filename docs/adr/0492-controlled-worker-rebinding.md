@@ -1,4 +1,4 @@
-# ADR-DRAFT: Controlled configured-Worker rebinding without process redeployment
+# ADR-0492: Controlled configured-Worker rebinding without process redeployment
 
 - **Status:** Proposed
 - **Implementation:** Not started
