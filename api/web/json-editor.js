@@ -13,6 +13,8 @@
 
 // ---------- Tokenizer ----------
 
+import { t } from "./i18n.js";
+
 // tokenizeJSON breaks a JSON string into typed spans for highlighting.
 export function tokenizeJSON(src) {
   const out = [];
@@ -98,6 +100,8 @@ export function tokenizeJSON(src) {
 }
 
 const escapeHTML = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// esc is escapeHTML for an attribute value, where a quote ends the value.
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 // highlightJSON renders a JSON string as coloured HTML spans for the backdrop.
 export function highlightJSON(src) {
@@ -138,8 +142,8 @@ export function attachJSONEditor(textarea, opts = {}) {
   // that a 34px inline box can't show.
   const toolbar = document.createElement("div");
   toolbar.className = "json-toolbar";
-  toolbar.innerHTML = `<button type="button" class="json-fmt icon-btn" title="Format JSON" aria-label="Format JSON">{ }</button>` +
-    (opts.compact ? `<button type="button" class="json-expand icon-btn" title="Open in a large editor" aria-label="Open in a large editor">⤢</button>` : "");
+  toolbar.innerHTML = `<button type="button" class="json-fmt icon-btn" title="${esc(t("json.format"))}" aria-label="${esc(t("json.format"))}">{ }</button>` +
+    (opts.compact ? `<button type="button" class="json-expand icon-btn" title="${esc(t("json.expand"))}" aria-label="${esc(t("json.expand"))}">⤢</button>` : "");
 
   wrap.appendChild(pre);
   wrap.appendChild(textarea);
@@ -348,15 +352,15 @@ export function attachJSONEditor(textarea, opts = {}) {
     const overlay = document.createElement("div");
     overlay.className = "json-modal-overlay";
     overlay.innerHTML = `
-      <div class="json-modal" role="dialog" aria-modal="true" aria-label="Edit JSON value">
+      <div class="json-modal" role="dialog" aria-modal="true" aria-label="${esc(t("json.modal"))}">
         <div class="json-modal-head">
-          <strong>Edit JSON</strong>
+          <strong>${esc(t("json.edit"))}</strong>
           <span style="flex:1"></span>
-          <button type="button" class="btn ghost small json-modal-fmt" title="Reformat the JSON">{ } Format</button>
-          <button type="button" class="btn ghost small json-modal-cancel" title="Close without applying changes">Cancel</button>
-          <button type="button" class="btn small json-modal-apply" title="Apply the edited JSON">Apply</button>
+          <button type="button" class="btn ghost small json-modal-fmt" title="${esc(t("json.reformatTitle"))}">${esc(t("json.reformat"))}</button>
+          <button type="button" class="btn ghost small json-modal-cancel" title="${esc(t("json.cancelTitle"))}">${esc(t("common.cancel"))}</button>
+          <button type="button" class="btn small json-modal-apply" title="${esc(t("json.applyTitle"))}">${esc(t("json.apply"))}</button>
         </div>
-        <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="JSON value"></textarea></div>
+        <div class="json-modal-body"><textarea class="json-modal-ta" spellcheck="false" aria-label="${esc(t("json.value"))}"></textarea></div>
       </div>`;
     document.body.appendChild(overlay);
     modalOverlay = overlay;

@@ -47,7 +47,7 @@ test("the process and the step it is for reach the request", async ({ page }) =>
   await expect(page.locator("#fg-step-field")).toBeVisible();
   // The user tasks of the model, plus the start-form entry that is the default.
   await expect(step.locator("option")).toHaveCount(3);
-  await expect(step.locator("option").first()).toHaveText(/Start form/);
+  await expect(step.locator("option").first()).toHaveText(/Startformular/);
 
   await step.selectOption("Task_Pruefen");
   await page.locator("#fg-brief").fill("Die Führungskraft entscheidet.");
@@ -63,7 +63,7 @@ test("naming no process is allowed, and a request with nothing in it is not", as
 
   // Nothing was sent and the dialog is still open, with the reason on it.
   await expect(sent(page)).toHaveText("—");
-  await expect(page.locator("#fg-err")).toContainText(/Say what the form is for/);
+  await expect(page.locator("#fg-err")).toContainText(/Sag, wofür das Formular ist/);
   await expect(page.locator("#fg-brief")).toBeVisible();
 
   // Picking a process is a complete request on its own: "the form that starts this".
@@ -110,7 +110,7 @@ test("a refusal from the model stays in the dialog, with the brief still in it",
   // simply try again, and can do either without retyping.
   await expect(page.locator("#fg-err")).toContainText(/no JSON object/);
   await expect(page.locator("#fg-brief")).toHaveValue(/nicht schreiben will/);
-  await expect(page.locator("[data-ok]")).toHaveText("Generate");
+  await expect(page.locator("[data-ok]")).toHaveText("Erzeugen");
   await expect(page.locator("[data-ok]")).toBeEnabled();
   // Nothing was resolved: a failed generation is not an answer.
   await expect(result(page)).toHaveText("—");

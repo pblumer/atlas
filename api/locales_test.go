@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -181,5 +182,84 @@ func TestTheLocaleListIsTheLocaleFiles(t *testing.T) {
 	if !slices.Equal(userprefs.Languages, files) {
 		t.Errorf("userprefs.Languages = %v; a person may choose exactly the locales the console carries, %v",
 			userprefs.Languages, files)
+	}
+}
+
+// i18nImport is a module's import of the catalogue's lookups, with any renaming:
+// `import { t as tr, plural as trPlural } from "./i18n.js"`.
+var i18nImport = regexp.MustCompile(`(?m)^import \{([^}]*)\} from "\./i18n\.js";`)
+
+// TestEveryMessageTheConsoleLooksUpExists holds every module that imports the
+// catalogue to it: each key it looks up by name, under whatever name it imported
+// t and plural as, is a German message — or, for a plural, has German's .one and
+// .other. The per-screen tests check keys a screen holds in tables too; this one
+// makes sure no direct lookup anywhere renders as a raw id, so a screen translated
+// later is covered the moment it imports the catalogue.
+func TestEveryMessageTheConsoleLooksUpExists(t *testing.T) {
+	de, _ := localeMessages(t, "de")
+	files, err := filepath.Glob("web/*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	importers, lookups := 0, 0
+	for _, file := range files {
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src := string(body)
+		m := i18nImport.FindStringSubmatch(src)
+		if m == nil {
+			continue
+		}
+		importers++
+		var direct, counted []string
+		for _, spec := range strings.Split(m[1], ",") {
+			fields := strings.Fields(spec)
+			if len(fields) == 0 {
+				continue
+			}
+			name, alias := fields[0], fields[len(fields)-1]
+			switch name {
+			case "t":
+				direct = append(direct, alias)
+			case "plural":
+				counted = append(counted, alias)
+			}
+		}
+		check := func(alias string, isPlural bool) {
+			call := regexp.MustCompile(`(?:^|[^\w$.])` + regexp.QuoteMeta(alias) + `\("([^"]+)"`)
+			for _, c := range call.FindAllStringSubmatch(src, -1) {
+				key := c[1]
+				// A key ending in a dot is the prefix of a family completed by an id
+				// at run time (`t("feel.target." + kind)`); the screen's own test
+				// holds those ids to the catalogue.
+				if strings.HasSuffix(key, ".") {
+					continue
+				}
+				lookups++
+				if isPlural {
+					if _, ok := de[key+".one"]; !ok {
+						t.Errorf("%s counts with %q, which has no German .one", file, key)
+					}
+					if _, ok := de[key+".other"]; !ok {
+						t.Errorf("%s counts with %q, which has no German .other", file, key)
+					}
+					continue
+				}
+				if _, ok := de[key]; !ok {
+					t.Errorf("%s looks up %q, which German does not have", file, key)
+				}
+			}
+		}
+		for _, a := range direct {
+			check(a, false)
+		}
+		for _, a := range counted {
+			check(a, true)
+		}
+	}
+	if importers < 20 || lookups < 500 {
+		t.Fatalf("found %d modules importing the catalogue and %d lookups; the scan no longer matches how modules import it", importers, lookups)
 	}
 }

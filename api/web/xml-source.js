@@ -27,6 +27,7 @@
 // self-contained (ADR-0012, ADR-0013).
 
 import { attachCodeEditor } from "./code-editor.js";
+import { t, plural } from "./i18n.js";
 import { copyText } from "./clipboard.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -207,7 +208,7 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
   try {
     source = await read();
   } catch (e) {
-    if (toast) toast("could not read the XML: " + e.message, "err");
+    if (toast) toast(t("xml.readFailed", { error: e.message }), "err");
     return;
   }
   // baseline is the text that matches the canvas: what was read, or what was last
@@ -217,24 +218,21 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
   const ov = document.createElement("div");
   ov.className = "modal-ov xml-ov";
   ov.innerHTML = `
-    <div class="modal xml-modal" role="dialog" aria-modal="true" aria-label="XML source">
+    <div class="modal xml-modal" role="dialog" aria-modal="true" aria-label="${esc(t("xml.title"))}">
       <div class="modal-head">
-        <h2>XML source <span class="chip xml-kind">${esc(kind)}</span></h2>
-        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+        <h2>${esc(t("xml.title"))} <span class="chip xml-kind">${esc(kind)}</span></h2>
+        <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
       </div>
       <div class="xml-body">
-        <p class="muted xml-hint">This is the ${esc(subject)} as it stands on the canvas, saved or not.
-          Correct it here and press <b>Apply</b> (Ctrl+Enter): the ${esc(subject)} is rebuilt from the text.
-          Applying is an edit like any other — <b>Save</b> still decides what is kept — but it starts the
-          undo history afresh.</p>
-        <div class="xml-editor"><textarea class="xml-ta" spellcheck="false" aria-label="XML source"></textarea></div>
+        <p class="muted xml-hint">${t("xml.hint." + subject)}</p>
+        <div class="xml-editor"><textarea class="xml-ta" spellcheck="false" aria-label="${esc(t("xml.title"))}"></textarea></div>
       </div>
       <div class="modal-foot">
         <span class="xml-status" role="status" aria-live="polite"></span>
         <span class="modal-actions">
-          <button type="button" class="btn neutral" data-copy title="Copy the XML to the clipboard">Copy</button>
-          <button type="button" class="btn ghost" data-cancel>Cancel</button>
-          <button type="button" class="btn" data-apply title="Rebuild the ${esc(subject)} from this XML (Ctrl+Enter)">Apply</button>
+          <button type="button" class="btn neutral" data-copy title="${esc(t("xml.copyTitle"))}">${esc(t("xml.copy"))}</button>
+          <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+          <button type="button" class="btn" data-apply title="${esc(t("xml.applyTitle." + subject))}">${esc(t("xml.apply"))}</button>
         </span>
       </div>
     </div>`;
@@ -255,7 +253,9 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
     ed.setMarkers(line > 0 ? [{ line, message }] : []);
     if (line > 0) ed.focusLine(line);
   };
-  const where = (r) => (r.line ? `Line ${r.line}${r.column ? `, column ${r.column}` : ""}: ` : "");
+  const where = (r) => (r.line
+    ? (r.column ? t("xml.whereColumn", { line: r.line, column: r.column }) : t("xml.where", { line: r.line }))
+    : "");
 
   // The well-formedness check runs while typing, so the line in error is marked before
   // Apply is ever pressed — debounced, because a document is reparsed whole.
@@ -264,11 +264,11 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
     const r = checkWellFormed(ta.value);
     if (r.ok) {
       if (ed) ed.setMarkers([]);
-      setStatus(ta.value === baseline ? "" : "Well-formed XML — not applied yet", "");
+      setStatus(ta.value === baseline ? "" : t("xml.wellFormed"), "");
       return r;
     }
     if (ed) ed.setMarkers(r.line > 0 ? [{ line: r.line, message: r.message }] : []);
-    setStatus(`Not well-formed. ${where(r)}${r.message}`, "err");
+    setStatus(t("xml.notWellFormed", { where: where(r), error: r.message }), "err");
     return r;
   };
   const onInput = () => {
@@ -281,7 +281,7 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
   const finish = (force) => {
     if (closed) return;
     if (!force && ta.value !== baseline &&
-        !window.confirm("Discard the changes to the XML source? They have not been applied.")) {
+        !window.confirm(t("xml.confirmDiscard"))) {
       return;
     }
     closed = true;
@@ -304,16 +304,16 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
     if (!r.ok) { mark(r.line, r.message); return; }
     applying = true;
     applyBtn.disabled = true;
-    setStatus("Applying…");
+    setStatus(t("xml.applying"));
     let res;
     try {
       res = (await apply(text)) || {};
     } catch (e) {
       if (closed) return;
-      const msg = firstLine(e && e.message) || "the import failed";
+      const msg = firstLine(e && e.message) || t("xml.importFailed");
       const line = lineOf(e && e.message);
       mark(line, msg);
-      setStatus(`Not applied — the ${subject} is unchanged. ${line ? `Line ${line}: ` : ""}${msg}`, "err");
+      setStatus(t("xml.notApplied." + subject, { where: line ? t("xml.where", { line }) : "", error: msg }), "err");
       return;
     } finally {
       applying = false;
@@ -324,7 +324,7 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
     const warnings = (res.warnings || []).map((w) => (w && w.message) || String(w)).filter(Boolean);
     if (!warnings.length) {
       finish(true);
-      if (toast) toast("XML applied", "ok");
+      if (toast) toast(t("xml.applied"), "ok");
       return;
     }
     // Applied, but the modeler set something aside — an unresolved reference, an
@@ -332,10 +332,10 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
     // needs to see, so the dialog stays open on it rather than closing over it.
     const line = lineOf(warnings[0]);
     mark(line, firstLine(warnings[0]));
-    const more = warnings.length > 1 ? ` (and ${warnings.length - 1} more)` : "";
-    setStatus(`Applied with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}: ` +
-      `${line ? `line ${line}: ` : ""}${firstLine(warnings[0])}${more}. ` +
-      `What the ${subject} could not read was left out.`, "warn");
+    const more = warnings.length > 1 ? t("xml.more", { n: warnings.length - 1 }) : "";
+    setStatus(plural("xml.withWarnings." + subject, warnings.length, {
+      where: line ? t("xml.lineLower", { line }) : "", first: firstLine(warnings[0]), more,
+    }), "warn");
   };
 
   // Bound on the window in the capture phase, the first stop of every key event, because
@@ -365,7 +365,7 @@ export async function openXmlSource({ kind, subject = "diagram", read, apply, to
   applyBtn.addEventListener("click", doApply);
   ov.querySelector("[data-copy]").addEventListener("click", async () => {
     const ok = await copyText(ta.value);
-    if (!closed) setStatus(ok ? "Copied to the clipboard" : "Copying failed — select the text and copy it by hand", ok ? "ok" : "err");
+    if (!closed) setStatus(t(ok ? "xml.copied" : "xml.copyFailed"), ok ? "ok" : "err");
   });
 
   ta.focus();

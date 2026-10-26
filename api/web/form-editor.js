@@ -17,6 +17,7 @@
 // lazily so non-editor pages stay light, mirroring the BPMN editor (editor.js).
 
 import { attachJSONEditor } from "./json-editor.js";
+import { t as tr, plural as trPlural } from "./i18n.js";
 import { installDevShortcut } from "./dev-view.js";
 import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
@@ -107,24 +108,24 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   root.innerHTML = `
     <div class="editor form-editor">
       <div class="editor-bar">
-        <a class="crumbs" id="form-back" href="#/modeler">&larr; Forms</a>
+        <a class="crumbs" id="form-back" href="#/modeler">${esc(tr("formEd.back"))}</a>
         <div class="etabs" id="form-tabs">
-          <button type="button" data-ftab="design" class="active" title="Build the form visually">Design</button>
-          <button type="button" data-ftab="validate" title="Preview the form and check it for problems">Validate</button>
-          <button type="button" data-ftab="editor" title="Show the form’s source — its JSON form-js schema — and correct it in place">Source</button>
+          <button type="button" data-ftab="design" class="active" title="${esc(tr("formEd.tab.designTitle"))}">${esc(tr("formEd.tab.design"))}</button>
+          <button type="button" data-ftab="validate" title="${esc(tr("formEd.tab.validateTitle"))}">${esc(tr("formEd.tab.validate"))}</button>
+          <button type="button" data-ftab="editor" title="${esc(tr("formEd.tab.sourceTitle"))}">${esc(tr("formEd.tab.source"))}</button>
         </div>
-        <input id="form-name" class="form-name-input" placeholder="Form name" spellcheck="false" />
+        <input id="form-name" class="form-name-input" placeholder="${esc(tr("formEd.namePlaceholder"))}" spellcheck="false" />
         <span class="chip" id="form-id-chip"></span>
         <span class="id-warn" id="form-id-warn" hidden></span>
         <div style="flex:1"></div>
         <span class="muted" id="form-status"></span>
         <button class="btn ghost" id="form-generate" hidden
-          title="Write this form from a description and from the process it belongs to">✨ Generate</button>
-        <button class="btn" id="form-save" title="Save this form">Save</button>
+          title="${esc(tr("formEd.generateTitle"))}">${esc(tr("formEd.generate"))}</button>
+        <button class="btn" id="form-save" title="${esc(tr("formEd.saveTitle"))}">${esc(tr("formEd.save"))}</button>
       </div>
       <div class="editor-body fv-body">
         <div class="fv-pane active" id="pane-design">
-          <div id="form-playground" class="form-playground"><p class="muted" style="padding:20px">Loading form editor&hellip;</p></div>
+          <div id="form-playground" class="form-playground"><p class="muted" style="padding:20px">${esc(tr("formEd.loading"))}</p></div>
         </div>
         <div class="fv-pane" id="pane-validate"></div>
         <div class="fv-pane" id="pane-editor"></div>
@@ -241,9 +242,10 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     playground = new Playground({
       container, schema, data: {},
       atlas: { sources: dataSources, remote: remoteAdapter({ transport: previewTransport(), preview: true }) },
+      editorAdditionalModules: [paletteNamesModule],
     });
   } catch (e) {
-    container.innerHTML = `<p class="muted err" style="padding:20px">Could not open this form: ${esc(e.message)}</p>`;
+    container.innerHTML = `<p class="muted err" style="padding:20px">${esc(tr("formEd.openFailed", { error: e.message }))}</p>`;
     return;
   }
   // Give the Playground's own areas the same collapse/resize affordances as the
@@ -300,14 +302,14 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   // showed the typed one, which is exactly the confusion this replaces.
   function syncIdentity() {
     const now = currentId();
-    idChip.textContent = now || "(no id)";
+    idChip.textContent = now || tr("formEd.noId");
     const pending = !!savedId && !!now && now !== savedId;
     idChip.classList.toggle("id-pending", pending);
     idChip.title = !now
-      ? "This form has no id. Set one in the Design pane under Form ▸ General ▸ ID."
+      ? tr("formEd.id.none")
       : pending
-        ? `Saving renames this form from “${savedId}” to “${now}”. A user task still bound to “${savedId}” will find no form.`
-        : "This form's id — a user task's formId binds to it. Edit it in the Design pane under Form ▸ General ▸ ID.";
+        ? tr("formEd.id.pending", { from: savedId, to: now })
+        : tr("formEd.id.current");
     idCheck.check();
   }
   syncIdentity();
@@ -392,7 +394,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       try { parsed = JSON.parse(text); }
       catch (e) {
         // Keep the invalid text on screen and the last valid schema intact.
-        toast("The source is not valid JSON — keeping the last valid schema (" + e.message + ")", "err");
+        toast(tr("formEd.source.invalid", { error: e.message }), "err");
         return;
       }
       if (JSON.stringify(parsed) !== JSON.stringify(schema)) { schema = parsed; rev++; schemaSource = "editor"; }
@@ -449,27 +451,27 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       <div class="fv-validate">
         <section class="fv-panel fv-preview" data-panel="preview">
           <header class="fv-head">
-            <button type="button" class="fv-caret" aria-label="Collapse">&#9662;</button>
-            <span class="fv-title">Form Preview</span>
+            <button type="button" class="fv-caret" aria-label="${esc(tr("formEd.collapse"))}">&#9662;</button>
+            <span class="fv-title">${esc(tr("formEd.preview"))}</span>
             <span style="flex:1"></span>
-            <button type="button" class="btn neutral fv-act" id="fv-validate-btn" title="Run validation">Validate</button>
+            <button type="button" class="btn neutral fv-act" id="fv-validate-btn" title="${esc(tr("formEd.validateTitle"))}">${esc(tr("formEd.validate"))}</button>
           </header>
           <div class="fv-panel-body"><div id="fv-form" class="fv-form"></div></div>
         </section>
-        <div class="fv-hresizer" data-resize="input" title="Drag to resize"></div>
+        <div class="fv-hresizer" data-resize="input" title="${esc(tr("formEd.dragResize"))}"></div>
         <section class="fv-panel fv-input" data-panel="input">
           <header class="fv-head">
-            <button type="button" class="fv-caret" aria-label="Collapse">&#9662;</button>
-            <span class="fv-title">Form Input</span>
-            <span class="fv-hint muted">sample data seeded into the form</span>
+            <button type="button" class="fv-caret" aria-label="${esc(tr("formEd.collapse"))}">&#9662;</button>
+            <span class="fv-title">${esc(tr("formEd.input"))}</span>
+            <span class="fv-hint muted">${esc(tr("formEd.inputHint"))}</span>
           </header>
           <div class="fv-panel-body"><textarea id="fv-input" class="fv-input-ta" spellcheck="false">{}</textarea></div>
         </section>
-        <div class="fv-hresizer" data-resize="output" title="Drag to resize"></div>
+        <div class="fv-hresizer" data-resize="output" title="${esc(tr("formEd.dragResize"))}"></div>
         <section class="fv-panel fv-output" data-panel="output">
           <header class="fv-head">
-            <button type="button" class="fv-caret" aria-label="Collapse">&#9662;</button>
-            <span class="fv-title">Form Output</span>
+            <button type="button" class="fv-caret" aria-label="${esc(tr("formEd.collapse"))}">&#9662;</button>
+            <span class="fv-title">${esc(tr("formEd.output"))}</span>
             <span class="fv-hint muted" id="fv-out-status"></span>
           </header>
           <div class="fv-panel-body"><pre id="fv-output" class="fv-output-pre"></pre></div>
@@ -521,7 +523,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     if (!host) return;
     let Form;
     try { ({ Form } = await loadFormViewer()); }
-    catch (e) { host.innerHTML = `<p class="muted err">Failed to load the form viewer: ${esc(e.message)}</p>`; return; }
+    catch (e) { host.innerHTML = `<p class="muted err">${esc(tr("formEd.viewerFailed", { error: e.message }))}</p>`; return; }
     try {
       if (!p.viewer) {
         p.viewer = new Form({ container: host, atlasRemote: remoteAdapter({ transport: previewTransport(), preview: true }) });
@@ -535,7 +537,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       p.lookups = attachRemoteSelects(p.viewer, host, { transport: previewTransport(), preview: true, data: currentInputData() });
       renderOutput(currentInputData(), null);
     } catch (e) {
-      host.innerHTML = `<p class="muted err">Could not render this form: ${esc(e.message)}</p>`;
+      host.innerHTML = `<p class="muted err">${esc(tr("formEd.renderFailed", { error: e.message }))}</p>`;
     }
   }
 
@@ -545,10 +547,10 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     if (!p.viewer) return;
     let res;
     try { res = p.viewer.submit(); }
-    catch (e) { toast("Validation failed: " + e.message, "err"); return; }
+    catch (e) { toast(tr("formEd.validationFailed", { error: e.message }), "err"); return; }
     renderOutput(res.data, res.errors);
     const n = res.errors ? Object.keys(res.errors).length : 0;
-    toast(n === 0 ? "Form is valid" : `${n} field${n === 1 ? "" : "s"} with errors`, n === 0 ? "" : "err");
+    toast(n === 0 ? tr("formEd.valid") : trPlural("formEd.fieldErrors", n), n === 0 ? "" : "err");
   }
 
   function renderOutput(data, errors) {
@@ -557,16 +559,16 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     const status = p.el.querySelector("#fv-out-status");
     if (!out) return;
     const hasErrors = errors && Object.keys(errors).length > 0;
-    let html = `<span class="fv-out-label muted">data</span>\n${esc(JSON.stringify(data ?? {}, null, 2))}`;
+    let html = `<span class="fv-out-label muted">${esc(tr("formEd.out.data"))}</span>\n${esc(JSON.stringify(data ?? {}, null, 2))}`;
     if (hasErrors) {
       const items = Object.entries(errors)
         .map(([k, v]) => `  ${esc(k)}: ${esc(Array.isArray(v) ? v.join(", ") : String(v))}`)
         .join("\n");
-      html += `\n\n<span class="fv-out-label err">errors</span>\n${items}`;
+      html += `\n\n<span class="fv-out-label err">${esc(tr("formEd.out.errors"))}</span>\n${items}`;
     }
     out.innerHTML = html;
     if (status) {
-      status.textContent = hasErrors ? Object.keys(errors).length + " error(s)" : "valid";
+      status.textContent = hasErrors ? tr("formEd.out.errorCount", { n: Object.keys(errors).length }) : tr("formEd.out.valid");
       status.className = "fv-hint " + (hasErrors ? "err" : "ok");
     }
   }
@@ -578,9 +580,9 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     p.el.innerHTML = `
       <div class="fv-editor">
         <header class="fv-head">
-          <span class="fv-title">Form Schema</span>
+          <span class="fv-title">${esc(tr("formEd.schema"))}</span>
           <span class="chip">JSON</span>
-          <span class="fv-hint muted">edit the raw form-js schema; switch tabs to apply</span>
+          <span class="fv-hint muted">${esc(tr("formEd.schemaHint"))}</span>
         </header>
         <div class="fv-editor-body"><textarea id="fv-schema" class="fv-schema-ta" spellcheck="false"></textarea></div>
       </div>`;
@@ -631,7 +633,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     commit(activeTab); // fold the active tab's edits into `schema` first
     const nextId = (typeof schema.id === "string" ? schema.id.trim() : "") || savedId;
     if (!nextId) {
-      toast("This form needs an id — set one in the Design pane under Form ▸ General ▸ ID", "err");
+      toast(tr("formEd.needsId"), "err");
       return;
     }
     if (schema.id !== nextId) {
@@ -646,15 +648,12 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     // Renaming a form is not relabelling it: a user task binds to the id, so a task
     // still pointing at the old one finds no form. That is worth a question, not a
     // toast after the fact.
-    if (savedId && nextId !== savedId && !window.confirm(
-      `Rename this form from “${savedId}” to “${nextId}”?\n\n` +
-      `The form moves to the new id — no copy is left behind. Any user task whose Form ID ` +
-      `still says “${savedId}” will show no form until it is re-linked.`)) {
+    if (savedId && nextId !== savedId && !window.confirm(tr("formEd.confirmRename", { from: savedId, to: nextId }))) {
       return;
     }
     const btn = root.querySelector("#form-save");
     btn.disabled = true;
-    statusEl.textContent = "Saving…";
+    statusEl.textContent = tr("formEd.saving");
     try {
       const body = {
         id: nextId,
@@ -668,10 +667,10 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
         from: savedId,
       };
       const res = await api("POST", "/api/v1/forms", body);
-      statusEl.textContent = "Saved";
+      statusEl.textContent = tr("formEd.saved");
       toast(res && res.renamedFrom
-        ? `Form renamed “${res.renamedFrom}” → “${nextId}”`
-        : "Form saved");
+        ? tr("formEd.renamed", { from: res.renamedFrom, to: nextId })
+        : tr("formEd.savedToast"));
       savedId = nextId;
       syncIdentity();
       baseline = snapshot();
@@ -690,7 +689,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
       // A refused collision is about the id, so re-run the check: the chip goes red and
       // names what holds it, instead of leaving only a toast that fades.
       if (e.status === 409) idCheck.now();
-      toast("Save failed: " + e.message, "err");
+      toast(tr("formEd.saveFailed", { error: e.message }), "err");
     } finally {
       btn.disabled = false;
     }
@@ -707,7 +706,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   root.querySelector("#form-back").addEventListener("click", (ev) => {
     if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
     if (!isDirty()) return;
-    if (!window.confirm("This form has unsaved changes, and going back discards them.\n\nContinue?")) ev.preventDefault();
+    if (!window.confirm(tr("formEd.confirmLeave"))) ev.preventDefault();
   });
 
   // ---- Generate ------------------------------------------------------------
@@ -739,7 +738,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     schemaSource = null; // every pane reloads: none of them authored this
     await load(activeTab);
     syncIdentity();
-    toast(`Generated by ${got.worker}${got.model ? " (" + got.model + ")" : ""} — read it before saving.`);
+    toast(got.model ? tr("formEd.generatedModel", { worker: got.worker, model: got.model }) : tr("formEd.generated", { worker: got.worker }));
   }
   let available = [];
   (async () => {
@@ -785,6 +784,35 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
 // it re-applies cleanly if the Playground ever rebuilds its chrome.
 const DKEY = "atlas.form.design.";
 
+// SECTION_TITLES are the catalogue's words for the Playground's four sections, in
+// the order it draws them. form-js writes each title as the first text of the
+// section's header and never touches that text again, so it is renamed in place —
+// no file of form-js is changed.
+const SECTION_TITLES = ["formEd.section.definition", "formEd.section.preview", "formEd.section.input", "formEd.section.output"];
+
+function nameSections(sections) {
+  sections.forEach((section, i) => {
+    const header = section.querySelector(":scope > .header");
+    const title = header && [...header.childNodes].find((n) => n.nodeType === 3 && n.data.trim());
+    if (title && SECTION_TITLES[i]) title.data = tr(SECTION_TITLES[i]);
+  });
+}
+
+// paletteNamesModule renames form-js's field types in the catalogue's words before
+// the palette first draws them: the palette reads each type's config.name once, when
+// it mounts, so an editor module's init is the moment. A type the catalogue does not
+// name keeps form-js's own name. The palette's group headings are a constant inside
+// form-js, not a service, and stay English.
+function PaletteNames(formFields) {
+  for (const [type, field] of Object.entries(formFields._formFields || {})) {
+    const key = "formjs.field." + type;
+    const name = tr(key);
+    if (name !== key && field.config) field.config.name = name;
+  }
+}
+PaletteNames.$inject = ["formFields"];
+const paletteNamesModule = { __init__: ["atlasPaletteNames"], atlasPaletteNames: ["type", PaletteNames] };
+
 function enhanceDesignLayout(container) {
   if (!container) return;
   const main = container.querySelector(".fjs-pgl-main");
@@ -797,6 +825,7 @@ function enhanceDesignLayout(container) {
   const sections = [...main.querySelectorAll(":scope > .fjs-pgl-section")];
   if (sections.length < 4) return; // unexpected layout — leave the Playground as-is
   const [editor, preview, input, output] = sections;
+  nameSections(sections);
 
   const num = (k, d) => { const v = parseFloat(localStorage.getItem(DKEY + k)); return Number.isFinite(v) ? v : d; };
   const bool = (k, d) => { const v = localStorage.getItem(DKEY + k); return v == null ? d : v === "1"; };
@@ -841,11 +870,11 @@ function enhanceDesignLayout(container) {
   // Dividers: editor|preview (within the top region) and top|bottom (over main).
   const vsplit = document.createElement("div");
   vsplit.className = "fv-grid-cresizer";
-  vsplit.title = "Drag to resize the preview";
+  vsplit.title = tr("formEd.resizePreview");
   topRegion.appendChild(vsplit);
   const hsplit = document.createElement("div");
   hsplit.className = "fv-grid-rresizer";
-  hsplit.title = "Drag to resize the data region";
+  hsplit.title = tr("formEd.resizeData");
   main.appendChild(hsplit);
 
   // A header's caret toggles its region; the click ignores the header's own
@@ -904,7 +933,7 @@ function enhanceDesignLayout(container) {
     preview.style.flex = previewOpen ? "1 1 auto" : "0 0 0";
     vsplit.style.left = state.edPct + "%";
     const btn = edHeader && edHeader.querySelector(".fv-preview-toggle");
-    if (btn) { btn.textContent = previewOpen ? "Hide preview" : "Show preview"; btn.classList.toggle("on", previewOpen); }
+    if (btn) { btn.textContent = tr(previewOpen ? "formEd.hidePreview" : "formEd.showPreview"); btn.classList.toggle("on", previewOpen); }
   }
 
   dragPct(vsplit, "x", topRegion, (pct) => { state.edPct = pct; recompute(); },
@@ -939,7 +968,7 @@ function enhanceDesignLayout(container) {
     const t = document.createElement("button");
     t.type = "button";
     t.className = "fv-railbtn";
-    t.title = "Collapse / expand";
+    t.title = tr("formEd.toggle");
     r.appendChild(t);
     t.addEventListener("pointerdown", (e) => e.stopPropagation()); // click, don't drag
     t.addEventListener("click", (e) => { e.stopPropagation(); open = !open; setBool(openKey, open); apply(); });

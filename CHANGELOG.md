@@ -57,6 +57,18 @@ _Changed_ / _Removed_ for each version.
   import, the Server constants section of Admin → Engine, and the mark on a definition
   whose decisions were frozen at deploy, also in the editors. Messages the server
   composes stay in its English. `?lang=en` keeps the English pages.
+- **The decision editor and the form editor speak German, down to the libraries they
+  embed.** Their bars, hints, menus, dialogs, toasts, the test panel and its rule trace,
+  the decision documentation and its PDF, the XML source dialog, the collaboration
+  notices, the knowledge-model and requirement findings, the form generator and the JSON
+  editor read from the message catalogue. dmn-js's own words — the requirements graph's
+  palette, context pad and properties panel, the decision table's menus and the hit
+  policy explanations — come from the same catalogue through the `translate` service the
+  library asks for each word (`api/web/lib-translate.js`), and the form palette names
+  each field in German. A library word the catalogue does not carry stays as the library
+  wrote it; FEEL's keywords and the hit policies' standard names stay English on
+  purpose. form-js's palette groups, search and properties panel still speak English:
+  they are built into the vendored bundle without a translation hook.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the

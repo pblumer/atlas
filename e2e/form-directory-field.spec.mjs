@@ -63,7 +63,7 @@ test("the palette's Directory picker adds a select that searches through the Wor
   await open(page);
   const preset = page.locator('.fjs-palette-field[data-field-type="directorypicker"]');
   await expect(preset).toBeVisible();
-  await expect(preset).toContainText("Directory picker");
+  await expect(preset).toContainText("Verzeichnisauswahl");
   await preset.focus();
   await preset.press("Enter");
   const schema = await save(page);

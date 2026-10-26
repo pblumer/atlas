@@ -220,16 +220,16 @@ test("a new decision opens at its own address, in the editor chrome its siblings
 
   // The tab strip is the .etabs strip, carrying the DRG overview and the seeded
   // decision's own table.
-  await expect(page.locator(".editor-bar .etabs#dmn-views button").first()).toHaveText("Overview (DRG)");
+  await expect(page.locator(".editor-bar .etabs#dmn-views button").first()).toHaveText("Übersicht (DRG)");
   await expect(page.locator(".editor-bar .etabs#dmn-views button")).toHaveCount(2);
 
   // English, like the rest of the Modeler — and the BPMN editor's grammar: neutral
   // buttons for what you keep, one primary button for the act that leaves the
   // browser. Three verbs, because a decision has three layers
   // (ADR-0321, ADR-0322).
-  await expect(page.locator("#dmn-save")).toHaveText("Save");
-  await expect(page.locator("#dmn-save-model")).toHaveText("Save to model");
-  await expect(page.locator("#dmn-deploy")).toHaveText("Deploy");
+  await expect(page.locator("#dmn-save")).toHaveText("Speichern");
+  await expect(page.locator("#dmn-save-model")).toHaveText("Ins Modell speichern");
+  await expect(page.locator("#dmn-deploy")).toHaveText("Deployen");
   await expect(page.locator("#dmn-save-model")).toHaveClass(/neutral/);
   await expect(page.locator("#dmn-deploy")).not.toHaveClass(/neutral/);
   // Nothing is drafted or deployed yet, so neither marker is offered, nor the way
@@ -246,7 +246,7 @@ test("Save keeps a draft and writes nothing anything else resolves", async ({ pa
   await editorReady(page);
 
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
 
   // The draft carries the application it was opened for, and no model or reference
   // was written: that is the whole point of pressing Save.
@@ -276,10 +276,10 @@ test("Save to model writes the model and the reference, clears the draft, and mo
 
   // Draft first, so the model save has one to clear.
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
 
   await page.locator("#dmn-save-model").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  await expect(page.locator("#dmn-status")).toHaveText("Ins Modell gespeichert");
 
   // What the editor sent: the seeded model under a name taken from the decision,
   // identity-aware (?from=) so a taken handle is refused rather than forked, and a
@@ -336,7 +336,7 @@ test("a model handle another decision holds is asked about, not silently forked"
   // model under that handle is overwritten (ADR-0222).
   await page.locator("#dmn-save-model").click();
   await expect.poll(() => asked.length).toBe(2);
-  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  await expect(page.locator("#dmn-status")).toHaveText("Ins Modell gespeichert");
   expect(asked[1]).toContain("decision.dmn");
   expect(state.uploads[state.uploads.length - 1].query).toBe("?name=Decision&from=&overwrite=true");
   expect(state.created).toHaveLength(1);
@@ -391,7 +391,7 @@ test("a model save names the artifact after the model, not after whichever decis
   await editorReady(page);
 
   await page.locator("#dmn-save-model").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  await expect(page.locator("#dmn-status")).toHaveText("Ins Modell gespeichert");
 
   // The model went back under the handle this session opened, unchanged.
   expect(state.uploads).toHaveLength(1);
@@ -405,7 +405,7 @@ test("a model save names the artifact after the model, not after whichever decis
 test("a decision reference that no longer exists says so instead of opening an empty editor", async ({ page }) => {
   installMock(page, { refs: [] });
   await page.goto("/index.html#/modeler/dmn/e/ref-gone");
-  await expect(page.locator("#view")).toContainText("Decision not found");
+  await expect(page.locator("#view")).toContainText("Entscheidung nicht gefunden");
   await expect(page.locator(".dmn-overlay")).toHaveCount(0);
 });
 
@@ -441,7 +441,7 @@ test("a draft saved on the way from a business rule task says the task is not wi
   // the model is not callable — so Save says so rather than leaving the author to
   // find the task still empty.
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved — save to the model to wire the task");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert — ins Modell speichern, um die Task zu verbinden");
   // And the draft keeps the way back: the route still names the diagram and the task.
   await expect.poll(() => page.evaluate(() => location.hash))
     .toBe("#/modeler/dmn/d/dd-new/for/orders/Activity_rule");
@@ -463,7 +463,7 @@ test("Deploy ships the decision to the engine, and says so on the bar", async ({
   await editorReady(page);
 
   await page.locator("#dmn-deploy").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Deployed v1 · key 7");
+  await expect(page.locator("#dmn-status")).toHaveText("Deployt v1 · Schlüssel 7");
 
   // What was sent: the decision on screen, filed under the application it was
   // opened for. And nothing else was written — Deploy is not Save and not Save to
@@ -477,15 +477,15 @@ test("Deploy ships the decision to the engine, and says so on the bar", async ({
 
   // The version and the key are on the bar, the way a diagram opened from a
   // deployment carries its key.
-  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v1 · key 7");
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployt v1 · Schlüssel 7");
 
   // The trap this buys is named where it happens: the decision runs, but nothing
   // can call it by name until it is in the model.
-  await expect(page.locator("#toast")).toContainText("not in the model yet");
+  await expect(page.locator("#toast")).toContainText("noch nicht im Modell");
 
   // Deploying again is a new version under a new key, and the bar follows.
   await page.locator("#dmn-deploy").click();
-  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v2 · key 8");
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployt v2 · Schlüssel 8");
 });
 
 test("a decision that is in the model deploys with its reference and handle, and is not warned about", async ({ page }) => {
@@ -496,15 +496,15 @@ test("a decision that is in the model deploys with its reference and handle, and
   await editorReady(page);
 
   await page.locator("#dmn-deploy").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Deployed v1 · key 7");
+  await expect(page.locator("#dmn-status")).toHaveText("Deployt v1 · Schlüssel 7");
 
   // Provenance the record keeps: which application, which reference, which model
   // handle this was authored as.
   expect(state.deploys[0].query).toBe("?projectId=app-1&artifactId=ref-1&modelRef=eligibility");
   // It is in the model, so there is nothing to warn about — the toast is the plain
   // confirmation.
-  await expect(page.locator("#toast")).toContainText("deployed as version 1");
-  await expect(page.locator("#toast")).not.toContainText("not in the model yet");
+  await expect(page.locator("#toast")).toContainText("als Version 1 deployt");
+  await expect(page.locator("#toast")).not.toContainText("noch nicht im Modell");
 });
 
 test("a deploy names the deployed processes that will not follow it", async ({ page }) => {
@@ -523,12 +523,12 @@ test("a deploy names the deployed processes that will not follow it", async ({ p
   await editorReady(page);
 
   await page.locator("#dmn-deploy").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Deployed v2 · key 7");
+  await expect(page.locator("#dmn-status")).toHaveText("Deployt v2 · Schlüssel 7");
   await expect(page.locator("#toast")).toContainText(
     "Ein deployter Prozess folgt dieser Version nicht: Orders v2 (Decision_stored wertet v1 aus, das Neueste ist v2)");
   await expect(page.locator("#toast")).not.toContainText("Billing");
   // And the chip no longer promises what ADR-0319 did: latest follows the version.
-  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /what a business rule task bound to latest evaluates when it runs/);
+  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /das wertet eine an latest gebundene Business Rule Task aus, wenn sie läuft/);
 });
 
 test("the bar says which version a decision is deployed at the moment it opens", async ({ page }) => {
@@ -544,8 +544,8 @@ test("the bar says which version a decision is deployed at the moment it opens",
   await page.goto("/index.html#/modeler/dmn/e/ref-1");
   await editorReady(page);
 
-  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployed v2 · key 9");
-  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /version 2 under definition key 9/);
+  await expect(page.locator("#dmn-deployed-chip")).toHaveText("Deployt v2 · Schlüssel 9");
+  await expect(page.locator("#dmn-deployed-chip")).toHaveAttribute("title", /Version 2 unter dem Definitionsschlüssel 9/);
 });
 
 test("a decision nothing has deployed yet says nothing, rather than saying zero", async ({ page }) => {
@@ -579,7 +579,7 @@ test("Test runs the decision on screen and shows which rule fired", async ({ pag
 
   // The answer, and the rule matrix that says why — the same matrix Operations draws.
   await expect(page.locator("#dmn-test-result .res-val")).toHaveText("approve");
-  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Rule 1 fired");
+  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Regel 1 hat gegriffen");
   await expect(page.locator("#dmn-test-result .mrule.is-hit")).toHaveCount(1);
 
   // What was sent: the model on screen, the decision named, and the value typed —
@@ -597,7 +597,7 @@ test("Test runs the decision on screen and shows which rule fired", async ({ pag
   await amount.fill("12");
   await page.locator("#dmn-test-run").click();
   await expect(page.locator("#dmn-test-result .res-val")).toHaveText("reject");
-  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Rule 2 fired");
+  await expect(page.locator("#dmn-test-result .mtable-head")).toContainText("Regel 2 hat gegriffen");
 });
 
 test("a decision that does not run says so in the panel, not as a broken page", async ({ page }) => {
@@ -637,9 +637,9 @@ test("a decision service says why it has no rule matrix, instead of claiming the
 
   const result = page.locator("#dmn-test-result");
   await expect(result.locator(".res-val")).toHaveText("approve");
-  await expect(result).toContainText("No rule matrix came back for this service");
-  await expect(result).toContainText("shows its rules");
-  await expect(result).not.toContainText("no table logic");
+  await expect(result).toContainText("Für diesen Service kam keine Regelmatrix zurück");
+  await expect(result).toContainText("zeigt jetzt seine Regeln");
+  await expect(result).not.toContainText("keine Tabellenlogik");
 });
 
 // The test panel's fields follow what the decision declares.
@@ -727,7 +727,7 @@ test("a decision whose logic has no table says that, and one with no trace at al
 
   await page.locator("#dmn-test").click();
   await page.locator("#dmn-test-run").click();
-  await expect(page.locator("#dmn-test-result")).toContainText("no table logic");
+  await expect(page.locator("#dmn-test-result")).toContainText("keine Tabellenlogik");
 
   // The same decision, answered without a trace: the panel no longer blames the
   // model for something the run did not record.
@@ -741,8 +741,8 @@ test("a decision whose logic has no table says that, and one with no trace at al
   await page.locator("#dmn-test").click();
   await page.locator("#dmn-test-run").click();
   const result = page.locator("#dmn-test-result");
-  await expect(result).toContainText("recorded no trace");
-  await expect(result).not.toContainText("no table logic");
+  await expect(result).toContainText("keinen Trace aufgezeichnet");
+  await expect(result).not.toContainText("keine Tabellenlogik");
 });
 
 test("Auto-layout re-flows the requirements graph through the server", async ({ page }) => {
@@ -756,7 +756,7 @@ test("Auto-layout re-flows the requirements graph through the server", async ({ 
   await expect(page.locator("#dmn-menu")).toBeVisible();
   await page.locator("#dmn-autolayout").click();
 
-  await expect(page.locator("#toast")).toContainText("laid out");
+  await expect(page.locator("#toast")).toContainText("angeordnet");
   expect(state.layouts).toHaveLength(1);
   expect(state.layouts[0]).toContain("<decision");
   // The model came back through the editor, not around it: nothing was stored.
@@ -825,7 +825,7 @@ test("a model the server completed draws its whole requirements graph", async ({
   });
   await page.goto("/index.html#/modeler/dmn/e/ref-1");
   await editorReady(page);
-  await page.locator("#dmn-views button", { hasText: "Overview (DRG)" }).click();
+  await page.locator("#dmn-views button", { hasText: "Übersicht (DRG)" }).click();
 
   // All three, and the arrow between them. Without the generated diagram dmn-js
   // draws the decision alone and silently drops the input data and the requirement,
@@ -845,7 +845,7 @@ test("Documentation publishes a version of the decision and lists its history", 
   await page.locator("#dmn-more").click();
   await page.locator("#dmn-docexport").click();
   await expect(page.locator("#dmn-doc-panel")).toBeVisible();
-  await expect(page.locator("#dmn-doc-history")).toContainText("No version published yet");
+  await expect(page.locator("#dmn-doc-history")).toContainText("Noch keine Version veröffentlicht");
 
   await page.locator("#dmn-doc-note").fill("Signed off in March");
   await page.locator("#dmn-doc-publish").click();
@@ -999,10 +999,10 @@ test("a knowledge model's expression opens styled, and the hint says what it is"
   // The hint under the canvas describes the view that is open. A knowledge model is
   // not a decision table, and saying so is the difference between a layout that
   // explains itself and one that looks broken.
-  await expect(page.locator("#dmn-hint")).toContainText("knowledge model");
-  await expect(page.locator("#dmn-hint")).not.toContainText("Model the decision table");
+  await expect(page.locator("#dmn-hint")).toContainText("Wissensmodell");
+  await expect(page.locator("#dmn-hint")).not.toContainText("Modelliere die Entscheidungstabelle");
   await tabs.nth(0).click();
-  await expect(page.locator("#dmn-hint")).toContainText("decision requirements graph");
+  await expect(page.locator("#dmn-hint")).toContainText("Entscheidungsanforderungsgraph");
 });
 
 // A knowledge model only runs when something invokes it, and DMN says the invoking
@@ -1071,11 +1071,11 @@ test("the editor says when a knowledge model is never invoked, or invoked withou
   const rows = strip.locator("li button[data-el]");
   // Both findings name the model they are about, and say what actually follows —
   // one is never evaluated, the other runs and draws a graph that omits it.
-  await expect(rows.nth(0)).toContainText("Nothing invokes the knowledge model “unused rate”");
-  await expect(rows.nth(1)).toContainText("“total” calls the knowledge model “tier” but does not require it");
+  await expect(rows.nth(0)).toContainText("Nichts ruft das Wissensmodell «unused rate» auf");
+  await expect(rows.nth(1)).toContainText("«total» ruft das Wissensmodell «tier» auf, fordert es aber nicht an");
   // The correctly wired pair is not mentioned: a warning an author learns to ignore
   // is worse than no warning.
-  await expect(strip).not.toContainText("“fee”");
+  await expect(strip).not.toContainText("«fee»");
 
   // One badge per offending shape in the requirements graph: the knowledge model
   // nothing reaches, and the decision whose declaration is incomplete. The knowledge
@@ -1104,7 +1104,7 @@ test("the findings follow the model as it is edited, from whichever view is doin
   await editorReady(page);
 
   const strip = page.locator("#dmn-warn");
-  await expect(strip).toContainText("calls the knowledge model “tier” but does not require it");
+  await expect(strip).toContainText("ruft das Wissensmodell «tier» auf, fordert es aber nicht an");
 
   // Edit the expression in the decision's own view — a different diagram-js instance
   // from the graph the findings are drawn on. Taking the call out of it changes which
@@ -1119,8 +1119,8 @@ test("the findings follow the model as it is edited, from whichever view is doin
 
   // No save, no blur, no going back to the graph: the strip is about the model, and
   // the model changed.
-  await expect(strip).toContainText("Nothing invokes the knowledge model “tier”");
-  await expect(strip).not.toContainText("does not require it");
+  await expect(strip).toContainText("Nichts ruft das Wissensmodell «tier» auf");
+  await expect(strip).not.toContainText("fordert es aber nicht an");
   await expect(strip.locator("li")).toHaveCount(2);
   // Both findings are now the kind with no determinate repair, so neither offers one.
   await expect(strip.locator(".dmn-warn-fix")).toHaveCount(0);
@@ -1148,15 +1148,15 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   // an uninvoked knowledge model is the author's to decide, so that one has no button.
   const fix = strip.locator(".dmn-warn-fix");
   await expect(fix).toHaveCount(1);
-  await expect(fix).toHaveText("Draw the requirement");
+  await expect(fix).toHaveText("Anforderung zeichnen");
 
   await fix.click();
 
   // The finding is gone because the model changed, not because the strip was told to
   // hide it: the findings are recomputed from the model after every command.
   await expect(strip.locator("li")).toHaveCount(1);
-  await expect(strip).not.toContainText("does not require it");
-  await expect(strip).toContainText("Nothing invokes the knowledge model “unused rate”");
+  await expect(strip).not.toContainText("fordert es aber nicht an");
+  await expect(strip).toContainText("Nichts ruft das Wissensmodell «unused rate» auf");
   await expect(page.locator(".dmn-canvas .djs-overlay .unsup-badge")).toHaveCount(1);
 
   // It is as easy to take back as it was to make, both ways, and without the author
@@ -1167,7 +1167,7 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   expect(await page.evaluate(() => document.activeElement.tagName.toLowerCase())).toBe("svg");
   await page.keyboard.press("ControlOrMeta+z");
   await expect(strip.locator("li")).toHaveCount(2);
-  await expect(strip).toContainText("does not require it");
+  await expect(strip).toContainText("fordert es aber nicht an");
 
   // The other way back is the connection's own context pad, whose single entry is the
   // bin — reachable because the new connection is left selected.
@@ -1182,7 +1182,7 @@ test("the missing requirement can be drawn from the finding, and the drawing is 
   await strip.locator(".dmn-warn-fix").click();
   await expect(strip.locator("li")).toHaveCount(1);
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
   expect(state.draftSaves).toHaveLength(1);
   expect(state.draftSaves[0].xml).toMatch(/<knowledgeRequirement[\s\S]*?requiredKnowledge[^>]*#bkm_tier/);
 });
@@ -1249,11 +1249,11 @@ test("the editor says when a decision reads a name nothing gives it, and when it
   // Three: the column that reads nothing, and each of the two requirements it leaves
   // unread. "Decision 2" is correctly wired and is not mentioned.
   await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText("“Decision 1” reads “input”, and nothing gives it that");
-  await expect(rows.nth(0)).toContainText("will not deploy");
-  await expect(rows.nth(1)).toContainText("“Decision 1” requires “input 1” and never reads it");
-  await expect(rows.nth(2)).toContainText("“Decision 1” requires “Decision 2” and never reads it");
-  await expect(strip).not.toContainText("“Decision 2” reads");
+  await expect(rows.nth(0)).toContainText("«Decision 1» liest «input», und nichts gibt ihr das");
+  await expect(rows.nth(0)).toContainText("lässt sich nicht deployen");
+  await expect(rows.nth(1)).toContainText("«Decision 1» fordert «input 1» an und liest es nie");
+  await expect(rows.nth(2)).toContainText("«Decision 1» fordert «Decision 2» an und liest es nie");
+  await expect(strip).not.toContainText("«Decision 2» liest");
 
   // Only one of the three does not deploy, and it is marked: a reader who has learned
   // that the strip is advisory would otherwise file it with the two that run.
@@ -1278,17 +1278,17 @@ test("the column a requirement implies can be added from the finding", async ({ 
   // from something that was picked for the author.
   await expect(strip.locator(".dmn-warn-fix")).toHaveCount(3);
   await expect(strip.locator('.dmn-warn-fix[data-fix-kind="create-input"]')).toHaveText(
-    "Add it as input data");
+    "Als Eingabedaten hinzufügen");
   const fixes = strip.locator('.dmn-warn-fix[data-fix-kind="add-input"]');
   await expect(fixes).toHaveCount(2);
-  await expect(fixes.first()).toHaveText("Add the input column");
+  await expect(fixes.first()).toHaveText("Eingabespalte hinzufügen");
 
   await fixes.first().click();
 
   // One finding fewer, because the model changed: the findings are recomputed from it
   // after every command, not crossed off a list.
   await expect(strip.locator("li")).toHaveCount(2);
-  await expect(strip).not.toContainText("requires “input 1” and never reads it");
+  await expect(strip).not.toContainText("fordert «input 1» an und liest es nie");
 
   // As easy to take back as to make, and without having to find the canvas first.
   expect(await page.evaluate(() => document.activeElement.tagName.toLowerCase())).toBe("svg");
@@ -1300,7 +1300,7 @@ test("the column a requirement implies can be added from the finding", async ({ 
   await strip.locator('.dmn-warn-fix[data-fix-kind="add-input"]').first().click();
   await expect(strip.locator("li")).toHaveCount(2);
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
   expect(state.draftSaves).toHaveLength(1);
   const saved = state.draftSaves[0].xml;
   expect(saved).toMatch(/<inputExpression[^>]*typeRef="boolean"[^>]*>\s*<text>input 1<\/text>/);
@@ -1347,7 +1347,7 @@ test("drawing a requirement gives the decision the column it implies", async ({ 
   // column that reads it — which is the whole point: the transcription an author would
   // otherwise do by hand is where the graph and the table start to differ.
   await expect(strip.locator("li")).toHaveCount(3);
-  await expect(strip).not.toContainText("requires “Input 2” and never reads it");
+  await expect(strip).not.toContainText("fordert «Input 2» an und liest es nie");
 
   // One undo takes the column and the arrow back together: a default the author can
   // refuse, not a rule. dmn-js binds its keyboard to the canvas, and a drag that ends
@@ -1365,7 +1365,7 @@ test("drawing a requirement gives the decision the column it implies", async ({ 
   await page.keyboard.press("ControlOrMeta+Shift+z");
   await expect(page.locator(".dmn-canvas .djs-connection")).toHaveCount(before + 1);
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
   const saved = state.draftSaves[state.draftSaves.length - 1].xml;
   expect(saved).toMatch(/<inputExpression[^>]*typeRef="string"[^>]*>\s*<text>Input 2<\/text>/);
   const decisionOne = saved.slice(saved.indexOf('id="dec_1"'));
@@ -1447,7 +1447,7 @@ async function renameOnCanvas(page, id, name) {
 
 const savedXml = async (page, state) => {
   await page.locator("#dmn-save").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Draft saved");
+  await expect(page.locator("#dmn-status")).toHaveText("Entwurf gespeichert");
   return state.draftSaves[state.draftSaves.length - 1].xml;
 };
 
@@ -1499,7 +1499,7 @@ async function selectInPanel(page, id, group, fieldId) {
 // field, which is the other way an author renames one — and a different command
 // (`element.updateProperties`) from the canvas.
 async function renameInPanel(page, id, name) {
-  const field = await selectInPanel(page, id, "General", "bio-properties-panel-name");
+  const field = await selectInPanel(page, id, "Allgemein", "bio-properties-panel-name");
   await field.fill(name);
   await field.blur();
 }
@@ -1585,7 +1585,7 @@ test("a column that reads a name nothing provides can draw that element into the
 
   const strip = page.locator("#dmn-warn");
   await expect(strip.locator("li.dmn-warn-error")).toHaveCount(1);
-  await expect(strip).toContainText("“Decision 1” reads “region”, and nothing gives it that");
+  await expect(strip).toContainText("«Decision 1» liest «region», und nichts gibt ihr das");
 
   const before = await page.locator(".dmn-canvas .djs-connection").count();
   await strip.locator('.dmn-warn-fix[data-fix-kind="create-input"]').click();
@@ -1628,13 +1628,13 @@ test("removing a requirement asks before it takes the column away", async ({ pag
   await page.keyboard.press("Delete");
   await expect(page.locator(".dmn-canvas .djs-connection")).toHaveCount(1);
   expect(asked).toHaveLength(1);
-  expect(asked[0]).toContain("“amount” in “Decision 1”");
+  expect(asked[0]).toContain("«amount» in «Decision 1»");
 
   // Kept — and now reported, because a column reading a name nothing provides is the
   // one finding in this family that does not deploy.
   const strip = page.locator("#dmn-warn");
   await expect(strip.locator("li.dmn-warn-error")).toHaveCount(1);
-  await expect(strip).toContainText("“Decision 1” reads “amount”, and nothing gives it that");
+  await expect(strip).toContainText("«Decision 1» liest «amount», und nichts gibt ihr das");
   const kept = await savedXml(page, state);
   expect(kept).toMatch(/<text>amount<\/text>/);
 
@@ -1680,7 +1680,7 @@ test("deleting the element behind a requirement asks once, for everything it fed
   // One question, not one per command: deleting a shape removes its arrows as nested
   // commands, and an author who deleted one thing is asked one thing.
   expect(asked).toHaveLength(1);
-  expect(asked[0]).toContain("“customer” in “Decision 1”");
+  expect(asked[0]).toContain("«customer» in «Decision 1»");
 
   await expect(page.locator("#dmn-warn")).toBeHidden();
   const saved = await savedXml(page, state);
@@ -1714,7 +1714,7 @@ test("a decision model in the DMN 1.5 namespace opens, and is not quietly saved 
 
   // The refusal card is what this used to show instead of a canvas.
   await expect(page.locator(".dmn-editor .card.empty")).toHaveCount(0);
-  await expect(page.getByText("Could not open the decision editor")).toHaveCount(0);
+  await expect(page.getByText("Der Entscheidungs-Editor liess sich nicht öffnen")).toHaveCount(0);
 
   // The document really parsed: its decision is a view in the tab strip, so
   // dmn-js built a model rather than an empty canvas.
@@ -1723,7 +1723,7 @@ test("a decision model in the DMN 1.5 namespace opens, and is not quietly saved 
   // And writing it back keeps the author's version. A 1.5 model silently returning
   // as 1.3 would be the same data loss as refusing it, only harder to notice.
   await page.locator("#dmn-save-model").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  await expect(page.locator("#dmn-status")).toHaveText("Ins Modell gespeichert");
   expect(state.uploads).toHaveLength(1);
   expect(state.uploads[0].body).toContain("https://www.omg.org/spec/DMN/20230324/MODEL/");
   expect(state.uploads[0].body).not.toContain("https://www.omg.org/spec/DMN/20191111/MODEL/");
@@ -1741,7 +1741,7 @@ test("a decision model in the DMN 1.3 namespace still opens, and still saves as 
   await expect(page.locator("#dmn-views button", { hasText: "eligibility" })).toBeVisible();
 
   await page.locator("#dmn-save-model").click();
-  await expect(page.locator("#dmn-status")).toHaveText("Saved to the model");
+  await expect(page.locator("#dmn-status")).toHaveText("Ins Modell gespeichert");
   expect(state.uploads[0].body).toContain("https://www.omg.org/spec/DMN/20191111/MODEL/");
   expect(state.uploads[0].body).not.toContain("https://www.omg.org/spec/DMN/20230324/MODEL/");
 });

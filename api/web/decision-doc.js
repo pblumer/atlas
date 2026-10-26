@@ -16,6 +16,7 @@
 import { PdfDocument, bytesToBase64 } from "./pdf.js";
 import { svgToJpeg, wantsLandscape } from "./doc-graphics.js";
 import { fmtDateTime } from "./datefmt.js";
+import { t } from "./i18n.js";
 
 const GREY = [0.42, 0.42, 0.42];
 
@@ -152,9 +153,9 @@ const columnTitle = (c) => c.label || c.expression || "—";
 // here it is the subject, there it is what a step calls.
 export function renderDecisionBody(doc, dec) {
   if (dec.inputs && dec.inputs.length) {
-    doc.paragraph("Reads", { size: 9, bold: true, after: 2 });
+    doc.paragraph(t("decisionDoc.reads"), { size: 9, bold: true, after: 2 });
     doc.table(
-      [{ header: "Input", width: 2 }, { header: "Type", width: 1 }],
+      [{ header: t("decisionDoc.input"), width: 2 }, { header: t("decisionDoc.type"), width: 1 }],
       dec.inputs.map((i) => [i.expression, i.type || "—"]),
     );
   }
@@ -163,7 +164,7 @@ export function renderDecisionBody(doc, dec) {
     // The rule table is the decision. It is set as a table rather than as
     // preformatted text because a decision table read as text is a decision
     // table nobody checks.
-    doc.paragraph("Rules  ·  hit policy " + dec.hitPolicy, { size: 9, color: GREY, after: 2 });
+    doc.paragraph(t("decisionDoc.rules", { policy: dec.hitPolicy }), { size: 9, color: GREY, after: 2 });
     const columns = [{ header: "#", width: 0.4 }]
       .concat(dec.inputColumns.map((c) => ({ header: columnTitle(c), width: 1.4 })))
       .concat(dec.outputColumns.map((c) => ({ header: "→ " + columnTitle(c), width: 1.4 })));
@@ -178,20 +179,20 @@ export function renderDecisionBody(doc, dec) {
       .map((rule, i) => ({ n: i + 1, text: rule.description }))
       .filter((r) => r.text);
     for (const r of annotated) {
-      doc.paragraph(`Rule ${r.n}: ${r.text}`, { size: 9, indent: 8, after: 3 });
+      doc.paragraph(t("decisionDoc.rule", { n: r.n, text: r.text }), { size: 9, indent: 8, after: 3 });
     }
     if (dec.outputColumns.length) {
       const outs = dec.outputColumns
         .map((c) => c.expression + (c.type ? " (" + c.type + ")" : ""))
         .filter(Boolean)
         .join(", ");
-      if (outs) doc.paragraph("Writes: " + outs, { size: 9, color: GREY, after: 4 });
+      if (outs) doc.paragraph(t("decisionDoc.writes", { outputs: outs }), { size: 9, color: GREY, after: 4 });
     }
   } else if (dec.literal) {
     // A decision whose logic is a literal expression is shown as what it is.
-    doc.codeBlock(dec.literal, { label: "Literal expression", language: "feel" });
+    doc.codeBlock(dec.literal, { label: t("decisionDoc.literal"), language: "feel" });
   } else {
-    doc.paragraph("This decision declares no logic yet.", { size: 9.5, color: GREY, after: 6 });
+    doc.paragraph(t("decisionDoc.noLogic"), { size: 9.5, color: GREY, after: 6 });
   }
 }
 
@@ -207,16 +208,16 @@ export function buildDecisionDocumentationPdf(spec) {
   });
 
   doc.heading(heading, 1);
-  doc.paragraph("Decision documentation", { size: 11, color: GREY, after: 12 });
+  doc.paragraph(t("decisionDoc.subtitle"), { size: 11, color: GREY, after: 12 });
 
-  if (collection.modelName) doc.keyValue("Model", collection.modelName);
-  if (modelRef) doc.keyValue("Model handle", modelRef + ".dmn");
-  doc.keyValue("Decision ID", collection.decisionId || "—");
-  if (version) doc.keyValue("Documentation version", "v" + version);
-  doc.keyValue("Created", createdAt || fmtDateTime(Date.now()));
-  if (createdBy) doc.keyValue("Created by", createdBy);
-  doc.keyValue("Decisions documented", String(collection.decisions.length));
-  if (note) doc.keyValue("Note", note);
+  if (collection.modelName) doc.keyValue(t("decisionDoc.model"), collection.modelName);
+  if (modelRef) doc.keyValue(t("decisionDoc.handle"), modelRef + ".dmn");
+  doc.keyValue(t("decisionDoc.decisionId"), collection.decisionId || "—");
+  if (version) doc.keyValue(t("decisionDoc.version"), "v" + version);
+  doc.keyValue(t("decisionDoc.created"), createdAt || fmtDateTime(Date.now()));
+  if (createdBy) doc.keyValue(t("decisionDoc.createdBy"), createdBy);
+  doc.keyValue(t("decisionDoc.count"), String(collection.decisions.length));
+  if (note) doc.keyValue(t("decisionDoc.note"), note);
   doc.rule();
 
   if (diagram && diagram.bytes) {
@@ -224,14 +225,14 @@ export function buildDecisionDocumentationPdf(spec) {
     // squeezed into an unreadable strip; the document then returns to portrait.
     const landscape = wantsLandscape(diagram, collection.decisions.length);
     if (landscape) doc.landscapePage();
-    doc.heading("Decision requirements", 2);
+    doc.heading(t("decisionDoc.requirements"), 2);
     doc.image(diagram.bytes, diagram.width, diagram.height);
     if (landscape) doc.portraitPage();
   }
 
-  doc.heading("Decisions", 2);
+  doc.heading(t("decisionDoc.decisions"), 2);
   if (collection.decisions.length === 0) {
-    doc.paragraph("This model declares no decision.", { color: GREY });
+    doc.paragraph(t("decisionDoc.noDecision"), { color: GREY });
   }
 
   for (const dec of collection.decisions) {
@@ -243,7 +244,7 @@ export function buildDecisionDocumentationPdf(spec) {
     if (dec.description) {
       doc.paragraph(dec.description, { size: 10, after: 6 });
     } else {
-      doc.paragraph("No description.", { size: 9.5, color: GREY, after: 6 });
+      doc.paragraph(t("decisionDoc.noDescription"), { size: 9.5, color: GREY, after: 6 });
     }
 
     renderDecisionBody(doc, dec);

@@ -18,6 +18,8 @@
 // and workerdialog.js are: app.js boots the whole console on import, so anything left
 // inside it can only ever be exercised by hand.
 
+import { t } from "./i18n.js";
+
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -90,35 +92,35 @@ export function openFormGenerator({ api, workers = [], formId = "", schema = nul
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal fg-modal" role="dialog" aria-modal="true" aria-label="Generate this form">
+      <div class="modal fg-modal" role="dialog" aria-modal="true" aria-label="${esc(t("formGen.title"))}">
         <div class="modal-head">
-          <h2>Generate this form</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+          <h2>${esc(t("formGen.title"))}</h2>
+          <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
-          <label class="field"><span>What should this form ask for?</span>
+          <label class="field"><span>${esc(t("formGen.brief"))}</span>
             <textarea id="fg-brief" rows="5" spellcheck="false"
-              placeholder="Ein Antrag auf Sonderurlaub: Grund, Zeitraum und ob Vertretung geregelt ist."></textarea></label>
-          <label class="field"><span>Process it belongs to <em>(optional, and worth it)</em></span>
-            <select id="fg-process"><option value="">— none —</option></select></label>
-          <label class="field" id="fg-step-field" hidden><span>Step</span>
-            <select id="fg-step"><option value="">Start form — this form starts the process</option></select></label>
-          ${workers.length > 1 ? `<label class="field"><span>AI Worker</span>
+              placeholder="${esc(t("formGen.briefPlaceholder"))}"></textarea></label>
+          <label class="field"><span>${t("formGen.process")}</span>
+            <select id="fg-process"><option value="">${esc(t("formGen.none"))}</option></select></label>
+          <label class="field" id="fg-step-field" hidden><span>${esc(t("formGen.step"))}</span>
+            <select id="fg-step"><option value="">${esc(t("formGen.startForm"))}</option></select></label>
+          ${workers.length > 1 ? `<label class="field"><span>${esc(t("formGen.worker"))}</span>
             <select id="fg-worker">${workers.map((w) =>
               `<option value="${esc(w.name)}">${esc(w.name)}${w.model ? " — " + esc(w.model) : ""}</option>`).join("")}</select></label>`
-            : `<p class="muted small" id="fg-worker-note">Written by ${esc(workers[0] ? workers[0].name : "the configured AI Worker")}${
-              workers[0] && workers[0].model ? " (" + esc(workers[0].model) + ")" : ""}.</p>`}
+            : `<p class="muted small" id="fg-worker-note">${esc(workers[0] && workers[0].model
+              ? t("formGen.writtenByModel", { worker: workers[0].name, model: workers[0].model })
+              : t("formGen.writtenBy", { worker: workers[0] ? workers[0].name : t("formGen.theWorker") }))}</p>`}
           ${refinable ? `<label class="field inline"><input type="checkbox" id="fg-refine" checked>
-            <span>Change the form that is open, rather than starting from nothing</span></label>` : ""}
-          <p class="muted small">Nothing is saved. What comes back opens in the editor for you to read,
-            change and save yourself.</p>
+            <span>${esc(t("formGen.refine"))}</span></label>` : ""}
+          <p class="muted small">${esc(t("formGen.nothingSaved"))}</p>
           <p class="warn-note" id="fg-err" hidden></p>
         </div>
         <div class="modal-foot">
           <span class="muted small" id="fg-status"></span>
           <span class="modal-actions">
-            <button type="button" class="btn ghost" data-cancel>Cancel</button>
-            <button type="button" class="btn" data-ok>Generate</button>
+            <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+            <button type="button" class="btn" data-ok>${esc(t("formGen.ok"))}</button>
           </span>
         </div>
       </div>`;
@@ -200,16 +202,16 @@ export function openFormGenerator({ api, workers = [], formId = "", schema = nul
       errEl.hidden = true;
       const description = brief.value.trim();
       if (!description && !procSel.value) {
-        fail("Say what the form is for, or pick the process it belongs to.");
+        fail(t("formGen.needBrief"));
         brief.focus();
         return;
       }
       running = true;
       okBtn.disabled = true;
-      okBtn.textContent = "Generating…";
+      okBtn.textContent = t("formGen.generating");
       // A model call is seconds, sometimes a good deal more, and a dialog that says
       // nothing for that long reads as one that has stopped working.
-      statusEl.textContent = "Asking the AI Worker — this can take a moment.";
+      statusEl.textContent = t("formGen.asking");
       const body = { description, formId };
       if (procSel.value) body.processId = procSel.value;
       if (stepSel.value) body.elementId = stepSel.value;
@@ -221,9 +223,9 @@ export function openFormGenerator({ api, workers = [], formId = "", schema = nul
       } catch (e) {
         running = false;
         okBtn.disabled = false;
-        okBtn.textContent = "Generate";
+        okBtn.textContent = t("formGen.ok");
         statusEl.textContent = "";
-        fail(e && e.message ? e.message : "The generation failed.");
+        fail(e && e.message ? e.message : t("formGen.failed"));
       }
     }
 
