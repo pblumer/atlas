@@ -513,6 +513,21 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.CardDAVJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunCardDAVJob(ctx, j, reg)
 			})
+		case "wikiwikibangbang":
+			reg, names, err := wikiRegistryFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if reg == nil {
+				// Told to serve the wiki, holding none: not an error, for CardDAV's reason —
+				// the kind is supervised by default.
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.WikiwikibangbangJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunWikiJob(ctx, j, reg)
+			})
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -671,7 +686,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.

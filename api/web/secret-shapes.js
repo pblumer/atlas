@@ -11,8 +11,9 @@
 // connector/sharepoint/oauth.go's, api/connectors.go's remedyCredentials, and
 // connector/jira/rest.go's, connector/googlesheets/oauth.go's,
 // connector/discord/rest.go's and connector/s3/rest.go's credentialBundle, and
-// connector/exchange/config.go's, connector/googlecontacts/config.go's and
-// connector/carddav/config.go's Bundle. A field added there is a field added here.
+// connector/exchange/config.go's, connector/googlecontacts/config.go's,
+// connector/carddav/config.go's and connector/wikiwikibangbang/config.go's Bundle. A field
+// added there is a field added here.
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -102,6 +103,12 @@ export const SECRET_SHAPES = {
     fields: ["username", "password"],
     skeleton: { username: "verkauf@firma.ch", password: "\u2026", groups: "categories" },
     note: "Use an <b>app-specific password</b> where the provider issues one: iCloud requires it, and Fastmail, mailbox.org and a Nextcloud with two-factor sign-in offer it. <code>\"groups\"</code> is <code>\"categories\"</code> (the default: Nextcloud, ownCloud, most servers) or <code>\"group-vcards\"</code> for iCloud and Fastmail, whose groups are cards of their own. The server's address is the Worker's endpoint, not part of this bundle.",
+  },
+  "wikiwikibangbang:": {
+    what: "the API token of the wiki account the Worker writes as (JSON)",
+    fields: ["token"],
+    skeleton: { token: "wwbb_\u2026" },
+    note: "Create the token signed in as a <b>technical account of its own</b> \u2014 an editor in the spaces processes write to, with no system role (an account with <code>admin</code> or <code>erasure</code> is refused) \u2014 under <i>Account</i> &rsaquo; <i>API tokens</i>, scope <code>full</code>. The wiki's address is the Worker's endpoint, not part of this bundle.",
   },
   "entra:": {
     what: "a Microsoft Entra ID app credential bundle (JSON): {tenantId, clientId} with a clientSecret, a certificate or a certificateThumbprint",

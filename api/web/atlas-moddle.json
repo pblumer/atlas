@@ -535,6 +535,32 @@
       ]
     },
     {
+      "name": "WikiwikibangbangConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "item", "type": "String", "isAttr": true },
+        { "name": "space", "type": "String", "isAttr": true },
+        { "name": "itemType", "type": "String", "isAttr": true },
+        { "name": "parent", "type": "String", "isAttr": true },
+        { "name": "title", "type": "String", "isAttr": true },
+        { "name": "properties", "type": "String", "isAttr": true },
+        { "name": "propertiesVariable", "type": "String", "isAttr": true },
+        { "name": "matchField", "type": "String", "isAttr": true },
+        { "name": "labels", "type": "String", "isAttr": true },
+        { "name": "text", "type": "String", "isAttr": true },
+        { "name": "blocks", "type": "String", "isAttr": true },
+        { "name": "transition", "type": "String", "isAttr": true },
+        { "name": "comment", "type": "String", "isAttr": true },
+        { "name": "query", "type": "String", "isAttr": true },
+        { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "GoogleContactsConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

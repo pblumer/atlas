@@ -2457,6 +2457,11 @@ type xmlServiceTask struct {
 	// search, list, create, update or delete a contact, or change its groups — through a
 	// server a *worker* holds the credential for.
 	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
+	// Wiki, when present, marks this service task a wikiwikibangbang task
+	// (ADR-draft-wikiwikibangbang-worker): one operation on a wikiwikibangbang wiki —
+	// create, read, update or move an item, comment on it, query items, read a page as
+	// Markdown or append to one — as an account a *worker* holds the token of.
+	Wiki *xmlWikiConnector `xml:"extensionElements>wikiwikibangbangConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2771,6 +2776,37 @@ type xmlCardDAVConnector struct {
 	ContactVariable string `xml:"contactVariable,attr"`
 	MaxResults      string `xml:"maxResults,attr"`
 	ResultVariable  string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlWikiConnector is the <atlas:wikiwikibangbangConnector> extension on a service task
+// (ADR-draft-wikiwikibangbang-worker). connector names the wikiwikibangbang Worker
+// (literal-or-FEEL), and there is no credential attribute, because none enters the
+// engine. operation is a row of connector/wikiwikibangbang/catalog; which other
+// attributes apply is decided by the operation, and only by it. The attributes are
+// spelled like the Jira Worker's where the two mean the same thing (itemType beside
+// issueType, transition, comment, query, maxResults).
+type xmlWikiConnector struct {
+	Connector          string `xml:"connector,attr"`
+	Operation          string `xml:"operation,attr"`
+	Item               string `xml:"item,attr"`
+	Space              string `xml:"space,attr"`
+	ItemType           string `xml:"itemType,attr"`
+	Parent             string `xml:"parent,attr"`
+	Title              string `xml:"title,attr"`
+	Properties         string `xml:"properties,attr"`
+	PropertiesVariable string `xml:"propertiesVariable,attr"`
+	MatchField         string `xml:"matchField,attr"`
+	Labels             string `xml:"labels,attr"`
+	Text               string `xml:"text,attr"`
+	Blocks             string `xml:"blocks,attr"`
+	Transition         string `xml:"transition,attr"`
+	Comment            string `xml:"comment,attr"`
+	Query              string `xml:"query,attr"`
+	MaxResults         string `xml:"maxResults,attr"`
+	ResultVariable     string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

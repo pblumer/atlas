@@ -86,8 +86,9 @@ var engineEvaluatedExpressions = map[string]bool{
 // connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
-// connector/googlecontacts/offload.go and connector/carddav/offload.go (Resolve and
-// resolveValue) and connector/agent/aitask.go:133, each over the scope variables handed to that call.
+// connector/googlecontacts/offload.go, connector/carddav/offload.go and
+// connector/wikiwikibangbang/offload.go (Resolve and resolveValue) and
+// connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
 // only while the values a worker binds are deciphered before it binds them. If the
@@ -217,6 +218,22 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CardDAVField.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// The wikiwikibangbang Worker's (ADR-draft-wikiwikibangbang-worker).
+	"connectorTasks.WikiConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiItem.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiSpace.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiItemType.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiParent.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiTitle.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiProperties.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiMatchField.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiLabels.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiText.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiBlocks.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiTransition.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiComment.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.WikiQuery.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// A mail template's FEEL (ADR-0487): rendered by the mail worker in
 	// connector/mail/offload.go (Resolve), over the same scope as the fields beside it.

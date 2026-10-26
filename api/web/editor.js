@@ -14,6 +14,7 @@ import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } 
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
+import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMaxPlaceholder, wikiMaxHint, wikiPropertiesPlaceholder } from "./wikiwikibangbang-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -5180,6 +5181,112 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
         showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
         hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "wikiwikibangbang", name: "wikiwikibangbang", group: "Applications",
+    desc: "Open, read, change and move tasks in a wikiwikibangbang wiki, comment on them and find them by a query; create a page, read it as Markdown and append to it",
+    icon: "W",
+    // A page with a check mark on indigo: knowledge and work in one wiki, told apart at a
+    // glance from Jira's blue and the contact Worker Types' cards.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4338ca"/><path d="M4 2.8h5.6L12 5.2v8H4z" fill="#fff"/><path d="M9.6 2.8v2.4H12" fill="#c7d2fe"/><rect x="5.4" y="6.4" width="4.6" height=".9" fill="#4338ca"/><path d="M5.6 9.9l1.3 1.3 2.6-2.7" stroke="#4338ca" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    ext: "atlas:WikiwikibangbangConnector",
+    fields: [
+      { group: "Wiki" },
+      {
+        key: "connector", label: "Worker", datalist: "wikiwikibangbang", placeholder: "wiki",
+        hint: "The configured wikiwikibangbang Worker whose wiki this task writes to, by its name under Workers in the Console. The wiki's address and the account's token reach that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the wiki at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: wikiOperationOptions(),
+      },
+      {
+        key: "item", label: "Item", placeholder: "=aufgabe.id", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "item"),
+        hint: "The item, by its id or its key (OPS-12). Usually a FEEL expression (fx) naming the id an earlier create or read answered with, e.g. =aufgabe.id — a key changes when the item moves to another space, the id never does.",
+      },
+      {
+        key: "space", label: "Space", placeholder: "OPS", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "space"),
+        hint: "The space's key, e.g. OPS. The Worker's account needs the role editor there.",
+      },
+      {
+        key: "itemType", label: "Item type", placeholder: "task", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "itemType"),
+        hint: "The type's name as the wiki's administrators defined it: a type with a workflow for a task, a type with a body for a page.",
+      },
+      {
+        key: "parent", label: "Parent", placeholder: "=protokollseite.id", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "parent"),
+        hint: "Optional. The item to place the new one under, by its id or key — a page below a page.",
+      },
+      {
+        key: "title", label: "Title", placeholder: "=\"Laptop für \" + mitarbeiter.name", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "title"),
+        hint: (v) => (v.operation === "update-item" ? "Optional. The item's new title." : "The new item's title."),
+      },
+      {
+        key: "properties", label: "Properties", type: "json", rows: 6,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.propertiesVariable,
+        placeholder: (v) => wikiPropertiesPlaceholder(v.operation || "create-item"),
+        hint: "Property values by the field's name, as the item's type defines them — the person a task is assigned to is one of them, e.g. assignee. A string starting with = is a FEEL expression. A value that is null changes nothing (an absent variable does not clear a due date); \"\" unsets the property.",
+      },
+      {
+        key: "propertiesVariable", label: "Properties variable", placeholder: "felder",
+        showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.properties,
+        hint: "Instead of the values above: a process variable holding the properties object, for a process that assembles it itself — a form's answers, say.",
+      },
+      {
+        key: "matchField", label: "Matching field", placeholder: "source-id",
+        showIf: (v) => wikiUses(v.operation || "create-item", "matchField"),
+        hint: "Optional. The property that identifies the item, e.g. source-id. When an item of this type in this space already has the value the properties set, it is answered instead of a second one — which also makes a repeated job safe. Without it a repeated create can create a second item.",
+      },
+      {
+        key: "labels", label: "Labels", placeholder: "onboarding, it", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "labels"),
+        hint: "Optional. Replaces the item's labels: a comma-separated list, or a FEEL list. An empty list clears them.",
+      },
+      {
+        key: "text", label: "Text", placeholder: "=\"Schritt \" + string(schritt) + \" erledigt.\"", fx: true, rows: 4,
+        showIf: (v) => wikiUses(v.operation || "create-item", "body") && !v.blocks,
+        hint: (v) => (v.operation === "append-to-page" ? "What is appended at the end of the page, as plain text: an empty line starts a new paragraph, a single line break stays inside its paragraph. Everything already on the page is kept." : "Optional. The new item's body, as plain text: an empty line starts a new paragraph, a single line break stays inside its paragraph."),
+      },
+      {
+        key: "blocks", label: "Blocks", placeholder: "[{\"kind\": \"heading\", \"level\": 2, \"text\": \"Protokoll\"}]", fx: true, rows: 4,
+        showIf: (v) => wikiUses(v.operation || "create-item", "body") && !v.text,
+        hint: "Instead of text: the wiki's own blocks, for headings, lists, tables or panels — a JSON list, or a FEEL expression that evaluates to one. Each block is an object with a kind (paragraph, heading, bullet, ordered, task, quote, code, panel, table, divider) and its text.",
+      },
+      {
+        key: "transition", label: "Transition", placeholder: "finish", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "transition"),
+        hint: "The transition's name as the item's type defines it, e.g. finish. If the item already stands in the state the transition leads to, the task succeeds.",
+      },
+      {
+        key: "comment", label: "Comment", placeholder: "Laptop bestellt.", fx: true, rows: 3,
+        showIf: (v) => wikiUses(v.operation || "create-item", "comment"),
+        hint: "The comment, as plain text. It is written as the Worker's account.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "type = task AND assignee = currentUser() AND state != done ORDER BY due", rows: 2,
+        showIf: (v) => wikiUses(v.operation || "create-item", "query"),
+        hint: "A query in the wiki's own query language: conditions joined with AND, OR and NOT, then ORDER BY. currentUser() is the Worker's account. Only items the account may read are found.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => wikiMaxPlaceholder(v.operation || "create-item"),
+        showIf: (v) => !!wikiMaxPlaceholder(v.operation || "create-item"),
+        hint: (v) => wikiMaxHint(v.operation || "create-item"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "aufgabe",
+        resultType: (v) => wikiResultType(v.operation || "create-item"),
+        showIf: (v) => !!wikiResultType(v.operation || "create-item"),
+        hint: (v) => wikiResultShape(v.operation || "create-item"),
       },
     ],
   },

@@ -44,6 +44,7 @@ import (
 	"github.com/pblumer/atlas/connector/teamsphone"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/connector/wikiwikibangbang"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
@@ -7227,6 +7228,24 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
 			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 			"createKey": j.CreateKey,
+		}}
+	case compiler.WikiwikibangbangJobTypeIndex:
+		// The evaluated values travel, and nothing that says which wiki or as whom
+		// (ADR-draft-wikiwikibangbang-worker). So does whether the job has been leased
+		// before: an append or a comment checks for its earlier round's write only then,
+		// and the lease epoch is a fact of the job the worker does not otherwise read.
+		j, err := wikiwikibangbang.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		j.Redelivered = jv.LeaseEpoch > 1
+		return &connectorPayload{Kind: "wikiwikibangbang", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "item": j.Item, "space": j.Space,
+			"itemType": j.ItemType, "parent": j.Parent, "title": j.Title, "properties": j.Properties,
+			"matchField": j.MatchField, "labels": j.Labels, "text": j.Text, "blocks": j.Blocks,
+			"transition": j.Transition, "comment": j.Comment, "query": j.Query,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+			"redelivered": j.Redelivered,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so
