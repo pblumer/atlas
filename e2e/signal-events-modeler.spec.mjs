@@ -43,7 +43,7 @@ test("a signal start is offered the events a model may listen to, and only those
   // neither is offered; the diagram already declares atlas.user.requested.
   expect(offered).toEqual([
     { value: "__event__:atlas.user.requested", text: "atlas.user.requested" },
-    { value: "__event__:atlas.user.created", text: "atlas.user.created — new" },
+    { value: "__event__:atlas.user.created", text: "atlas.user.created — neu" },
   ]);
   expect(page.__errors).toEqual([]);
 });
@@ -166,7 +166,7 @@ test("a signal start is offered the signals deployed models throw", async ({ pag
   // not offered.
   const offered = await deployedGroup(page).locator("option").evaluateAll((os) =>
     os.map((o) => ({ value: o.value, text: o.textContent })));
-  expect(offered).toEqual([{ value: "__event__:order.cancelled", text: "order.cancelled — shop — new" }]);
+  expect(offered).toEqual([{ value: "__event__:order.cancelled", text: "order.cancelled — shop — neu" }]);
 
   await page.locator("#f-sigref").selectOption("__event__:order.cancelled");
   const xml = await page.evaluate(() => window.__xml());

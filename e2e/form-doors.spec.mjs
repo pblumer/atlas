@@ -222,7 +222,7 @@ test("Open form follows the picker, and is unavailable while there is nothing to
   // A form this server does not hold has nowhere to open: the picker keeps showing the
   // link as "(missing)", and the door says why it is shut.
   await select(page, "Task_lost", "Form");
-  await expect(page.locator("#f-form")).toContainText("(missing)");
+  await expect(page.locator("#f-form")).toContainText("(fehlt)");
   await expect(open).toHaveAttribute("aria-disabled", "true");
   await expect(open).toHaveAttribute("title", /no form .gone./i);
   expect(page.__errors).toEqual([]);

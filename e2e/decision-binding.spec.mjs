@@ -42,8 +42,8 @@ test("choosing a version lists the deployed ones and writes atlas:version", asyn
   await page.locator("#f-brt-binding").selectOption("version");
   await expect(page.locator("#f-brt-version-wrap")).toBeVisible();
   await expect(page.locator("#f-brt-version option")).toHaveText([
-    "— choose a deployed version —",
-    "v2 — current",
+    "— wähle eine deployte Version —",
+    "v2 — aktuell",
     "v1",
   ]);
   await page.locator("#f-brt-version").selectOption("1");

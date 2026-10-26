@@ -10195,7 +10195,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
       const tl = stTemplateLang(f);
-      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: f.label } : undefined);
+      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: kindText(f.label) } : undefined);
     }
     // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
@@ -10209,7 +10209,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // template. The Developer View is where it gets a gutter and the full width.
       const markup = stTemplateLang(f) || htmlLang;
       attachCodeEditor(el, { lang: markup.module, variables: stFeelVars, gutter: false, wrap: true });
-      markDevField(el, markup.id, { title: f.label });
+      markDevField(el, markup.id, { title: kindText(f.label) });
     }
     // JSON fields (the Entra attributes template) get the shared JSON editor:
     // highlighting, live validation and auto-format. A '=' inside a string value is
@@ -10294,16 +10294,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const extra = [...mapped].filter((n) => !declared.has(n));
       const parts = [];
       if (missing.length) {
-        parts.push(`The decision reads ${missing.map((n) => `<b>${esc(n)}</b>`).join(", ")}, and `
-          + `no row feeds ${missing.length > 1 ? "them" : "it"}. `
-          + `${missing.length > 1 ? "They arrive" : "It arrives"} empty, and the rules that `
-          + `test ${missing.length > 1 ? "them" : "it"} do not match.`);
+        parts.push(trPlural("pnl.more.decision.driftMissing", missing.length,
+          { names: missing.map((n) => `<b>${esc(n)}</b>`).join(", ") }));
       }
       if (extra.length) {
-        parts.push(`${extra.map((n) => `<b>${esc(n)}</b>`).join(", ")} `
-          + `${extra.length > 1 ? "are" : "is"} fed and the decision does not declare `
-          + `${extra.length > 1 ? "them" : "it"}. `
-          + `${extra.length > 1 ? "They are" : "It is"} ignored.`);
+        parts.push(trPlural("pnl.more.decision.driftExtra", extra.length,
+          { names: extra.map((n) => `<b>${esc(n)}</b>`).join(", ") }));
       }
       note.hidden = parts.length === 0;
       note.innerHTML = parts.map((t) => `<p>${t}</p>`).join("");
@@ -10334,15 +10330,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (id) {
         try { rows = (await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`)) || []; } catch { rows = []; }
       }
-      const opts = [`<option value="">— choose a deployed version —</option>`];
+      const opts = [`<option value="">${esc(tr("pnl.more.decision.chooseVersion"))}</option>`];
       const seen = new Set();
       for (const r of rows) {
         const v = String(r.version || "");
         if (!v || seen.has(v)) continue;
         seen.add(v);
-        opts.push(`<option value="${esc(v)}">v${esc(v)}${r.current ? " — current" : ""}</option>`);
+        opts.push(`<option value="${esc(v)}">${r.current ? esc(tr("pnl.more.decision.versionCurrent", { version: v })) : "v" + esc(v)}</option>`);
       }
-      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">v${esc(keep)} — not deployed</option>`);
+      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">${esc(tr("pnl.more.decision.versionNotDeployed", { version: keep }))}</option>`);
       fversion.innerHTML = opts.join("");
       fversion.value = keep;
     };
@@ -10445,7 +10441,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             let f = files.get(key);
             if (!f) {
               f = {
-                model: d.model || d.modelRef || "(unnamed model)",
+                model: d.model || d.modelRef || tr("pnl.more.decision.unnamedModel"),
                 mine: mine,
                 deployed: !d.modelRef,
                 items: [],
@@ -10469,10 +10465,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // exists to give them (DMN §10.4).
         const noteFor = (d, service) => {
           const notes = [];
-          if (d.service) notes.push("decision service");
-          else if (service && service.internal) notes.push(`internal to ${service.name} — bypasses it`);
-          else if (service) notes.push("published by " + service.name);
-          if (!d.deployed) notes.push("not deployed");
+          if (d.service) notes.push(tr("pnl.more.decision.noteService"));
+          else if (service && service.internal) notes.push(tr("pnl.more.decision.noteInternal", { service: service.name }));
+          else if (service) notes.push(tr("pnl.more.decision.notePublished", { service: service.name }));
+          if (!d.deployed) notes.push(tr("pnl.more.decision.noteNotDeployed"));
           return notes.join(" · ");
         };
         const optionFor = (d, note) => {
@@ -10505,12 +10501,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))))
             .concat(decisions.filter(isInternal)
               .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))));
-          const where = f.deployed
-            ? " — deployed only"
-            : !f.mine && projectId ? " — other application" : "";
-          return `<optgroup label="${esc(f.model + where)}">${opts.join("")}</optgroup>`;
+          const label = f.deployed
+            ? tr("pnl.more.decision.fileDeployedOnly", { model: f.model })
+            : !f.mine && projectId ? tr("pnl.more.decision.fileOtherApp", { model: f.model }) : f.model;
+          return `<optgroup label="${esc(label)}">${opts.join("")}</optgroup>`;
         };
-        const parts = [`<option value="">— choose a decision —</option>`]
+        const parts = [`<option value="">${esc(tr("pnl.more.decision.choose"))}</option>`]
           .concat(Array.from(files.values(), groupFor));
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
@@ -10611,7 +10607,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         fedit.addEventListener("click", async () => {
           const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
           if (!cur || !cur.modelRef) {
-            toast && toast("This decision has no locally editable model.", "err");
+            toast && toast(tr("pnl.more.decision.noLocalModel"), "err");
             return;
           }
           // The panel knows the model handle; the editor's route addresses the
@@ -10620,7 +10616,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           try { refs = (await api("GET", "/api/v1/dmnrefs")) || []; } catch { /* reported below */ }
           const ref = refs.find((r) => r.modelRef === cur.modelRef);
           if (!ref) {
-            toast && toast("This decision has no reference to open — add it to an application first.", "err");
+            toast && toast(tr("pnl.more.decision.noRef"), "err");
             return;
           }
           openDecisionPage("e/" + encodeURIComponent(ref.id));
@@ -10782,9 +10778,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
             };
             (procs || []).forEach((p) => add(p.processId,
-              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + tr("pnl.more.call.deployed") + (p.version ? " v" + p.version : "")));
             (drafts || []).forEach((d) => add(d.processId,
-              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + tr("pnl.more.call.draft")));
             proclist.innerHTML = opts.join("");
           } catch { /* suggestions are best-effort */ }
         })();
@@ -10799,7 +10795,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         newbtn.addEventListener("click", async () => {
           let pid = (fcallpid.value || "").trim();
           if (!pid) {
-            const typed = prompt("Process ID for the new called process:", "");
+            const typed = prompt(tr("pnl.more.call.newPrompt"), "");
             if (typed == null) return;
             pid = typed.trim();
             if (!pid) return;
@@ -10825,14 +10821,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // refuses instead of being overwritten (ADR-0222).
             const existing = await api("GET", "/api/v1/drafts").catch(() => []);
             if ((existing || []).some((d) => (d.processId || "") === pid)) {
-              toast(`Opening existing draft “${pid}”`, "ok");
+              toast(tr("pnl.more.call.openingDraft", { id: pid }), "ok");
             } else {
               await api("POST", savePath(""), calleeXML(pid, pid), true);
-              toast(`Created called process “${pid}”`, "ok");
+              toast(tr("pnl.more.call.created", { id: pid }), "ok");
             }
             location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
           } catch (e) {
-            toast("Could not create the process: " + e.message, "err");
+            toast(tr("pnl.more.call.createFailed", { error: e.message }), "err");
             newbtn.disabled = false;
           }
         });
@@ -10923,14 +10919,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       api("GET", "/api/v1/forms").then((forms) => {
         if (!document.body.contains(fform)) return; // selection moved on
         const cur = fform.value;
-        const opts = [`<option value="">— none —</option>`];
+        const opts = [`<option value="">${esc(tr("pnl.more.form.none"))}</option>`];
         let sawCur = false;
         for (const f of forms || []) {
           const sel = f.id === cur ? " selected" : "";
           if (f.id === cur) sawCur = true;
           opts.push(`<option value="${esc(f.id)}"${sel}>${esc(f.name || f.id)}</option>`);
         }
-        if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)} (missing)</option>`);
+        if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(tr("pnl.more.form.missing", { id: cur }))}</option>`);
         fform.innerHTML = opts.join("");
         setFormOpen(fopen, cur, !!cur && !sawCur);
       }).catch(() => { /* leave the current single-option select as-is */ });
@@ -11064,7 +11060,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const mine = new Set(listSignals(modeler).map((x) => x.name));
           group.innerHTML = deployedSignalChoices(signals)
             .map((c) => `<option value="${esc(SIGNAL_EVENT_PREFIX + c.name)}">${
-              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — new"}</option>`).join("");
+              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — " + esc(tr("pnl.more.signal.new"))}</option>`).join("");
           if (!group.children.length) group.remove();
         }
         const line = body.querySelector("#f-sigreceivers");
@@ -11078,7 +11074,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const mine = new Set(listSignals(modeler).map((x) => x.name));
           group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
             .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
-              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+              esc(e.type)}${mine.has(e.type) ? "" : " — " + esc(tr("pnl.more.signal.new"))}</option>`).join("");
           if (!group.children.length) group.remove();
         }
         const sed = signalDefOf(element.businessObject);
@@ -11323,7 +11319,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (e.target.closest(".io-map-del")) return;
           card.classList.toggle("collapsed");
         });
-        name.addEventListener("input", () => { title.textContent = name.value.trim() || "parameter"; });
+        name.addEventListener("input", () => { title.textContent = name.value.trim() || tr("pnl.more.agent.param"); });
         for (const sel of [".ap-name", ".ap-type", ".ap-desc", ".ap-required"]) {
           card.querySelector(sel).addEventListener("change", saveParams);
         }
