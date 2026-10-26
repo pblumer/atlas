@@ -223,7 +223,8 @@ const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[ent
 // isCatalogueRoute names the Console views of the area the switch removes — the same
 // four the menus mark with feature: "catalogue".
 const isCatalogueRoute = (path) =>
-  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification";
+  path.startsWith("#/catalog") || path === "#/operations/reconciliation" || path === "#/tasks/recertification"
+  || path === "#/console/content-sources";
 
 const initials = (name) => {
   const s = String(name || "").trim();
@@ -673,7 +674,14 @@ async function deployDemo() {
 const APPS = [
   { id: "console", name: "Console", route: "#/console", on: true, role: "any" },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true, role: "modeler" },
+  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
+  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true, role: "user" },
+  { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
+  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
+  // catalogue means choosing from processes already deployed, never deploying one,
+  // so it is deliberately not the modeller's role — deploy is code execution.
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -686,13 +694,6 @@ const APPS = [
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
   { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
-  // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
-  // catalogue means choosing from processes already deployed, never deploying one,
-  // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
-  { id: "operations", name: "Operations", route: "#/operations", on: true, role: "operator" },
-  { id: "panorama", name: "Panorama", route: "#/panorama/starmap", on: true, role: "modeler" },
-  { id: "data", name: "Data", route: "#/data", on: true, role: "modeler" },
 ];
 
 // Secondary (in-app) navigation.
@@ -727,6 +728,11 @@ const TOPNAV = {
       // and the recorded decisions (ADR-0475).
       { name: "Security", route: "#/console/security", role: "admin" },
       { name: "Audit log", route: "#/console/audit", role: "admin" },
+      // Where a product's description may come from outside Atlas
+      // (ADR-0491 § 3): installation
+      // configuration naming a vault secret, so it is the administrator's, beside the
+      // other installation settings. The catalogue's, so it goes with the switch.
+      { name: "Content sources", route: "#/console/content-sources", role: "admin", feature: "catalogue" },
     ] },
   ],
   modeler: [
@@ -1149,6 +1155,7 @@ function handbookHelp(path) {
   // modelling products and designing their processes. shop() points into it, and the
   // help-context spec holds its anchors to that page as it holds H()'s to the handbook.
   const shop = (anchor, label) => ({ anchor, label, page: "shop-handbuch.html" });
+  if (path === "#/console/content-sources") return shop("wiki-inhalt", "Content from the wiki");
   if (path.startsWith("#/catalog")) return shop("katalog-aufbauen", "Building a catalogue");
   if (/^#\/modeler\/dmn\//.test(path)) return H("dmn", "Learn DMN");
   if (/^#\/modeler\/form\b/.test(path)) return H("formulare", "Forms & workers");
@@ -11490,6 +11497,7 @@ function routeTitle(path) {
     [/^#\/console\/org$/, "Organization · Console"],
     [/^#\/console\/workers$/, "Workers · Console"],
     [/^#\/console\/events$/, "Events · Console"],
+    [/^#\/console\/content-sources$/, "Content sources · Console"],
     [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
@@ -11617,6 +11625,11 @@ async function route() {
       return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
+    if (path === "#/console/content-sources") {
+      const gen = navGen;
+      const { viewContentSources } = await import("./content-sources.js");
+      return await viewContentSources({ api, toast, view, isSuperseded: () => superseded(gen) });
+    }
     if (path === "#/console/settings") return await renderDisplaySettings(view, { api, toast });
     if (path === "#/console/events") {
       const gen = navGen;

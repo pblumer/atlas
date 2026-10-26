@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.19.0/atlas_0.19.0_linux_amd64.tar.gz
-tar -xzf atlas_0.19.0_linux_amd64.tar.gz
-./atlas_0.19.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.20.0/atlas_0.20.0_linux_amd64.tar.gz
+tar -xzf atlas_0.20.0_linux_amd64.tar.gz
+./atlas_0.20.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.19.0
+VERSION=0.20.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.19.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.20.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -706,7 +706,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.19.0'
+$Version = '0.20.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -722,7 +722,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.19.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.20.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -738,7 +738,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.19.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.20.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -1062,6 +1062,12 @@ of them carries a password, a hash or a token. Ship them with `--log-format=json
 | `auth.denied` | WARN | A signed-in caller was refused for lacking the admin role, with the `method` and `path`. Anonymous `401`s are deliberately *not* logged — they would bury this under every probe that finds the port |
 | `auth.user_created`, `auth.user_updated`, `auth.user_deleted` | INFO | The account lifecycle, naming both the actor and the subject; the update line carries the `roles` and `disabled` state that resulted |
 | `auth.password_set` | INFO | An administrator replaced a user's password (that it happened and for whom — never the password) |
+| `content.source_changed` | INFO | An administrator created, changed or removed a content source, by `source`, naming its `base_url` and `credentials_ref` — never the token |
+| `content.unlinked` | INFO | A product manager removed a product's content binding or one language page of it, with the `item`, the `pages`, the `lang` and the `reason` they had to give |
+| `content.quarantined` | WARN | A recheck found a bound page protected, unreadable or gone, the account's standing wrong or the source unreachable; the product's source content is withheld until a refresh passes. Names the `item`, the `source` and the `reason` |
+| `content.quarantine_lifted` | INFO | A refresh passed every rule and ended a product's quarantine |
+| `content.source_unreachable`, `content.source_recovered` | WARN / INFO | The recheck could not reach a content source, said once when the failures begin, and that it answers again — which lifts no quarantine |
+| `content.watch_failed` | WARN | The source refused to watch a bound page; the fifteen-minute sweep still rechecks it |
 | `feed.subscription_changed` | INFO | An administrator created, changed or deleted a push subscription of the event feed, by `subscription_id`; a create names the `worker_id` and every change the `reach` |
 | `auth.token_minted`, `auth.token_revoked` | INFO | A machine credential — an API token or a deploy token — was issued or revoked, by `token_id` and `token_name`; a mint also records its `scope` and `expires_at`, and `vault_secret` — the name, never the value — when the token was sealed in the vault |
 | `auth.worker_token_unknown` | WARN | `ATLAS_TOKEN` is set to a value this server does not accept. Supervised workers are handed it instead of the server's own token and will be refused at every poll — mint an API token with scope `worker`, or unset the variable |

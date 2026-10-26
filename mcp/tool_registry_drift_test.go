@@ -61,6 +61,16 @@ var mcpToolRoutes = map[string]string{
 	"atlas_delete_catalog":            "DELETE /api/v1/catalogs/{id}",
 	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
 	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
+	// A product's content from an external source
+	// (ADR-0491), maintained like the
+	// rest of the product.
+	"atlas_catalog_product_content":         "GET /api/v1/catalog-products/{id}/content",
+	"atlas_search_content_source":           "GET /api/v1/catalog-products/{id}/content/search",
+	"atlas_preview_content_page":            "GET /api/v1/catalog-products/{id}/content/preview",
+	"atlas_link_catalog_product_content":    "POST /api/v1/catalog-products/{id}/content",
+	"atlas_refresh_catalog_product_content": "POST /api/v1/catalog-products/{id}/content/refresh",
+	"atlas_unlink_catalog_product_content":  "POST /api/v1/catalog-products/{id}/content/unlink",
+	"atlas_refresh_catalog_content":         "POST /api/v1/catalogs/{id}/content/refresh",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
@@ -954,9 +964,15 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/dmn-drafts/{id}":  "discards Modeler work in progress an agent never wrote",
 
 	// Secrets: credential storage; an agent must never read or write it.
-	"GET /api/v1/secrets":           "credential storage is not an agent capability",
-	"PUT /api/v1/secrets/{name}":    "credential storage is not an agent capability",
-	"DELETE /api/v1/secrets/{name}": "credential storage is not an agent capability",
+	"GET /api/v1/content-sources":             "content-source configuration names a credential and is admin config",
+	"POST /api/v1/content-sources":            "content-source configuration names a credential and is admin config",
+	"GET /api/v1/content-sources/{id}":        "content-source configuration names a credential and is admin config",
+	"PUT /api/v1/content-sources/{id}":        "content-source configuration names a credential and is admin config",
+	"DELETE /api/v1/content-sources/{id}":     "content-source configuration names a credential and is admin config",
+	"POST /api/v1/content-sources/{id}/check": "content-source configuration names a credential and is admin config",
+	"GET /api/v1/secrets":                     "credential storage is not an agent capability",
+	"PUT /api/v1/secrets/{name}":              "credential storage is not an agent capability",
+	"DELETE /api/v1/secrets/{name}":           "credential storage is not an agent capability",
 
 	// Personal-data erasure (ADR-0314): the most irreversible operation the API has, and
 	// the one furthest from an agent's business. Destroying a data subject's key makes
