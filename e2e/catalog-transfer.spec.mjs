@@ -102,7 +102,7 @@ test("what is newer in the file starts ticked, what changed here only does not",
   const dialog = page.locator(".import-choices");
   await expect(dialog.locator('.import-pick[value="product:p3"]')).toBeChecked();
   await expect(dialog.locator('.import-pick[value="product:p5"]')).not.toBeChecked();
-  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Changed here only");
+  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Nur hier geändert");
   // Left as they start, behind and ahead are not named; a box moved is.
   await dialog.locator('.import-pick[value="product:p4"]').uncheck();
   await dialog.locator("[data-ok]").click();
