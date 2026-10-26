@@ -421,7 +421,13 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 		if err != nil {
 			return plan, nil, err
 		}
-		next := in
+		// While bound, what a source supplies is not an import's to change
+		// either; an import that carries the product unchanged keeps it.
+		next, bound := boundSave(prev, found, in)
+		if bound != "" {
+			add(subject, bound)
+			continue
+		}
 		if found {
 			// Moving a product takes it from the catalogue responsible for it now,
 			// so that side must agree too, as it must for a single save.

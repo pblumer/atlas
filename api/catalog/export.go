@@ -87,7 +87,11 @@ func (s *Service) HandleExportCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, it := range all {
 			if it.HomeCatalog == id || slices.Contains(c.Items, it.ID) {
-				doc.Products = append(doc.Products, exported(it))
+				var x Item
+				if x, loadErr = s.exportable(it); loadErr != nil {
+					return
+				}
+				doc.Products = append(doc.Products, x)
 			}
 		}
 		c.OwnerID, c.Theme = "", Theme{}
@@ -149,7 +153,12 @@ func (s *Service) HandleExportProducts(w http.ResponseWriter, r *http.Request) {
 				missing = id
 				return
 			}
-			doc.Products = append(doc.Products, exported(it))
+			x, err := s.exportable(it)
+			if err != nil {
+				loadErr = err
+				return
+			}
+			doc.Products = append(doc.Products, x)
 		}
 		// Each edge once, in the order the catalogues hold them, homes by id.
 		var homeIDs []string

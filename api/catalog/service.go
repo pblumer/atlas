@@ -89,6 +89,16 @@ type Service struct {
 	// processes, for the fulfilment report (ADR-0427). Nil leaves the report's
 	// remainder empty.
 	Remainders RemainderLookup
+
+	// Content reaches the configured content sources
+	// (ADR-draft-service-content-from-an-external-source). Nil is an
+	// installation with none, and it is the ordinary state: every route of the
+	// binding then answers that none is configured, and nothing else changes.
+	Content ContentSources
+
+	// Unlinked is told the source of a binding that was removed, so the recheck
+	// stops watching pages nothing holds any more. Nil does nothing.
+	Unlinked func(source string)
 }
 
 // New builds the service. Every dependency is an explicit argument (ADR-0147).
@@ -563,6 +573,7 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		homeOK  bool
 		allowed bool
 		stale   string
+		bound   string
 		opErr   error
 	)
 	s.loop.Do(func() {
@@ -629,6 +640,11 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		// While bound, the fields a source supplies are the source's (ADR-draft-
+		// service-content-from-an-external-source, § 1).
+		if in, bound = boundSave(prev, prevOK, in); bound != "" {
+			return
+		}
 		in.Revision = prev.Revision + 1
 
 		opErr = s.store.SaveItem(in)
@@ -643,6 +659,8 @@ func (s *Service) HandleSaveItem(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusForbidden, "not an editor of catalogue "+in.HomeCatalog)
 	case stale != "":
 		httpapi.Error(w, http.StatusConflict, stale)
+	case bound != "":
+		httpapi.Error(w, http.StatusConflict, bound)
 	default:
 		httpapi.JSON(w, http.StatusOK, in)
 	}
@@ -688,6 +706,14 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rel, problems = Publish(in)
+		// Publishing reads only Atlas's own recheck record and never the source
+		// (§ 9): a bound product goes into a release only while it is not
+		// quarantined and a recheck passed within the last interval.
+		if len(problems) == 0 {
+			if problems, opErr = s.contentProblems(rel.Items); opErr != nil {
+				return
+			}
+		}
 	})
 	// What is deployed is the server's to answer, on its own visit to the loop, so it
 	// is asked between computing the release and saving it (ADR-0425). The release
@@ -732,6 +758,13 @@ func (s *Service) HandleListReleases(w http.ResponseWriter, r *http.Request) {
 		visible bool
 		loadErr error
 	)
+	// Which sources let the shop link to a page, read before the loop: the
+	// sources are visited through it themselves.
+	linkInShop, err := s.linksInShop()
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "list releases: "+err.Error())
+		return
+	}
 	s.loop.Do(func() {
 		cat, found, e := s.store.Catalog(id)
 		if e != nil {
@@ -741,7 +774,10 @@ func (s *Service) HandleListReleases(w http.ResponseWriter, r *http.Request) {
 		if visible = found && s.mayRead(cat, p); !visible {
 			return
 		}
-		out, loadErr = s.store.ReleasesOf(id)
+		if out, loadErr = s.store.ReleasesOf(id); loadErr != nil {
+			return
+		}
+		out, loadErr = s.withholdReleases(out, linkInShop)
 	})
 	switch {
 	case loadErr != nil:
