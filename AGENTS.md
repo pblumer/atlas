@@ -145,6 +145,8 @@ internal/diskspace/ How large a directory's file system is and how much this pro
             still write: statfs on Unix, GetDiskFreeSpaceExW on Windows
 internal/certstore/ Signing with a key in the Windows certificate store, named by its
             certificate's thumbprint, without reading the key out (ADR-0172, amended)
+internal/impldigest/ The dependency digest that names a built-in Worker Type's implementation
+            for conformance evidence (ADR-0483); build and review tooling, never the engine
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a

@@ -40,7 +40,7 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 **Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
 
-**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. Content digests in [PR #1360](https://github.com/pblumer/atlas/pull/1360) are under review. The publication, approval and revocation workflow is not implemented, and nothing on `main` is independently verified evidence.
+**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. [PR #1360](https://github.com/pblumer/atlas/pull/1360) added contract digests over the file's bytes, and `internal/impldigest` computes the dependency digest of a built-in Worker Type's implementation. The publication, approval and revocation workflow is not implemented, and nothing on `main` is independently verified evidence.
 
 ### Initial publication and trust boundary (accepted)
 
@@ -121,10 +121,20 @@ Decided by the maintainer on 2026-10-26:
   that re-serializes them.
 - **Implementation identity of a built-in Worker Type.** The fixed version
   `1.0.0` of built-in Worker Types is not an implementation identity. Evidence
-  binds to a dependency digest instead: SHA-256 over every non-test Go source
-  file of the module's packages in the Worker Type's dependency closure
-  (`go list -deps` for one fixed reference platform), together with `go.mod`,
-  `go.sum` and the Go toolchain version. A Worker Type installed as a package
+  binds to a dependency digest instead: SHA-256 over a manifest of every file
+  the module's packages in the Worker Type's dependency closure are built from
+  (`go list -deps` for linux/amd64 without cgo): their non-test Go files for
+  every platform and the files they embed, together with `go.mod` and `go.sum`.
+  `go.mod` carries the Go version the module declares; the patch release that
+  happens to run is left out, because CI and contributors differ in it.
+  `internal/impldigest` computes it. Which root packages serve a Worker Type is
+  named in its evidence record and reviewed with it, and the roots cover every
+  path the Worker Type can run on. Today there are two: a supervised worker runs
+  it through the shared `worker` package, whose closure reaches every
+  connector; the engine runs it through `api`, whose closure is nearly the whole
+  module. Nine built-in Worker Types are worker-only, CloudEvents runs only in
+  the engine, and the other ten run in a supervised worker by default and in the
+  engine under `--in-process-connectors`. A Worker Type installed as a package
   binds to its ADR-0208 package digest once that exists. A build commit was
   rejected: evidence kept in the repository cannot name the commit that
   contains it.
