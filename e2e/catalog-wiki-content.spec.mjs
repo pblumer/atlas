@@ -358,3 +358,85 @@ test("the info panel opens as a dialog over the page and closes on Escape, its b
   await expect(dialog).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+// installBundleShop is a release with one market offering assembled from two
+// included services and one optional one, beside one service sold on its own.
+function installBundleShop() {
+  const item = (id, de, en, desc) => ({
+    id, homeCatalog: "cat_b", state: "active", texts: { de, en },
+    ...(desc ? { descriptions: { de: desc.de, en: desc.en } } : {}),
+    approval: { kind: "none" }, provisionProcess: "p", deprovisionProcess: "d",
+    category: "Arbeitsplatz", productGroup: "Laptop",
+  });
+  const items = [
+    { ...item("bundle", "Laptop-Paket", "Laptop bundle", { de: "Das Paket für den Arbeitsplatz.", en: "The bundle for the workplace." }), price: "CHF 1'200.–" },
+    item("hw", "Hardware", "Hardware", { de: "Das Gerät.", en: "The device." }),
+    item("os", "Betriebssystem", "Operating system", null),
+    item("case", "Hülle", "Sleeve", { de: "Schützt das Gerät.", en: "Protects the device." }),
+    item("solo", "Monitor", "Monitor", { de: "Ein Bildschirm.", en: "A display." }),
+  ];
+  const ROUTES = {
+    "/api/v1/auth/me": { user: { id: "usr_1", username: "anja", displayName: "Anja", roles: [] } },
+    "/api/v1/shop/catalog": { id: "cat_b", rank: 1, languages: ["de", "en"], texts: { de: "Katalog", en: "Catalogue" }, items: items.map((i) => i.id) },
+    "/api/v1/catalogs/cat_b/releases": [{ id: "rel_b", catalogId: "cat_b", items,
+      includes: { bundle: ["hw", "os"] }, options: { bundle: ["case"] },
+      waves: [["hw", "os", "case", "solo"], ["bundle"]], withoutApproval: items.map((i) => i.id) }],
+    "/api/v1/orders": [],
+    "/api/v1/shop/tasks": { tasks: [], orders: [], truncated: false },
+    "/api/v1/inventory": { items: [] },
+    "/api/v1/shop/favourites": { itemIds: [] },
+    "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
+  };
+  window.__printed = 0;
+  window.print = () => { window.__printed++; };
+  window.fetch = (input) => {
+    const path = String(input).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+    if (Object.prototype.hasOwnProperty.call(ROUTES, path)) {
+      return Promise.resolve(new Response(JSON.stringify(ROUTES[path]), { status: 200, headers: { "content-type": "application/json" } }));
+    }
+    return Promise.resolve(new Response("not in this fixture", { status: 404 }));
+  };
+}
+
+test("a market offering's info opens its fact sheet, which can be copied and printed", async ({ page, context }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript(installBundleShop);
+  await page.goto("/shop.html?lang=en");
+  // A search hit opens its panel straight away.
+  await page.locator("#find").fill("Laptop bundle");
+  await page.locator(".cascade").getByText("Laptop bundle", { exact: true }).click();
+  const sheet = page.getByRole("dialog").locator(".factsheet");
+  await expect(sheet).toBeVisible();
+  // The three sections in the order asked for, each service under its name.
+  await expect(sheet.locator(".factsheet-section h4")).toHaveText(["About the offering", "Included services", "Optional services"]);
+  await expect(sheet.locator(".factsheet-section").nth(0)).toContainText("The bundle for the workplace.");
+  await expect(sheet.locator(".factsheet-section").nth(1).locator("h5")).toHaveText(["Hardware", "Operating system"]);
+  await expect(sheet.locator(".factsheet-section").nth(1)).toContainText("The device.");
+  await expect(sheet.locator(".factsheet-section").nth(1)).toContainText("No description recorded.");
+  await expect(sheet.locator(".factsheet-section").nth(2)).toContainText("Protects the device.");
+
+  await sheet.getByRole("button", { name: "Copy" }).click();
+  await expect(sheet.locator(".factsheet-copied")).toHaveText("Copied to the clipboard.");
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied.indexOf("About the offering")).toBeLessThan(copied.indexOf("Included services"));
+  expect(copied.indexOf("Included services")).toBeLessThan(copied.indexOf("Optional services"));
+  expect(copied).toContain("Operating system\nNo description recorded.");
+  expect(copied).toContain("CHF 1'200.–");
+
+  await sheet.getByRole("button", { name: "Print" }).click();
+  expect(await page.evaluate(() => window.__printed)).toBe(1);
+  expect(errors).toEqual([]);
+});
+
+test("a service that is no market offering keeps its plain info panel", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript(installBundleShop);
+  await page.goto("/shop.html?lang=en");
+  await page.locator("#find").fill("Monitor");
+  await page.locator(".cascade").getByText("Monitor", { exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("A display.");
+  await expect(page.getByRole("dialog").locator(".factsheet")).toHaveCount(0);
+});

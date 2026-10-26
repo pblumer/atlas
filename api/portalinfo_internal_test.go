@@ -128,3 +128,41 @@ func TestTheInfoPanelOpensAsADialog(t *testing.T) {
 		t.Error("shop.html has no style for the dialog's backdrop")
 	}
 }
+
+// TestAMarketOfferingsInfoIsItsFactSheet: the "i" of a product with parts — a
+// market offering, and only that — opens a fact sheet: the offering's
+// description, then the included services' descriptions, then the optional ones',
+// in that order, with a way to copy it and to print it alone.
+func TestAMarketOfferingsInfoIsItsFactSheet(t *testing.T) {
+	src := readWeb(t, "shop.js")
+	panel := webRegion(t, src, "function infoPanel(", "\n}")
+	if !strings.Contains(panel, "if (carried.length || offered.length) return factsheet(rel, item);") {
+		t.Error("the info panel does not hand a market offering to its fact sheet")
+	}
+	sheet := webRegion(t, src, "function factsheet(", "\n}")
+	offering := strings.Index(sheet, "t('factsheet.offering')")
+	included := strings.Index(sheet, "t('factsheet.included')")
+	optional := strings.Index(sheet, "t('factsheet.optional')")
+	if offering < 0 || included < offering || optional < included {
+		t.Errorf("the fact sheet's sections are not offering, included, optional in that order (%d, %d, %d)",
+			offering, included, optional)
+	}
+	for _, want := range []string{"copyText(factsheetText(rel, item))", "printFactsheet", "descriptionOf(p)"} {
+		if !strings.Contains(sheet, want) {
+			t.Errorf("the fact sheet lacks %s", want)
+		}
+	}
+	text := webRegion(t, src, "function factsheetText(", "\n}")
+	if strings.Index(text, "'includes'") > strings.Index(text, "'options'") {
+		t.Error("the copied fact sheet does not list the included services before the optional ones")
+	}
+	for _, key := range []string{"factsheet.offering", "factsheet.included", "factsheet.optional", "factsheet.copy",
+		"factsheet.print", "factsheet.copied", "factsheet.copyFailed", "factsheet.noDescription"} {
+		if n := strings.Count(src, "'"+key+"':"); n != 4 {
+			t.Errorf("%s is translated %d times, want once per locale (de, en, fr, it)", key, n)
+		}
+	}
+	if !strings.Contains(readWeb(t, "shop.html"), "body.printing-factsheet .factsheet") {
+		t.Error("shop.html has no print style that puts the fact sheet alone on the paper")
+	}
+}

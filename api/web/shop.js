@@ -156,13 +156,19 @@ const STRINGS = {
     'variant.missing': 'Bitte wählen Sie zuerst für jede Position eine Ausführung.',
     'info.title': 'Angaben zum Service',
     'info.close': 'Schliessen',
+    'factsheet.offering': 'Beschreibung der Marktleistung',
+    'factsheet.included': 'Inkludierte Services',
+    'factsheet.optional': 'Optionale Services',
+    'factsheet.noDescription': 'Keine Beschreibung erfasst.',
+    'factsheet.copy': 'Kopieren',
+    'factsheet.copied': 'In die Zwischenablage kopiert.',
+    'factsheet.copyFailed': 'Kopieren hat nicht geklappt; bitte den Text markieren und kopieren.',
+    'factsheet.print': 'Drucken',
     'info.id': 'Kennung',
     'info.wiki': 'Mehr im Wiki',
     'info.approval': 'Genehmigung',
     'info.none': 'keine',
     'info.repeatable': 'Mehrfach beziehbar',
-    'info.includes': 'Fest enthalten',
-    'info.options': 'Optional wählbar',
     'info.yes': 'ja',
     'info.no': 'nein',
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
@@ -333,13 +339,19 @@ const STRINGS = {
     'variant.missing': 'Choose a version for every line before ordering.',
     'info.title': 'About this service',
     'info.close': 'Close',
+    'factsheet.offering': 'About the offering',
+    'factsheet.included': 'Included services',
+    'factsheet.optional': 'Optional services',
+    'factsheet.noDescription': 'No description recorded.',
+    'factsheet.copy': 'Copy',
+    'factsheet.copied': 'Copied to the clipboard.',
+    'factsheet.copyFailed': 'Copying did not work; please select the text and copy it.',
+    'factsheet.print': 'Print',
     'info.id': 'Identifier',
     'info.wiki': 'More in the wiki',
     'info.approval': 'Approval',
     'info.none': 'none',
     'info.repeatable': 'May be held more than once',
-    'info.includes': 'Always included',
-    'info.options': 'Optional',
     'info.yes': 'yes',
     'info.no': 'no',
     'services.none': 'You currently hold no services.',
@@ -510,13 +522,19 @@ const STRINGS = {
     'variant.missing': 'Choisissez une variante pour chaque position avant de commander.',
     'info.title': 'Informations sur le service',
     'info.close': 'Fermer',
+    'factsheet.offering': 'Description de la prestation',
+    'factsheet.included': 'Services inclus',
+    'factsheet.optional': 'Services optionnels',
+    'factsheet.noDescription': 'Aucune description saisie.',
+    'factsheet.copy': 'Copier',
+    'factsheet.copied': 'Copié dans le presse-papiers.',
+    'factsheet.copyFailed': 'La copie a échoué ; veuillez sélectionner le texte et le copier.',
+    'factsheet.print': 'Imprimer',
     'info.id': 'Identifiant',
     'info.wiki': 'En savoir plus dans le wiki',
     'info.approval': 'Approbation',
     'info.none': 'aucune',
     'info.repeatable': 'Peut être détenu plusieurs fois',
-    'info.includes': 'Toujours inclus',
-    'info.options': 'En option',
     'info.yes': 'oui',
     'info.no': 'non',
     'services.none': 'Vous ne détenez actuellement aucune prestation.',
@@ -686,13 +704,19 @@ const STRINGS = {
     'variant.missing': 'Scegliere una variante per ogni posizione prima di ordinare.',
     'info.title': 'Indicazioni sul servizio',
     'info.close': 'Chiudi',
+    'factsheet.offering': 'Descrizione della prestazione',
+    'factsheet.included': 'Servizi inclusi',
+    'factsheet.optional': 'Servizi opzionali',
+    'factsheet.noDescription': 'Nessuna descrizione registrata.',
+    'factsheet.copy': 'Copia',
+    'factsheet.copied': 'Copiato negli appunti.',
+    'factsheet.copyFailed': 'La copia non è riuscita; selezionare il testo e copiarlo.',
+    'factsheet.print': 'Stampa',
     'info.id': 'Identificativo',
     'info.wiki': 'Altro nel wiki',
     'info.approval': 'Approvazione',
     'info.none': 'nessuna',
     'info.repeatable': 'Può essere detenuto più volte',
-    'info.includes': 'Sempre incluso',
-    'info.options': 'Opzionale',
     'info.yes': 'sì',
     'info.no': 'no',
     'services.none': 'Al momento non detiene alcuna prestazione.',
@@ -2024,6 +2048,8 @@ function infoPanel(rel, item) {
   // two fields for everything, which is why the panel stays one thing.
   const carried = namesOf(rel, (((rel || {}).includes || {})[item.id]) || []);
   const offered = namesOf(rel, (((rel || {}).options || {})[item.id]) || []);
+  // A market offering — a product with parts — opens as its fact sheet instead.
+  if (carried.length || offered.length) return factsheet(rel, item);
   return el('div', { class: 'card' },
     el('h3', {}, textOf(item.texts, item.id)),
     productPicture(item.id),
@@ -2043,10 +2069,6 @@ function infoPanel(rel, item) {
     el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
     el('p', { class: 'muted' },
       `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
-    carried.length
-      ? el('p', { class: 'muted' }, `${t('info.includes')}: ${carried.join(', ')}`) : null,
-    offered.length
-      ? el('p', { class: 'muted' }, `${t('info.options')}: ${offered.join(', ')}`) : null,
     // The window, where there is one. Beside the price and the approval rather
     // than as a pill, because it is a fact about the product and not about this
     // person: "orderable until the 31st" is true for everybody reading it.
@@ -2076,6 +2098,108 @@ function infoDialog(rel, item) {
   },
   el('button', { class: 'sq info-close', 'aria-label': t('info.close'), onclick: close }, '\u00d7'),
   infoPanel(rel, item)));
+}
+
+// offeringParts are the parts of a market offering the release carries, in one of the
+// two groups (ADR-0312): `includes` comes with it, `options` stands beside it.
+function offeringParts(rel, item, group) {
+  const by = itemsById(rel || {});
+  return ((((rel || {})[group]) || {})[item.id] || []).filter((id) => by[id]).map((id) => by[id]);
+}
+
+// factsheet is what the "i" of a market offering opens: the offering and every
+// service it is assembled from, each with its own description, in the order a
+// reader deciding on it asks — what the offering is, what always comes with it,
+// what can be added. It is written to be copied or printed and handed on, so it
+// says nothing the release does not carry, as the panel does not.
+function factsheet(rel, item) {
+  const included = offeringParts(rel, item, 'includes');
+  const optional = offeringParts(rel, item, 'options');
+  const kind = item.approval && item.approval.kind && item.approval.kind !== 'none'
+    ? item.approval.kind : t('info.none');
+  const part = (p) => el('div', { class: 'factsheet-part' },
+    el('h5', {}, textOf(p.texts, p.id)),
+    descriptionOf(p)
+      ? el('p', { class: 'product-description' }, descriptionOf(p))
+      : el('p', { class: 'muted' }, t('factsheet.noDescription')));
+  const section = (title, body) => el('section', { class: 'factsheet-section' }, el('h4', {}, title), body);
+  const copied = el('span', { class: 'muted factsheet-copied', role: 'status' });
+  return el('div', { class: 'card factsheet' },
+    el('h3', {}, textOf(item.texts, item.id)),
+    el('div', { class: 'factsheet-actions' },
+      el('button', {
+        type: 'button',
+        onclick: async () => {
+          copied.textContent = (await copyText(factsheetText(rel, item))) ? t('factsheet.copied') : t('factsheet.copyFailed');
+        },
+      }, t('factsheet.copy')),
+      el('button', { type: 'button', onclick: printFactsheet }, t('factsheet.print')),
+      copied),
+    productPicture(item.id),
+    section(t('factsheet.offering'), [
+      descriptionOf(item)
+        ? el('p', { class: 'product-description' }, descriptionOf(item))
+        : el('p', { class: 'muted' }, t('factsheet.noDescription')),
+      wikiLinkOf(item)]),
+    included.length ? section(t('factsheet.included'), included.map(part)) : null,
+    optional.length ? section(t('factsheet.optional'), optional.map(part)) : null,
+    el('section', { class: 'factsheet-facts' },
+      el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
+      el('p', { class: 'muted' }, `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
+      el('p', { class: 'muted' }, `${t('info.approval')}: ${kind}`),
+      el('p', { class: 'muted' },
+        `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
+      windowNote(item) ? el('p', { class: 'muted' }, windowNote(item)) : null,
+      heldPill(item)));
+}
+
+// factsheetText is the fact sheet as plain text, for the clipboard: the same
+// sections in the same order, a service's name above its description.
+function factsheetText(rel, item) {
+  const lines = [textOf(item.texts, item.id), ''];
+  const block = (title, parts) => {
+    if (!parts.length) return;
+    lines.push(title, '');
+    for (const p of parts) {
+      lines.push(textOf(p.texts, p.id), descriptionOf(p) || t('factsheet.noDescription'), '');
+    }
+  };
+  lines.push(t('factsheet.offering'), '', descriptionOf(item) || t('factsheet.noDescription'), '');
+  block(t('factsheet.included'), offeringParts(rel, item, 'includes'));
+  block(t('factsheet.optional'), offeringParts(rel, item, 'options'));
+  lines.push(`${t('info.price')}: ${item.price ? item.price : t('price.none')}`);
+  return lines.join('\n').trim() + '\n';
+}
+
+// copyText puts text on the clipboard, falling back to a selection the browser
+// copies where the clipboard API is not offered (a page not served over https).
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall back below */ }
+  const area = el('textarea', { readonly: 'readonly', style: 'position:fixed;left:-9999px;top:0' });
+  area.value = text;
+  document.body.append(area);
+  area.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+  area.remove();
+  return ok;
+}
+
+// printFactsheet prints the fact sheet alone: the page behind the dialog, the
+// dialog's own buttons and the backdrop stay off the paper (shop.html, @media print).
+function printFactsheet() {
+  document.body.classList.add('printing-factsheet');
+  const done = () => {
+    document.body.classList.remove('printing-factsheet');
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  window.print();
 }
 
 // productPicture is the product as it looks, where the catalogue has a picture of
