@@ -79,19 +79,20 @@ test("the Constants tab says what the processes read and what this installation 
   installMock(page);
   await openAppConstants(page);
 
-  await expect(page.locator('#pd-tabs button[data-pane="constants"]')).toHaveText("Constants");
+  // The page reads its words from the catalogue (ADR-0267): German by default.
+  await expect(page.locator('#pd-tabs button[data-pane="constants"]')).toHaveText("Konstanten");
   await expect(page.locator("#ac-required tbody tr")).toHaveCount(2);
-  await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("missing");
+  await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("fehlt");
   await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("application.TENANT_ID");
   await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("ucc-create, ucc-delete");
-  await expect(page.locator('#ac-required tr[data-req="LANGUAGE"]')).toContainText("fallback");
+  await expect(page.locator('#ac-required tr[data-req="LANGUAGE"]')).toContainText("Fallback");
 
   // The constant held here, then a row for each required name it does not hold yet — so
   // setting one is typing a value, not retyping its name.
   const names = await page.locator("#ac-rows .hc-name").evaluateAll((els) => els.map((e) => e.value));
   expect(names).toEqual(["DOMAIN_SUFFIX", "LANGUAGE", "TENANT_ID"]);
   // Who changed them is named, not identified.
-  await expect(page.locator("#pd-constants")).toContainText("by Anja Admin");
+  await expect(page.locator("#pd-constants")).toContainText("von Anja Admin");
   expect(page.__errors).toEqual([]);
 });
 
@@ -115,7 +116,7 @@ test("Save sends the constants that have a value, named in capitals", async ({ p
     { name: "TENANT_ID", type: "string", value: "tenant-int" },
     { name: "MAX_AGENTS", type: "number", value: "20" },
   ]);
-  await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("set");
+  await expect(page.locator('#ac-required tr[data-req="TENANT_ID"]')).toContainText("gesetzt");
   expect(page.__errors).toEqual([]);
 });
 
@@ -126,14 +127,14 @@ test("Admin → Engine holds the server constants every application reads", asyn
   await page.goto("/index.html#/console/engine");
 
   const card = page.locator("#server-constants-card");
-  await expect(card.locator("h2")).toHaveText("Server constants");
-  await expect(card.locator('#sc-required tr[data-req="ENTRA_TENANT_ID"]')).toContainText("missing");
+  await expect(card.locator("h2")).toHaveText("Server-Konstanten");
+  await expect(card.locator('#sc-required tr[data-req="ENTRA_TENANT_ID"]')).toContainText("fehlt");
   await expect(card.locator('#sc-required tr[data-req="ENTRA_TENANT_ID"]')).toContainText("server.ENTRA_TENANT_ID");
 
   await card.locator("#sc-rows tr").first().locator(".hc-value").fill("contoso-prod");
   await card.locator("#sc-save").click();
   await expect.poll(() => puts.server.length).toBe(1);
   expect(puts.server[0].constants).toEqual([{ name: "ENTRA_TENANT_ID", type: "string", value: "contoso-prod" }]);
-  await expect(card.locator('#sc-required tr[data-req="ENTRA_TENANT_ID"]')).toContainText("set");
+  await expect(card.locator('#sc-required tr[data-req="ENTRA_TENANT_ID"]')).toContainText("gesetzt");
   expect(errors).toEqual([]);
 });

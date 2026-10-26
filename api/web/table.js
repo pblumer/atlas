@@ -29,6 +29,9 @@
 // value, a worker's log — marks it `data-dt-detail`. Such a row is not data: the helper
 // never sorts it on its own, never opens it, and only hides it along with the row it
 // belongs to when a filter removes that row. Whether it is open stays the view's to say.
+
+import { t } from "./i18n.js";
+
 export function enhanceTable(table, opts = {}) {
   if (!table || table.dataset.dtEnhanced === "1") return;
   const thead = table.tHead;
@@ -99,8 +102,8 @@ export function enhanceTable(table, opts = {}) {
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "dt-filter";
-      inp.placeholder = "Filter";
-      inp.setAttribute("aria-label", "Filter by " + (cols[i].label || ("column " + (i + 1))));
+      inp.placeholder = t("table.filter");
+      inp.setAttribute("aria-label", t("table.filterBy", { column: cols[i].label || t("table.column", { n: i + 1 }) }));
       inp.addEventListener("input", apply);
       cell.appendChild(inp);
     }
@@ -116,8 +119,8 @@ export function enhanceTable(table, opts = {}) {
   const funnel = document.createElement("button");
   funnel.type = "button";
   funnel.className = "dt-filter-toggle";
-  funnel.title = "Show or hide the column filters";
-  funnel.setAttribute("aria-label", "Show or hide the column filters");
+  funnel.title = t("table.toggleFilters");
+  funnel.setAttribute("aria-label", t("table.toggleFilters"));
   funnel.setAttribute("aria-expanded", filtersOpen ? "true" : "false");
   funnel.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M1.8 2.5h12.4L9.3 8.6v4.4l-2.6 1.3V8.6L1.8 2.5Z"/></svg>';
   funnel.addEventListener("click", (e) => {
@@ -225,7 +228,7 @@ export function enhanceTable(table, opts = {}) {
           const td = document.createElement("td");
           td.colSpan = ths.length;
           td.className = "empty";
-          td.textContent = "No rows match the filters.";
+          td.textContent = t("table.noMatch");
           empty.appendChild(td);
         }
         empty.hidden = false;

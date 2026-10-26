@@ -42,7 +42,7 @@ function installMock(page) {
 // Returns the row's box, so a test can walk the pointer from there.
 async function openFlyout(page) {
   await page.evaluate(() => { location.hash = "#/modeler/p/ungrouped"; });
-  await expect(page.locator("#view")).toContainText("Not assigned");
+  await expect(page.locator("#view")).toContainText("Nicht zugeordnet");
   const dots = page.locator("tr", { hasText: "Alter neu" }).locator(".dropdown-toggle").first();
   await dots.click();
   const toggle = page.locator(".submenu-toggle").first();

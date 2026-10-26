@@ -4489,7 +4489,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             wählt es über seinen Antragsteller aus – eine Erneuerung braucht in Atlas keine Änderung. Der Tenant ist
             eine <b>Serverkonstante</b> (<code>server.ENTRA_TENANT_ID</code>, gesetzt unter Admin → Engine → Server
             constants), Client-ID und Zertifikats-Antragsteller sind <b>Applikationskonstanten</b>
-            (<code>application.ENTRA_CLIENT_ID</code>, gesetzt im Tab <i>Constants</i> der Applikation) – jede
+            (<code>application.ENTRA_CLIENT_ID</code>, gesetzt im Tab <i>Konstanten</i> der Applikation) – jede
             Installation setzt ihre eigenen, und bis Tenant und Client-ID gesetzt sind, wird ein Start abgelehnt.</p>
           <p data-l="en">Beside it lies <code>entra-create-account.bpmn</code> – the same job as a PowerShell
             <code>jobScript</code>. The comparison is worth making: the script route can do everything PowerShell can,
@@ -5935,8 +5935,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         sich ein Wert zwischen DEV, INT und PROD – ein Tenant, eine App-ID –, steht er nicht im Modell. Die Konstante
         erhält im Panel die Quelle <i>application</i> oder <i>server</i> und wird dann unter diesem Namensraum
         gelesen: <code>application.TENANT_ID</code> ist die Konstante, die ihre Applikation auf der jeweiligen
-        Installation hält (gesetzt im Tab <i>Constants</i> der Applikation), <code>server.TENANT_ID</code> die, die die
-        Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server constants</i>). In FEEL
+        Installation hält (gesetzt im Tab <i>Konstanten</i> der Applikation), <code>server.TENANT_ID</code> die, die die
+        Installation für alle Applikationen hält (gesetzt unter Admin → Engine → <i>Server-Konstanten</i>). In FEEL
         schreibt man <code>application.TENANT_ID</code>, in PowerShell <code>$application.TENANT_ID</code>, in Python
         <code>application["TENANT_ID"]</code>. Ein Wert im Modell ist nur noch der Fallback. Beide Seiten zeigen,
         welche Konstanten die deployten Prozesse lesen und welche hier fehlen; ein Deploy warnt, und ein Start aus
@@ -9133,8 +9133,8 @@ atlas worker --connector mssql</code></pre>
         einmal aus dem Namen ableitet und bei einer Umbenennung behält. Ausgeliefert wird sie als Ganzes. Beim
         Publizieren werden ihre BPMN-Entwürfe und die von ihnen gebundenen DMN-Referenzen zusammen deployt –
         alle oder keiner; <b>Formulare gehören zur Applikation, werden aber nicht deployt</b>. In der Konsole legt
-        man sie im Modeler unter <i>Create new › New application</i> an; ihr Detail hat die Reiter
-        <i>Artifacts</i> und <i>Deployments</i>.</p>
+        man sie im Modeler unter <i>Neu erstellen › Neue Anwendung</i> an; ihr Detail hat die Reiter
+        <i>Artefakte</i> und <i>Deployments</i>.</p>
       <p data-l="en">An <b>application</b> is the same thing as a project, only renamed (ADR-0128): it groups
         drafts, forms and decision references under one name and one <b>key</b> that atlas derives once from the
         name and keeps across a rename. It is delivered as a whole. Publishing deploys its BPMN drafts and the DMN
@@ -9143,7 +9143,7 @@ atlas worker --connector mssql</code></pre>
         <i>Artifacts</i> and <i>Deployments</i> tabs.</p>
 
       <h3 data-l="de">Publizieren: ein Release</h3><h3 data-l="en">Publish: a release</h3>
-      <p data-l="de">Der Knopf <b>Publish</b> deployt die Applikation und hält zugleich einen <b>Release</b> fest:
+      <p data-l="de">Der Knopf <b>Veröffentlichen</b> deployt die Applikation und hält zugleich einen <b>Release</b> fest:
         eine Momentaufnahme dessen, was zusammen ausgeliefert wurde, mit einer <b>Versionsnummer je Applikation</b>,
         die bei 1 beginnt und je Publikation um eins steigt – kein SemVer. (Ohne Release deployt dagegen der
         Knopf <i>Deploy</i> im Editor, für einen einzelnen Prozess und schnelle Runden; <code>…/deploy</code> tut
@@ -9163,7 +9163,7 @@ atlas worker --connector mssql</code></pre>
 curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
   -H "Content-Type: application/json" -d '{"note":"Antrag prüfen"}'</code></pre>
       <p data-l="de">In der Applikation zeigt <i>Deployments</i> die publizierte Version, die laufenden Instanzen
-        und darunter die <b>Release history</b>. Publizieren und Promoten verlangen die Rolle <code>modeler</code>
+        und darunter den <b>Release-Verlauf</b>. Publizieren und Promoten verlangen die Rolle <code>modeler</code>
         und auf der Applikation die Stufe <i>editor</i>.</p>
       <p data-l="en">Inside the application, <i>Deployments</i> shows the published version, the running instances,
         and below them the <b>Release history</b>. Publishing and promoting need the <code>modeler</code> role and,
@@ -9171,8 +9171,8 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
       <p data-l="de">Jeder Release trägt eine <b>Architekturskizze</b> (ADR-0471): Beim Publizieren und beim Import
         eines promoteten Release hält atlas fest, welche Nachrichten seine Prozesse empfangen, welche Worker sie mit
         welchem Worker Type nennen, welche lokalen Entscheidungen sie auswerten und welche Prozesse anderer
-        Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architecture</i> in der Release
-        history zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
+        Applikationen sie aufrufen – jeweils mit den Elementen, die es angeben. <i>Architektur</i> im
+        Release-Verlauf zeigt sie als Skizze und bietet sie als SVG und als ArchiMate-Open-Exchange-Dokument für Archi und
         andere Werkzeuge an. Derselbe Release ergibt immer dieselben Bytes. Neben der logischen Sicht hält die Skizze
         fest, was die aufzeichnende Installation in diesem Moment bereitstellte: ihren Namen und ihre Umgebung, ihre
         externe Adresse, die öffentlichen Start-Links und pro Worker, ob atlas ihn selbst ausführt oder ein
@@ -9280,12 +9280,12 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/releases/1/
       <h3 data-l="de">Der Quellbaum: die Quelle bewegen, nicht das Deployment</h3>
       <h3 data-l="en">The source tree: moving the source, not the deployment</h3>
       <p data-l="de">Promotion bewegt, <i>was deployt ist</i>. Der <b>Quellbaum</b> bewegt, <i>was ein Mensch
-        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Export application…</i>
+        bearbeitet</i>: Entwürfe, Formulare und Entscheidungsreferenzen als lesbare Dateien. <i>Anwendung exportieren…</i>
         lädt ein <code>tar.gz</code> mit einem Manifest <code>atlas.json</code> (Format-Version, Schlüssel, Name)
         und je einer Datei unter <code>processes/</code> und <code>forms/</code>; Entscheidungen stehen als Verweis
         im Manifest, DMN-Modelle dieses Servers als Datei. Auf Wunsch kommen die Konstanten-Werte und die Kataloge
         mit, die die Applikation verkaufen (siehe Shop-Handbuch). Der Export ist <b>Byte für Byte reproduzierbar</b>.
-        Beim Import (<i>Import application…</i>) wird die Applikation über den <b>Schlüssel</b> gefunden; fehlt sie,
+        Beim Import (<i>Anwendung importieren…</i>) wird die Applikation über den <b>Schlüssel</b> gefunden; fehlt sie,
         wird sie angelegt. Der Import <b>ersetzt nichts ungefragt</b> und <b>löscht nie</b>; was hier anders ist,
         listet er zur Entscheidung auf. Ein eingebautes Git gibt es nicht – der Quellbaum ist ein Archiv, das man
         selbst versionieren kann.</p>
@@ -10557,7 +10557,7 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         protected system process can never be deleted. In the Modeler, <i>Delete</i> shows the reason for a refusal
         and offers the forced delete.</p>
       <p data-l="de">Beim Löschen einer Applikation wählst du: Entweder bleibt ihr Inhalt erhalten und erscheint
-        unter <i>Not assigned</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
+        unter <i>Nicht zugeordnet</i>, oder alles, was ihr auf diesem Server gehört, wird mitgelöscht – deployte Versionen
         samt laufenden Instanzen, Entscheidungs-Deployments, BPMN- und Entscheidungsentwürfe, DMN-Referenzen mit ihren
         gespeicherten Modellen, Formulare, Testszenarien, Panorama- und Informationsmodelle
         (<code>DELETE /api/v1/applications/{id}?purge=true</code>, nur für die Besitzerin oder den Besitzer der

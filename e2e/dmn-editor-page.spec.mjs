@@ -450,7 +450,7 @@ test("a draft saved on the way from a business rule task says the task is not wi
 test("the application's Create new menu navigates to the decision editor", async ({ page }) => {
   installMock(page);
   await page.goto("/index.html#/modeler/p/app-1");
-  await page.getByRole("button", { name: "Create new" }).click();
+  await page.getByRole("button", { name: "Neu erstellen" }).click();
   await page.locator('button[data-act="newdec"]').click();
 
   await expect.poll(() => page.evaluate(() => location.hash)).toBe("#/modeler/dmn/new/p/app-1");

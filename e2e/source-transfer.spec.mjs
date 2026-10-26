@@ -5,7 +5,8 @@
 // processes need from the target that no download carries. An import names what the
 // target still lacks before anybody publishes. Which URL the dialog downloads, what it
 // lists and what it leaves out are things no Go test can see; these drive the real
-// module through its own harness.
+// module through its own harness. The dialogs read their words from the catalogue
+// (ADR-0267), so they speak the default locale, German, here.
 import { test, expect } from "@playwright/test";
 import zlib from "node:zlib";
 
@@ -26,16 +27,16 @@ test("a download lists what the target needs and carries the constants when tick
   for (const [kind, n] of [["server-constant", 2], ["application-constant", 1], ["worker", 1]]) {
     await expect(dialog(page).locator(`.need-group[data-kind="${kind}"] li`)).toHaveCount(n);
   }
-  await expect(dialog(page).locator('[data-need="server-constant/LANGUAGE"]')).toContainText("has a fallback");
+  await expect(dialog(page).locator('[data-need="server-constant/LANGUAGE"]')).toContainText("hat einen Fallback");
   await expect(dialog(page).locator('[data-need="worker/Postausgang"]')).toContainText("mail");
   await expect(dialog(page).locator(".source-unread")).toContainText("halb");
 
   // Ticked by default when the application holds values: TENANT_ID travels.
   const box = dialog(page).locator('[name="withConstants"]');
   await expect(box).toBeChecked();
-  await expect(dialog(page).locator('[data-need="application-constant/TENANT_ID"]')).toContainText("travels with the download");
+  await expect(dialog(page).locator('[data-need="application-constant/TENANT_ID"]')).toContainText("reist mit dem Download");
   await box.uncheck();
-  await expect(dialog(page).locator('[data-need="application-constant/TENANT_ID"]')).toContainText("set it on the target");
+  await expect(dialog(page).locator('[data-need="application-constant/TENANT_ID"]')).toContainText("auf dem Ziel setzen");
   await box.check();
   await dialog(page).locator("[data-ok]").click();
   await expect(result(page)).toHaveText("/api/v1/applications/a%201/source?constants=true");
@@ -53,8 +54,8 @@ test("an application holding no values offers none, and cancelling downloads not
   page.evaluate(() => window.__download({ applicationId: "a1", constants: 0, unread: [], needs: [] }));
   const box = dialog(page).locator('[name="withConstants"]');
   await expect(box).toBeDisabled();
-  await expect(dialog(page)).toContainText("holds no constant values here");
-  await expect(dialog(page)).toContainText("read nothing from the installation");
+  await expect(dialog(page)).toContainText("hält hier keine Konstantenwerte");
+  await expect(dialog(page)).toContainText("lesen nichts aus der Installation");
   await dialog(page).locator("[data-cancel]").click();
   await expect(result(page)).toHaveText("cancelled");
   await expect(dialog(page)).toHaveCount(0);
@@ -77,11 +78,11 @@ test("an import names only what the target still lacks", async ({ page }) => {
   page.evaluate((a) => window.__importNeeds(a), answer);
   const report = page.locator(".import-needs");
   await expect(report).toBeVisible();
-  await expect(report.locator("h2")).toHaveText("Before Bedarf runs here");
+  await expect(report.locator("h2")).toHaveText("Bevor Bedarf hier läuft");
   // A need the target answers, or a fallback covers, is not listed.
   await expect(report.locator("[data-need]")).toHaveCount(3);
-  await expect(report.locator('[data-need="server-constant/MAIL_DOMAIN"]')).toContainText("missing");
-  await expect(report.locator('[data-need="application-constant/TENANT_ID"]')).toContainText("held with another type: number");
+  await expect(report.locator('[data-need="server-constant/MAIL_DOMAIN"]')).toContainText("fehlt");
+  await expect(report.locator('[data-need="application-constant/TENANT_ID"]')).toContainText("mit einem anderen Typ gehalten: number");
   await expect(report.locator('[data-need="worker/Archiv"]')).toHaveCount(0);
   await expect(report.locator('.need-group[data-kind="not-set"]')).toContainText("REGION");
   await report.locator("[data-done]").click();
@@ -102,11 +103,11 @@ test("ticked catalogues make it a package, and its warnings are shown before it 
   // The catalogue that sells the application starts ticked; another does not.
   await expect(boxes.nth(0)).toBeChecked();
   await expect(boxes.nth(1)).not.toBeChecked();
-  await expect(dialog(page).locator(".package-catalogs li").first()).toContainText("sells this application");
+  await expect(dialog(page).locator(".package-catalogs li").first()).toContainText("verkauft diese Anwendung");
 
   await dialog(page).locator("[data-ok]").click();
   await expect(dialog(page).locator(".package-warnings")).toContainText("form f1 is asked by product p1");
-  await expect(dialog(page).locator("[data-ok]")).toHaveText("Download anyway");
+  await expect(dialog(page).locator("[data-ok]")).toHaveText("Trotzdem herunterladen");
   expect(await page.evaluate(() => window.__previews)).toEqual(
     ["/api/v1/applications/a%201/package?constants=true&catalog=cat-a&preview=true"]);
   await dialog(page).locator("[data-ok]").click();

@@ -6,6 +6,9 @@
 // could do. The dialog now offers to delete everything — and since that cancels
 // running instances and cannot be undone, it must show what goes, say what outside
 // the application stops working, and not run until the name has been typed.
+//
+// The dialog reads its words from the catalogue (ADR-0267), so it speaks the default
+// locale, German, here.
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -21,7 +24,7 @@ const ok = (page) => page.locator("[data-ok]");
 
 test("the default keeps the contents and asks for no preview", async ({ page }) => {
   await page.locator("#open").click();
-  await expect(ok(page)).toHaveText("Delete application");
+  await expect(ok(page)).toHaveText("Anwendung löschen");
   await expect(ok(page)).toBeEnabled();
   await ok(page).click();
   await expect(result(page)).toHaveText("keep");
@@ -34,17 +37,17 @@ test("deleting everything shows what goes and runs only once the name is typed",
   await page.locator('input[value="purge"]').check();
 
   const detail = page.locator("#purge-detail");
-  await expect(detail).toContainText("1 deployed process (1 version)");
-  await expect(detail).toContainText("2 running instances will be cancelled");
+  await expect(detail).toContainText("1 deployter Prozess (1 Version)");
+  await expect(detail).toContainText("2 laufende Instanzen werden abgebrochen");
   await expect(detail).toContainText("Teams Phone: Telefonzentrale (proc_m365_telefonzentrale)");
   await expect(detail).toContainText("m365-telefonie v1");
-  await expect(detail).toContainText("1 form");
+  await expect(detail).toContainText("1 Formular");
   // The reported blocker, now named as a consequence rather than a refusal.
   await expect(detail).toContainText("m365-telefonzentrale");
-  await expect(detail).toContainText("ordering it will fail");
-  await expect(detail).toContainText("This cannot be undone");
+  await expect(detail).toContainText("Bestellungen darauf schlagen fehl");
+  await expect(detail).toContainText("Das lässt sich nicht rückgängig machen");
 
-  await expect(ok(page)).toHaveText("Delete everything permanently");
+  await expect(ok(page)).toHaveText("Alles endgültig löschen");
   await expect(ok(page)).toBeDisabled();
   await page.locator("#purge-confirm").fill("M36");
   await expect(ok(page)).toBeDisabled();
@@ -70,7 +73,7 @@ test("a refusal from the preview keeps the purge disarmed", async ({ page }) => 
 test("a caller who may not cancel instances is told so and cannot purge", async ({ page }) => {
   await page.locator("#open-modeler").click();
   await page.locator('input[value="purge"]').check();
-  await expect(page.locator("#purge-detail")).toContainText("needs the operator role");
+  await expect(page.locator("#purge-detail")).toContainText("braucht es die Rolle Operator");
   await page.locator("#purge-confirm").fill("Busy");
   await expect(ok(page)).toBeDisabled();
 });
