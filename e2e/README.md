@@ -788,6 +788,13 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   with enforcement off it is offered. Operations keeps its working pages and the incident
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
+- **`release-architecture-layers.spec.mjs`**
+  ([ADR-0495](../docs/adr/0495-layered-release-architecture.md)):
+  **Applications → Deployments → Release history → Architecture** against a stubbed API.
+  Every layer the release records is a ticked checkbox; switching one off redraws the
+  picture for the remaining layers and points both downloads at the same selection. The
+  last ticked layer cannot be switched off, and a release that records one layer offers
+  no choice.
 - **`workers-endpoints.spec.mjs`**
   ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
   against a stubbed API. A worker name a Worker Instance holds shows the endpoint the

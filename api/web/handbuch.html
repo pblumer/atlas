@@ -9192,6 +9192,29 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         only) and the worker instances that served it since the start. An arrow points from the side that opens the
         connection. An endpoint is shown only to whoever may see that worker's configuration, the worker instances
         only to the <code>operator</code> role. A release recorded before this version has no sketch and says so.</p>
+      <p data-l="de">Die Skizze ist in <b>Ebenen</b> gegliedert. Im Dialog <i>Architecture</i> gibt es pro Ebene, die
+        der Release aufzeichnet, eine Checkbox: <i>Application</i> ist die logische Sicht (was der Inhalt des Release
+        festlegt), <i>Technology</i> die physische (was die Installation bereitstellte). Ohne Technology zeigt die
+        Skizze die logische Sicht; ohne Application zeigt sie die Installation allein – den atlas-Knoten mit seiner
+        Adresse, jeden Worker-Prozess und jede Verbindung, die atlas selbst öffnet, mit dem System, das sie erreicht.
+        Vorschau und beide Downloads folgen der Auswahl, und eine eingeschränkte Skizze nennt die gezeigten und die
+        ausgeschalteten Ebenen. Dieselbe Wahl nehmen die Routen und <code>atlas_release_architecture</code> als
+        <code>?layers=</code> entgegen (<code>strategy</code>, <code>business</code>, <code>application</code>,
+        <code>data</code>, <code>technology</code>). Ohne Angabe gelten Application und Technology; ein Link oder ein
+        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Strategie-, Business- und
+        Datenebene zeichnet noch kein Release auf; wer nur nach solchen Ebenen fragt, erhält eine Antwort, die sagt,
+        welche Ebenen der Release aufzeichnet.</p>
+      <p data-l="en">The sketch is organised in <b>layers</b>. The <i>Architecture</i> dialog offers one checkbox per
+        layer the release records: <i>Application</i> is the logical view (what the release's content fixes),
+        <i>Technology</i> the physical one (what the installation had in place). Without Technology the sketch shows
+        the logical view; without Application it shows the installation alone – the atlas node with its address, each
+        worker process and each connection atlas opens itself, with the system it reaches. The preview and both
+        downloads follow the choice, and a narrowed sketch names the layers it shows and the ones switched off. The
+        routes and <code>atlas_release_architecture</code> take the same choice as <code>?layers=</code>
+        (<code>strategy</code>, <code>business</code>, <code>application</code>, <code>data</code>,
+        <code>technology</code>). Without it, Application and Technology apply, so a link or an embedded picture
+        without <code>layers</code> shows exactly what it showed before. No release records the strategy, business
+        or data layer yet; asking for those alone gets an answer that says which layers the release records.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
@@ -9323,8 +9346,8 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
             <td data-l="de">die Release-Historie lesen</td>
             <td data-l="en">read the release history</td></tr>
           <tr><td><code>GET /api/v1/applications/{id}/releases/{version}/architecture</code></td><td><code>any</code></td>
-            <td data-l="de">die Architekturskizze eines Release lesen, auch als <code>.svg</code> und <code>.xml</code></td>
-            <td data-l="en">read a release's architecture sketch, also as <code>.svg</code> and <code>.xml</code></td></tr>
+            <td data-l="de">die Architekturskizze eines Release lesen, auch als <code>.svg</code> und <code>.xml</code>; <code>?layers=</code> wählt die Ebenen</td>
+            <td data-l="en">read a release's architecture sketch, also as <code>.svg</code> and <code>.xml</code>; <code>?layers=</code> picks the layers</td></tr>
           <tr><td><code>GET /api/v1/applications/{id}/deployments</code></td><td><code>any</code></td>
             <td data-l="de">was hier deployt ist, mit Instanzzahlen</td>
             <td data-l="en">what is deployed here, with instance counts</td></tr>
