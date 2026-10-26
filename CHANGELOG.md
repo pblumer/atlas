@@ -14,6 +14,22 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Operations view has a heatmap.** A strip over a version's live diagram switches
+  from **Live** to **Runs**, **Waiting**, **Working** or **Duration**. Runs shades every
+  element *and* every sequence flow by how many tokens passed it, and draws what nothing
+  reached dashed with a zero; the time modes shade the tasks by the median time from
+  activation to completion, split at the moment a person claimed the task or a Worker
+  picked it up. **Glow** paints halos under the diagram that add up where the traffic is,
+  **Outline** the Playground's five shaded strokes; the period is *since deployment* or the
+  last 30 days, 7 days or 24 hours. The side panel lists the instances, the tasks ranked by
+  what is shown, how each gateway split and what was never reached. Behind it the engine
+  now counts the sequence flows tokens arrive over — a branch of an event-based gateway
+  only when it wins its race — and keeps when a task was claimed or leased and handed
+  back; a store upgraded into the flow counter rebuilds it once from the lifecycle trail.
+  The runtime overlay carries `flows`, and `GET /api/v1/processes/{key}/statistics` answers
+  a window's runs, durations, waiting and working times as count, mean, median, p90,
+  maximum and total, also as the `atlas_process_statistics` MCP tool. Times are kept per
+  task, never per person ([ADR-draft-operations-heatmap](docs/adr/draft-operations-heatmap.md)).
 - **Technical capability contracts have a content digest.** `workertype.DigestTechnicalContractJSON` names a contract file by
   the SHA-256 of its exact bytes, `sha256:<hex>`, so any tool can recompute it and a
   reformatted file is a different artifact. It refuses a file that is not exactly one

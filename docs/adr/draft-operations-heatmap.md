@@ -139,6 +139,23 @@ beside the diagram lists the figures behind the colours.
   `diagrams`-token answer (ADR-0493), which deliberately carries no new field until
   somebody decides it should; working-time calendars.
 
+### As built
+
+- **Compiler:** `CompiledProcess.FlowBpmnId` and `FlowCount`; `Builder.SetFlowBpmnId`,
+  called for every authored `<sequenceFlow>` (`compiler/scope_compile.go`).
+- **State:** `cfFlowTakenAgg` (0x36) with `Tx.IncFlowTakenAgg` and `FlowTakenTotals`;
+  `cfJobTake` (0x37) with `Tx.RecordJobTake`, `JobTakeHistory` and the kinds `JobTaken` /
+  `JobReleased`, purged by `PurgeInstanceHistory`; the one-time reconstruction
+  `backfillFlowTakenIfNeeded`, marked `flow_taken_v1`.
+- **Engine:** the flow counter on element activation and on an armed catch's completion,
+  and `jobTakeKind` for `JobActivated`, `JobAssigned`, `JobFailed` and `JobTimedOut`
+  (`engine/apply.go`).
+- **API:** `flows` on `GET /api/v1/processes/{key}/runtime`;
+  `GET /api/v1/processes/{key}/statistics` (`api/processstats.go`), bounded by
+  `maxStatisticsInstances` = 10 000; the MCP tool `atlas_process_statistics`.
+- **Console:** `api/web/heatoverlay.js`, wired into the live view (`mountLive`); covered by
+  `e2e/heatmap-overlay.spec.mjs`.
+
 ## Pros and cons of the options
 
 ### Option 1 — fold everything on request
