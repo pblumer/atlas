@@ -2032,24 +2032,6 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 				})
 			})
 			scan(func() error {
-				// One instance's arrows, folded from its own trail under the counter's
-				// rule — bounded by that instance's history, like the visits above.
-				visits := make([]int, d.cp.FlowCount())
-				if err := foldInstanceTrail(s.store, instanceFilter, key, d.cp, func(_ int64, _ state.ElementReplayValue, flow int32) {
-					if flow >= 0 {
-						visits[flow]++
-					}
-				}); err != nil {
-					return err
-				}
-				for i, n := range visits {
-					if id := d.cp.FlowBpmnId(int32(i)); id != "" && n > 0 {
-						resp.Flows = append(resp.Flows, runtimeFlow{FlowID: id, Visits: n})
-					}
-				}
-				return nil
-			})
-			scan(func() error {
 				// Filtered to one instance: ask for that instance, do not walk
 				// the family looking for it (ADR-0080's rule, applied to the one
 				// scan its own view had left).
@@ -2080,6 +2062,16 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 	// running would deadlock.
 	if found && scanErr == nil && instanceFilter == 0 {
 		applyIncidentOverlay(s, key, cp, &resp)
+	}
+	// One isolated instance's arrows are folded from its trail, on a snapshot after the
+	// loop turn rather than inside it: the trail grows with every round an instance loops,
+	// and the overlay is polled every 1.5 seconds (ADR-0496).
+	if found && scanErr == nil && instanceFilter != 0 {
+		scanErr = s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+			flows, err := instanceFlowVisits(rv, instanceFilter, key, cp)
+			resp.Flows = flows
+			return err
+		})
 	}
 	switch {
 	case !found:

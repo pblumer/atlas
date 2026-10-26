@@ -156,6 +156,33 @@ beside the diagram lists the figures behind the colours.
 - **Console:** `api/web/heatoverlay.js`, wired into the live view (`mountLive`); covered by
   `e2e/heatmap-overlay.spec.mjs`.
 
+### As built, second slice: the figures are kept, not re-read
+
+The first slice let every open tab re-read the statistics every fifteen seconds, and each
+read folded up to ten thousand instances' histories again — about 70 µs per small
+instance, so most of a second of CPU and some 20 MB of garbage at the bound, per tab.
+Nothing the fold reads about a finished instance can change, so:
+
+- **The Console reads the figures when asked:** when the heatmap opens and when the period
+  changes, then every five minutes while the tab is visible, or on **Refresh**; the strip
+  says when they were folded. A window's start is rounded to the minute, so tabs asking
+  within one minute name the same window.
+- **The endpoint shares a result** for a minute per (definition, window) — a window ending
+  now is one window for that minute — and requests arriving while a fold runs wait for it
+  (`statsResultCache`, at most 256 results; a failure or an unknown definition is never
+  kept).
+- **A finished instance's contribution is folded once and kept** (`instanceStatsCache`,
+  least recently used out, at most twice the per-fold bound). It is the contribution to
+  every window that holds the instance's whole trail; an instance still running, or one a
+  window cuts, is folded for that window alone. Nothing invalidates an entry: a finished
+  trail is fixed, keys are never reused, and a purged instance is never asked for again.
+- **The runtime overlay folds an isolated instance's flows on a snapshot** after the loop
+  turn rather than inside it, since a looping instance's trail grows without bound.
+- **The glow layer is rebuilt only when its values change**, rather than on every poll.
+
+The engine's own cost was measured unchanged: `BenchmarkInstanceLifecycle` ran at
+2.29 ms per instance before the first slice and 2.30 ms after, two more allocations each.
+
 ## Pros and cons of the options
 
 ### Option 1 — fold everything on request

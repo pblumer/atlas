@@ -211,7 +211,7 @@ func TestProcessStatisticsSaysWhenItStopped(t *testing.T) {
 	var resp processStatsResp
 	err := srv.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
 		var err error
-		resp, err = foldProcessStatistics(rv, defKey, defs[defKey].cp, 0, int64(10000*time.Second), 1)
+		resp, err = foldProcessStatistics(rv, defKey, defs[defKey].cp, 0, int64(10000*time.Second), 1, nil)
 		return err
 	})
 	if err != nil {
