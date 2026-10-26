@@ -33,6 +33,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Console's languages are one file each, and none ships incomplete.** The
+  message catalogue is split into `api/web/locales/de.js` and `en.js`, listed once by
+  `locales/index.js`; the language picker names each language by its own file, and the
+  server accepts as a person's choice exactly the languages the Console carries, read
+  from the same directory. A test holds every language to every message German has,
+  with the same placeholders, so adding a language is adding a complete file. A counted
+  message picks its form with the browser's plural rules, so a language with more than
+  two forms needs no code
+  ([ADR-draft-console-locales-one-file-each](docs/adr/draft-console-locales-one-file-each.md),
+  amends [ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
 - **The Modeler's application landscape and application page speak German.** Both
   pages and everything they open read from the message catalogue
   ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): the "Neu erstellen" menu

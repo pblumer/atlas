@@ -17,10 +17,6 @@ import (
 // other. A typo in any of them otherwise reaches the author as a raw id in place of a
 // button, a confirm or a warning.
 func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	// A key ends in a letter or digit: a literal ending in a dot is the prefix of a
 	// family of ids the server sends ("share.role."), resolved one id at a time.
 	const key = `((?:create|application|artifact|dmnref|deployments|constants|import|share|appDelete|transfer|pick|table|home|choices|package|frozen)\.[A-Za-z0-9.]*[A-Za-z0-9])`
@@ -52,12 +48,8 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 		t.Fatalf("found only %d message keys; the scan no longer matches how the modules look them up", len(direct)+len(counted))
 	}
 
-	src := string(catalogue)
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(src, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		has := func(k string) bool { return strings.Contains(block, `"`+k+`":`) }
 		for k := range direct {
 			if !has(k) {

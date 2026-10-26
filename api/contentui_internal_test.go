@@ -145,7 +145,6 @@ func TestAWikiLinkOpensANewTabWithoutOpenerAndOnlyOverHTTPS(t *testing.T) {
 // TestEveryMessageTheWikiScreensAskForExists: every key the modules look up is in
 // both locales of the Console's catalogue, and the German is Swiss — ss, never ß.
 func TestEveryMessageTheWikiScreensAskForExists(t *testing.T) {
-	catalogue := readWeb(t, "i18n.js")
 	keys := map[string]bool{}
 	lookup := regexp.MustCompile(`\b(?:t|boundNote)\("((?:content|contentSources|common)\.[A-Za-z0-9.]+)"`)
 	for _, name := range append([]string{"catalog-admin.js"}, wikiModules...) {
@@ -156,19 +155,15 @@ func TestEveryMessageTheWikiScreensAskForExists(t *testing.T) {
 	if len(keys) < 100 {
 		t.Fatalf("found only %d message keys; the scan no longer matches how the modules look them up", len(keys))
 	}
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(catalogue, locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("the wiki screens ask for %q, which locale %q does not have", key, locale)
 			}
 		}
 	}
-	de, _ := localeBlock(catalogue, "de")
-	if strings.Contains(de, "ß") {
+	if strings.Contains(localeCatalogue(t, "de"), "ß") {
 		t.Error("the German catalogue writes ß; Swiss spelling is ss")
 	}
 }
