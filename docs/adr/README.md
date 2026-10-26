@@ -565,20 +565,22 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0477](0477-last-login-day.md) | The roster says on which day an account last signed in | Accepted | Landed |
 | [0478](0478-mail-documents-leave-the-mailbox.md) | A mail's documents leave the mailbox — forward, get-attachment, export-attachment, and what inspects them first | Accepted | Landed |
 | [0479](0479-paperless-ngx-worker.md) | Paperless-ngx Worker with reference-only document handling | Proposed | Not started |
-| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Proposed | Partial |
+| [0480](0480-technical-capability-contract.md) | Technical capability claims on Worker Type operations | Accepted | Partial |
 | [0481](0481-storage-guard.md) | A storage reserve, and an engine that halts on a failed write | Accepted | Landed |
 | [0482](0482-capability-aware-binding-and-routing.md) | Capability-aware BPMN binding and deterministic authorized Worker selection | Proposed | Not started |
 | [0483](0483-technical-capability-conformance-governance.md) | Technical capability contract publication and conformance governance | Accepted | Partial |
 | [0484](0484-sharepoint-mock-mode.md) | A mockup provider for the SharePoint Worker Type | Accepted | Landed |
-| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Proposed | Partial |
+| [0485](0485-technical-capability-semantics.md) | Versioned semantic contracts for technical capabilities | Accepted | Partial |
 | [0486](0486-operator-history-purge-and-compaction.md) | Deleting finished instances and compacting the WAL on an operator's request | Accepted | Landed |
 | [0487](0487-mail-templates.md) | A mail text is a template in the language form text views already speak | Accepted | Landed |
 | [0488](0488-checkpoint-verdicts-are-remembered.md) | A checkpoint's verdict is remembered, not re-read on every scrape | Accepted | Landed |
 | [0489](0489-mail-html-view.md) | A received mail's HTML body, read on request and shown in a task form | Accepted | Landed |
 | [0490](0490-carddav-worker.md) | A CardDAV Worker Type — a process finds, keeps and labels contacts in any CardDAV address book | Accepted | Landed |
-| [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted | Partial |
+| [0491](0491-service-content-from-an-external-source.md) | A service's content may come from an external source, copied into the draft and frozen with the release | Accepted (amended) | Partial |
 | [0492](0492-controlled-worker-rebinding.md) | Controlled configured-Worker rebinding without process redeployment | Proposed | Not started |
-| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed | Partial |
+| [0493](0493-diagrams-scope.md) | A diagrams scope for systems that show processes elsewhere | Proposed (amended) | Partial |
+| [0494](0494-delegated-form-lookups.md) | A form looks up the asking person's own address book through their linked account | Proposed | Not started |
+| [0495](0495-layered-release-architecture.md) | A release's architecture is drawn in layers, from what Atlas already holds | Proposed | Not started |
 
 ## The two states of a record
 

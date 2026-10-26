@@ -481,6 +481,15 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   fixed half an hour after local midnight, when the local and the UTC calendar disagree:
   the age must be counted in UTC, as the day was.
 
+- **`user-row-actions.spec.mjs`** ([ADR-0163](../docs/adr/0163-deleting-a-referenced-connector.md)):
+  **the Users card fits the content column**. With a roster as it looks in use — an id,
+  an address that cannot wrap, four roles, a last login and a presence pill on a row —
+  the table must be no wider than its card at the column's 1120px, so the card does not
+  scroll it and no control is drawn past its edge. Edit stays a button on the row; set
+  password, disable and delete are in the row's ⋯ menu and must send the same requests
+  the buttons did, delete only after it was confirmed. Drives the real app shell against
+  a routed mock at a 1280px window.
+
 - **`catalog-actions.spec.mjs`** ([ADR-0429](../docs/adr/0429-product-actions-are-commands-with-published-outcomes.md)):
   the **product's actions** in the catalogue editor. A product that still carries the
   operation map opens as the actions it means — the order's provision and return first, key

@@ -1,11 +1,12 @@
 # ADR-0485: Versioned semantic contracts for technical capabilities
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-24
 - **Deciders:** atlas maintainers
-- **Open question:** Which vetted JSON Schema validation and provider conformance runner should gate verified provider mappings? This initial record limits enforcement to the contract envelope; full JSON Schema validation and provider evidence are subsequent slices.
+- **Open question:** Which provider conformance runner and evidence format should gate verified provider mappings? The JSON Schema validator is chosen (CDA2a, PR #1357); evidence and approval follow ADR-0483.
 - **Question checked:** 2026-10
+- **Decision recorded:** 2026-10-26; accepted with a reservation. The contract identity `(id, version, profile)` and its immutability are binding. The `v1alpha1` envelope fields may still change until the first contract is published (CDA3); after that, a change needs a new `apiVersion`.
 
 ## Context and problem statement
 
@@ -78,11 +79,11 @@ This first slice **does not publish a canonical production corpus**: fixtures in
 
 `ParseTechnicalContractJSON` rejects unknown envelope fields, multiple JSON values, invalid IDs/versions/profiles, missing required semantics, invalid enum values, duplicate error codes and malformed/unpinned root schemas. `ValidateTechnicalContracts` rejects repeated `(id, version, profile)` identities in a set.
 
-**This is not full JSON Schema validation.** Embedded schemas remain JSON Schema documents; T1a checks their root dialect and type only and does not assert that provider request or result objects conform to every keyword. No network retrieval, `$ref` execution, provider calls, or runtime input/output validation is introduced. Because schema documents are not evaluated, consumers must not advertise provider conformance based on a successful envelope parse.
+The envelope parse is not full JSON Schema validation: it checks the embedded schemas' root dialect and type only. Full Draft 2020-12 keyword validation of sample documents was added separately in CDA2a ([PR #1357](https://github.com/pblumer/atlas/pull/1357), `CompileTechnicalContract`), offline, with remote loading disabled and at design time only. Neither proves provider behavior: consumers must not advertise provider conformance based on a successful envelope parse or schema check.
 
-### Conformance and trust (not yet implemented)
+### Conformance and trust (partly implemented)
 
-T1b will choose a maintained JSON Schema validator, restrict remote references to prevent network retrieval, validate positive/negative fixtures, and define a provider mock/conformance runner with independently reviewed expected outcomes. A self-declared capability claim cannot mark its own conformance state. Evidence must include the exact contract identity and content digest, operation mapping, runner/fixture revision, and review status. The contract format alone does not grant policy permissions (ADR-0475).
+CDA2a chose a maintained JSON Schema validator, disabled remote references and validates positive/negative fixtures. Still to come: a provider mock/conformance runner with independently reviewed expected outcomes. A self-declared capability claim cannot mark its own conformance state. Evidence must include the exact contract identity and content digest, operation mapping, runner/fixture revision, and review status. The contract format alone does not grant policy permissions (ADR-0475).
 
 ### Stability and compatibility
 

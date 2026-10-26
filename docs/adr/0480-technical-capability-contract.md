@@ -1,11 +1,12 @@
 # ADR-0480: Technical capability claims on Worker Type operations
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-24
 - **Deciders:** atlas maintainers
 - **Open question:** What reviewed, versioned canonical contract and provider conformance evidence are sufficient to classify two operations as substitutable? This first slice makes no interchangeability claim; a future ADR must settle equivalence before routing.
 - **Question checked:** 2026-10
+- **Decision recorded:** 2026-10-26; accepted by the CDA programme owner. Claims stay descriptive; the one-claim-per-`id@version` rule within an operation is kept deliberately (see section 1).
 
 ## Context and problem statement
 
@@ -71,6 +72,8 @@ The entries have three attributes:
 | `profile` | Optional lower-case kebab-case semantic profile for provider constraints. Omitting it is **not** a claim of generic interoperability. |
 
 The list is optional. Parsing and validation reject malformed identifiers, invalid versions, malformed profiles and duplicate `id@version` claims **within the same operation**. Legacy manifests with no claims retain their existing meaning, JSON representation and compatibility checks.
+
+The duplicate rule holds even when the profiles differ, although [ADR-0485](0485-technical-capability-semantics.md) identifies a contract by `(id, version, profile)`. This is deliberate: two profiles of one contract version on one operation would claim that the operation meets two constraint sets at once, and each would need its own evidence. Relaxing the rule is a separately tested manifest change.
 
 This slice deliberately does **not** introduce a canonical contract registry, shared resource schema, provider conformance suite, runtime routing, new job type, or policy integration. A declaration is useful for architecture review and discovery, but is not yet a guarantee. Cross-provider equivalence, input/output conversion, idempotency, error mappings and consistency guarantees are separate properties to prove in later slices.
 

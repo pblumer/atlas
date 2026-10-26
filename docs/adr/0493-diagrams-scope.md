@@ -1,11 +1,40 @@
 # ADR-0493: A diagrams scope for systems that show processes elsewhere
 
-- **Status:** Proposed
+- **Status:** Proposed (amended 2026-10-26: the scope reaches the overlay's counts, not its incident details)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
-- **Deciders:** requested 2026-10-26 by the maintainer, who wants wikiwikibangbang (github.com/dbuchs7/wikiwikibangbang) to show Atlas processes in its pages in their newest version, with their live counts when its administrator allows them, and asked for a narrow token on the Atlas side rather than a `full` one; proposed for the maintainers' acceptance
-- **Open question:** `GET /api/v1/processes/{key}/runtime` answers the overlay's counts *and* a page of incident details — the message, the instance and job keys, the Worker. A system that shows counts only (the wiki drops the rest) still receives them, so a leaked `diagrams` token reads incident messages, which can carry business data. Should the scope reach a counts-only form of the overlay instead (a query parameter the handler honours for this scope, or a route of its own), so that its reach matches what such a system needs?
-- **Question checked:** 2026-10
+- **Deciders:** requested 2026-10-26 by the maintainer, who wants wikiwikibangbang (github.com/dbuchs7/wikiwikibangbang) to show Atlas processes in its pages in their newest version, with their live counts when its administrator allows them, and asked for a narrow token on the Atlas side rather than a `full` one; proposed for the maintainers' acceptance. The amendment was asked for by the maintainer on the same day, answering the record's open question.
+
+> **Amendment (2026-10-26) — the scope reaches the counts of the overlay, not the
+> overlay.** As first written, the scope reached `GET /api/v1/processes/{key}/runtime`,
+> which answers the overlay's counts *and* a page of incident details: the message, the
+> instance, element-instance and job keys, the Worker and its repair form. A system that
+> shows counts only still received them, so a leaked `diagrams` token read incident
+> messages, which can carry business data, and could isolate one instance with
+> `?instance=`. The record left that open; the maintainer answered it.
+>
+> - `GET /api/v1/processes/{key}/runtime/counts` answers the overlay's numbers and
+>   nothing else: `instances`, `finished`, `tokens`, `elements` (per element: `tokens`,
+>   `visits`, `incidents`, `terminated`, with its id and type), `incidentTotal` and
+>   `incidentCountsExact`. They come from the same reading as the overlay, so the two
+>   cannot disagree. The fields are copied one by one, so a field added to the overlay
+>   later reaches this answer only by a decision. It is the whole definition's: an
+>   `?instance=` filter is refused (400), not ignored, because isolating an instance is
+>   reading it.
+> - The scope's allowlist names that route instead of `/runtime`, which a `diagrams`
+>   token is now refused (403) — with or without `?instance=`.
+> - Of the two forms the open question named, a route of its own was chosen over a
+>   query parameter the handler honours for this scope. The allowlist matches patterns,
+>   not queries, so the parameter would have needed the handler to know the caller's
+>   scope, and the reach of a `diagrams` token would no longer be readable in
+>   `api/apitokenscope.go` alone — the property ADR-0194 asks of every scope.
+> - The new route is role `any`, like the overlay. It is not an MCP tool: an agent holds
+>   no `diagrams` credential and reads the whole overlay through `atlas_process_runtime`.
+>
+> The decision driver "no new route" below gave way to that property: one read route
+> that answers a subset of an existing one is the price of a reach that is a list.
+> The consumer reads the counts route; until it does, a wiki holding a `diagrams` token
+> is refused the operations view, not handed the messages.
 
 ## Context and problem statement
 
@@ -19,7 +48,7 @@ Deployed definitions are readable by every signed-in caller (ADR-0447 §5, `defi
 
 - A long-lived credential on another host reaches what its machine needs and nothing else (ADR-0194).
 - The reach of a scope is short enough to read in one glance.
-- No new route and no change to what the three routes answer.
+- No new route and no change to what the three routes answer. (Amended: one new read route, the overlay's counts; see the amendment.)
 
 ## Considered options
 
@@ -31,14 +60,14 @@ Deployed definitions are readable by every signed-in caller (ADR-0447 §5, `defi
 
 Chosen option: **1**.
 
-- `apiScopeDiagrams = "diagrams"` is mintable. Its allowlist is `GET /api/v1/processes`, `GET /api/v1/processes/{key}/xml` and `GET /api/v1/processes/{key}/runtime`; every other request, the writes on the same paths included, is refused with 403.
+- `apiScopeDiagrams = "diagrams"` is mintable. Its allowlist is `GET /api/v1/processes`, `GET /api/v1/processes/{key}/xml` and `GET /api/v1/processes/{key}/runtime`; every other request, the writes on the same paths included, is refused with 403. (Amended: `GET /api/v1/processes/{key}/runtime/counts` instead of `/runtime`.)
 - It carries its minter's roles, as `status` and `landscape` do: every route it reaches asks for the role `any`, so roles cannot widen what the allowlist admits. It is not added to `scopeRoles`, because an empty role set is read as a legacy token's.
-- The Console offers it on the API token page between `status` and `events`; the handbook's table of scopes names it, in both languages, with the runtime answer's incident messages said plainly.
+- The Console offers it on the API token page between `status` and `events`; the handbook's table of scopes names it, in both languages, with the runtime answer's incident messages said plainly. (Amended: the handbook now says the scope reads counts and never an incident's message.)
 
 ### Consequences
 
-- **Positive:** a leaked `diagrams` token reads models and runtime overlays; it cannot deploy, start, cancel, move, redraw or read an instance's variables.
-- **Negative / trade-offs accepted:** the runtime overlay comes whole, incident details included (the open question). Every deployed definition is readable, as for any signed-in caller.
+- **Positive:** a leaked `diagrams` token reads models and runtime overlays; it cannot deploy, start, cancel, move, redraw or read an instance's variables. (Amended: it reads the overlays' counts, never an incident's message, key or Worker, and cannot isolate an instance.)
+- **Negative / trade-offs accepted:** the runtime overlay comes whole, incident details included (the open question). Every deployed definition is readable, as for any signed-in caller. (Amended: the overlay no longer comes whole; one more read route, the counts, is the trade-off.)
 - **Follow-ups / risks to watch:** if definitions become object-gated (ADR-0447 §5), the scope narrows with them, since the routes do the gating. A new read such a system needs is a change to this record, not an addition on the side.
 
 ## Pros and cons of the options

@@ -14,6 +14,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Technical capability contracts have a content digest.** `workertype.DigestTechnicalContractJSON` names a contract file by
+  the SHA-256 of its exact bytes, `sha256:<hex>`, so any tool can recompute it and a
+  reformatted file is a different artifact. It refuses a file that is not exactly one
+  valid contract: oversized, invalid UTF-8, a byte-order mark, a carriage return, a
+  duplicate JSON member at any depth or excess nesting. A digest binds bytes only; it
+  does not certify a Worker, grant routing or record an approval (CDA2b,
+  [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)).
 - **Account linking is set up in the Console.** An administrator sets up the Microsoft
   app registration people link their accounts through under **Administration →
   Security**: the directory (tenant) id, the application (client) id, the delegated
@@ -26,9 +33,12 @@ _Changed_ / _Removed_ for each version.
   act and asks first. `GET`, `PUT` and `DELETE /api/v1/security/linking/microsoft`,
   admin-only ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md), amended).
 - **A diagrams scope for systems that show processes elsewhere.** An API token of the
-  scope `diagrams` reads the deployed processes, a definition's BPMN model and its
-  runtime overlay and nothing else, so a wiki can draw a process's newest version, with
-  its live counts, without holding a `full` token
+  scope `diagrams` reads the deployed processes, a definition's BPMN model and the
+  counts of its runtime overlay and nothing else, so a wiki can draw a process's newest
+  version, with its live counts, without holding a `full` token. The counts come from
+  the new `GET /api/v1/processes/{key}/runtime/counts`: the overlay's numbers for the
+  whole definition, without its incident details. The token never reads an incident's
+  message or an instance, and the full overlay, `/runtime`, is refused to it
   ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
 
 ### Changed
@@ -98,6 +108,12 @@ _Changed_ / _Removed_ for each version.
   sent again at three quarters of the size, up to four times. The routes and their limit
   are unchanged ([ADR-0368](docs/adr/0368-user-avatar.md),
   [ADR-0391](docs/adr/0391-product-picture.md), both amended).
+- **The Users list fits its card.** Under Console → Organization each user row carried
+  four buttons side by side, which made the table wider than the content column: the card
+  scrolled it sideways and cut Delete off at its edge, even on a wide screen. Edit stays
+  on the row; Set password, Disable and Delete are in the row's ⋯ menu, as on the
+  Console's other lists, and do what the buttons did
+  ([ADR-0163](docs/adr/0163-deleting-a-referenced-connector.md)).
 
 ## [0.20.0] — 2026-10-25
 
