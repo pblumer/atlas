@@ -1,4 +1,4 @@
-# ADR-DRAFT: The console's languages are one file each, and none ships incomplete
+# ADR-0497: The console's languages are one file each, and none ships incomplete
 
 - **Status:** Accepted
 - **Implementation:** Landed

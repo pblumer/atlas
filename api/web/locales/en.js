@@ -1,4 +1,4 @@
-// English (ADR-0267, ADR-draft-console-locales-one-file-each).
+// English (ADR-0267, ADR-0497).
 //
 // It carries every key the German default does — a test holds it to that — and is
 // selected only when somebody asks for it: German is the default, and the browser's

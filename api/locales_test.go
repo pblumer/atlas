@@ -79,7 +79,7 @@ func placeholders(msg string) []string {
 var pluralCategories = []string{"zero", "two", "few", "many"}
 
 // TestEveryLocaleCarriesEveryMessageOfTheDefault is what makes an incomplete language
-// impossible to ship (ADR-draft-console-locales-one-file-each). A missing message
+// impossible to ship (ADR-0497). A missing message
 // renders as its key by design (ADR-0267), so a locale that lacks one would show ids
 // on a screen; this refuses it instead. Every locale carries every key German does,
 // with the same {placeholders} — a placeholder a translation dropped is a value the

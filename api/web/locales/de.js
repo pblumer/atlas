@@ -1,5 +1,5 @@
 // German — the console's default locale and the one every other locale is held to
-// (ADR-0267, ADR-draft-console-locales-one-file-each).
+// (ADR-0267, ADR-0497).
 //
 // Messages are keyed by id: a dotted path naming the screen and then the thing —
 // `tasks.folders.save` — so a screen's strings sit together and an unused one is

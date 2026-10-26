@@ -1,5 +1,5 @@
 // The console's locales: one module per language, each an object of messages keyed
-// by id (ADR-0267, ADR-draft-console-locales-one-file-each).
+// by id (ADR-0267, ADR-0497).
 //
 // Adding a language is adding its file beside these and naming it here — two lines.
 // Everything else follows from this list: the language picker offers it under the

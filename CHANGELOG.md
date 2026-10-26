@@ -83,7 +83,7 @@ _Changed_ / _Removed_ for each version.
   with the same placeholders, so adding a language is adding a complete file. A counted
   message picks its form with the browser's plural rules, so a language with more than
   two forms needs no code
-  ([ADR-draft-console-locales-one-file-each](docs/adr/draft-console-locales-one-file-each.md),
+  ([ADR-0497](docs/adr/0497-console-locales-one-file-each.md),
   amends [ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
 - **The Modeler's application landscape and application page speak German.** Both
   pages and everything they open read from the message catalogue

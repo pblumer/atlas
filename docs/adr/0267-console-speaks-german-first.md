@@ -57,7 +57,7 @@ browser like the other per-viewer preferences.
 exist, so the mechanism is demonstrably multi-locale rather than a single-language
 stub with a hook. It is not selected by default.
 
-> **Amended by [ADR-draft-console-locales-one-file-each](draft-console-locales-one-file-each.md).**
+> **Amended by [ADR-0497](0497-console-locales-one-file-each.md).**
 > A locale is now a file of its own under `api/web/locales/`, named once by the
 > index the browser imports; the server reads the same directory for the languages a
 > person may choose, and the tests hold every locale to every key German has. A

@@ -1,5 +1,5 @@
 // The translate service the vendored modelers call (bpmn-js, dmn-js), fed from the
-// console's catalogue (ADR-0267, ADR-draft-console-locales-one-file-each).
+// console's catalogue (ADR-0267, ADR-0497).
 //
 // diagram-js and table-js ask a `translate` service for every word they draw — the
 // palette, the context pad, the popup menus, the properties panel — passing their

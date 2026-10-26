@@ -9,7 +9,7 @@
 // translation project, and doing it badly is worse than not doing it. It is a
 // boundary: text that a person reads lives in a catalogue keyed by id, German is
 // the language it is written in first, and a second locale is a second file
-// (locales/, ADR-draft-console-locales-one-file-each). Nothing else in the console
+// (locales/, ADR-0497). Nothing else in the console
 // has to change until it is translated, and a screen that has been translated never
 // has to be untangled again.
 //

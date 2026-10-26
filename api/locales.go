@@ -10,7 +10,7 @@ import (
 )
 
 // localeDir is where the console keeps one message file per language
-// (ADR-draft-console-locales-one-file-each). index.js beside them is the list the
+// (ADR-0497). index.js beside them is the list the
 // browser imports, not a language.
 const localeDir = "web/locales"
 
