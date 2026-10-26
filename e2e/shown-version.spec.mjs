@@ -46,7 +46,7 @@ test("a draft missing a newer deployed change says so, and names who to ask", as
   await page.evaluate(() => window.__mountDraft());
 
   const chip = page.locator("#sv-chip");
-  await expect(chip).toHaveText("Draft ≠ v2");
+  await expect(chip).toHaveText("Entwurf ≠ v2");
   await expect(chip).toHaveClass(/warn/);
   expect(await oneRow(page), "the chip must not push the bar into a second row").toBe(1);
 
@@ -57,9 +57,9 @@ test("a draft missing a newer deployed change says so, and names who to ask", as
   await expect(pop).toContainText("Alice Adams");
   await expect(pop).toContainText("Bob Brown");
   await expect(pop).toContainText("Carol Clark");
-  await expect(pop.locator(".sv-note.warn")).toContainText("deployed after this draft was last saved");
+  await expect(pop.locator(".sv-note.warn")).toContainText("deployt, nachdem dieser Entwurf zuletzt gespeichert wurde");
   await expect(pop.locator(".sv-note.warn")).toContainText('<serviceTask id="t"> differs');
-  await expect(pop.locator("a", { hasText: "Open v2" })).toHaveAttribute("href", "#/modeler/d/2251799813685250");
+  await expect(pop.locator("a", { hasText: "v2 öffnen" })).toHaveAttribute("href", "#/modeler/d/2251799813685250");
 
   // It closes on an outside click and on Escape, like the bar's menu.
   await page.locator("#canvas").click({ position: { x: 20, y: 20 } });
@@ -81,7 +81,7 @@ test("the chip never starts a second row: short of room it is cut, not wrapped",
   });
   await page.evaluate(() => window.__mountDraft());
   const chip = page.locator("#sv-chip");
-  await expect(chip).toHaveText("Draft · not deployed");
+  await expect(chip).toHaveText("Entwurf · nicht deployt");
   await page.evaluate(() => {
     const bar = document.querySelector(".editor-bar");
     const host = document.querySelector("#shown-version");
@@ -108,11 +108,11 @@ test("a draft that is the deployed model reads as that version", async ({ page }
     },
   });
   await page.evaluate(() => window.__mountDraft());
-  await expect(page.locator("#sv-chip")).toHaveText("Draft = v1");
+  await expect(page.locator("#sv-chip")).toHaveText("Entwurf = v1");
   await expect(page.locator("#sv-chip")).toHaveClass(/ok/);
   await page.locator("#sv-chip").click();
   // Nobody recorded is said as such, not left blank.
-  await expect(page.locator("#sv-pop")).toContainText("not recorded");
+  await expect(page.locator("#sv-pop")).toContainText("nicht erfasst");
 });
 
 test("a draft with undeployed changes is not a warning", async ({ page }) => {
@@ -123,7 +123,7 @@ test("a draft with undeployed changes is not a warning", async ({ page }) => {
     },
   });
   await page.evaluate(() => window.__mountDraft());
-  await expect(page.locator("#sv-chip")).toHaveText("Draft · v1 + changes");
+  await expect(page.locator("#sv-chip")).toHaveText("Entwurf · v1 + Änderungen");
   await expect(page.locator("#sv-chip")).not.toHaveClass(/warn/);
   expect(await oneRow(page)).toBe(1);
 });
@@ -145,7 +145,7 @@ test("a deployed version says which of how many, who deployed it, and how the dr
   await page.evaluate(() => window.__mountVersion(42));
 
   const chip = page.locator("#sv-chip");
-  await expect(chip).toHaveText("v2 of 3");
+  await expect(chip).toHaveText("v2 von 3");
   await expect(chip).toHaveClass(/warn/);
   expect(await oneRow(page)).toBe(1);
   // The draft is compared with the version that is open, not with the newest.
@@ -154,12 +154,12 @@ test("a deployed version says which of how many, who deployed it, and how the dr
 
   await chip.click();
   const pop = page.locator("#sv-pop");
-  await expect(pop).toContainText("Deployed version 2 of 3");
+  await expect(pop).toContainText("Deployte Version 2 von 3");
   await expect(pop).toContainText("Bob Brown");
   await expect(pop).toContainText("Dana Dent");
-  await expect(pop).toContainText("a different model from v2");
-  await expect(pop.locator("a", { hasText: "Open v3" })).toHaveAttribute("href", "#/modeler/d/43");
-  await expect(pop.locator("a", { hasText: "Open the draft" })).toHaveAttribute("href", "#/modeler/draft/order");
+  await expect(pop).toContainText("ein anderes Modell als v2");
+  await expect(pop.locator("a", { hasText: "v3 öffnen" })).toHaveAttribute("href", "#/modeler/d/43");
+  await expect(pop.locator("a", { hasText: "Den Entwurf öffnen" })).toHaveAttribute("href", "#/modeler/draft/order");
 });
 
 test("the newest version without a draft says so", async ({ page }) => {
@@ -168,9 +168,9 @@ test("the newest version without a draft says so", async ({ page }) => {
     comparison: null,
   });
   await page.evaluate(() => window.__mountVersion(43));
-  await expect(page.locator("#sv-chip")).toHaveText("v3 · newest");
+  await expect(page.locator("#sv-chip")).toHaveText("v3 · neueste");
   await page.locator("#sv-chip").click();
-  await expect(page.locator("#sv-pop")).toContainText("None — Save turns this version into one");
+  await expect(page.locator("#sv-pop")).toContainText("Keiner — Speichern macht aus dieser Version einen");
 });
 
 test("a draft that cannot be read is not passed off as no draft", async ({ page }) => {
@@ -180,8 +180,8 @@ test("a draft that cannot be read is not passed off as no draft", async ({ page 
   });
   await page.evaluate(() => window.__mountVersion(43));
   await page.locator("#sv-chip").click();
-  await expect(page.locator("#sv-pop")).toContainText("Could not be read");
-  await expect(page.locator("#sv-pop")).not.toContainText("None");
+  await expect(page.locator("#sv-pop")).toContainText("Liess sich nicht lesen");
+  await expect(page.locator("#sv-pop")).not.toContainText("Keiner");
 });
 
 test("Deploy from a draft saves the draft first, and only once", async ({ page }) => {
@@ -189,7 +189,7 @@ test("Deploy from a draft saves the draft first, and only once", async ({ page }
     comparison: { processId: "order", savedAt: T0, deployed: false, sameModel: false },
   });
   await page.evaluate(() => window.__mountDraft());
-  await expect(page.locator("#sv-chip")).toHaveText("Draft · not deployed");
+  await expect(page.locator("#sv-chip")).toHaveText("Entwurf · nicht deployt");
 
   const writes = () => page.evaluate(() =>
     window.__writes.filter((w) => w.method === "POST").map((w) => w.url.split("?")[0]));
@@ -213,7 +213,7 @@ test("Deploy from a version opened read-only leaves the draft alone, and says so
   });
   await page.evaluate(() => window.__mountVersion(43));
   await page.locator("#deploy").click();
-  await expect(page.locator("#deploy-from-version")).toContainText("leaves the draft as it is");
+  await expect(page.locator("#deploy-from-version")).toContainText("lässt den Entwurf, wie er ist");
   await page.locator("#deploy-only").click();
   await expect(page.locator(".deploy-success")).toBeVisible();
   const posts = await page.evaluate(() => window.__writes.filter((w) => w.method === "POST").map((w) => w.url));
@@ -222,7 +222,7 @@ test("Deploy from a version opened read-only leaves the draft alone, and says so
 
 test("a new diagram is not saved yet, and its first deploy saves it", async ({ page }) => {
   await page.evaluate(() => window.__mountNew());
-  await expect(page.locator("#sv-chip")).toHaveText("Not saved");
+  await expect(page.locator("#sv-chip")).toHaveText("Nicht gespeichert");
   await page.locator("#deploy").click();
   await page.locator("#deploy-only").click();
   await expect(page.locator(".deploy-success")).toBeVisible();

@@ -80,7 +80,7 @@ test("a deployment whose latest was frozen when it was deployed says so beside i
   // something else, and Deploy on this bar is the remedy.
   const mark = page.locator(".editor-bar .crumbs .frozen-mark");
   await expect(mark).toBeVisible();
-  await expect(mark).toHaveText("Decision frozen · newer deployed");
-  await expect(mark).toHaveAttribute("title", /eligibility runs v1, the newest is v2/);
+  await expect(mark).toHaveText("Entscheidung eingefroren · neuere deployt");
+  await expect(mark).toHaveAttribute("title", /eligibility wertet v1 aus, das Neueste ist v2/);
   expect(page.__errors).toEqual([]);
 });

@@ -21,6 +21,7 @@
 // frozen-decisions.js already makes.
 
 import { fmtDateTime } from "./datefmt.js";
+import { t } from "./i18n.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -32,7 +33,7 @@ const when = (sec) => (sec ? fmtDateTime(sec * 1000) : "");
 // name; that is said as it is rather than filled in.
 function stamp(at, name) {
   const parts = [when(at), name].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "not recorded";
+  return parts.length ? parts.join(" · ") : t("shown.notRecorded");
 }
 
 // draftStanding is the chip for a session that addresses a draft. cmp is the server's
@@ -41,56 +42,53 @@ function stamp(at, name) {
 export function draftStanding(cmp) {
   if (!cmp) {
     return {
-      label: "Draft", tone: "", title: "The draft of this process",
-      rows: [["Showing", "The draft — the editable copy an application publishes"]],
-      note: "Could not compare this draft with what is deployed.", links: [],
+      label: t("shown.draft"), tone: "", title: t("shown.draftTitle"),
+      rows: [[t("shown.row.showing"), t("shown.showingDraft")]],
+      note: t("shown.noCompare"), links: [],
     };
   }
   const rows = [
-    ["Showing", "The draft — the editable copy an application publishes"],
-    ["Created by", cmp.ownerName || "not recorded"],
-    ["Last saved", stamp(cmp.savedAt, cmp.savedByName)],
+    [t("shown.row.showing"), t("shown.showingDraft")],
+    [t("shown.row.createdBy"), cmp.ownerName || t("shown.notRecorded")],
+    [t("shown.row.lastSaved"), stamp(cmp.savedAt, cmp.savedByName)],
   ];
   if (!cmp.deployed) {
-    rows.push(["Deployed", "No version yet"]);
+    rows.push([t("shown.row.deployed"), t("shown.noVersion")]);
     return {
-      label: "Draft · not deployed", tone: "off",
-      title: "The draft of this process. No version of it is deployed yet.",
+      label: t("shown.notDeployed"), tone: "off",
+      title: t("shown.notDeployedTitle"),
       rows, note: "", links: [],
     };
   }
   const v = `v${cmp.version}`;
-  rows.push(["Newest version", `${v} · deployed ${stamp(cmp.deployedAt, cmp.deployedByName)}`]);
-  const links = [{ href: `#/modeler/d/${encodeURIComponent(cmp.key)}`, text: `Open ${v}` }];
+  rows.push([t("shown.row.newest"), t("shown.newestRow", { v, stamp: stamp(cmp.deployedAt, cmp.deployedByName) })]);
+  const links = [{ href: `#/modeler/d/${encodeURIComponent(cmp.key)}`, text: t("shown.open", { v }) }];
   if (cmp.sameModel) {
     return {
-      label: `Draft = ${v}`, tone: "ok",
-      title: `The draft of this process — the same model as the deployed ${v}.`,
+      label: t("shown.same", { v }), tone: "ok",
+      title: t("shown.sameTitle", { v }),
       rows, links,
-      note: `This draft is the model ${v} runs. The diagram's layout is not compared.`,
+      note: t("shown.sameNote", { v }),
     };
   }
-  const diff = cmp.difference ? ` First difference: ${cmp.difference}.` : "";
+  const diff = cmp.difference ? t("shown.firstDiff", { difference: cmp.difference }) : "";
   // Deployed after the draft's last save and not the same model: the version holds
   // something this draft does not. That is the case that loses work — editing this
   // draft and publishing its application deploys without it — so it is the warning.
   // An equal second counts as after: missing the warning costs more than showing it.
   if (cmp.deployedAt >= cmp.savedAt) {
     return {
-      label: `Draft ≠ ${v}`, tone: "warn",
-      title: `${v} was deployed after this draft was last saved, and it is a different model. ` +
-        "This draft may be missing changes that are deployed.",
+      label: t("shown.behind", { v }), tone: "warn",
+      title: t("shown.behindTitle", { v }),
       rows, links,
-      note: `${v} was deployed after this draft was last saved, and it is not the model shown here.${diff} ` +
-        `A change deployed in ${v} is not in this draft: publishing the application from this draft would ` +
-        `replace it. Open ${v} and Save it to make it the draft again, or carry the change over here.`,
+      note: t("shown.behindNote", { v, diff }),
     };
   }
   return {
-    label: `Draft · ${v} + changes`, tone: "",
-    title: `The draft of this process, changed since ${v} was deployed.`,
+    label: t("shown.ahead", { v }), tone: "",
+    title: t("shown.aheadTitle", { v }),
     rows, links,
-    note: `This draft has changes that are not deployed yet.${diff} Deploy it, or publish its application, to run them.`,
+    note: t("shown.aheadNote", { diff }),
   };
 }
 
@@ -104,35 +102,36 @@ export function versionStanding(here, versions, cmp, draftUnread) {
   const latest = newest.version === here.version;
   const v = `v${here.version}`;
   const rows = [
-    ["Showing", `Deployed version ${here.version} of ${newest.version} — it does not change; Deploy makes a new one`],
-    ["Deployed", stamp(here.deployedAt, here.deployedByName)],
+    [t("shown.row.showing"), t("shown.showingVersion", { version: here.version, newest: newest.version })],
+    [t("shown.row.deployed"), stamp(here.deployedAt, here.deployedByName)],
   ];
   if (here.diagramUpdatedAt) {
-    rows.push(["Layout adjusted", stamp(here.diagramUpdatedAt, here.diagramUpdatedByName || here.diagramUpdatedBy)]);
+    rows.push([t("shown.row.layout"), stamp(here.diagramUpdatedAt, here.diagramUpdatedByName || here.diagramUpdatedBy)]);
   }
   const links = [];
   if (!latest) {
-    rows.push(["Newest version", `v${newest.version} · deployed ${stamp(newest.deployedAt, newest.deployedByName)}`]);
-    links.push({ href: `#/modeler/d/${encodeURIComponent(newest.key)}`, text: `Open v${newest.version}` });
+    rows.push([t("shown.row.newest"), t("shown.newestRow", { v: `v${newest.version}`, stamp: stamp(newest.deployedAt, newest.deployedByName) })]);
+    links.push({ href: `#/modeler/d/${encodeURIComponent(newest.key)}`, text: t("shown.open", { v: `v${newest.version}` }) });
   }
   let note = "";
   if (cmp) {
-    const same = cmp.sameModel ? `the same model as ${v}` : `a different model from ${v}`;
-    rows.push(["Draft", `Last saved ${stamp(cmp.savedAt, cmp.savedByName)} — ${same}`]);
-    links.push({ href: `#/modeler/draft/${encodeURIComponent(here.processId)}`, text: "Open the draft" });
+    const same = t(cmp.sameModel ? "shown.sameModel" : "shown.otherModel", { v });
+    rows.push([t("shown.row.draft"), t("shown.draftSaved", { stamp: stamp(cmp.savedAt, cmp.savedByName), same })]);
+    links.push({ href: `#/modeler/draft/${encodeURIComponent(here.processId)}`, text: t("shown.openDraft") });
     if (!cmp.sameModel) {
-      note = `The draft of this process is not ${v}` + (cmp.difference ? ` (first difference: ${cmp.difference})` : "") +
-        ". Save here to replace the draft with this version.";
+      note = t("shown.draftDiffers", {
+        v, diff: cmp.difference ? t("shown.draftDiffersFirst", { difference: cmp.difference }) : "",
+      });
     }
   } else if (draftUnread) {
-    rows.push(["Draft", "Could not be read"]);
+    rows.push([t("shown.row.draft"), t("shown.draftUnread")]);
   } else {
-    rows.push(["Draft", "None — Save turns this version into one"]);
+    rows.push([t("shown.row.draft"), t("shown.noDraft")]);
   }
   return {
-    label: latest ? `${v} · newest` : `${v} of ${newest.version}`,
+    label: latest ? t("shown.newestLabel", { v }) : t("shown.ofLabel", { v, newest: newest.version }),
     tone: latest ? "ok" : "warn",
-    title: `Deployed version ${here.version} of ${newest.version}, deployed ${stamp(here.deployedAt, here.deployedByName)}.`,
+    title: t("shown.versionTitle", { version: here.version, newest: newest.version, stamp: stamp(here.deployedAt, here.deployedByName) }),
     rows, note, links,
   };
 }
@@ -140,8 +139,8 @@ export function versionStanding(here, versions, cmp, draftUnread) {
 // unsavedStanding is the chip for a diagram that has never been saved.
 export function unsavedStanding() {
   return {
-    label: "Not saved", tone: "off", title: "A new diagram, not saved as a draft yet.",
-    rows: [["Showing", "A new diagram, not saved as a draft yet"]], note: "", links: [],
+    label: t("shown.unsaved"), tone: "off", title: t("shown.unsavedTitle"),
+    rows: [[t("shown.row.showing"), t("shown.unsavedRow")]], note: "", links: [],
   };
 }
 
@@ -154,7 +153,7 @@ export function standingHTML(s) {
     : "";
   return `<button type="button" class="pill sv-chip${s.tone ? " " + s.tone : ""}" id="sv-chip"
       aria-haspopup="true" aria-expanded="false" aria-controls="sv-pop" title="${esc(s.title)}">${esc(s.label)}</button>
-    <div class="sv-pop" id="sv-pop" role="dialog" aria-label="What is shown" hidden>
+    <div class="sv-pop" id="sv-pop" role="dialog" aria-label="${esc(t("shown.popLabel"))}" hidden>
       <dl class="sv-rows">${rows}</dl>${note}${links}
     </div>`;
 }

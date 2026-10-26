@@ -682,6 +682,7 @@ type Builder struct {
 	ioInputs           []pendingIO                 // zeebe:ioMapping inputs, grouped by node in Build
 	ioOutputs          []pendingIO                 // zeebe:ioMapping outputs, grouped by node in Build
 	elementIds         []int32                     // interned source BPMN id per node, -1 if unset
+	flowIds            []int32                     // interned source BPMN id per flow, -1 if unset (a link goto, or a flow built in code)
 	agentParams        map[string][]agentParamSpec // element id → declared tool parameters
 	elementDocs        []int32                     // interned <bpmn:documentation> per node, -1 if undocumented (ADR-0025)
 	repairForms        []int32                     // interned repair form id per node, -1 if none (ADR-0169)
@@ -3371,7 +3372,18 @@ func (b *Builder) Connect(source, target int32) int32 {
 		Source: source,
 		Target: target,
 	})
+	b.flowIds = append(b.flowIds, -1) // kept in lockstep with flows: unnamed until SetFlowBpmnId
 	return id
+}
+
+// SetFlowBpmnId records the source BPMN id of a sequence flow (e.g. "Flow_1"), so a
+// count the engine keeps per compiled flow can be drawn on the arrow it belongs to
+// (ADR-0496). Optional, like SetElementBpmnId: a flow without
+// one reports "" from CompiledProcess.FlowBpmnId.
+func (b *Builder) SetFlowBpmnId(flowID int32, bpmnID string) {
+	if flowID >= 0 && int(flowID) < len(b.flowIds) {
+		b.flowIds[flowID] = b.intern(bpmnID)
+	}
 }
 
 // SetFlowCondition attaches a compiled FEEL guard to a flow (an exclusive gateway
@@ -3665,6 +3677,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		ioOutputs:          ioOut,
 		startEvents:        startEvents,
 		elementIds:         b.elementIds,
+		flowIds:            b.flowIds,
 		elementDocs:        b.elementDocs,
 		repairForms:        b.repairForms,
 		lanes:              b.lanes,

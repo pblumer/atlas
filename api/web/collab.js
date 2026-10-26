@@ -18,6 +18,8 @@
 // true per-element merging await the op-log/CRDT upgrade. A re-import never runs
 // over unsaved local work: a dirty canvas defers the sync until the next save.
 
+import { t } from "./i18n.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -139,7 +141,7 @@ export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface
       const many = g.count > 1 ? ` (×${g.count})` : "";
       const badge = g.count > 1 ? `<i class="collab-count">${g.count}</i>` : "";
       return `<span class="collab-avatar${g.me ? " me" : ""}" style="--h:${hueFor(g.key)}" ` +
-        `title="${esc(g.name)}${g.me ? " (you)" : ""}${many}${where}">${esc(initials(g.name))}${badge}</span>`;
+        `title="${esc(g.name)}${g.me ? esc(t("collab.you")) : ""}${many}${where}">${esc(initials(g.name))}${badge}</span>`;
     }).join("");
   };
 
@@ -155,7 +157,7 @@ export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface
         state.overlayIds.push(overlays.add(l.elementId, "collab-lock", {
           position: { top: -12, right: 12 },
           html: `<span class="collab-lock" style="--h:${hueFor(l.holderId)}" ` +
-            `title="Locked by ${esc(l.holderName)}">🔒 ${esc(initials(l.holderName))}</span>`,
+            `title="${esc(t("collab.lockedBy", { name: l.holderName }))}">🔒 ${esc(initials(l.holderName))}</span>`,
         }));
       } catch { /* shape not on canvas (mid-import) — skip */ }
     }
@@ -193,7 +195,7 @@ export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface
       state.pendingRemote = true;
       if (!state.warnedPending) {
         state.warnedPending = true;
-        toast("A collaborator changed the diagram — save to merge their changes", "warn");
+        toast(t("collab.remoteChange"), "warn");
       }
       return;
     }
@@ -282,11 +284,11 @@ export function attachCollab(modeler, api, draftId, toast, surface = bpmnSurface
     // Acquire locks for newly selected elements not already ours.
     for (const id of wanted) {
       if (state.myLocks.has(id)) continue;
-      if (isLockedByOther(id)) { toast(`${id} is being edited by someone else`, "warn"); continue; }
+      if (isLockedByOther(id)) { toast(t("collab.lockedByOther", { id }), "warn"); continue; }
       state.myLocks.add(id);
       send("/lock", { elementId: id, action: "acquire" }, (e) => {
         state.myLocks.delete(id);
-        if (String(e.message || "").includes("locked")) toast(`${id} is being edited by someone else`, "warn");
+        if (String(e.message || "").includes("locked")) toast(t("collab.lockedByOther", { id }), "warn");
       });
     }
     // Announce where we are looking.

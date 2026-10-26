@@ -14,10 +14,6 @@ import (
 // answers with codes, the field words them, and a code or a message the catalogue
 // lacks would show a raw key in the middle of a task form.
 func TestTheDirectoryFieldSpeaksBothLanguages(t *testing.T) {
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatal(err)
-	}
 	widget, err := os.ReadFile("web/remote-select.js")
 	if err != nil {
 		t.Fatal(err)
@@ -36,11 +32,8 @@ func TestTheDirectoryFieldSpeaksBothLanguages(t *testing.T) {
 	for _, c := range formlookup.Codes {
 		keys["remote.error."+c] = true
 	}
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(string(catalogue), locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for k := range keys {
 			if !strings.Contains(block, `"`+k+`":`) {
 				t.Errorf("locale %q has no message %q", locale, k)

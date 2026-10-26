@@ -350,6 +350,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/runtime", s.handleProcessRuntime, apiOp{
 			summary: "Read a process's live runtime state", tag: "Processes", role: roleAny, resp: jsonBody("Runtime state", tObject())}},
+		{"GET", "/api/v1/processes/{key}/statistics", s.handleProcessStatistics, apiOp{
+			summary: "Read how a process's elements and sequence flows were used over a window, and where the time went: for every element and flow of the model (zeroes included) how many tokens arrived, and for every element how long its instances took — activation to completion, and for a task split at the moment it was claimed or leased into waiting and working — as count, mean, median, 90th percentile, maximum and total in milliseconds; and the instances started, finished and running. ?from= and ?to= are RFC 3339 moments or unix nanoseconds (default: the beginning of retained history, and now). The fold reads at most a bounded number of instances, newest first, and says so with truncated (ADR-0496)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Statistics", schemaObj(map[string]any{
+				"from": tInteger(), "to": tInteger(), "instances": tObject(), "elements": tArray(), "flows": tArray(),
+				"scanned": tInteger(), "truncated": tBool(),
+			}))}},
 		{"GET", "/api/v1/processes/{key}/runtime/counts", s.handleProcessRuntimeCounts, apiOp{
 			summary: "Read the counts of a process's live runtime state and nothing else: instances live and finished, and tokens live, passed, cancelled and parked behind an incident on each element — the same numbers as the runtime state, without its incident details and for the whole definition only (?instance= is refused). It is what a system that shows the process elsewhere reads, and all the diagrams scope reaches (ADR-0493)", tag: "Processes", role: roleAny,
 			resp: jsonBody("Runtime counts", schemaObj(map[string]any{

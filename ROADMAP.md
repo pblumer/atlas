@@ -1374,6 +1374,13 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   live view): active elements highlighted with token counts, polled from a
   `/processes/{key}/runtime` endpoint — the differentiator a standalone modeler
   can't offer. Incidents/history overlays still to come.
+- ✅ **Heatmap overlay** ([ADR-0496](docs/adr/0496-operations-heatmap.md)):
+  the live view's diagram shaded by how many tokens passed each element *and* sequence
+  flow, or by the median waiting, working and total time of each task, as a glow under
+  the diagram or as shaded outlines, since deployment or over a period, with the figures
+  in the side panel. The engine counts sequence flows per definition and keeps when a
+  task was claimed or leased; `GET /api/v1/processes/{key}/statistics` folds a window off
+  the loop. Closes statusbericht item 803.
 - ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
 - ✅ **Multi-token replay & causal token lineage**

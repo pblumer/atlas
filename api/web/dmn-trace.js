@@ -18,6 +18,8 @@
 // panel, in the Operations hover, and in the decision graph, so learning to read it
 // once is enough.
 
+import { t } from "./i18n.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -54,7 +56,7 @@ export function matchedRuleNumbers(trace) {
 export function renderTraceTable(tt, n) {
   const matched = (tt.rules || []).filter((r) => r.matched).map((r) => r.index + 1);
   const policy = (tt.hitPolicy || "U") + (tt.aggregation ? " " + tt.aggregation : "");
-  const head = matched.length ? `Rule ${matched.join(", ")} fired` : "no rule fired";
+  const head = matched.length ? t("trace.fired", { rules: matched.join(", ") }) : t("trace.noneFired");
   const ins = tt.inputs || [];
   const hr = `<tr><th class="mcol-idx">#</th>${ins.map((i) =>
     `<th>${esc(i.expression)} <code>= ${esc(fmtVal(i.value))}</code></th>`).join("")}<th>&rarr;</th></tr>`;
@@ -67,7 +69,7 @@ export function renderTraceTable(tt, n) {
     const out = r.matched && r.outputs ? esc(r.outputs.map(fmtVal).join(", ")) : "";
     return `<tr class="mrule${r.matched ? " is-hit" : ""}"><td class="mcol-idx">${r.index + 1}</td>${cells}<td class="mout">${out}</td></tr>`;
   }).join("");
-  return `<div class="mtable"><div class="mtable-head">${n ? `Table ${n} · ` : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
+  return `<div class="mtable"><div class="mtable-head">${n ? esc(t("trace.table", { n })) : ""}${esc(head)}<span class="mtable-policy">${esc(policy)}</span></div>` +
     `<table class="mgrid">${hr}${body}</table></div>`;
 }
 
@@ -94,12 +96,12 @@ export function renderTraceTable(tt, n) {
 export function renderTrace(trace, opts = {}) {
   if (trace === null || trace === undefined) {
     return opts.service
-      ? `<p class="muted">No rule matrix came back for this service. A decision service reported none until the engine learned to trace one, so this is an older engine answering — a service evaluated here now shows its rules.</p>`
-      : `<p class="muted">This evaluation recorded no trace, so there are no rules to show.</p>`;
+      ? `<p class="muted">${esc(t("trace.noServiceTrace"))}</p>`
+      : `<p class="muted">${esc(t("trace.none"))}</p>`;
   }
   const tables = tablesOf(trace);
   if (!tables.length) {
-    return `<p class="muted">This decision has no table logic, so there are no rules to trace.</p>`;
+    return `<p class="muted">${esc(t("trace.noTable"))}</p>`;
   }
   return tables.map((tt, i) => renderTraceTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
 }

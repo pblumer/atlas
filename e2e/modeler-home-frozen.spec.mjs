@@ -38,12 +38,12 @@ const row = (page, name) => page.locator("tr", { has: page.locator(`a[href^="#/m
 
 test("a frozen definition's row says so, and warns when a newer version is deployed", async ({ page }) => {
   const orders = row(page, "Orders").locator(".frozen-mark");
-  await expect(orders).toHaveText("Decision frozen · newer deployed");
+  await expect(orders).toHaveText("Entscheidung eingefroren · neuere deployt");
   await expect(orders).toHaveClass(/\bwarn\b/);
-  await expect(orders).toHaveAttribute("title", /eligibility runs v1, the newest is v3/);
+  await expect(orders).toHaveAttribute("title", /eligibility wertet v1 aus, das Neueste ist v3/);
 
   const audit = row(page, "Audit").locator(".frozen-mark");
-  await expect(audit).toHaveText("Decision frozen");
+  await expect(audit).toHaveText("Entscheidung eingefroren");
   await expect(audit).not.toHaveClass(/\bwarn\b/);
 
   await expect(row(page, "Billing")).toBeVisible();

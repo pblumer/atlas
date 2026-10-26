@@ -77,7 +77,7 @@ test("an import that would replace what changed here asks first, one box each", 
   await page.locator('.cat-transfer [name="productsFile"]').setInputFiles(aFile({ products: [] }));
   await page.locator('.cat-transfer [data-act="import-products"]').click();
   const dialog = page.locator(".import-choices");
-  await expect(dialog).toContainText("2 changed on both sides");
+  await expect(dialog).toContainText("2 auf beiden Seiten geändert");
   await expect(dialog.locator(".import-pick")).toHaveCount(2);
   // Unticked is keep: nothing is replaced unless somebody ticks it.
   await dialog.locator('.import-pick[value="product:p2"]').check();
@@ -102,7 +102,7 @@ test("what is newer in the file starts ticked, what changed here only does not",
   const dialog = page.locator(".import-choices");
   await expect(dialog.locator('.import-pick[value="product:p3"]')).toBeChecked();
   await expect(dialog.locator('.import-pick[value="product:p5"]')).not.toBeChecked();
-  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Changed here only");
+  await expect(dialog.locator('.import-group[data-status="ahead"]')).toContainText("Nur hier geändert");
   // Left as they start, behind and ahead are not named; a box moved is.
   await dialog.locator('.import-pick[value="product:p4"]').uncheck();
   await dialog.locator("[data-ok]").click();

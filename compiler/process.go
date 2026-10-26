@@ -1665,6 +1665,7 @@ type CompiledProcess struct {
 	dataSubjectVar string
 	isExecutable   bool         // bpmn:isExecutable — a non-executable process can't be started
 	elementIds     []int32      // interned source BPMN id per node id (-1 if unset)
+	flowIds        []int32      // interned source BPMN id per flow id (-1 if unset: a link goto, ADR-0133)
 	elementDocs    []int32      // interned <bpmn:documentation> per node id (-1 if undocumented, ADR-0025)
 	repairForms    []int32      // interned repair form id per node id (-1 if none, ADR-0169)
 	documentation  int32        // interned <bpmn:documentation> of the process itself, -1 if none
@@ -1704,6 +1705,22 @@ func (p *CompiledProcess) IsTransaction(id int32) bool { return p.nodes[id].Tran
 
 // Flow returns the flow with the given id.
 func (p *CompiledProcess) Flow(id int32) *CompiledFlow { return &p.flows[id] }
+
+// FlowCount is how many sequence flows the process compiled to, so a caller outside
+// this package can walk them: flow ids are the dense range [0, FlowCount).
+func (p *CompiledProcess) FlowCount() int { return len(p.flows) }
+
+// FlowBpmnId returns the source BPMN id of a sequence flow — the id bpmn-js draws the
+// arrow under — or "" when the index is out of range or the flow has no arrow: the goto
+// the compiler makes up for a link event (ADR-0133). The engine counts the flows a token
+// takes by index; this is how such a count reaches the diagram
+// (ADR-0496).
+func (p *CompiledProcess) FlowBpmnId(id int32) string {
+	if id < 0 || int(id) >= len(p.flowIds) {
+		return ""
+	}
+	return p.Intern(p.flowIds[id])
+}
 
 // Outgoing returns the flow ids leaving node id, as a slice into the shared
 // topology array (no allocation).

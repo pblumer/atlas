@@ -15,17 +15,17 @@
 // It lives in its own module because app.js boots the whole console on import; here
 // a test can drive it with a preview of its own.
 
+import { t, plural } from "./i18n.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
-const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // nameList renders up to a handful of names and says how many more there are, so a
 // preview of a large application stays one screen.
 function nameList(items, label = (x) => x.name || x.id) {
   const MAX = 8;
   const shown = items.slice(0, MAX).map((x) => `<li>${esc(label(x))}</li>`).join("");
-  const more = items.length > MAX ? `<li class="muted">and ${items.length - MAX} more</li>` : "";
+  const more = items.length > MAX ? `<li class="muted">${esc(t("appDelete.more", { n: items.length - MAX }))}</li>` : "";
   return `<ul class="purge-names">${shown}${more}</ul>`;
 }
 
@@ -36,42 +36,46 @@ export function purgeSummaryHTML(p) {
   const versions = p.processes.reduce((n, pr) => n + pr.versions.length, 0);
   if (p.processes.length) {
     const running = p.runningInstances
-      ? ` — <b>${count(p.runningInstances, "running instance", "running instances")} will be cancelled</b>`
+      ? ` — <b>${esc(plural("appDelete.running", p.runningInstances))}</b>`
       : "";
-    rows.push(`<li>${count(p.processes.length, "deployed process", "deployed processes")} (${count(versions, "version", "versions")})${running}
+    const counted = t("appDelete.processes", {
+      processes: plural("appDelete.process", p.processes.length),
+      versions: plural("appDelete.version", versions),
+    });
+    rows.push(`<li>${esc(counted)}${running}
       ${nameList(p.processes, (pr) => pr.name ? `${pr.name} (${pr.processId})` : pr.processId)}</li>`);
   }
   const simple = [
-    [p.decisionDeployments, "decision deployment", "decision deployments", (d) => `${d.name || d.key}: ${d.decisions.join(", ")}`],
-    [p.drafts, "BPMN draft", "BPMN drafts"],
-    [p.decisionDrafts, "decision draft", "decision drafts"],
-    [p.decisionReferences, "DMN reference", "DMN references"],
-    [p.forms, "form", "forms"],
-    [p.scenarios, "test scenario", "test scenarios"],
-    [p.panoramaModels, "Panorama model", "Panorama models"],
-    [p.informationModels, "information model", "information models"],
+    [p.decisionDeployments, "appDelete.decisionDeployment", (d) => `${d.name || d.key}: ${d.decisions.join(", ")}`],
+    [p.drafts, "appDelete.draft"],
+    [p.decisionDrafts, "appDelete.decisionDraft"],
+    [p.decisionReferences, "appDelete.reference"],
+    [p.forms, "appDelete.form"],
+    [p.scenarios, "appDelete.scenario"],
+    [p.panoramaModels, "appDelete.panorama"],
+    [p.informationModels, "appDelete.infoModel"],
   ];
-  for (const [items, one, many, label] of simple) {
-    if (items && items.length) rows.push(`<li>${count(items.length, one, many)}${nameList(items, label)}</li>`);
+  for (const [items, key, label] of simple) {
+    if (items && items.length) rows.push(`<li>${esc(plural(key, items.length))}${nameList(items, label)}</li>`);
   }
   const removed = rows.length
     ? `<ul class="purge-list">${rows.join("")}</ul>`
-    : `<p class="muted">The application holds nothing else; only the application itself is deleted.</p>`;
+    : `<p class="muted">${esc(t("appDelete.nothingElse"))}</p>`;
 
   const outside = [];
   for (const b of p.catalogueProducts || []) {
-    outside.push(`<li>Catalogue ${b.products.length === 1 ? "product" : "products"} <b>${esc(b.products.join(", "))}</b> ${b.products.length === 1 ? "binds" : "bind"} <b>${esc(b.processId)}</b>: ordering ${b.products.length === 1 ? "it" : "them"} will fail.</li>`);
+    outside.push(`<li>${plural("appDelete.product", b.products.length, { products: esc(b.products.join(", ")), process: esc(b.processId) })}</li>`);
   }
   for (const o of p.orderLines || []) {
-    outside.push(`<li>${count(o.lines, "order line", "order lines")} can still start <b>${esc(o.processId)}</b> (a return or a change): ${o.lines === 1 ? "it" : "they"} will fail.</li>`);
+    outside.push(`<li>${plural("appDelete.orderLine", o.lines, { process: esc(o.processId) })}</li>`);
   }
   for (const d of p.dependentProcesses || []) {
-    outside.push(`<li>Process <b>${esc(d.processId)}</b> v${d.version} of another application evaluates decision <b>${esc(d.decisionId)}</b>: its business rule task will fail.</li>`);
+    outside.push(`<li>${t("appDelete.dependent", { process: esc(d.processId), version: d.version, decision: esc(d.decisionId) })}</li>`);
   }
   const breaks = outside.length
-    ? `<h3 class="purge-h">Outside this application, this stops working</h3><ul class="purge-list">${outside.join("")}</ul>`
+    ? `<h3 class="purge-h">${esc(t("appDelete.outside"))}</h3><ul class="purge-list">${outside.join("")}</ul>`
     : "";
-  return `<h3 class="purge-h">Deleted permanently</h3>${removed}${breaks}`;
+  return `<h3 class="purge-h">${esc(t("appDelete.removed"))}</h3>${removed}${breaks}`;
 }
 
 // openApplicationDeleteDialog asks how to delete an application. loadPreview fetches
@@ -82,29 +86,29 @@ export function openApplicationDeleteDialog({ name, loadPreview }) {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
-      <div class="modal purge-modal" role="dialog" aria-modal="true" aria-label="Delete application">
+      <div class="modal purge-modal" role="dialog" aria-modal="true" aria-label="${esc(t("appDelete.ok"))}">
         <div class="modal-head">
-          <h2>Delete application “${esc(name)}”</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+          <h2>${esc(t("appDelete.title", { name }))}</h2>
+          <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
           <label class="purge-choice">
             <input type="radio" name="purge-mode" value="keep" checked>
-            <span><b>Delete the application only</b><br>
-            <span class="muted small">Its BPMN, DMN and form artifacts and its deployments are kept and become Not assigned. Panorama models must be deleted first.</span></span>
+            <span><b>${esc(t("appDelete.keep"))}</b><br>
+            <span class="muted small">${esc(t("appDelete.keepHint"))}</span></span>
           </label>
           <label class="purge-choice">
             <input type="radio" name="purge-mode" value="purge">
-            <span><b>Delete the application and everything in it</b><br>
-            <span class="muted small">Deployments, running instances, decisions, drafts, forms and models — permanently.</span></span>
+            <span><b>${esc(t("appDelete.purge"))}</b><br>
+            <span class="muted small">${esc(t("appDelete.purgeHint"))}</span></span>
           </label>
           <div id="purge-detail" hidden></div>
         </div>
         <div class="modal-foot">
           <span></span>
           <span class="modal-actions">
-            <button type="button" class="btn ghost" data-cancel>Cancel</button>
-            <button type="button" class="btn danger" data-ok>Delete application</button>
+            <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
+            <button type="button" class="btn danger" data-ok>${esc(t("appDelete.ok"))}</button>
           </span>
         </div>
       </div>`;
@@ -122,10 +126,10 @@ export function openApplicationDeleteDialog({ name, loadPreview }) {
     const arm = () => {
       if (mode === "keep") {
         ok.disabled = false;
-        ok.textContent = "Delete application";
+        ok.textContent = t("appDelete.ok");
         return;
       }
-      ok.textContent = "Delete everything permanently";
+      ok.textContent = t("appDelete.okPurge");
       ok.disabled = !preview || !!preview.refusal || preview.needsOperator || typed.trim() !== name.trim();
     };
 
@@ -135,11 +139,11 @@ export function openApplicationDeleteDialog({ name, loadPreview }) {
         return;
       }
       const role = preview.needsOperator
-        ? `<p class="purge-refusal">Cancelling the running instances needs the operator role, which you do not hold. Ask an operator or an administrator to do this.</p>`
+        ? `<p class="purge-refusal">${esc(t("appDelete.needsOperator"))}</p>`
         : "";
       detail.innerHTML = `${purgeSummaryHTML(preview)}${role}
-        <p class="purge-warning">This cannot be undone. Nothing listed above can be restored afterwards.</p>
-        <label class="field"><span>Type <b>${esc(name)}</b> to confirm</span>
+        <p class="purge-warning">${esc(t("appDelete.warning"))}</p>
+        <label class="field"><span>${t("appDelete.confirm", { name: esc(name) })}</span>
           <input id="purge-confirm" type="text" autocomplete="off" spellcheck="false"></label>`;
       const input = detail.querySelector("#purge-confirm");
       input.addEventListener("input", () => { typed = input.value; arm(); });
@@ -151,12 +155,12 @@ export function openApplicationDeleteDialog({ name, loadPreview }) {
       detail.hidden = mode !== "purge";
       arm();
       if (mode !== "purge" || preview) return;
-      detail.innerHTML = `<p class="muted">Reading what the application holds…</p>`;
+      detail.innerHTML = `<p class="muted">${esc(t("appDelete.reading"))}</p>`;
       try {
         preview = await loadPreview();
         showPreview();
       } catch (e) {
-        detail.innerHTML = `<p class="purge-refusal">Could not read what the application holds: ${esc(e.message)}</p>`;
+        detail.innerHTML = `<p class="purge-refusal">${esc(t("appDelete.readFailed", { error: e.message }))}</p>`;
       }
       arm();
     };

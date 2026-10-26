@@ -32,7 +32,7 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   // the title span. innerText reflects the CSS text-transform:uppercase, so compare
   // case-insensitively.
   const titles = heads.locator(".vg-title");
-  expect((await titles.allInnerTexts()).map((s) => s.toLowerCase())).toEqual(["form", "process"]);
+  expect((await titles.allInnerTexts()).map((s) => s.toLowerCase())).toEqual(["formular", "prozess"]);
 
   // Every input-bearing field is surfaced; layout-only components and a dynamic
   // list's inner field (bound under its path) are not.
@@ -41,7 +41,7 @@ test("a linked start form's fields appear under a Form group", async ({ page }) 
   expect(names).not.toContain("cell");
 
   // A form field names its form as the click-to-select origin.
-  await expect(list.locator('.var-row[data-var="filename"] .var-meta')).toContainText("form field · CSV Upload");
+  await expect(list.locator('.var-row[data-var="filename"] .var-meta')).toContainText("Formularfeld · CSV Upload");
 
   expect(page.__errors).toEqual([]);
 });
@@ -52,7 +52,7 @@ test("filtering opens a closed variable group while it finds something there", a
   const list = page.locator("#vars-list");
   const row = list.locator('.var-row[data-var="delimiter"]');
   await expect(row).toBeVisible();
-  const form = list.locator(".vars-group", { has: page.locator(".vg-title", { hasText: /^form$/i }) });
+  const form = list.locator(".vars-group", { has: page.locator(".vg-title", { hasText: /^formular$/i }) });
   await form.locator(".vars-group-head").click();
   await expect(row).toBeHidden();
 

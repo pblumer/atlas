@@ -43,7 +43,10 @@ var Regions = []string{"international", "ch", "de", "us"}
 
 // Languages are the locales the console's catalogue actually holds (ADR-0267).
 // A language without a catalogue would render every translated screen as its own
-// message keys, so the list is the catalogue's and is checked, not trusted.
+// message keys, so the list is the catalogue's and is checked, not trusted. The
+// api package replaces it at start-up with the message files the embedded console
+// carries (ADR-draft-console-locales-one-file-each); this default is what the
+// package's own tests and a console-less build see.
 var Languages = []string{"de", "en"}
 
 // Prefs is one person's answer to the three questions. Each field's zero value is

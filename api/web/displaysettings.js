@@ -14,7 +14,7 @@
 import { REGIONS, fmtCount } from "./numfmt.js";
 import { fmtDateTime, zoneName } from "./datefmt.js";
 import { prefs, loadPrefs, savePrefs } from "./prefs.js";
-import { locales, t } from "./i18n.js";
+import { localeName, locales, t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -25,10 +25,6 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
 // that does not itself follow the choice disproves itself on the first click
 // (ADR-0267 adopts the catalogue per screen; this is one of them).
 const regionLabel = (id) => t(`display.region.${id}`);
-
-// LANGUAGE_LABELS are in the language they name — somebody looking for their own
-// language should not have to read another one to find it.
-const LANGUAGE_LABELS = { de: "Deutsch", en: "English" };
 
 // SAMPLE is the instant the previews are drawn from: a fixed one rather than
 // "now", so two options can be compared without the seconds moving underneath,
@@ -104,7 +100,7 @@ export async function renderDisplaySettings(root, { api, toast }) {
 
   const languageRows = ["", ...locales()].map((id) => `
       <option value="${esc(id)}"${id === pending.language ? " selected" : ""}>${
-        esc(id ? LANGUAGE_LABELS[id] || id : t("display.language.default"))}</option>`).join("");
+        esc(id ? localeName(id) : t("display.language.default"))}</option>`).join("");
 
   const zoneRows = ["", ...zoneOptions(pending.timeZone)].map((id) => `
       <option value="${esc(id)}"${id === pending.timeZone ? " selected" : ""}>${

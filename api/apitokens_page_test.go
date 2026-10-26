@@ -144,10 +144,6 @@ func TestTheAPITokenPageAgreesWithTheServer(t *testing.T) {
 // the page in that language.
 func TestEveryMessageTheAPITokenPageAsksForExists(t *testing.T) {
 	src := apiTokenPage(t)
-	catalogue, err := os.ReadFile("web/i18n.js")
-	if err != nil {
-		t.Fatalf("read the message catalogue: %v", err)
-	}
 	keys := map[string]bool{}
 	for _, m := range regexp.MustCompile(`\b(?:t|th)\("(apitokens\.[A-Za-z0-9.-]+)"`).FindAllStringSubmatch(src, -1) {
 		keys[m[1]] = true
@@ -176,11 +172,8 @@ func TestEveryMessageTheAPITokenPageAsksForExists(t *testing.T) {
 	for _, scope := range apiMintableScopes {
 		keys["apitokens.scope."+scope] = true
 	}
-	for _, locale := range []string{"de", "en"} {
-		block, ok := localeBlock(string(catalogue), locale)
-		if !ok {
-			t.Fatalf("no %q block in web/i18n.js", locale)
-		}
+	for _, locale := range consoleLocales() {
+		block := localeCatalogue(t, locale)
 		for key := range keys {
 			if !strings.Contains(block, `"`+key+`":`) {
 				t.Errorf("web/apitokens.js asks for %q, which locale %q does not have", key, locale)

@@ -7,6 +7,8 @@
 // exercised by hand. Here it is reachable from a test — which matters for this one,
 // because what it replaces failed in a way no one could see.
 
+import { t } from "./i18n.js";
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -24,7 +26,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
 //
 // A <select> has no length limit and needs no counting. Resolves to
 // { option, name } on confirm, or null on cancel, Escape or a click outside.
-export function openPickModal({ title, label, options, hint, nameLabel, nameFor, okLabel = "Create" }) {
+export function openPickModal({ title, label, options, hint, nameLabel, nameFor, okLabel = t("pick.create") }) {
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-ov";
@@ -32,20 +34,20 @@ export function openPickModal({ title, label, options, hint, nameLabel, nameFor,
       <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
         <div class="modal-head">
           <h2>${esc(title)}</h2>
-          <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+          <button type="button" class="icon-btn" data-x aria-label="${esc(t("common.close"))}" title="${esc(t("common.close"))}">✕</button>
         </div>
         <div class="modal-body">
           <label class="field"><span>${esc(label)}</span>
             <select id="pick-opt">${options.map((o) =>
               `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("")}</select></label>
-          ${nameFor ? `<label class="field"><span>${esc(nameLabel || "Name")}</span>
+          ${nameFor ? `<label class="field"><span>${esc(nameLabel || t("pick.name"))}</span>
             <input type="text" id="pick-name" autocomplete="off"></label>` : ""}
           ${hint ? `<p class="muted small">${esc(hint)}</p>` : ""}
         </div>
         <div class="modal-foot">
           <span></span>
           <span class="modal-actions">
-            <button type="button" class="btn ghost" data-cancel>Cancel</button>
+            <button type="button" class="btn ghost" data-cancel>${esc(t("common.cancel"))}</button>
             <button type="button" class="btn" data-ok>${esc(okLabel)}</button>
           </span>
         </div>

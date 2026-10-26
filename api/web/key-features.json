@@ -72,8 +72,8 @@
         "de": "Jeden Token sehen"
       },
       "text": {
-        "en": "A live view of all running instances on the diagram, step-by-step replay of any single instance with per-step variable snapshots and the DMN rules that fired, and instance search over the business data a process declares searchable.",
-        "de": "Eine Live-Ansicht aller laufenden Instanzen auf dem Diagramm, ein Schritt-für-Schritt-Replay jeder einzelnen Instanz mit Variablen-Snapshots je Schritt und den ausgelösten DMN-Regeln, und eine Instanzsuche über die Geschäftsdaten, die ein Prozess als suchbar deklariert."
+        "en": "A live view of all running instances on the diagram, a heatmap of which paths are taken and where the time goes, step-by-step replay of any single instance with per-step variable snapshots and the DMN rules that fired, and instance search over the business data a process declares searchable.",
+        "de": "Eine Live-Ansicht aller laufenden Instanzen auf dem Diagramm, eine Heatmap, die zeigt, welche Wege genommen werden und wo die Zeit hingeht, ein Schritt-für-Schritt-Replay jeder einzelnen Instanz mit Variablen-Snapshots je Schritt und den ausgelösten DMN-Regeln, und eine Instanzsuche über die Geschäftsdaten, die ein Prozess als suchbar deklariert."
       }
     },
     {

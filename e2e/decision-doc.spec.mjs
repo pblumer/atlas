@@ -92,20 +92,20 @@ test("the document is a PDF that says what the decision does", async ({ page }) 
   expect(text.startsWith("%PDF-")).toBe(true);
   // The title block: what this is, which version, and who signed it off.
   expect(text).toContain("Antragspr");        // the title, WinAnsi-encoded
-  expect(text).toContain("Decision ID");
+  expect(text).toContain("Entscheidungs-ID");
   expect(text).toContain("eignung");
   expect(text).toContain("v3");
   expect(text).toContain("Freigabe M");
   expect(text).toContain("antrag.dmn");
 
   // The rules themselves, which is the whole point.
-  expect(text).toContain("hit policy COLLECT SUM");
+  expect(text).toContain("Hit Policy COLLECT SUM");
   expect(text).toContain(">= 1000");
   expect(text).toContain("annehmen");
-  expect(text).toContain("Rule 1: Grosse Betr");
+  expect(text).toContain("Regel 1: Grosse Betr");
   // Parentheses are escaped inside a PDF string, so the type reads as \(string\)
   // in the file itself — assert the part that is not escaped.
-  expect(text).toContain("Writes: urteil");
+  expect(text).toContain("Schreibt: urteil");
 
   // And the second decision's logic, set as what it is.
   expect(text).toContain("0.02 * betrag");

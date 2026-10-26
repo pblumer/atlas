@@ -110,7 +110,7 @@ test("opening a decision's table claims that decision, and leaving it releases t
 
   // Back to the graph: the table's claim is given up, because the graph claims
   // nothing until something in it is selected.
-  await page.locator("#dmn-views button", { hasText: "Overview (DRG)" }).click();
+  await page.locator("#dmn-views button", { hasText: "Übersicht (DRG)" }).click();
   await expect.poll(() => session.locks.filter((l) => l.action === "release").map((l) => l.elementId))
     .toContain("fee");
 });

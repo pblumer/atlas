@@ -81,7 +81,7 @@ test("the badge marks the wizards on the Implement tab only", async ({ page }) =
   await expect(badge(page, "Sub_public")).toHaveCount(1);
   await expect(badge(page, "Sub_plain")).toHaveCount(0);
   await expect(badge(page, "Sub_event")).toHaveCount(0);
-  await expect(badge(page, "Sub_public")).toHaveAttribute("title", /anonymous/);
+  await expect(badge(page, "Sub_public")).toHaveAttribute("title", /anonymen/);
 
   await page.locator('[data-tab="design"]').click();
   await expect(page.locator(".wizard-badge")).toHaveCount(0);

@@ -42,7 +42,7 @@ test("with one instance in view, the + opens the child instance it started", asy
 
   const at = await markerCenter(page, "CallActivity_1");
   await page.mouse.move(at.x, at.y);
-  await expect(page.locator(".ca-drill-tip")).toHaveText("Double-click to open");
+  await expect(page.locator(".ca-drill-tip")).toHaveText("Doppelklick zum Öffnen");
   await page.mouse.dblclick(at.x, at.y);
 
   const want = await page.evaluate(() => `#/operations/p/${window.__CHILD_DEF}/i/${window.__CHILD}`);

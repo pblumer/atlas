@@ -339,9 +339,9 @@ test("an empty Problems panel says whether anything actually looked", async ({ p
   // earned is indistinguishable from one that was.
   await page.evaluate(() => window.__mountLoose());
   await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
-  await expect(page.locator("#prob-summary")).toHaveText("No problems found — data not checked");
+  await expect(page.locator("#prob-summary")).toHaveText("Keine Probleme gefunden — Daten nicht geprüft");
 
   await page.evaluate(() => window.__mount());
   await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
-  await expect(page.locator("#prob-summary")).not.toHaveText(/not checked/);
+  await expect(page.locator("#prob-summary")).not.toHaveText(/nicht geprüft/);
 });

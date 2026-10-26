@@ -79,7 +79,7 @@ test("a node the case never touched says so rather than showing nothing", async 
 test("the rule that carried the answer is shown, with why the ones above it did not", async ({ page }) => {
   await page.evaluate(() => window.__open(window.__at));
   await page.waitForSelector(".drg-rules .mgrid");
-  await expect(page.locator(".drg-rules .mtable-head")).toContainText("Rule 6 fired");
+  await expect(page.locator(".drg-rules .mtable-head")).toContainText("Regel 6 hat gegriffen");
 
   // The rule that fired, and the output it carried.
   const fired = page.locator(".drg-rules tr.mrule.is-hit");
@@ -101,7 +101,7 @@ test("a decision service shows its rules like a decision does", async ({ page })
   await page.waitForSelector(".drg-rules .mgrid");
 
   await expect(page.locator(".drg-tag")).toHaveText(/decision service/i);
-  await expect(page.locator(".drg-rules .mtable-head")).toContainText("Rule 6 fired");
+  await expect(page.locator(".drg-rules .mtable-head")).toContainText("Regel 6 hat gegriffen");
   await expect(page.locator(".drg-rules tr.mrule.is-hit")).toHaveCount(1);
   // And none of the older record's apology.
   await expect(page.locator(".drg-rules")).not.toContainText("No rule matrix was recorded");

@@ -32,6 +32,6 @@ test("a superseded form-editor mount bails before building the playground", asyn
   // container, so the initial "Loading form editor…" shell is still there — the
   // Playground was never built. Unguarded, the container would have been cleared and
   // replaced (or shown a load error).
-  await expect(page.locator("#form-playground")).toContainText("Loading form editor");
+  await expect(page.locator("#form-playground")).toContainText("Formular-Editor wird geladen");
   expect(page.__errors, "page errors during superseded mount").toEqual([]);
 });

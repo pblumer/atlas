@@ -35,7 +35,7 @@ test("the panel opens with the process name and an empty history", async ({ page
   await expect(page.locator("#doc-panel")).toBeVisible();
   // The title is prefilled from the model, so the common case is one click.
   await expect(page.locator("#doc-title")).toHaveValue("Reisebuchung");
-  await expect(page.locator("#doc-history")).toContainText("No version published yet.");
+  await expect(page.locator("#doc-history")).toContainText("Noch keine Version veröffentlicht.");
 
   // The button toggles the panel shut again.
   await docExport(page);
@@ -100,11 +100,11 @@ test("a version is private until shared, and revoking takes the link away", asyn
   await expect(page.locator(".doc-version")).toHaveCount(1);
 
   // Private by default: a download for whoever is signed in, no public link.
-  await expect(page.locator(".doc-version a", { hasText: "Open PDF" })).toBeVisible();
-  await expect(page.locator(".doc-version a", { hasText: "Public link" })).toHaveCount(0);
+  await expect(page.locator(".doc-version a", { hasText: "PDF öffnen" })).toBeVisible();
+  await expect(page.locator(".doc-version a", { hasText: "Öffentlicher Link" })).toHaveCount(0);
 
   await page.locator("[data-share]").click();
-  const link = page.locator(".doc-version a", { hasText: "Public link" });
+  const link = page.locator(".doc-version a", { hasText: "Öffentlicher Link" });
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("href", "/public/process-docs/tok1");
   // The link opens away from the editor, and carries no referrer to the host.
@@ -112,7 +112,7 @@ test("a version is private until shared, and revoking takes the link away", asyn
   await expect(link).toHaveAttribute("rel", "noopener");
 
   await page.locator("[data-unshare]").click();
-  await expect(page.locator(".doc-version a", { hasText: "Public link" })).toHaveCount(0);
+  await expect(page.locator(".doc-version a", { hasText: "Öffentlicher Link" })).toHaveCount(0);
   await expect(page.locator("[data-share]")).toBeVisible();
 });
 
@@ -124,10 +124,10 @@ test("sharing is per version: publishing v2 does not expose v1", async ({ page }
 
   // Share only the newest.
   await page.locator(".doc-version").first().locator("[data-share]").click();
-  await expect(page.locator(".doc-version").first().locator("a", { hasText: "Public link" })).toBeVisible();
+  await expect(page.locator(".doc-version").first().locator("a", { hasText: "Öffentlicher Link" })).toBeVisible();
 
   // The older one stayed private. A reader handed the new link cannot reach it.
-  await expect(page.locator(".doc-version").nth(1).locator("a", { hasText: "Public link" })).toHaveCount(0);
+  await expect(page.locator(".doc-version").nth(1).locator("a", { hasText: "Öffentlicher Link" })).toHaveCount(0);
   await expect(page.locator(".doc-version").nth(1).locator("[data-share]")).toBeVisible();
 });
 

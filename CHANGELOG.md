@@ -29,6 +29,22 @@ _Changed_ / _Removed_ for each version.
   `WIKIWIKIBANGBANG_ITEM_NOT_FOUND` and `WIKIWIKIBANGBANG_VALIDATION_FAILED`. No capability
   claim is made: the record lists where the wiki and Jira differ
   ([ADR-draft-wikiwikibangbang-worker](docs/adr/draft-wikiwikibangbang-worker.md)).
+- **The Operations view has a heatmap.** A strip over a version's live diagram switches
+  from **Live** to **Runs**, **Waiting**, **Working** or **Duration**. Runs shades every
+  element *and* every sequence flow by how many tokens passed it, and draws what nothing
+  reached dashed with a zero; the time modes shade the tasks by the median time from
+  activation to completion, split at the moment a person claimed the task or a Worker
+  picked it up. **Glow** paints halos under the diagram that add up where the traffic is,
+  **Outline** the Playground's five shaded strokes; the period is *since deployment* or the
+  last 30 days, 7 days or 24 hours. The side panel lists the instances, the tasks ranked by
+  what is shown, how each gateway split and what was never reached. Behind it the engine
+  now counts the sequence flows tokens arrive over — a branch of an event-based gateway
+  only when it wins its race — and keeps when a task was claimed or leased and handed
+  back; a store upgraded into the flow counter rebuilds it once from the lifecycle trail.
+  The runtime overlay carries `flows`, and `GET /api/v1/processes/{key}/statistics` answers
+  a window's runs, durations, waiting and working times as count, mean, median, p90,
+  maximum and total, also as the `atlas_process_statistics` MCP tool. Times are kept per
+  task, never per person ([ADR-0496](docs/adr/0496-operations-heatmap.md)).
 - **The architecture sketch shows the layers you choose.** **Architecture** in a
   release's history now offers one checkbox per layer the release records: the
   *application* layer (what the release's content fixes: the messages it receives, the
@@ -74,6 +90,50 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The Console's languages are one file each, and none ships incomplete.** The
+  message catalogue is split into `api/web/locales/de.js` and `en.js`, listed once by
+  `locales/index.js`; the language picker names each language by its own file, and the
+  server accepts as a person's choice exactly the languages the Console carries, read
+  from the same directory. A test holds every language to every message German has,
+  with the same placeholders, so adding a language is adding a complete file. A counted
+  message picks its form with the browser's plural rules, so a language with more than
+  two forms needs no code
+  ([ADR-draft-console-locales-one-file-each](docs/adr/draft-console-locales-one-file-each.md),
+  amends [ADR-0267](docs/adr/0267-console-speaks-german-first.md)).
+- **The Modeler's application landscape and application page speak German.** Both
+  pages and everything they open read from the message catalogue
+  ([ADR-0267](docs/adr/0267-console-speaks-german-first.md)): the "Neu erstellen" menu
+  ("Prozessdiagramm (BPMN)", "Entscheidungsdiagramm (DMN)", "Entscheidungsmodell
+  hochladen (.dmn)", "Formular"), the list of applications and of deployed processes
+  with activating, deactivating and deleting one, the artifact table and its row
+  actions, the Artefakte, Deployments and Konstanten tabs, publishing, promoting and the
+  architecture sketch, importing a file, a MIM workflow or an application package,
+  exporting, sharing and deleting an application, and the confirm for deleting a DMN
+  reference. Shared pieces follow, so they read the same everywhere: the column filters
+  of every table, the buttons of the pick dialog, the import choices of a catalogue
+  import, the Server constants section of Admin → Engine, and the mark on a definition
+  whose decisions were frozen at deploy, also in the editors. Messages the server
+  composes stay in its English. `?lang=en` keeps the English pages.
+- **The decision editor and the form editor speak German, down to the libraries they
+  embed.** Their bars, hints, menus, dialogs, toasts, the test panel and its rule trace,
+  the decision documentation and its PDF, the XML source dialog, the collaboration
+  notices, the knowledge-model and requirement findings, the form generator and the JSON
+  editor read from the message catalogue. dmn-js's own words — the requirements graph's
+  palette, context pad and properties panel, the decision table's menus and the hit
+  policy explanations — come from the same catalogue through the `translate` service the
+  library asks for each word (`api/web/lib-translate.js`), and the form palette names
+  each field in German. A library word the catalogue does not carry stays as the library
+  wrote it; FEEL's keywords and the hit policies' standard names stay English on
+  purpose. form-js's palette groups, search and properties panel still speak English:
+  they are built into the vendored bundle without a translation hook.
+- **The BPMN editor's frame speaks German, and so does bpmn-js.** The bar, its tabs
+  (Design, Umsetzen, Playground) and its menu, the token simulation, the variables
+  panel, the problems bar, the deploy and documentation panels, the start form dialog,
+  the chip that says which record is shown, the marks on the canvas, the Playground tab
+  and the process documentation PDF read from the message catalogue. bpmn-js's palette,
+  context pad and replace menu take their words from the same catalogue through
+  `lib-translate.js`. The properties panel follows area by area; messages the server
+  composes — the compiler's problems, a verdict's checks — stay in its English.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the

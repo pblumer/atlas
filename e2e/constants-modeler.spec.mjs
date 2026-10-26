@@ -91,7 +91,7 @@ test("the Variables panel offers a constant like any variable", async ({ page })
   await page.locator("#vars-toggle").click();
   const row = page.locator('#vars-list .var-row[data-var="DOMAIN_SUFFIX"]');
   await expect(row).toBeVisible();
-  await expect(row.locator(".var-meta")).toContainText("process constant");
+  await expect(row.locator(".var-meta")).toContainText("Prozesskonstante");
   await expect(page.locator('#vars-list .var-row[data-var="MAX_AGENTS"] .vtag')).toHaveText("number");
   expect(page.__errors).toEqual([]);
 });
@@ -118,7 +118,7 @@ test("a constant bound to its application writes its source, and a fallback only
 
   // The Variables panel says where the value comes from.
   await page.locator("#vars-toggle").click();
-  await expect(page.locator('#vars-list .var-row[data-var="application.TENANT_ID"] .var-meta')).toContainText("application constant");
+  await expect(page.locator('#vars-list .var-row[data-var="application.TENANT_ID"] .var-meta')).toContainText("Anwendungskonstante");
   expect(page.__errors).toEqual([]);
 });
 
@@ -185,7 +185,7 @@ test("a constant read from the installation writes source server", async ({ page
   await row.locator(".sv-source").selectOption("server");
   await expect.poll(() => constantsXML(page)).toContain('<atlas:constant name="ENTRA_TENANT_ID" type="string" source="server" />');
   await page.locator("#vars-toggle").click();
-  await expect(page.locator('#vars-list .var-row[data-var="server.ENTRA_TENANT_ID"] .var-meta')).toContainText("server constant");
+  await expect(page.locator('#vars-list .var-row[data-var="server.ENTRA_TENANT_ID"] .var-meta')).toContainText("Serverkonstante");
   expect(page.__errors).toEqual([]);
 });
 
@@ -199,11 +199,11 @@ test("the Variables panel offers undeclared namespace members and declares one",
   await avail.locator(".vars-group-head").click();
   await expect(avail.locator('[data-avail="application.CLIENT_ID"]')).toBeVisible();
   await expect(avail.locator('[data-avail="server.ENTRA_TENANT_ID"]')).toBeVisible();
-  await expect(avail.locator('[data-avail="server.environment"]')).toContainText("server info");
+  await expect(avail.locator('[data-avail="server.environment"]')).toContainText("Serverinfo");
   await avail.locator('[data-declare="application.CLIENT_ID"]').click();
   await expect.poll(() => constantsXML(page)).toContain('<atlas:constant name="CLIENT_ID" type="string" source="application" />');
   // Declared, it is a variable of the process now, and no longer offered.
-  await expect(page.locator('#vars-list .var-row[data-var="application.CLIENT_ID"]').first()).toContainText("application constant");
+  await expect(page.locator('#vars-list .var-row[data-var="application.CLIENT_ID"]').first()).toContainText("Anwendungskonstante");
   await expect(avail.locator('[data-avail="application.CLIENT_ID"]')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });

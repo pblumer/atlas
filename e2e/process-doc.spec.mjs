@@ -159,13 +159,13 @@ test("the built document contains the diagram and every element's prose", async 
   // its annotation.
   expect(raw).toContain("Anfrage pr\xFCfen");
   expect(raw).toContain("Die Sachbearbeitung pr\xFCft Vollst\xE4ndigkeit und Budget.");
-  expect(raw).toContain("Service task");
-  expect(raw).toContain("Note: Ben\xF6tigt IATA-Zugang");
+  expect(raw).toContain("Service-Task");
+  expect(raw).toContain("Notiz: Ben\xF6tigt IATA-Zugang");
   expect(raw).toContain("Freigabe durch die Leitung steht aus");
 
   // An element with nothing written about it says so, rather than appearing to
   // have been overlooked.
-  expect(raw).toContain("No documentation.");
+  expect(raw).toContain("Keine Dokumentation.");
 });
 
 test("exporting publishes the document, the prose, and the source in one request", async ({ page }) => {
@@ -210,8 +210,8 @@ test("a flow's FEEL condition reaches the document as code, read from the real m
   const byId = Object.fromEntries(c.elements.map((e) => [e.id, e]));
   // The branch conditions the modeller wrote onto the gateway's flows are the
   // rule a reader needs to see why a token went one way; they travel as code.
-  expect(byId.f2.code).toEqual([{ label: "Condition", language: "feel", source: "= genehmigt = true" }]);
-  expect(byId.f3.code).toEqual([{ label: "Condition", language: "feel", source: "= genehmigt = false" }]);
+  expect(byId.f2.code).toEqual([{ label: "Bedingung", language: "feel", source: "= genehmigt = true" }]);
+  expect(byId.f3.code).toEqual([{ label: "Bedingung", language: "feel", source: "= genehmigt = false" }]);
   // A task with no code carries none, rather than an empty field.
   expect(byId.Task_pruefen.code).toEqual([]);
 });
@@ -231,9 +231,9 @@ test("codeFieldsOf reads a script task's job source and a FEEL condition verbati
   });
   // The source keeps its indentation — a script whose whitespace is mangled is one
   // a reader cannot trust.
-  expect(out.script).toEqual([{ label: "Script", language: "powershell", source: "if ($budget -gt 1000) {\n    Approve-Request\n}" }]);
-  expect(out.imported).toEqual([{ label: "Script", language: "javascript", source: "return true" }]);
-  expect(out.cond).toEqual([{ label: "Condition", language: "feel", source: "= amount > 10" }]);
+  expect(out.script).toEqual([{ label: "Skript", language: "powershell", source: "if ($budget -gt 1000) {\n    Approve-Request\n}" }]);
+  expect(out.imported).toEqual([{ label: "Skript", language: "javascript", source: "return true" }]);
+  expect(out.cond).toEqual([{ label: "Bedingung", language: "feel", source: "= amount > 10" }]);
   expect(out.none).toEqual([]);
 });
 
@@ -293,7 +293,7 @@ test("a diagram with no process is refused rather than published empty", async (
       return "no error";
     } catch (e) { return e.message; }
   });
-  expect(message).toContain("no process to document");
+  expect(message).toContain("keinen Prozess");
 });
 
 // The decision behind a business rule task
@@ -350,7 +350,7 @@ test("the rules are fetched from the model behind the decision's reference", asy
   // control, and the one a deployment-bound task would bundle.
   expect(out.paths).toContain("/api/v1/decisions");
   expect(out.paths).toContain("/api/v1/dmn-models/anspruch/xml");
-  expect(out.decisions.eligibility.source).toBe("Model anspruch.dmn");
+  expect(out.decisions.eligibility.source).toBe("Modell anspruch.dmn");
   expect(out.decisions.eligibility.collection.decisions[0].rules).toHaveLength(2);
 
   // The worker-backed task is not looked up at all: there is nothing local to read.
@@ -372,7 +372,7 @@ test("a decision with no reference is read from its deployment instead", async (
   // which a latest-bound task may now name.
   expect(out.paths).toContain("/api/v1/decision-deployments?decisionId=eligibility");
   expect(out.paths).toContain("/api/v1/decision-deployments/7788/xml");
-  expect(out.decisions.eligibility.source).toBe("Deployed decision v3 (key 7788)");
+  expect(out.decisions.eligibility.source).toBe("Deployte Entscheidung v3 (Schlüssel 7788)");
 });
 
 test("a decision that cannot be read costs its table, not the document", async ({ page }) => {
@@ -390,7 +390,7 @@ test("a decision that cannot be read costs its table, not the document", async (
   // The call is still documented — it comes off the diagram — and the missing
   // table is admitted rather than passed over in silence.
   expect(out.raw).toContain("eligibility");
-  expect(out.raw).toContain("could not be read");
+  expect(out.raw).toContain("liessen sich nicht lesen");
 });
 
 test("the document sets the rule table behind the business rule task", async ({ page }) => {
@@ -405,19 +405,19 @@ test("the document sets the rule table behind the business rule task", async ({ 
 
   // How the task calls it, in words a reader who has not read ADR-0063 can use.
   expect(raw).toContain("eligibility");
-  expect(raw).toContain("newest version deployed");
+  expect(raw).toContain("die neueste Version, die beim Deploy");
   expect(raw).toContain("verdict");
   expect(raw).toContain("= betrag");
 
   // Where the rules came from, and then the rules themselves — the same table the
   // decision's own document sets, drawn by the same renderer.
-  expect(raw).toContain("Rules read from: Model anspruch.dmn");
-  expect(raw).toContain("hit policy UNIQUE");
+  expect(raw).toContain("Regeln gelesen aus: Modell anspruch.dmn");
+  expect(raw).toContain("Hit Policy UNIQUE");
   expect(raw).toContain("Betrag");
   expect(raw).toContain("approve");
   expect(raw).toContain("reject");
-  expect(raw).toContain("Rule 1: Ab 100 immer");
-  expect(raw).toContain("Writes: eligibility");
+  expect(raw).toContain("Regel 1: Ab 100 immer");
+  expect(raw).toContain("Schreibt: eligibility");
 
   // The worker-backed task says where its rules live instead of pretending to none.
   expect(raw).toContain("risk-service");

@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas heatmap overlay e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view against a mock `api` serving one
+         approval process with a used branch, a rare one and one nobody ever took
+         (ADR-0496). The runtime overlay carries the counts since
+         deployment, elements and sequence flows; the statistics endpoint carries a
+         window's counts and every element's times. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const DEF = 7;
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_heat" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="access" name="Berechtigungsantrag" isExecutable="true">
+    <bpmn:startEvent id="start" name="Antrag eingegangen"><bpmn:outgoing>fStart</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="review" name="Freigabe"><bpmn:incoming>fStart</bpmn:incoming><bpmn:outgoing>fGate</bpmn:outgoing></bpmn:userTask>
+    <bpmn:exclusiveGateway id="gate" name="Risiko?" default="fLow">
+      <bpmn:incoming>fGate</bpmn:incoming><bpmn:outgoing>fLow</bpmn:outgoing><bpmn:outgoing>fMid</bpmn:outgoing><bpmn:outgoing>fHigh</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="grant" name="Berechtigung setzen"><bpmn:incoming>fLow</bpmn:incoming><bpmn:outgoing>fDone</bpmn:outgoing></bpmn:serviceTask>
+    <bpmn:sendTask id="decline" name="Absage senden"><bpmn:incoming>fMid</bpmn:incoming><bpmn:outgoing>fNo</bpmn:outgoing></bpmn:sendTask>
+    <bpmn:userTask id="iso" name="Prüfung durch ISO"><bpmn:incoming>fHigh</bpmn:incoming><bpmn:outgoing>fIso</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="done" name="Erteilt"><bpmn:incoming>fDone</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="no" name="Abgelehnt"><bpmn:incoming>fNo</bpmn:incoming></bpmn:endEvent>
+    <bpmn:endEvent id="isoEnd" name="Geprüft"><bpmn:incoming>fIso</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="fStart" sourceRef="start" targetRef="review"/>
+    <bpmn:sequenceFlow id="fGate" sourceRef="review" targetRef="gate"/>
+    <bpmn:sequenceFlow id="fLow" name="tief" sourceRef="gate" targetRef="grant"/>
+    <bpmn:sequenceFlow id="fMid" name="mittel" sourceRef="gate" targetRef="decline"><bpmn:conditionExpression>=risk = "mittel"</bpmn:conditionExpression></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fHigh" name="hoch" sourceRef="gate" targetRef="iso"><bpmn:conditionExpression>=risk = "hoch"</bpmn:conditionExpression></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="fDone" sourceRef="grant" targetRef="done"/>
+    <bpmn:sequenceFlow id="fNo" sourceRef="decline" targetRef="no"/>
+    <bpmn:sequenceFlow id="fIso" sourceRef="iso" targetRef="isoEnd"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="access">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="100" y="202" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="review_di" bpmnElement="review"><dc:Bounds x="190" y="180" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="gate_di" bpmnElement="gate" isMarkerVisible="true"><dc:Bounds x="345" y="195" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="grant_di" bpmnElement="grant"><dc:Bounds x="460" y="180" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="decline_di" bpmnElement="decline"><dc:Bounds x="460" y="60" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="iso_di" bpmnElement="iso"><dc:Bounds x="460" y="300" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="done_di" bpmnElement="done"><dc:Bounds x="620" y="202" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="no_di" bpmnElement="no"><dc:Bounds x="620" y="82" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="isoEnd_di" bpmnElement="isoEnd"><dc:Bounds x="620" y="322" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="fStart_di" bpmnElement="fStart"><di:waypoint x="136" y="220"/><di:waypoint x="190" y="220"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fGate_di" bpmnElement="fGate"><di:waypoint x="290" y="220"/><di:waypoint x="345" y="220"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fLow_di" bpmnElement="fLow"><di:waypoint x="395" y="220"/><di:waypoint x="460" y="220"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fMid_di" bpmnElement="fMid"><di:waypoint x="370" y="195"/><di:waypoint x="370" y="100"/><di:waypoint x="460" y="100"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fHigh_di" bpmnElement="fHigh"><di:waypoint x="370" y="245"/><di:waypoint x="370" y="340"/><di:waypoint x="460" y="340"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fDone_di" bpmnElement="fDone"><di:waypoint x="560" y="220"/><di:waypoint x="620" y="220"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fNo_di" bpmnElement="fNo"><di:waypoint x="560" y="100"/><di:waypoint x="620" y="100"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="fIso_di" bpmnElement="fIso"><di:waypoint x="560" y="340"/><di:waypoint x="620" y="340"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // Since deployment: 877 requests reached the review and 8 are still waiting there;
+      // of the 869 decided, 836 were low risk, 33 medium and none high.
+      const ELEMENTS = [
+        { elementId: "start", type: "StartEvent", tokens: 0, visits: 877, terminated: 0, incidents: 0 },
+        { elementId: "review", type: "UserTask", tokens: 8, visits: 877, terminated: 0, incidents: 0 },
+        { elementId: "gate", type: "ExclusiveGateway", tokens: 0, visits: 869, terminated: 0, incidents: 0 },
+        { elementId: "grant", type: "ServiceTask", tokens: 0, visits: 836, terminated: 0, incidents: 0 },
+        { elementId: "decline", type: "SendTask", tokens: 0, visits: 33, terminated: 0, incidents: 0 },
+        { elementId: "done", type: "EndEvent", tokens: 0, visits: 836, terminated: 0, incidents: 0 },
+        { elementId: "no", type: "EndEvent", tokens: 0, visits: 33, terminated: 0, incidents: 0 },
+      ];
+      const FLOWS = [
+        { flowId: "fStart", visits: 877 }, { flowId: "fGate", visits: 869 },
+        { flowId: "fLow", visits: 836 }, { flowId: "fMid", visits: 33 },
+        { flowId: "fDone", visits: 836 }, { flowId: "fNo", visits: 33 },
+      ];
+      const sum = (p50, count = 10) => ({ count, meanMillis: p50, p50Millis: p50, p90Millis: p50 * 3, maxMillis: p50 * 5, totalMillis: p50 * count });
+      const STATS = {
+        from: 0, to: 1, scanned: 877, truncated: false,
+        instances: { started: 877, finished: 869, running: 8, duration: sum(3000) },
+        elements: [
+          { elementId: "start", type: "StartEvent", runs: 877, completed: 877, terminated: 0, duration: sum(0) },
+          { elementId: "review", type: "UserTask", runs: 877, completed: 869, terminated: 0,
+            duration: sum(68880000), waiting: sum(68100000), working: sum(360000) },
+          { elementId: "gate", type: "ExclusiveGateway", runs: 869, completed: 869, terminated: 0, duration: sum(0) },
+          { elementId: "grant", type: "ServiceTask", runs: 836, completed: 836, terminated: 0,
+            duration: sum(2100), waiting: sum(300), working: sum(1800) },
+          { elementId: "decline", type: "SendTask", runs: 33, completed: 33, terminated: 0,
+            duration: sum(700), waiting: sum(200), working: sum(500) },
+          { elementId: "iso", type: "UserTask", runs: 0, completed: 0, terminated: 0 },
+          { elementId: "done", type: "EndEvent", runs: 836, completed: 836, terminated: 0 },
+          { elementId: "no", type: "EndEvent", runs: 33, completed: 33, terminated: 0 },
+          { elementId: "isoEnd", type: "EndEvent", runs: 0, completed: 0, terminated: 0 },
+        ],
+        flows: [
+          { flowId: "fStart", runs: 877 }, { flowId: "fGate", runs: 869 }, { flowId: "fLow", runs: 836 },
+          { flowId: "fMid", runs: 33 }, { flowId: "fHigh", runs: 0 }, { flowId: "fDone", runs: 836 },
+          { flowId: "fNo", runs: 33 }, { flowId: "fIso", runs: 0 },
+        ],
+      };
+
+      const instances = [{ key: 900001, processDefKey: DEF, state: "active", createdAt: 1, variables: [] }];
+      const page = (items) => ({ items, total: items.length, totalExact: true, truncated: false });
+
+      window.__requests = [];
+      const api = async (method, url) => {
+        window.__requests.push(url);
+        if (url === "/api/v1/processes") return [{ key: DEF, processId: "access", name: "Berechtigungsantrag", version: 4 }];
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?process=")) {
+          const state = new URL(url, location.origin).searchParams.get("state");
+          return page(state === "finished" ? [] : instances);
+        }
+        if (url.startsWith("/api/v1/tasks")) return page([]);
+        if (url.includes("/statistics")) return STATS;
+        if (url.includes("/runtime")) {
+          return {
+            instances: 8, finished: 869, tokens: 8, incidents: [], incidentsTruncated: false,
+            incidentTotal: 0, incidentCountsExact: true, elements: ELEMENTS, flows: FLOWS,
+          };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+      const apiRaw = async (method, url, body) => ({ data: await api(method, url, body), headers: new Headers() });
+
+      window.__mountLive = () => mountLive(view, { api, apiRaw, toast: noop, key: DEF });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -34,11 +34,11 @@ test("a frozen definition says what it runs, what is newest, and how to follow",
     frozenDecisions: [{ decisionId: "eligibility", key: 11, version: 1, latestKey: 33, latestVersion: 3, behind: true }],
   });
   expect(m.behind).toBe(true);
-  expect(m.label).toBe("Decision frozen · newer deployed");
-  expect(m.title).toContain("eligibility runs v1, the newest is v3");
-  expect(m.title).toContain("Deploy the process again to have it follow each new decision version");
+  expect(m.label).toBe("Entscheidung eingefroren · neuere deployt");
+  expect(m.title).toContain("eligibility wertet v1 aus, das Neueste ist v3");
+  expect(m.title).toContain("Deploye den Prozess erneut, damit er jeder neuen Entscheidungsversion folgt");
   // What a redeploy does not do, said before somebody expects it to.
-  expect(m.title).toContain("instances already running stay on this definition unless they are migrated");
+  expect(m.title).toContain("bereits laufende Instanzen bleiben auf dieser Definition, solange sie nicht migriert werden");
 });
 
 test("a frozen definition that still runs the newest version is marked, not warned", async ({ page }) => {
@@ -47,8 +47,8 @@ test("a frozen definition that still runs the newest version is marked, not warn
     frozenDecisions: [{ decisionId: "eligibility", key: 11, version: 1, latestKey: 11, latestVersion: 1, behind: false }],
   });
   expect(m.behind).toBe(false);
-  expect(m.label).toBe("Decision frozen");
-  expect(m.title).toContain("eligibility runs v1, which is still the newest");
+  expect(m.label).toBe("Entscheidung eingefroren");
+  expect(m.title).toContain("eligibility wertet v1 aus, und das ist noch das Neueste");
 });
 
 test("a definition frozen on its bundled model says so rather than naming a version it has not", async ({ page }) => {
@@ -56,7 +56,7 @@ test("a definition frozen on its bundled model says so rather than naming a vers
     key: 7,
     frozenDecisions: [{ decisionId: "eligibility", key: 7, latestKey: 33, latestVersion: 1, behind: true }],
   });
-  expect(m.title).toContain("eligibility runs the model deployed with the process, the newest is v1");
+  expect(m.title).toContain("eligibility wertet das mit dem Prozess deployte Modell aus, das Neueste ist v1");
 });
 
 test("after a deploy, the newest version of each frozen process is named, and only the ones behind", async ({ page }) => {
@@ -79,8 +79,8 @@ test("after a deploy, the newest version of each frozen process is named, and on
 
   const notice = await page.evaluate((h) => window.__notice(h), held);
   expect(notice).toBe(
-    "One deployed process does not follow this version: Orders v2 (eligibility runs v1, the newest is v2). " +
-    "It was deployed while latest was frozen at deploy time — deploy it again to have it follow each new version.");
+    "Ein deployter Prozess folgt dieser Version nicht: Orders v2 (eligibility wertet v1 aus, das Neueste ist v2). " +
+    "Er wurde deployt, als latest beim Deployment eingefroren wurde — deploye ihn erneut, damit er jeder neuen Version folgt.");
 });
 
 test("a deploy every process follows says nothing", async ({ page }) => {

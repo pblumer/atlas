@@ -39,6 +39,8 @@
 // element, so an unusual way of calling one costs a missed warning rather than a
 // false one. A warning an author learns to ignore is worse than no warning.
 
+import { t } from "./i18n.js";
+
 // refId reads the id out of a moddle reference. dmn-moddle keeps a requirement's
 // target unresolved — `{ href: "#bkm_fee" }` — rather than pointing at the element,
 // so the id has to come off the href. A reference into another model
@@ -158,9 +160,7 @@ export function knowledgeModelFindings(definitions) {
       rule: "knowledge-model-unused",
       element: bkm.id,
       label: labelFor(bkm),
-      message: `Nothing invokes the knowledge model “${labelFor(bkm)}”. A knowledge model runs `
-        + `only when a decision calls it, so this one is never evaluated — and nothing later `
-        + `will say so: the model is valid, and its decisions deploy.`,
+      message: t("dmnWarn.unusedModel", { model: labelFor(bkm) }),
     });
   }
 
@@ -174,8 +174,7 @@ export function knowledgeModelFindings(definitions) {
         rule: "knowledge-requirement-missing",
         element: callerId,
         label: labelFor(caller),
-        message: `“${labelFor(caller)}” calls the knowledge model “${labelFor(bkm)}” but does not `
-          + `require it. It will run, and the requirements graph will not show the dependency.`,
+        message: t("dmnWarn.missingRequirement", { caller: labelFor(caller), model: labelFor(bkm) }),
         // This one finding has a determinate repair, so it carries it: the missing edge
         // runs from the knowledge model to the element that calls it, and there is
         // nothing to choose. The other finding has no fix here on purpose — which
@@ -184,7 +183,7 @@ export function knowledgeModelFindings(definitions) {
         //
         // It is declared rather than performed: this module knows the model, not the
         // canvas, and the editor is what owns dmn-js.
-        fix: { kind: "connect", source: bkm.id, target: callerId, label: "Draw the requirement" },
+        fix: { kind: "connect", source: bkm.id, target: callerId, label: t("dmnWarn.drawRequirement") },
       });
     }
   }
@@ -319,9 +318,9 @@ export function informationRequirementFindings(definitions) {
       const source = providers.get(text);
       let fix;
       if (source && source.id !== decision.id && !given.has(providedName(source))) {
-        fix = { kind: "connect", source: source.id, target: decision.id, label: "Draw the requirement" };
+        fix = { kind: "connect", source: source.id, target: decision.id, label: t("dmnWarn.drawRequirement") };
       } else if (!providers.has(text)) {
-        fix = { kind: "create-input", source: text, target: decision.id, label: "Add it as input data" };
+        fix = { kind: "create-input", source: text, target: decision.id, label: t("dmnWarn.addInputData") };
       }
 
       findings.push({
@@ -329,10 +328,7 @@ export function informationRequirementFindings(definitions) {
         rule: "decision-input-unbound",
         element: decision.id,
         label: labelFor(decision),
-        message: `“${labelFor(decision)}” reads “${text}”, and nothing gives it that. `
-          + `A decision is given what its requirements provide and nothing else, so this `
-          + `column is empty at every evaluation — and the model will not deploy: the `
-          + `engine reports it as an unknown variable.`,
+        message: t("dmnWarn.unbound", { decision: labelFor(decision), name: text }),
         ...(fix ? { fix } : {}),
       });
     }
@@ -345,16 +341,14 @@ export function informationRequirementFindings(definitions) {
         rule: "information-requirement-unused",
         element: decision.id,
         label: labelFor(decision),
-        message: `“${labelFor(decision)}” requires “${labelFor(provider)}” and never reads it. `
-          + `It deploys and it runs, so nothing later will say so — but the graph shows a `
-          + `dependency the decision does not have, and the graph is what gets reviewed.`,
+        message: t("dmnWarn.unusedRequirement", { decision: labelFor(decision), provider: labelFor(provider) }),
         // The repair is the column that would use it, which is the same edit drawing
         // the requirement offers to make. Declared, not performed: this module knows
         // the model, not the canvas.
         ...(table ? {
           fix: {
             kind: "add-input", source: provider.id, target: decision.id,
-            label: "Add the input column",
+            label: t("dmnWarn.addColumn"),
           },
         } : {}),
       });

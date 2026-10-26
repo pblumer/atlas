@@ -197,6 +197,48 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_process_statistics",
+			Description: "Get how one process definition's elements and sequence flows were used over a period, and " +
+				"where the time went — the figures behind the Operations heatmap. For every element and flow of the " +
+				"model, zeroes included (a zero is a path no instance took in the period): how many tokens arrived. " +
+				"For every element: how long its instances took from activation to completion, and for a task split " +
+				"at the moment a person claimed it or a Worker leased it into waiting and working — each as count, " +
+				"mean, median, 90th percentile, maximum and total in milliseconds. A task completed without being " +
+				"claimed has a duration but no split. Also the instances started, finished and running. 'from' and " +
+				"'to' are RFC 3339 moments or unix nanoseconds (default: the beginning of retained history, and now). " +
+				"At most a bounded number of instances is read, newest first; 'truncated' says when the bound cut " +
+				"the period short. Times are per task, never per person.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key": map[string]any{
+						"type":        "integer",
+						"description": "The process definition key (from atlas_list_processes).",
+					},
+					"from": stringProp("Optional start of the period, inclusive: RFC 3339 or unix nanoseconds."),
+					"to":   stringProp("Optional end of the period, exclusive: RFC 3339 or unix nanoseconds; default now."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				for _, name := range []string{"from", "to"} {
+					if v := optString(args, name); v != "" {
+						q.Set(name, v)
+					}
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/statistics"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_call_activities",
 			Description: "List every call activity across all deployed processes on this server, with " +
 				"its caller, the process id it calls, its version binding and propagation flags, whether " +

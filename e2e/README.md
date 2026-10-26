@@ -61,6 +61,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   change event, keeping an fx field's `=`; a focused dmn-js output cell gets a spark and Apply types
   into it, while an input cell (a unary test) is not written to; and without an AI Worker the chat
   is absent and the rest still works.
+- **`heatmap-overlay.spec.mjs`** ([ADR-0496](../docs/adr/0496-operations-heatmap.md)):
+  the heatmap over the Operations live view, against a stubbed API — Live stays the default and
+  shades nothing; Runs glows under shapes and arrows alike and draws the branch nobody took
+  dashed with a zero, in both styles; Outline draws the same values as the five shaded strokes;
+  the time modes read the statistics endpoint, a period asks it with `from=`, and the panel ranks
+  the tasks by what the diagram shows; picking one instance goes back to Live; and the choice
+  survives a reload.
 - **`history-purge.spec.mjs`** ([ADR-0486](../docs/adr/0486-operator-history-purge-and-compaction.md)):
   deleting a process's finished instances and the storage card's reclaim section against a
   stubbed API — the preview counts every version with one cut-off and writes nothing, and says
