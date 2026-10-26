@@ -4164,11 +4164,21 @@ async function renderAppDeployments(id) {
 // where an SVG cannot run anything even if a label in it tried to.
 async function openReleaseArchitecture(appID, appName, version) {
   const base = `/api/v1/applications/${encodeURIComponent(appID)}/releases/${version}/architecture`;
-  let svg;
+  let info;
   try {
-    svg = await api("GET", base + ".svg");
+    info = await api("GET", base);
   } catch (e) { toast(e.message, "err"); return; }
-  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  // One checkbox per layer the release records (ADR-0495
+  // §3); the answer's own default is what is ticked first.
+  const recorded = (info.layers && info.layers.recorded) || ["application"];
+  let shown = (info.layers && info.layers.shown) || recorded;
+  const layerNames = {
+    strategy: tr("deployments.architecture.layer.strategy"),
+    business: tr("deployments.architecture.layer.business"),
+    application: tr("deployments.architecture.layer.application"),
+    data: tr("deployments.architecture.layer.data"),
+    technology: tr("deployments.architecture.layer.technology"),
+  };
   const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
 
   const ov = document.createElement("div");
@@ -4179,18 +4189,52 @@ async function openReleaseArchitecture(appID, appName, version) {
         <h2>${esc(tr("deployments.architecture.title", { version }))}</h2>
         <button type="button" class="icon-btn" data-x aria-label="${esc(tr("common.close"))}" title="${esc(tr("common.close"))}">✕</button>
       </div>
+      ${recorded.length > 1 ? `<div class="row" data-layers style="gap:16px; padding:8px 16px 0">
+        <span class="muted small">${esc(tr("deployments.architecture.layers"))}</span>
+        ${recorded.map((l) => `<label class="field inline" style="margin:0"><input type="checkbox" value="${esc(l)}"${shown.includes(l) ? " checked" : ""}> ${esc(layerNames[l] || l)}</label>`).join("")}
+      </div>` : ""}
       <div class="modal-body" style="overflow:auto; background:#fff">
-        <img src="${url}" alt="${esc(tr("deployments.architecture.alt", { version }))}" style="display:block; max-width:100%; height:auto">
+        <img alt="${esc(tr("deployments.architecture.alt", { version }))}" style="display:block; max-width:100%; height:auto">
       </div>
       <div class="modal-foot">
         <span class="muted small">${esc(tr("deployments.architecture.foot"))}</span>
-        <a class="btn ghost" href="${base}.xml" download="${esc(file)}.xml" title="${esc(tr("deployments.architecture.xmlTitle"))}">ArchiMate (.xml)</a>
-        <a class="btn" href="${base}.svg" download="${esc(file)}.svg" title="${esc(tr("deployments.architecture.svgTitle"))}">${esc(tr("deployments.architecture.svg"))}</a>
+        <a class="btn ghost" data-xml download="${esc(file)}.xml" title="${esc(tr("deployments.architecture.xmlTitle"))}">ArchiMate (.xml)</a>
+        <a class="btn" data-svg download="${esc(file)}.svg" title="${esc(tr("deployments.architecture.svgTitle"))}">${esc(tr("deployments.architecture.svg"))}</a>
       </div>
     </div>`;
   document.body.appendChild(ov);
 
-  const close = () => { ov.remove(); URL.revokeObjectURL(url); document.removeEventListener("keydown", onKey); };
+  const img = ov.querySelector("img");
+  let url = null;
+  // render draws the picture for the ticked layers, and points both downloads at the
+  // same selection, so what is saved is what is on the screen.
+  const render = async () => {
+    const q = "?layers=" + encodeURIComponent(shown.join(","));
+    let svg;
+    try {
+      svg = await api("GET", base + ".svg" + q);
+    } catch (e) { toast(e.message, "err"); return; }
+    if (url) URL.revokeObjectURL(url);
+    url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    img.src = url;
+    ov.querySelector("[data-xml]").href = base + ".xml" + q;
+    ov.querySelector("[data-svg]").href = base + ".svg" + q;
+  };
+  for (const box of ov.querySelectorAll("[data-layers] input")) {
+    box.addEventListener("change", () => {
+      const picked = [...ov.querySelectorAll("[data-layers] input")].filter((b) => b.checked).map((b) => b.value);
+      if (!picked.length) {
+        box.checked = true;
+        toast(tr("deployments.architecture.needLayer"), "err");
+        return;
+      }
+      shown = picked;
+      render();
+    });
+  }
+  await render();
+
+  const close = () => { ov.remove(); if (url) URL.revokeObjectURL(url); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") close(); };
   document.addEventListener("keydown", onKey);
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });

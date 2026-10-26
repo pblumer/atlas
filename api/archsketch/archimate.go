@@ -59,8 +59,21 @@ type archRelationship struct {
 	typ, source, target string
 }
 
-// ArchiMate renders the snapshot as an ArchiMate Model Exchange document.
+// ArchiMate renders the snapshot as an ArchiMate Model Exchange document. A value
+// [Snapshot.Select] narrowed to the technology layer is written as the installation
+// alone.
 func ArchiMate(s Snapshot, m Meta) []byte {
+	if s.technologyOnly() {
+		elements, relationships := technologyGraph(s, m)
+		return exchangeDocument(s, m, elements, relationships)
+	}
+	elements, relationships := applicationGraph(s, m)
+	return exchangeDocument(s, m, elements, relationships)
+}
+
+// applicationGraph is the application on its node, with everything it offers and
+// depends on, and with a physical part, how each connection runs.
+func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 	var elements []archElement
 	var relationships []archRelationship
 	add := func(e archElement) string {
@@ -230,6 +243,112 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 		relate("Association", path, target)
 	}
 
+	return elements, relationships
+}
+
+// technologyGraph is the installation alone: the Atlas node and its system software,
+// the release deployed on it, its API, and each worker process and each connection
+// Atlas opens itself, with the system it reaches.
+func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
+	var elements []archElement
+	var relationships []archRelationship
+	add := func(e archElement) string {
+		elements = append(elements, e)
+		return e.id
+	}
+	relate := func(typ, source, target string) {
+		relationships = append(relationships, archRelationship{typ, source, target})
+	}
+	p := *s.Physical
+
+	node := add(archElement{id: "id-atlas-node", typ: "Node", name: "Atlas — " + installationName(p),
+		doc:   "The Atlas server the release was recorded on.",
+		props: map[string]string{"atlas.derivedKind": "node", "atlas.node": p.Node, "atlas.environment": p.Environment}})
+	software := add(archElement{id: "id-atlas-software", typ: "SystemSoftware", name: "Atlas",
+		doc:   "The Atlas workflow engine.",
+		props: map[string]string{"atlas.derivedKind": "systemSoftware"}})
+	relate("Composition", node, software)
+	release := add(archElement{id: "id-release", typ: "Artifact", name: fmt.Sprintf("%s v%d", m.Application, m.Version),
+		doc: "The release: what was published together.",
+		props: map[string]string{
+			"atlas.derivedKind":   "release",
+			panorama.KeyReleaseID: m.ReleaseID,
+		}})
+	relate("Assignment", node, release)
+	apiProps := map[string]string{"atlas.derivedKind": "api"}
+	if p.ExternalURL != nil {
+		endpointProps(apiProps, *p.ExternalURL)
+	}
+	api := add(archElement{id: "id-atlas-api", typ: "TechnologyInterface", name: "Atlas API",
+		doc:   "The HTTP API every way into the application goes through, and the one worker processes lease their work from.",
+		props: apiProps})
+	relate("Composition", node, api)
+
+	for i, w := range p.Workers {
+		initiator, initiatorKind := node, "atlas"
+		if w.Placement == PlacementWorker {
+			initiatorKind = "worker"
+			initiator = add(archElement{id: fmt.Sprintf("id-worker-%d", i+1), typ: "SystemSoftware", name: "Worker for " + w.Name,
+				doc: "The worker process that serves " + w.Name + " (" + workerTypeName(w.WorkerType) + "): it leases the work from the Atlas API and connects to the target system. On the recording installation: " + w.Observers.text() + ".",
+				props: map[string]string{
+					"atlas.derivedKind": "workerProcess",
+					"atlas.workerName":  w.Name,
+					"atlas.workerType":  w.WorkerType,
+					"atlas.observedBy":  strings.Join(w.ObservedBy, ", "),
+				}})
+			lease := add(archElement{id: fmt.Sprintf("id-lease-%d", i+1), typ: "Path", name: "Lease of " + w.Name,
+				doc: "The worker opens this connection to the Atlas API to lease its jobs.",
+				props: map[string]string{
+					"atlas.derivedKind":          "lease",
+					"atlas.connection.initiator": "worker",
+				}})
+			relate("Association", lease, initiator)
+			relate("Association", lease, node)
+		}
+		if w.Endpoint == nil || w.Endpoint.Withheld || w.Endpoint.Unparseable {
+			if w.Endpoint != nil {
+				elements[len(elements)-1].doc += " The target endpoint of " + w.Name + " is not in this document: " + w.Endpoint.String() + "."
+			}
+			continue
+		}
+		targetProps := map[string]string{"atlas.derivedKind": "targetSystem"}
+		endpointProps(targetProps, *w.Endpoint)
+		source := "as its configuration on the recording installation names it"
+		if w.EndpointReported {
+			source = "as the worker instances serving it reported it"
+		}
+		target := add(archElement{id: fmt.Sprintf("id-target-%d", i+1), typ: "Node", name: w.Endpoint.Host,
+			doc: "The system worker " + w.Name + " connects to, " + source + ".", props: targetProps})
+		pathProps := map[string]string{"atlas.derivedKind": "connection", "atlas.connection.initiator": initiatorKind}
+		endpointProps(pathProps, *w.Endpoint)
+		path := add(archElement{id: fmt.Sprintf("id-connection-%d", i+1), typ: "Path", name: w.Endpoint.String(),
+			doc: "Opened by the " + map[string]string{"atlas": "Atlas server", "worker": "worker process"}[initiatorKind] + ".", props: pathProps})
+		relate("Association", path, initiator)
+		relate("Association", path, target)
+	}
+	for i, j := range p.JobTypes {
+		workers := add(archElement{id: fmt.Sprintf("id-jobtype-workers-%d", i+1), typ: "SystemSoftware", name: "Workers of job type " + j.JobType,
+			doc: "The worker processes subscribed to job type " + j.JobType + ": they lease its work from the Atlas API. On the recording installation: " + j.Observers.text() + ".",
+			props: map[string]string{
+				"atlas.derivedKind": "jobTypeWorkers",
+				panorama.KeyJobType: j.JobType,
+				"atlas.observedBy":  strings.Join(j.ObservedBy, ", "),
+			}})
+		lease := add(archElement{id: fmt.Sprintf("id-jobtype-lease-%d", i+1), typ: "Path", name: "Lease of job type " + j.JobType,
+			doc: "Each subscribed worker opens this connection to the Atlas API to lease its jobs.",
+			props: map[string]string{
+				"atlas.derivedKind":          "lease",
+				"atlas.connection.initiator": "worker",
+			}})
+		relate("Association", lease, workers)
+		relate("Association", lease, node)
+	}
+	return elements, relationships
+}
+
+// exchangeDocument writes elements and relationships as the Model Exchange document,
+// with the provenance that keeps it from being mistaken for one somebody drew.
+func exchangeDocument(s Snapshot, m Meta, elements []archElement, relationships []archRelationship) []byte {
 	var out strings.Builder
 	out.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
 	out.WriteString(`<model xmlns="` + panorama.ExchangeNamespace + `"` +
@@ -294,6 +413,9 @@ func archiProvenance(s Snapshot, m Meta) string {
 		fmt.Fprintf(&b, "Incomplete: %s could not be read when the snapshot was taken, so what they offer and need is missing. ",
 			plural(n, "process", "processes"))
 	}
+	if note := s.layerNote(); note != "" {
+		b.WriteString(note + " ")
+	}
 	b.WriteString("No diagram: the importing tool's own layout is the better one.\n\nNot shown:\n")
 	for _, gap := range s.NotShown() {
 		b.WriteString("  • " + gap + "\n")
@@ -304,6 +426,9 @@ func archiProvenance(s Snapshot, m Meta) string {
 // view names what the document holds, the way the image's stamp does.
 func view(s Snapshot) string {
 	if p := s.Physical; p != nil {
+		if s.technologyOnly() {
+			return "physical architecture on " + installationName(*p)
+		}
 		return "logical architecture and the physical one of " + installationName(*p)
 	}
 	return "logical architecture"

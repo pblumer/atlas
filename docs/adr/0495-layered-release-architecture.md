@@ -1,7 +1,8 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 — the banded layout lands with the
+  first slice that has a band to draw, slice C; see the note below)
+- **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
 - **Open question:** §4 assumes the starmap's renderer (`api/web/panorama-mesh.js`, fed
@@ -10,6 +11,26 @@
   today; the lens is planned with a spike as its first step, and §4 is revisited if
   the spike says the renderer cannot carry a second source.
 - **Question checked:** 2026-10
+
+> **Implementation status and amendment (2026-10-26): slice A has landed.** Every read of a
+> release's architecture takes `layers=` (`archsketch.ParseSelection`): the application
+> layer is the snapshot's logical part, the technology layer its physical part, and
+> strategy, business and data are accepted names that no snapshot records yet. Without
+> the technology layer a snapshot is drawn as the logical view; without the application
+> layer it is drawn as the installation alone — the Atlas system software, its API, each
+> worker process and each connection Atlas opens itself, with the system it reaches — in
+> SVG and ArchiMate. A public start link, an application interface that only the
+> installation records, is drawn only when both layers are shown. A narrowed picture
+> names the layers it shows, those switched off, and those asked for but not recorded;
+> an unknown layer is a 400, and a release that records none of the layers asked for a
+> 404 that says which it records. The default selection renders the bytes it rendered
+> before. The Console's architecture dialog offers one checkbox per recorded layer, and
+> `atlas_release_architecture` takes `layers`.
+>
+> **Amendment:** §3's banded layout is not built in slice A. With only the application
+> and technology layers holding anything, there is no band to draw, and a layout with
+> nothing in it would be code no test can exercise. It lands with slice C, the first
+> slice that records a new layer (data); §7 is read with that move.
 
 ## Context and problem statement
 
@@ -221,9 +242,9 @@ and a read withholds what the reader may not see, saying that it withheld it.
 
 | Slice | Content |
 |---|---|
-| A | layer tag on every element; `layers=` on all routes; the banded layout; the Console checkboxes. Existing content is tagged application or technology, so nothing changes by default |
+| A | layer tag on every element; `layers=` on all routes; the Console checkboxes. Existing content is tagged application or technology, so nothing changes by default (the banded layout moved to C; see the amendment) |
 | B | technology depth: Worker detail and inbound subscriptions |
-| C | the data layer: data objects, stores, information-model classes, personal-data declarations and the Workers that receive personal values |
+| C | the banded layout; the data layer: data objects, stores, information-model classes, personal-data declarations and the Workers that receive personal values |
 | D | the business and strategy layers: business processes, roles, products and actions, capabilities, value streams |
 | E | cross-application coupling: senders and receivers of message and signal names, the event feed |
 | F | the release lens: spike first (open question), then the lens with show/hide, drilldown, live overlay and drift |
