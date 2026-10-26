@@ -58,6 +58,8 @@ On deployment, *off the processor hot path*, resolve the exact contract identity
 
 If zero verified and eligible configured Workers match, reject the deployment with an actionable diagnostic. If several match, require the author/operator to select one explicitly; **do not choose the first lexically, fastest, cheapest, or most privileged**. After the decision the compiled deployment points at one immutable binding. Changing Worker configuration or verified evidence in a way that changes semantics cannot silently retarget an existing deployment; fail closed and require an explicit migration/redeployment path.
 
+**Design-time compatibility for a later controlled replacement (new requirement, not accepted here):** [ADR-0492](0492-controlled-worker-rebinding.md) proposes a stable, deployment-scoped logical binding slot with separately versioned, durably authorized target revisions for **future jobs** of an existing opt-in deployment. CDA6 must not paint this extension into a corner by making a concrete Worker ID the *only* persistent task identity. The current proposed CDA6/CDA7 route nevertheless remains pinned; the new feature is **CDA8**, requires its own accepted ADR and event/recovery tests, and cannot silently alter jobs or deployments.
+
 No provider network calls, schema parsing, authorization requests or string-based discovery are permitted in the processor hot path. Do not introduce a new cross-partition state read or a Worker-instance scheduling shortcut.
 
 ### 3. The runtime authorization seam
@@ -100,7 +102,7 @@ A future dynamic selector must first settle the **open question above**, prove t
 
 - **Positive:** Process authors can request exact semantics without treating generic CRUD methods as equivalent.
 - **Positive:** First executable slice reuses existing deterministic job routing and ADR-0475's governing seam instead of inventing an unsafe dynamic router.
-- **Negative:** Deployment-time pinning does not offer instantaneous fallback or load balancing across configured Workers; ambiguity requires explicit human choice.
+- **Negative:** Deployment-time pinning does not offer instantaneous fallback or load balancing across configured Workers; ambiguity requires explicit human choice. A later explicit operator-driven rebind is a separate, not-yet-approved capability (CDA8), **not** automatic fallback.
 - **Follow-ups / risks:** Approval of ADR-0480, contract governance, Worker Type installation/version pinning (ADR-0208), provider-specific identity enforcement (ADR-0475), the exact BPMN extension and recovery tests. True policy-gated dynamic selection is explicitly *not yet decided*.
 
 ## Pros and cons of the options
@@ -126,6 +128,7 @@ A future dynamic selector must first settle the **open question above**, prove t
 - [CDA programme and gates](../planning/capability-driven-automation-program.md)
 - [ADR-0480 — Technical capability claims](0480-technical-capability-contract.md)
 - [ADR-0483](0483-technical-capability-conformance-governance.md)
+- [ADR-0492 — proposed no-redeploy replacement](0492-controlled-worker-rebinding.md)
 - [ADR-0203 — Worker execution](0203-worker-execution-model.md)
 - [ADR-0208 — Worker Type packages and trust](0208-worker-type-packages.md)
 - [ADR-0420 — Unified graph](0420-one-graph-model-several-projections.md)

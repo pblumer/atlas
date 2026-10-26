@@ -44,6 +44,7 @@ import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
+import { uploadPicture, PERSON } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
@@ -214,6 +215,31 @@ function loadFeatures() {
   return featuresAsked;
 }
 
+// LINKING is whether the account menu offers "Connected accounts". The page earns
+// its place when the server can link an account, or when the person already has an
+// account linked or a connection on record — then it is where they withdraw it, even
+// after an administrator switched linking off. Everybody else would find a page that
+// only says there is nothing to do. Until the server has answered, the entry is
+// offered, the stance FEATURES takes; a server without the vault answers 503 and has
+// nothing to link and nothing linked. It is asked once per signed-in person, and
+// again when an administrator changes the setup (security.js).
+const LINKING = { offered: true, user: null };
+let linkingAsked = null;
+function loadLinking(force) {
+  const who = AUTH.user && AUTH.user.id;
+  if (!who) return Promise.resolve();
+  if (!force && LINKING.user === who && linkingAsked) return linkingAsked;
+  LINKING.user = who;
+  linkingAsked = api("GET", "/api/v1/me/connections").then((m) => {
+    LINKING.offered = !!(m && ((m.linkable || []).length || (m.identities || []).length || (m.connections || []).length));
+  }, (e) => {
+    // Anything but 503 is no answer: keep the entry and ask on the next navigation.
+    if (e && e.status === 503) LINKING.offered = false;
+    else LINKING.user = null;
+  }).then(() => updateAccount());
+  return linkingAsked;
+}
+
 // offered is the one predicate both menus filter by: the person holds the role, and
 // the server serves the part of Atlas the entry opens. One predicate and not a second
 // condition beside each role check, because the next menu would be the one that
@@ -245,7 +271,7 @@ function updateAccount() {
     if (menu) menu.innerHTML =
       `<div class="mlabel">Signed in as <b>${esc(AUTH.user.username)}</b></div>` +
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
-      `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` +
+      (LINKING.offered ? `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` : "") +
       `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
@@ -2240,7 +2266,8 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
-      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG; a large
+      one is scaled down before it is uploaded.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2257,9 +2284,9 @@ function avatarField(u) {
 
 // wireAvatarField hangs the two buttons off whichever edit form is open.
 //
-// The upload does not go through api(): that helper sends JSON, and this route
-// takes the bytes themselves under the Content-Type the file already carries —
-// the same shape the catalogue's brand mark uses, and for the same reason.
+// The upload goes through apiBytes and not api(): that helper sends JSON, and this
+// route takes the bytes themselves under their own Content-Type — the same shape
+// the catalogue's brand mark uses, and for the same reason.
 function wireAvatarField(slot, reload) {
   const box = slot.querySelector(".avatar-field");
   if (!box) return;
@@ -2282,19 +2309,12 @@ function wireAvatarField(slot, reload) {
       if (b.dataset.avact === "upload") {
         const file = box.querySelector(".avatar-file").files[0];
         if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
-        // No size check here. The server carries the limit, it is configurable, and
-        // a number copied into this page would go stale silently — its refusal
-        // names the actual figure.
-        const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
-          method: "PUT", body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-        });
-        if (!res.ok) {
-          const text = await res.text();
-          let data = null;
-          try { data = text ? JSON.parse(text) : null; } catch { /* keep text */ }
-          throw new Error((data && data.error) || text || `HTTP ${res.status}`);
-        }
+        // Scaled down here, so a photograph straight off a camera is taken rather
+        // than refused for its size; picturescale.js says why here and not on the
+        // server, and why it carries no number of the server's limit.
+        await uploadPicture(file,
+          (picture) => apiBytes("PUT", `/api/v1/users/${encodeURIComponent(id)}/avatar`, picture),
+          PERSON);
         toast("Picture updated", "ok");
       } else {
         await api("DELETE", `/api/v1/users/${encodeURIComponent(id)}/avatar`);
@@ -11583,6 +11603,7 @@ async function route() {
 
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
+  if (AUTH.user) loadLinking(); // not awaited: it only decides one entry of a closed menu
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
@@ -11611,7 +11632,7 @@ async function route() {
     if (path === "#/console/connections") {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
-      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen), canConfigure: mayUse("admin") });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;
@@ -11622,7 +11643,8 @@ async function route() {
     if (path === "#/console/security") {
       const gen = navGen;
       const { viewSecurity } = await import("./security.js");
-      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen) });
+      return await viewSecurity({ api, toast, view, isSuperseded: () => superseded(gen),
+        onLinkingChanged: () => loadLinking(true) });
     }
     if (path === "#/console/audit") return await viewConsoleAudit();
     if (path === "#/console/content-sources") {

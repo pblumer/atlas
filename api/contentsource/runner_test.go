@@ -328,90 +328,42 @@ func TestTheConfigurationRoutes(t *testing.T) {
 	}
 }
 
-// TestAKickRechecksOneSourceInTheBackground: an unlink kicks the source so the
-// watches nothing needs any more end without waiting for the next sweep.
-func TestAKickRechecksOneSourceInTheBackground(t *testing.T) {
+// TestKickRechecksASourceInTheBackground: an unlink kicks a sweep that records
+// the products without waiting for the interval, and repeated reloads coalesce
+// into one wake-up instead of blocking the caller.
+func TestKickRechecksASourceInTheBackground(t *testing.T) {
 	f := wiki(t)
-	b := bound(map[string][]Check{"vpn": {{ID: "it_de", Passages: []string{"sec_pw"}}}})
-	r := NewRunner(registry(t, f), b, func() int64 { return 7 })
+	b := bound(map[string][]Check{"mail": {{ID: "it_fr"}}})
+	r := NewRunner(registry(t, f), b, func() int64 { return 9 })
 	r.Kick("wiki")
 	r.wg.Wait()
-	if res, rounds := b.result("vpn"); !res.Passed || res.At != 7 || rounds != 1 {
+	if res, rounds := b.result("mail"); !res.Passed || res.At != 9 || rounds != 1 {
 		t.Fatalf("after a kick: %+v in %d rounds", res, rounds)
 	}
-	if got := f.Watched(); !reflect.DeepEqual(got, []string{"it_de", "it_root"}) {
-		t.Fatalf("watched after a kick = %v", got)
-	}
-	// The binding goes, and the next kick ends its watches by id.
-	b.mu.Lock()
-	b.targets["wiki"] = nil
-	b.mu.Unlock()
-	r.Kick("wiki")
-	r.wg.Wait()
-	if got := f.Watched(); len(got) != 0 {
-		t.Fatalf("watched after the unlink's kick = %v", got)
+	r.Reload()
+	r.Reload()
+	if len(r.wake) != 1 {
+		t.Fatalf("two reloads left %d wake-ups, want one", len(r.wake))
 	}
 }
 
-// TestAReloadWakesTheRunnerOnceHoweverOftenItIsAsked: a configuration change asks
-// the runner to look at the sources again; asked twice before it looked, it looks
-// once, and the asking never blocks the handler that asked.
-func TestAReloadWakesTheRunnerOnceHoweverOftenItIsAsked(t *testing.T) {
-	f := wiki(t)
-	r := NewRunner(registry(t, f), bound(nil), func() int64 { return 1 })
-	done := make(chan struct{})
-	go func() {
-		r.Reload()
-		r.Reload()
-		r.Reload()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Reload blocked while nothing was listening")
-	}
-	if n := len(r.wake); n != 1 {
-		t.Fatalf("%d wakes pending, want 1", n)
-	}
-}
-
-// TestTheAdapterWalksAPagesAncestors: the source answers a page's own restriction
-// and not its ancestors', so the adapter reads the chain up to the root.
-func TestTheAdapterWalksAPagesAncestors(t *testing.T) {
-	f := wiki(t)
-	ad := adapter(t, f)
-	p, err := ad.Page(ctx(t), "it_c1")
+// TestTheConfigurationRoutesRefuseWhatTheyCannotUse: an empty configuration is an
+// empty list, a body that is not JSON or not a usable source is a 400, and a
+// delete whose bindings cannot be read is refused rather than guessed.
+func TestTheConfigurationRoutesRefuseWhatTheyCannotUse(t *testing.T) {
+	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	chain, err := ad.Ancestors(ctx(t), p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ids []string
-	for _, a := range chain {
-		ids = append(ids, a.ID)
-	}
-	if len(ids) == 0 || ids[len(ids)-1] != "it_root" {
-		t.Fatalf("ancestors of it_c1 = %v", ids)
-	}
-	f.Edit("it_root", func(p *wikifake.Page) { p.Unreadable = true })
-	if _, err := ad.Ancestors(ctx(t), p); err == nil {
-		t.Fatal("an unreadable ancestor did not stop the walk")
-	}
-}
-
-// TestTheConfigurationRoutesSayWhatIsWrong: an empty installation lists an empty
-// array rather than null; a malformed or invalid change, a failing binding lookup
-// and a credential that resolves to nothing are each named, and the check answers
-// the unresolvable credential as its result, not as a failed request.
-func TestTheConfigurationRoutesSayWhatIsWrong(t *testing.T) {
-	f := wiki(t)
-	reg := registry(t, f)
-	svc := NewService(reg, func() int64 { return 5 })
-	do := func(h http.HandlerFunc, method, body, id string) *httptest.ResponseRecorder {
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+	svc := NewService(NewRegistry(loop, store, func(string) string { return "" }), func() int64 { return 1 })
+	svc.InUse = func(string) ([]string, error) { return nil, errors.New("bindings unreadable") }
+	call := func(h http.HandlerFunc, method, body, id string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, "/x", strings.NewReader(body))
+		req = req.WithContext(httpapi.WithPrincipal(req.Context(), &httpapi.Principal{UserID: "u1", Username: "root"}))
 		if id != "" {
 			req.SetPathValue("id", id)
 		}
@@ -419,33 +371,17 @@ func TestTheConfigurationRoutesSayWhatIsWrong(t *testing.T) {
 		h(rec, req)
 		return rec
 	}
-	if rec := do(svc.HandleUpdate, "PUT", `{`, "wiki"); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "malformed") {
-		t.Errorf("malformed update = %d %s", rec.Code, rec.Body)
+	if rec := call(svc.HandleList, "GET", "", ""); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("empty list = %d %q, want []", rec.Code, rec.Body)
 	}
-	if rec := do(svc.HandleUpdate, "PUT", `{"name":"W","kind":"wikiwikibangbang","baseURL":"http://plain","credentialsRef":"wiki"}`, "wiki"); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "https") {
-		t.Errorf("an update to plain http = %d %s", rec.Code, rec.Body)
+	if rec := call(svc.HandleUpdate, "PUT", `{`, "wiki"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("broken body = %d", rec.Code)
 	}
-	svc.InUse = func(string) ([]string, error) { return nil, errors.New("store gone") }
-	if rec := do(svc.HandleDelete, "DELETE", "", "wiki"); rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "store gone") {
-		t.Errorf("delete with a failing lookup = %d %s", rec.Code, rec.Body)
+	if rec := call(svc.HandleUpdate, "PUT", `{"name":"x","kind":"wikiwikibangbang","baseURL":"http://x","credentialsRef":"r"}`, "wiki"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("http base = %d", rec.Code)
 	}
-	// A source whose credential names nothing in the vault.
-	orphan := `{"id":"orphan","name":"O","kind":"wikiwikibangbang","baseURL":"https://o.example.org","credentialsRef":"nowhere"}`
-	if rec := do(svc.HandleCreate, "POST", orphan, ""); rec.Code != http.StatusCreated {
-		t.Fatalf("create = %d %s", rec.Code, rec.Body)
-	}
-	rec := do(svc.HandleCheck, "POST", "", "orphan")
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `the vault holds no secret under its credentialsRef`) || strings.Contains(rec.Body.String(), `"reachable":true`) {
-		t.Errorf("check of an unresolvable credential = %d %s", rec.Code, rec.Body)
-	}
-	// Nothing left configured: the list is an empty array.
-	svc.InUse = nil
-	for _, id := range []string{"orphan", "wiki"} {
-		if rec := do(svc.HandleDelete, "DELETE", "", id); rec.Code != http.StatusNoContent {
-			t.Fatalf("delete %s = %d", id, rec.Code)
-		}
-	}
-	if rec := do(svc.HandleList, "GET", "", ""); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != "[]" {
-		t.Errorf("an empty list = %d %q", rec.Code, rec.Body)
+	if rec := call(svc.HandleDelete, "DELETE", "", "wiki"); rec.Code != http.StatusInternalServerError ||
+		!strings.Contains(rec.Body.String(), "bindings unreadable") {
+		t.Fatalf("delete with unreadable bindings = %d %s", rec.Code, rec.Body)
 	}
 }

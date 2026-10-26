@@ -1,376 +1,359 @@
-package wikifake
+package wikifake_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pblumer/atlas/api/contentsource/wikifake"
 )
 
-// The fake stands in for wikiwikibangbang in every content-source test, so those
-// tests prove Atlas against the source's contract only while the fake keeps it.
-// These hold the fake to that contract directly, request by request: what an
-// unreadable item answers, what a read token may not do, how a watch ends, and how
-// the change feed names what it may not name.
-
-// call sends one request with the read token (or another) and decodes the answer.
-func call(t *testing.T, s *Server, method, path, token string) (int, map[string]any, []byte) {
+// call sends one request to the fake with the given bearer token and decodes a
+// JSON answer into out when out is non-nil. It returns the status and raw body.
+func call(t *testing.T, f *wikifake.Server, method, path, token string, out any) (int, []byte) {
 	t.Helper()
-	req, err := http.NewRequest(method, s.URL()+path, nil)
+	req, err := http.NewRequest(method, f.URL()+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	client := s.TS.Client()
+	client := f.TS.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	res, err := client.Do(req)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("%s %s: %v", method, path, err)
 	}
 	defer res.Body.Close()
-	raw, _ := io.ReadAll(res.Body)
-	var out map[string]any
-	_ = json.Unmarshal(raw, &out)
-	return res.StatusCode, out, raw
+	body, _ := io.ReadAll(res.Body)
+	if out != nil {
+		if err := json.Unmarshal(body, out); err != nil {
+			t.Fatalf("%s %s: decode %q: %v", method, path, body, err)
+		}
+	}
+	return res.StatusCode, body
 }
 
-func newFake(t *testing.T) *Server {
+func get(t *testing.T, f *wikifake.Server, path string, out any) int {
 	t.Helper()
-	s := New()
-	t.Cleanup(s.Close)
-	s.Put(Page{ID: "it_root", Key: "SVC-1", Space: "SVC", Title: "Services"})
-	s.Put(Page{ID: "it_a", Key: "SVC-2", Space: "SVC", Parent: "it_root", Title: "VPN",
-		Body:   []Block{{Kind: "paragraph", Text: "Sicher", Marks: []Mark{{Type: "bold", Start: 0, End: 3}}}},
-		Labels: []string{"vpn"}, Properties: map[string]any{"pictures": []string{"logo.png"}}, State: "published"})
-	s.Put(Page{ID: "it_b", Key: "SVC-3", Space: "SVC", Parent: "it_root", Title: "Mail",
-		ReadRestriction: []string{"u_atlas"}, Held: true})
-	s.Put(Page{ID: "it_gone", Key: "SVC-4", Space: "SVC", Parent: "it_root", Title: "Gone", Unreadable: true})
-	s.Put(Page{ID: "it_trash", Key: "SVC-5", Space: "SVC", Parent: "it_root", Title: "Trash", Presence: "trashed"})
-	s.Put(Page{ID: "it_quiet", Key: "SVC-6", Space: "SVC", Title: "Quiet", OmitPresence: true})
-	return s
+	status, _ := call(t, f, http.MethodGet, path, wikifake.Token, out)
+	return status
 }
 
-func TestTheFakeAnswersOnlyItsReadToken(t *testing.T) {
-	s := newFake(t)
-	if code, _, _ := call(t, s, "GET", "/api/me", ""); code != http.StatusUnauthorized {
-		t.Fatalf("no token = %d", code)
-	}
-	if code, _, _ := call(t, s, "GET", "/api/me", "wrong"); code != http.StatusUnauthorized {
-		t.Fatalf("wrong token = %d", code)
-	}
-	code, me, _ := call(t, s, "GET", "/api/me", Token)
-	if code != 200 || me["scope"] != "read" || me["admin"] != false || me["erasure"] != false {
-		t.Fatalf("me = %d %v", code, me)
-	}
-	if got := s.Tokens[len(s.Tokens)-1]; got != Token {
-		t.Fatalf("recorded token = %q", got)
-	}
-	if !strings.HasPrefix(s.Seen[0], "GET /api/me") {
-		t.Fatalf("seen = %v", s.Seen)
-	}
-	if code, _, _ := call(t, s, "GET", "/api/nowhere", Token); code != 404 {
-		t.Fatalf("unknown route = %d", code)
-	}
+// seed is a small space: a root with two live children, one archived child, one
+// the account may not read, and a page in another space.
+func seed(t *testing.T) *wikifake.Server {
+	t.Helper()
+	f := wikifake.New()
+	t.Cleanup(f.Close)
+	f.Put(wikifake.Page{ID: "it_root", Key: "SVC-1", Space: "SVC", Title: "Services"})
+	f.Put(wikifake.Page{ID: "it_vpn", Key: "SVC-2", Space: "SVC", Parent: "it_root", Title: "VPN access",
+		Labels: []string{"network"}, Properties: map[string]any{"owner": "net"},
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Ask the desk.",
+			Marks: []wikifake.Mark{{Type: "secret", Start: 0, End: 3}}}},
+		ReadRestriction: []string{"u_atlas"}, Held: true, State: "approved"})
+	f.Put(wikifake.Page{ID: "it_mail", Key: "SVC-3", Space: "SVC", Parent: "it_root", Title: "Mailbox"})
+	f.Put(wikifake.Page{ID: "it_old", Key: "SVC-4", Space: "SVC", Parent: "it_root", Title: "Fax", Presence: "archived"})
+	f.Put(wikifake.Page{ID: "it_hidden", Key: "SVC-5", Space: "SVC", Parent: "it_root", Title: "VPN admin", Unreadable: true})
+	f.Put(wikifake.Page{ID: "it_other", Key: "OPS-1", Space: "OPS", Parent: "it_root", Title: "Runbook"})
+	return f
 }
 
-func TestTheFakeReportsTheAccountsStanding(t *testing.T) {
-	s := newFake(t)
-	s.Set(func(s *Server) {
-		s.Scope, s.Admin, s.System = "write", true, []string{"admin"}
-		s.Spaces = append(s.Spaces, Grant{Space: "HR", Role: "admin", Via: "group"})
-	})
-	_, me, _ := call(t, s, "GET", "/api/me", Token)
-	if me["scope"] != "write" || me["admin"] != true {
-		t.Fatalf("me = %v", me)
+// TestTheFakeRefusesWhatTheSourceRefuses: no token, a wrong token, an outage and
+// a redirect each answer before any route is read, as the source's front door does.
+func TestTheFakeRefusesWhatTheSourceRefuses(t *testing.T) {
+	f := seed(t)
+	if status, _ := call(t, f, http.MethodGet, "/api/me", "", nil); status != http.StatusUnauthorized {
+		t.Errorf("no token: status %d, want 401", status)
 	}
-	_, roles, _ := call(t, s, "GET", "/api/me/roles", Token)
-	if sys, _ := roles["system"].([]any); len(sys) != 1 || sys[0] != "admin" {
-		t.Fatalf("system = %v", roles["system"])
+	if status, _ := call(t, f, http.MethodGet, "/api/me", "wrong", nil); status != http.StatusUnauthorized {
+		t.Errorf("wrong token: status %d, want 401", status)
 	}
-	if sp, _ := roles["spaces"].([]any); len(sp) != 2 {
-		t.Fatalf("spaces = %v", roles["spaces"])
+	if got := f.Tokens; !reflect.DeepEqual(got, []string{"", "wrong"}) {
+		t.Errorf("Tokens = %q, want both presented tokens recorded", got)
 	}
-	// A source without the roles query answers 404, which an adapter must read as
-	// a fact it could not establish.
-	s.Set(func(s *Server) { s.RolesMissing = true })
-	if code, _, _ := call(t, s, "GET", "/api/me/roles", Token); code != 404 {
-		t.Fatalf("missing roles = %d", code)
+	f.Set(func(s *wikifake.Server) { s.Down = true })
+	if status := get(t, f, "/api/me", nil); status != http.StatusServiceUnavailable {
+		t.Errorf("down: status %d, want 503", status)
+	}
+	f.Set(func(s *wikifake.Server) { s.Down = false; s.Redirect = "https://elsewhere.example" })
+	status, _ := call(t, f, http.MethodGet, "/api/me", wikifake.Token, nil)
+	if status != http.StatusFound {
+		t.Errorf("redirect: status %d, want 302", status)
+	}
+	f.Set(func(s *wikifake.Server) { s.Redirect = "" })
+	if status := get(t, f, "/api/nowhere", nil); status != http.StatusNotFound {
+		t.Errorf("unknown route: status %d, want 404", status)
+	}
+	if !strings.HasPrefix(f.URL(), "https://") || !strings.HasSuffix(f.URL(), f.Host()) {
+		t.Errorf("URL %q and Host %q disagree", f.URL(), f.Host())
+	}
+	if len(f.Seen) != 5 || f.Seen[0] != "GET /api/me" {
+		t.Errorf("Seen = %q, want every request recorded in order", f.Seen)
 	}
 }
 
-func TestTheFakeCanBeDownOrRedirectAway(t *testing.T) {
-	s := newFake(t)
-	s.Set(func(s *Server) { s.Down = true })
-	if code, _, _ := call(t, s, "GET", "/api/me", Token); code != http.StatusServiceUnavailable {
-		t.Fatalf("down = %d", code)
+func TestTheAccountReportsItsStanding(t *testing.T) {
+	f := seed(t)
+	var me struct {
+		User  map[string]string `json:"user"`
+		Scope string            `json:"scope"`
+		Admin bool              `json:"admin"`
 	}
-	s.Set(func(s *Server) { s.Down, s.Redirect = false, "https://elsewhere.example" })
-	req, _ := http.NewRequest("GET", s.URL()+"/api/me", nil)
-	client := s.TS.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	res, err := client.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	if status := get(t, f, "/api/me", &me); status != 200 || me.User["id"] != "u_atlas" || me.Scope != "read" || me.Admin {
+		t.Errorf("me = %d %+v, want the read-scope viewer New starts with", status, me)
 	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusFound || res.Header.Get("Location") != "https://elsewhere.example/api/me" {
-		t.Fatalf("redirect = %d %s", res.StatusCode, res.Header.Get("Location"))
+	f.Set(func(s *wikifake.Server) { s.System = []string{"auditor"} })
+	var roles struct {
+		System []string         `json:"system"`
+		Spaces []wikifake.Grant `json:"spaces"`
 	}
-	if !strings.HasPrefix(s.URL(), "https://") || !strings.Contains(s.URL(), s.Host()) {
-		t.Fatalf("URL %q, host %q", s.URL(), s.Host())
+	if status := get(t, f, "/api/me/roles", &roles); status != 200 ||
+		!reflect.DeepEqual(roles.System, []string{"auditor"}) || len(roles.Spaces) != 1 || roles.Spaces[0].Space != "SVC" {
+		t.Errorf("roles = %d %+v", status, roles)
+	}
+	f.Set(func(s *wikifake.Server) { s.RolesMissing = true })
+	if status := get(t, f, "/api/me/roles", nil); status != http.StatusNotFound {
+		t.Errorf("roles missing: status %d, want 404", status)
 	}
 }
 
-func TestAnItemAnswersItsFactsAndOmitsWhatItDoesNotHave(t *testing.T) {
-	s := newFake(t)
-	code, out, _ := call(t, s, "GET", "/api/items/SVC-2", Token)
-	item, _ := out["item"].(map[string]any)
-	if code != 200 || item["id"] != "it_a" || item["parent"] != "it_root" || item["state"] != "published" ||
-		item["presence"] != "live" || item["version"] != float64(1) {
-		t.Fatalf("by key = %d %v", code, out)
+type itemAnswer struct {
+	Item     map[string]any `json:"item"`
+	Editable bool           `json:"editable"`
+}
+
+// TestAnItemCarriesOnlyWhatItHas: restriction, hold, parent and state appear only
+// when the page has them, an unreadable page is a 404 by id and by key, and a
+// read token may not change anything.
+func TestAnItemCarriesOnlyWhatItHas(t *testing.T) {
+	f := seed(t)
+	var full itemAnswer
+	if status := get(t, f, "/api/items/SVC-2", &full); status != 200 {
+		t.Fatalf("by key: status %d", status)
 	}
-	if _, has := item["restriction"]; has {
-		t.Error("an unrestricted item carries a restriction")
+	it := full.Item
+	if it["id"] != "it_vpn" || it["parent"] != "it_root" || it["state"] != "approved" || it["presence"] != "live" || full.Editable {
+		t.Errorf("item = %v", it)
 	}
-	if _, has := item["hold"]; has {
-		t.Error("an item with no hold carries one")
+	if it["version"] != float64(1) {
+		t.Errorf("version = %v, want the default 1", it["version"])
 	}
-	body, _ := item["body"].([]any)
-	if blk, _ := body[0].(map[string]any); blk["marks"] == nil {
-		t.Errorf("marks lost: %v", body)
+	restriction, _ := it["restriction"].(map[string]any)
+	if !reflect.DeepEqual(restriction["read"], []any{"u_atlas"}) || !reflect.DeepEqual(restriction["edit"], []any{}) {
+		t.Errorf("restriction = %v, want read named and edit empty", it["restriction"])
 	}
-	_, out, _ = call(t, s, "GET", "/api/items/it_b", Token)
-	item, _ = out["item"].(map[string]any)
-	r, _ := item["restriction"].(map[string]any)
-	if r == nil || len(r["read"].([]any)) != 1 || len(r["edit"].([]any)) != 0 || item["hold"] == nil {
-		t.Fatalf("restricted, held = %v", item)
+	if _, ok := it["hold"]; !ok {
+		t.Error("a held page reports its hold")
 	}
-	if lbl, _ := item["labels"].([]any); lbl == nil {
-		t.Error("labels are null rather than empty")
+	body, _ := it["body"].([]any)
+	if len(body) != 1 || body[0].(map[string]any)["marks"] == nil {
+		t.Errorf("body = %v, want the block with its mark", it["body"])
 	}
-	_, out, _ = call(t, s, "GET", "/api/items/it_quiet", Token)
-	if _, has := out["item"].(map[string]any)["presence"]; has {
-		t.Error("an item whose source reports no presence carries one")
-	}
-	// Unreadable is non-existent, by id and by key alike.
-	for _, ref := range []string{"it_gone", "SVC-4", "nothing"} {
-		if code, _, _ := call(t, s, "GET", "/api/items/"+ref, Token); code != 404 {
-			t.Errorf("%s = %d", ref, code)
+
+	var bare itemAnswer
+	get(t, f, "/api/items/it_mail", &bare)
+	for _, key := range []string{"restriction", "hold", "state"} {
+		if _, ok := bare.Item[key]; ok {
+			t.Errorf("a plain page carries %q: %v", key, bare.Item)
 		}
 	}
-	if code, _, _ := call(t, s, "GET", "/api/items/it_a/unknown", Token); code != 404 {
-		t.Errorf("unknown item route = %d", code)
+	if !reflect.DeepEqual(bare.Item["labels"], []any{}) || !reflect.DeepEqual(bare.Item["properties"], map[string]any{}) {
+		t.Errorf("labels/properties = %v / %v, want empty, not null", bare.Item["labels"], bare.Item["properties"])
 	}
-}
 
-func TestAReadTokenMayNotChangeContent(t *testing.T) {
-	s := newFake(t)
-	for _, m := range []string{"POST", "PUT", "PATCH", "DELETE"} {
-		if code, _, _ := call(t, s, m, "/api/items/it_a", Token); code != http.StatusForbidden {
-			t.Errorf("%s = %d", m, code)
+	f.Put(wikifake.Page{ID: "it_quiet", Key: "SVC-6", Space: "SVC", Title: "Quiet", OmitPresence: true})
+	var quiet itemAnswer
+	get(t, f, "/api/items/it_quiet", &quiet)
+	if _, ok := quiet.Item["presence"]; ok {
+		t.Errorf("OmitPresence still reports presence: %v", quiet.Item)
+	}
+
+	for _, ref := range []string{"it_hidden", "SVC-5", "missing"} {
+		if status := get(t, f, "/api/items/"+ref, nil); status != http.StatusNotFound {
+			t.Errorf("%s: status %d, want 404", ref, status)
 		}
 	}
-}
-
-func TestEditBumpsTheVersion(t *testing.T) {
-	s := newFake(t)
-	s.Edit("it_a", func(p *Page) { p.Title = "VPN neu" })
-	_, out, _ := call(t, s, "GET", "/api/items/it_a", Token)
-	if it := out["item"].(map[string]any); it["version"] != float64(2) || it["title"] != "VPN neu" {
-		t.Fatalf("edited = %v", it)
+	if status, _ := call(t, f, http.MethodPost, "/api/items/it_mail", wikifake.Token, nil); status != http.StatusForbidden {
+		t.Errorf("POST with a read token: status %d, want 403", status)
 	}
-	// Put replaces a page and keeps its place among its siblings.
-	s.Put(Page{ID: "it_a", Key: "SVC-2", Space: "SVC", Parent: "it_root", Title: "VPN", Version: 7})
-	_, out, _ = call(t, s, "GET", "/api/items/it_a", Token)
-	if it := out["item"].(map[string]any); it["version"] != float64(7) {
-		t.Fatalf("replaced = %v", it)
+	if status := get(t, f, "/api/items/it_mail/history", nil); status != http.StatusNotFound {
+		t.Errorf("unknown item route: status %d, want 404", status)
 	}
 }
 
-func TestAttachmentsAreListedAndServedAsTheyWere(t *testing.T) {
-	s := newFake(t)
-	s.Attach("it_a", Attachment{ID: "att_1", Name: "logo.png", Type: "image/png", Data: []byte("PNG")})
-	_, out, _ := call(t, s, "GET", "/api/items/it_a/attachments", Token)
-	list, _ := out["attachments"].([]any)
-	if len(list) != 1 || list[0].(map[string]any)["size"] != float64(3) {
-		t.Fatalf("attachments = %v", out)
+func TestAttachmentsAreListedAndServed(t *testing.T) {
+	f := seed(t)
+	f.Attach("it_vpn", wikifake.Attachment{ID: "at_1", Name: "guide.pdf", Type: "application/pdf", Data: []byte("%PDF-1")})
+	var list struct {
+		Attachments []map[string]any `json:"attachments"`
 	}
-	code, _, raw := call(t, s, "GET", "/api/items/it_a/attachments/att_1", Token)
-	if code != 200 || string(raw) != "PNG" {
-		t.Fatalf("file = %d %q", code, raw)
+	if status := get(t, f, "/api/items/it_vpn/attachments", &list); status != 200 ||
+		len(list.Attachments) != 1 || list.Attachments[0]["name"] != "guide.pdf" || list.Attachments[0]["size"] != float64(6) {
+		t.Errorf("attachments = %d %v", status, list.Attachments)
 	}
-	if code, _, _ := call(t, s, "GET", "/api/items/it_a/attachments/att_9", Token); code != 404 {
-		t.Fatalf("missing file = %d", code)
+	status, data := call(t, f, http.MethodGet, "/api/items/it_vpn/attachments/at_1", wikifake.Token, nil)
+	if status != 200 || string(data) != "%PDF-1" {
+		t.Errorf("file = %d %q, want the attached bytes", status, data)
 	}
-	_, out, _ = call(t, s, "GET", "/api/items/it_b/attachments", Token)
-	if list, _ := out["attachments"].([]any); list == nil || len(list) != 0 {
-		t.Fatalf("no attachments = %v", out)
+	if status := get(t, f, "/api/items/it_vpn/attachments/at_2", nil); status != http.StatusNotFound {
+		t.Errorf("missing file: status %d, want 404", status)
 	}
 }
 
-func TestATreeListsLiveReadableChildrenInPages(t *testing.T) {
-	s := newFake(t)
-	for _, id := range []string{"it_c", "it_d"} {
-		s.Put(Page{ID: id, Key: id, Space: "SVC", Parent: "it_root", Title: id})
+// TestTheTreeListsLiveReadableChildrenInPages: only live, readable pages of the
+// asked space, in sibling order, with a cursor until the last page.
+func TestTheTreeListsLiveReadableChildrenInPages(t *testing.T) {
+	f := seed(t)
+	type tree struct {
+		Items []map[string]any `json:"items"`
+		Next  string           `json:"next"`
+		Total map[string]any   `json:"total"`
 	}
-	s.Put(Page{ID: "it_other", Space: "HR", Parent: "it_root", Title: "elsewhere"})
-	ids := func(out map[string]any) []string {
-		var r []string
-		for _, it := range out["items"].([]any) {
-			r = append(r, it.(map[string]any)["id"].(string))
-		}
-		return r
+	var first tree
+	if status := get(t, f, "/api/spaces/SVC/tree?parent=SVC-1&limit=1", &first); status != 200 {
+		t.Fatalf("tree: status %d", status)
 	}
-	_, out, _ := call(t, s, "GET", "/api/spaces/SVC/tree?parent=SVC-1", Token)
-	if got := strings.Join(ids(out), ","); got != "it_a,it_b,it_c,it_d" {
-		t.Fatalf("children = %s (unreadable, trashed and another space's are left out)", got)
+	if len(first.Items) != 1 || first.Items[0]["id"] != "it_vpn" || first.Next != "it_vpn" || first.Total["value"] != float64(2) {
+		t.Errorf("first page = %+v, want it_vpn and a cursor over two children", first)
 	}
-	_, out, _ = call(t, s, "GET", "/api/spaces/SVC/tree?parent=it_root&limit=2", Token)
-	if got := strings.Join(ids(out), ","); got != "it_a,it_b" || out["next"] != "it_b" {
-		t.Fatalf("first page = %s next %v", got, out["next"])
+	var second tree
+	get(t, f, "/api/spaces/SVC/tree?parent=it_root&limit=1&after=it_vpn", &second)
+	if len(second.Items) != 1 || second.Items[0]["id"] != "it_mail" || second.Next != "" {
+		t.Errorf("second page = %+v, want it_mail and no cursor", second)
 	}
-	_, out, _ = call(t, s, "GET", "/api/spaces/SVC/tree?parent=it_root&limit=2&after=it_b", Token)
-	if got := strings.Join(ids(out), ","); got != "it_c,it_d" || out["next"] != nil {
-		t.Fatalf("second page = %s next %v", got, out["next"])
+	var all tree
+	get(t, f, "/api/spaces/SVC/tree?parent=it_root", &all)
+	if len(all.Items) != 2 {
+		t.Errorf("default limit = %+v, want both live readable children", all.Items)
 	}
-	_, out, _ = call(t, s, "GET", "/api/spaces/SVC/tree?parent=it_d", Token)
-	if items, _ := out["items"].([]any); items == nil || len(items) != 0 {
-		t.Fatalf("a leaf = %v", out)
+	var none tree
+	get(t, f, "/api/spaces/SVC/tree?parent=it_mail", &none)
+	if none.Items == nil || len(none.Items) != 0 {
+		t.Errorf("a leaf lists %v, want an empty list, not null", none.Items)
 	}
-	if code, _, _ := call(t, s, "GET", "/api/spaces/SVC/tree?parent=it_gone", Token); code != 404 {
-		t.Fatalf("tree under an unreadable page = %d", code)
-	}
-}
-
-func TestSearchFindsOnlyReadablePages(t *testing.T) {
-	s := newFake(t)
-	_, out, _ := call(t, s, "GET", "/api/search?q=E", Token)
-	var titles []string
-	for _, h := range out["hits"].([]any) {
-		titles = append(titles, h.(map[string]any)["item"].(map[string]any)["title"].(string))
-	}
-	// Case-insensitive, in the source's order, and never the unreadable "Gone".
-	if got := strings.Join(titles, ","); got != "Services,Quiet" {
-		t.Fatalf("hits = %s", got)
-	}
-	_, out, _ = call(t, s, "GET", "/api/search?q=zzz", Token)
-	if hits, _ := out["hits"].([]any); hits == nil || len(hits) != 0 {
-		t.Fatalf("no hits = %v", out)
+	if status := get(t, f, "/api/spaces/SVC/tree?parent=it_hidden", nil); status != http.StatusNotFound {
+		t.Errorf("unreadable parent: status %d, want 404", status)
 	}
 }
 
-func TestAWatchEndsByIdEvenOnAPageNoLongerReadable(t *testing.T) {
-	s := newFake(t)
-	if code, out, _ := call(t, s, "PUT", "/api/items/SVC-2/watch", Token); code != 200 || out["watching"] != true {
-		t.Fatalf("watch by key = %d %v", code, out)
+func TestSearchMatchesReadableTitles(t *testing.T) {
+	f := seed(t)
+	var res struct {
+		Hits []struct {
+			Item map[string]any `json:"item"`
+		} `json:"hits"`
 	}
-	call(t, s, "PUT", "/api/items/it_b/watch", Token)
-	if code, _, _ := call(t, s, "PUT", "/api/items/it_gone/watch", Token); code != 404 {
-		t.Fatalf("watching an unreadable page = %d", code)
+	if status := get(t, f, "/api/search?q=vpn", &res); status != 200 {
+		t.Fatalf("search: status %d", status)
 	}
-	if got := strings.Join(s.Watched(), ","); got != "it_a,it_b" {
-		t.Fatalf("watched = %s", got)
-	}
-	s.Edit("it_b", func(p *Page) { p.Unreadable = true })
-	if code, out, _ := call(t, s, "DELETE", "/api/items/it_b/watch", Token); code != 200 || out["watching"] != false {
-		t.Fatalf("unwatch an unreadable page by id = %d %v", code, out)
-	}
-	if code, _, _ := call(t, s, "DELETE", "/api/items/it_b/watch", Token); code != 404 {
-		t.Fatalf("unwatch twice = %d", code)
-	}
-	if got := strings.Join(s.Watched(), ","); got != "it_a" {
-		t.Fatalf("watched = %s", got)
+	if len(res.Hits) != 1 || res.Hits[0].Item["id"] != "it_vpn" {
+		t.Errorf("hits = %v, want VPN access and not the unreadable VPN admin", res.Hits)
 	}
 }
 
+func TestWatchesStartOnReadablePagesAndEndById(t *testing.T) {
+	f := seed(t)
+	var ans map[string]bool
+	if status, _ := call(t, f, http.MethodPut, "/api/items/SVC-3/watch", wikifake.Token, &ans); status != 200 || !ans["watching"] {
+		t.Errorf("watch by key = %d %v", status, ans)
+	}
+	call(t, f, http.MethodPut, "/api/items/it_vpn/watch", wikifake.Token, nil)
+	if got := f.Watched(); !reflect.DeepEqual(got, []string{"it_mail", "it_vpn"}) {
+		t.Errorf("Watched = %q, want the ids, sorted", got)
+	}
+	if status, _ := call(t, f, http.MethodPut, "/api/items/it_hidden/watch", wikifake.Token, nil); status != http.StatusNotFound {
+		t.Errorf("watch unreadable: status %d, want 404", status)
+	}
+	f.Edit("it_vpn", func(p *wikifake.Page) { p.Unreadable = true })
+	if status, _ := call(t, f, http.MethodDelete, "/api/items/it_vpn/watch", wikifake.Token, &ans); status != 200 || ans["watching"] {
+		t.Errorf("unwatch a page that became unreadable = %d %v, want it ended", status, ans)
+	}
+	if status, _ := call(t, f, http.MethodDelete, "/api/items/it_vpn/watch", wikifake.Token, nil); status != http.StatusNotFound {
+		t.Errorf("unwatch twice: status %d, want 404", status)
+	}
+}
+
+type feedAnswer struct {
+	Changes []struct {
+		Seq  int64  `json:"seq"`
+		Item string `json:"item"`
+	} `json:"changes"`
+	Last int64 `json:"last"`
+}
+
+// TestTheFeedNamesOnlyWhatTheAccountMayRead: a watched readable page is named, a
+// watched unreadable one and an account change are "", an unwatched page writes
+// nothing, and Edit bumps the version as it writes its entry.
 func TestTheFeedNamesOnlyWhatTheAccountMayRead(t *testing.T) {
-	s := newFake(t)
-	call(t, s, "PUT", "/api/items/it_a/watch", Token)
-	call(t, s, "PUT", "/api/items/it_b/watch", Token)
-	_, out, _ := call(t, s, "GET", "/api/changes", Token)
-	if out["last"] != float64(0) || len(out["changes"].([]any)) != 0 {
-		t.Fatalf("position = %v", out)
+	f := seed(t)
+	var start feedAnswer
+	get(t, f, "/api/changes", &start)
+	if start.Last != 0 || start.Changes == nil || len(start.Changes) != 0 {
+		t.Fatalf("start = %+v, want no changes and last 0", start)
 	}
-	s.Touch("it_root") // not watched: no entry
-	s.Edit("it_a", func(p *Page) { p.Title = "VPN 2" })
-	s.Edit("it_b", func(p *Page) { p.Unreadable = true })
-	s.TouchAccount()
-	_, out, _ = call(t, s, "GET", "/api/changes?after=0", Token)
-	changes := out["changes"].([]any)
-	if len(changes) != 3 || out["last"] != float64(3) {
-		t.Fatalf("changes = %v", out)
-	}
+	call(t, f, http.MethodPut, "/api/items/it_mail/watch", wikifake.Token, nil)
+	call(t, f, http.MethodPut, "/api/items/it_vpn/watch", wikifake.Token, nil)
+	f.Touch("it_root") // not watched: no entry
+	f.Edit("it_mail", func(p *wikifake.Page) { p.Title = "Mailbox (new)" })
+	f.Edit("it_vpn", func(p *wikifake.Page) { p.Unreadable = true })
+	f.TouchAccount()
+
+	var got feedAnswer
+	get(t, f, "/api/changes?after=0", &got)
 	items := []string{}
-	for _, c := range changes {
-		items = append(items, c.(map[string]any)["item"].(string))
+	for _, c := range got.Changes {
+		items = append(items, c.Item)
 	}
-	if strings.Join(items, "|") != "it_a||" {
-		t.Fatalf("items = %q: an unreadable page and the account's roles name no item", items)
+	if !reflect.DeepEqual(items, []string{"it_mail", "", ""}) || got.Last != 3 {
+		t.Errorf("feed = %q last %d, want it_mail then two unnamed entries", items, got.Last)
 	}
-	_, out, _ = call(t, s, "GET", "/api/changes?after=3", Token)
-	if c, _ := out["changes"].([]any); c == nil || len(c) != 0 {
-		t.Fatalf("nothing new = %v", out)
+	var item itemAnswer
+	get(t, f, "/api/items/it_mail", &item)
+	if item.Item["version"] != float64(2) || item.Item["title"] != "Mailbox (new)" {
+		t.Errorf("edited item = %v, want version 2 with the new title", item.Item)
 	}
-}
-
-func TestTheFeedWaitsForAChangeOrItsDeadline(t *testing.T) {
-	s := newFake(t)
-	call(t, s, "PUT", "/api/items/it_a/watch", Token)
-	got := make(chan map[string]any, 1)
-	go func() {
-		_, out, _ := call(t, s, "GET", "/api/changes?after=0&wait=10", Token)
-		got <- out
-	}()
-	// Touch until the waiting request has seen an entry: one appended before the
-	// request starts is answered at once, one after wakes it.
-	deadline := time.After(10 * time.Second)
-	s.Touch("it_a")
-	select {
-	case out := <-got:
-		if len(out["changes"].([]any)) == 0 {
-			t.Fatalf("woken with nothing: %v", out)
-		}
-	case <-deadline:
-		t.Fatal("the feed never answered")
-	}
-	// A wait with no change ends at its deadline with an empty delivery.
-	start := time.Now()
-	_, out, _ := call(t, s, "GET", "/api/changes?after=1&wait=1", Token)
-	if c, _ := out["changes"].([]any); len(c) != 0 || time.Since(start) < 900*time.Millisecond {
-		t.Fatalf("deadline = %v after %v", out, time.Since(start))
+	var later feedAnswer
+	get(t, f, "/api/changes?after=3", &later)
+	if later.Changes == nil || len(later.Changes) != 0 || later.Last != 3 {
+		t.Errorf("caught-up feed = %+v, want an empty list", later)
 	}
 }
 
-func TestTheFeedWakesAWaitingReader(t *testing.T) {
-	s := newFake(t)
-	call(t, s, "PUT", "/api/items/it_a/watch", Token)
-	got := make(chan map[string]any, 1)
+// TestTheFeedWaitsForAChange: a long poll returns as soon as an entry is written,
+// returns empty once its wait runs out, and ends when the caller gives up.
+func TestTheFeedWaitsForAChange(t *testing.T) {
+	f := seed(t)
+	call(t, f, http.MethodPut, "/api/items/it_mail/watch", wikifake.Token, nil)
 	go func() {
-		_, out, _ := call(t, s, "GET", "/api/changes?after=0&wait=20", Token)
-		got <- out
+		time.Sleep(50 * time.Millisecond)
+		f.Touch("it_mail")
 	}()
-	// Wait until the request is in the fake, then change the page.
-	for i := 0; i < 500; i++ {
-		s.mu.Lock()
-		n := len(s.Seen)
-		s.mu.Unlock()
-		if n >= 2 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
+	var woke feedAnswer
+	get(t, f, "/api/changes?after=0&wait=10", &woke)
+	if len(woke.Changes) != 1 || woke.Changes[0].Item != "it_mail" {
+		t.Errorf("woken feed = %+v, want the entry written while it waited", woke)
 	}
-	time.Sleep(50 * time.Millisecond)
-	s.Edit("it_a", func(p *Page) { p.Title = "woken" })
-	select {
-	case out := <-got:
-		if len(out["changes"].([]any)) != 1 {
-			t.Fatalf("woken = %v", out)
-		}
-	case <-time.After(15 * time.Second):
-		t.Fatal("a change did not wake the waiting reader")
+
+	began := time.Now()
+	var empty feedAnswer
+	get(t, f, "/api/changes?after=1&wait=1", &empty)
+	if len(empty.Changes) != 0 || time.Since(began) < 900*time.Millisecond {
+		t.Errorf("timed-out feed = %+v after %v, want empty after its wait", empty, time.Since(began))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, f.URL()+"/api/changes?after=1&wait=10", nil)
+	req.Header.Set("Authorization", "Bearer "+wikifake.Token)
+	if res, err := f.TS.Client().Do(req); err == nil {
+		res.Body.Close()
+		t.Error("a poll the caller abandoned answered anyway")
 	}
 }

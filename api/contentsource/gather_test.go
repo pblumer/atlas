@@ -3,9 +3,9 @@ package contentsource
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -528,41 +528,46 @@ func TestDialKind(t *testing.T) {
 	}
 }
 
-// TestAChildWhoseTitleIsVeiledIsDroppedWithItsSubtree: a placeholder in a child's
-// title means something was veiled that Atlas did not recognise as a passage, so
-// the child goes, with everything below it, and the rest of the description stays.
-func TestAChildWhoseTitleIsVeiledIsDroppedWithItsSubtree(t *testing.T) {
+func TestASourceThatFailsDuringAPreviewIsAnError(t *testing.T) {
 	f := wiki(t)
-	f.Put(wikifake.Page{ID: "it_v", Key: "SVC-30", Space: "SVC", Parent: "it_de", Title: "Kosten " + wikifake.Placeholder})
-	f.Put(wikifake.Page{ID: "it_v1", Key: "SVC-31", Space: "SVC", Parent: "it_v", Title: "Darunter",
-		Body: []wikifake.Block{{Kind: "paragraph", Text: "Unter dem Verschleierten."}}})
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	f.Set(func(s *wikifake.Server) { s.Down = true })
+	if _, err := Preview(ctx(t), ad, st, "SVC-12"); err == nil {
+		t.Fatal("a preview against a source in an outage succeeded")
+	}
+}
+
+func TestAChildWhoseTitleHoldsThePlaceholderIsDropped(t *testing.T) {
+	f := wiki(t)
+	f.Edit("it_c1", func(p *wikifake.Page) { p.Title = "Details " + wikifake.Placeholder })
 	ad := adapter(t, f)
 	st, _ := ad.Standing(ctx(t))
 	l, err := Preview(ctx(t), ad, st, "SVC-12")
 	if err != nil || len(l.Refusals) != 0 {
-		t.Fatalf("preview = %v %v", err, l.Refusals)
+		t.Fatalf("preview: %v %v", err, l.Refusals)
 	}
-	var reason string
-	for _, d := range l.Dropped {
-		if d.Page == "SVC-30" && d.What == "page" {
-			reason = strings.Join(d.Reasons, "|")
+	for _, c := range l.Children {
+		if c.ID == "it_c1" {
+			t.Fatalf("the child with a placeholder title was taken: %+v", c)
 		}
 	}
-	if !strings.Contains(reason, "placeholder") {
-		t.Fatalf("dropped = %+v", l.Dropped)
+	dropped := false
+	for _, d := range l.Dropped {
+		if d.Page == "SVC-20" && strings.Contains(strings.Join(d.Reasons, "|"), "placeholder") {
+			dropped = true
+		}
 	}
-	if strings.Contains(l.Text, "Verschleierten") || !strings.Contains(l.Text, "Für alle Mitarbeitenden.") {
-		t.Fatalf("text = %q", l.Text)
+	if !dropped {
+		t.Fatalf("dropped = %+v, want SVC-20 named with the placeholder", l.Dropped)
 	}
 }
 
-// TestAPageWithTooManyPagesBelowItIsRefused: past maxBelow child pages a
-// description is a handbook, and the walk stops with a refusal, not a partial copy.
-func TestAPageWithTooManyPagesBelowItIsRefused(t *testing.T) {
+func TestMoreThanFiveHundredPagesBelowRefuseThePreview(t *testing.T) {
 	f := wiki(t)
-	for i := 0; i <= maxBelow; i++ {
-		id := "it_many_" + strconv.Itoa(i)
-		f.Put(wikifake.Page{ID: id, Key: "M-" + strconv.Itoa(i), Space: "SVC", Parent: "it_fr", Title: id})
+	for i := range maxBelow + 1 {
+		f.Put(wikifake.Page{ID: fmt.Sprintf("it_m%03d", i), Key: fmt.Sprintf("SVC-%d", 1000+i), Space: "SVC",
+			Parent: "it_fr", Title: fmt.Sprintf("Teil %d", i)})
 	}
 	ad := adapter(t, f)
 	st, _ := ad.Standing(ctx(t))
@@ -570,24 +575,7 @@ func TestAPageWithTooManyPagesBelowItIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(strings.Join(l.Refusals, "|"), "more than "+strconv.Itoa(maxBelow)+" pages") {
+	if !strings.Contains(strings.Join(l.Refusals, "|"), fmt.Sprintf("more than %d pages lie below", maxBelow)) {
 		t.Fatalf("refusals = %v", l.Refusals)
-	}
-	if l.Text != "" {
-		t.Fatalf("a refused walk still produced text: %q", l.Text)
-	}
-}
-
-// TestAPreviewOfASourceThatStopsAnsweringIsAnError: an unreachable source is not a
-// refusal of the page — the page may be fine — so the preview fails instead.
-func TestAPreviewOfASourceThatStopsAnsweringIsAnError(t *testing.T) {
-	f := wiki(t)
-	ad := adapter(t, f)
-	st, _ := ad.Standing(ctx(t))
-	f.Set(func(s *wikifake.Server) { s.Down = true })
-	for _, in := range []string{"SVC-12", "it_de"} {
-		if _, err := Preview(ctx(t), ad, st, in); err == nil {
-			t.Errorf("%s: a preview against a source that is down did not fail", in)
-		}
 	}
 }

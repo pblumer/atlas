@@ -424,8 +424,7 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request, space string) {
 	if start+limit < len(all) {
 		res["next"] = page[len(page)-1]["id"]
 	}
-	// An empty page is an empty list, as the source answers it: res["items"] holds
-	// a typed nil slice here, which an interface comparison with nil never catches.
+	// A nil page slice is a non-nil interface value, so test the slice itself.
 	if len(page) == 0 {
 		res["items"] = []any{}
 	}
