@@ -3,11 +3,11 @@
   "name": "Identity-aware Execution",
   "summary": "Govern external Worker actions through explicit identities, managed Connections, versioned authorization policies, obligations, durable pre-effect decisions and attributable audit evidence; provider enforcement is verified per execution mode, never assumed.",
   "status": "active",
-  "owner": "unassigned (maintainer assignment required)",
-  "last_reviewed": "2026-10-25",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-26",
   "plan": "../../planning/identity-aware-execution-program.md",
   "milestone": "../../../ROADMAP.md#milestone-iae--identity-aware-execution-",
-  "next_action": "Assign a human programme owner; review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice.",
+  "next_action": "Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice.",
   "slices": [
     {
       "id": "IAE0",

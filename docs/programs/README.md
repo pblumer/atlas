@@ -10,20 +10,20 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 0/9 | pblumer | Bring digest PR #1360 up to date with main and decide its canonical JSON profile and the implementation digest of built-in Worker Types; configure CODEOWNERS and branch protection before the first evidence record; decide ADR-0480 and ADR-0485 so CDA0/CDA1 can close (three slices are active against the default WIP limit of two); review the proposed controlled Worker-rebinding decision for CDA8 (PR #1355). |
-| [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | unassigned (maintainer assignment required) | Assign a human programme owner; review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Rework digest PR #1360 to SHA-256 over the exact LF file bytes and add the dependency digest of built-in Worker Types (ADR-0483); configure branch protection on main with code-owner review before the first evidence record, whose PR adds CODEOWNERS for the evidence path; then evidence records with same-PR renewal enforced in CI. |
+| [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
 ## Capability-driven Automation (CDA)
 
 Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.
 
-**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-25**
+**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-26**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **CDA0** — Declarative operation claims | active | unassigned | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | PR #1343 merged; ADR-0480 remains Proposed/Partial. Review architecture approval and completion evidence before closing. |
-| **CDA1** — Semantic contract envelope | active | unassigned | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | PR #1346 merged the exact technical-contract envelope on main; ADR-0485 remains Proposed/Partial, so no provider conformance or completed-slice claim. |
-| **CDA2** — Contract governance and conformance | active | unassigned | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [PR #1360](https://github.com/pblumer/atlas/pull/1360), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3). CDA2a schema-only validation merged in PR #1357; content digests PR #1360 in review. Independent operation/package-bound evidence, reviewer approval, revocation and publication are not yet implemented; no Worker is verified. |
+| **CDA0** — Declarative operation claims | complete | pblumer | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | Complete: PR #1343 merged; ADR-0480 Accepted (2026-10-26). Claims stay descriptive and never authorize; one claim per contract id@version per operation, deliberately.; [Evidence 1](../../workertype/capability_test.go), [Evidence 2](../adr/0480-technical-capability-contract.md) |
+| **CDA1** — Semantic contract envelope | complete | pblumer | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Complete: PR #1346 merged; ADR-0485 Accepted (2026-10-26) with a reservation: contract identity (id, version, profile) and immutability are binding, the v1alpha1 fields may change until the first published contract (CDA3). No provider conformance claim.; [Evidence 1](../../workertype/contract_test.go), [Evidence 2](../adr/0485-technical-capability-semantics.md) |
+| **CDA2** — Contract governance and conformance | active | pblumer | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [PR #1360](https://github.com/pblumer/atlas/pull/1360), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. CDA2a schema-only validation merged in PR #1357; digest PR #1360 in review and to be reworked to raw bytes. Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified. |
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |
@@ -35,7 +35,7 @@ Connect business outcomes to verified technical operation semantics and, only af
 
 Govern external Worker actions through explicit identities, managed Connections, versioned authorization policies, obligations, durable pre-effect decisions and attributable audit evidence; provider enforcement is verified per execution mode, never assumed.
 
-**[Programme plan](../planning/identity-aware-execution-program.md) · [Roadmap track](../../ROADMAP.md#milestone-iae--identity-aware-execution-) · [Manifest](iae/program.json) · Reviewed: 2026-10-25**
+**[Programme plan](../planning/identity-aware-execution-program.md) · [Roadmap track](../../ROADMAP.md#milestone-iae--identity-aware-execution-) · [Manifest](iae/program.json) · Reviewed: 2026-10-26**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
