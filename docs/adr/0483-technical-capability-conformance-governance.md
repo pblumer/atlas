@@ -128,9 +128,13 @@ Decided by the maintainer on 2026-10-26:
   `go.mod` carries the Go version the module declares; the patch release that
   happens to run is left out, because CI and contributors differ in it.
   `internal/impldigest` computes it. Which root packages serve a Worker Type is
-  named in its evidence record and reviewed with it; today every built-in
-  Worker Type's operations run through the shared `worker` package, whose
-  closure reaches every connector. A Worker Type installed as a package
+  named in its evidence record and reviewed with it, and the roots cover every
+  path the Worker Type can run on. Today there are two: a supervised worker runs
+  it through the shared `worker` package, whose closure reaches every
+  connector; the engine runs it through `api`, whose closure is nearly the whole
+  module. Nine built-in Worker Types are worker-only, CloudEvents runs only in
+  the engine, and the other ten run in a supervised worker by default and in the
+  engine under `--in-process-connectors`. A Worker Type installed as a package
   binds to its ADR-0208 package digest once that exists. A build commit was
   rejected: evidence kept in the repository cannot name the commit that
   contains it.

@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-26",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since all of them run through the shared worker package whose closure reaches every connector; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code.",
+  "next_action": "Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since a supervised worker runs it through the worker package, whose closure reaches every connector, and the engine can run eleven of them through api, whose closure is nearly the whole module; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code.",
   "slices": [
     {
       "id": "CDA0",

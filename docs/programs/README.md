@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since all of them run through the shared worker package whose closure reaches every connector; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since a supervised worker runs it through the worker package, whose closure reaches every connector, and the engine can run eleven of them through api, whose closure is nearly the whole module; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
 ## Capability-driven Automation (CDA)
