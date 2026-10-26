@@ -3678,6 +3678,10 @@ function sqlServiceTaskKind(p) {
 // identities the picker and the panel's groups are addressed by. So the words are looked
 // up where they are drawn, under "wt." and the English text, the way lib-translate.js
 // looks up a library's words; a text the catalogue does not carry is shown as written.
+//
+// A field's placeholder is not passed through it: placeholders are example values
+// (https://…, payment, =scimId), and an example word that happens to be a label
+// elsewhere ("Users") must stay what the field expects.
 function kindText(s) {
   if (typeof s !== "string" || !s) return s;
   const key = "wt." + s;
@@ -5746,7 +5750,7 @@ function stKindFieldsHTML(cur, ext) {
       // lower bound, so the field cannot express a value the compiler refuses.
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
-               value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/></label>`;
+               value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
@@ -5758,27 +5762,27 @@ function stKindFieldsHTML(cur, ext) {
       // A markup field: the same textarea the save wiring reads, upgraded to an HTML
       // code editor below (and F2-able into the Developer View, ADR-0145).
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.type === "json") {
       // A JSON field: the same textarea the save wiring reads, upgraded to the JSON
       // editor below (highlighting, validation, auto-format). String values with a
       // leading '=' are FEEL, evaluated per field at runtime (compiled to one context).
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
-        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(kindText(f.placeholder || ""))}">${esc(ext[f.key] || "")}</textarea></label>`;
+        <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.datalist) {
       // A combobox: a free-text field that also offers this server's configured Workers
       // of the kind as a dropdown (populated after render, see the field wiring).
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
-        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/>
+        <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
         <datalist id="dl-st-${f.key}"></datalist></label>`;
     } else {
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
-        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(kindText(f.placeholder || ""))}"/></label>`;
+        <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
     // A hint is usually a static string; an operation-aware field (the Entra result
     // variable, whose shape differs per operation) may give a function of the current
