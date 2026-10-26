@@ -1,4 +1,4 @@
-# ADR-DRAFT: A form looks up the asking person's own address book through their linked account
+# ADR-0494: A form looks up the asking person's own address book through their linked account
 
 - **Status:** Proposed
 - **Implementation:** Not started
