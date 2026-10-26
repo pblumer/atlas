@@ -376,6 +376,18 @@ type runtimeResp struct {
 	// store errored), in which case the counts fall back to the bounded scan's and a
 	// reader must treat them as a floor.
 	IncidentCountsExact bool `json:"incidentCountsExact"`
+	// Flows is how many tokens arrived over each sequence flow, the arrows' half of the
+	// heatmap (ADR-draft-operations-heatmap): for the whole definition from the
+	// maintained counter, for one isolated instance folded from its own trail. A flow no
+	// token took is absent, as an element no token reached is; the browser draws the
+	// diagram's other arrows at zero.
+	Flows []runtimeFlow `json:"flows"`
+}
+
+// runtimeFlow is one sequence flow on the overlay, named by its BPMN id.
+type runtimeFlow struct {
+	FlowID string `json:"flowId"`
+	Visits int    `json:"visits"`
 }
 
 // maxRuntimeIncidents bounds the overlay's *details* — how many rows the resolve panel
@@ -1824,7 +1836,7 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 		// deployed (I5), which is what makes that safe — readOffLoop hands the same
 		// pointer to its own callers for the same reason.
 		cp   *compiler.CompiledProcess
-		resp = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}}
+		resp = runtimeResp{Elements: []runtimeElement{}, Incidents: []runtimeIncident{}, Flows: []runtimeFlow{}}
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -1942,6 +1954,14 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 				})
 			})
 			scan(func() error {
+				return s.store.FlowTakenTotals(key, func(flowId int32, count int64) error {
+					if id := d.cp.FlowBpmnId(flowId); id != "" && count > 0 {
+						resp.Flows = append(resp.Flows, runtimeFlow{FlowID: id, Visits: int(count)})
+					}
+					return nil
+				})
+			})
+			scan(func() error {
 				n, err := s.store.DefInstanceCount(key)
 				resp.Instances = n
 				return err
@@ -2009,6 +2029,24 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 					}
 					return nil
 				})
+			})
+			scan(func() error {
+				// One instance's arrows, folded from its own trail under the counter's
+				// rule — bounded by that instance's history, like the visits above.
+				visits := make([]int, d.cp.FlowCount())
+				if err := foldInstanceTrail(s.store, instanceFilter, key, d.cp, func(_ int64, _ state.ElementReplayValue, flow int32) {
+					if flow >= 0 {
+						visits[flow]++
+					}
+				}); err != nil {
+					return err
+				}
+				for i, n := range visits {
+					if id := d.cp.FlowBpmnId(int32(i)); id != "" && n > 0 {
+						resp.Flows = append(resp.Flows, runtimeFlow{FlowID: id, Visits: n})
+					}
+				}
+				return nil
 			})
 			scan(func() error {
 				// Filtered to one instance: ask for that instance, do not walk
