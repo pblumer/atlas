@@ -13204,14 +13204,20 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // scale the last poll shaded with.
   const heatStrip = root.querySelector("#heat-strip");
   const liveLegend = root.querySelector(".problems");
+  let heatStripShown = "";
   function renderHeatStrip() {
     // The legend under the diagram explains Live's colours; with a heatmap on, the strip
     // carries the scale, and a key to colours that are not on screen only misleads.
     liveLegend.hidden = heatOn();
     const note = heatOn() && heatStats && heatStats.truncated ? "newest instances only" : "";
-    heatStrip.innerHTML = heatStripHTML(heat, {
+    const html = heatStripHTML(heat, {
       max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note,
     });
+    // Only a change is drawn: the poll calls this every 1.5 seconds, and replacing the
+    // strip would close the period list under the pointer of somebody choosing from it.
+    if (html === heatStripShown) return;
+    heatStripShown = html;
+    heatStrip.innerHTML = html;
   }
   renderHeatStrip();
 

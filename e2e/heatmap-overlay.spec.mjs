@@ -80,6 +80,12 @@ test("the time modes read the statistics and a window asks for one", async ({ pa
   // The panel ranks by what the diagram shows: the slowest wait first.
   await expect(page.locator("#var-panel .heat-table tbody tr").first()).toContainText("Freigabe");
 
+  // The strip survives the poll: replaced every 1.5 seconds, the period list would close
+  // under the pointer of somebody choosing from it.
+  const period = await page.locator("#heat-period").elementHandle();
+  await page.waitForTimeout(2000);
+  expect(await period.evaluate((n) => n.isConnected)).toBe(true);
+
   await page.locator("#heat-period").selectOption("7d");
   await expect.poll(() => page.evaluate(() =>
     window.__requests.some((u) => u.includes("/statistics?from=")))).toBe(true);
