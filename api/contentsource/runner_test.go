@@ -2,6 +2,7 @@ package contentsource
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -398,5 +399,53 @@ func TestTheAdapterWalksAPagesAncestors(t *testing.T) {
 	f.Edit("it_root", func(p *wikifake.Page) { p.Unreadable = true })
 	if _, err := ad.Ancestors(ctx(t), p); err == nil {
 		t.Fatal("an unreadable ancestor did not stop the walk")
+	}
+}
+
+// TestTheConfigurationRoutesSayWhatIsWrong: an empty installation lists an empty
+// array rather than null; a malformed or invalid change, a failing binding lookup
+// and a credential that resolves to nothing are each named, and the check answers
+// the unresolvable credential as its result, not as a failed request.
+func TestTheConfigurationRoutesSayWhatIsWrong(t *testing.T) {
+	f := wiki(t)
+	reg := registry(t, f)
+	svc := NewService(reg, func() int64 { return 5 })
+	do := func(h http.HandlerFunc, method, body, id string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/x", strings.NewReader(body))
+		if id != "" {
+			req.SetPathValue("id", id)
+		}
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		return rec
+	}
+	if rec := do(svc.HandleUpdate, "PUT", `{`, "wiki"); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "malformed") {
+		t.Errorf("malformed update = %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(svc.HandleUpdate, "PUT", `{"name":"W","kind":"wikiwikibangbang","baseURL":"http://plain","credentialsRef":"wiki"}`, "wiki"); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "https") {
+		t.Errorf("an update to plain http = %d %s", rec.Code, rec.Body)
+	}
+	svc.InUse = func(string) ([]string, error) { return nil, errors.New("store gone") }
+	if rec := do(svc.HandleDelete, "DELETE", "", "wiki"); rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "store gone") {
+		t.Errorf("delete with a failing lookup = %d %s", rec.Code, rec.Body)
+	}
+	// A source whose credential names nothing in the vault.
+	orphan := `{"id":"orphan","name":"O","kind":"wikiwikibangbang","baseURL":"https://o.example.org","credentialsRef":"nowhere"}`
+	if rec := do(svc.HandleCreate, "POST", orphan, ""); rec.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", rec.Code, rec.Body)
+	}
+	rec := do(svc.HandleCheck, "POST", "", "orphan")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `resolves to no secret`) || strings.Contains(rec.Body.String(), `"reachable":true`) {
+		t.Errorf("check of an unresolvable credential = %d %s", rec.Code, rec.Body)
+	}
+	// Nothing left configured: the list is an empty array.
+	svc.InUse = nil
+	for _, id := range []string{"orphan", "wiki"} {
+		if rec := do(svc.HandleDelete, "DELETE", "", id); rec.Code != http.StatusNoContent {
+			t.Fatalf("delete %s = %d", id, rec.Code)
+		}
+	}
+	if rec := do(svc.HandleList, "GET", "", ""); rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Errorf("an empty list = %d %q", rec.Code, rec.Body)
 	}
 }

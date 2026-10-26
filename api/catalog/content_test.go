@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -935,5 +936,60 @@ func TestWithoutAContentSourceTheRoutesSayThereIsNone(t *testing.T) {
 	rec := call(t, b.s.HandleContentStatus, b.owner, "GET", "/x", "", "id", "vpn")
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"sources":[]`) {
 		t.Fatalf("status = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// meddling opens the real source but runs act the first time a page is read — a
+// second maintainer's save, or the product's removal, landing mid-fetch.
+type meddling struct {
+	ContentSources
+	once sync.Once
+	act  func()
+}
+
+func (m *meddling) Open(id string) (contentsource.Source, contentsource.Adapter, error) {
+	src, ad, err := m.ContentSources.Open(id)
+	if err != nil {
+		return src, ad, err
+	}
+	return src, meddlingAdapter{Adapter: ad, m: m}, nil
+}
+
+type meddlingAdapter struct {
+	contentsource.Adapter
+	m *meddling
+}
+
+func (a meddlingAdapter) Page(ctx context.Context, id string) (contentsource.Page, error) {
+	a.m.once.Do(a.m.act)
+	return a.Adapter.Page(ctx, id)
+}
+
+// TestALinkDoesNotOverwriteAChangeMadeWhileItsPagesWereRead: the fetch runs with
+// the loop free, so a save in between is possible; the second visit finds it and
+// refuses rather than writing over it, and a product removed meanwhile is gone.
+func TestALinkDoesNotOverwriteAChangeMadeWhileItsPagesWereRead(t *testing.T) {
+	b := newBoundFixture(t)
+	real := b.s.Content
+	b.s.Content = &meddling{ContentSources: real, act: func() {
+		body := `{"id":"vpn","homeCatalog":"` + b.cat.ID + `","state":"active","texts":{"de":"VPN neu","fr":"VPN"},` +
+			`"approval":{"kind":"none"},"provisionProcess":"p","deprovisionProcess":"d","price":"CHF 6"}`
+		if rec := as(t, b.s.HandleSaveItem, b.owner, "POST", body); rec.Code != 200 {
+			t.Errorf("the concurrent save = %d %s", rec.Code, rec.Body)
+		}
+	}}
+	rec := b.link(t, "vpn", `{"source":"wiki","pages":{"de":"SVC-12"}}`)
+	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "changed while its pages were read") {
+		t.Fatalf("link across a concurrent save = %d %s", rec.Code, rec.Body)
+	}
+	if it := b.item(t, "vpn"); it.ContentSource != nil || it.Texts["de"] != "VPN neu" || it.Price != "CHF 6" {
+		t.Fatalf("the concurrent save was overwritten: %+v", it)
+	}
+
+	b.s.Content = &meddling{ContentSources: real, act: func() {
+		b.s.loop.Do(func() { _ = b.s.store.DeleteItem("mail") })
+	}}
+	if rec := b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-30"}}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("link of a product removed meanwhile = %d %s", rec.Code, rec.Body)
 	}
 }

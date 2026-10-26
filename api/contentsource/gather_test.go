@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -524,5 +525,69 @@ func TestDialKind(t *testing.T) {
 	ad, err := DialKind(Source{Kind: KindWikiWikiBangBang, BaseURL: "https://wiki.example.org"}, "t", http.DefaultTransport)
 	if err != nil || ad == nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAChildWhoseTitleIsVeiledIsDroppedWithItsSubtree: a placeholder in a child's
+// title means something was veiled that Atlas did not recognise as a passage, so
+// the child goes, with everything below it, and the rest of the description stays.
+func TestAChildWhoseTitleIsVeiledIsDroppedWithItsSubtree(t *testing.T) {
+	f := wiki(t)
+	f.Put(wikifake.Page{ID: "it_v", Key: "SVC-30", Space: "SVC", Parent: "it_de", Title: "Kosten " + wikifake.Placeholder})
+	f.Put(wikifake.Page{ID: "it_v1", Key: "SVC-31", Space: "SVC", Parent: "it_v", Title: "Darunter",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Unter dem Verschleierten."}}})
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-12")
+	if err != nil || len(l.Refusals) != 0 {
+		t.Fatalf("preview = %v %v", err, l.Refusals)
+	}
+	var reason string
+	for _, d := range l.Dropped {
+		if d.Page == "SVC-30" && d.What == "page" {
+			reason = strings.Join(d.Reasons, "|")
+		}
+	}
+	if !strings.Contains(reason, "placeholder") {
+		t.Fatalf("dropped = %+v", l.Dropped)
+	}
+	if strings.Contains(l.Text, "Verschleierten") || !strings.Contains(l.Text, "Für alle Mitarbeitenden.") {
+		t.Fatalf("text = %q", l.Text)
+	}
+}
+
+// TestAPageWithTooManyPagesBelowItIsRefused: past maxBelow child pages a
+// description is a handbook, and the walk stops with a refusal, not a partial copy.
+func TestAPageWithTooManyPagesBelowItIsRefused(t *testing.T) {
+	f := wiki(t)
+	for i := 0; i <= maxBelow; i++ {
+		id := "it_many_" + strconv.Itoa(i)
+		f.Put(wikifake.Page{ID: id, Key: "M-" + strconv.Itoa(i), Space: "SVC", Parent: "it_fr", Title: id})
+	}
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-13")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(l.Refusals, "|"), "more than "+strconv.Itoa(maxBelow)+" pages") {
+		t.Fatalf("refusals = %v", l.Refusals)
+	}
+	if l.Text != "" {
+		t.Fatalf("a refused walk still produced text: %q", l.Text)
+	}
+}
+
+// TestAPreviewOfASourceThatStopsAnsweringIsAnError: an unreachable source is not a
+// refusal of the page — the page may be fine — so the preview fails instead.
+func TestAPreviewOfASourceThatStopsAnsweringIsAnError(t *testing.T) {
+	f := wiki(t)
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	f.Set(func(s *wikifake.Server) { s.Down = true })
+	for _, in := range []string{"SVC-12", "it_de"} {
+		if _, err := Preview(ctx(t), ad, st, in); err == nil {
+			t.Errorf("%s: a preview against a source that is down did not fail", in)
+		}
 	}
 }
