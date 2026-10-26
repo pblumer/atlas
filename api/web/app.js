@@ -44,6 +44,7 @@ import { frozenMark } from "./frozen-decisions.js";
 import { t as tr, plural as trPlural, locale as trLocale } from "./i18n.js";
 import { loadFolders, loadCounts, openFolderEditor, forgetCatalogue } from "./taskfolders.js";
 import { runImport } from "./infomodel-import.js";
+import { scalePicture } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
 import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
@@ -2233,7 +2234,8 @@ function avatarField(u) {
   return `<div class="avatar-field" data-uid="${esc(u.id)}" style="border-top:1px solid var(--border); margin-top:14px; padding-top:12px">
     <b>Picture</b>
     <p class="muted" style="margin:2px 0 8px">Shown beside this person's name wherever atlas names
-      them — a task list, an approval, the shop's recipient picker. PNG or JPEG.
+      them — a task list, an approval, the shop's recipient picker. PNG or JPEG; a large
+      one is scaled down before it is uploaded.
       ${u.avatarSource === "entra"
     ? "This one came from the directory; uploading here replaces it, and the mirror will not put it back."
     : ""}</p>
@@ -2275,12 +2277,13 @@ function wireAvatarField(slot, reload) {
       if (b.dataset.avact === "upload") {
         const file = box.querySelector(".avatar-file").files[0];
         if (!file) { toast("Choose a PNG or JPEG first", "err"); return; }
-        // No size check here. The server carries the limit, it is configurable, and
-        // a number copied into this page would go stale silently — its refusal
-        // names the actual figure.
+        // Scaled down here, so a photograph straight off a camera is taken rather
+        // than refused for its size; picturescale.js says why here and not on the
+        // server. There is still no size check: the server carries the limit, it
+        // is configurable, and its refusal names the actual figure.
+        const picture = await scalePicture(file);
         const res = await fetch(`/api/v1/users/${encodeURIComponent(id)}/avatar`, {
-          method: "PUT", body: file,
-          headers: { "Content-Type": file.type || "application/octet-stream" },
+          method: "PUT", body: picture, headers: { "Content-Type": picture.type },
         });
         if (!res.ok) {
           const text = await res.text();

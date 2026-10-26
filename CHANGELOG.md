@@ -12,6 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A person's picture of any size is taken.** Console → Organization passed the chosen
+  file on unchanged, so a photograph straight off a phone was refused with "the picture
+  exceeds the 524288 byte limit". The Console now scales the picture in the browser before
+  the upload — shorter side at most 256 pixels, never enlarged, JPEG or a PNG where there
+  is transparency — and redraws it even when it is small enough, so the Exif data a phone
+  writes, its location included, is not stored and served to every colleague. The route
+  and its limit are unchanged ([ADR-0368](docs/adr/0368-user-avatar.md), amended).
+
 ## [0.20.0] — 2026-10-25
 
 **A SharePoint Worker can act as the person who asked, and only for what a policy

@@ -286,6 +286,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   manager the directory reports is shown disabled with a note naming the directory, and is
   left out of the save.
 
+- **`user-picture.spec.mjs`**
+  ([ADR-0368](../docs/adr/0368-user-avatar.md), amended): a person's picture as it is
+  uploaded from Console → Organization, against a mock of the users endpoints. A photograph
+  over the server's limit is scaled before the upload, to a shorter side of 256 pixels and
+  well under the limit; an Exif orientation is applied and the Exif data is not carried on;
+  a small picture is not enlarged; a picture with transparency stays a PNG and an opaque PNG
+  becomes a JPEG; and a file the browser cannot read is refused with nothing sent.
+
 - **`pdf-writer.spec.mjs`** (ADR-0143): the dependency-free **PDF writer** behind the process
   documentation export (`api/web/pdf.js`). A PDF is only valid if its cross-reference table
   points at the exact byte offset of every object, so these build documents in the browser
