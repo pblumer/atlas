@@ -62,14 +62,14 @@ test("a member whose type is a class offers what is inside it, one level down", 
   await selectWrite(page);
   // `customer` is typed as Customer, and Customer says what is inside one — so the
   // dotted path ADR-0060 allows can be picked rather than spelled.
-  const group = member(page).locator('optgroup[label*="inside customer"]');
+  const group = member(page).locator('optgroup[label^="in customer ·"]');
   await expect(group).toHaveCount(1);
   await expect(group.locator("option")).toHaveCount(1);
   await expect(group.locator("option")).toHaveText(/customer\.name/);
 
   // `tags` is untyped, so nothing is claimed about what is inside it. Guessing there
   // would be the false knowledge the derived model reports as a gap.
-  await expect(member(page).locator('optgroup[label*="inside tags"]')).toHaveCount(0);
+  await expect(member(page).locator('optgroup[label^="in tags ·"]')).toHaveCount(0);
 });
 
 test("choosing a member writes it into the assignment", async ({ page }) => {
