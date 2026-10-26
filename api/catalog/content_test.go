@@ -703,6 +703,42 @@ func TestLinkInShopShowsOnlyTheAddresses(t *testing.T) {
 	}
 }
 
+// TestTheShopsWikiLinkIsWithheldExactlyWithTheContent holds the shop's "more in the
+// wiki" to the quarantine: the page address travels in the release's binding, and the
+// binding is withheld whenever the description is — quarantined, or vouched for by no
+// recent recheck — so the shop cannot link to a page whose content it may not show.
+func TestTheShopsWikiLinkIsWithheldExactlyWithTheContent(t *testing.T) {
+	b := newBoundFixture(t)
+	b.linkVPN(t)
+	b.publish(t)
+	b.s.Content = linkingSources{ContentSources: b.s.Content}
+	linked := func() (bool, bool) {
+		it := itemIn(b.releases(t)[0], "vpn")
+		return it.ContentSource != nil && it.ContentSource.Pages["de"].URL != "", it.Descriptions != nil
+	}
+	if url, desc := linked(); !url || !desc {
+		t.Fatalf("shown content without its link: url %v, description %v", url, desc)
+	}
+
+	// No recheck for longer than the stale limit: both go, without a quarantine.
+	b.now.Add(staleAfter + minute)
+	if url, desc := linked(); url || desc {
+		t.Fatalf("a stale recheck still shows: url %v, description %v", url, desc)
+	}
+	b.sweep(t)
+	if url, desc := linked(); !url || !desc {
+		t.Fatalf("a passing recheck did not show them again: url %v, description %v", url, desc)
+	}
+
+	// Quarantined: both go at once.
+	b.wiki.Edit("it_root", func(p *wikifake.Page) { p.ReadRestriction = []string{"u_atlas"} })
+	b.now.Add(minute)
+	b.sweep(t)
+	if url, desc := linked(); url || desc {
+		t.Fatalf("a quarantined product still shows: url %v, description %v", url, desc)
+	}
+}
+
 // linkingSources answers every source as one the shop may link to.
 type linkingSources struct{ ContentSources }
 

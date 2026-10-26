@@ -156,6 +156,7 @@ const STRINGS = {
     'variant.missing': 'Bitte wählen Sie zuerst für jede Position eine Ausführung.',
     'info.title': 'Angaben zum Service',
     'info.id': 'Kennung',
+    'info.wiki': 'Mehr im Wiki',
     'info.approval': 'Genehmigung',
     'info.none': 'keine',
     'info.repeatable': 'Mehrfach beziehbar',
@@ -331,6 +332,7 @@ const STRINGS = {
     'variant.missing': 'Choose a version for every line before ordering.',
     'info.title': 'About this service',
     'info.id': 'Identifier',
+    'info.wiki': 'More in the wiki',
     'info.approval': 'Approval',
     'info.none': 'none',
     'info.repeatable': 'May be held more than once',
@@ -506,6 +508,7 @@ const STRINGS = {
     'variant.missing': 'Choisissez une variante pour chaque position avant de commander.',
     'info.title': 'Informations sur le service',
     'info.id': 'Identifiant',
+    'info.wiki': 'En savoir plus dans le wiki',
     'info.approval': 'Approbation',
     'info.none': 'aucune',
     'info.repeatable': 'Peut être détenu plusieurs fois',
@@ -680,6 +683,7 @@ const STRINGS = {
     'variant.missing': 'Scegliere una variante per ogni posizione prima di ordinare.',
     'info.title': 'Indicazioni sul servizio',
     'info.id': 'Identificativo',
+    'info.wiki': 'Altro nel wiki',
     'info.approval': 'Approvazione',
     'info.none': 'nessuna',
     'info.repeatable': 'Può essere detenuto più volte',
@@ -877,6 +881,30 @@ function descriptionOf(item) {
     if (typeof text === 'string' && text.trim() !== '') return text.trim();
   }
   return '';
+}
+
+// wikiLinkOf is "more in the wiki" under a description that came from one
+// (ADR-draft-service-content-from-an-external-source § 3).
+//
+// It reads the binding the release listing hands the shop, and the server decides
+// everything about it: the binding is there only where the source lets the shop link
+// to a page, and only while the content may be shown — a quarantined product, a copy
+// older than a lifted quarantine and a stale recheck all arrive with no binding at
+// all, exactly as they arrive with no description. So there is nothing to decide
+// here, and nothing here to get wrong about the quarantine. The page is chosen in the
+// order the description is, and only an https address becomes a link.
+function wikiLinkOf(item) {
+  const pages = ((item || {}).contentSource || {}).pages;
+  if (!pages || !descriptionOf(item)) return null;
+  const urls = {};
+  for (const [lang, p] of Object.entries(pages)) {
+    if (p && typeof p.url === 'string' && /^https:\/\/\S+$/i.test(p.url)) urls[lang] = p.url;
+  }
+  const href = pickText(urls, locale) || pickText(urls, 'de') || pickText(urls, 'en')
+    || Object.values(urls)[0];
+  if (!href) return null;
+  return el('p', { class: 'product-wiki' },
+    el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, t('info.wiki')));
 }
 
 // The typeface stacks the server ships, mirrored here because the page paints
@@ -1989,6 +2017,7 @@ function infoPanel(rel, item) {
     // Absent entirely where there is none — an empty paragraph would leave a gap
     // that reads as something that failed to load.
     descriptionOf(item) ? el('p', { class: 'product-description' }, descriptionOf(item)) : null,
+    wikiLinkOf(item),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
