@@ -16,12 +16,22 @@ the code does.
 
 ## What has to exist first
 
-1. **Linking is configured** (`atlas serve --link-microsoft-tenant … --link-microsoft-client-id …
-   --link-microsoft-client-secret … --link-microsoft-scopes "https://graph.microsoft.com/Sites.ReadWrite.All"`).
-   The app registration needs the delegated permission, admin consent where the tenant
-   requires it, and the redirect URI `https://<atlas>/auth/link/microsoft/callback`.
-   Delegated `Sites.Selected` narrows what a released token can reach, at the cost of a
-   per-site grant.
+1. **Linking is set up** (Console → Administration → *Security* → *Account linking*, or):
+
+   ```http
+   PUT /api/v1/security/linking/microsoft
+   {"tenantId": "<directory id>", "clientId": "<application id>",
+    "scopes": "https://graph.microsoft.com/Sites.ReadWrite.All", "clientSecret": "<value>"}
+   ```
+
+   An installation configured by its deployment passes the same as start flags instead
+   (`--link-microsoft-tenant`, `--link-microsoft-client-id`,
+   `--link-microsoft-client-secret`, `--link-microsoft-scopes`); then the flags decide
+   and the Console only shows them. The app registration needs the delegated
+   permission, admin consent where the tenant requires it, and the redirect URI the
+   Security page shows, `https://<atlas>/auth/link/microsoft/callback`. Delegated
+   `Sites.Selected` narrows what a released token can reach, at the cost of a per-site
+   grant.
 2. **Authentication is on** and the SharePoint Worker runs **supervised**: a delegated
    credential is released only to a Worker Instance Atlas started.
 3. **A configured Worker `sp-prod`** of type SharePoint, with its identity policy set

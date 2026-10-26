@@ -38,6 +38,11 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/security/policies/{id}/enabled",
 	"POST /api/v1/security/policies/simulate",
 	"GET /api/v1/security/readiness",
+	// How people link their accounts: the app registration every delegated
+	// connection is authorized through, and the secret that redeems its codes.
+	"GET /api/v1/security/linking/microsoft",
+	"PUT /api/v1/security/linking/microsoft",
+	"DELETE /api/v1/security/linking/microsoft",
 	"PUT /api/v1/configured-workers/{id}/identity",
 	"DELETE /api/v1/configured-workers/{id}/identity",
 	"GET /api/v1/users/{id}/connections",

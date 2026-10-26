@@ -12,6 +12,29 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **Account linking is set up in the Console.** An administrator sets up the Microsoft
+  app registration people link their accounts through under **Administration →
+  Security**: the directory (tenant) id, the application (client) id, the delegated
+  scopes and the client secret, with the steps to take in Entra and the redirect URI to
+  register, ready to copy. It applies from the next request, without a restart. The
+  secret is kept in the vault under a reserved name no Worker, API token or secrets route
+  reaches, and is never shown again. The `--link-microsoft-*` flags still work and win:
+  with any of them given, the Console only shows them. Changing the tenant or the client
+  id, or removing the setup, revokes nothing; the page counts the connections that cannot
+  act and asks first. `GET`, `PUT` and `DELETE /api/v1/security/linking/microsoft`,
+  admin-only ([ADR-0475](docs/adr/0475-identity-aware-worker-execution.md), amended).
+
+### Changed
+
+- **Connected accounts no longer tells people to run a command.** Where linking is not
+  set up, a person is told so and that an administrator changes it; an administrator is
+  sent to the Security page. The account menu offers *Connected accounts* only when the
+  server can link an account or the person already has one linked or a connection on
+  record, so the page stays reachable for withdrawing a connection after linking is
+  removed.
+
 ## [0.20.0] — 2026-10-25
 
 **A SharePoint Worker can act as the person who asked, and only for what a policy

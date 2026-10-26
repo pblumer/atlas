@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pblumer/atlas/api/runloop"
@@ -174,8 +175,10 @@ type Service struct {
 	// and a rotated refresh token is never used twice.
 	mu     sync.Mutex
 	tokens map[string]*cachedToken
-	// linkable is what HandleMine offers to link with.
-	linkable []LinkOption
+	// linkable is what HandleMine offers to link with. An administrator sets up or
+	// removes linking while the server runs, so it is swapped whole rather than
+	// written in place.
+	linkable atomic.Pointer[[]LinkOption]
 
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own.
@@ -372,6 +375,22 @@ func (s *Service) ForOwner(userID string) ([]ExternalIdentity, []Connection) {
 	return ids, conns
 }
 
+// Unrevoked counts the connections of one provider that are not revoked, by tenant:
+// the ones whose owners would have to sign in again, or could not act at all, if the
+// app registration they were authorized through changed.
+func (s *Service) Unrevoked(provider string) map[string]int {
+	out := map[string]int{}
+	s.loop.Do(func() {
+		cs, _ := s.stores.connections.LoadAll()
+		for _, c := range cs {
+			if c.Provider == provider && c.Status != StatusRevoked {
+				out[c.TenantID]++
+			}
+		}
+	})
+	return out
+}
+
 // SetAllowedWorkers replaces the Workers that may act through a connection. Only its
 // owner consents to that: an administrator who could add a Worker here could have any
 // Worker act as anybody.
@@ -528,6 +547,18 @@ func (s *Service) dropToken(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.tokens, id)
+}
+
+// ForgetAccessTokens drops every cached access token, so the next release for any
+// connection asks the provider again, under whatever app registration is configured
+// by then. The server calls it whenever linking is set up, changed or removed: a
+// token obtained under the previous setup must not be handed out for up to an hour
+// after it. A release already in flight is the check-then-act window §13 accepts for
+// a revocation, and ends the same way: the next one is decided afresh.
+func (s *Service) ForgetAccessTokens() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokens = map[string]*cachedToken{}
 }
 
 // AccessToken is the credential broker: a short-lived access token for an active

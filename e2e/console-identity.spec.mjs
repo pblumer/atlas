@@ -6,6 +6,12 @@
 //   - A person reaches their connections from the account menu, is offered the link
 //     only when the server can link, chooses which Workers may act as them, and is
 //     asked before a revocation that cannot be undone.
+//   - Where nothing can be linked and nothing is, the menu leaves the page out, and
+//     the page itself names no start flag: a person is told it is not theirs to set
+//     up, an administrator where it is set up.
+//   - An administrator sets linking up on the Security page: the redirect URI is
+//     shown to copy, the secret is sent once and never shown again, and start flags
+//     are shown, not edited.
 //   - An administrator reaches Security from Administration and sees shadow called
 //     what it is — not enforcement — wherever it appears.
 //   - A simulation says it is one, and an "approved" field in it changes nothing.
@@ -33,6 +39,14 @@ const MINE = {
   linkable: [{ provider: "microsoft", start: "/auth/link/microsoft/start" }],
 };
 
+const LINK_OFF = {
+  available: true, source: "none", active: false, tenantId: "", clientId: "", scopes: "",
+  clientSecretSet: false, redirectUri: "http://atlas.example/auth/link/microsoft/callback",
+  redirectUriDerived: true, connections: 0, stranded: 0,
+};
+
+const NOTHING_LINKED = { identities: [], connections: [], linkable: [] };
+
 const WORKERS = [
   { id: "cw_sp", name: "sp-prod", kind: "sharepoint", enabled: true },
   { id: "cw_mail", name: "mail", kind: "smtp", enabled: true },
@@ -47,9 +61,9 @@ const READINESS = {
   ],
 };
 
-function installFixture({ me, mine, workers, readiness, nowNs }) {
+function installFixture({ me, mine, workers, readiness, link, nowNs }) {
   window.__requests = [];
-  const state = { mine: JSON.parse(JSON.stringify(mine)), policies: [] };
+  const state = { mine: JSON.parse(JSON.stringify(mine)), policies: [], link: JSON.parse(JSON.stringify(link)) };
   const json = (body, status) => Promise.resolve(new Response(JSON.stringify(body), {
     status: status || 200, headers: { "content-type": "application/json" },
   }));
@@ -72,6 +86,21 @@ function installFixture({ me, mine, workers, readiness, nowNs }) {
     }
     if (path.startsWith("/api/v1/security/") && !isAdmin) return json({ error: "the admin role is required" }, 403);
     if (path === "/api/v1/security/readiness") return json(readiness);
+    if (path === "/api/v1/security/linking/microsoft") {
+      // The server's answers, as far as the page reads them: the secret is taken and
+      // never returned, and the ids come back as Entra's token names them.
+      if (state.link.source === "flags" && method !== "GET") return json({ error: "set by this server's start flags (--link-microsoft-*)" }, 409);
+      if (method === "PUT") {
+        Object.assign(state.link, { source: "console", active: true, tenantId: body.tenantId.toLowerCase(),
+          clientId: body.clientId.toLowerCase(), scopes: body.scopes, clientSecretSet: state.link.clientSecretSet || !!body.clientSecret });
+        state.mine.linkable = [{ provider: "microsoft", start: "/auth/link/microsoft/start" }];
+      }
+      if (method === "DELETE") {
+        Object.assign(state.link, { source: "none", active: false, tenantId: "", clientId: "", scopes: "", clientSecretSet: false });
+        state.mine.linkable = [];
+      }
+      return json(state.link);
+    }
     if (path === "/api/v1/security/policies" && method === "GET") return json(state.policies);
     if (path === "/api/v1/security/policies/simulate") {
       // The server's own answer to a request with no approval: an obligation open,
@@ -95,10 +124,10 @@ function installFixture({ me, mine, workers, readiness, nowNs }) {
   };
 }
 
-async function boot(page, me, hash = "") {
+async function boot(page, me, hash = "", { mine = MINE, link = LINK_OFF } = {}) {
   page._errors = [];
   page.on("pageerror", (e) => page._errors.push(e.message));
-  await page.addInitScript(installFixture, { me, mine: MINE, workers: WORKERS, readiness: READINESS, nowNs: NOW_NS });
+  await page.addInitScript(installFixture, { me, mine, workers: WORKERS, readiness: READINESS, link, nowNs: NOW_NS });
   await page.goto("/index.html" + hash);
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
 }
@@ -215,4 +244,85 @@ test("a draft the server refuses shows the server's reason", async ({ page }) =>
 test("Security is not offered to a person without the admin role", async ({ page }) => {
   await boot(page, ALICE, "#/console/security");
   await expect(page.locator("#sec-denied")).toBeVisible();
+});
+
+test("where nothing can be linked and nothing is, the menu leaves the page out and the page names no flag", async ({ page }) => {
+  await boot(page, ALICE, "", { mine: NOTHING_LINKED });
+  await page.locator(".topbar .avatar").click();
+  await expect(page.locator(".topbar a", { hasText: "Approvals" })).toBeVisible();
+  await expect(page.locator("a", { hasText: "Connected accounts" })).toHaveCount(0);
+  // Reached by its address anyway, the page says what is so and whose it is to change.
+  await page.evaluate(() => { location.hash = "#/console/connections"; });
+  await expect(page.locator("#con-no-link")).toBeVisible();
+  await expect(page.locator("#con-no-link")).not.toContainText("--link");
+  await expect(page.locator("#con-no-link")).not.toHaveAttribute("data-admin", "");
+  await expect(page.locator("#con-setup")).toHaveCount(0);
+  expect(page._errors).toEqual([]);
+});
+
+test("a person with a connection keeps the page in the menu after linking is switched off", async ({ page }) => {
+  await boot(page, ALICE, "", { mine: Object.assign({}, MINE, { linkable: [] }) });
+  await page.locator(".topbar .avatar").click();
+  await page.locator("a", { hasText: "Connected accounts" }).click();
+  await expect(page.locator("[data-connection='con_1'] button[data-act='revoke']")).toBeVisible();
+  await expect(page.locator("a[data-link]")).toHaveCount(0);
+});
+
+test("an administrator is sent from the connections page to where linking is set up", async ({ page }) => {
+  await boot(page, ADMIN, "#/console/connections", { mine: NOTHING_LINKED });
+  await expect(page.locator("#con-no-link[data-admin]")).toBeVisible();
+  await expect(page.locator("#con-no-link")).not.toContainText("--link");
+  await page.locator("#con-setup").click();
+  await expect(page).toHaveURL(/#\/console\/security$/);
+  await expect(page.locator("#sec-linking #link-status[data-source='none']")).toBeVisible();
+});
+
+test("an administrator sets linking up on the Security page, and the secret is sent once", async ({ page }) => {
+  await boot(page, ADMIN, "#/console/security", { mine: NOTHING_LINKED });
+  const box = page.locator("#sec-linking");
+  await expect(box.locator("#link-redirect")).toHaveText("http://atlas.example/auth/link/microsoft/callback");
+  await expect(box.locator("#link-steps li")).toHaveCount(4);
+  const form = box.locator("#link-form");
+  await form.locator("input[name=tenantId]").fill("8F5C2A1E-3B4D-4C6E-9A7B-1D2E3F4A5B6C");
+  await form.locator("input[name=clientId]").fill("0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d");
+  await form.locator("input[name=scopes]").fill("https://graph.microsoft.com/Sites.ReadWrite.All");
+  await form.locator("input[name=clientSecret]").fill("s3cret-value");
+  await form.locator("button[type=submit]").click();
+  await expect(box.locator("#link-status[data-source='console']")).toBeVisible();
+  const put = (await requests(page)).find((r) => r.method === "PUT");
+  expect(put).toEqual({ method: "PUT", path: "/api/v1/security/linking/microsoft", body: {
+    tenantId: "8F5C2A1E-3B4D-4C6E-9A7B-1D2E3F4A5B6C", clientId: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+    scopes: "https://graph.microsoft.com/Sites.ReadWrite.All", clientSecret: "s3cret-value" } });
+  // The form comes back without the secret, and says one is held.
+  await expect(box.locator("input[name=clientSecret]")).toHaveValue("");
+  await expect(box.locator("input[name=clientSecret]")).not.toHaveAttribute("placeholder", "");
+  // Saved again with the field left empty, the secret is not sent: the held one stays.
+  await box.locator("#link-form button[type=submit]").click();
+  await expect.poll(async () => (await requests(page)).filter((r) => r.method === "PUT").length).toBe(2);
+  const again = (await requests(page)).filter((r) => r.method === "PUT")[1];
+  expect(again.body.clientSecret).toBeUndefined();
+  // The menu now offers the page: linking is set up.
+  await page.locator(".topbar .avatar").click();
+  await expect(page.locator("a", { hasText: "Connected accounts" })).toBeVisible();
+  expect(await storageKeys(page)).toEqual([]);
+  expect(await page.evaluate(() => JSON.stringify(localStorage) + JSON.stringify(sessionStorage))).not.toContain("s3cret");
+  // Removing asks first.
+  page.once("dialog", (d) => d.dismiss());
+  await box.locator("button[data-act='remove-link']").click();
+  expect((await requests(page)).filter((r) => r.method === "DELETE")).toEqual([]);
+  page.once("dialog", (d) => d.accept());
+  await box.locator("button[data-act='remove-link']").click();
+  await expect(box.locator("#link-status[data-source='none']")).toBeVisible();
+  expect(page._errors).toEqual([]);
+});
+
+test("start flags are shown on the Security page, not edited", async ({ page }) => {
+  const flags = Object.assign({}, LINK_OFF, { source: "flags", active: true, tenantId: "tid-1", clientId: "atlas-ms",
+    scopes: "https://graph.microsoft.com/Sites.ReadWrite.All", clientSecretSet: true, connections: 2, stranded: 1 });
+  await boot(page, ADMIN, "#/console/security", { link: flags });
+  const box = page.locator("#sec-linking");
+  await expect(box.locator("#link-status[data-source='flags']")).toBeVisible();
+  await expect(box.locator("#link-flags")).toContainText("--link-microsoft");
+  await expect(box.locator("#link-form")).toHaveCount(0);
+  await expect(box.locator("#link-stranded")).toBeVisible();
 });

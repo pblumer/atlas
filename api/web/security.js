@@ -1,8 +1,12 @@
 // Console → Administration → Security: who acts as whom, and by which policy
 // (ADR-0475 §10, §12, §13, §17).
 //
-// Four parts, in the order an administrator migrates through them:
+// Five parts, in the order an administrator migrates through them:
 //
+//   - **Account linking.** The app registration people link their Microsoft
+//     accounts through. Start flags outrank it and are only shown; otherwise it is
+//     set up here. The half at Microsoft cannot be done from a browser tab of this
+//     server, so the card says what to make there and shows the redirect URI to copy.
 //   - **Readiness.** Every configured Worker, whether its actions are governed and
 //     how, and where its credential is. Shadow is said to be what it is — decisions
 //     recorded, nothing blocked — every time it is shown, because a page that let
@@ -17,6 +21,7 @@
 //
 // The server decides every rule; this page only asks and shows.
 
+import { copyText } from "./clipboard.js";
 import { fmtDateTime } from "./datefmt.js";
 import { t } from "./i18n.js";
 
@@ -56,6 +61,143 @@ const credentialOf = (row) => {
   if (row.credentialKind === "worker") return t("security.credential.worker", { ref: row.credentialRef || "" });
   return t("security.credential.none");
 };
+
+// ---------- Account linking ----------
+
+const LINK_PATH = "/api/v1/security/linking/microsoft";
+
+function linkStatus(v) {
+  const pill = (cls, text) => `<span class="pill ${cls}" id="link-status" data-source="${esc(v.source)}"><span class="dot"></span>${esc(text)}</span>`;
+  if (!v.available) return pill("off", t("security.link.status.unavailable"));
+  if (v.active) return pill("ok", v.source === "flags" ? t("security.link.status.flags") : t("security.link.status.console"));
+  if (v.source === "flags") return pill("warn", t("security.link.status.flagsIncomplete"));
+  return pill("off", t("security.link.status.off"));
+}
+
+function linkRedirect(v) {
+  return `<div style="margin:10px 0">
+    <div class="muted" style="font-size:12px">${esc(t("security.link.redirect"))}</div>
+    <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap">
+      <code id="link-redirect">${esc(v.redirectUri || "—")}</code>
+      ${v.redirectUri ? `<button class="btn ghost" type="button" data-act="copy-redirect">${esc(t("security.link.copy"))}</button>` : ""}
+    </div>
+    ${v.redirectUriDerived ? `<p class="muted" style="font-size:12px; margin:4px 0 0">${esc(t("security.link.redirectDerived"))}</p>` : ""}
+  </div>`;
+}
+
+function linkBody(v) {
+  if (!v.available) return `<p class="muted" id="link-unavailable">${esc(t("security.link.unavailable"))}</p>`;
+  const stranded = v.stranded
+    ? `<div class="warn-note" id="link-stranded" role="status">${esc(t("security.link.stranded", { n: v.stranded }))}</div>` : "";
+  if (v.source === "flags") {
+    const row = (label, value) => `<tr><td class="muted">${esc(label)}</td><td><code>${esc(value || "—")}</code></td></tr>`;
+    return `${stranded}<p class="muted" id="link-flags">${esc(t("security.link.flags"))}</p>
+      ${v.active ? "" : `<p class="muted" id="link-flags-incomplete">${esc(t("security.link.flagsIncompleteHint"))}</p>`}
+      <table><tbody>
+        ${row(t("security.link.tenant"), v.tenantId)}
+        ${row(t("security.link.client"), v.clientId)}
+        ${row(t("security.link.scopes"), v.scopes)}
+        ${row(t("security.link.secret"), v.clientSecretSet ? t("security.link.secretSet") : t("security.link.secretUnset"))}
+      </tbody></table>
+      ${linkRedirect(v)}`;
+  }
+  const input = (name, label, value, attrs) => `<label class="field" style="min-width:320px">${esc(label)}
+      <input name="${name}" value="${esc(value || "")}" autocomplete="off" spellcheck="false" ${attrs || ""} /></label>`;
+  return `${stranded}
+    <p style="margin:10px 0 4px"><b>${esc(t("security.link.steps"))}</b></p>
+    <ol id="link-steps" class="muted" style="margin:0 0 6px 18px; padding:0">
+      <li>${esc(t("security.link.step1"))}</li>
+      <li>${esc(t("security.link.step2"))}</li>
+      <li>${esc(t("security.link.step3"))}</li>
+      <li>${esc(t("security.link.step4"))}</li>
+    </ol>
+    ${linkRedirect(v)}
+    <form id="link-form" autocomplete="off">
+      <div class="row" style="gap:12px; flex-wrap:wrap; align-items:flex-end">
+        ${input("tenantId", t("security.link.tenant"), v.tenantId, `placeholder="00000000-0000-0000-0000-000000000000" required`)}
+        ${input("clientId", t("security.link.client"), v.clientId, `placeholder="00000000-0000-0000-0000-000000000000" required`)}
+      </div>
+      <div class="row" style="gap:12px; flex-wrap:wrap; align-items:flex-end; margin-top:8px">
+        ${input("scopes", t("security.link.scopes"), v.scopes, `placeholder="https://graph.microsoft.com/Sites.ReadWrite.All" required`)}
+        <label class="field" style="min-width:320px">${esc(t("security.link.secret"))}
+          <input name="clientSecret" type="password" autocomplete="new-password" spellcheck="false"
+            placeholder="${esc(v.clientSecretSet ? t("security.link.secretKept") : "")}" ${v.clientSecretSet ? "" : "required"} /></label>
+      </div>
+      <p class="muted" style="font-size:12px; margin:6px 0">${esc(t("security.link.scopesHint"))} ${esc(t("security.link.secretHint"))}</p>
+      <div class="row" style="gap:8px">
+        <button class="btn" type="submit">${esc(t("security.link.save"))}</button>
+        ${v.source === "console" ? `<button class="btn ghost danger" type="button" data-act="remove-link">${esc(t("security.link.remove"))}</button>` : ""}
+      </div>
+    </form>`;
+}
+
+function paintLinkSetup(box, v) {
+  box._setup = v;
+  box.querySelector("#link-status-slot").innerHTML = linkStatus(v);
+  box.querySelector("#link-body").innerHTML = linkBody(v);
+}
+
+async function loadLinkSetup(api, root) {
+  const box = root.querySelector("#sec-linking");
+  let v;
+  try { v = await api("GET", LINK_PATH); } catch (e) {
+    box.querySelector("#link-body").innerHTML = `<div class="warn-note">${esc(e.message)}</div>`;
+    return;
+  }
+  // A server from before this card answers with something else; say nothing rather
+  // than paint a form it would refuse.
+  if (!v || typeof v.source !== "string") { box.hidden = true; return; }
+  paintLinkSetup(box, v);
+}
+
+function wireLinkSetup(api, toast, root, onLinkingChanged) {
+  const box = root.querySelector("#sec-linking");
+  const changed = () => { if (onLinkingChanged) onLinkingChanged(); };
+  box.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const v = box._setup || {};
+    if (btn.dataset.act === "copy-redirect") {
+      if (await copyText(v.redirectUri || "")) toast(t("security.link.copied"));
+      else toast(t("security.link.copyFailed"), "warn");
+      return;
+    }
+    if (btn.dataset.act !== "remove-link") return;
+    const ask = v.connections ? t("security.link.removeConfirmConnections", { n: v.connections }) : t("security.link.removeConfirm");
+    if (!window.confirm(ask)) return;
+    btn.disabled = true;
+    try {
+      paintLinkSetup(box, await api("DELETE", LINK_PATH));
+      toast(t("security.link.removed"));
+      changed();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, "err");
+    }
+  });
+  box.addEventListener("submit", async (e) => {
+    const form = e.target.closest("#link-form");
+    if (!form) return;
+    e.preventDefault();
+    const v = box._setup || {};
+    const f = form.elements;
+    const body = { tenantId: f.tenantId.value.trim(), clientId: f.clientId.value.trim(), scopes: f.scopes.value.trim() };
+    // The secret travels only when one was typed: empty keeps the one held.
+    if (f.clientSecret.value) body.clientSecret = f.clientSecret.value;
+    const moved = (v.tenantId && body.tenantId.toLowerCase() !== v.tenantId) || (v.clientId && body.clientId.toLowerCase() !== v.clientId);
+    if (moved && v.connections && !window.confirm(t("security.link.changeConfirm", { n: v.connections }))) return;
+    const btn = form.querySelector("button[type=submit]");
+    btn.disabled = true;
+    try {
+      paintLinkSetup(box, await api("PUT", LINK_PATH, body));
+      toast(t("security.link.saved"));
+      changed();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, "err");
+    }
+  });
+}
 
 // ---------- Readiness ----------
 
@@ -513,7 +655,7 @@ function wireEvidence(api, toast, root) {
 
 // ---------- The page ----------
 
-export async function viewSecurity({ api, toast, view, isSuperseded }) {
+export async function viewSecurity({ api, toast, view, isSuperseded, onLinkingChanged }) {
   // One call decides whether the page is for this reader at all: the readiness view
   // is an administrator's, like every route below it.
   try {
@@ -532,6 +674,11 @@ export async function viewSecurity({ api, toast, view, isSuperseded }) {
     <div class="card">
       <h1>${esc(t("security.title"))}</h1>
       <p class="muted">${esc(t("security.intro"))}</p>
+    </div>
+    <div class="card" style="margin-top:18px" id="sec-linking">
+      <div class="between"><h2>${esc(t("security.link.title"))}</h2><span id="link-status-slot"></span></div>
+      <p class="muted">${esc(t("security.link.intro"))}</p>
+      <div id="link-body"></div>
     </div>
     <div class="card" style="margin-top:18px">
       <h2>${esc(t("security.readiness.title"))}</h2>
@@ -567,8 +714,9 @@ export async function viewSecurity({ api, toast, view, isSuperseded }) {
     </div>
   </div>`;
   const root = document.getElementById("security");
-  await Promise.all([loadReadiness(api, root), loadPolicies(api, root)]);
+  await Promise.all([loadLinkSetup(api, root), loadReadiness(api, root), loadPolicies(api, root)]);
   if (isSuperseded()) return;
+  wireLinkSetup(api, toast, root, onLinkingChanged);
   wireReadiness(api, toast, root);
   wirePolicies(api, toast, root);
   wireSimulator(api, toast, root);

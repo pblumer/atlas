@@ -106,7 +106,17 @@ function connectionCard(conn, ctx) {
   </div>`;
 }
 
-export async function viewConnections({ api, toast, view, isSuperseded }) {
+// unlinkable says why nothing can be linked here, to the person who can change it and
+// to everybody else. A start flag means nothing to the people who meet this page, so
+// it is not named: they learn that it is not set up and that this is not theirs to
+// fix; an administrator learns where it is set up.
+function unlinkable(canConfigure) {
+  if (!canConfigure) return `<p class="muted" id="con-no-link">${esc(t("connections.link.unconfigured"))}</p>`;
+  return `<p class="muted" id="con-no-link" data-admin>${esc(t("connections.link.unconfiguredAdmin"))}</p>
+    <a class="btn ghost" id="con-setup" href="#/console/security">${esc(t("connections.link.setUp"))}</a>`;
+}
+
+export async function viewConnections({ api, toast, view, isSuperseded, canConfigure = false }) {
   let mine;
   try {
     mine = await api("GET", "/api/v1/me/connections");
@@ -134,14 +144,14 @@ export async function viewConnections({ api, toast, view, isSuperseded }) {
   const conns = mine.connections || [];
   const link = ctx.linkable.length
     ? ctx.linkable.map((l) => `<a class="btn" data-link="${esc(l.provider)}" href="${esc(l.start)}">${esc(t("connections.link", { provider: providerName(l.provider) }))}</a>`).join(" ")
-    : `<p class="muted" id="con-no-link">${esc(t("connections.link.unconfigured"))}</p>`;
+    : unlinkable(canConfigure);
 
   view.innerHTML = `<div id="connections">
     <div class="card">
       <h1>${esc(t("connections.title"))}</h1>
       <p class="muted">${esc(t("connections.intro"))}</p>
-      <div class="row" style="margin-top:10px">${link}</div>
-      <p class="muted" style="font-size:12px; margin-top:8px">${esc(t("connections.link.privacy"))}</p>
+      <div class="row" style="margin-top:10px; gap:8px; align-items:center; flex-wrap:wrap">${link}</div>
+      ${ctx.linkable.length ? `<p class="muted" style="font-size:12px; margin-top:8px">${esc(t("connections.link.privacy"))}</p>` : ""}
     </div>
     ${banner()}
     <div class="card" style="padding:0; margin-top:18px">
