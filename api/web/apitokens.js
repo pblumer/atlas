@@ -47,6 +47,7 @@ const th = (key, params) => {
 export const SCOPES = [
   { id: "metrics", reach: "" },
   { id: "status", reach: "" },
+  { id: "diagrams", reach: "" },
   { id: "worker", reach: "" },
   { id: "events", reach: "catalogues" },
   { id: "landscape", reach: "projects" },

@@ -12,6 +12,14 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A diagrams scope for systems that show processes elsewhere.** An API token of the
+  scope `diagrams` reads the deployed processes, a definition's BPMN model and its
+  runtime overlay and nothing else, so a wiki can draw a process's newest version, with
+  its live counts, without holding a `full` token
+  ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
+
 ### Fixed
 
 - **A picture of any size is taken, for a person and for a product.** Console →
