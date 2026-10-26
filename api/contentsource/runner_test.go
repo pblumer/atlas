@@ -326,3 +326,77 @@ func TestTheConfigurationRoutes(t *testing.T) {
 		t.Fatal("Configured")
 	}
 }
+
+// TestAKickRechecksOneSourceInTheBackground: an unlink kicks the source so the
+// watches nothing needs any more end without waiting for the next sweep.
+func TestAKickRechecksOneSourceInTheBackground(t *testing.T) {
+	f := wiki(t)
+	b := bound(map[string][]Check{"vpn": {{ID: "it_de", Passages: []string{"sec_pw"}}}})
+	r := NewRunner(registry(t, f), b, func() int64 { return 7 })
+	r.Kick("wiki")
+	r.wg.Wait()
+	if res, rounds := b.result("vpn"); !res.Passed || res.At != 7 || rounds != 1 {
+		t.Fatalf("after a kick: %+v in %d rounds", res, rounds)
+	}
+	if got := f.Watched(); !reflect.DeepEqual(got, []string{"it_de", "it_root"}) {
+		t.Fatalf("watched after a kick = %v", got)
+	}
+	// The binding goes, and the next kick ends its watches by id.
+	b.mu.Lock()
+	b.targets["wiki"] = nil
+	b.mu.Unlock()
+	r.Kick("wiki")
+	r.wg.Wait()
+	if got := f.Watched(); len(got) != 0 {
+		t.Fatalf("watched after the unlink's kick = %v", got)
+	}
+}
+
+// TestAReloadWakesTheRunnerOnceHoweverOftenItIsAsked: a configuration change asks
+// the runner to look at the sources again; asked twice before it looked, it looks
+// once, and the asking never blocks the handler that asked.
+func TestAReloadWakesTheRunnerOnceHoweverOftenItIsAsked(t *testing.T) {
+	f := wiki(t)
+	r := NewRunner(registry(t, f), bound(nil), func() int64 { return 1 })
+	done := make(chan struct{})
+	go func() {
+		r.Reload()
+		r.Reload()
+		r.Reload()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Reload blocked while nothing was listening")
+	}
+	if n := len(r.wake); n != 1 {
+		t.Fatalf("%d wakes pending, want 1", n)
+	}
+}
+
+// TestTheAdapterWalksAPagesAncestors: the source answers a page's own restriction
+// and not its ancestors', so the adapter reads the chain up to the root.
+func TestTheAdapterWalksAPagesAncestors(t *testing.T) {
+	f := wiki(t)
+	ad := adapter(t, f)
+	p, err := ad.Page(ctx(t), "it_c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chain, err := ad.Ancestors(ctx(t), p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, a := range chain {
+		ids = append(ids, a.ID)
+	}
+	if len(ids) == 0 || ids[len(ids)-1] != "it_root" {
+		t.Fatalf("ancestors of it_c1 = %v", ids)
+	}
+	f.Edit("it_root", func(p *wikifake.Page) { p.Unreadable = true })
+	if _, err := ad.Ancestors(ctx(t), p); err == nil {
+		t.Fatal("an unreadable ancestor did not stop the walk")
+	}
+}

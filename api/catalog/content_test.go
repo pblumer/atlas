@@ -807,3 +807,133 @@ func captureCatalogLog(t *testing.T) *strings.Builder {
 }
 
 type logSink struct{ strings.Builder }
+
+// TestEveryContentRouteRunsUnderTheProductsGate: every route of the binding answers
+// a product somebody may only read with 403 and an unknown one with 404, before it
+// asks the source anything — the binding is changed by whoever maintains the
+// product's home catalogue and by nobody else.
+func TestEveryContentRouteRunsUnderTheProductsGate(t *testing.T) {
+	b := newBoundFixture(t)
+	reader := user("usr_reader", "grp_shop")
+	routes := []struct {
+		name   string
+		h      http.HandlerFunc
+		method string
+		target string
+		body   string
+	}{
+		{"status", b.s.HandleContentStatus, "GET", "/x", ""},
+		{"search", b.s.HandleContentSearch, "GET", "/x?source=wiki&q=VPN", ""},
+		{"preview", b.s.HandleContentPreview, "GET", "/x?source=wiki&page=SVC-12", ""},
+		{"link", b.s.HandleContentLink, "POST", "/x", `{"source":"wiki","pages":{"de":"SVC-12"}}`},
+		{"refresh", b.s.HandleContentRefresh, "POST", "/x", `{}`},
+		{"unlink", b.s.HandleContentUnlink, "POST", "/x", `{"reason":"r"}`},
+	}
+	seen := len(b.wiki.Seen)
+	for _, r := range routes {
+		if rec := call(t, r.h, reader, r.method, r.target, r.body, "id", "vpn"); rec.Code != http.StatusForbidden {
+			t.Errorf("%s by a reader = %d %s", r.name, rec.Code, rec.Body)
+		}
+		if rec := call(t, r.h, b.owner, r.method, r.target, r.body, "id", "nothing"); rec.Code != http.StatusNotFound {
+			t.Errorf("%s of an unknown product = %d %s", r.name, rec.Code, rec.Body)
+		}
+	}
+	if len(b.wiki.Seen) != seen {
+		t.Errorf("a refused caller reached the source: %v", b.wiki.Seen[seen:])
+	}
+	if rec := call(t, b.s.HandleCatalogContentRefresh, reader, "POST", "/x", "", "id", b.cat.ID); rec.Code != http.StatusForbidden {
+		t.Errorf("catalogue refresh by a reader = %d", rec.Code)
+	}
+	if rec := call(t, b.s.HandleCatalogContentRefresh, b.owner, "POST", "/x", "", "id", "nothing"); rec.Code != http.StatusNotFound {
+		t.Errorf("catalogue refresh of an unknown catalogue = %d", rec.Code)
+	}
+}
+
+// TestWhatSearchPreviewRefreshAndUnlinkRefuse: each route names what is missing or
+// wrong in the request rather than guessing, and a source that cannot be reached is
+// a gateway failure, not an empty answer.
+func TestWhatSearchPreviewRefreshAndUnlinkRefuse(t *testing.T) {
+	b := newBoundFixture(t)
+	get := func(h http.HandlerFunc, target string) *httptest.ResponseRecorder {
+		return call(t, h, b.owner, "GET", target, "", "id", "vpn")
+	}
+	post := func(h http.HandlerFunc, body string) *httptest.ResponseRecorder {
+		return call(t, h, b.owner, "POST", "/x", body, "id", "vpn")
+	}
+	cases := []struct {
+		name string
+		rec  *httptest.ResponseRecorder
+		code int
+		want string
+	}{
+		{"search without a source", get(b.s.HandleContentSearch, "/x?q=VPN"), 400, "name the content source"},
+		{"search of an unknown source", get(b.s.HandleContentSearch, "/x?source=other&q=VPN"), 400, "no content source other"},
+		{"search without a query", get(b.s.HandleContentSearch, "/x?source=wiki"), 400, "?q="},
+		{"preview without a page", get(b.s.HandleContentPreview, "/x?source=wiki"), 400, "?page="},
+		{"refresh of an unbound product", post(b.s.HandleContentRefresh, `{}`), 409, "not bound"},
+		{"refresh with a broken body", post(b.s.HandleContentRefresh, `{`), 400, ""},
+		{"unlink without a reason", post(b.s.HandleContentUnlink, `{"reason":"  "}`), 400, "needs a reason"},
+		{"unlink of an unbound product", post(b.s.HandleContentUnlink, `{"reason":"r"}`), 409, "not bound"},
+		{"unlink with a broken body", post(b.s.HandleContentUnlink, `{`), 400, ""},
+	}
+	for _, c := range cases {
+		if c.rec.Code != c.code || !strings.Contains(c.rec.Body.String(), c.want) {
+			t.Errorf("%s: %d %s", c.name, c.rec.Code, c.rec.Body)
+		}
+	}
+	// A search answers what the source found.
+	if rec := get(b.s.HandleContentSearch, "/x?source=wiki&q=VPN"); rec.Code != 200 || !strings.Contains(rec.Body.String(), "SVC-12") {
+		t.Fatalf("search = %d %s", rec.Code, rec.Body)
+	}
+
+	it := b.linkVPN(t)
+	bound := []struct {
+		name string
+		rec  *httptest.ResponseRecorder
+		code int
+		want string
+	}{
+		{"unlink of a language with no page", post(b.s.HandleContentUnlink, `{"lang":"it","reason":"r"}`), 400, "no it page"},
+		{"unlink of the primary alone", post(b.s.HandleContentUnlink, `{"lang":"de","reason":"r"}`), 409, "primary page"},
+		{"unlink at a stale revision", post(b.s.HandleContentUnlink, `{"reason":"r","revision":`+itoa(it.Revision+5)+`}`), 409, "changed since"},
+		{"refresh at a stale revision", post(b.s.HandleContentRefresh, `{"revision":`+itoa(it.Revision+5)+`}`), 409, "changed since"},
+	}
+	for _, c := range bound {
+		if c.rec.Code != c.code || !strings.Contains(c.rec.Body.String(), c.want) {
+			t.Errorf("%s: %d %s", c.name, c.rec.Code, c.rec.Body)
+		}
+	}
+	if got := b.item(t, "vpn"); got.Revision != it.Revision || got.ContentSource == nil {
+		t.Fatalf("a refused request changed the product: %+v", got)
+	}
+
+	// The source down: search and preview are gateway failures.
+	b.wiki.Set(func(s *wikifake.Server) { s.Down = true })
+	if rec := get(b.s.HandleContentSearch, "/x?source=wiki&q=VPN"); rec.Code != http.StatusBadGateway {
+		t.Errorf("search while down = %d %s", rec.Code, rec.Body)
+	}
+	if rec := get(b.s.HandleContentPreview, "/x?source=wiki&page=SVC-12"); rec.Code != http.StatusBadGateway {
+		t.Errorf("preview while down = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestWithoutAContentSourceTheRoutesSayThereIsNone: a server built without the
+// registry answers every route but the status with 404 naming why.
+func TestWithoutAContentSourceTheRoutesSayThereIsNone(t *testing.T) {
+	b := newBoundFixture(t)
+	b.s.Content = nil
+	for name, rec := range map[string]*httptest.ResponseRecorder{
+		"search":  call(t, b.s.HandleContentSearch, b.owner, "GET", "/x?source=wiki&q=a", "", "id", "vpn"),
+		"preview": call(t, b.s.HandleContentPreview, b.owner, "GET", "/x?source=wiki&page=a", "", "id", "vpn"),
+		"link":    call(t, b.s.HandleContentLink, b.owner, "POST", "/x", `{}`, "id", "vpn"),
+		"catalog": call(t, b.s.HandleCatalogContentRefresh, b.owner, "POST", "/x", "", "id", b.cat.ID),
+	} {
+		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "no content source is configured") {
+			t.Errorf("%s = %d %s", name, rec.Code, rec.Body)
+		}
+	}
+	rec := call(t, b.s.HandleContentStatus, b.owner, "GET", "/x", "", "id", "vpn")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"sources":[]`) {
+		t.Fatalf("status = %d %s", rec.Code, rec.Body)
+	}
+}

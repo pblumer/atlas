@@ -424,7 +424,9 @@ func (s *Server) tree(w http.ResponseWriter, r *http.Request, space string) {
 	if start+limit < len(all) {
 		res["next"] = page[len(page)-1]["id"]
 	}
-	if res["items"] == nil {
+	// An empty page is an empty list, as the source answers it: res["items"] holds
+	// a typed nil slice here, which an interface comparison with nil never catches.
+	if len(page) == 0 {
 		res["items"] = []any{}
 	}
 	writeJSON(w, 200, res)
