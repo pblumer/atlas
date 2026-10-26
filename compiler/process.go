@@ -1178,7 +1178,7 @@ type ConnectorTaskDetail struct {
 	CardDAVContactVar int32
 	CardDAVMaxResults int32
 	// wikiwikibangbang fields (JobType == WikiwikibangbangJobType,
-	// ADR-draft-wikiwikibangbang-worker). Connector (above) names the configured wiki,
+	// ADR-0498). Connector (above) names the configured wiki,
 	// and WikiConnector carries it as literal-or-FEEL. WikiOp is the interned operation —
 	// a row of connector/wikiwikibangbang/catalog. WikiProperties is the authored
 	// properties object compiled to one FEEL context at deploy (I5), and

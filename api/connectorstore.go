@@ -96,7 +96,7 @@ const (
 	// client from it.
 	connectorKindCardDAV = "carddav"
 	// connectorKindWiki is the wikiwikibangbang Worker Type
-	// (ADR-draft-wikiwikibangbang-worker). Worker-only like CardDAV: a record holds the
+	// (ADR-0498). Worker-only like CardDAV: a record holds the
 	// endpoint — the wiki's base URL — and a credentialsRef naming the vault bundle with
 	// the API token of the wiki account it writes as (connector/wikiwikibangbang.Bundle).
 	// The engine builds no client from it.

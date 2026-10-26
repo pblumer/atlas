@@ -11,7 +11,7 @@ import (
 
 // compileWikiConnectorTask compiles an <atlas:wikiwikibangbangConnector> task: one
 // operation on a wikiwikibangbang wiki through a Worker an operator configured
-// (ADR-draft-wikiwikibangbang-worker).
+// (ADR-0498).
 //
 // The operation table is connector/wikiwikibangbang/catalog's, read here directly so the
 // rules a deploy enforces are the very rows the worker runs. Every authored value is

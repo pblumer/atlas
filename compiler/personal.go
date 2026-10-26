@@ -219,7 +219,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.CardDAVGroup.Expr":     "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.CardDAVContact.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
-	// The wikiwikibangbang Worker's (ADR-draft-wikiwikibangbang-worker).
+	// The wikiwikibangbang Worker's (ADR-0498).
 	"connectorTasks.WikiConnector.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.WikiItem.Expr":       "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.WikiSpace.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

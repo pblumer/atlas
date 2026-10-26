@@ -21,7 +21,7 @@ const (
 
 // wikiWorkerEnv renders the wikis a supervised wikiwikibangbang worker needs out of the
 // vault, one set of variables per wikiwikibangbang Worker the store holds
-// (ADR-draft-wikiwikibangbang-worker).
+// (ADR-0498).
 //
 // It is CardDAV's arrangement: the endpoint is always rendered, because every wiki is an
 // installation of its own. [wikiwikibangbang.CheckBundle] is the one reading of an

@@ -52,7 +52,7 @@ func TestEveryOperationIsConsistent(t *testing.T) {
 }
 
 // The operations are the loop a process runs on a task and a page, spelled like the
-// Jira Worker's where the meaning is the same (ADR-draft-wikiwikibangbang-worker).
+// Jira Worker's where the meaning is the same (ADR-0498).
 func TestTheOperationsAreTheRecordsTable(t *testing.T) {
 	want := []string{"add-comment", "append-to-page", "create-item", "get-item", "query-items", "read-page", "transition-item", "update-item"}
 	if got := Names(); !slices.Equal(got, want) {

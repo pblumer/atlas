@@ -1,5 +1,5 @@
 // Package catalog is the wikiwikibangbang Worker's operation table
-// (ADR-draft-wikiwikibangbang-worker): which values each operation needs and takes, what
+// (ADR-0498): which values each operation needs and takes, what
 // it returns, and the checks a deploy and a run share.
 //
 // It imports nothing of atlas's, for the reason connector/carddav/catalog gives: the

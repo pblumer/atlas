@@ -533,7 +533,7 @@ const CardDAVJobType = "io.atlas.carddav"
 const CardDAVJobTypeIndex int32 = 37
 
 // WikiwikibangbangJobType is the reserved job type a wikiwikibangbang task carries
-// (ADR-draft-wikiwikibangbang-worker). One job type serves every operation on the wiki —
+// (ADR-0498). One job type serves every operation on the wiki —
 // create, read, update and move an item, comment on it, query items, read a page as
 // Markdown and append to one — because they share a wiki, an account and its error
 // envelope; the operation is a modeled value, as it is for Jira (ADR-0201).
@@ -2526,7 +2526,7 @@ func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
 }
 
 // WikiConfig is the deploy-time configuration of a wikiwikibangbang task
-// (ADR-draft-wikiwikibangbang-worker). Worker names the configured wiki and WorkerExpr
+// (ADR-0498). Worker names the configured wiki and WorkerExpr
 // carries it as literal-or-FEEL; Op is a row of connector/wikiwikibangbang/catalog. Item,
 // Space, ItemType, Parent, Title, MatchField, Labels, Text, Blocks, Transition, Comment
 // and Query are literal-or-FEEL values; a literal Blocks is the JSON array the compiler

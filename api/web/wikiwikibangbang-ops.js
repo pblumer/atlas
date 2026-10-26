@@ -1,5 +1,5 @@
 // wikiwikibangbang-ops.js — what the Modeler knows about the wikiwikibangbang Worker's
-// operations (ADR-draft-wikiwikibangbang-worker): each operation's label, which values
+// operations (ADR-0498): each operation's label, which values
 // it needs and takes, what it returns, and the bound a query takes by default and at
 // most.
 //

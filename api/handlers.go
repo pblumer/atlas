@@ -7231,7 +7231,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 		}}
 	case compiler.WikiwikibangbangJobTypeIndex:
 		// The evaluated values travel, and nothing that says which wiki or as whom
-		// (ADR-draft-wikiwikibangbang-worker). So does whether the job has been leased
+		// (ADR-0498). So does whether the job has been leased
 		// before: an append or a comment checks for its earlier round's write only then,
 		// and the lease epoch is a fact of the job the worker does not otherwise read.
 		j, err := wikiwikibangbang.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)

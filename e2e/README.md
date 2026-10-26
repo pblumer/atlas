@@ -246,7 +246,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   switching a find to an update drops what only a find takes; a delete offers and writes
   no result variable; and a contact given by a variable hides the inline values and keeps
   the variable across an unrelated edit. Assertions are on the exported XML.
-- **`wikiwikibangbang-modeler.spec.mjs`** (ADR-draft-wikiwikibangbang-worker): the
+- **`wikiwikibangbang-modeler.spec.mjs`** (ADR-0498): the
   **wikiwikibangbang Worker Type in the Implement panel** — choosing it starts on Create
   item and shows the space, type, title, parent, properties, matching field and body a
   create takes; switching a create to a transition drops what only a create takes; a query

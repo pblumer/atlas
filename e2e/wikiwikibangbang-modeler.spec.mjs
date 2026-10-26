@@ -4,7 +4,7 @@
 // the compiler refuses a value an operation does not use ("does not use space"), and a
 // field the panel hides is one it cannot clear. Driven through the real vendored
 // bpmn-js, asserting against the exported XML the deploy sends
-// (ADR-draft-wikiwikibangbang-worker).
+// (ADR-0498).
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {

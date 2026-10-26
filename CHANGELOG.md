@@ -28,7 +28,7 @@ _Changed_ / _Removed_ for each version.
   twice; a missing item and a refused value can be caught as
   `WIKIWIKIBANGBANG_ITEM_NOT_FOUND` and `WIKIWIKIBANGBANG_VALIDATION_FAILED`. No capability
   claim is made: the record lists where the wiki and Jira differ
-  ([ADR-draft-wikiwikibangbang-worker](docs/adr/draft-wikiwikibangbang-worker.md)).
+  ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)).
 - **The Operations view has a heatmap.** A strip over a version's live diagram switches
   from **Live** to **Runs**, **Waiting**, **Working** or **Duration**. Runs shades every
   element *and* every sequence flow by how many tokens passed it, and draws what nothing

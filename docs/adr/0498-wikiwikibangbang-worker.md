@@ -1,4 +1,4 @@
-# ADR-DRAFT: A wikiwikibangbang Worker Type — a process opens and moves tasks, and creates, reads and extends pages in a wikiwikibangbang wiki
+# ADR-0498: A wikiwikibangbang Worker Type — a process opens and moves tasks, and creates, reads and extends pages in a wikiwikibangbang wiki
 
 - **Status:** Accepted
 - **Implementation:** Landed

@@ -964,7 +964,7 @@ const WORKER_TYPES = [
   {
     id: "wikiwikibangbang", name: "wikiwikibangbang", kind: "Wiki",
     desc: "Uses a wikiwikibangbang wiki from a process: opens a task for a person, reads it, changes its properties and labels, moves it through its workflow, comments on it and finds tasks by a query; creates a page, reads it as Markdown and appends to it. A repeated create finds the item an earlier round made when a matching field identifies it, a transition already made counts as made, and an append carries every block of the page back unchanged. Configure each wiki below: its base URL, and the API token of a technical account that is an editor in the spaces processes write to, in the vault, which never enters a model. An account with a system role is refused. Worker-only, and atlas supervises the worker for it.",
-    refs: "ADR-draft-wikiwikibangbang-worker", status: "active", statusLabel: "configured below",
+    refs: "ADR-0498", status: "active", statusLabel: "configured below",
   },
   {
     id: "mssql", name: "Microsoft SQL Server", kind: "Database",

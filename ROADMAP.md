@@ -660,7 +660,7 @@ The control-flow basics most real models use.
   capability claim yet — the two contact Worker Types are not declared interchangeable
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
   **wikiwikibangbang wikis are a Worker Type too**
-  ([ADR-draft-wikiwikibangbang-worker](docs/adr/draft-wikiwikibangbang-worker.md)): a
+  ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)): a
   service task marked `<atlas:wikiwikibangbangConnector connector operation …>` opens,
   reads, changes and moves tasks, comments on them and queries items, and creates, reads (as
   Markdown) and extends pages — eight operations in one table

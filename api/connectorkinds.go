@@ -467,7 +467,7 @@ var managedConnectorKinds = append([]managedConnectorKind{
 	{
 		// A wikiwikibangbang task creates, reads, updates or moves an item of a
 		// wikiwikibangbang wiki, comments on it, queries items, reads a page as Markdown or
-		// appends to one (ADR-draft-wikiwikibangbang-worker). Worker-only for CardDAV's
+		// appends to one (ADR-0498). Worker-only for CardDAV's
 		// reason: the token writes as the wiki account and has no business on the engine's
 		// run loop.
 		name:           connectorKindWiki,

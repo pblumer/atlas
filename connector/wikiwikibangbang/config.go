@@ -24,7 +24,7 @@ import (
 //
 // The account is a technical one of its own — not a person's, and not the read-only
 // account the catalogue reads the same wiki with (ADR-0491), whose standing that record
-// checks before every read (ADR-draft-wikiwikibangbang-worker).
+// checks before every read (ADR-0498).
 type Bundle struct {
 	Token string `json:"token"`
 }

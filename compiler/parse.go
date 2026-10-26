@@ -2458,7 +2458,7 @@ type xmlServiceTask struct {
 	// server a *worker* holds the credential for.
 	CardDAV *xmlCardDAVConnector `xml:"extensionElements>carddavConnector"`
 	// Wiki, when present, marks this service task a wikiwikibangbang task
-	// (ADR-draft-wikiwikibangbang-worker): one operation on a wikiwikibangbang wiki —
+	// (ADR-0498): one operation on a wikiwikibangbang wiki —
 	// create, read, update or move an item, comment on it, query items, read a page as
 	// Markdown or append to one — as an account a *worker* holds the token of.
 	Wiki *xmlWikiConnector `xml:"extensionElements>wikiwikibangbangConnector"`
@@ -2782,7 +2782,7 @@ type xmlCardDAVConnector struct {
 }
 
 // xmlWikiConnector is the <atlas:wikiwikibangbangConnector> extension on a service task
-// (ADR-draft-wikiwikibangbang-worker). connector names the wikiwikibangbang Worker
+// (ADR-0498). connector names the wikiwikibangbang Worker
 // (literal-or-FEEL), and there is no credential attribute, because none enters the
 // engine. operation is a row of connector/wikiwikibangbang/catalog; which other
 // attributes apply is decided by the operation, and only by it. The attributes are

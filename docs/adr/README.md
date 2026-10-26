@@ -583,6 +583,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0495](0495-layered-release-architecture.md) | A release's architecture is drawn in layers, from what Atlas already holds | Accepted (amended) | Partial |
 | [0496](0496-operations-heatmap.md) | The Operations heatmap counts arrows and splits a task's time | Accepted | Landed |
 | [0497](0497-console-locales-one-file-each.md) | The console's languages are one file each, and none ships incomplete | Accepted | Landed |
+| [0498](0498-wikiwikibangbang-worker.md) | A wikiwikibangbang Worker Type — a process opens and moves tasks, and creates, reads and extends pages in a wikiwikibangbang wiki | Accepted | Landed |
 
 ## The two states of a record
 
