@@ -422,14 +422,14 @@ test("the application lists a decision that is only a draft, and marks one that 
   // The decision that is in the model carries the marker: what a publish ships is
   // the model, not the work sitting on top of it.
   const inModel = page.locator("#pd-rows tr", { hasText: "Eligibility" });
-  await expect(inModel.locator(".draft-chip")).toHaveText("Draft");
+  await expect(inModel.locator(".draft-chip")).toHaveText("Entwurf");
   await expect(inModel.locator("a").first()).toHaveAttribute("href", "#/modeler/dmn/ref-1");
 
   // The decision that is *only* a draft is a row of its own — nothing else in this
   // table represents it — and it says it will not travel.
   const loose = page.locator("#pd-rows tr", { hasText: "Pricing" });
   await expect(loose.locator("a").first()).toHaveAttribute("href", "#/modeler/dmn/d/dd-1");
-  await expect(loose).toContainText("not in the model yet");
+  await expect(loose).toContainText("noch nicht im Modell");
 });
 
 test("a draft saved on the way from a business rule task says the task is not wired yet", async ({ page }) => {
