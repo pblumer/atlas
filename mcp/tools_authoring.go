@@ -902,13 +902,17 @@ func authoringTools() []Tool {
 				"what this installation had in place for it: its name and environment, its external address, the " +
 				"public start links, and per worker whether Atlas runs it or a worker process leases it, its " +
 				"endpoint as scheme, host and port, and the worker instances seen serving it. An endpoint the " +
-				"caller may not see, and the instances for a caller who is not an operator, are withheld. A " +
-				"release recorded before snapshots existed has none, and the error says so.",
+				"caller may not see, and the instances for a caller who is not an operator, are withheld. " +
+				"layers narrows the answer: application is the logical part, technology the physical part, and " +
+				"the answer's layers field says which the release records and which it shows. A release " +
+				"recorded before snapshots existed has none, and the error says so.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"id":      stringProp("The application id."),
 					"version": integerProp("The release version, as atlas_application_releases lists it."),
+					"layers": stringProp("Optional: the layers to show, comma-separated, of strategy, business, " +
+						"application, data and technology. Default application,technology."),
 				},
 				"required": []any{"id", "version"},
 			},
@@ -921,8 +925,12 @@ func authoringTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.get("/api/v1/applications/" + url.PathEscape(id) + "/releases/" +
-					strconv.FormatUint(version, 10) + "/architecture"))
+				path := "/api/v1/applications/" + url.PathEscape(id) + "/releases/" +
+					strconv.FormatUint(version, 10) + "/architecture"
+				if layers, _ := args["layers"].(string); layers != "" {
+					path += "?layers=" + url.QueryEscape(layers)
+				}
+				return asText(c.get(path))
 			},
 		},
 		{

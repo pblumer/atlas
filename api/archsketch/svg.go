@@ -62,10 +62,42 @@ const (
 	colorSheet       = "#ffffff"
 )
 
-// SVG renders the snapshot as a standalone SVG document.
+// SVG renders the snapshot as a standalone SVG document. A value [Snapshot.Select]
+// narrowed to the technology layer is drawn as the installation alone.
 func SVG(s Snapshot, m Meta) []byte {
-	left := inboundBoxes(s)
-	right := outboundBoxes(s)
+	if s.technologyOnly() {
+		return drawSketch(s, m, technologyParts(s, m))
+	}
+	return drawSketch(s, m, sketchParts{
+		left:       inboundBoxes(s),
+		right:      outboundBoxes(s),
+		rightTitle: "Depends on",
+		noRight:    "No outbound dependencies.",
+		center: centerBox{fill: colorApplication, tooltip: m.Application, kind: "Application component",
+			lines: applicationLines(s, m)},
+		key: footerKey(s),
+	})
+}
+
+// sketchParts is what one kind of picture puts into the fixed frame: the two columns,
+// the box inside the Atlas node, and the key that explains its lines.
+type sketchParts struct {
+	left, right []box
+	rightTitle  string
+	noRight     string
+	center      centerBox
+	key         string
+}
+
+// centerBox is what sits inside the Atlas node: the application, or, on a picture of
+// the installation alone, the Atlas system software.
+type centerBox struct {
+	fill, tooltip, kind string
+	lines               []string
+}
+
+func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
+	left, right := parts.left, parts.right
 	bh := boxHeight
 	if s.Physical != nil {
 		bh = physicalBoxHeight
@@ -75,7 +107,7 @@ func SVG(s Snapshot, m Meta) []byte {
 	contentH := rows*bh + (rows-1)*boxGap
 	nodeTop := headerH + 18
 	top := nodeTop + nodeHeadH
-	notes := footerLines(s, m)
+	notes := footerLines(s, m, parts.key)
 	footerTop := top + contentH + 40
 	height := footerTop + 22 + len(notes)*lineHeight + 16
 
@@ -92,9 +124,9 @@ func SVG(s Snapshot, m Meta) []byte {
 	fmt.Fprintf(&b, `<text x="%d" y="34" font-size="20" font-weight="600" fill="%s">%s</text>`+"\n", colLeftX, colorInk, esc(title(m)))
 	fmt.Fprintf(&b, `<text x="%d" y="56" fill="%s">%s</text>`+"\n", colLeftX, colorMuted, esc(stampLine(s, m)))
 	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, headerH+10, colorInk)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Depends on</text>`+"\n", colRightX, headerH+10, colorInk)
+	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, headerH+10, colorInk, esc(parts.rightTitle))
 
-	// The Atlas node, and the application inside it.
+	// The Atlas node, and what runs inside it.
 	nodeH := nodeHeadH + contentH + 16
 	fmt.Fprintf(&b, `<g><title>%s</title>`, esc("Atlas — the server the application runs on"))
 	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, nodeX, nodeTop, nodeWidth, nodeH, colorTechnology, colorStroke)
@@ -104,17 +136,16 @@ func SVG(s Snapshot, m Meta) []byte {
 	appX := nodeX + appInset
 	appW := nodeWidth - 2*appInset
 	appTop := top
-	fmt.Fprintf(&b, `<g><title>%s</title>`, esc(m.Application))
-	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, colorApplication, colorStroke)
-	appLines := applicationLines(s, m)
-	for i, line := range appLines {
+	fmt.Fprintf(&b, `<g><title>%s</title>`, esc(parts.center.tooltip))
+	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, parts.center.fill, colorStroke)
+	for i, line := range parts.center.lines {
 		weight := ""
 		if i == 0 {
 			weight = ` font-weight="600"`
 		}
 		fmt.Fprintf(&b, `<text x="%d" y="%d"%s fill="%s">%s</text>`, appX+12, appTop+24+i*lineHeight, weight, colorInk, esc(cut(line, 30)))
 	}
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">Application component</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted)
+	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
 
 	// The ways in, each with a solid arrow into the application.
 	for i, box := range left {
@@ -125,10 +156,10 @@ func SVG(s Snapshot, m Meta) []byte {
 			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke)
 	}
 
-	// The dependencies: a solid arrow from whichever side opens the connection, or a
+	// The right column: a solid arrow from whichever side opens the connection, or a
 	// dashed line where no connection is recorded.
 	if len(right) == 0 {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">No outbound dependencies.</text>`+"\n", colRightX, top+bh/2+5, colorMuted)
+		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colRightX, top+bh/2+5, colorMuted, esc(parts.noRight))
 	}
 	for i, box := range right {
 		y := top + i*(bh+boxGap)
@@ -155,6 +186,22 @@ func SVG(s Snapshot, m Meta) []byte {
 	}
 	b.WriteString("</svg>\n")
 	return []byte(b.String())
+}
+
+// technologyParts is the picture of the installation alone: the Atlas system software
+// in the node, its API on the left, and on the right each worker process and each
+// connection Atlas opens itself, with the system it reaches.
+func technologyParts(s Snapshot, m Meta) sketchParts {
+	p := *s.Physical
+	return sketchParts{
+		left:       []box{apiBox(s)},
+		right:      technologyBoxes(p),
+		rightTitle: "Worker processes and the systems reached",
+		noRight:    "No worker served this release here.",
+		center: centerBox{fill: colorTechnology, tooltip: "Atlas — the system software the release runs in", kind: "System software",
+			lines: []string{"Atlas", installationName(p), fmt.Sprintf("Release v%d", m.Version)}},
+		key: "Solid arrow: a connection, from the side that opens it — a worker process leasing its work from Atlas, or Atlas reaching a system itself; → in a box: the system that connection reaches.",
+	}
 }
 
 // box is one entry on either side: a fill for its layer, two or three lines of text,
@@ -190,10 +237,9 @@ func drawBox(b *strings.Builder, x, y, height int, bx box) {
 	b.WriteString("</g>\n")
 }
 
-// inboundBoxes is the left column: Atlas's API first, because every other way in is
-// one of its routes, then each message the application receives, then the public
-// start links the recording installation had.
-func inboundBoxes(s Snapshot) []box {
+// apiBox is Atlas's API, with the address it is reached at when the snapshot has a
+// physical part: every way in is one of its routes.
+func apiBox(s Snapshot) box {
 	api := box{
 		fill:    colorTechnology,
 		label:   "Atlas API",
@@ -209,7 +255,14 @@ func inboundBoxes(s Snapshot) []box {
 		}
 		api.tooltip += "; " + api.site
 	}
-	out := []box{api}
+	return api
+}
+
+// inboundBoxes is the left column: Atlas's API first, because every other way in is
+// one of its routes, then each message the application receives, then the public
+// start links the recording installation had.
+func inboundBoxes(s Snapshot) []box {
+	out := []box{apiBox(s)}
 	for _, e := range s.EntryPoints {
 		effect := "continues a running instance"
 		if e.Starts {
@@ -288,6 +341,37 @@ func outboundBoxes(s Snapshot) []box {
 	return out
 }
 
+// technologyBoxes is the right column of a picture of the installation alone: each
+// worker process with the system it reaches, each connection Atlas opens itself, and
+// the job types worker processes lease.
+func technologyBoxes(p Physical) []box {
+	var out []box
+	for _, w := range p.Workers {
+		bx := box{fill: colorTechnology, label: w.Name, site: w.siteText()}
+		if w.Placement == PlacementEngine {
+			bx.kind = "Path"
+			bx.detail = workerTypeText(w.WorkerType) + " · opened by Atlas itself"
+			bx.tooltip = "Connection Atlas opens itself for worker " + w.Name + " (" + workerTypeText(w.WorkerType) + "); " + bx.site
+			bx.arrow = arrowOut
+		} else {
+			bx.kind = "System software"
+			bx.detail = workerTypeText(w.WorkerType) + " · " + w.Observers.text()
+			bx.tooltip = "Worker process serving " + w.Name + " (" + workerTypeText(w.WorkerType) + "), leasing its work from Atlas; " +
+				w.Observers.text() + "; " + bx.site
+			bx.arrow = arrowIn
+		}
+		out = append(out, bx)
+	}
+	for _, j := range p.JobTypes {
+		out = append(out, box{fill: colorTechnology, kind: "System software", label: "Job type " + j.JobType,
+			detail:  "leased by subscribed worker processes",
+			site:    j.Observers.text(),
+			tooltip: "Worker processes subscribed to job type " + j.JobType + " lease its work from Atlas; " + j.Observers.text(),
+			arrow:   arrowIn})
+	}
+	return out
+}
+
 func applicationLines(s Snapshot, m Meta) []string {
 	lines := []string{m.Application, fmt.Sprintf("Release v%d", m.Version)}
 	lines = append(lines, plural(len(s.Processes), "process", "processes"))
@@ -300,14 +384,24 @@ func applicationLines(s Snapshot, m Meta) []string {
 	return lines
 }
 
-func footerLines(s Snapshot, m Meta) []string {
-	key := "Solid arrow: a connection opened towards Atlas. Dashed line: the application depends on it — who connects to whom there is not recorded in this snapshot."
+// footerKey explains the lines of a picture of the application.
+func footerKey(s Snapshot) string {
 	if s.Physical != nil {
-		key = "Solid arrow: a connection, from the side that opens it; → in a worker's box: the system that worker connects to. Dashed line: a dependency with no connection recorded."
+		return "Solid arrow: a connection, from the side that opens it; → in a worker's box: the system that worker connects to. Dashed line: a dependency with no connection recorded."
 	}
+	if s.Recorded().Has(LayerTechnology) {
+		return "Solid arrow: a connection opened towards Atlas. Dashed line: the application depends on it — who connects to whom is in the technology layer, switched off for this picture."
+	}
+	return "Solid arrow: a connection opened towards Atlas. Dashed line: the application depends on it — who connects to whom there is not recorded in this snapshot."
+}
+
+func footerLines(s Snapshot, m Meta, key string) []string {
 	lines := []string{
 		fmt.Sprintf("Generated by Atlas from release v%d of %s; nothing here was drawn by a person.", m.Version, m.Application),
 		key,
+	}
+	if note := s.layerNote(); note != "" {
+		lines = append(lines, note)
 	}
 	if n := s.UnreadProcesses(); n > 0 {
 		lines = append(lines, fmt.Sprintf("Incomplete: %s could not be read when the snapshot was taken; what they offer and need is missing.",
@@ -328,9 +422,16 @@ func stampLine(s Snapshot, m Meta) string {
 	view := "Logical view"
 	if p := s.Physical; p != nil {
 		view = "Logical and physical view of " + installationName(*p)
+		if s.technologyOnly() {
+			view = "Physical view of " + installationName(*p)
+		}
 	}
-	return fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
+	line := fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
 		view, formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
+	if sel := s.Shown(); sel != DefaultSelection {
+		line += " · layers: " + (sel & s.Recorded()).String()
+	}
+	return line
 }
 
 // installationName says which installation a physical part describes, in the words

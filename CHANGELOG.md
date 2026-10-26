@@ -29,6 +29,22 @@ _Changed_ / _Removed_ for each version.
   `WIKIWIKIBANGBANG_ITEM_NOT_FOUND` and `WIKIWIKIBANGBANG_VALIDATION_FAILED`. No capability
   claim is made: the record lists where the wiki and Jira differ
   ([ADR-draft-wikiwikibangbang-worker](docs/adr/draft-wikiwikibangbang-worker.md)).
+- **The architecture sketch shows the layers you choose.** **Architecture** in a
+  release's history now offers one checkbox per layer the release records: the
+  *application* layer (what the release's content fixes: the messages it receives, the
+  workers, job types, calls and decisions it names) and the *technology* layer (what the
+  installation had in place: the Atlas node and its address, worker processes, endpoints
+  and the instances seen). Switching off technology draws the logical view; switching off
+  application draws the installation alone, with each worker process and each connection
+  Atlas opens itself and the system it reaches. The picture and both downloads follow the
+  ticked layers, and a narrowed picture says which layers it shows and which were
+  switched off. The routes and `atlas_release_architecture` take the same choice as
+  `?layers=` (`strategy`, `business`, `application`, `data`, `technology`); the
+  default is application and technology, so a link or an embedded picture that names no
+  layer draws exactly what it drew before. A name that is not a layer is refused, and a
+  release that records none of the layers asked for says which it records
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
+
 - **Technical capability contracts have a content digest.** `workertype.DigestTechnicalContractJSON` names a contract file by
   the SHA-256 of its exact bytes, `sha256:<hex>`, so any tool can recompute it and a
   reformatted file is a different artifact. It refuses a file that is not exactly one
