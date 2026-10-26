@@ -1,0 +1,50 @@
+[
+  {
+    "name": "create contact",
+    "direction": "input",
+    "document": {
+      "displayName": "Alice",
+      "email": "alice@example.org"
+    },
+    "valid": true
+  },
+  {
+    "name": "missing contact name",
+    "direction": "input",
+    "document": {
+      "email": "alice@example.org"
+    },
+    "valid": false
+  },
+  {
+    "name": "contact rejects account username",
+    "direction": "input",
+    "document": {
+      "userName": "alice"
+    },
+    "valid": false
+  },
+  {
+    "name": "contact creation response",
+    "direction": "output",
+    "document": {
+      "id": "people/c123"
+    },
+    "valid": true
+  },
+  {
+    "name": "missing contact ID",
+    "direction": "output",
+    "document": {},
+    "valid": false
+  },
+  {
+    "name": "unknown output property",
+    "direction": "output",
+    "document": {
+      "id": "people/c123",
+      "password": "secret"
+    },
+    "valid": false
+  }
+]
