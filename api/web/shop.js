@@ -155,6 +155,7 @@ const STRINGS = {
     'variant.one': 'Genau eine Ausführung wählen.',
     'variant.missing': 'Bitte wählen Sie zuerst für jede Position eine Ausführung.',
     'info.title': 'Angaben zum Service',
+    'info.close': 'Schliessen',
     'info.id': 'Kennung',
     'info.wiki': 'Mehr im Wiki',
     'info.approval': 'Genehmigung',
@@ -331,6 +332,7 @@ const STRINGS = {
     'variant.one': 'Choose exactly one version.',
     'variant.missing': 'Choose a version for every line before ordering.',
     'info.title': 'About this service',
+    'info.close': 'Close',
     'info.id': 'Identifier',
     'info.wiki': 'More in the wiki',
     'info.approval': 'Approval',
@@ -507,6 +509,7 @@ const STRINGS = {
     'variant.one': 'Choisissez exactement une variante.',
     'variant.missing': 'Choisissez une variante pour chaque position avant de commander.',
     'info.title': 'Informations sur le service',
+    'info.close': 'Fermer',
     'info.id': 'Identifiant',
     'info.wiki': 'En savoir plus dans le wiki',
     'info.approval': 'Approbation',
@@ -682,6 +685,7 @@ const STRINGS = {
     'variant.one': 'Scegliere esattamente una variante.',
     'variant.missing': 'Scegliere una variante per ogni posizione prima di ordinare.',
     'info.title': 'Indicazioni sul servizio',
+    'info.close': 'Chiudi',
     'info.id': 'Identificativo',
     'info.wiki': 'Altro nel wiki',
     'info.approval': 'Approvazione',
@@ -1989,8 +1993,19 @@ function infoButton(id) {
   return el('button', {
     class: 'sq info',
     'aria-label': t('info.title'),
-    onclick: () => { state.info = state.info === id ? '' : id; render(); },
+    onclick: () => {
+      state.info = state.info === id ? '' : id;
+      render();
+      focusInfoDialog();
+    },
   }, 'i');
+}
+
+// focusInfoDialog moves the focus into an open dialog, so a keyboard user lands
+// in it and Escape and Tab act on it rather than on the page behind.
+function focusInfoDialog() {
+  const b = document.querySelector('.info-dialog .info-close');
+  if (b) b.focus();
 }
 
 // infoPanel is what the "i" opens: what the catalogue actually knows about a
@@ -2038,6 +2053,29 @@ function infoPanel(rel, item) {
     windowNote(item)
       ? el('p', { class: 'muted' }, windowNote(item)) : null,
     heldPill(item));
+}
+
+// infoDialog shows the panel as a dialog over the page instead of below it.
+//
+// Below the columns it landed under the last row, so in a catalogue of many
+// products the description somebody asked for appeared a screen further down,
+// out of sight of the "i" they pressed. Over the page it opens where they are
+// looking. It closes on its button, a click beside it and Escape, and the page
+// behind it does not scroll while it is open.
+function infoDialog(rel, item) {
+  const close = () => { state.info = ''; render(); };
+  return el('div', {
+    class: 'info-backdrop',
+    onclick: (e) => { if (e.target === e.currentTarget) close(); },
+  },
+  el('div', {
+    class: 'info-dialog',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-label': textOf(item.texts, item.id),
+  },
+  el('button', { class: 'sq info-close', 'aria-label': t('info.close'), onclick: close }, '\u00d7'),
+  infoPanel(rel, item)));
 }
 
 // productPicture is the product as it looks, where the catalogue has a picture of
@@ -2338,7 +2376,7 @@ function renderCatalogue() {
       el('div', { class: 'cascade', 'data-step': String(state.step) },
         category, groupCol, offeringCol, serviceCol),
       state.info && by[state.info]
-        ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null]);
+        ? infoDialog(rel, by[state.info]) : null]);
   catalogueBody = body;
   catalogueBodyNode = el('div', {}, body());
 
@@ -2639,7 +2677,7 @@ function renderBasket() {
     // mounted form before it repaints, so opening this does not cost somebody
     // what they have typed.
     state.info && by[state.info]
-      ? el('div', { style: 'margin-top:18px' }, infoPanel(rel, by[state.info])) : null);
+      ? infoDialog(rel, by[state.info]) : null);
 }
 
 // --- What a product needs that its name does not say -------------------------
@@ -3865,7 +3903,7 @@ function renderServices() {
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.service')),
         where.offering ? services.filter((id) => productOf(id) === where.offering).map((id) => row(id)) : [])),
-    state.info && by[state.info] ? el('div', { style: 'margin-top:16px' }, infoPanel(rel, by[state.info])) : null);
+    state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
 }
 
 // filedUnder is the key one product is filed under for one of the two heading
@@ -4204,11 +4242,21 @@ function render() {
       currentView(),
       renderActions(),
     ]));
+  // The page behind an open dialog stays where it is (infoDialog).
+  document.body.classList.toggle('dialog-open', !!state.info);
   // After the page exists. Fire and forget: the containers say they are loading
   // until this finishes, and a failure to load the runtime leaves a sentence rather
   // than an empty box.
   mountConfigForms();
 }
+
+// Escape closes the info dialog wherever the focus is.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && state.info) {
+    state.info = '';
+    render();
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.lang = locale;

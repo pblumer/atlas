@@ -87,10 +87,44 @@ func TestEveryViewThatOffersThePanelAlsoDrawsIt(t *testing.T) {
 		if !strings.Contains(body, "infoButton(") {
 			continue // a view with no button owes no panel
 		}
-		if !strings.Contains(body, "infoPanel(") {
+		if !strings.Contains(body, "infoPanel(") && !strings.Contains(body, "infoDialog(") {
 			t.Errorf("%s draws the info button and never the panel, so pressing it "+
 				"does nothing at all — the control answers and the answer is blank",
 				view.name)
 		}
+	}
+}
+
+// TestTheInfoPanelOpensAsADialog: the "i" opens its panel over the page, where
+// the person pressing it is looking, and not under the last row of a long
+// catalogue. The dialog says what it is to a screen reader, closes on its own
+// button and on Escape, and every view that draws the panel draws it this way.
+func TestTheInfoPanelOpensAsADialog(t *testing.T) {
+	src := readWeb(t, "shop.js")
+	dialog := webRegion(t, src, "function infoDialog(", "\n}")
+	for _, want := range []string{"role: 'dialog'", "'aria-modal': 'true'", "t('info.close')", "infoPanel(rel, item)",
+		"e.target === e.currentTarget"} {
+		if !strings.Contains(dialog, want) {
+			t.Errorf("infoDialog lacks %s", want)
+		}
+	}
+	if !strings.Contains(src, "e.key === 'Escape' && state.info") {
+		t.Error("Escape does not close the info dialog")
+	}
+	for _, view := range []struct{ name, from, to string }{
+		{"the catalogue", "function renderCatalogue(", "\nfunction renderBasket("},
+		{"the basket", "function renderBasket(", "\n// --- What a product needs"},
+		{"what somebody holds", "function renderServices(", "\n// The brand mark"},
+	} {
+		body := webRegion(t, src, view.from, view.to)
+		if strings.Contains(body, "infoPanel(") {
+			t.Errorf("%s still draws the panel inline instead of as a dialog", view.name)
+		}
+	}
+	if n := strings.Count(src, "'info.close':"); n != 4 {
+		t.Errorf("info.close is translated %d times, want once per locale (de, en, fr, it)", n)
+	}
+	if !strings.Contains(readWeb(t, "shop.html"), ".info-backdrop") {
+		t.Error("shop.html has no style for the dialog's backdrop")
 	}
 }

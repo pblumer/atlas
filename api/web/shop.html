@@ -186,6 +186,15 @@
         font:inherit; font-size:13px; cursor:pointer; padding:0; }
   .sq:disabled { opacity:.45; cursor:default; }
   .sq.info { color:var(--muted); }
+  /* The "i" opens its panel over the page (infoDialog in shop.js), where the
+     person is looking, instead of under the last row of a long catalogue. */
+  .info-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:flex-start;
+                   justify-content:center; padding:48px 16px; overflow-y:auto;
+                   background:rgba(15,23,42,.45); }
+  .info-dialog { position:relative; width:100%; max-width:640px; }
+  .info-dialog .card { box-shadow:0 12px 32px rgba(15,23,42,.25); padding-right:48px; }
+  .info-close { position:absolute; top:12px; right:12px; z-index:1; font-size:16px; }
+  body.dialog-open { overflow:hidden; }
 
   /* The favourites bar above the cascade. */
   .favbar { display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:12px;

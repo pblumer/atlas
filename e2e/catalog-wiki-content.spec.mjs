@@ -327,3 +327,34 @@ for (const withBinding of [true, false]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("the info panel opens as a dialog over the page and closes on Escape, its button and the backdrop", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript(installShop, true);
+  await page.goto("/shop.html?lang=en");
+  const info = page.getByRole("button", { name: "About this service" }).first();
+  await expect(info).toBeVisible({ timeout: 10000 });
+  const dialog = page.getByRole("dialog");
+
+  await info.click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator(".product-description")).toHaveText("Secure access.");
+  // Open where the person is looking: the dialog's top is inside the viewport.
+  const box = await dialog.boundingBox();
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y).toBeLessThan(900);
+  await expect(page.getByRole("button", { name: "Close" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+
+  await info.click();
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await info.click();
+  await page.locator(".info-backdrop").click({ position: { x: 5, y: 5 } });
+  await expect(dialog).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
