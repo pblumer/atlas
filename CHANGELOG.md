@@ -33,7 +33,14 @@ _Changed_ / _Removed_ for each version.
   publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
   product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
   and is audited. Without a configured source nothing changes
-  ([ADR-draft](docs/adr/draft-service-content-from-an-external-source.md)).
+  ([ADR-draft](docs/adr/draft-service-content-from-an-external-source.md)). In the Console,
+  administrators configure and check sources under **Console › Content sources**; the
+  catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
+  with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
+  quarantine state — draws a bound product's description, keywords and picture read-only, and
+  offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
+  **More in the wiki** under a description where the source allows it and only while the content
+  is shown.
 - **The Start view groups its processes by application, filters them and keeps favourites.**
   The Tasks app's Start list was one alphabetical column of every process with a start form.
   It now sits under one heading per application the process was deployed under, sorted by

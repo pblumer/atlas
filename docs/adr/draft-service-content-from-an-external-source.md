@@ -349,9 +349,9 @@ that an unreadable item is non-existent (its D10).
 
 ### As built
 
-The backend is built; the catalogue screen's part of it is not, and neither are the
-finance-system cost (§ 2), more than one picture, an administrator's purge of
-quarantined content, or telling the product owner about an unlink (the open question).
+The backend and its screens are built; the finance-system cost (§ 2), more than one
+picture, an administrator's purge of quarantined content, and telling the product owner
+about an unlink (the open question) are not.
 
 - **Where it lives.** `api/contentsource` holds the source configuration and its store
   (`contentsources`, an instance store), the adapter contract (`Adapter`, with every
@@ -401,6 +401,23 @@ quarantined content, or telling the product owner about an unlink (the open ques
   A picture on a bound product is the source's: the picture routes refuse to set or
   remove one.
 - **Removing a source** is refused while a product is bound to it.
+- **The screens.** `api/web/content-sources.js` is *Console › Content sources*, admin-only
+  and gone with the catalogue switch: list, create, change, remove (the 409 naming the bound
+  products is shown) and the check with every problem. `api/web/catalog-content.js` is the
+  product editor's *Content from the wiki* panel — drawn only when the status route names a
+  source, so an installation without one sees the screen it had: search, a preview per
+  language slot with the text, the dropped passages, children and blocks, every refusal and
+  `boundTo`, and one link for all slots; for a bound product its pages with version, copy time
+  and children, the recheck record, the quarantine and whether the shop shows it, refresh, and
+  unlink of a slot or the whole binding through a dialog that requires the reason and says it is
+  audited. The editor draws a bound product's description and keywords read-only and disables
+  the picture controls; a catalogue offering a bound product gets *Refresh all wiki content* with
+  one line per product. Everything a wiki supplies is drawn as text nodes, never as markup, and a
+  page address becomes a link only over https, in a new tab without an opener. The shop shows
+  *More in the wiki* from the release's binding, which the server hands it only where the source
+  allows a link and only while the content is shown. Words live in the Console's message
+  catalogue (`content.*`, `contentSources.*`) and the shop's (`info.wiki`); the shop handbook
+  has a section `#wiki-inhalt`.
 
 ### Consequences
 
