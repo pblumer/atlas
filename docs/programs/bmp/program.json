@@ -1,0 +1,59 @@
+{
+  "id": "bmp",
+  "name": "Blueprint Marketplace",
+  "summary": "Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.",
+  "status": "planned",
+  "owner": "unassigned",
+  "last_reviewed": "2026-10-26",
+  "plan": "../../planning/blueprint-marketplace-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
+  "next_action": "Assign human programme owner and review proposed Blueprint registry ADR; only then begin BMP0 contract and trust tests.",
+  "slices": [
+    {
+      "id": "BMP0",
+      "title": "Registry and trust contract",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "Approve identities, immutable version/digest, registry schema, trust and collision decisions before implementation."
+    },
+    {
+      "id": "BMP1",
+      "title": "Free registry to installed application",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "BMP0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart."
+    },
+    {
+      "id": "BMP2",
+      "title": "Provenance and managed updates",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "BMP1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery."
+    },
+    {
+      "id": "BMP3",
+      "title": "Private and federated registries",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "BMP1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core."
+    }
+  ]
+}
