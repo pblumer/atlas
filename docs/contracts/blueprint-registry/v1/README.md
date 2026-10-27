@@ -1,6 +1,6 @@
 # Blueprint Registry v1: contract review fixtures
 
-**Status: accepted contract, partially implemented.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). The offline signature/digest verifier and tests landed in PR #1405. This document is the registry wire contract, **not** an active atlas marketplace endpoint or installer.
+**Status: accepted v1 contract; public Console integration landed in PR #1416 (BMP1 remains active).** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). Signed-index verification, bounded HTTPS fetching, archive inspection and authorized Console package import are implemented. A publicly hosted signed sample and persistent installation provenance are still missing.
 
 ## Publication layout
 
@@ -79,4 +79,4 @@ provenance or a complete BMP1 milestone.
 - [Rejected traversal](examples/reject-path-traversal.json): invalid artifact path.
 - [Rejected digest](examples/reject-digest.json): invalid package digest.
 
-**As built in BMP0:** offline verifier and deterministic positive/negative schema, signature, SHA-256, duplicate and version tests are present in `api/blueprintregistry/`. It does not fetch from the network or inspect archive members. **BMP1:** enforce safe DNS/IP, redirects, archive extraction and authorization independently before exposing registry installs. The schema does not contain prices, entitlements, purchase tokens or runtime licences.
+**As built:** BMP0 implements the signed-index verifier and deterministic negative tests. BMP1 implements the pinned HTTPS client with redirect/DNS/IP and size checks (#1411), safe bounded tar.gz inspection (#1415), and the Console/API listing, preview and verified download linked to the existing authorized import workflow (#1416). This is not yet a complete or provenance-backed Marketplace installation: a public signed demo, restart/recovery checks and durable source/catalogue IDs remain open. The v1 schema contains no prices, entitlements, purchase tokens or runtime licences. ADR-0506's catalogue-only and auto-safe extensions are Proposed, not implemented.

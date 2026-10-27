@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review PR #1416 Console browse/preview/import integration and required CI; then persist trusted Blueprint provenance in design-time sidecar state and prove restart recovery with a signed public demo.",
+  "next_action": "Finish PR #1420 signed application-plus-catalogue bundle test; publish a separately signed public demo registry and persist verified installation provenance (including catalogue IDs) with restart and repeated-import tests.",
   "slices": [
     {
       "id": "BMP0",
@@ -36,13 +36,16 @@
       "depends_on": [
         "BMP0"
       ],
-      "issues": [],
+      "issues": [
+        1422
+      ],
       "prs": [
         1411,
         1415,
-        1416
+        1416,
+        1420
       ],
-      "note": "PR #1411 merged the pinned HTTPS transport; PR #1415 merged bounded archive inspection. Draft PR #1416 adds operator-pinned signed registry browse/preview and explicit Console import through existing authorization/conflict APIs. Persistent provenance, restart test and a signed demo registry are still required."
+      "note": "PR #1411 (safe HTTPS), #1415 (bounded archive inspection) and #1416 (operator-pinned Console browsing, digest-conditional download, authorized import) are merged and CI-verified. Draft PR #1420 verifies the real application-plus-catalogue example as a signed test bundle. Public hosted demo distribution, installation provenance and restart/repeated-import end-to-end acceptance remain open; no auto-safe updates."
     },
     {
       "id": "BMP2",

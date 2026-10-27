@@ -71,7 +71,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-BMP1: PR #1411 merged the bounded public HTTPS registry client with pinned Ed25519 identity, no redirects, DNS/IP checks and verified archive digests. Draft PR #1415 inspects the existing tar.gz application package with bounded expansion, path/link/duplicate/manifest/CRC guards, returning metadata without installing. Draft PR #1416 adds an operator-pinned public Registry browser with signed release previews and a digest-conditional package GET, then reuses the existing authorized Console import workflow. Durable provenance, restart/recovery tests and a signed free demo registry remain open gates. **No automatic installation, runtime licence checks or direct Worker code execution.**
+BMP1: PR #1411 (pinned HTTPS transport), PR #1415 (bounded archive inspection) and PR #1416 (authorized Console browse, signed preview and digest-conditional import) are merged and CI-verified. Draft PR #1420 exercises a real application and its product catalogues through signed v1 package verification. Next publish a static public registry with a separately protected signer key, then persist registry identity, signer fingerprint, publisher, version, digest, application key and installed catalogue IDs in restart-safe design-time sidecar state. Test the full Console import, repeat import, partial failures and recovery before declaring BMP1 complete. The existing importer remains authoritative; no automatic installation, runtime licence checks or direct Worker code execution. ADR-0506 remains Proposed and does not authorize standalone catalogue artifacts or auto-safe updates.
 
 ## References
 
