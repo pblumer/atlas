@@ -35,6 +35,9 @@ An authorized atlas operator finds a free Blueprint from an independent static r
 
 ### BMP0 — Contract and trust foundation (architecture gate)
 
+**Current review:** [Draft PR #1402](https://github.com/pblumer/atlas/pull/1402) proposes a [versioned registry index schema](../contracts/blueprint-registry/v1/index.schema.json), positive/negative fixture tests and an Ed25519 registry signing profile for [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md). These are **proposal and schema-only checks**, not a working remote registry or an accepted architecture. Named slice ownership and ADR acceptance remain required before production network/install code.
+
+
 Define and review the versioned registry index, globally namespaced publisher/Blueprint identity, immutable release digest, compatibility, installation needs, signature/trust bootstrap, source collisions and threat model. Propose installation provenance representation and required authorization gates.
 
 **Done only when:** ADR is accepted or replaced; human owner assigned; validated examples and invalid contract fixtures exist. No premature registry implementation.
