@@ -901,7 +901,10 @@ func authoringTools() []Tool {
 				"tasks hand to subscribed workers. A release recorded since the physical view exists also carries " +
 				"what this installation had in place for it: its name and environment, its external address, the " +
 				"public start links, and per worker whether Atlas runs it or a worker process leases it, its " +
-				"endpoint as scheme, host and port, and the worker instances seen serving it. An endpoint the " +
+				"endpoint as scheme, host and port, and the worker instances seen serving it; from format " +
+				"version 4 also the rest of its configuration that is not a secret (mail provider, scanner " +
+				"endpoint, agent model, identity policy, whether a credential is configured) and the inbound " +
+				"subscriptions that publish a message the release receives. A Worker's configuration the " +
 				"caller may not see, and the instances for a caller who is not an operator, are withheld. " +
 				"layers narrows the answer: application is the logical part, technology the physical part, and " +
 				"the answer's layers field says which the release records and which it shows. A release " +

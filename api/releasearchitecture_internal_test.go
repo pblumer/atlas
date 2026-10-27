@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -148,5 +149,60 @@ func TestAReportedEndpointIsInputNotAPromise(t *testing.T) {
 	r.holdsConnectors("w", []string{"a"}, nil)
 	if st := r.byName["w"]; st.Endpoints != nil {
 		t.Errorf("a later poll reporting no endpoint left %v behind", st.Endpoints)
+	}
+}
+
+// TestTheRestOfAWorkersConfigurationIsRecordedAndNoSecret: a release records what else
+// the configured Worker says (ADR-0495 slice B) — the transport, the scanner, the
+// model, the identity, and that a credential exists — and never the credential's name.
+func TestTheRestOfAWorkersConfigurationIsRecordedAndNoSecret(t *testing.T) {
+	srv := newServerWithOptions(t)
+	rec := connector{ID: "w-mail", Name: "smtp-main", Kind: "mail", Endpoint: "smtp://relay.example.com:587",
+		CredentialsRef: "mail-relay-password", Provider: "smtp", Scanner: "clamd://av.example.com:3310",
+		Model: "gpt-4o-mini", Enabled: true,
+		Identity: &workerIdentity{Mode: "delegated-per-job", ActAs: actAsInitiator, Enforcement: enforcementShadow}}
+	if err := srv.connectors.Save(rec); err != nil {
+		t.Fatal(err)
+	}
+	var p *archsketch.Physical
+	srv.do(func() {
+		p = srv.physicalPart(map[string]bool{}, map[string]bool{},
+			[]archsketch.Dependency{{Kind: archsketch.DependencyWorker, Name: "smtp-main", WorkerType: "mail"}},
+			map[[2]string]string{{"smtp-main", "mail"}: archsketch.PlacementEngine})
+	})
+	if p == nil || len(p.Workers) != 1 {
+		t.Fatalf("physical part = %+v", p)
+	}
+	w := p.Workers[0]
+	if w.Provider != "smtp" || w.Model != "gpt-4o-mini" || !w.Credential ||
+		w.ScannerEndpoint == nil || w.ScannerEndpoint.Host != "av.example.com" ||
+		w.Identity == nil || w.Identity.Mode != "delegated-per-job" || w.Identity.Enforcement != "shadow" {
+		t.Errorf("worker = %+v, want its configuration beyond the endpoint", w)
+	}
+	raw, _ := json.Marshal(p)
+	if strings.Contains(string(raw), "mail-relay-password") {
+		t.Errorf("the snapshot names the credential: %s", raw)
+	}
+}
+
+// TestAnInboundSubscriptionSaysWhatItWatchesInItsWorkersTerms covers each kind of
+// watch an inbound subscription can hold.
+func TestAnInboundSubscriptionSaysWhatItWatchesInItsWorkersTerms(t *testing.T) {
+	for _, tc := range []struct {
+		sub  inboundSubscription
+		want string
+	}{
+		{inboundSubscription{WatchedSubject: "orders/new"}, "orders/new"},
+		{inboundSubscription{JQL: "project = OPS"}, "JQL project = OPS"},
+		{inboundSubscription{SpreadsheetID: "sheet-1", WatchRange: "A1:D"}, "spreadsheet sheet-1 A1:D"},
+		{inboundSubscription{SpreadsheetID: "sheet-1"}, "spreadsheet sheet-1"},
+		{inboundSubscription{FolderID: "f-1"}, "folder f-1"},
+		{inboundSubscription{ChannelID: "c-1"}, "channel c-1"},
+		{inboundSubscription{MailFolder: "INBOX"}, "mail folder INBOX"},
+		{inboundSubscription{}, ""},
+	} {
+		if got := inboundWatched(tc.sub); got != tc.want {
+			t.Errorf("inboundWatched(%+v) = %q, want %q", tc.sub, got, tc.want)
+		}
 	}
 }

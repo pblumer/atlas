@@ -132,7 +132,11 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 			snap.Dependencies = append(snap.Dependencies, dep)
 		}
 	}
-	snap.Physical = s.physicalPart(shipped, snap.Dependencies, placement)
+	received := map[string]bool{}
+	for _, e := range snap.EntryPoints {
+		received[e.Name] = true
+	}
+	snap.Physical = s.physicalPart(shipped, received, snap.Dependencies, placement)
 	snap.Normalize()
 	return snap
 }
@@ -145,12 +149,16 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 // in it: a missing worker record would otherwise read as "this worker keeps its own
 // configuration", which is a claim, and the renderings of a snapshot with no physical
 // part say plainly that it has none.
-func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Dependency, placement map[[2]string]string) *archsketch.Physical {
+func (s *Server) physicalPart(shipped, received map[string]bool, deps []archsketch.Dependency, placement map[[2]string]string) *archsketch.Physical {
 	links, err := s.publicLinks.LoadAll()
 	if err != nil {
 		return nil
 	}
 	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil
+	}
+	subs, err := s.inboundSubs.LoadAll()
 	if err != nil {
 		return nil
 	}
@@ -195,6 +203,16 @@ func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Depende
 				site.ConfiguredID = c.ID
 				site.Endpoint = archsketch.ParseEndpoint(c.Endpoint)
 				site.MailboxEndpoint = archsketch.ParseEndpoint(c.MailboxEndpoint)
+				// The rest of the configuration, none of it a secret: which credential
+				// a Worker uses is the vault's business, so only that it has one is
+				// recorded (ADR-0495 slice B).
+				site.Provider = c.Provider
+				site.ScannerEndpoint = archsketch.ParseEndpoint(c.Scanner)
+				site.Model = c.Model
+				site.Credential = c.CredentialsRef != ""
+				if c.Identity != nil {
+					site.Identity = &archsketch.WorkerIdentity{Mode: c.Identity.Mode, Enforcement: c.Identity.Enforcement}
+				}
 			}
 			if site.Endpoint == nil {
 				// What the instances serving the name reported, when this installation
@@ -217,7 +235,48 @@ func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Depende
 				Observers: archsketch.Observers{ObservedBy: s.workerInstances(func(st *workerStat) bool { return slices.Contains(st.Serves, d.Name) })}})
 		}
 	}
+
+	// The inbound subscriptions that publish a message the release receives. A
+	// subscription whose Worker was deleted since keeps that Worker's id, so a read
+	// judges it as the ownerless configuration it was.
+	byID := make(map[string]connector, len(recs))
+	for _, c := range recs {
+		byID[c.ID] = c
+	}
+	for _, sub := range subs {
+		if !sub.Enabled || !received[sub.MessageName] {
+			continue
+		}
+		in := archsketch.InboundSite{MessageName: sub.MessageName, ConfiguredID: sub.ConnectorID,
+			Subject: inboundWatched(sub), Recursive: sub.Recursive && sub.WatchedSubject != ""}
+		if c, ok := byID[sub.ConnectorID]; ok {
+			in.Worker, in.WorkerType, in.Endpoint = c.Name, c.Kind, archsketch.ParseEndpoint(c.Endpoint)
+		}
+		p.Inbound = append(p.Inbound, in)
+	}
 	return p
+}
+
+// inboundWatched says what an inbound subscription watches, in the terms of the
+// Worker kind it reads through: a clio subject, a Jira query, a spreadsheet and its
+// range, a folder, a channel or a mail folder (ADR-0075, ADR-0214, ADR-0234). A
+// subscription names exactly one of them.
+func inboundWatched(sub inboundSubscription) string {
+	switch {
+	case sub.WatchedSubject != "":
+		return sub.WatchedSubject
+	case sub.JQL != "":
+		return "JQL " + sub.JQL
+	case sub.SpreadsheetID != "":
+		return strings.TrimSpace("spreadsheet " + sub.SpreadsheetID + " " + sub.WatchRange)
+	case sub.FolderID != "":
+		return "folder " + sub.FolderID
+	case sub.ChannelID != "":
+		return "channel " + sub.ChannelID
+	case sub.MailFolder != "":
+		return "mail folder " + sub.MailFolder
+	}
+	return ""
 }
 
 // workerInstances names the worker instances seen this run that match. The registry
