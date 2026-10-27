@@ -12,7 +12,9 @@
 // Nothing here reaches the durable engine, the deployment registry or any
 // design-time store. Resolving *which* model a session runs is the one thing that
 // does, and that is injected as [ModelSource] so the server keeps its own
-// authorization rules over drafts and deployments.
+// authorization rules over drafts and deployments. The decisions a session's
+// business rule tasks evaluate are read the same way: handed in as
+// [Service.Decisions] and [Service.DecisionPins], never looked up from here.
 package playground
 
 import (
@@ -26,6 +28,8 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/playground"
 )
@@ -65,6 +69,13 @@ type Service struct {
 	// environment, so every ceiling in this service is the one operators configured
 	// (ADR-0291).
 	Limits limits.Limits
+
+	// Decisions are the server's deployed decisions, which a sandbox's business rule
+	// tasks evaluate rather than leaving them to the stubs, and DecisionPins resolves a
+	// fixed decision version the way a deploy does. Nil leaves those tasks to the stub
+	// policy, which is what a sandbox did before it could evaluate a decision.
+	Decisions    *dmn.Registry
+	DecisionPins func(*compiler.CompiledProcess) (map[compiler.DecisionVersionRef]uint64, error)
 }
 
 // New builds the Playground service over a session registry.
@@ -224,9 +235,16 @@ func (s *Service) HandleOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess, err := s.sessions.Open(principal(r), playground.Options{
+	opts := playground.Options{
 		ModelXML: xml, Root: req.Root, StartTime: start, Seed: seed, Stubs: stubs,
-	})
+		Decisions: s.Decisions, DecisionPins: s.DecisionPins,
+	}
+	if req.Source == "process" {
+		// A deployed definition's deployment-bound decisions are the ones bundled with
+		// it, registered under its own key. The ref parsed once already, in source.
+		opts.BundledDecisions, _ = strconv.ParseUint(req.Ref, 10, 64)
+	}
+	sess, err := s.sessions.Open(principal(r), opts)
 	if err != nil {
 		// A model that does not compile is the caller's problem; a full registry is
 		// a capacity problem. Both are refusals, not server faults.

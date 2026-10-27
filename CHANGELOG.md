@@ -23,7 +23,25 @@ _Changed_ / _Removed_ for each version.
   publishing waits until that product is refreshed, so no page's text appears under two
   products. A page that is another product's own page is still refused (ADR-0491,
   amended 2026-10-27).
-
+- **The architecture sketch shows who else is at the other end of a release's messages and signals.**
+  A release now records the messages and signals its processes throw and the signals they
+  catch, and, for each name, the processes of other applications on the installation at
+  the other end: those that throw a message the release receives or a signal it catches,
+  and those that receive a message or signal it throws, read from the newest active
+  version of every deployed model. A message box says who throws it, and the picture
+  gains a box for each name the release throws — "Sends message …", "Broadcasts signal
+  …" — saying who receives it, drawn with a dashed line because Atlas correlates a name
+  itself and no connection crosses it. The event feed appears as one box when the
+  installation pushes one: how many subscriptions, and that the release's incidents (and,
+  with the business layer, its products' outcomes) travel on it; a feed endpoint is shown
+  only to whoever may see its Worker, and no credential is recorded. In ArchiMate each
+  peer process is an application process of its application, triggering or triggered by
+  the release's processes. Another application's name and processes are shown only to a
+  reader who may see that application — elsewhere the picture says "another application"
+  — and the same now holds for the application a call activity reaches, which every reader
+  of the release saw before. Snapshots are now format and mapping version 7; a release
+  recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **The architecture sketch has business and strategy layers.** A release now records its
   processes as the work they do, with how their user tasks say who does them (for a
   group, for a named person, decided at run time, or nobody); the roles they name — each
@@ -152,6 +170,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Console › Workers folds and filters both of its lists.** The Worker catalog and
+  the configured workers each fold away under their heading, which still shows how many
+  entries the section holds, and the browser remembers each choice; **New worker**
+  unfolds the section its form opens in. The catalog has the filter row and sorting of
+  every other list in the Console, searching each type's name, kind and description.
+  The configured workers keep their filter row after a worker is changed, which used to
+  redraw the list without it.
+
 - **The heatmap's figures cost the server once, not once per tab.** The Operations
   heatmap reads its statistics when it opens, when the period changes, every five minutes
   while the tab is visible and on **Refresh** — no longer every fifteen seconds — and the
@@ -216,6 +242,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Playground evaluates decisions.** A business rule task in a Playground sandbox
+  was answered like any other job: by the default stub, which completed it without a
+  result, or not at all. The decision it calls was never evaluated, although the
+  Playground was documented to run DMN as production does. A sandbox now evaluates the
+  decision the way production's DMN worker does, over the case's own variables and
+  against the decisions deployed on the server, and keeps the evaluation record:
+  - a fixed `atlas:version` is resolved when the session opens, as a deploy resolves
+    it, so a version that is not deployed refuses the session;
+  - a deployed version's deployment-bound decision runs the model bundled with it, and a
+    draft's runs the latest deployed decision of its id;
+  - a decision routed to a temis Worker is evaluated in the sandbox, which dials
+    nothing;
+  - a decision that cannot be found raises an incident naming it.
+
+  A stub an author names for the task itself still answers it. **Runs of a model with a
+  business rule task now carry the decision's result where they carried none**, so a
+  saved scenario's baseline shows the difference.
 - **A picture of any size is taken, for a person and for a product.** Console →
   Organization and the catalogue's product editor passed the chosen file on unchanged, so
   a photograph straight off a phone was refused with "the picture exceeds the 524288 byte

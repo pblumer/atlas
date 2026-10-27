@@ -599,6 +599,14 @@ export default {
   "table.toggleFilters": "Show or hide the column filters",
   "table.noMatch": "No rows match the filters.",
 
+  "workers.section.toggle": "Fold or unfold this section",
+  "workers.catalog.th.type": "Worker Type",
+  "workers.catalog.th.status": "Status",
+  "workers.catalog.count.one": "{n} Worker Type",
+  "workers.catalog.count.other": "{n} Worker Types",
+  "workers.configured.count.one": "{n} worker",
+  "workers.configured.count.other": "{n} workers",
+
   "home.title": "Applications",
   "home.th.artifacts": "Artifacts",
   "home.th.process": "Process",

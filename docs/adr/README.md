@@ -584,7 +584,9 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0496](0496-operations-heatmap.md) | The Operations heatmap counts arrows and splits a task's time | Accepted | Landed |
 | [0497](0497-console-locales-one-file-each.md) | The console's languages are one file each, and none ships incomplete | Accepted | Landed |
 | [0498](0498-wikiwikibangbang-worker.md) | A wikiwikibangbang Worker Type — a process opens and moves tasks, and creates, reads and extends pages in a wikiwikibangbang wiki | Accepted | Landed |
-| [0499](0499-blueprint-registry-and-distribution.md) | Open Blueprint registries for process applications | Proposed | Not started |
+| [0499](0499-blueprint-registry-and-distribution.md) | Open Blueprint registries for process applications | Accepted | Not started |
+| [0500](0500-playground-data-from-history-and-model.md) | Playground data is profiled from history and proposed from the model, and the sandbox checks both | Proposed | Not started |
+| [0501](0501-playground-data-run.md) | A data run checks a whole file against a model in throwaway sandboxes, and hands the file back | Proposed | Partial |
 
 ## The two states of a record
 

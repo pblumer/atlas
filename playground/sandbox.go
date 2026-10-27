@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
@@ -48,6 +50,22 @@ type Options struct {
 	// Stubs is the answering policy. The zero value parks every job, which is what
 	// an environment with no workers does.
 	Stubs StubSet
+	// Decisions are the decisions a business rule task evaluates: the server's DMN
+	// registry. With them such a task is answered the way production answers it, by
+	// the handler production's DMN worker is built on (dmn.DecisionHandler), over the
+	// case's own variables, and the evaluation is retained (ADR-0066). Without them
+	// the task is a job like any other and the stub policy answers it.
+	Decisions *dmn.Registry
+	// DecisionPins resolves the fixed decision versions a process names to their
+	// deployments, as a deploy does (ADR-0423). An error refuses the model, as the
+	// deploy would refuse it. Nil resolves none, and a version-bound task then
+	// raises an incident when it runs.
+	DecisionPins func(*compiler.CompiledProcess) (map[compiler.DecisionVersionRef]uint64, error)
+	// BundledDecisions is the deployment whose bundled decision models a
+	// deployment-bound task evaluates: the deployed definition a session runs. Zero
+	// for a draft, which has no deployed snapshot, so its deployment-bound tasks
+	// evaluate the latest deployed decision of their id.
+	BundledDecisions uint64
 }
 
 // Budget bounds a Run so an abandoned or pathological model cannot spin forever.
@@ -146,6 +164,9 @@ type pending struct {
 	outputs []model.VariableValue
 	message string
 	code    string
+	// decision is the evaluation a business rule task's answer retains, nil for every
+	// answer a stub gives.
+	decision *model.DecisionEvaluationValue
 	// work is how long the answer takes once somebody is working on it. It is what
 	// dueAt is derived from — directly for unpooled work, and across the pool's
 	// calendar for pooled work.
@@ -222,6 +243,9 @@ type Sandbox struct {
 	root  *compiler.CompiledProcess
 	byKey map[uint64]*compiler.CompiledProcess // definition key → compiled process
 	stubs StubSet
+	// decide evaluates a business rule task's decision, nil when the sandbox was
+	// given no decisions and such a task is left to the stubs.
+	decide job.CompletingHandler
 
 	// scheduled holds the answer committed to for each job, so a job is drawn for
 	// exactly once however often the scheduler looks at it.
@@ -273,6 +297,20 @@ func Open(opts Options) (*Sandbox, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A fixed decision version is resolved before anything runs, as a deploy resolves
+	// it: a model naming a version the server does not have is refused here rather
+	// than running into an incident on its first case (ADR-0423).
+	if opts.Decisions != nil && opts.DecisionPins != nil {
+		for _, d := range deployables {
+			pins, err := opts.DecisionPins(d.Process)
+			if err != nil {
+				return nil, fmt.Errorf("playground: %w", err)
+			}
+			if len(pins) > 0 {
+				d.Process.ResolveLatestAtRuntime(pins)
+			}
+		}
+	}
 
 	dir, err := os.MkdirTemp(opts.BaseDir, "atlas-playground-")
 	if err != nil {
@@ -312,6 +350,9 @@ func Open(opts Options) (*Sandbox, error) {
 	}
 	for name, cfg := range opts.Stubs.Pools {
 		s.pools[name] = &poolState{cfg: cfg, stat: PoolStat{Capacity: cfg.Capacity}}
+	}
+	if opts.Decisions != nil {
+		s.decide = dmn.DecisionHandler(store, s.processOf, decisionBinding(opts.Decisions, opts.BundledDecisions), nil)
 	}
 	// No worker registry, no vault, no job runner, no HTTP client: a service
 	// task in here has nothing that could reach the outside, which is how the
@@ -508,38 +549,16 @@ func (s *Sandbox) reconcileJobs() error {
 		if err != nil || element == "" {
 			return err
 		}
-		stub, ok := s.stubs.forJob(element, jv.JobType == compiler.UserTaskJobTypeIndex)
+		p, ok, err := s.decisionAnswer(jobKey, jv, element, now)
+		if err != nil {
+			return err
+		}
 		if !ok {
-			return nil
-		}
-		// Draw on the key's *counter*, not the whole key: the high bits carry the
-		// partition, which a sandbox is handed round-robin at Open. Seeding on the
-		// whole key would make the same dataset, policy and seed produce different
-		// durations in two sandboxes, which is exactly the reproducibility the seed
-		// exists to provide.
-		seq := model.CounterOf(jobKey)
-		work := stub.duration(newDraw(s.seed, seq, 1))
-		p := pending{
-			dueAt:      now + int64(work),
-			jobKey:     jobKey,
-			element:    element,
-			kind:       OccJobCompleted,
-			outputs:    stub.Outputs,
-			work:       work,
-			pool:       s.stubs.PoolOf[element],
-			enqueuedAt: now,
-			startedAt:  now,
-		}
-		if stub.fails(newDraw(s.seed, seq, 2)) {
-			switch {
-			case stub.ErrorCode != "":
-				p.kind, p.code = OccJobError, stub.ErrorCode
-			default:
-				p.kind, p.message = OccJobFailed, stub.FailMessage
-				if p.message == "" {
-					p.message = "simulated failure of " + element
-				}
+			stub, covered := s.stubs.forJob(element, jv.JobType == compiler.UserTaskJobTypeIndex)
+			if !covered {
+				return nil
 			}
+			p = s.stubAnswer(jobKey, element, stub, now)
 		}
 		if ps := s.pools[p.pool]; ps != nil {
 			// Pooled work waits for a seat: it has no due date until one takes it, so
@@ -561,6 +580,89 @@ func (s *Sandbox) reconcileJobs() error {
 	}
 	return s.serveQueues(now)
 }
+
+// stubAnswer draws the stub's answer for one job: when it comes due, and whether it
+// completes, fails into an incident or throws a business error.
+func (s *Sandbox) stubAnswer(jobKey uint64, element string, stub Stub, now int64) pending {
+	// Draw on the key's *counter*, not the whole key: the high bits carry the
+	// partition, which a sandbox is handed round-robin at Open. Seeding on the
+	// whole key would make the same dataset, policy and seed produce different
+	// durations in two sandboxes, which is exactly the reproducibility the seed
+	// exists to provide.
+	seq := model.CounterOf(jobKey)
+	work := stub.duration(newDraw(s.seed, seq, 1))
+	p := pending{
+		dueAt:      now + int64(work),
+		jobKey:     jobKey,
+		element:    element,
+		kind:       OccJobCompleted,
+		outputs:    stub.Outputs,
+		work:       work,
+		pool:       s.stubs.PoolOf[element],
+		enqueuedAt: now,
+		startedAt:  now,
+	}
+	if stub.fails(newDraw(s.seed, seq, 2)) {
+		switch {
+		case stub.ErrorCode != "":
+			p.kind, p.code = OccJobError, stub.ErrorCode
+		default:
+			p.kind, p.message = OccJobFailed, stub.FailMessage
+			if p.message == "" {
+				p.message = "simulated failure of " + element
+			}
+		}
+	}
+	return p
+}
+
+// decisionAnswer answers a business rule task's job by evaluating its decision, as
+// production's DMN worker does: over the case's variables as they stand, against the
+// decisions deployed on the server. It reports false when the sandbox was given no
+// decisions, when the job is not a decision's, or when the author named a stub for the
+// task itself, which is an explicit statement and wins.
+//
+// The answer is due at once. A decision is computed rather than worked on, and
+// production's worker takes it as soon as it exists. A decision that cannot be
+// evaluated (one that is not deployed, a version nobody resolved, a table that fails)
+// is an incident saying why. A stub's empty answer in its place would be a verdict
+// nobody computed, which is what used to happen here.
+func (s *Sandbox) decisionAnswer(jobKey uint64, jv *model.JobValue, element string, now int64) (pending, bool, error) {
+	// A user task is a person's work, never a decision's. It is checked first because a
+	// parked one is visited again on every settle, and it should cost no read for that.
+	if s.decide == nil || jv.JobType == compiler.UserTaskJobTypeIndex {
+		return pending{}, false, nil
+	}
+	if _, named := s.stubs.ByElement[element]; named {
+		return pending{}, false, nil
+	}
+	ei, ok, err := s.store.GetElementInstance(jv.ElementInstanceKey)
+	if err != nil || !ok {
+		return pending{}, false, err
+	}
+	cp := s.byKey[ei.ProcessDefKey]
+	if cp == nil || cp.Node(ei.ElementId).Type != compiler.TypeBusinessRuleTask {
+		return pending{}, false, nil
+	}
+	p := pending{
+		dueAt: now, jobKey: jobKey, element: element, kind: OccJobCompleted,
+		pool: s.stubs.PoolOf[element], enqueuedAt: now, startedAt: now,
+	}
+	done, err := s.decide(job.Job{
+		Key: jobKey, Type: jv.JobType, ProcessInstanceKey: jv.ProcessInstanceKey,
+		ElementInstanceKey: jv.ElementInstanceKey, Retries: jv.Retries,
+	})
+	if err != nil {
+		p.kind, p.message = OccJobFailed, err.Error()
+		return p, true, nil
+	}
+	p.outputs, p.decision = done.Outputs, done.Decision
+	return p, true, nil
+}
+
+// processOf resolves a definition key to the compiled process the sandbox deployed
+// under it, for the decision handler.
+func (s *Sandbox) processOf(defKey uint64) *compiler.CompiledProcess { return s.byKey[defKey] }
 
 // abandon drops a job that went away before it was answered out of whatever pool
 // it was waiting in or occupying, so an interrupted case does not hold a seat for
@@ -847,6 +949,10 @@ func (s *Sandbox) answer(p pending) {
 		// incident, not to be quietly retried into success.
 		s.proc.FailJob(p.jobKey, 0, p.message, 0)
 	default:
+		if p.decision != nil {
+			s.proc.CompleteJobWithDecision(p.jobKey, p.decision, p.outputs...)
+			return
+		}
 		s.proc.CompleteJob(p.jobKey, p.outputs...)
 	}
 }
