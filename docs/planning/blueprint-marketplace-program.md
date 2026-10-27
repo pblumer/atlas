@@ -4,7 +4,7 @@
 **Baseline:** Public atlas repository checked on 2026-10-26.  
 **Milestone:** [Milestone 6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-).  
 **Architecture authority:** [Proposed Blueprint registry ADR](../adr/0499-blueprint-registry-and-distribution.md).  
-**Owner:** Unassigned. A human maintainer must accept programme and slice responsibility before implementation starts.
+**Programme owner:** pblumer (accepted 2026-10-27). BMP0 and later slices require their own accountable owners before implementation.
 
 ## User outcome
 
@@ -59,7 +59,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## Engineering gates
 
-- ADR review before conflicting architectural changes and before BMP1; implementation ownership is currently unassigned.
+- ADR-0499 review before conflicting architectural changes and before BMP1; programme ownership is assigned to pblumer, but individual slice ownership remains unassigned until explicitly accepted.
 - Follow AGENTS.md, TDD, API route table/OpenAPI, MCP drift classification, Console security, and changelog discipline.
 - Sidecar state on the run-loop owner and new network operations off the run loop. Do not touch engine, WAL or applyToState.
 - Reuse one portable application package and the existing import-plan machinery.
@@ -68,7 +68,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-Approve programme ownership and resolve BMP0 architecture questions, especially publisher identity, registry trust keys, source collisions, one-install-per-server and native package reuse. **Do not start additional parallel implementation slices while owner or ADR approval is missing.**
+Review proposed ADR-0499, assign a named owner for BMP0, and resolve architecture questions on publisher identity, registry trust keys, source collisions, one-install-per-server and native package reuse. **Do not start BMP1 or any parallel implementation while required architecture decisions or slice ownership are missing.**
 
 ## References
 
