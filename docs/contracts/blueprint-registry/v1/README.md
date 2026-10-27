@@ -1,6 +1,6 @@
 # Blueprint Registry v1: contract review fixtures
 
-**Status: accepted contract, implementation in progress.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Not started**). Maintainer approval dated 2026-10-27. The material in this folder is a wire-contract draft, **not** an active atlas endpoint or installable package.
+**Status: accepted contract, partially implemented.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). The offline signature/digest verifier and tests landed in PR #1405. This document is the registry wire contract, **not** an active atlas marketplace endpoint or installer.
 
 ## Publication layout
 
@@ -42,4 +42,4 @@ The signed index records `sha256:<64 lowercase hex>` of **the exact compressed a
 - [Rejected traversal](examples/reject-path-traversal.json): invalid artifact path.
 - [Rejected digest](examples/reject-digest.json): invalid package digest.
 
-**Before code integration:** add a Go validator and deterministic tests for JSON schema + all cross-field requirements, Ed25519 verification (valid/invalid/wrong key), byte-exact digest, duplicate rejection, bound checks, and compatibility comparisons. A schema alone is not an install-time security boundary. The first network/client slice adds independent SSRF, redirect, archive and authentication tests. The schema does not contain prices, entitlements, purchase tokens or runtime licences.
+**As built in BMP0:** offline verifier and deterministic positive/negative schema, signature, SHA-256, duplicate and version tests are present in `api/blueprintregistry/`. It does not fetch from the network or inspect archive members. **BMP1:** enforce safe DNS/IP, redirects, archive extraction and authorization independently before exposing registry installs. The schema does not contain prices, entitlements, purchase tokens or runtime licences.

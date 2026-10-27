@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | active | 0/4 | pblumer | BMP0: implement and verify offline signed-index and package integrity validation; keep network/install code gated until tests and ADR security requirements are met. |
+| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | BMP1: review and test fail-closed public HTTPS registry transport, then connect verified package bytes to existing import-plan and explicit publish APIs through an authorized operator flow. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
@@ -22,8 +22,8 @@ Distribute versioned Process Application Blueprints from independently operated 
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **BMP0** — Registry and trust contract | active | pblumer | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395), [PR #1402](https://github.com/pblumer/atlas/pull/1402) | Maintainer accepted ADR-0499 on 2026-10-27. BMP0 owner pblumer. PR #1402 defines signed v1 schema/tests; the offline verifier, signature and digest checks are next. No runtime registry integration claimed. |
-| **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
+| **BMP0** — Registry and trust contract | complete | pblumer | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395), [PR #1402](https://github.com/pblumer/atlas/pull/1402), [PR #1405](https://github.com/pblumer/atlas/pull/1405) | Complete: ADR-0499 Accepted; signed v1 schema, positive/negative fixtures and offline Ed25519/SHA-256 verifier landed in PR #1402 and #1405. Offline verifications only; no registry transport or installs.; [Evidence 1](../../api/blueprintregistry/verify_test.go), [Evidence 2](../../api/blueprintregistry/semver_test.go), [Evidence 3](../contracts/blueprint-registry/v1/registry_schema_test.go) |
+| **BMP1** — Free registry to installed application | active | pblumer | BMP0 | [PR #1411](https://github.com/pblumer/atlas/pull/1411) | Draft PR #1411 adds bounded, fail-closed public HTTPS index/package transport and negative SSRF/redirect tests. No Console/API installation or persistence yet; archive inspection, import decisions, publish and recovery remain. |
 | **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
 | **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
 

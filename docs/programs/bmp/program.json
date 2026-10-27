@@ -7,32 +7,40 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "BMP0: implement and verify offline signed-index and package integrity validation; keep network/install code gated until tests and ADR security requirements are met.",
+  "next_action": "BMP1: review and test fail-closed public HTTPS registry transport, then connect verified package bytes to existing import-plan and explicit publish APIs through an authorized operator flow.",
   "slices": [
     {
       "id": "BMP0",
       "title": "Registry and trust contract",
-      "status": "active",
+      "status": "complete",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [
         1395,
-        1402
+        1402,
+        1405
       ],
-      "note": "Maintainer accepted ADR-0499 on 2026-10-27. BMP0 owner pblumer. PR #1402 defines signed v1 schema/tests; the offline verifier, signature and digest checks are next. No runtime registry integration claimed."
+      "note": "Complete: ADR-0499 Accepted; signed v1 schema, positive/negative fixtures and offline Ed25519/SHA-256 verifier landed in PR #1402 and #1405. Offline verifications only; no registry transport or installs.",
+      "evidence": [
+        "../../../api/blueprintregistry/verify_test.go",
+        "../../../api/blueprintregistry/semver_test.go",
+        "../../../docs/contracts/blueprint-registry/v1/registry_schema_test.go"
+      ]
     },
     {
       "id": "BMP1",
       "title": "Free registry to installed application",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "BMP0"
       ],
       "issues": [],
-      "prs": [],
-      "note": "Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart."
+      "prs": [
+        1411
+      ],
+      "note": "Draft PR #1411 adds bounded, fail-closed public HTTPS index/package transport and negative SSRF/redirect tests. No Console/API installation or persistence yet; archive inspection, import decisions, publish and recovery remain."
     },
     {
       "id": "BMP2",

@@ -1,7 +1,7 @@
 # ADR-0499: Open Blueprint registries for process applications
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** pblumer (maintainer; approval to implement on 2026-10-27)
 
@@ -71,9 +71,9 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 - **Negative:** new versioned metadata, trust/bootstrap, source precedence, provenance persistence and update UX; commercial operations have separate infrastructure and support costs.
 - **Follow-ups:** settle registry wire schema, signature/trust roots and key rotation, compatibility rules, provenance lifecycle, reliable rollback, licensing, and a separate ADR for multiple installations/remapping.
 
-## BMP0 registry v1 contract profile (under review)
+## BMP0 registry v1 contract profile (accepted)
 
-The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Not started** describes the runtime integration; the checked-in schema/fixtures are a contract, not a deployed registry, an installer, or authorization to execute untrusted downloaded code.
+The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Partial** reflects the merged offline schema/fixtures and signed-index verifier; it does not mean a registry endpoint, marketplace installer or authorization to execute untrusted downloaded code exists.
 
 **Decision: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
 
@@ -96,7 +96,7 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 ## As built (2026-10-27)
 
-The accepted registry v1 design currently has a JSON Schema, valid/invalid examples and schema-only tests in `docs/contracts/blueprint-registry/v1/`. **No signature verifier, registry client, production package fetch, persistent installation provenance or user-visible installer is implemented by this ADR acceptance.** BMP0 is in progress and must prove the accepted model through code/tests before the implementation status changes.
+The accepted registry v1 schema and fixtures are in `docs/contracts/blueprint-registry/v1/`. **BMP0 is complete:** PR #1405 implemented the pure offline `api/blueprintregistry` verifier for pinned Ed25519 signatures, bounded strict index metadata, SemVer and SHA-256 over exact compressed package bytes; positive/negative tests are in `api/blueprintregistry/verify_test.go` and `semver_test.go`. **BMP1 is in progress:** network fetching, operator-owned registry configuration, API/Console browse, package extraction/import plans, provenance and explicit publish are not yet shipped. No engine run-loop, WAL or execution changes are involved.
 
 ## Links
 
