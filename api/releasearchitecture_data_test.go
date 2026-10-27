@@ -123,8 +123,8 @@ func TestAReleaseRecordsItsDataLayer(t *testing.T) {
 	if err := json.Unmarshal(body, &read); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(read.Layers.Recorded, ","); got != "application,data,technology" {
-		t.Errorf("recorded layers = %s, want application, data and technology", got)
+	if got := strings.Join(read.Layers.Recorded, ","); got != "strategy,business,application,data,technology" {
+		t.Errorf("recorded layers = %s, want all five", got)
 	}
 	d := read.Architecture.Data
 	if d == nil {
@@ -156,7 +156,7 @@ func TestAReleaseRecordsItsDataLayer(t *testing.T) {
 		}
 	}
 	_, plain := doReq(t, ts, http.MethodGet, base+".svg", "", "")
-	if strings.Contains(string(plain), "Personal data of") || !strings.Contains(string(plain), "Switched off for this picture: data.") {
+	if strings.Contains(string(plain), "Personal data of") || !strings.Contains(string(plain), "Switched off for this picture: strategy, business, data.") {
 		t.Error("the default sketch draws the data layer, or does not say it is switched off")
 	}
 	_, xml := doReq(t, ts, http.MethodGet, base+".xml?layers=data", "", "")
