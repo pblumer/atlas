@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Blueprint Marketplace integration harness</title>
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <pre id="result">not started</pre>
+    <script type="module">
+      import { openBlueprintMarketplace } from "/blueprint-marketplace.js";
+      window.__calls = [];
+      window.__reloads = 0;
+      window.__open = () => openBlueprintMarketplace({
+        call: async (method, path, body) => {
+          window.__calls.push({ method, path, body: body instanceof Uint8Array ? "<archive>" : body });
+          if (path === "/api/v1/applications/source?dryRun=true") {
+            return { status: 200, data: { created: true, artifacts: [] } };
+          }
+          if (path === "/api/v1/applications/source") {
+            return { status: 200, data: { created: true, applicationId: "new", name: "Purchase", artifacts: [] } };
+          }
+          return { status: 404, data: { error: "unexpected API call" } };
+        },
+        reload: async () => { window.__reloads++; },
+        notify: (msg, kind) => { document.getElementById("result").textContent = kind + ": " + msg; },
+      });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

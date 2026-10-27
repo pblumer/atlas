@@ -191,6 +191,10 @@ type Server struct {
 	proc  *engine.Processor
 	store *state.Store
 
+	// blueprints is an optional immutable operator-pinned registry client. All
+	// network I/O stays in HTTP handlers, outside the processor run loop.
+	blueprints blueprintSource
+
 	// limits are the installation's resource budgets: how much a caller, a called
 	// service, or a running process may make this server hold at once. Every ceiling
 	// in the API reads its number from here rather than from a constant beside the
@@ -1715,6 +1719,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// configured) or the zero-config <data-dir>/dmn-models folder. Both satisfy the
 	// Resolver interface, so the rest of the server is unaffected (ADR-0034/0014).
 	resolver := dmnResolverFromEnv(filepath.Join(dataDir, "dmn-models"))
+	blueprints, err := configuredBlueprintSource()
+	if err != nil {
+		return nil, err
+	}
 	// quit stops the run loop and every background sweeper alike, so the loop is
 	// built from it rather than owning it.
 	quit := make(chan struct{})
@@ -2082,6 +2090,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// separately and runs off the loop (ADR-0239). Everything else in that area is
 	// design-time size and runs on it.
 	s.capabilities.SetMeasurementResolver(s.measureCapability)
+	s.blueprints = blueprints
 	for _, opt := range opts {
 		opt(s)
 	}

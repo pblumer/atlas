@@ -835,6 +835,15 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/events":                     "a machine-to-machine pull feed for systems beyond Atlas (a CMDB, a billing system), paged by a cursor the consumer keeps; an agent reads how a position's actions ended with atlas_order_line_outcomes",
 	"GET /api/v1/message-sources":            "the Modeler's authoring aid for picking a message name, flat for its picker — watch configuration, product actions and deployed catches and throws; an agent reads the same rows grouped by name, with their findings, through atlas_message_names (ADR-0446 §5), and publishes a message itself rather than needing one to exist",
 
+	// Blueprint Marketplace (ADR-0499): this first integration is a
+	// human-reviewed Console preview/download workflow. Unlike ordinary
+	// application APIs, returning a raw downloaded package to an MCP agent
+	// would bypass the dedicated import decision UI without adding a distinct
+	// agent capability. MCP uses the existing application/import tools.
+	"GET /api/v1/blueprints":                                 "Console discovery of operator-pinned signed releases, with no standalone agent workflow yet",
+	"GET /api/v1/blueprints/{id}/releases/{version}/preview": "Console design-time safety and dependency preview before a human import decision",
+	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; MCP does not download raw package bytes",
+
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",
 	"GET /api/v1/repository/packages/{id}":          "repository management is a UI concern",

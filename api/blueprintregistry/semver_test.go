@@ -101,3 +101,23 @@ func TestVerifySignedIndexAllowsEmptyRegistry(t *testing.T) {
 		t.Fatalf("empty but correctly signed public catalog rejected: %v", err)
 	}
 }
+
+func TestBlueprintCompatibilityMustFitSignedRange(t *testing.T) {
+	req := Compatibility{MinVersion: "0.20.0", MaxVersionExclusive: "0.21.0"}
+	for _, v := range []string{"0.19.9", "0.20.0-dev", "0.21.0", "v0.20.1", ""} {
+		if Compatible(req, v) {
+			t.Errorf("accepted atlas %q outside signed range", v)
+		}
+	}
+	for _, v := range []string{"0.20.0", "0.20.1", "0.21.0-rc.1"} {
+		if !Compatible(req, v) {
+			t.Errorf("rejected compatible atlas %q", v)
+		}
+	}
+	if Compatible(Compatibility{MinVersion: "0.21.0", MaxVersionExclusive: "0.20.0"}, "0.20.0") {
+		t.Fatal("accepted inverted signed compatibility range")
+	}
+	if !Compatible(Compatibility{MinVersion: "0.1.0"}, "0.20.0-dev") {
+		t.Fatal("rejected compatible prerelease atlas")
+	}
+}

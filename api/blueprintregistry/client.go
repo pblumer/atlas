@@ -90,10 +90,20 @@ func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
 // version-pinned artifact relative to the configured registry base directory.
 // It verifies exact compressed bytes, but DOES NOT validate archive members,
 // import data, publish a process or make the payload executable.
+// Download returns a release's pinned bytes. Call Fetch when the caller also
+// needs provenance from the same verified index snapshot.
 func (c *PublicClient) Download(ctx context.Context, blueprintID, version string) ([]byte, error) {
+	_, content, err := c.Fetch(ctx, blueprintID, version)
+	return content, err
+}
+
+// Fetch obtains a release descriptor and archive bytes from one verified
+// signed-index snapshot. The descriptor always matches the downloaded bytes,
+// even if the registry index changes between separate HTTP requests.
+func (c *PublicClient) Fetch(ctx context.Context, blueprintID, version string) (Release, []byte, error) {
 	index, err := c.LoadIndex(ctx)
 	if err != nil {
-		return nil, err
+		return Release{}, nil, err
 	}
 	for _, release := range index.Releases {
 		if release.BlueprintID != blueprintID || release.Version != version {
@@ -101,21 +111,19 @@ func (c *PublicClient) Download(ctx context.Context, blueprintID, version string
 		}
 		location := *c.indexURL
 		location.Path = path.Join(path.Dir(location.Path), release.Artifact.Path)
-		// The signed manifest forbids absolute, escaped and traversal paths.
-		// Independently check the derived location before performing I/O.
 		if err := validateDerivedArtifactURL(c.indexURL, &location); err != nil {
-			return nil, err
+			return Release{}, nil, err
 		}
 		data, err := c.readBounded(ctx, &location, release.Artifact.SizeBytes)
 		if err != nil {
-			return nil, fmt.Errorf("download signed registry release: %w", err)
+			return Release{}, nil, fmt.Errorf("download signed registry release: %w", err)
 		}
 		if err := VerifyArchive(release, data); err != nil {
-			return nil, fmt.Errorf("verify signed registry release: %w", err)
+			return Release{}, nil, fmt.Errorf("verify signed registry release: %w", err)
 		}
-		return data, nil
+		return release, data, nil
 	}
-	return nil, fmt.Errorf("Blueprint %q release %q not listed in verified registry", blueprintID, version)
+	return Release{}, nil, fmt.Errorf("Blueprint %q release %q not listed in verified registry", blueprintID, version)
 }
 
 func (c *PublicClient) readBounded(ctx context.Context, location *url.URL, size int64) ([]byte, error) {

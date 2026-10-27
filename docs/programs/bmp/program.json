@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review BMP1 package-inspection PR #1415 and complete its security, race, Windows and archive test gates; then build authorized registry browsing and import-plan/publish using established application APIs.",
+  "next_action": "Review PR #1416 Console browse/preview/import integration and required CI; then persist trusted Blueprint provenance in design-time sidecar state and prove restart recovery with a signed public demo.",
   "slices": [
     {
       "id": "BMP0",
@@ -39,9 +39,10 @@
       "issues": [],
       "prs": [
         1411,
-        1415
+        1415,
+        1416
       ],
-      "note": "PR #1411 merged: safe pinned HTTPS transport. Draft PR #1415 adds bounded, fail-closed in-memory inspection of the existing tar.gz application package with malicious-entry, expansion, duplicate-name, manifest, CRC and truncated-stream tests. Import plan, authorization, publish, provenance and recovery remain outstanding."
+      "note": "PR #1411 merged the pinned HTTPS transport; PR #1415 merged bounded archive inspection. Draft PR #1416 adds operator-pinned signed registry browse/preview and explicit Console import through existing authorization/conflict APIs. Persistent provenance, restart test and a signed demo registry are still required."
     },
     {
       "id": "BMP2",

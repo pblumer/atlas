@@ -71,7 +71,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-BMP1: PR #1411 merged the bounded public HTTPS registry client with pinned Ed25519 identity, no redirects, DNS/IP checks and verified archive digests. Draft PR #1415 inspects the existing tar.gz application package with bounded expansion, path/link/duplicate/manifest/CRC guards, returning metadata without installing. After that passes review, connect it to authorized source and catalogue import-plan APIs, explicit publish and durable provenance with restart/recovery tests. **No automatic installation, runtime licence checks or direct Worker code execution.**
+BMP1: PR #1411 merged the bounded public HTTPS registry client with pinned Ed25519 identity, no redirects, DNS/IP checks and verified archive digests. Draft PR #1415 inspects the existing tar.gz application package with bounded expansion, path/link/duplicate/manifest/CRC guards, returning metadata without installing. Draft PR #1416 adds an operator-pinned public Registry browser with signed release previews and a digest-conditional package GET, then reuses the existing authorized Console import workflow. Durable provenance, restart/recovery tests and a signed free demo registry remain open gates. **No automatic installation, runtime licence checks or direct Worker code execution.**
 
 ## References
 
