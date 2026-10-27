@@ -14,7 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
-- **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
+- **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
 - **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
   wikiwikibangbang already holds to draw processes and decisions in its pages, now also
   lists the releases with a sketch (`GET /api/v1/architectures`) and reads one

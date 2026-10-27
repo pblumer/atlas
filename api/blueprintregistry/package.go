@@ -18,8 +18,9 @@ import (
 const MaxPackageExpandedBytes int64 = 200 << 20
 
 const (
-	maxPackageEntries  = 2000
-	maxPackageManifest = 2 << 20
+	maxPackageEntries   = 2000
+	maxPackageManifest  = 2 << 20
+	maxPackageCatalogue = 16 << 20
 )
 
 type archiveLimits struct {
@@ -34,12 +35,27 @@ type PackageFile struct {
 	SizeBytes int64
 }
 
+// PackageCatalogue lists one catalogue and the product IDs it offers.
+type PackageCatalogue struct {
+	ID    string   `json:"id"`
+	Items []string `json:"items"`
+}
+
+// PackageProduct names a product and its authoritative home catalogue.
+type PackageProduct struct {
+	ID          string `json:"id"`
+	HomeCatalog string `json:"homeCatalog"`
+}
+
 // PackageInspection describes the transport-level contents of a pinned
 // Blueprint package. It does not prove that its BPMN, DMN or forms are valid.
 type PackageInspection struct {
-	ApplicationKey  string
-	ApplicationName string
-	Files           []PackageFile
+	ApplicationKey   string
+	ApplicationName  string
+	Files            []PackageFile
+	Catalogues       []PackageCatalogue
+	Products         []PackageProduct
+	CataloguePublish bool
 }
 
 // InspectPackage verifies the exact signed archive bytes and inspects a bounded
@@ -110,6 +126,17 @@ func inspectPackageWithLimits(release Release, compressed []byte, limits archive
 				return result, err
 			}
 			haveManifest = true
+		} else if hdr.Name == "katalog.json" {
+			if hdr.Size > maxPackageCatalogue {
+				return result, errors.New("catalogue document exceeds preview limit")
+			}
+			catalogue := make([]byte, int(hdr.Size))
+			if _, err := io.ReadFull(tr, catalogue); err != nil {
+				return result, fmt.Errorf("read catalogue document: %w", err)
+			}
+			if err := inspectCatalogue(catalogue, &result); err != nil {
+				return result, err
+			}
 		} else {
 			if _, err := io.CopyN(io.Discard, tr, hdr.Size); err != nil {
 				return result, fmt.Errorf("read package file %q: %w", hdr.Name, err)
@@ -187,5 +214,51 @@ func inspectManifest(raw []byte, result *PackageInspection) error {
 	}
 	result.ApplicationKey = manifest.Key
 	result.ApplicationName = manifest.Name
+	return nil
+}
+
+// inspectCatalogue reads only the bounded, signed package document to describe
+// what is offered. Native import planning still owns semantics, authorization,
+// bindings and publication decisions; this preview never writes to a store.
+func inspectCatalogue(raw []byte, result *PackageInspection) error {
+	if !json.Valid(raw) {
+		return errors.New("invalid catalogue document JSON")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := checkUniqueJSON(decoder, 0); err != nil {
+		return fmt.Errorf("ambiguous catalogue document: %w", err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return errors.New("catalogue document must contain exactly one JSON value")
+	}
+	var doc struct {
+		Publish    bool               `json:"publish"`
+		Catalogues []PackageCatalogue `json:"catalogs"`
+		Products   []PackageProduct   `json:"products"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("decode catalogue document: %w", err)
+	}
+	catalogueIDs := make(map[string]struct{}, len(doc.Catalogues))
+	for _, catalogue := range doc.Catalogues {
+		if strings.TrimSpace(catalogue.ID) == "" {
+			return errors.New("catalogue document contains an unnamed catalogue")
+		}
+		if _, found := catalogueIDs[catalogue.ID]; found {
+			return fmt.Errorf("duplicate catalogue id %q", catalogue.ID)
+		}
+		catalogueIDs[catalogue.ID] = struct{}{}
+	}
+	productIDs := make(map[string]struct{}, len(doc.Products))
+	for _, product := range doc.Products {
+		if strings.TrimSpace(product.ID) == "" {
+			return errors.New("catalogue document contains an unnamed product")
+		}
+		if _, found := productIDs[product.ID]; found {
+			return fmt.Errorf("duplicate product id %q", product.ID)
+		}
+		productIDs[product.ID] = struct{}{}
+	}
+	result.Catalogues, result.Products, result.CataloguePublish = doc.Catalogues, doc.Products, doc.Publish
 	return nil
 }

@@ -92,10 +92,17 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
         ...(inspected.needs?.workerTypes || []),
         ...(inspected.needs?.serverConstants || []),
       ];
+      // The signed package describes catalogue offers, not import outcomes.
+      // Conflicts, local edits and publication are checked later by ADR-0467.
+      const products = new Map((inspected.products || []).map((p) => [p.id, p.homeCatalog]));
+      const catalogues = (inspected.catalogues || []).map((c) => `
+        <li><b>${esc(c.id)}</b>${(c.items || []).length ? `<ul>${c.items.map((id) =>
+          `<li>${esc(id)}${products.has(id) && products.get(id) !== c.id ? ` (${esc(products.get(id))})` : ""}</li>`).join("")}</ul>` : ""}</li>`).join("");
       body.innerHTML = `<h3>${esc(inspected.applicationName)}</h3>
         <p class="muted">${esc(inspected.blueprintId)} · v${esc(inspected.version)} · ${esc(inspected.license)}</p>
         <p>${esc(t("blueprint.digest"))}: <code>${esc(inspected.digest)}</code></p>
         <p><b>${esc(t("blueprint.needs"))}:</b> ${esc(needs.join(", ") || t("blueprint.none"))}</p>
+        ${catalogues ? `<p><b>${esc(t("transfer.catalogues"))}:</b></p><ul>${catalogues}</ul>` : ""}
         <p><b>${esc(t("blueprint.files"))}:</b></p><ul>${fileRows}</ul>
         <p>${esc(t("blueprint.warning"))}</p>
         <div class="between"><button type="button" class="btn ghost" data-back>${esc(t("blueprint.back"))}</button>

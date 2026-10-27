@@ -14,6 +14,8 @@ const index = { schemaVersion: 1, registryId: "org.example.community", releases:
 const preview = {
   ...release, applicationKey: "purchase", applicationName: "Purchase",
   digest, files: [{ Path: "atlas.json", SizeBytes: 80 }],
+  catalogues: [{ id: "cat-requests", items: ["badge", "access"] }, { id: "cat-department", items: ["badge"] }],
+  products: [{ id: "badge", homeCatalog: "cat-requests" }, { id: "access", homeCatalog: "cat-requests" }],
 };
 
 function tarGz(files) {
@@ -35,7 +37,7 @@ const pkg = tarGz([["atlas.json", JSON.stringify({
   formatVersion: 1, key: "purchase", name: "Purchase", processes: [], forms: [], decisions: [],
 })]]);
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200 } = {}) {
+async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
@@ -45,7 +47,7 @@ async function stubRegistry(page, { status = 200, downloadStatus = 200 } = {}) {
       await route.fulfill({ status, contentType: "application/json",
         body: JSON.stringify(status === 200 ? index : { error: "Registry not configured" }) });
     } else if (path.endsWith("/preview")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(preview) });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewBody) });
     } else if (path.endsWith("/package")) {
       await route.fulfill(downloadStatus === 200
         ? { status: 200, contentType: "application/gzip", body: pkg }
@@ -72,11 +74,31 @@ test("only signed registry metadata is rendered and safe escaped; preview does n
   await page.locator('[data-preview="0"]').click();
   await expect(page.locator("[data-install]")).toBeVisible();
   await expect(page.locator(".modal-ov")).toContainText(digest);
+  await expect(page.locator(".modal-ov")).toContainText("cat-requests");
+  await expect(page.locator(".modal-ov")).toContainText("cat-department");
+  await expect(page.locator(".modal-ov")).toContainText("badge");
+  await expect(page.locator(".modal-ov")).toContainText("access");
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
   expect(requests.map((r) => r.path).every((p) => !p.endsWith("/package"))).toBe(true);
   await page.locator("[data-back]").click();
   await page.locator("[data-close]").first().click();
   await expect(page.locator(".modal-ov")).toHaveCount(0);
+});
+
+test("untrusted catalogue and offered product names cannot inject markup", async ({ page }) => {
+  const hostile = '<img src=x onerror="alert(1)">';
+  await stubRegistry(page, {
+    previewBody: {
+      ...preview,
+      catalogues: [{ id: hostile, items: [hostile] }],
+      products: [{ id: hostile, homeCatalog: hostile }],
+    },
+  });
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  await expect(page.locator(".modal-ov")).toContainText(hostile);
+  await expect(page.locator(".modal-ov img")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
 });
 
 test("cancelled operator confirmation never downloads or imports", async ({ page }) => {
