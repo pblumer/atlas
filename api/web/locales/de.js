@@ -353,6 +353,8 @@ export default {
   "deployments.architecture.layer.data": "Daten",
   "deployments.architecture.layer.technology": "Technologie",
   "deployments.architecture.needLayer": "Eine Skizze braucht mindestens eine Ebene",
+  "deployments.architecture.panorama": "In Panorama öffnen",
+  "deployments.architecture.panoramaTitle": "Dieses Release in der Starmap von Panorama zeigen: jede Ebene, die es festhält, zum Ein- und Ausblenden und zum Hineinzoomen, auf Wunsch mit dem aktuellen Zustand seiner Prozesse und Worker",
   "deployments.promote.title": "v{version} übertragen",
   "deployments.promote.label": "Ziel",
   "deployments.promote.ok": "Übertragen",

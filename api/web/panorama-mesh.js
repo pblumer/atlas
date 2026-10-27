@@ -12,7 +12,7 @@
 // applications and says so, which this view repeats rather than hides.
 
 import {
-  captureView, frameFor, pinsFor, readViews, removeView, saveView, writeViews,
+  captureView, frameFor, pinsFor, readViews, removeView, saveView, viewsOf, writeViews,
 } from "./panorama-views.js";
 import {
   exportName, exportStyles, rasterise, save, standaloneSVG, stampLines,
@@ -20,6 +20,9 @@ import {
 // The runtime counts here are the engine's own, the same ones the Operations badges
 // carry — so they are grouped in thousands the same way (numfmt.js).
 import { fmtCount, spanText } from "./numfmt.js";
+// A release is dated the way the release history it was opened from dates it, in the
+// reader's chosen zone and region (ADR-0459).
+import { fmtDateTime } from "./datefmt.js";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (character) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
@@ -111,7 +114,7 @@ const KIND = {
   // thing on this landscape whose state was fetched over the network — and therefore
   // the only one that can be *unreachable* or *stale*, which is exactly what somebody
   // scanning for trouble needs to find first.
-  target: { r: 24, grow: 6, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent-hover)", label: "Deployment target — a peer this server can promote to" },
+  target: { r: 24, grow: 6, shape: "pentagon", fill: "var(--surface)", stroke: "var(--accent-hover)", label: "Deployment target — a peer this server can promote to", layer: "technology" },
   // The service catalogue, drawn as its own family. Everything above is what this
   // server *runs*; these two are what it *offers*, which is a different axis of the
   // same estate — and a reader has to be able to tell at a glance which half of the
@@ -130,9 +133,81 @@ const KIND = {
   // reason. Both stay far below a finding, where the amber badge is 3.59 and the red
   // 5.44 (ADR-0211 §4). The outline is the canvas's own ink for both: the card already
   // carries the kind, and the stroke is what a severity overrides.
-  catalog: { r: 24, grow: 6, shape: "card", fill: "#e6dff5", stroke: "var(--mesh-ink)", label: "Catalogue — what a group of people may order" },
-  product: { r: 13, grow: 4, shape: "tile", fill: "#efe9f8", stroke: "var(--mesh-ink)", label: "Product — a catalogue item and what provisions it" },
+  catalog: { r: 24, grow: 6, shape: "card", fill: "#e6dff5", stroke: "var(--mesh-ink)", label: "Catalogue — what a group of people may order", layer: "business" },
+  product: { r: 13, grow: 4, shape: "tile", fill: "#efe9f8", stroke: "var(--mesh-ink)", label: "Product — a catalogue item and what provisions it", layer: "business" },
+
+  // The kinds a release records and the live landscape does not draw (ADR-0495 §4).
+  // They reach this canvas only through the release lens, and they follow the rules
+  // above rather than adding any: a step of tint each, every one between 1.13 and 1.32
+  // against the canvas — under the 1.35 the strongest kind above already sits at, so
+  // still far below the amber badge's 3.59 and the red's 5.44 — and the canvas's own
+  // ink as the outline, because the outline is what a severity overrides. None is
+  // dashed: the dash means what is drawn is not running, and a recorded capability or
+  // message is not a claim about running at all.
+  //
+  // The tints come from the four ArchiMate layer colours (see NOTATION_PAINT), pale on
+  // purpose: a reader who works in ArchiMate finds strategy in sand, business in
+  // yellow, application in cyan and technology in green, and the data band — which is
+  // a band of the picture rather than an ArchiMate layer — keeps the colour the
+  // standard gives each of its two objects. Within a layer the two related kinds are
+  // a step apart, the darker on the one that stands over the other, which is the
+  // catalogue and product's arrangement: a value stream (1.32) over the capabilities
+  // that serve it (1.17), a message (1.22) beside a signal (1.14), a business object
+  // (1.24) over the data objects that keep it (1.14).
+  //
+  // Shapes are the notation's own icons where it has one (see ARCHIMATE_ICONS), and
+  // BPMN's where the thing is a BPMN element and the process author would look for
+  // its symbol: a message is an envelope and a data object a folded page. Each is a
+  // silhouette no kind above uses in Atlas's own drawing.
+  //
+  // Sizes keep the ranks: a value stream is a container like a catalogue, a capability
+  // stands over the processes that realise it like a definition does, and the names a
+  // release exchanges are leaves — drawn at the placeholders' size, below a worker.
+  capability: { r: 20, grow: 5, shape: "am-capability", fill: "#f7ecd2", stroke: "var(--mesh-ink)", label: "Capability — what the organisation can do, realised here", layer: "strategy" },
+  valueStream: { r: 24, grow: 6, shape: "am-value-stream", fill: "#f1dfb5", stroke: "var(--mesh-ink)", label: "Value stream — the stages a capability serves", layer: "strategy" },
+  role: { r: 13, grow: 4, shape: "am-role", fill: "#f6f2cc", stroke: "var(--mesh-ink)", label: "Role — who works a step: a candidate group or a lane", layer: "business" },
+  message: { r: 11, grow: 3, shape: "bpmn-message", fill: "#d3eef2", stroke: "var(--mesh-ink)", label: "Message — a name this release receives or throws", layer: "application" },
+  signal: { r: 11, grow: 3, shape: "am-event", fill: "#e2f4f6", stroke: "var(--mesh-ink)", label: "Signal — a broadcast this release receives or throws", layer: "application" },
+  // A step lighter than the worker it is handed to (1.04 between them), so the two
+  // read as related and the worker as the more substantial of the pair.
+  jobType: { r: 11, grow: 3, shape: "tag", fill: "#e4f1e7", stroke: "var(--mesh-ink)", label: "Job type — the name work is handed to Workers under", layer: "application" },
+  feed: { r: 14, grow: 4, shape: "am-interface", fill: "#d2e9f4", stroke: "var(--mesh-ink)", label: "Event feed — what Atlas publishes for its subscribers", layer: "application" },
+  endpoint: { r: 12, grow: 3.5, shape: "am-node", fill: "#d6ecc8", stroke: "var(--mesh-ink)", label: "Endpoint — a system a Worker or Atlas reaches", layer: "technology" },
+  dataObject: { r: 11, grow: 3, shape: "bpmn-data", fill: "#e2f3ef", stroke: "var(--mesh-ink)", label: "Data object — what a process keeps: an object, a store, or its personal data", layer: "data" },
+  businessObject: { r: 13, grow: 4, shape: "am-object", fill: "#efe8b6", stroke: "var(--mesh-ink)", label: "Business object — an information-model class the release uses", layer: "data" },
 };
+
+// LAYERS are the bands of ADR-0495 §1, top to bottom, which is the order the type
+// filter groups the kinds in when the picture is a release. A kind names its own
+// layer above; one that does not is application, which is where every kind the live
+// landscape drew before the lens existed sits, bar the catalogue's two and the
+// deployment target.
+const LAYERS = [
+  ["strategy", "Strategy"],
+  ["business", "Business"],
+  ["application", "Application"],
+  ["data", "Data"],
+  ["technology", "Technology"],
+];
+const layerOf = (kind) => styleOf(kind)?.layer || "application";
+
+// kindOverrides is what the picture's source says a kind means on *its* picture,
+// where that differs from the live landscape's. Module state for the reason
+// `notations` is: one starmap is mounted at a time, and every function that names or
+// sizes a kind reads it through styleOf rather than being handed it, so nothing can
+// draw a kind in one source's words and label it in another's.
+//
+// The live landscape overrides nothing. The release lens restates two kinds (see
+// releaseSource): a definition there is a process outside the release, and an
+// unresolved Worker one named by an expression.
+let kindOverrides = {};
+
+// styleOf is a kind's entry with the source's restatement laid over it.
+function styleOf(kind) {
+  const base = KIND[kind];
+  const over = kindOverrides[kind];
+  return base && over ? { ...base, ...over } : base;
+}
 
 // Shape is the third channel, after colour and size, and the one that survives what
 // they do not: a printout, a projector, and a reader who does not separate the hues.
@@ -163,7 +238,7 @@ export function shapeForNode(node, notation) {
     const missing = String(node.id || "").split(":")[1];
     return KIND[missing]?.shape || KIND.unresolved.shape;
   }
-  return (KIND[node?.kind] || KIND.process).shape;
+  return (styleOf(node?.kind) || KIND.process).shape;
 }
 
 // shapeVertices returns a shape's corners at radius r, and an empty list for the
@@ -190,7 +265,7 @@ export function shapeVertices(shape, r) {
     default: {
       // ArchiMate's own outlines, at the same rule as everything else: the furthest
       // corner sits *on* the reserved circle and none is outside it.
-      const icon = ARCHIMATE_ICONS[shape];
+      const icon = iconFor(shape);
       if (icon) return iconPoints(icon.points, r);
       // The wide rectangles the notation projections draw in (see NOTATION_SHAPES). Same
       // rule as every other shape: the corners sit *on* the reserved circle, so the
@@ -289,7 +364,95 @@ const ARCHIMATE_ICONS = {
     points: [[-7, -5], [7, -5], [7, 5], [-7, 5]],
     detail: [[[-7, -1.5], [-1.5, -1.5], [-1.5, -5]]],
   },
+
+  // The release lens's kinds (ADR-0495 §4), in the standard's own icons. These are
+  // Atlas's drawing of those kinds rather than a projection's, so they are what the
+  // lens shows in every notation that has no word of its own for them.
+  //
+  // Capability: a staircase, three steps rising to the right — the standard's icon
+  // is six small squares stacked that way, and at this size the steps are what
+  // survives of it.
+  "am-capability": {
+    points: [[-7, 7], [-7, 2.3], [-2.3, 2.3], [-2.3, -2.3], [2.3, -2.3], [2.3, -7], [7, -7], [7, 7]],
+  },
+  // Value Stream: an arrow with a notch in its tail, the chevron a stage diagram is
+  // drawn in. Told from the Application Process arrow by the notch and the missing
+  // shaft.
+  "am-value-stream": {
+    points: [[-7, -5], [3, -5], [7, 0], [3, 5], [-7, 5], [-3, 0]],
+  },
+  // Business Role: a cylinder on its side. The silhouette has round ends like a
+  // service's; the front face of the near end, drawn as interior line work, is what
+  // makes it the role.
+  "am-role": {
+    points: [[-4, -4.5], [4.5, -4.5], ...arcPoints(4.5, 0, 2.5, 4.5, -60, 60, 4), [4.5, 4.5], [-4, 4.5],
+      ...arcPoints(-4, 0, 2.5, 4.5, 120, 240, 4)],
+    detail: [arcPoints(-4, 0, 2.5, 4.5, -90, 90, 6)],
+  },
+  // Event: notched where it is received, rounded where it goes — the standard's
+  // Application and Business Event. A signal is a broadcast, which is the event in its
+  // plainest form.
+  "am-event": {
+    points: [[-7, -5], [2, -5], ...arcPoints(2, 0, 5, 5, -60, 60, 4), [2, 5], [-7, 5], [-3.5, 0]],
+  },
+  // Application Interface: the lollipop, a disc on a stalk. The event feed is the
+  // interface Atlas's events leave by (ADR-0435), which is what the standard draws it
+  // as.
+  "am-interface": {
+    points: [[-7, -0.9], ...arcPoints(2.5, 0, 4.5, 4.5, -168, 168, 14), [-7, 0.9]],
+  },
+  // Business Object, and Data Object, which the standard draws the same: a box with a
+  // band across its head. Only the business object takes it here, because the data
+  // object is a BPMN element and keeps BPMN's page (see OWN_ICONS).
+  "am-object": {
+    points: [[-7, -5], [7, -5], [7, 5], [-7, 5]],
+    detail: [[[-7, -2], [7, -2]]],
+  },
 };
+
+// OWN_ICONS are outlines for the lens's kinds that ArchiMate has no icon for, or whose
+// reader looks for another notation's. Same normalisation as ARCHIMATE_ICONS and the
+// same reason: the table reads as the shape, and the reserved circle is computed.
+const OWN_ICONS = {
+  // A message is BPMN's envelope, the symbol every message event and message flow in
+  // the release's own diagrams carries.
+  "bpmn-message": {
+    points: [[-7, -4.5], [7, -4.5], [7, 4.5], [-7, 4.5]],
+    detail: [[[-7, -4.5], [0, 0.8], [7, -4.5]]],
+  },
+  // A data object is BPMN's page with its corner folded down: the element the process
+  // declares it with.
+  "bpmn-data": {
+    points: [[-5, -7], [2, -7], [5, -4], [5, 7], [-5, 7]],
+    detail: [[[2, -7], [2, -4], [5, -4]]],
+  },
+  // A job type is a label work is handed out under, so it is drawn as one: a tag,
+  // pointed at the end it hangs from, with the hole it hangs by. Pointed where the
+  // event is notched, so the two read apart on one row.
+  tag: {
+    points: [[-7, 0], [-3, -4.5], [7, -4.5], [7, 4.5], [-3, 4.5]],
+    detail: [[[-3.4, -0.9], [-1.6, -0.9], [-1.6, 0.9], [-3.4, 0.9], [-3.4, -0.9]]],
+  },
+};
+
+// iconFor is the outline drawn for a shape name from either table, or null for the
+// plain polygons and rectangles.
+function iconFor(shape) {
+  return ARCHIMATE_ICONS[shape] || OWN_ICONS[shape] || null;
+}
+
+// arcPoints walks an ellipse from one angle to another, in degrees, clockwise on the
+// screen. The icons above that have a round end are polygons like every other outline
+// here, so the reserved-circle rule is the same arithmetic for them; this only spares
+// the table a column of trigonometry.
+function arcPoints(cx, cy, rx, ry, from, to, steps) {
+  const out = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = ((from + ((to - from) * i) / steps) * Math.PI) / 180;
+    out.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+  }
+  return out;
+}
 
 // iconPoints scales one of those outlines to the radius the layout reserved.
 //
@@ -318,7 +481,7 @@ function bodyElement(shape, r, attrs) {
   // a three-pixel red stroke on the fold of a box if it were one element. It is also
   // the reason there is never more than one .mesh-body in a node — everything that
   // reads the picture back, the tests included, asks for the outline by that name.
-  const icon = ARCHIMATE_ICONS[shape];
+  const icon = iconFor(shape);
   if (icon) {
     const path = (list) => iconPoints(list, r)
       .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
@@ -442,7 +605,7 @@ const NOTATION_PAINT = {
 // picture draws its swatches through this as well, and a key that painted its
 // swatches from its own copy would be a legend for a different picture.
 export function paintFor(node, notation) {
-  const style = KIND[node?.kind] || KIND.process;
+  const style = styleOf(node?.kind) || KIND.process;
   const spoken = notationOf(notation?.id ?? notation);
   const paint = NOTATION_PAINT[spoken.id]?.[node?.kind];
   return paint ? { ...style, ...paint } : style;
@@ -909,7 +1072,7 @@ const DEGREE_FULL = 12;
 // and fifty there is nothing left to say that the size could carry, and a linear
 // scale would spend the whole band saying it.
 export function radiusFor(node, degree) {
-  const style = KIND[node.kind] || KIND.process;
+  const style = styleOf(node.kind) || KIND.process;
   const reach = Math.log2(1 + Math.max(0, degree || 0)) / Math.log2(1 + DEGREE_FULL);
   return style.r + (style.grow || 0) * Math.min(1, reach);
 }
@@ -1142,6 +1305,12 @@ const SEVERITY = {
   attention: { glyph: "•", stroke: "var(--mesh-attention)", beats: true, label: "Attention — something inside it went wrong" },
   ok: { glyph: "", stroke: "", label: "OK — nothing is wrong here" },
   unknown: { glyph: "?", stroke: "", label: "Unwatched — nothing here observes it" },
+  // A release drawn as it was recorded, with the live overlay off (ADR-0495 §4). Not
+  // "unwatched": that is a finding about this server, and here nothing on the picture
+  // is being asked about this server at all. So it is the neutral class with no badge
+  // — a hundred question marks over a record would read as a hundred open questions —
+  // and the key and the panel say in words what it means.
+  recorded: { glyph: "", stroke: "", label: "Recorded — as the release was taken, not observed" },
 };
 
 // EDGE_KEY is what each derived edge means, in the order the key lists them.
@@ -1183,6 +1352,25 @@ const EDGE_KEY = [
     "a part offered beside the whole, ordered only if it is chosen"],
   ["requires", "Dotted line — precedence: this cannot be provisioned before that",
     "this cannot be provisioned before that"],
+  // The release lens's seven (ADR-0495 §4), in the order the rest are: the four a
+  // failure travels along first, then the three that are structure. They reuse the
+  // three patterns for the stylesheet's reason — a fifth pattern would not be told from
+  // the four at a glance — so the pattern says which group a line is in and the row
+  // says which line it is.
+  ["receives", "Solid line — receives: a message or signal sets a process going",
+    "a message or signal sets a process going"],
+  ["throws", "Solid line — throws: a process, a peer or a Worker sends a message or signal, and an application its events to the feed",
+    "a process, a peer or a Worker sends a message or signal, and an application its events to the feed"],
+  ["accesses", "Dashed line — accesses: a process keeps its data, and a Worker receives personal data",
+    "a process keeps its data, and a Worker receives personal data"],
+  ["reaches", "Dashed line — reaches: a Worker connects to a system outside Atlas",
+    "a Worker connects to a system outside Atlas"],
+  ["realizes", "Dotted line — realises: a process or Worker realises a capability or a product, and a data object a class",
+    "a process or Worker realises a capability or a product, and a data object a class"],
+  ["assigned", "Dotted line — assigned: a role works a process's tasks or lanes",
+    "a role works a process's tasks or lanes"],
+  ["serves", "Dotted line — serves: a capability serves a stage of a value stream",
+    "a capability serves a stage of a value stream"],
   // Last, because it is the structure the rest hangs on and the order above puts
   // structure last. It is also the only row here whose line a reader cannot currently
   // see: a definition is drawn only where several servers hold one model (ADR-0401),
@@ -1213,6 +1401,9 @@ const STATE_TEXT = {
   unreachable: "unreachable",
   stale: "stale",
   unbound: "unbound — nothing observes it",
+  // Said of the picture rather than of a switch: the overlay may be off, or withheld
+  // from this reader (ADR-0495 §5), and either way the record is all there is.
+  recorded: "not observed — this is the record alone",
 };
 
 // LABEL_TIERS decides which names are painted, from how large they will actually
@@ -1318,7 +1509,7 @@ const WORLD_FILL = 0.22;
 // separation pass, the circle itself — asks here rather than re-deriving it, so
 // they cannot disagree about how big a node is.
 function radiusOf(node) {
-  return node.r ?? (KIND[node.kind] || KIND.process).r;
+  return node.r ?? (styleOf(node.kind) || KIND.process).r;
 }
 
 // worldFor sizes the space the graph is laid out in, from the graph rather than
@@ -2191,7 +2382,29 @@ export function zoomView(view, factor, focus, base) {
 // without it whenever nobody ticks it, so a package whose optional case is
 // unavailable is a package that is still deliverable. Walking it would put "what
 // breaks" and "what is offered alongside" in one number.
-const DEPENDENCY_EDGES = new Set(["calls", "uses", "composition", "requires"]);
+//
+// The release lens adds seven kinds (ADR-0495 §4), and the test for each is the one
+// every kind above passed: the walk reads an edge as "from needs to", so a kind joins
+// only if its own direction says that.
+//
+//   - receives and throws do. A name is an asynchronous call cut in two — the thrower
+//     throws it, the receiver receives it — so thrower → name → receiver reads exactly
+//     as caller → callee does, and a receiver that goes down takes with it the name
+//     nobody now consumes and whoever throws it.
+//   - accesses does: a process cannot keep data in a store that is not there.
+//   - reaches does, although it is technology: a Worker that cannot reach its mail
+//     server or its database cannot do its work, and that is the failure path this
+//     walk exists to follow. An endpoint many Workers reach is exactly the node whose
+//     blast radius somebody is asking about.
+//   - realizes, assigned and serves do not, and the reason is direction rather than
+//     importance. Each runs from the one that provides to the one that is provided
+//     for — process to capability, role to process, capability to value stream — which
+//     is a dependency read backwards; walking it would say the capability is needed by
+//     the process. They stay on the picture as structure, as containment does.
+const DEPENDENCY_EDGES = new Set([
+  "calls", "uses", "composition", "requires",
+  "receives", "throws", "accesses", "reaches",
+]);
 
 // degreesOf counts, for every node, how many dependency edges touch it.
 //
@@ -2364,8 +2577,12 @@ export function impactSummary(graph, result, startId) {
   const others = result.nodes.filter((id) => !from.has(id));
   const bySeverity = { critical: 0, attention: 0, ok: 0, unknown: 0 };
   for (const id of others) {
+    // A class this file draws keeps its own count, so a recorded node is counted as
+    // recorded rather than as unwatched; the four above are always present, and one
+    // that is not among them is counted only where it occurs.
     const sev = byId.get(id)?.severity;
-    bySeverity[sev in bySeverity ? sev : "unknown"] += 1;
+    const key = SEVERITY[sev] ? sev : "unknown";
+    bySeverity[key] = (bySeverity[key] || 0) + 1;
   }
   return {
     total: others.length,
@@ -2594,6 +2811,18 @@ function hrefFor(node) {
     const id = node.catalog.slice("catalog:".length);
     return `#/catalog/c/${encodeURIComponent(id)}`;
   }
+  // A capability and a value stream are records in Panorama's own register (ADR-0305),
+  // and their inside is that record's page — the same href capabilities.js builds
+  // (capabilityHref, valueStreamHref), read off the key the id carries the way every
+  // link above reads its own.
+  if (node.kind === "capability") {
+    const key = node.id.slice("capability:".length);
+    return `#/panorama/capabilities/${encodeURIComponent(key)}`;
+  }
+  if (node.kind === "valueStream") {
+    const key = node.id.slice("valuestream:".length);
+    return `#/panorama/value-streams/${encodeURIComponent(key)}`;
+  }
   return "";
 }
 
@@ -2603,6 +2832,8 @@ function hrefFor(node) {
 function insideName(node) {
   if (node.kind === "draft") return "Modeler";
   if (node.kind === "catalog" || node.kind === "product") return "Catalogue";
+  if (node.kind === "capability") return "Capabilities";
+  if (node.kind === "valueStream") return "Value streams";
   return "Operations";
 }
 
@@ -2614,8 +2845,8 @@ function nodeTitle(node, notation) {
   const typed = typeIn(node.kind, notation);
   if (typed) {
     const parts = [node.name || node.id, typed.name,
-      `Atlas ${(KIND[node.kind] || {}).label?.split(" — ")[0]?.toLowerCase() || node.kind}`];
-    if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+      `Atlas ${(styleOf(node.kind) || {}).label?.split(" — ")[0]?.toLowerCase() || node.kind}`];
+    if (statesSomething(node.state)) parts.push(STATE_TEXT[node.state] || node.state);
     if (node.reason) parts.push(node.reason);
     return parts.join(" · ");
   }
@@ -2623,13 +2854,17 @@ function nodeTitle(node, notation) {
     // Never its base URL: that is this operator's map of where their infrastructure
     // lives, and a landscape is opened by anybody with modeler access.
     const parts = [node.name || node.id, "deployment target"];
-    if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+    if (statesSomething(node.state)) parts.push(STATE_TEXT[node.state] || node.state);
     if (node.reason) parts.push(node.reason);
     return parts.join(" · ");
   }
   if (node.kind === "restricted") {
     return "A resource outside your access. The dependency is real; its identity is not shown.";
   }
+  // A kind its source restates says what it is in that source's sentence: the live
+  // landscape's would be the wrong finding (see kindOverrides).
+  const restated = kindOverrides[node.kind]?.title;
+  if (restated) return restated(node);
   if (node.kind === "catalog") {
     return `${node.name || node.id} · a service catalogue · what a group of people may order`;
   }
@@ -2666,10 +2901,18 @@ function nodeTitle(node, notation) {
   // The state, then the reason, then — if it was inherited — which descendant it
   // came from. ADR-0211 §4 requires the last of those: a red parent that cannot say
   // which child is red is not actionable, and trains an operator to ignore the color.
-  if (node.state && node.state !== "unbound") parts.push(STATE_TEXT[node.state] || node.state);
+  if (statesSomething(node.state)) parts.push(STATE_TEXT[node.state] || node.state);
   if (node.reason) parts.push(node.reason);
   if (node.severityFrom) parts.push(`inherited from ${node.severityFrom}`);
   return parts.join(" · ");
+}
+
+// statesSomething is whether a node's state is a fact about the node worth a clause in
+// its title. Unbound and recorded are not: one says nothing observes this, the other
+// that nothing on this picture is observed at all, and repeating either on every node
+// would bury the states that are findings.
+function statesSomething(state) {
+  return Boolean(state) && state !== "unbound" && state !== "recorded";
 }
 
 // matches decides what a search term keeps. It reads the name, the kind, and a
@@ -2788,6 +3031,18 @@ export function withoutKinds(graph, hidden) {
 export function kindsPresent(graph) {
   const here = new Set((graph?.nodes || []).map((n) => n.kind));
   return Object.keys(KIND).filter((kind) => here.has(kind));
+}
+
+// kindsByLayer is the same list cut into the bands of ADR-0495 §1, strategy at the
+// top and technology at the foot, which is how the type filter reads on a release:
+// "show and hide are the starmap's hidden kinds, grouped by layer" (§4). Only bands
+// that hold something are returned, and within one the kinds keep KIND's order, so the
+// grouping moves boxes under headings and never changes which boxes there are.
+export function kindsByLayer(graph) {
+  const kinds = kindsPresent(graph);
+  return LAYERS
+    .map(([layer, label]) => ({ layer, label, kinds: kinds.filter((kind) => layerOf(kind) === layer) }))
+    .filter((group) => group.kinds.length);
 }
 
 // PRODUCT_STATE is what the catalogue says an offering is, in the order an offering
@@ -2986,9 +3241,10 @@ export function drillInto(graph, id, hops) {
 function legendEntries(graph, notation) {
   const spoken = notationOf(notation?.id ?? notation);
   const present = new Set(graph.nodes.map((n) => n.kind));
-  const entries = Object.entries(KIND)
-    .filter(([kind]) => present.has(kind))
-    .map(([kind, style]) => {
+  const entries = Object.keys(KIND)
+    .filter((kind) => present.has(kind))
+    .map((kind) => {
+      const style = styleOf(kind);
       const typed = typeIn(kind, spoken);
       const paint = paintFor({ kind }, spoken);
       return {
@@ -3037,7 +3293,7 @@ function legendEntries(graph, notation) {
   }
 
   const severityPresent = new Set(graph.nodes.map((n) => n.severity).filter(Boolean));
-  for (const key of ["critical", "attention", "ok", "unknown"]) {
+  for (const key of ["critical", "attention", "ok", "unknown", "recorded"]) {
     if (!severityPresent.has(key)) continue;
     entries.push({
       group: "severity",
@@ -3231,7 +3487,12 @@ export function heatScaleEntries(heat, peak) {
 // `offersNothing` says the *delivered* product map was empty, which is not the same as
 // this picture being empty: a search that matches nothing empties the picture too, and
 // that already has its own sentence. The note below is about what the server had.
-function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNothing = false) {
+//
+// `madeOf` is the sentence saying what the picture is made of, when its source is not
+// the live landscape (see the sources' `madeOf`). A release is not derived from this
+// server's resources, and the one line of the key that says where everything came from
+// is the last line that may say it of the wrong thing.
+function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNothing = false, madeOf = "") {
   const spoken = notationOf(notation?.id ?? notation);
   const heat = heatOf(spoken);
   const swatch = (entry) => `<span class="mesh-swatch ${entry.tone}">
@@ -3320,7 +3581,11 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNoth
   // What the picture cannot see is stated beside what it can. Without this an
   // instance nothing observes renders as uniformly well, and a green view that has
   // no way to go red is worse than no view.
-  if (Array.isArray(status.unavailable) && status.unavailable.length) {
+  //
+  // The release lens without its overlay observes nothing at all, and its own line
+  // above already says so; listing every state as unwatched beside it would say it twice.
+  const recordOnly = graph.lens && !graph.lens.overlay;
+  if (Array.isArray(status.unavailable) && status.unavailable.length && !recordOnly) {
     notes.push(`<p class="mesh-note"><b>Not watched here:</b>
       ${status.unavailable.map((u) => esc(STATE_TEXT[u.state] || u.state)).join(", ")}.
       ${esc(status.unavailable[0].reason)}</p>`);
@@ -3351,11 +3616,11 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNoth
     ${rules ? `<div class="mesh-swatches mesh-rules">${rules}</div>` : ""}
     ${severity ? `<div class="mesh-swatches">${severity}</div>` : ""}
     ${provenance ? `<div class="mesh-swatches">${provenance}</div>` : ""}
-    <div class="mesh-meta">${compared
+    <div class="mesh-meta">${madeOf || (compared
       ? `Compared against the architecture models you can see. Everything unmarked is
          <b>derived</b> from this server's resources.`
       : `Everything here is <b>derived</b> from this server's resources — nothing on this
-         view was drawn.`}
+         view was drawn.`)}
       <span class="muted">Laid out in ${Math.round(layoutMs)} ms.</span></div>
     ${notes.join("")}
   </div>`;
@@ -3388,7 +3653,7 @@ function takenTitle(edge) {
 }
 
 function renderGraph(graph, layoutMs, frame,
-  { pinned, from, notation, peak = 0, at: measuredAt = Date.now() } = {}) {
+  { pinned, from, notation, peak = 0, at: measuredAt = Date.now(), label = "Derived starmap" } = {}) {
   const spoken = notationOf(notation?.id ?? notation);
   // Read off the notation rather than passed in beside it: the numbers under the names
   // and the radii they hang from are one decision, and two arguments that could
@@ -3542,7 +3807,7 @@ function renderGraph(graph, layoutMs, frame,
   // picture is the entire landscape, filling the window.
   return { ms, world, nodes, margin, svg: `<svg class="mesh-canvas${
     beating && beating <= PULSE_BUDGET ? " mesh-beating" : ""}" viewBox="0 0 ${width} ${height}"
-    role="img" aria-label="Derived starmap">${defs}
+    role="img" aria-label="${esc(label)}">${defs}
     <g class="mesh-edges">${edges}</g>${circles}</svg>` };
 }
 
@@ -3608,7 +3873,7 @@ function rankingHTML(graph, direction, depth, heat = null, at = Date.now()) {
     : direction === "both" ? "how much each one is connected to"
     : "how much stops if this one does";
   const who = (r) => esc(r.name ||
-    String((KIND[r.kind] || {}).label || r.kind || r.id).split(" — ")[0]);
+    String((styleOf(r.kind) || {}).label || r.kind || r.id).split(" — ")[0]);
   const shell = (heading, body) => `<div class="mesh-rank">
     <div class="mesh-rank-head">${heading}</div>${body}</div>`;
 
@@ -3686,6 +3951,16 @@ function findingsHTML(graph) {
   // otherwise read as the findings, which is a claim about the six that are not
   // there.
   const scope = graph.matched ? " in the filtered starmap" : "";
+  // A release drawn with the live overlay off observes nothing, so there is nothing
+  // here that could report a problem. Said as that rather than as the sentence below,
+  // which points at a legend of what is unwatched — and nothing on a record is.
+  if (graph.nodes.length && graph.nodes.every((n) => n.severity === "recorded")) {
+    return `<div class="mesh-findings">
+      <div class="mesh-findings-head"><b>Findings${esc(scope)}</b></div>
+      <p class="mesh-note">Nothing here is observed: this is the release as it was
+      recorded. With the live overlay on, its processes and Workers carry this
+      server's state.</p></div>`;
+  }
   if (!found.length) {
     // Not "everything is fine": most nodes in a young landscape are unobserved, and
     // an empty findings list over an unwatched instance would be a claim nobody made.
@@ -3777,12 +4052,12 @@ function sitesHTML(node) {
 // server aggregates by (ADR-0211 §4) — unknown below ok, because a node nothing
 // observes is unobserved rather than well — and it is here only to sort a list the
 // server does not sort.
-const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0 };
+const SEVERITY_ORDER = { critical: 3, attention: 2, ok: 1, unknown: 0, recorded: 0 };
 
 // shortLabel is a node in one word. A restricted placeholder has no name to give —
 // that is the point of it — so it falls back to what its kind is called.
 const shortLabel = (n) => n.name ||
-  String((KIND[n.kind] || {}).label || n.kind || n.id).split(" — ")[0];
+  String((styleOf(n.kind) || {}).label || n.kind || n.id).split(" — ")[0];
 
 // The three pieces an impact answer is made of, written once because two panels now
 // render them: one node's radius, and a maintenance window's. Two copies would have
@@ -3794,7 +4069,7 @@ const shortLabel = (n) => n.name ||
 // time somebody checked — so `cause` names what is *not* being claimed.
 function impactMixHTML(summary, cause) {
   if (!summary || !summary.total) return "";
-  const classes = ["critical", "attention", "ok", "unknown"].filter((k) => summary.bySeverity[k]);
+  const classes = ["critical", "attention", "ok", "unknown", "recorded"].filter((k) => summary.bySeverity[k]);
   return `
     <div class="mesh-impact-mix">${classes.map((k) => `
       <span class="mesh-impact-chip mesh-sev-${k}"><b>${summary.bySeverity[k]}</b>
@@ -3848,8 +4123,8 @@ function impactPanelHTML(node, result, direction, depth,
   }
   const typed = typeIn(node.kind, notation);
   const kindLabel = typed
-    ? `${typed.name} · ${((KIND[node.kind] || {}).label || node.kind).split(" — ")[0]}`
-    : (KIND[node.kind] || {}).label || node.kind;
+    ? `${typed.name} · ${((styleOf(node.kind) || {}).label || node.kind).split(" — ")[0]}`
+    : (styleOf(node.kind) || {}).label || node.kind;
   const others = result ? result.nodes.length - 1 : 0;
   const word = direction === "dependents" ? "depend on this" : "are needed by this";
   // The link the double-click duplicates. Every kind that has an elsewhere gets one:
@@ -4002,8 +4277,220 @@ function windowPanelHTML(nodes, result, direction, depth, { graph = null, overla
   </div>`;
 }
 
-export async function mountPanoramaMesh(view, { api, toast }) {
-  view.innerHTML = `<div class="card"><h1>Starmap</h1><p class="muted">Deriving…</p></div>`;
+// The two things the starmap can draw (ADR-0495 §4).
+//
+// The renderer below is one view with one source of truth about what is on it, and
+// until the release lens that source was always this server's landscape, now. The
+// lens draws one release's recorded architecture instead — and the spike that
+// preceded it found the difference is not in the drawing at all: it is which URL is
+// read, what the switches beside the picture ask the server for, and the words that
+// say what the picture is. So that is what a source is: everything mountPanoramaMesh
+// used to know about the live landscape and did not need to know about drawing,
+// gathered in one object, so the view asks its source rather than asking which source
+// it has.
+//
+// A query is what the controls are asking for: `drafts` and `subject` are the live
+// landscape's (the Drafts switch, and the View picker's product map), `live` is the
+// Live switch. Each source reads the half it has a use for and ignores the rest, and
+// `url` is a pure function of it — which is also how a re-read that arrives after
+// the reader changed the question is recognised (see loadLandscape).
+
+// liveSource is the landscape as it always was: this server's resources, derived on
+// request, re-read while it is open. Nothing here may differ from what the view did
+// before sources existed — the same requests, the same words.
+export function liveSource(api) {
+  const url = ({ drafts = false, subject = "" } = {}) => "/api/v1/panorama/mesh" +
+    // The subject is the server's question and the drafts switch is the landscape's: a
+    // draft is a diagram nobody deployed, and the product map draws no diagrams at
+    // all, so the two are never asked together.
+    (subject === "products" ? "?view=products" : (drafts ? "?drafts=1" : ""));
+  return {
+    // Saved views of the live landscape carry no source, which is what every view
+    // stored before there was a second source also carries.
+    id: "",
+    // What the card says while the first answer is on its way, and if it never comes.
+    heading: "Starmap",
+    loading: "Deriving…",
+    initial: { drafts: false, subject: "", live: true },
+    url,
+    load: (query) => api("GET", url(query)),
+    // Saved-but-undeployed diagrams, and the fallback that turns them on when nothing
+    // is deployed: both are questions about this server's landscape only.
+    drafts: true,
+    // The Live switch re-reads the same question; it never changes what is asked.
+    overlay: false,
+    offers: () => true,
+    title: () => "Starmap",
+    titleAbove: false,
+    empty: `Nothing is deployed on this server yet, and there are no saved diagrams
+      either. The landscape is derived from what atlas holds, so it fills in as you
+      draw and deploy — there is nothing to model first.`,
+    freshness: (graph, age) => `observed ${age || "just now"}`,
+    madeOf: () => "",
+    // A flat list of kinds, as the type filter has always been: the live landscape
+    // is nearly all one layer, and headings over it would be structure about nothing.
+    recorded: () => null,
+    canvasLabel: "Derived starmap",
+    stamped: "when and where it was observed",
+    exportFacts: () => ({}),
+    fileStem: () => "starmap",
+    archimate: {
+      label: "ArchiMate XML",
+      title: "Download the whole starmap as an ArchiMate Open Exchange model — structure only, generated, not drawn",
+      // The file follows the picture: exporting a product map and getting the estate
+      // would be two answers to one question, and the reader would have no way of
+      // telling which was theirs.
+      href: (graph, subject) => "/api/v1/panorama/mesh/archimate" +
+        (subject === "products" ? "?view=products" : ""),
+    },
+    kinds: {},
+  };
+}
+
+// releaseSource is one release's architecture as its snapshot recorded it (ADR-0495),
+// read from GET /api/v1/applications/{id}/releases/{version}/mesh. The answer has the
+// live landscape's shape plus a `lens` object saying which release it is, when it was
+// recorded, which layers it records, and whether the live overlay is laid over it.
+//
+// The Live switch becomes the overlay: on, the release's processes and Workers carry
+// this server's current state and the picture is re-read like the landscape is; off,
+// it is the record alone and nothing is re-read, because a record does not change.
+// The overlay is the server's to give (operators only, ADR-0495 §5), so the switch
+// follows what the answer says it got rather than what was asked for.
+export function releaseSource(api, appId, version) {
+  const base = `/api/v1/applications/${encodeURIComponent(appId)}/releases/${encodeURIComponent(version)}`;
+  const url = ({ live = true } = {}) => `${base}/mesh${live ? "?overlay=1" : ""}`;
+  const lensOf = (graph) => graph?.lens || {};
+  // When the release was taken, in the words the release history uses for it.
+  const recordedAt = (graph) => {
+    const at = lensOf(graph).takenAt;
+    return at > 0 ? fmtDateTime(at * 1000) : "at a time it did not record";
+  };
+  const named = (graph) => {
+    const lens = lensOf(graph);
+    return `Release v${lens.version ?? version} of ${lens.application || appId}`;
+  };
+  return {
+    id: `release:${appId}/${version}`,
+    heading: `Release v${version}`,
+    loading: "Reading the release…",
+    initial: { live: true },
+    url,
+    // Without the overlay nothing on the picture is observed, and the server says so
+    // in the live landscape's words — every node unbound, its severity unknown. Those
+    // words mean "nothing on this server watches it", which is a finding about the
+    // server; here it is a fact about the picture. So they are restated once, as the
+    // answer arrives, and everything that draws or lists a severity reads "recorded".
+    load: async (query) => {
+      const graph = await api("GET", url(query));
+      if (graph && !graph.lens?.overlay) {
+        graph.nodes = (graph.nodes || []).map((n) => (n.severity && n.severity !== "unknown"
+          ? n : { ...n, severity: "recorded", state: "recorded" }));
+      }
+      return graph;
+    },
+    drafts: false,
+    overlay: true,
+    // The product map is a second landscape of this server's and has no release, and
+    // a heat weighting sizes nodes by a live tally that only the overlay carries —
+    // without it every node would sit at one floor and the picture would say nothing.
+    offers: (notation, { live }) => !notation.subject && (live || !heatOf(notation)),
+    // Never the word Starmap: a picture of a release that could be taken for the live
+    // landscape is the one mistake this header exists to prevent (ADR-0495 §4).
+    title: (graph) => `${named(graph)}, as recorded ${recordedAt(graph)}`,
+    // On a line of its own above the controls, because a sentence is not a word and
+    // the control row would give it the search box's room.
+    titleAbove: true,
+    empty: "This release recorded nothing this view can draw.",
+    freshness: (graph, age) => (lensOf(graph).overlay
+      ? `recorded ${recordedAt(graph)}, live state ${age || "just now"}`
+      : `as recorded ${recordedAt(graph)}`),
+    madeOf: (graph) => (lensOf(graph).overlay
+      ? `${esc(named(graph))}, <b>recorded</b> ${esc(recordedAt(graph))}, <b>live state</b>
+         ${esc(graph.observedAt > 0 ? fmtDateTime(graph.observedAt * 1000) : "now")}. The
+         structure is what the release recorded; only its processes and Workers carry a
+         state, read from this server.`
+      : `${esc(named(graph))}, <b>as recorded</b> ${esc(recordedAt(graph))}. Everything
+         here is what the release recorded — nothing on this view was drawn, and nothing
+         on it is observed.`),
+    // The layers the snapshot records, which is what the type filter groups by; a
+    // layer missing from the list is one the release was taken before it existed.
+    recorded: (graph) => lensOf(graph).recorded || LAYERS.map(([layer]) => layer),
+    canvasLabel: "Recorded release",
+    stamped: "the release it shows and when it was recorded",
+    exportFacts: (graph) => {
+      const lens = lensOf(graph);
+      return {
+        release: {
+          application: lens.application || appId,
+          version: lens.version ?? version,
+          takenAt: lens.takenAt,
+          live: Boolean(lens.overlay),
+        },
+      };
+    },
+    fileStem: (graph) => `release-${String(lensOf(graph).application || appId)
+      .replace(/[^A-Za-z0-9._-]+/g, "-")}-v${lensOf(graph).version ?? version}`,
+    archimate: {
+      label: "ArchiMate XML (release)",
+      title: "Download the whole release as an ArchiMate Open Exchange model, with every layer it recorded — the file its architecture dialog downloads. Structure only, never what this picture is narrowed to",
+      // Every layer the release records, so the file is the release rather than this
+      // picture's narrowing of it — the same document the architecture dialog's
+      // download gives with every box ticked.
+      href: (graph) => {
+        const layers = lensOf(graph).recorded || [];
+        return `${base}/architecture.xml${layers.length
+          ? `?layers=${encodeURIComponent(layers.join(","))}` : ""}`;
+      },
+    },
+    // Two kinds the lens draws in the live landscape's spelling and with another
+    // meaning, restated so the key, the filter and the titles say what they are here.
+    kinds: {
+      // On the landscape a definition stands over several servers' deployments and is
+      // drawn a rank larger than one. Here it is a process this picture has no
+      // deployment of — one the release calls or exchanges names with, or one it
+      // recorded without a deployment — so it is drawn a rank *smaller* than the
+      // release's own processes, which are what the picture is about.
+      definition: {
+        r: 14, grow: 4,
+        label: "Definition — a process with no deployment in this release: called, at the other end of a name, or recorded without one",
+      },
+      // A Worker named by an expression is decided at run time, and the snapshot
+      // records it as that (ADR-0471). On the landscape this kind is a dependency
+      // nothing provides, drawn in the warning ink; here it is not a finding, so it is
+      // drawn as the placeholder it is — the restricted kind's neutral outline, the
+      // dash that says nothing running is drawn here, and the Worker's hexagon from
+      // its id.
+      unresolved: {
+        fill: "var(--bg)", stroke: "var(--muted)",
+        label: "Decided at run time — a Worker named by an expression",
+        title: (n) => `"${n.name}" names its Worker at run time, so which Worker does ` +
+          "the work is not part of the record.",
+      },
+    },
+  };
+}
+
+// pickerOptions is the View picker's list as a source offers it, with the Live switch
+// on or off — which only changes anything on a release, where the heat weightings need
+// the overlay to have something to size by.
+function pickerOptions(source, live) {
+  return notationsAvailable().filter((n) => source.offers(n, { live }))
+    .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("");
+}
+
+// pickerIds is the same list as ids, which is what tells whether the picker on screen
+// already offers it: rebuilding a select the reader may have open would close it.
+function pickerIds(source, live) {
+  return notationsAvailable().filter((n) => source.offers(n, { live })).map((n) => n.id).join(" ");
+}
+
+export async function mountPanoramaMesh(view, { api, toast, source = liveSource(api) }) {
+  // Before anything is drawn: every kind on this picture is sized, painted and named
+  // through styleOf, and a restatement left over from the last mount would draw this
+  // source's kinds in the other one's words.
+  kindOverrides = source.kinds || {};
+  view.innerHTML = `<div class="card"><h1>${esc(source.heading)}</h1><p class="muted">${esc(source.loading)}</p></div>`;
   let graph;
   const fetched = performance.now();
   try {
@@ -4011,13 +4498,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // cannot be read, and without them the picker offers only the derived vocabulary
     // — which is the one that cannot be wrong about what it is.
     const [mesh, served] = await Promise.all([
-      api("GET", "/api/v1/panorama/mesh"),
+      source.load(source.initial),
       api("GET", "/api/v1/panorama/notations").catch(() => []),
     ]);
     graph = mesh;
     useNotations(served);
   } catch (e) {
-    view.innerHTML = `<div class="card empty"><h1>Starmap</h1>
+    view.innerHTML = `<div class="card empty"><h1>${esc(source.heading)}</h1>
       <p>${esc(e.message)}</p></div>`;
     return;
   }
@@ -4028,9 +4515,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // a draft, and an empty picture whose only switch is on the page it refuses to draw
   // is a dead end rather than an answer.
   let withDrafts = false;
-  if (!graph.nodes.length) {
+  if (source.drafts && !graph.nodes.length) {
     try {
-      const drafted = await api("GET", "/api/v1/panorama/mesh?drafts=1");
+      const drafted = await source.load({ ...source.initial, drafts: true });
       if (drafted.nodes.length) {
         graph = drafted;
         withDrafts = true;
@@ -4041,17 +4528,17 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     }
   }
 
+  const title = source.title(graph);
   if (!graph.nodes.length) {
-    view.innerHTML = `<div class="card empty"><h1>Starmap</h1>
-      <p>Nothing is deployed on this server yet, and there are no saved diagrams
-      either. The landscape is derived from what atlas holds, so it fills in as you
-      draw and deploy — there is nothing to model first.</p></div>`;
+    view.innerHTML = `<div class="card empty"><h1>${esc(title)}</h1>
+      <p>${source.empty}</p></div>`;
     return;
   }
 
   view.innerHTML = `<div id="mesh-root" class="card mesh-card">
+    ${source.titleAbove ? `<div class="mesh-lens-head"><h1>${esc(title)}</h1></div>` : ""}
     <div class="mesh-head">
-      <h1>Starmap</h1>
+      ${source.titleAbove ? "" : `<h1>${esc(title)}</h1>`}
       <input id="mesh-search" type="search" class="mesh-search" autocomplete="off"
         placeholder="Filter by name, kind or process id…" aria-label="Filter the starmap"/>
       <!-- Going *into* the selected node, as a control rather than only as a
@@ -4077,30 +4564,29 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            is one nobody looks in for the others. -->
       <label class="mesh-notation" for="mesh-notation">View</label>
       <select id="mesh-notation" class="mesh-notation-pick"
-        title="What this picture shows and how: the estate as atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${notationsAvailable()
-        .map((n) => `<option value="${esc(n.id)}">${esc(n.label)}</option>`).join("")}</select>
+        title="What this picture shows and how: the estate as atlas's own kinds, sized by what is running, by what is stuck or by how long it has been stuck, projected into another vocabulary — or the product map, which is what this server offers rather than what it runs">${pickerOptions(source, true)}</select>
       <!-- Saved diagrams nobody has deployed. Off by default, and the one control here
            that re-asks the server rather than re-drawing what is already on screen:
            the drafts are not in the payload until they are wanted, because an estate
            holds several of them per deployed process and carrying them always would
            spend the size budget (ADR-0211 §7) on work that is not running. -->
-      <label class="mesh-toggle" title="Also draw saved diagrams that have not been deployed">
+      ${source.drafts ? `<label class="mesh-toggle" title="Also draw saved diagrams that have not been deployed">
         <input id="mesh-drafts" type="checkbox"/> Drafts
-      </label>
+      </label>` : ""}
       <!-- Beside the picture's own controls rather than in the side column: what is
            exported is the picture, including whatever the search box and the
            drilldown have done to it. -->
       <span class="mesh-export" role="group" aria-label="Export this starmap">
         <button id="mesh-export-svg" type="button"
-          title="Save this starmap as an SVG, stamped with when and where it was observed">SVG</button>
+          title="Save this starmap as an SVG, stamped with ${esc(source.stamped)}">SVG</button>
         <button id="mesh-export-png" type="button"
-          title="Save this starmap as a PNG, stamped with when and where it was observed">PNG</button>
+          title="Save this starmap as a PNG, stamped with ${esc(source.stamped)}">PNG</button>
         <!-- Generated by the server from the same landscape, so it is the whole of it
              rather than whatever the search box has narrowed this picture to — and it
              carries structure only, never health. A plain navigation, so the session
              cookie authenticates it, exactly as the application source download does. -->
         <button id="mesh-export-archimate" type="button"
-          title="Download the whole starmap as an ArchiMate Open Exchange model — structure only, generated, not drawn">ArchiMate XML</button>
+          title="${esc(source.archimate.title)}">${esc(source.archimate.label)}</button>
       </span>
     </div>
     <!-- How much of the landscape is on screen, on its own line under the controls.
@@ -4122,9 +4608,18 @@ export async function mountPanoramaMesh(view, { api, toast }) {
            sentence beside it stays "just now". Off is for reading one picture
            carefully — a canvas that re-lays-out under a reader mid-thought is its own
            kind of wrong. -->
-      <label class="mesh-toggle mesh-live" title="Re-read the landscape from the server while this view is open">
-        <input id="mesh-live" type="checkbox" checked/> Live
+      ${source.overlay
+        // On a release the same switch asks a different question: whether this
+        // server's current state is laid over the record at all. Off is the record
+        // alone, which nothing re-reads; on is the overlay, kept current like the
+        // landscape is. The note is for a reader the server withholds it from.
+        ? `<label class="mesh-toggle mesh-live" title="Lay this server's current state over the release's processes and Workers, and keep it current while this view is open">
+        <input id="mesh-live" type="checkbox" checked/> Live overlay
       </label>
+      <span id="mesh-overlay-note" class="muted mesh-overlay-note" hidden>The live overlay is shown to operators.</span>`
+        : `<label class="mesh-toggle mesh-live" title="Re-read the landscape from the server while this view is open">
+        <input id="mesh-live" type="checkbox" checked/> Live
+      </label>`}
       <span class="mesh-subhead-gap"></span>
       <span id="mesh-count" class="muted"></span>
     </div>
@@ -4239,6 +4734,14 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   const root = document.getElementById("mesh-root");
   const liveToggle = document.getElementById("mesh-live");
   const observed = document.getElementById("mesh-observed");
+  // Absent on a source with no drafts, so it is read through this rather than touched:
+  // a picture with no Drafts switch is a picture without drafts.
+  const draftsOn = () => Boolean(draftsToggle?.checked);
+  // The one switch on the row that re-asks the server for a *different* picture, and
+  // is dimmed while its answer is on its way: the drafts on the landscape, the overlay
+  // on a release. The timer below will not start a re-read across it.
+  const landscapeSwitch = source.overlay ? liveToggle : draftsToggle;
+  const overlayNote = document.getElementById("mesh-overlay-note");
   // What the freshness line and the cadence below are computed from. Seeded from the
   // fetch that opened the view, so the first tick reasons about a real request rather
   // than about nothing.
@@ -4259,7 +4762,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   let refreshing = false;
   // Set from what was actually fetched rather than left at its markup default, so the
   // control agrees with the picture on the first frame as well as on every later one.
-  draftsToggle.checked = withDrafts;
+  if (draftsToggle) draftsToggle.checked = withDrafts;
   const legendSlot = document.getElementById("mesh-legend-slot");
   const count = document.getElementById("mesh-count");
   const panel = document.getElementById("mesh-panel-slot");
@@ -4299,13 +4802,43 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       return;
     }
     kindsSlot.hidden = false;
-    kindsSlot.innerHTML = kinds.map((kind) => {
+    const box = (kind) => {
       const typed = typeIn(kind, spoken);
-      const label = typed?.name || KIND[kind].label.split(" — ")[0];
-      return `<label class="mesh-kind" title="${esc(KIND[kind].label)}">` +
+      const label = typed?.name || styleOf(kind).label.split(" — ")[0];
+      return `<label class="mesh-kind" title="${esc(styleOf(kind).label)}">` +
         `<input type="checkbox" data-kind="${esc(kind)}"${hiddenKinds.has(kind) ? "" : " checked"}/>` +
         ` ${esc(label)}</label>`;
-    }).join("");
+    };
+    const recorded = source.recorded(delivered);
+    if (!recorded) {
+      kindsSlot.innerHTML = kinds.map(box).join("");
+      return;
+    }
+    // A release is read in its layers (ADR-0495 §4), so its kinds stand under the band
+    // they belong to — the same boxes, under headings. Each heading is a box of its
+    // own that puts its whole band down or back, because "hide the data layer" is the
+    // question somebody brings to a picture with five of them, and five clicks is not
+    // an answer to it. It is ticked while any kind under it is shown and half-ticked
+    // while only some are, so it never claims a band is off that is still on screen.
+    const groups = kindsByLayer(delivered);
+    // The bands this release did not record, said rather than left out: a snapshot
+    // taken before a layer existed has nothing in it, and an absent heading would read
+    // as a release that has no strategy rather than one that was not asked about it.
+    const unrecorded = LAYERS.filter(([layer]) => !recorded.includes(layer)).map(([, label]) => label);
+    kindsSlot.innerHTML = groups.map((group) => {
+      const shown = group.kinds.filter((kind) => !hiddenKinds.has(kind)).length;
+      return `<div class="mesh-kind-layer" role="group" aria-label="${esc(group.label)} layer">` +
+        `<label class="mesh-kind mesh-kind-layer-head" title="Show or hide every ${esc(group.label.toLowerCase())} element type">` +
+        `<input type="checkbox" data-layer="${esc(group.layer)}"${shown ? " checked" : ""}/> ${esc(group.label)}</label>` +
+        group.kinds.map(box).join("") + "</div>";
+    }).join("") + (unrecorded.length
+      ? `<p class="mesh-kinds-note muted">Not recorded by this release: ${esc(unrecorded.join(", "))}.</p>`
+      : "");
+    for (const group of groups) {
+      const head = kindsSlot.querySelector(`input[data-layer="${group.layer}"]`);
+      const shown = group.kinds.filter((kind) => !hiddenKinds.has(kind)).length;
+      if (head) head.indeterminate = shown > 0 && shown < group.kinds.length;
+    }
   }
 
   // The two facet sets, holding the switched-off values for the same reason
@@ -4367,6 +4900,18 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   }
 
   kindsSlot.addEventListener("change", (ev) => {
+    // A band's heading switches every kind under it, as the reader can see them: the
+    // kinds the delivered picture holds in that band, and no others.
+    const band = ev.target.closest("input[data-layer]");
+    if (band) {
+      const group = kindsByLayer(graph).find((g) => g.layer === band.dataset.layer);
+      for (const kind of group?.kinds || []) {
+        if (band.checked) hiddenKinds.delete(kind);
+        else hiddenKinds.add(kind);
+      }
+      paint();
+      return;
+    }
     const box = ev.target.closest("input[data-kind]");
     if (!box) return;
     if (box.checked) hiddenKinds.delete(box.dataset.kind);
@@ -4672,7 +5217,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     const from = new Map(placed.map((n) => [n.id, { x: n.x, y: n.y }]));
     laidOut = frame;
     const painted = renderGraph(shown, 0, frame, {
-      pinned, from, notation: spoken, peak, at: measuredAt,
+      pinned, from, notation: spoken, peak, at: measuredAt, label: source.canvasLabel,
     });
     const { ms, svg } = painted;
     world = painted.world;
@@ -4690,7 +5235,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     lit = null;
     refit();
     applyView();
-    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt, !graph.nodes.length);
+    legendSlot.innerHTML = legendHTML(shown, ms, spoken, peak, bandAt, !graph.nodes.length,
+      source.madeOf(graph));
     findingsSlot.innerHTML = findingsHTML(shown);
     paintRanking();
     // The freshness line, on every repaint as well as on every tick: a repaint that
@@ -5361,7 +5907,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // which part.
     scope.hiddenKinds = kindsPresent(graph)
       .filter((kind) => hiddenKinds.has(kind))
-      .map((kind) => typeIn(kind, spoken)?.name || KIND[kind].label.split(" — ")[0]);
+      .map((kind) => typeIn(kind, spoken)?.name || styleOf(kind).label.split(" — ")[0]);
     // And the offerings put down, which narrow a picture exactly as invisibly: a
     // catalogue drawn with half its products missing looks like a catalogue with
     // half as many products. Named in the words on the control rather than the
@@ -5381,6 +5927,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // The server's reading, never this browser's clock: one dates the facts, the
       // other dates the save, and an export exists to be read later.
       observedAt: graph.observedAt,
+      // What the source adds to the stamp: on a release, which release this is and
+      // when it was recorded, which a file has no other way to say — the picture of a
+      // record and the picture of the estate look alike once they have left the app.
+      ...source.exportFacts(graph),
       source: location.host,
       // Which vocabulary the file is drawn in, and what that vocabulary drops. A
       // reader who receives a C4-looking picture has no other way to learn that it
@@ -5412,7 +5962,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // directly, and the answer it wants is still true.
       instances: weighted()?.key === "instances",
       peak: heatPeak(graph, weighted(), measuredAt),
-      drafts: draftsToggle.checked,
+      drafts: draftsOn(),
       partial: Boolean(status.partial),
       unavailable: (status.unavailable || []).map((u) => ({
         ...u, label: STATE_TEXT[u.state] || u.state,
@@ -5457,9 +6007,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
         rule: token("--border", "#dddddd"),
       });
       if (kind === "png") {
-        save(await rasterise(built, { background }), exportName("png"));
+        save(await rasterise(built, { background }), exportName("png", new Date(), source.fileStem(graph)));
       } else {
-        save(new Blob([built.svg], { type: "image/svg+xml;charset=utf-8" }), exportName("svg"));
+        save(new Blob([built.svg], { type: "image/svg+xml;charset=utf-8" }),
+          exportName("svg", new Date(), source.fileStem(graph)));
       }
     } catch (e) {
       toast("export failed: " + e.message, "err");
@@ -5513,13 +6064,13 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       return;
     }
     try {
-      if (await loadLandscape(draftsToggle.checked, { subject: want })) {
+      if (await loadLandscape(asked({ subject: want }))) {
         subjectLoaded = want;
         // The drafts switch belongs to the landscape: a draft is a diagram nobody
         // deployed, and the product map draws no diagrams. Disabled rather than
         // hidden, so a reader who turned it on finds it where they left it — and set
         // after the load, because the load itself puts the switch back.
-        draftsToggle.disabled = want === "products";
+        if (draftsToggle) draftsToggle.disabled = want === "products";
         // The arrangement is not carried across: the two pictures share almost no
         // node, so positions kept by id would place a handful of processes where they
         // sat among four hundred other nodes and leave the rest to the layout.
@@ -5533,7 +6084,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // naming a view the reader is not looking at is the one lie this view cannot
       // afford.
       notationPick.value = notationOf(subjectLoaded === "products" ? "products" : "atlas").id;
-      draftsToggle.disabled = false;
+      if (draftsToggle) draftsToggle.disabled = false;
       return;
     }
     paint();
@@ -5542,7 +6093,8 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // Drafts are the one switch that changes the *landscape* rather than the drawing of
   // it, so it is answered by the server. Two things reach for it — the switch, and a
   // saved view that was saved with drafts on — and both go through here, so a view
-  // cannot come back showing half the picture it was named for.
+  // cannot come back showing half the picture it was named for. On a release the
+  // overlay is that switch, and it comes through here too.
   //
   // Everything the reader has arranged survives the swap: positions are kept by node
   // id, and the drilldown trail is pruned rather than cleared — a station whose node
@@ -5555,27 +6107,28 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // thing that merely does so on its own.
   // Reports whether it took: a silent answer that arrived too late is dropped rather
   // than applied, so the caller knows not to repaint.
-  async function loadLandscape(wantDrafts, { silent = false, subject = subjectNow() } = {}) {
-    if (!silent) draftsToggle.disabled = true;
+  //
+  // `want` is a query (see the sources): what the controls ask for, with whatever the
+  // caller is changing laid over it — asked() is the controls as they stand.
+  async function loadLandscape(want, { silent = false } = {}) {
+    if (!silent) landscapeSwitch.disabled = true;
     const started = performance.now();
     let arrived;
     try {
-      // The subject is the server's question and the drafts switch is the landscape's:
-      // a draft is a diagram nobody deployed, and the product map draws no diagrams at
-      // all, so the two are never asked together.
-      const query = subject === "products" ? "?view=products" : (wantDrafts ? "?drafts=1" : "");
-      arrived = await api("GET", "/api/v1/panorama/mesh" + query);
+      arrived = await source.load(want);
     } finally {
-      if (!silent) draftsToggle.disabled = false;
+      if (!silent) landscapeSwitch.disabled = false;
     }
     // The reader asked for a different landscape while this one was in flight. A
     // timer's answer is to a question nobody is asking any more: applying it would put
     // the drafts back on the picture and flick the switch under the hand that had just
     // moved it, with nothing said. Their answer is on its way; this one is dropped.
+    // "A different landscape" is a different URL, which covers the drafts, the
+    // subject and a release's overlay in one comparison.
     //
     // The other order — the switch's fetch in flight when the timer fires — is refused
     // at the tick, where the disabled switch already says a load is running.
-    if (silent && draftsToggle.checked !== wantDrafts) return false;
+    if (silent && source.url(want) !== source.url(asked())) return false;
     graph = arrived;
     // What this landscape costs to derive, measured every time rather than once at
     // open: an estate grows, and the cadence below is a fraction of the cost.
@@ -5583,17 +6136,49 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     fetchedAt = Date.now();
     attemptedAt = fetchedAt;
     failing = false;
-    draftsToggle.checked = wantDrafts;
+    if (draftsToggle) draftsToggle.checked = Boolean(want.drafts);
     trail = trail.filter((id) => graph.nodes.some((n) => n.id === id));
+    syncOverlay();
     return true;
   }
 
+  // asked is the question the controls are putting to the server right now, with any
+  // of it replaced by what a caller is about to change.
+  function asked(change = {}) {
+    return { drafts: draftsOn(), subject: subjectNow(), live: liveToggle.checked, ...change };
+  }
+
+  // syncOverlay puts a release's overlay switch where the answer says the picture is,
+  // which is not always where it was asked to be: the overlay is given to operators
+  // only (ADR-0495 §5), and a reader who asked for it and was not given it sees the
+  // switch off, unable to be turned on, and a note saying why — rather than a switch
+  // claiming a live state the picture does not carry. With the switch off the timer
+  // asks nothing, so a reader the overlay is withheld from is not re-read either.
+  //
+  // The View picker follows it, because the heat weightings exist only with the
+  // overlay; a picker left on one that is no longer offered falls back to the derived
+  // drawing, and the caller's repaint draws that.
+  function syncOverlay() {
+    if (!source.overlay) return;
+    const lens = graph.lens || {};
+    liveToggle.checked = Boolean(lens.overlay);
+    liveToggle.disabled = Boolean(lens.overlayWithheld);
+    if (overlayNote) overlayNote.hidden = !lens.overlayWithheld;
+    const current = notationPick.value;
+    if (pickerIds(source, liveToggle.checked) !== [...notationPick.options].map((o) => o.value).join(" ")) {
+      notationPick.innerHTML = pickerOptions(source, liveToggle.checked);
+      notationPick.value = current;
+      if (notationPick.value !== current) notationPick.value = "atlas";
+    }
+  }
+  syncOverlay();
+
   // A failed fetch puts the checkbox back. The picture did not change, so a control
   // left claiming it did would be the one lie this view cannot afford.
-  draftsToggle.addEventListener("change", async () => {
+  draftsToggle?.addEventListener("change", async () => {
     const want = draftsToggle.checked;
     try {
-      await loadLandscape(want);
+      await loadLandscape(asked({ drafts: want }));
     } catch (e) {
       draftsToggle.checked = !want;
       toast(`Could not ${want ? "add" : "remove"} drafts: ${e.message}`);
@@ -5603,11 +6188,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   });
 
   exportModelBtn.addEventListener("click", () => {
-    // The file follows the picture: exporting a product map and getting the estate
-    // would be two answers to one question, and the reader would have no way of
-    // telling which was theirs.
-    window.location.href = "/api/v1/panorama/mesh/archimate" +
-      (subjectNow() === "products" ? "?view=products" : "");
+    // A plain navigation to whatever the source says the whole picture is as a file:
+    // the estate, the product map, or the release with every layer it recorded.
+    window.location.href = source.archimate.href(graph, subjectNow());
   });
 
   exportSvgBtn.addEventListener("click", () => exportPicture("svg"));
@@ -5631,6 +6214,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   // *touching* window.localStorage throws, and that must cost the landscape nothing
   // more than its saved views.
   const store = (() => { try { return window.localStorage; } catch { return null; } })();
+  // Every view this browser holds, of every source, because they are stored as one
+  // list; the panel offers only this source's (see viewsOf). A view of one release
+  // opened over another, or over the live landscape, would restore a selection and a
+  // walk through nodes that picture does not have.
   let views = readViews(store);
 
   function say(message) {
@@ -5639,8 +6226,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
   }
 
   function renderViews() {
-    viewList.innerHTML = views.length
-      ? views.map((v) => `<li>
+    const mine = viewsOf(views, source.id);
+    viewList.innerHTML = mine.length
+      ? mine.map((v) => `<li>
           <button type="button" class="mesh-view-open" data-view="${esc(v.id)}"
             title="${esc(viewSummary(v))}">${esc(v.name)}</button>
           <button type="button" class="mesh-view-drop" data-drop="${esc(v.id)}"
@@ -5683,9 +6271,12 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // saved before drafts existed carries none, and false is the picture it was
     // looking at. A fetch that fails leaves the landscape as it is and says so — the
     // rest of the view is still worth restoring against it.
-    if (Boolean(v.drafts) !== draftsToggle.checked) {
+    //
+    // Only where the source has drafts at all: a release is one fixed record, and
+    // opening a view of it is never a reason to ask for a different one.
+    if (source.drafts && Boolean(v.drafts) !== draftsOn()) {
       try {
-        await loadLandscape(Boolean(v.drafts));
+        await loadLandscape(asked({ drafts: Boolean(v.drafts) }));
       } catch (e) {
         toast(`Showing this view without changing the drafts: ${e.message}`);
       }
@@ -5720,6 +6311,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // projection: the counts were the lesser half of what it was named for, and
     // silently replacing ArchiMate with a heatmap would reopen a different question.
     if (v.instances && notationPick.value === "atlas") notationPick.value = "instances";
+    // A way of drawing this picture does not offer now — a heat weighting on a release
+    // whose overlay is off — leaves the picker on nothing, and nothing is the derived
+    // drawing, said as such so the control names what is on screen.
+    if (!notationPick.value) notationPick.value = "atlas";
     // The walk, before the paint that draws it: the picture a view saved is the one
     // cut from the last station, so restoring the path is part of restoring the
     // picture rather than something done to it afterwards. Stations whose nodes are
@@ -5802,7 +6397,10 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // read back by older builds, which ask this question directly and can only
       // answer it about the one weighting they had.
       instances: weighted()?.key === "instances",
-      drafts: draftsToggle.checked,
+      drafts: draftsOn(),
+      // Whose view it is. The live landscape's carry none, as every view stored before
+      // the lens did, so those keep opening exactly where they always opened.
+      source: source.id,
       hiddenKinds,
       hiddenStates,
       hiddenApprovals,
@@ -6028,7 +6626,9 @@ export async function mountPanoramaMesh(view, { api, toast }) {
       // runtime tallies are in.
       ? sinceText(graph.observedAt * 1e9)
       : sinceText(fetchedAt * 1e6);
-    observed.textContent = `observed ${age || "just now"}` +
+    // In the source's words: on a release, when it was recorded and, with the overlay
+    // on, how old the live state laid over it is.
+    observed.textContent = source.freshness(graph, age) +
       (failing ? " · could not re-read" : "");
     observed.classList.toggle("mesh-stale", failing);
   }
@@ -6045,7 +6645,7 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     if (refreshing) return;
     refreshing = true;
     try {
-      if (await loadLandscape(draftsToggle.checked, { silent: true })) paint();
+      if (await loadLandscape(asked(), { silent: true })) paint();
     } catch {
       // The picture stands. A landscape that blanked itself because one request
       // failed would have thrown away a true answer for an error, and the freshness
@@ -6079,10 +6679,11 @@ export async function mountPanoramaMesh(view, { api, toast }) {
     // running while the picture did not.
     if (document.visibilityState === "hidden") return;
     if (!liveToggle.checked || !refreshDue()) return;
-    // The drafts switch is mid-fetch: it is disabled for exactly as long as its own
-    // request is in flight. Starting a second landscape read across it is how the two
-    // answers end up racing to overwrite each other.
-    if (draftsToggle.disabled) return;
+    // The drafts switch — on a release, the overlay switch — is mid-fetch: it is
+    // disabled for exactly as long as its own request is in flight. Starting a second
+    // landscape read across it is how the two answers end up racing to overwrite each
+    // other.
+    if (landscapeSwitch?.disabled) return;
     // Never under the reader's hand. A re-layout in the middle of a drag or a pan
     // takes the picture out from under the gesture that is moving it.
     if (moving || panning) return;
@@ -6091,8 +6692,26 @@ export async function mountPanoramaMesh(view, { api, toast }) {
 
   // Turning it back on is a request for a current picture, not a request to wait
   // another half minute for one.
-  liveToggle.addEventListener("change", () => {
-    if (liveToggle.checked && !moving && !panning) reread();
+  //
+  // On a release it is more than that: the switch decides what is asked, so either
+  // way is a different picture to fetch — the record with this server's state laid
+  // over it, or the record alone — and it is fetched the way the Drafts switch fetches
+  // its own, put back if the answer does not come. The timer then follows the switch
+  // as it always has: on keeps re-reading, off asks nothing.
+  liveToggle.addEventListener("change", async () => {
+    if (!source.overlay) {
+      if (liveToggle.checked && !moving && !panning) reread();
+      return;
+    }
+    const want = liveToggle.checked;
+    try {
+      await loadLandscape(asked({ live: want }));
+    } catch (e) {
+      liveToggle.checked = !want;
+      toast(`Could not ${want ? "lay the live overlay over" : "take the live overlay off"} this release: ${e.message}`);
+      return;
+    }
+    paint();
   });
 
   if (fetchMs > 2000) toast(`The starmap took ${Math.round(fetchMs)} ms to derive.`);

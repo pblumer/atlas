@@ -366,6 +366,8 @@ export default {
   "deployments.architecture.layer.data": "Data",
   "deployments.architecture.layer.technology": "Technology",
   "deployments.architecture.needLayer": "A sketch needs at least one layer",
+  "deployments.architecture.panorama": "Open in Panorama",
+  "deployments.architecture.panoramaTitle": "Show this release in Panorama's Starmap: every layer it records, to show, hide and drill into, with the current state of its processes and Workers laid over it if you choose",
   "deployments.promote.title": "Promote v{version}",
   "deployments.promote.label": "Target",
   "deployments.promote.ok": "Promote",
