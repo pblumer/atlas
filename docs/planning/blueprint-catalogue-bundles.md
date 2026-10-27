@@ -4,7 +4,7 @@
 **Milestone:** [6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-)
 **Status:** planning proposal, **not implementation**
 **Programme owner:** pblumer
-**Architecture gate:** [ADR-draft-marketplace-catalogue-bundles-and-updates](../adr/draft-marketplace-catalogue-bundles-and-updates.md).
+**Architecture gate:** [ADR-0506](../adr/0506-marketplace-catalogue-bundles-and-updates.md).
 Existing [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md)
 remains binding until an extension is accepted.
 

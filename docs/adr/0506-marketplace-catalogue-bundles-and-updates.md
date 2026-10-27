@@ -1,4 +1,4 @@
-# ADR-DRAFT: Marketplace catalogue bundles and opt-in updates
+# ADR-0506: Marketplace catalogue bundles and opt-in updates
 
 - **Status:** Proposed
 - **Implementation:** Not started
