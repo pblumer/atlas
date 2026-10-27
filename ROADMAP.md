@@ -1318,7 +1318,7 @@ Beyond a single node.
 
 Adoption and polish.
 
-- 🔲 **Blueprint Marketplace (BMP):** source-independent public/private Blueprint registries for versioned process-application packages, safe install/update using existing import baselines, and optional independent commercial distribution. The free engine does not depend on payments or runtime licence checks. [Programme](docs/planning/blueprint-marketplace-program.md) · [Proposed ADR](docs/adr/0499-blueprint-registry-and-distribution.md).
+- 🚧 **Blueprint Marketplace (BMP):** source-independent public/private Blueprint registries for versioned process-application packages, safe install/update using existing import baselines, and optional independent commercial distribution. The free engine does not depend on payments or runtime licence checks. [Programme](docs/planning/blueprint-marketplace-program.md) · [Accepted ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md).
 
 - 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
   descriptor for a Worker Type operation's claimed semantics: resource kind and
