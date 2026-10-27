@@ -14,18 +14,18 @@ import (
 // to the exact signed registry origin, signer, Blueprint release and digest;
 // a different package cannot silently replace an in-flight installation.
 type blueprintInstallation struct {
-	ApplicationKey     string   `json:"applicationKey"`
-	RegistryID         string   `json:"registryId"`
-	RegistryOrigin     string   `json:"registryOrigin"`
-	SignerFingerprint  string   `json:"signerFingerprint"`
-	PublisherID        string   `json:"publisherId"`
-	BlueprintID        string   `json:"blueprintId"`
-	Version            string   `json:"version"`
-	Digest             string   `json:"digest"`
-	CatalogueIDs       []string `json:"catalogueIds"`
-	Status             string   `json:"status"`
-	RequestedBy        string   `json:"requestedBy,omitempty"`
-	RequestedAt        int64    `json:"requestedAt"`
+	ApplicationKey    string   `json:"applicationKey"`
+	RegistryID        string   `json:"registryId"`
+	RegistryOrigin    string   `json:"registryOrigin"`
+	SignerFingerprint string   `json:"signerFingerprint"`
+	PublisherID       string   `json:"publisherId"`
+	BlueprintID       string   `json:"blueprintId"`
+	Version           string   `json:"version"`
+	Digest            string   `json:"digest"`
+	CatalogueIDs      []string `json:"catalogueIds"`
+	Status            string   `json:"status"`
+	RequestedBy       string   `json:"requestedBy,omitempty"`
+	RequestedAt       int64    `json:"requestedAt"`
 }
 
 // blueprintInstallationStore is single-writer design-time metadata. Unlike
