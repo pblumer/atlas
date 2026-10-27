@@ -206,6 +206,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Playground evaluates decisions.** A business rule task in a Playground sandbox
+  was answered like any other job: by the default stub, which completed it without a
+  result, or not at all. The decision it calls was never evaluated, although the
+  Playground was documented to run DMN as production does. A sandbox now evaluates the
+  decision the way production's DMN worker does, over the case's own variables and
+  against the decisions deployed on the server, and keeps the evaluation record:
+  - a fixed `atlas:version` is resolved when the session opens, as a deploy resolves
+    it, so a version that is not deployed refuses the session;
+  - a deployed version's deployment-bound decision runs the model bundled with it, and a
+    draft's runs the latest deployed decision of its id;
+  - a decision routed to a temis Worker is evaluated in the sandbox, which dials
+    nothing;
+  - a decision that cannot be found raises an incident naming it.
+
+  A stub an author names for the task itself still answers it. **Runs of a model with a
+  business rule task now carry the decision's result where they carried none**, so a
+  saved scenario's baseline shows the difference.
 - **A picture of any size is taken, for a person and for a product.** Console →
   Organization and the catalogue's product editor passed the chosen file on unchanged, so
   a photograph straight off a phone was refused with "the picture exceeds the 524288 byte

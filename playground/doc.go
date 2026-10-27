@@ -15,6 +15,13 @@
 // multi-instance behave exactly as they do in production — there is no second
 // implementation to drift (the reason ADR-0030 rejected a browser-side simulator).
 //
+// DMN needs one thing more, because production evaluates a decision in a worker, not in
+// the processor: a sandbox given the server's decisions ([Options.Decisions]) answers a
+// business rule task with the handler that worker is built on, over the case's own
+// variables, instead of leaving it to the stubs. Without them a business rule task is
+// a job like any other, which is what every sandbox did until ADR-0501 found the
+// decision was never evaluated.
+//
 // Three things make it a playground rather than a second engine:
 //
 //   - A virtual clock. Simulated time is moved by the scheduler, never read from
