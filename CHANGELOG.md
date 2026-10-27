@@ -98,7 +98,9 @@ _Changed_ / _Removed_ for each version.
   of every table, the buttons of the pick dialog, the import choices of a catalogue
   import, the Server constants section of Admin → Engine, and the mark on a definition
   whose decisions were frozen at deploy, also in the editors. Messages the server
-  composes stay in its English. `?lang=en` keeps the English pages.
+  composes stay in its English. `?lang=en` keeps the English pages, and there the menu
+  names the same things as in German: "Process diagram (BPMN)", "Decision diagram
+  (DMN)", "Upload decision model (.dmn)".
 - **The decision editor and the form editor speak German, down to the libraries they
   embed.** Their bars, hints, menus, dialogs, toasts, the test panel and its rule trace,
   the decision documentation and its PDF, the XML source dialog, the collaboration
