@@ -423,3 +423,95 @@ func TestABaselineThatIsNotAReportIsRefused(t *testing.T) {
 		}
 	}
 }
+
+// playgroundDishBPMN asks a decision for its answer, so a session shows whether the
+// sandbox evaluated the decision or a stub stood in for it. extra is spliced into the
+// task's calledDecision attributes.
+func playgroundDishBPMN(extra string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0"
+             id="defs_dish" targetNamespace="http://atlas/test">
+  <process id="dinner" isExecutable="true">
+    <startEvent id="start"/>
+    <businessRuleTask id="choose">
+      <extensionElements>
+        <zeebe:calledDecision decisionId="Dish" resultVariable="dish"` + extra + `/>
+        <zeebe:ioMapping><zeebe:input source="=season" target="Season"/></zeebe:ioMapping>
+      </extensionElements>
+    </businessRuleTask>
+    <endEvent id="end"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="choose"/>
+    <sequenceFlow id="f2" sourceRef="choose" targetRef="end"/>
+  </process>
+</definitions>`
+}
+
+const playgroundDishDMN = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_dish_dmn" name="dish" namespace="http://atlas/dmn">
+  <inputData id="id_season" name="Season"/>
+  <decision id="Dish" name="Dish">
+    <informationRequirement><requiredInput href="#id_season"/></informationRequirement>
+    <decisionTable id="dt" hitPolicy="UNIQUE">
+      <input id="in1" label="Season"><inputExpression id="ie1" typeRef="string"><text>Season</text></inputExpression></input>
+      <output id="out1" label="Dish" name="Dish" typeRef="string"/>
+      <rule id="r1"><inputEntry id="e1"><text>"Winter"</text></inputEntry><outputEntry id="o1"><text>"Roastbeef"</text></outputEntry></rule>
+      <rule id="r2"><inputEntry id="e2"><text>"Summer"</text></inputEntry><outputEntry id="o2"><text>"Salad"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+</definitions>`
+
+// A sandbox's business rule task is answered by the decision the server has deployed,
+// the way production answers it, and not by the stub policy: the session below
+// configures no stub at all, so a stub could not have completed the case.
+func TestAPlaygroundSessionEvaluatesTheServersDeployedDecisions(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/decision-deployments", playgroundDishDMN, "application/xml"); code/100 != 2 {
+		t.Fatalf("deploy decision = %d, body %s", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/playground/sessions",
+		`{"source":"xml","xml":`+jsonQuote(playgroundDishBPMN(""))+`}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("open = %d, body %s", code, body)
+	}
+	var sess struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &sess); err != nil {
+		t.Fatalf("decode session: %v (%s)", err, body)
+	}
+	base := "/api/v1/playground/sessions/" + sess.ID
+	code, body = doReq(t, ts, http.MethodPost, base+"/cases", `{"variables":{"season":"Winter"}}`, "application/json")
+	if code != http.StatusOK {
+		t.Fatalf("start case = %d, body %s", code, body)
+	}
+	var started struct {
+		InstanceKey string `json:"instanceKey"`
+	}
+	if err := json.Unmarshal(body, &started); err != nil {
+		t.Fatalf("decode case: %v (%s)", err, body)
+	}
+	if code, body = doReq(t, ts, http.MethodPost, base+"/run", "", ""); code != http.StatusOK {
+		t.Fatalf("run = %d, body %s", code, body)
+	}
+	code, body = doReq(t, ts, http.MethodGet, base+"/cases/"+started.InstanceKey, "", "")
+	if code != http.StatusOK {
+		t.Fatalf("read case = %d, body %s", code, body)
+	}
+	if !strings.Contains(string(body), `"state":"completed"`) || !strings.Contains(string(body), "Roastbeef") {
+		t.Fatalf("case = %s, want it completed with the decision's answer for winter", body)
+	}
+}
+
+// A model that names a decision version the server does not have is refused when the
+// session opens, as the deploy refuses it, rather than running into an incident.
+func TestAPlaygroundSessionRefusesAnUndeployedDecisionVersion(t *testing.T) {
+	ts := newTestServer(t)
+	if code, body := doReq(t, ts, http.MethodPost, "/api/v1/decision-deployments", playgroundDishDMN, "application/xml"); code/100 != 2 {
+		t.Fatalf("deploy decision = %d, body %s", code, body)
+	}
+	code, body := doReq(t, ts, http.MethodPost, "/api/v1/playground/sessions",
+		`{"source":"xml","xml":`+jsonQuote(playgroundDishBPMN(` atlas:version="3"`))+`}`, "application/json")
+	if code != http.StatusConflict || !strings.Contains(string(body), "version 3") {
+		t.Fatalf("open = %d, body %s; want the deploy's refusal of version 3", code, body)
+	}
+}

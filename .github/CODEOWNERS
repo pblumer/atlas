@@ -1,0 +1,10 @@
+# The trust-bearing paths of ADR-0483: published technical capability contracts,
+# their conformance evidence, and the code that binds and checks them. A record
+# counts as approved only once it reached protected main through a pull request the
+# code owner approved or merged, so this file takes effect together with branch
+# protection that requires a code owner's review.
+/.github/CODEOWNERS            @pblumer
+/workertype/contracts/         @pblumer
+/workertype/evidence/          @pblumer
+/workertype/contract_digest.go @pblumer
+/internal/impldigest/          @pblumer

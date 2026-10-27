@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "registryId": "org.example.community",
+  "releases": [
+    {
+      "blueprintId": "org.example.purchase-approval",
+      "version": "1.0.0",
+      "publisherId": "org.example",
+      "title": "Purchase approval",
+      "description": "Approval process and form without external integrations.",
+      "license": "Apache-2.0",
+      "atlas": {
+        "minVersion": "0.2.0"
+      },
+      "artifact": {
+        "path": "packages/purchase-approval-1.0.0.tar.gz",
+        "digest": "sha256:abc",
+        "sizeBytes": 2048
+      },
+      "needs": {
+        "workerTypes": [],
+        "serverConstants": []
+      }
+    }
+  ]
+}

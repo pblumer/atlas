@@ -30,8 +30,10 @@ import (
 // Version 2 added the physical part and job-type dependencies; version 3 the
 // endpoints worker instances report for the names they serve; version 4 the rest of a
 // configured Worker and the inbound subscriptions (ADR-0495 slice B); version 5 the
-// data layer (slice C); version 6 the business and strategy layers (slice D).
-const FormatVersion = 6
+// data layer (slice C); version 6 the business and strategy layers (slice D); version 7
+// the cross-application coupling and the event feed (slice E), and whether a called
+// application is withheld from a reader.
+const FormatVersion = 7
 
 // MappingVersion versions how a snapshot is drawn and written as ArchiMate: which
 // facts become which elements and relationships. It is a small public contract — a
@@ -46,12 +48,15 @@ const FormatVersion = 6
 // Version 6 draws the business and strategy layers as bands above the picture, and in
 // ArchiMate each process as a Business Process its Application Process realises, the
 // roles assigned to it, the products it carries out, and the capabilities and value
-// streams it serves.
+// streams it serves. Version 7 draws the coupling: the messages and signals the release
+// throws and catches, who in other applications is at the other end, and the event
+// feed; in ArchiMate each peer process is an Application Process of its application,
+// triggering or triggered by the release's processes.
 //
 // A snapshot keeps the version it was taken under, and a snapshot without a physical
 // part is drawn exactly as version 1 drew it, so the version a rendering states is
 // the snapshot's own.
-const MappingVersion = 6
+const MappingVersion = 7
 
 // Snapshot is the logical part of one release's architecture.
 type Snapshot struct {
@@ -74,6 +79,9 @@ type Snapshot struct {
 	// snapshot taken before format version 6.
 	Business *Business `json:"business,omitempty"`
 	Strategy *Strategy `json:"strategy,omitempty"`
+	// Coupling is how the release meets other applications through names, and the
+	// event feed; part of the application layer, absent before format version 7.
+	Coupling *Coupling `json:"coupling,omitempty"`
 
 	// shown is the layer selection a rendering of this value draws, and recorded the
 	// layers the stored snapshot held before the selection narrowed it; both are set
@@ -154,7 +162,10 @@ type Dependency struct {
 	// it has none anywhere.
 	TargetApplicationID string `json:"targetApplicationId,omitempty"`
 	TargetApplication   string `json:"targetApplication,omitempty"`
-	UsedBy              []Use  `json:"usedBy"`
+	// TargetWithheld is set by a read for a reader who may not see the called
+	// application: the call stays, the application's name does not (ADR-0495 §5).
+	TargetWithheld bool  `json:"targetWithheld,omitempty"`
+	UsedBy         []Use `json:"usedBy"`
 }
 
 // Normalize puts every list in a fixed order and merges duplicates, so the same
@@ -219,6 +230,9 @@ func (s *Snapshot) Normalize() {
 	}
 	if s.Strategy != nil {
 		s.Strategy.normalize()
+	}
+	if s.Coupling != nil {
+		s.Coupling.normalize()
 	}
 }
 
@@ -325,6 +339,17 @@ func (s Snapshot) NotShown() []string {
 			gaps = append(gaps, plural(b.ProductsWithheld, "product", "products")+" withheld from this reader, who may not maintain its catalogue")
 		}
 		if o := b.Omitted; o != (BusinessOmitted{}) {
+			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
+		}
+	}
+	if c := s.Coupling; c != nil {
+		gaps = append(gaps,
+			"messages published through the API, by an order or by a Worker that is not an inbound subscription: senders no deployed model shows",
+			"which instance a message reaches: its correlation key decides that at run time")
+		if c.PeersWithheld > 0 {
+			gaps = append(gaps, plural(c.PeersWithheld, "process", "processes")+" of applications this reader may not see")
+		}
+		if o := c.Omitted; o != (CouplingOmitted{}) {
 			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
 		}
 	}

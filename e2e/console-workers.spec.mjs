@@ -120,3 +120,64 @@ test("the New worker form says how the picked type is set up, and links to the h
   await expect(page.locator(".conn-setup .wtdoc-steps")).toContainText("Share the spreadsheet");
   expect(page.__errors).toEqual([]);
 });
+
+// The catalog lists every Worker Type this Atlas serves, which is two dozen rows of
+// prose; the configured workers grow with the installation. Both are lists, so both
+// get the table's own filter row (ADR-0286), and both fold away so an operator who
+// came for the vault or a mockup switch scrolls past neither.
+test("the Worker catalog is a filterable list", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  const catalog = page.locator("#sec-workers-catalog table");
+  await expect(catalog.locator(".dt-filter").first()).toBeVisible();
+  const rows = catalog.locator("tbody tr:not([hidden])");
+  expect(await rows.count()).toBeGreaterThan(5);
+
+  await catalog.locator(".dt-filter").first().fill("atlassian jira");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("Jira");
+  expect(page.__errors).toEqual([]);
+});
+
+test("both worker sections fold away, and stay folded", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  for (const id of ["workers-catalog", "workers-configured"]) {
+    const toggle = page.locator(`.section-toggle[data-section="${id}"]`);
+    const body = page.locator(`#sec-${id}`);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(body).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(body).toBeHidden();
+  }
+  // A folded section still says what it holds.
+  await expect(page.locator(".workers-sec-head").last()).toContainText("1 Worker");
+
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
+  await expect(page.locator("#sec-workers-catalog")).toBeHidden();
+  await expect(page.locator("#sec-workers-configured")).toBeHidden();
+  // The vault below is not folded with them.
+  await expect(page.locator("#view h2").filter({ hasText: "Secrets" })).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+test("New worker unfolds the folded section it opens its form in", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  await page.click('.section-toggle[data-section="workers-configured"]');
+  await expect(page.locator("#sec-workers-configured")).toBeHidden();
+  await page.click("#new-worker");
+  await expect(page.locator("#sec-workers-configured")).toBeVisible();
+  await expect(page.locator(".worker-form")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+// Enabling or disabling a worker re-renders the page without the router, which is
+// what used to give the tables their filter row; the list must keep it.
+test("the configured workers keep their filter row after a worker is changed", async ({ page }) => {
+  await goto(page, "#/console/workers");
+  await page.click("#worker-rows .dropdown-toggle");
+  await page.click('#worker-rows .dropdown-menu button[data-act="toggle"]');
+  await expect(page.locator("#worker-rows")).toContainText("disabled");
+  await expect(page.locator('table[data-dt-key="connectors"] .dt-filter').first()).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});

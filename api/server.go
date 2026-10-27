@@ -2094,6 +2094,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// WithPlaygroundSessions reaches the registry it configures.
 	s.playgroundSessions = playground.NewRegistry(s.playgroundTTL, playgroundMaxSessions)
 	s.playground = playgroundapi.New(s.playgroundSessions, s.playgroundModel, startVarsFromMap)
+	// A sandbox's business rule tasks evaluate the decisions this server has deployed,
+	// as production's do, rather than being answered by a stub.
+	s.playground.Decisions = s.dmnRegistry
+	s.playground.DecisionPins = s.playgroundDecisionPins
 	// Every sub-service reads the ceilings this server was configured with, rather
 	// than the defaults its own constructor set. One assignment each, here, because
 	// the options have all run by now: WithLimits is what s.limits already reflects.
@@ -3569,6 +3573,19 @@ func (s *Server) playgroundModel(r *http.Request, kind, ref string) ([]byte, int
 	default:
 		return nil, http.StatusBadRequest, "unknown model source"
 	}
+}
+
+// playgroundDecisionPins resolves the fixed decision versions a Playground model names,
+// exactly as a deploy resolves them (ADR-0423), so a model the deploy would refuse for
+// an undeployed version is refused by the sandbox too. The version index belongs to the
+// loop, so the lookup runs there.
+func (s *Server) playgroundDecisionPins(cp *compiler.CompiledProcess) (map[compiler.DecisionVersionRef]uint64, error) {
+	var (
+		pins map[compiler.DecisionVersionRef]uint64
+		err  error
+	)
+	s.do(func() { pins, err = s.resolveVersionPins(cp) })
+	return pins, err
 }
 
 // loop runs the single-writer goroutine that owns the processor. Every processor
