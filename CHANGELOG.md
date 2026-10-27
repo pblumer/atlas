@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
 - **An agent can tell whether, and where, the server is slow.** Two MCP tools for an
   administrator's agent: `atlas_runtime_health` (`GET /api/v1/debug/runtime`) measures a
   window of up to 20 seconds and answers with the run loop's wait and hold latencies, the
