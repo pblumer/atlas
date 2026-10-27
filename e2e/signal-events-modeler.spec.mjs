@@ -26,7 +26,7 @@ async function openSignal(page, id) {
   await page.evaluate((el) => window.__select(el), id);
   const picker = page.locator("#f-sigref");
   await expect(picker).toHaveCount(1);
-  if (!(await picker.isVisible())) await page.locator(".pgroup-head", { hasText: "Signal" }).first().click();
+  if (!(await picker.isVisible())) await page.locator('.pgroup[data-group*="Signal" i] > .pgroup-head').first().click();
   await expect(picker).toBeVisible();
 }
 
@@ -35,7 +35,7 @@ const eventGroup = (page) => page.locator("#f-sigref optgroup#f-sig-events");
 test("a signal start is offered the events a model may listen to, and only those", async ({ page }) => {
   await mount(page);
   await openSignal(page, "Start_sig");
-  await expect(eventGroup(page)).toHaveAttribute("label", "Events atlas emits");
+  await expect(eventGroup(page)).toHaveAttribute("label", "Ereignisse, die atlas aussendet");
   await expect(eventGroup(page).locator("option")).toHaveCount(2);
   const offered = await eventGroup(page).locator("option").evaluateAll((os) =>
     os.map((o) => ({ value: o.value, text: o.textContent })));
@@ -43,7 +43,7 @@ test("a signal start is offered the events a model may listen to, and only those
   // neither is offered; the diagram already declares atlas.user.requested.
   expect(offered).toEqual([
     { value: "__event__:atlas.user.requested", text: "atlas.user.requested" },
-    { value: "__event__:atlas.user.created", text: "atlas.user.created — new" },
+    { value: "__event__:atlas.user.created", text: "atlas.user.created — neu" },
   ]);
   expect(page.__errors).toEqual([]);
 });
@@ -61,8 +61,8 @@ test("picking an event declares a signal of that name and says what the listener
   await expect(page.locator("#f-sigref")).toHaveValue(sig[1]);
   await expect(page.locator("#f-sigevent [data-event]")).toHaveAttribute("data-event", "atlas.user.created");
   await expect(page.locator("#f-sigevent")).toContainText("A user account was created.");
-  await expect(page.locator("#f-sigevent")).not.toContainText("personal data");
-  await expect(page.locator("#f-sigevent")).not.toContainText("administrator");
+  await expect(page.locator("#f-sigevent")).not.toContainText("Personendaten");
+  await expect(page.locator("#f-sigevent")).not.toContainText("Administrator");
   expect(page.__errors).toEqual([]);
 });
 
@@ -77,9 +77,9 @@ test("picking an event the diagram declares reuses its signal", async ({ page })
   expect(xml).toMatch(/<bpmn:startEvent id="Start_sig"[\s\S]*?signalRef="Signal_req"/);
   // The note names the personal data the listener receives.
   await expect(page.locator("#f-sigevent")).toContainText("Somebody asked for a user account.");
-  await expect(page.locator("#f-sigevent")).toContainText("The listener receives personal data: vorname, email.");
+  await expect(page.locator("#f-sigevent")).toContainText("Wer darauf hört, erhält Personendaten: vorname, email.");
   // The deploy rule that follows from it (ADR-0435 §6) is said where the event is chosen.
-  await expect(page.locator("#f-sigevent")).toContainText("Only an administrator may deploy a model that listens to it.");
+  await expect(page.locator("#f-sigevent")).toContainText("Nur ein Administrator darf ein Modell deployen, das darauf hört.");
   await expect(page.locator('#f-sigevent a[href="/#/console/events"]')).toHaveCount(1);
   expect(page.__errors).toEqual([]);
 });
@@ -88,7 +88,7 @@ test("a catch on an atlas.* name that is no event is warned about", async ({ pag
   await mount(page);
   await openSignal(page, "Catch_stray");
   await expect(page.locator("#f-sigevent .hint.warn")).toContainText(
-    "atlas emits no event named atlas.user.vanished; this element would wait for something that never comes.");
+    "atlas sendet kein Ereignis namens atlas.user.vanished aus; dieses Element würde auf etwas warten, das nie kommt.");
   expect(page.__errors).toEqual([]);
 });
 
@@ -97,7 +97,7 @@ test("a throw is offered no events and is told the name is atlas's own", async (
   await openSignal(page, "Throw_1");
   await page.waitForFunction(() => window.__catalogCalls > 0);
   await expect(page.locator("#f-sigevent .hint.warn")).toContainText(
-    "atlas.user.requested is a name atlas emits: a model that throws it speaks for atlas.");
+    "atlas.user.requested ist ein Name, den atlas aussendet: Ein Modell, das ihn wirft, spricht für atlas.");
   await expect(eventGroup(page)).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });
@@ -161,12 +161,12 @@ test("a signal start is offered the signals deployed models throw", async ({ pag
   await page.evaluate((s) => { window.__SIGNALS = s; }, SIGNALS);
   await mount(page);
   await openSignal(page, "Start_sig");
-  await expect(deployedGroup(page)).toHaveAttribute("label", "Signals deployed models throw");
+  await expect(deployedGroup(page)).toHaveAttribute("label", "Signale, die deployte Modelle werfen");
   // An atlas.* name, a name only an older version throws and a name nobody throws are
   // not offered.
   const offered = await deployedGroup(page).locator("option").evaluateAll((os) =>
     os.map((o) => ({ value: o.value, text: o.textContent })));
-  expect(offered).toEqual([{ value: "__event__:order.cancelled", text: "order.cancelled — shop — new" }]);
+  expect(offered).toEqual([{ value: "__event__:order.cancelled", text: "order.cancelled — shop — neu" }]);
 
   await page.locator("#f-sigref").selectOption("__event__:order.cancelled");
   const xml = await page.evaluate(() => window.__xml());
@@ -188,12 +188,12 @@ test("a throw is told who receives its name, or that nobody does", async ({ page
   // The newest, active receivers count: billing's v2, not its v1, and not the inactive one.
   await page.locator("#f-signame").fill("order.cancelled");
   await page.locator("#f-signame").blur();
-  await expect(line).toContainText("Received by 1 deployed process: billing.");
+  await expect(line).toContainText("Empfangen von 1 deployten Prozess: billing.");
   await expect(line.locator('a[href="/#/console/events?name=order.cancelled&channel=signal"]')).toHaveCount(1);
 
   await page.locator("#f-signame").fill("nobody.hears");
   await page.locator("#f-signame").blur();
-  await expect(line).toContainText("No deployed process receives it");
+  await expect(line).toContainText("Kein deployter Prozess empfängt es");
   expect(page.__errors).toEqual([]);
 });
 

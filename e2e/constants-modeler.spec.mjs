@@ -109,7 +109,7 @@ test("a constant bound to its application writes its source, and a fallback only
   await row.locator(".sv-source").selectOption("application");
 
   row = page.locator("#cv-list .sv-row").last();
-  await expect(row.locator(".sv-default")).toHaveAttribute("placeholder", "fallback (optional)");
+  await expect(row.locator(".sv-default")).toHaveAttribute("placeholder", "Fallback (optional)");
   await expect.poll(() => constantsXML(page)).toContain('<atlas:constant name="TENANT_ID" type="string" source="application" />');
 
   await row.locator(".sv-default").fill("tenant-dev");

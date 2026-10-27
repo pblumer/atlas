@@ -53,6 +53,8 @@ Bearer` header.
 | `atlas_finished_instances_deletion` | `key`, `before?` | what deleting a version's finished instances would consider: the count before the cut-off, the running ones that stay, the export gate, whether the server allows it, and what `confirm` must repeat |
 | `atlas_delete_finished_instances` | `key`, `confirm`, `before?`, `limit?`, `after?` | deletes one batch of a version's finished instances for good; repeat with `after` = `nextCursor` while `remaining` is true |
 | `atlas_stats` | none | engine-wide active counts |
+| `atlas_runtime_health` | `seconds?` | admin: over a window (default 5 s, at most 20; 0 = since the start), the run loop's wait and held latencies, the writer's throughput and fsync/commit latencies, scheduler latency, goroutines, GC and heap — read it first when the server is slow |
+| `atlas_runtime_profile` | `kind`, `seconds?`, `top?`, `gc?` | admin: a summarized runtime profile — `profile` (CPU over up to 20 s), `heap`, `allocs` as top functions by flat and cum; `goroutine` as the largest groups sharing a stack, leaf first |
 | `atlas_publish_message` | `name`, `correlationKey?`, `variables?`, `timeToLiveMs?`, `messageId?` | correlates a message to waiting instances; with `timeToLiveMs` keeps an unmatched one for an instance that waits later (ADR-0370); returns stats |
 | `atlas_buffered_messages` | `name?`, `correlationKey?`, `limit?`, `after?` | lists the messages waiting in the buffer, with payload and expiry; returns `{messages, total, nextCursor}` |
 | `atlas_complete_job` | `key`, `variables?` | completes a job by hand (operator counterpart to a worker) |

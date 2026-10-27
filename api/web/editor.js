@@ -1705,7 +1705,7 @@ function implMarker(bo) {
   if (bo.$type === "bpmn:ServiceTask") {
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null; // plain job worker — the default gear is its symbol
-    return { label: kind.name, icon: kind.glyph };
+    return { label: kindText(kind.name), icon: kind.glyph };
   }
   if (bo.$type === "bpmn:SendTask") {
     // The send task's kind badge (ADR-0112): a message throw, a Worker Type, or (plain job
@@ -1714,10 +1714,10 @@ function implMarker(bo) {
     // envelope rather than over it (shopBadgeOf), and it is asked first, as sendTaskKind
     // asks it, so a leftover messageRef cannot cover the envelope with the Message badge.
     if (findExt(bo, SEND_SHOP_KIND.ext)) return null;
-    if (bo.messageRef) return { label: SEND_MESSAGE_KIND.name, icon: SEND_MESSAGE_KIND.glyph };
+    if (bo.messageRef) return { label: kindText(SEND_MESSAGE_KIND.name), icon: SEND_MESSAGE_KIND.glyph };
     const kind = serviceTaskKind(bo);
     if (!kind.glyph) return null;
-    return { label: kind.name, icon: kind.glyph };
+    return { label: kindText(kind.name), icon: kind.glyph };
   }
   return null;
 }
@@ -1803,7 +1803,7 @@ function wizardHTML(bo) {
   const v = bo.wizard || "";
   const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
   const unknown = v && !WIZARD_KINDS[v] ? `<option value="${esc(v)}" selected>${esc(v)} — not a kind atlas knows</option>` : "";
-  return `<h3>Wizard</h3>
+  return `<h3 data-group="Wizard">${esc(tr("bpmn.group.wizard"))}</h3>
     <label class="field"><span>One sitting of one person</span>
       <select id="f-wizard">
         ${opt("", "No — an ordinary subprocess")}
@@ -3235,8 +3235,8 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
 
   const hint = document.createElement("p");
   hint.className = "feel-hint";
-  hint.innerHTML = "FEEL — <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions · <kbd>F2</kbd> developer view";
-  if (evaluate) hint.innerHTML += ' &middot; <button type="button" class="linklike" data-feel-test title="Test this expression against sample variables">Test</button>';
+  hint.innerHTML = tr("pnl.feel.hint");
+  if (evaluate) hint.innerHTML += ` &middot; <button type="button" class="linklike" data-feel-test title="${esc(tr("pnl.feel.test.buttonTitle"))}">${esc(tr("pnl.feel.test.button"))}</button>`;
   wrap.after(hint);
   if (!evaluate) return;
 
@@ -3246,9 +3246,9 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
   panel.className = "feel-test";
   panel.hidden = true;
   panel.innerHTML = `
-    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder='sample variables, e.g. { "amount": 100 }'></textarea>
+    <textarea class="feel-test-vars" rows="2" spellcheck="false" placeholder="${esc(tr("pnl.feel.test.varsPlaceholder"))}"></textarea>
     <div class="feel-test-row">
-      <button type="button" class="btn neutral feel-test-run" title="Evaluate the expression">Run</button>
+      <button type="button" class="btn neutral feel-test-run" title="${esc(tr("pnl.feel.test.runTitle"))}">${esc(tr("pnl.feel.test.run"))}</button>
       <span class="feel-test-out" aria-live="polite"></span>
     </div>`;
   hint.after(panel);
@@ -3268,7 +3268,7 @@ function enhanceFeel(body, sel, vars, validate, evaluate) {
     try {
       const res = await evaluate(ta.value, variables);
       if (res && res.ok) setOut("ok", `= ${res.result} (${res.kind})`);
-      else setOut("err", (res && res.error) || "could not evaluate");
+      else setOut("err", (res && res.error) || tr("pnl.feel.test.failed"));
     } catch (e) {
       setOut("err", e.message);
     }
@@ -3332,8 +3332,8 @@ function enhanceScript(body, modeler, api, variables) {
   markDevField(ta, language);
 
   const shortcut = language === "powershell"
-    ? "<code>$name</code> / <code>$env:</code> &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view"
-    : "instance variables by name &middot; <kbd>Ctrl</kbd>+<kbd>Space</kbd> for completions, <kbd>Tab</kbd> to indent, <kbd>F2</kbd> developer view";
+    ? tr("pnl.feel.script.hintPowershell")
+    : tr("pnl.feel.script.hint");
   const hint = document.createElement("p");
   hint.className = "feel-hint";
   hint.innerHTML = shortcut;
@@ -3358,9 +3358,9 @@ function enhanceScript(body, modeler, api, variables) {
     const raw = (runVars.value || "").trim();
     if (raw) {
       try { variables = JSON.parse(raw); }
-      catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+      catch { setOut("err", tr("pnl.feel.script.varsInvalid")); setDetail("", ""); return; }
     }
-    setOut("", "Running…"); setDetail("", "");
+    setOut("", tr("pnl.feel.script.running")); setDetail("", "");
     const t0 = performance.now();
     try {
       const r = await api("POST", "/api/v1/scripts/run", { language, source: ta.value || "", variables });
@@ -3370,11 +3370,11 @@ function enhanceScript(body, modeler, api, variables) {
         setDetail("ok", "→ " + prettyResult(r.result));
       } else {
         setOut("err", `✗ ${ms} ms`);
-        const msg = cleanScriptError((r && r.error) || "run failed");
+        const msg = cleanScriptError((r && r.error) || tr("pnl.feel.script.runFailed"));
         // Which code the script raised, since a test run cannot know whether the process
         // catches it (ADR-0461).
         const coded = r && r.errorCode
-          ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
+          ? tr("pnl.feel.script.errorCode", { code: r.errorCode }) + "\n\n"
           : "";
         setDetail("err", coded + msg);
         const line = scriptErrorLine(language, msg);
@@ -3406,7 +3406,7 @@ export function attachExpressionToggle(el, opts = {}) {
   btn.type = "button";
   btn.className = "fx-toggle";
   btn.textContent = "fx";
-  btn.title = "Toggle between a literal value and a FEEL expression (=)";
+  btn.title = tr("pnl.feel.fx.title");
   // Prefer the field label (a labelled row); fall back to sitting inline before the
   // input for fields without a .field/span wrapper (e.g. a map value cell).
   if (span) span.appendChild(btn);
@@ -3569,8 +3569,8 @@ function writeDocumentation(modeler, element, bo, text) {
 // documentationField renders the documentation editor for one business object. `id`
 // keeps the field unique when a panel documents two things at once (a pool and the
 // process it executes); `placeholder` names what is worth writing there.
-function documentationField(bo, id = "f-doc", placeholder = "What this step is for, when it applies, who owns it…") {
-  return `<label class="field doc-field"><span>Documentation</span>
+function documentationField(bo, id = "f-doc", placeholder = tr("pnl.feel.doc.placeholder")) {
+  return `<label class="field doc-field"><span>${esc(tr("pnl.feel.doc.label"))}</span>
       <textarea id="${id}" rows="3" placeholder="${esc(placeholder)}">${esc(readDocumentation(bo))}</textarea></label>`;
 }
 
@@ -3582,7 +3582,7 @@ function wireDocumentation(body, modeler, element, bo, id = "f-doc") {
   if (!f) return;
   // Documentation is prose that ends up in the task view, the replay and the
   // exported process document (ADR-0143) — Markdown, and worth a real editor.
-  markDevField(f, "markdown", { title: "Documentation" });
+  markDevField(f, "markdown", { title: tr("pnl.feel.doc.label") });
   f.addEventListener("change", (e) => {
     try { writeDocumentation(modeler, element, bo, e.target.value); } catch { /* stale */ }
   });
@@ -3619,12 +3619,9 @@ function withRetries(kind) {
 // picker's `datalist` is the kind's own id for the same reason — derived, so it cannot
 // be typed wrong for one product and right for the others.
 function sqlServiceTaskKind(p) {
-  const binding = p.named
-    ? `a JSON array binds in order, a JSON object binds by name (${p.name} supports named binding)`
-    : `as a JSON array, in order. ${p.name} has no named parameters, so an object is refused rather than silently reordered`;
   return {
     id: p.id, name: p.name, group: "Database",
-    desc: `Run one query or statement against a ${p.name} database on a worker`,
+    desc: { toString: () => tr("pnl.feel.sql.desc", { name: p.name }) },
     icon: p.icon,
     // A database cylinder on the product's own colour, so the three read as one family
     // at a glance and are still told apart. The drawImplBadges/stkind-icon CSS adds the
@@ -3635,7 +3632,7 @@ function sqlServiceTaskKind(p) {
       { group: "Database" },
       {
         key: "connector", label: "Worker", datalist: p.id, placeholder: "hr-db",
-        hint: `The configured ${p.name} Worker this statement runs on, by the name it has under Workers in the Console. Its connection string is sealed into the vault there, or read by a worker you run yourself from its own environment (ATLAS_${p.envPrefix}_<NAME>_DSN) — either way the engine never holds a database credential (ADR-0173). With the Databases mockup switched on (Console \u203a Workers, or ATLAS_${p.envPrefix}_MOCK on a worker you run yourself) the same task is answered from prepared answers in that worker's memory instead, so the model can be tried without a database (ADR-0221).`,
+        hint: () => tr("pnl.feel.sql.connectorHint", { name: p.name, env: p.envPrefix }),
       },
       { group: "Statement" },
       {
@@ -3648,11 +3645,13 @@ function sqlServiceTaskKind(p) {
       },
       {
         key: "statement", label: "SQL statement", rows: 6, placeholder: `SELECT id, mail FROM personen WHERE abteilung = ${p.placeholder}`,
-        hint: `Literal SQL — this field has no fx toggle on purpose. A statement built from process data would be an injection, so values reach it only as bound parameters below. ${p.name} uses ${p.placeholder}-style placeholders.`,
+        hint: () => tr("pnl.feel.sql.statementHint", { name: p.name, placeholder: p.placeholder }),
       },
       {
         key: "parametersVariable", label: "Parameters variable", placeholder: "params",
-        hint: `A process variable bound to the statement's placeholders: ${binding}. Leave empty for a statement with no placeholders.`,
+        hint: () => (p.named
+          ? tr("pnl.feel.sql.paramsHintNamed", { name: p.name })
+          : tr("pnl.feel.sql.paramsHintOrdered", { name: p.name })),
       },
       { group: "Output" },
       {
@@ -3673,6 +3672,23 @@ function sqlServiceTaskKind(p) {
 // Worker Type is one entry here (plus its moddle type, compiler branch, and
 // worker) — the searchable picker and the field form are both rendered
 // generically from this data, so no bespoke panel code is needed per kind.
+// kindText shows a display text of the Worker Type tables — SERVICE_TASK_KINDS, the send
+// task's kinds and the shop task's modes — in the console's language (ADR-0267). The
+// tables keep their English as data: a kind's group and a field's section are also the
+// identities the picker and the panel's groups are addressed by. So the words are looked
+// up where they are drawn, under "wt." and the English text, the way lib-translate.js
+// looks up a library's words; a text the catalogue does not carry is shown as written.
+//
+// A field's placeholder is not passed through it: placeholders are example values
+// (https://…, payment, =scimId), and an example word that happens to be a label
+// elsewhere ("Users") must stay what the field expects.
+function kindText(s) {
+  if (typeof s !== "string" || !s) return s;
+  const key = "wt." + s;
+  const out = tr(key);
+  return out === key ? s : out;
+}
+
 const SERVICE_TASK_KINDS = [
   {
     id: "worker", name: "Job worker", group: "No Worker Type", desc: "Handled by an external job worker", icon: "⚙",
@@ -4203,8 +4219,10 @@ const SERVICE_TASK_KINDS = [
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: (v) => exchangeResultType(v.operation || "get-mailbox"), placeholder: "postfach",
-        hint: (v) => exchangeResultShape(v.operation || "get-mailbox") + " Objects carry the cmdlet's properties under their own names, complex values as text, e.g. =" +
-          (v.resultVariable ? v.resultVariable : "postfach") + ".PrimarySmtpAddress.",
+        hint: (v) => tr("pnl.kindA.exchange.resultHint", {
+          shape: exchangeResultShape(v.operation || "get-mailbox"),
+          name: v.resultVariable ? v.resultVariable : "postfach",
+        }),
       },
     ],
   },
@@ -4604,7 +4622,7 @@ const SERVICE_TASK_KINDS = [
             ? "Receives the attachment: content (base64), name, contentType as detected from the content, declaredType as the sender wrote it, size, and inspection. Limited to what fits a process variable (1 MiB); a larger document needs Export attachment."
             : v.operation === "export-attachment"
               ? "Optional. Receives where the document went — bucket, key, etag — with its detected type and the inspection. Mint a link for a user task with an S3 presign-get on that key."
-              : "Receives what the mailbox answered: " + (v.operation === "list" ? "a list of messages, newest first." : "the message.")),
+              : (v.operation === "list" ? tr("pnl.kindB.mail.resultList") : tr("pnl.kindB.mail.resultMessage"))),
       },
     ],
     // Only a get reads a message's HTML body (ADR-0489): a get turned
@@ -5090,9 +5108,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => googleContactsUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
         placeholder: (v) => googleContactsContactPlaceholder(v.operation || "create-contact"),
-        hint: (v) => "Keys: givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses, birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
-          (v.operation === "create-contact" ? " and groups (labels by name)." : "; labels change through Add to label and Remove from label.") +
-          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the primary entry and keep the others, emails, phones and addresses replace the list.",
+        hint: (v) => (v.operation === "create-contact" ? tr("pnl.kindB.googlecontacts.contactCreate") : tr("pnl.kindB.googlecontacts.contactUpdate")),
       },
       {
         key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
@@ -5160,9 +5176,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => cardDAVUses(v.operation || "find-contacts", "contact") && !v.contactVariable,
         placeholder: (v) => cardDAVContactPlaceholder(v.operation || "create-contact"),
-        hint: (v) => "Keys: displayName, givenName, familyName, email, emails, phone, phones, organization, jobTitle, department, address, addresses (streetAddress, extendedAddress, poBox, postalCode, city, region, country, type), birthday (1980-05-17, or --05-17 without a year), notes, fields (custom fields by name)" +
-          (v.operation === "create-contact" ? " and groups (by name)." : "; groups change through Add to group and Remove from group.") +
-          " A string starting with = is a FEEL expression. A value that is null changes nothing, \"\" clears; email, phone and address change the preferred entry and keep the others, emails, phones and addresses replace the list. Every other property of the card — a photo included — is kept.",
+        hint: (v) => (v.operation === "create-contact" ? tr("pnl.kindB.carddav.contactCreate") : tr("pnl.kindB.carddav.contactUpdate")),
       },
       {
         key: "contactVariable", label: "Contact variable", placeholder: "neukunde",
@@ -5233,7 +5247,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.propertiesVariable,
         placeholder: (v) => wikiPropertiesPlaceholder(v.operation || "create-item"),
-        hint: "Property values by the field's name, as the item's type defines them — the person a task is assigned to is one of them, e.g. assignee. A string starting with = is a FEEL expression. A value that is null changes nothing (an absent variable does not clear a due date); \"\" unsets the property.",
+        hint: () => tr("pnl.ops.wiki.propertiesHint"),
       },
       {
         key: "propertiesVariable", label: "Properties variable", placeholder: "felder",
@@ -5694,13 +5708,13 @@ function selectOption(o) {
 // bespoke editor.
 function stMapRowHTML(f, name, value, extra) {
   const extraCell = f.extraKey
-    ? `<input type="text" class="st-map-extra" value="${esc(extra || "")}" placeholder="${esc(f.extraPlaceholder || f.extraKey)}" style="flex:0 0 22%"/>`
+    ? `<input type="text" class="st-map-extra" value="${esc(extra || "")}" placeholder="${esc(kindText(f.extraPlaceholder || f.extraKey))}" style="flex:0 0 22%"/>`
     : "";
   return `<div class="st-map-row" data-field="${esc(f.key)}" style="display:flex;gap:6px;margin-bottom:6px;align-items:start">
-    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="${esc(f.namePlaceholder || "name")}" style="flex:0 0 ${f.extraKey ? "26%" : "40%"}"/>
-    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="${esc(f.valuePlaceholder || "value")}" style="flex:1;resize:none">${esc(value || "")}</textarea>
+    <input type="text" class="st-map-name" value="${esc(name || "")}" placeholder="${esc(kindText(f.namePlaceholder || "name"))}" style="flex:0 0 ${f.extraKey ? "26%" : "40%"}"/>
+    <textarea class="st-map-value" rows="1" spellcheck="false" placeholder="${esc(kindText(f.valuePlaceholder || "value"))}" style="flex:1;resize:none">${esc(value || "")}</textarea>
     ${extraCell}
-    <button type="button" class="st-map-del" title="Remove" style="flex:0 0 auto">✕</button>
+    <button type="button" class="st-map-del" title="${esc(tr("bpmn.kind.remove"))}" style="flex:0 0 auto">✕</button>
   </div>`;
 }
 
@@ -5730,7 +5744,7 @@ function fillWorkerDatalist(api, dl, note, kind) {
     if (note) {
       note.textContent = names.length
         ? ""
-        : "No Worker of this type is configured on this server — an operator adds one under Workers in the Console.";
+        : tr("bpmn.kind.noWorker");
     }
   }).catch(() => { /* no suggestions; the field stays free text */ });
 }
@@ -5742,7 +5756,7 @@ function fillWorkerDatalist(api, dl, note, kind) {
 function placementBadgeHTML(id) {
   const b = PLACEMENT_BADGE[placementOf(id)];
   if (!b) return "";
-  return `<span class="stkind-where ${b.cls}" title="${esc(b.title)}">${b.label}</span>`;
+  return `<span class="stkind-where ${b.cls}" title="${esc(tr(b.title))}">${tr(b.label)}</span>`;
 }
 
 // stKindRowsHTML renders the searchable kind-picker rows for a list of kinds, highlighting
@@ -5764,10 +5778,10 @@ function stKindRow(k, curId) {
   const chosen = k.id === curId;
   return `
     <div class="stkind-row${chosen ? " stkind-row-on" : ""}" data-kind="${k.id}"
-         data-match="${esc((k.name + " " + k.desc + " connector").toLowerCase())}" title="${esc(k.desc)}">
+         data-match="${esc([k.name, k.desc, kindText(k.name), kindText(k.desc), "connector"].join(" ").toLowerCase())}" title="${esc(kindText(k.desc))}">
       <span class="stkind-icon">${k.glyph || esc(k.icon)}</span>
-      <span class="stkind-name"><b>${esc(k.name)}</b>${chosen
-        ? `<span class="stkind-desc">${esc(k.desc)}</span>` : ""}</span>
+      <span class="stkind-name"><b>${esc(kindText(k.name))}</b>${chosen
+        ? `<span class="stkind-desc">${esc(kindText(k.desc))}</span>` : ""}</span>
       ${placementBadgeHTML(k.id)}
     </div>`;
 }
@@ -5788,7 +5802,7 @@ function stKindRowsHTML(kinds, curId) {
   const other = rest.filter((k) => !ST_KIND_GROUPS.includes(k.group));
   if (other.length) groups.push(["Other", other]);
   return groups.map(([name, list]) => `<div class="stkind-group">
-      <div class="stkind-group-h">${esc(name)}</div>
+      <div class="stkind-group-h">${esc(kindText(name))}</div>
       ${list.map((k) => stKindRow(k, curId)).join("")}
     </div>`).join("");
 }
@@ -5815,7 +5829,7 @@ function stKindFieldsHTML(cur, ext) {
   for (const field of cur.fields) {
     if (field.group) {
       if (field.showIf && !field.showIf(ext)) continue;
-      fields += `<h3>${esc(field.group)}</h3>`;
+      fields += `<h3 data-group="${esc(field.group)}">${esc(kindText(field.group))}</h3>`;
       continue;
     }
     if (field.showIf && !field.showIf(ext)) continue;
@@ -5830,55 +5844,55 @@ function stKindFieldsHTML(cur, ext) {
       const list = Array.isArray(ext[f.key]) ? ext[f.key] : [];
       const valueKey = f.valueKey || "value";
       const rowsHTML = list.map((kv) => stMapRowHTML(f, kv.name, kv[valueKey], f.extraKey ? kv[f.extraKey] : "")).join("");
-      fields += `<div class="field"><span>${esc(f.label)}</span>
+      fields += `<div class="field"><span>${esc(kindText(f.label))}</span>
         <div class="st-map" data-field="${esc(f.key)}" data-childtype="${esc(f.childType)}">
           <div class="st-map-rows">${rowsHTML}</div>
-          <button type="button" class="st-map-add" style="margin-top:2px" title="Add a mapping">+ Add</button>
+          <button type="button" class="st-map-add" style="margin-top:2px" title="${esc(tr("bpmn.kind.addTitle"))}">${esc(tr("bpmn.kind.add"))}</button>
         </div></div>`;
     } else if (f.type === "number") {
       // A count, not free text (the retry budget): a spinner with the engine's own
       // lower bound, so the field cannot express a value the compiler refuses.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="number" id="f-st-${f.key}" ${f.min === undefined ? "" : `min="${esc(String(f.min))}"`} step="1"
                value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     } else if (f.type === "select") {
       const chosen = ext[f.key] || "";
       const opts = f.options.map((o) => {
         const { v, l } = selectOption(o);
-        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(l)}</option>`;
+        return `<option value="${esc(v)}" ${v === chosen ? "selected" : ""}>${esc(kindText(l))}</option>`;
       }).join("");
-      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-st-${f.key}">${opts}</select></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span><select id="f-st-${f.key}">${opts}</select></label>`;
     } else if (f.type === "html") {
       // A markup field: the same textarea the save wiring reads, upgraded to an HTML
       // code editor below (and F2-able into the Developer View, ADR-0145).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 4}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.type === "json") {
       // A JSON field: the same textarea the save wiring reads, upgraded to the JSON
       // editor below (highlighting, validation, auto-format). String values with a
       // leading '=' are FEEL, evaluated per field at runtime (compiled to one context).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 8}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.fx) {
       // A textarea — 1 row by default, taller for prose like an e-mail body — so the
       // fx toggle can host the FEEL editor in place at that size.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <textarea id="f-st-${f.key}" rows="${f.rows || 1}" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(ext[f.key] || "")}</textarea></label>`;
     } else if (f.datalist) {
       // A combobox: a free-text field that also offers this server's configured Workers
       // of the kind as a dropdown (populated after render, see the field wiring).
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-st-${f.key}" list="dl-st-${f.key}" autocomplete="off" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/>
         <datalist id="dl-st-${f.key}"></datalist></label>`;
     } else {
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-st-${f.key}" value="${esc(ext[f.key] || "")}" placeholder="${esc(f.placeholder || "")}"/></label>`;
     }
     // A hint is usually a static string; an operation-aware field (the Entra result
     // variable, whose shape differs per operation) may give a function of the current
     // extension values instead, so the note can describe what THIS operation returns.
     const hintText = typeof f.hint === "function" ? f.hint(ext) : f.hint;
-    if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(hintText)}</p>`;
+    if (hintText) fields += `<p class="muted" style="font-size:12px">${esc(kindText(hintText))}</p>`;
     // The Worker picker's empty state, filled in once the fetch lands (fillWorkerDatalist).
     if (f.datalist) fields += `<p class="muted" id="nt-st-${f.key}" style="font-size:12px"></p>`;
   }
@@ -5922,26 +5936,24 @@ function placementOf(id) { return (KIND_PLACEMENT && KIND_PLACEMENT[id]) || ""; 
 // like their plain counterparts on purpose — where the work runs is the same fact —
 // and differ in the advice, because a kind with no other form cannot take it.
 const PLACEMENT_BADGE = {
-  "engine": { label: "in&#8209;engine", cls: "stkind-where-engine",
-    title: "This server runs this kind in its own process, so the call's latency and failures are the engine's. It can be moved onto a worker (ADR-0164)." },
-  "engine-only": { label: "in&#8209;engine", cls: "stkind-where-engine",
-    title: "This server runs this kind in its own process. It has no out-of-process form, so there is no worker to move it to." },
-  "worker": { label: "on a worker", cls: "stkind-where-worker",
-    title: "This server does not run this kind itself: its jobs are leased by a worker process, so a slow call cannot stall the engine (ADR-0168)." },
-  "worker-only": { label: "worker only", cls: "stkind-where-worker",
-    title: "This kind has no in-engine form — its work always runs on a worker (ADR-0173)." },
+  "engine": { label: "pnl.task.where.inEngine", cls: "stkind-where-engine",
+    title: "pnl.task.where.engineTitle" },
+  "engine-only": { label: "pnl.task.where.inEngine", cls: "stkind-where-engine",
+    title: "pnl.task.where.engineOnlyTitle" },
+  "worker": { label: "pnl.task.where.onWorker", cls: "stkind-where-worker",
+    title: "pnl.task.where.workerTitle" },
+  "worker-only": { label: "pnl.task.where.workerOnly", cls: "stkind-where-worker",
+    title: "pnl.task.where.workerOnlyTitle" },
 };
 
 // PLACEMENT_LEAD says where the work runs. It is the same sentence wherever it appears,
 // because it is the same fact — a worker call, a script and a decision are all a job
 // this server either runs itself or leaves for a worker.
 const PLACEMENT_LEAD = {
-  "engine": `Atlas runs this <b>in its own process</b> on this server, so its latency and its
-    failures are the engine&rsquo;s.`,
-  "engine-only": `Atlas runs this <b>in its own process</b>, and it has no out-of-process form.`,
-  "worker": `This server does <b>not</b> run this itself: its jobs are leased by a <b>worker</b>,
-    so a slow call cannot stall the engine.`,
-  "worker-only": `This has <b>no in-engine form</b>: its jobs always run on a worker.`,
+  "engine": "pnl.task.place.lead.engine",
+  "engine-only": "pnl.task.place.lead.engineOnly",
+  "worker": "pnl.task.place.lead.worker",
+  "worker-only": "pnl.task.place.lead.workerOnly",
 };
 
 // PLACEMENT_TAIL is what follows from that, which is *not* the same in the three panels.
@@ -5952,39 +5964,22 @@ const PLACEMENT_LEAD = {
 // tail.
 const PLACEMENT_TAIL = {
   workerType: {
-    "engine": `New models should prefer a <b>Job worker</b> and an <code>atlas worker</code> serving
-      that job type; these kinds keep working and are being moved out of the engine.`,
-    "engine-only": `Its work changes this server&rsquo;s own state rather than calling anything out,
-      so there is nothing to move onto a worker.`,
-    "worker": `Its jobs wait for a worker process serving this job type — atlas supervises one for
-      the kinds it offloads by default. That process holds the configured Worker&rsquo;s endpoint and
-      credential, so the credential lives where it is used; <b>Workers</b> in the Console shows which
-      names are served and which are configured nowhere (ADR-0168).`,
-    "worker-only": `The worker process holds the connection and its credential &mdash; the model
-      names the Worker and nothing else (ADR-0168).`,
+    "engine": "pnl.task.place.workerType.engine",
+    "engine-only": "pnl.task.place.workerType.engineOnly",
+    "worker": "pnl.task.place.workerType.worker",
+    "worker-only": "pnl.task.place.workerType.workerOnly",
   },
   script: {
-    "engine": `A script that hangs holds the loop with it. Atlas normally runs script tasks on a
-      worker it starts and supervises itself; <code>--in-process-connectors</code> is what turns
-      that off (ADR-0047).`,
-    "worker": `Atlas supervises a script worker of its own by default. The language&rsquo;s
-      interpreter has to be installed where that worker runs, which need not be this server
-      (ADR-0047).`,
+    "engine": "pnl.task.place.script.engine",
+    "worker": "pnl.task.place.script.worker",
   },
   dmn: {
-    "engine": `The engine&rsquo;s embedded DMN library evaluates it here. A decision table is
-      computation rather than a network call, so what moving it out buys is CPU time, not
-      protection from a slow endpoint.`,
-    "worker": `Its jobs wait for a worker serving the decision job type. <b>Workers</b> in the
-      Console shows whether one is running (ADR-0157).`,
+    "engine": "pnl.task.place.dmn.engine",
+    "worker": "pnl.task.place.dmn.worker",
   },
   temis: {
-    "engine": `A temis evaluation is a network call this server makes itself, so its latency is the
-      engine&rsquo;s — the case ADR-0164 is about. Moving it onto a worker also moves the
-      service&rsquo;s endpoint and credential there (ADR-0168).`,
-    "worker": `Its jobs wait for a worker serving this job type, and that worker holds the temis
-      endpoint and its credential. <b>Workers</b> in the Console shows whether one is running
-      (ADR-0157/0168).`,
+    "engine": "pnl.task.place.temis.engine",
+    "worker": "pnl.task.place.temis.worker",
   },
 };
 
@@ -6000,7 +5995,7 @@ function placementNoticeHTML(id, context) {
   const tail = (PLACEMENT_TAIL[context] || {})[placement] || "";
   // An in-engine kind is being warned about; one already on a worker is being described.
   const cls = placement === "worker" || placement === "worker-only" ? " stkind-notice-worker" : "";
-  return `<p class="stkind-notice${cls}">${lead} ${tail}</p>`;
+  return `<p class="stkind-notice${cls}">${tr(lead)} ${tail ? tr(tail) : ""}</p>`;
 }
 
 // WORKER_TYPE_INFO_GROUP is the title the setup section carries in the panel, and the
@@ -6031,8 +6026,8 @@ function workerTypeInfoHTML(id, namesAWorker, context = "workerType") {
   const open = namesAWorker && !configuredKinds.has(id);
   return `<div class="io-group wt-group" data-group="${esc(WORKER_TYPE_INFO_GROUP)}"
        data-standalone-group="1" data-open-default="${open ? "1" : "0"}">
-    <div class="io-group-head" title="What this Worker Type needs before a task of it runs">
-      <span class="io-group-title">${esc(WORKER_TYPE_INFO_GROUP)}</span>
+    <div class="io-group-head" title="${esc(tr("pnl.task.setupTitle"))}">
+      <span class="io-group-title">${esc(tr("pnl.task.setup"))}</span>
       <span class="io-group-chevron" aria-hidden="true">&#9662;</span>
     </div>
     <div class="io-group-body">${inner}</div>
@@ -6081,10 +6076,10 @@ function stKindHeadingHTML(cur) {
   // true here; only what precedes the first one decides.
   const firstGroup = fields.findIndex((f) => f.group);
   const leading = firstGroup === -1 ? fields.length : firstGroup;
-  if (leading > 0) return `<h3>${esc(cur.name)}</h3>`;
+  if (leading > 0) return `<h3 data-group="${esc(cur.name)}">${esc(kindText(cur.name))}</h3>`;
   return `<div class="pgroup-caption" data-standalone-group="1">
     ${cur.glyph ? `<span class="pgroup-caption-icon">${cur.glyph}</span>` : ""}
-    <span>${esc(cur.name)}</span>
+    <span>${esc(kindText(cur.name))}</span>
   </div>`;
 }
 
@@ -6093,8 +6088,8 @@ function stKindHeadingHTML(cur) {
 function serviceTaskKindHTML(bo) {
   const cur = serviceTaskKind(bo);
   const ext = findExt(bo, cur.ext) || {};
-  return `<h3>Worker type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search Worker type… (e.g. rest)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+  return `<h3 data-group="Worker type">${esc(tr("bpmn.group.workerType"))}</h3>
+    <input type="text" id="f-stkind-filter" placeholder="${esc(tr("bpmn.kind.search"))}" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SERVICE_TASK_KINDS, cur.id)}</div>
     ${stKindHeadingHTML(cur)}${workerTypeInfoHTML(cur.id, kindNamesAWorker(cur))}${stKindFieldsHTML(cur, ext)}`;
 }
@@ -6209,7 +6204,7 @@ function shopTaskMode(v) {
 function shopActionKeyProblem(v) {
   const key = (v || "").trim();
   if (key === "" || SHOP_ACTION_KEY.test(key)) return "";
-  return "Not an action key: a key is lower-case letters, digits and dashes, 1 to 64 characters (password-reset), so no product can declare this one.";
+  return tr("pnl.task.shop.keyProblem");
 }
 
 // shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
@@ -6219,26 +6214,26 @@ function shopTaskFieldsHTML(bo) {
   const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
   const mode = shopTaskMode(shop.mode);
   const modes = SHOP_TASK_MODES.map((m) =>
-    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(m.l)}</option>`).join("");
+    `<option value="${esc(m.v)}" ${m === mode ? "selected" : ""}>${esc(kindText(m.l))}</option>`).join("");
   let fields = "";
   for (const f of mode.fields) {
     const value = shop[f.key] || "";
     if (f.type === "select") {
       const opts = f.options.map((o) => {
         const { v, l } = selectOption(o);
-        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(l)}</option>`;
+        return `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(kindText(l))}</option>`;
       }).join("");
-      fields += `<label class="field"><span>${esc(f.label)}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span><select id="f-shop-${f.key}">${opts}</select></label>`;
     } else if (f.fx) {
       // A one-row textarea, as the Worker Types' fx fields are, so the fx toggle wired
       // after render can host the FEEL editor in place.
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <textarea id="f-shop-${f.key}" rows="1" spellcheck="false" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea></label>`;
     } else {
       // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
       // lists are filled once the message sources arrive, and the fields stay free text.
       const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
-      fields += `<label class="field"><span>${esc(f.label)}</span>
+      fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
       if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
     }
@@ -6246,12 +6241,12 @@ function shopTaskFieldsHTML(bo) {
       const problem = shopActionKeyProblem(value);
       fields += `<p class="muted" id="f-shop-action-err" style="font-size:12px;color:var(--danger)" ${problem ? "" : "hidden"}>${esc(problem)}</p>`;
     }
-    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(f.hint)}</p>`;
+    if (f.hint) fields += `<p class="muted" style="font-size:12px">${esc(kindText(f.hint))}</p>`;
   }
-  return `<h3>Shop</h3>
-    <label class="field"><span>Mode</span><select id="f-shop-mode">${modes}</select></label>
+  return `<h3 data-group="Shop">${esc(tr("bpmn.group.shop"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.task.shop.mode"))}</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
-    <p class="muted" style="font-size:12px">${esc(mode.hint)}</p>`;
+    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>`;
 }
 
 // shopActionSuggestions are the action keys and products a shop task may name, from the
@@ -6316,12 +6311,12 @@ function sendTaskKind(bo) {
 // drives it.
 function sendTaskKindHTML(modeler, bo) {
   const cur = sendTaskKind(bo);
-  const picker = `<h3>Type</h3>
-    <input type="text" id="f-stkind-filter" placeholder="Search type… (e.g. message, shop, mail)" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
+  const picker = `<h3 data-group="Type">${esc(tr("bpmn.group.type"))}</h3>
+    <input type="text" id="f-stkind-filter" placeholder="${esc(tr("pnl.task.send.search"))}" style="width:100%;box-sizing:border-box;margin-bottom:8px"/>
     <div id="f-stkind-list">${stKindRowsHTML(SEND_TASK_KINDS, cur.id)}</div>`;
   if (cur.id === "message") {
     return picker + messageFieldsHTML(modeler, bo,
-      "On reaching this send task the message is published; any instance waiting on it (a receive task or message catch) with a matching correlation key continues. The token then flows straight on.");
+      esc(tr("pnl.task.send.messageHint")));
   }
   if (cur.id === SEND_SHOP_KIND.id) return picker + shopTaskFieldsHTML(bo);
   const ext = findExt(bo, cur.ext) || {};
@@ -6461,8 +6456,8 @@ function applySendTaskKind(modeler, element, kindId) {
 function decisionInputRowHTML(i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
   return `<div class="dmn-input-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
-    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="Decision input name (from the decision)"/>
-    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="A known variable, or any FEEL expression over the instance's variables"/>
+    <input type="text" class="dmn-in-target" list="dmn-inputs-dl" value="${esc(target || "")}" placeholder="Season" style="flex:0 0 34%" title="${esc(tr("pnl.task.dmnIn.targetTitle"))}"/>
+    <input type="text" class="dmn-in-source" list="dmn-vars-dl" value="${esc(src)}" placeholder="order.season" style="flex:1" title="${esc(tr("pnl.task.dmnIn.sourceTitle"))}"/>
   </div>`;
 }
 
@@ -6513,14 +6508,14 @@ function ioMapDefaultName(kind) {
 // or a placeholder while the name is still blank.
 function ioMapTitle(kind, target) {
   const t = (target || "").trim();
-  return t || (kind === "in" ? "Input mapping" : "Output mapping");
+  return t || (kind === "in" ? tr("pnl.task.io.inputMapping") : tr("pnl.task.io.outputMapping"));
 }
 
 // dataWriteTitle is the collapsed-card label for one write of a data output
 // association: the member it targets, or what an empty target actually means — the
 // whole object, which is a different write and not a missing one.
 function dataWriteTitle(target) {
-  return (target || "").trim() || "the whole object";
+  return (target || "").trim() || tr("pnl.task.io.wholeObject");
 }
 
 // ioTrashIcon is the small trash glyph used to delete a mapping card (styled red by
@@ -6535,23 +6530,23 @@ const ioTrashIcon = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden
 // convention); it is shown stripped and re-prefixed on save.
 function ioMapCardHTML(kind, i, source, target) {
   const src = (source || "").replace(/^=\s*/, "");
-  const nameLabel = kind === "in" ? "Local variable name" : "Process variable name";
+  const nameLabel = kind === "in" ? tr("pnl.task.io.localName") : tr("pnl.task.io.processName");
   const cfg = kind === "in"
-    ? { np: "amount", sp: "order.total", nt: "Local variable the activity sees", st: "FEEL over the enclosing scope" }
-    : { np: "orderStatus", sp: "result.status", nt: "Variable promoted to the process scope", st: "FEEL over the activity's local scope" };
+    ? { np: "amount", sp: "order.total", nt: tr("pnl.task.io.localTitle"), st: tr("pnl.task.io.enclosingTitle") }
+    : { np: "orderStatus", sp: "result.status", nt: tr("pnl.task.io.promotedTitle"), st: tr("pnl.task.io.localScopeTitle") };
   return `<div class="io-map" data-kind="${kind}" data-i="${i}">
     <div class="io-map-head">
       <span class="io-map-chevron" aria-hidden="true">▾</span>
       <span class="io-map-title">${esc(ioMapTitle(kind, target))}</span>
-      <button type="button" class="io-map-del" title="Delete mapping" aria-label="Delete mapping">${ioTrashIcon}</button>
+      <button type="button" class="io-map-del" title="${esc(tr("pnl.task.io.delete"))}" aria-label="${esc(tr("pnl.task.io.delete"))}">${ioTrashIcon}</button>
     </div>
     <div class="io-map-body">
-      <label class="field"><span>${nameLabel}</span>
-        <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${cfg.np}" title="${cfg.nt}"/></label>
-      <label class="field"><span>Variable assignment value <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+      <label class="field"><span>${esc(nameLabel)}</span>
+        <input type="text" class="io-target" value="${esc(target || "")}" placeholder="${cfg.np}" title="${esc(cfg.nt)}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.io.assignValue"))} <i class="io-fx" title="${esc(tr("pnl.task.io.fxTitle"))}">fx</i></span>
         <div class="io-assign">
           <span class="io-eq" aria-hidden="true">=</span>
-          <input type="text" class="io-source" value="${esc(src)}" placeholder="${cfg.sp}" spellcheck="false" title="${cfg.st}"/>
+          <input type="text" class="io-source" value="${esc(src)}" placeholder="${cfg.sp}" spellcheck="false" title="${esc(cfg.st)}"/>
         </div></label>
     </div>
   </div>`;
@@ -6563,15 +6558,15 @@ function ioMapCardHTML(kind, i, source, target) {
 // it into the preceding <h3> section. kind is "in" or "out".
 function mappingGroupHTML(kind, params) {
   const meta = kind === "in"
-    ? { title: "Input mapping", wrap: "io-inputs",
-        hint: "Each mapping computes a variable the activity sees (its <b>local scope</b>) from a FEEL expression over the enclosing variables. Locals shadow inherited values and are dropped when the activity completes." }
-    : { title: "Output mapping", wrap: "io-outputs",
-        hint: "Each mapping promotes a value to the <b>process scope</b> from a FEEL expression over the activity's local scope (e.g. its result). With no output mapping the task's result merges into the process scope as-is." };
+    ? { title: "Input mapping", label: tr("pnl.task.io.inputMapping"), wrap: "io-inputs",
+        hint: tr("pnl.task.io.inputHint") }
+    : { title: "Output mapping", label: tr("pnl.task.io.outputMapping"), wrap: "io-outputs",
+        hint: tr("pnl.task.io.outputHint") };
   const cards = params.map((p, i) => ioMapCardHTML(kind, i, p.source, p.target)).join("");
   return `<div class="io-group" data-kind="${kind}" data-group="${meta.title}" data-standalone-group="1">
     <div class="io-group-head">
-      <span class="io-group-title">${meta.title}</span>
-      <button type="button" class="io-group-add" title="Add mapping" aria-label="Add mapping">＋</button>
+      <span class="io-group-title">${esc(meta.label)}</span>
+      <button type="button" class="io-group-add" title="${esc(tr("pnl.task.io.add"))}" aria-label="${esc(tr("pnl.task.io.add"))}">＋</button>
       <span class="io-group-count" title="Mappings">${params.length}</span>
       <span class="io-group-chevron" aria-hidden="true">▾</span>
     </div>
@@ -6683,20 +6678,20 @@ function agentParamCardHTML(i, p) {
   return `<div class="io-map" data-agent-param data-i="${i}">
     <div class="io-map-head">
       <span class="io-map-chevron" aria-hidden="true">▾</span>
-      <span class="io-map-title">${esc((p && p.name) || "parameter")}</span>
-      <button type="button" class="io-map-del" title="Delete parameter" aria-label="Delete parameter">${ioTrashIcon}</button>
+      <span class="io-map-title">${esc((p && p.name) || tr("pnl.task.agent.param"))}</span>
+      <button type="button" class="io-map-del" title="${esc(tr("pnl.task.agent.deleteParam"))}" aria-label="${esc(tr("pnl.task.agent.deleteParam"))}">${ioTrashIcon}</button>
     </div>
     <div class="io-map-body">
       <label class="field"><span>Name</span>
         <input type="text" class="ap-name" value="${esc((p && p.name) || "")}" placeholder="url"
-          title="The variable this argument is written into, in the activity's own scope"/></label>
-      <label class="field"><span>Type</span>
+          title="${esc(tr("pnl.task.agent.nameTitle"))}"/></label>
+      <label class="field"><span>${esc(tr("pnl.task.agent.type"))}</span>
         <select class="ap-type">
           ${AGENT_PARAM_TYPES.map((t) => `<option value="${t}" ${type === t ? "selected" : ""}>${t}</option>`).join("")}
         </select></label>
-      <label class="field"><span>Description</span>
+      <label class="field"><span>${esc(tr("pnl.task.agent.description"))}</span>
         <textarea class="ap-desc" rows="2" placeholder="Vollständige https-URL der Zinsseite">${esc((p && p.description) || "")}</textarea></label>
-      <label class="field checkbox"><input type="checkbox" class="ap-required" ${required ? "checked" : ""}/> <span>Required</span></label>
+      <label class="field checkbox"><input type="checkbox" class="ap-required" ${required ? "checked" : ""}/> <span>${esc(tr("pnl.task.agent.required"))}</span></label>
     </div>
   </div>`;
 }
@@ -6709,16 +6704,14 @@ function agentParamsHTML(bo) {
   const cards = params.map((p, i) => agentParamCardHTML(i, p)).join("");
   return `<div class="io-group" data-agent-param-group="1" data-group="Parameters" data-standalone-group="1">
     <div class="io-group-head">
-      <span class="io-group-title">Parameters</span>
-      <button type="button" class="io-group-add" title="Add parameter" aria-label="Add parameter">＋</button>
-      <span class="io-group-count" title="Parameters">${params.length}</span>
+      <span class="io-group-title">${esc(tr("pnl.task.agent.params"))}</span>
+      <button type="button" class="io-group-add" title="${esc(tr("pnl.task.agent.addParam"))}" aria-label="${esc(tr("pnl.task.agent.addParam"))}">＋</button>
+      <span class="io-group-count" title="${esc(tr("pnl.task.agent.params"))}">${params.length}</span>
       <span class="io-group-chevron" aria-hidden="true">▾</span>
     </div>
     <div class="io-group-body">
       <div class="io-map-list" id="agent-params">${cards}</div>
-      <p class="muted io-group-hint">What the agent has to supply when it calls this tool. Each one is written into this
-        activity's <b>own scope</b> under its name, so the activity reads it like any other variable. Describe each
-        parameter: the description is what stops the model guessing a value.</p>
+      <p class="muted io-group-hint">${tr("pnl.task.agent.paramsHint")}</p>
     </div>
   </div>`;
 }
@@ -6735,20 +6728,13 @@ function agentToolHTML(bo) {
   const container = agentContainerOf(bo);
   if (!container) return "";
   if (!isAgentTool(bo)) {
-    return `<h3>Agent tool</h3>
-      <p class="muted" style="font-size:12px">A sequence flow leads to this activity, so it is a later step of whichever
-        tool starts that chain — not a tool the agent can call. Only the activities no flow leads to are offered to the
-        model. Disconnect it to make it one.</p>`;
+    return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
+      <p class="muted" style="font-size:12px">${tr("pnl.task.agent.notTool")}</p>`;
   }
   const documented = readDocumentation(bo).trim() !== "";
-  return `<h3>Agent tool</h3>
-    <p class="muted" style="font-size:12px">The agent driving <b>${esc(container.id || "this subprocess")}</b> may call
-      this activity. It is offered under its own id — <code>${esc(bo.id || "")}</code> — and its <b>Documentation</b>
-      (General) is what the model reads to decide whether this is the tool for the job. Write when to use it, when not
-      to, and what it returns.</p>
-    ${documented ? "" : `<div class="warn-note">This tool has no documentation, so the agent is told that it exists and
-      not what it is for — it will call it on the strength of its id alone. Deploy warns about this
-      (<code>agent.tool</code>); it does not refuse it.</div>`}
+  return `<h3 data-group="Agent tool">${esc(tr("bpmn.group.agentTool"))}</h3>
+    <p class="muted" style="font-size:12px">${tr("pnl.task.agent.callable", { container: esc(container.id || tr("pnl.task.agent.thisSubprocess")), id: esc(bo.id || "") })}</p>
+    ${documented ? "" : `<div class="warn-note">${tr("pnl.task.agent.undocumented")}</div>`}
     ${agentParamsHTML(bo)}`;
 }
 
@@ -6822,17 +6808,14 @@ function repairFormHTML(bo, projectId) {
   if (!REPAIR_FORM_TYPES.has(bo.$type)) return "";
   const fd = findExt(bo, "zeebe:FormDefinition") || {};
   const cur = fd.formId || "";
-  return `<h3>Repair form</h3>
-    <label class="field"><span>Form</span>
+  return `<h3 data-group="Repair form">${esc(tr("bpmn.group.repairForm"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.task.repair.form"))}</span>
       <select id="f-form">
-        <option value="">&mdash; none &mdash;</option>
+        <option value="">${esc(tr("pnl.task.repair.none"))}</option>
         ${cur ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : ""}
       </select></label>
     ${formDoorsHTML(newFormBase(projectId))}
-    <p class="muted" style="font-size:12px">Shown to an operator when this task parks behind an incident, so they can correct
-      the values that matter instead of editing the whole variable set as JSON. Only the form's own fields are written, and the
-      change is audited like any other. Leave it unset and the raw editor is the only way — which is fine for a task with
-      nothing specific to say. <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>`;
+    <p class="muted" style="font-size:12px">${tr("pnl.task.repair.hint")}</p>`;
 }
 
 // multiInstanceHTML renders the Loop section for an activity: the mode — a BPMN
@@ -6865,42 +6848,42 @@ function multiInstanceHTML(bo) {
   const src = cardBody && !ic ? "cardinality" : "collection";
   const strip = (s) => (s || "").replace(/^=\s*/, "");
 
-  let html = `<h3>Loop</h3>
-    <label class="field"><span>Mode</span>
+  let html = `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.task.loop.mode"))}</span>
       <select id="f-mi-mode">
-        <option value="none" ${mode === "none" ? "selected" : ""}>None — runs once</option>
-        <option value="loop" ${mode === "loop" ? "selected" : ""}>Loop — repeat while a condition holds</option>
-        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>Multi-instance parallel — all iterations at once</option>
-        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>Multi-instance sequential — one after another</option>
+        <option value="none" ${mode === "none" ? "selected" : ""}>${esc(tr("pnl.task.loop.none"))}</option>
+        <option value="loop" ${mode === "loop" ? "selected" : ""}>${esc(tr("pnl.task.loop.loop"))}</option>
+        <option value="parallel" ${mode === "parallel" ? "selected" : ""}>${esc(tr("pnl.task.loop.parallel"))}</option>
+        <option value="sequential" ${mode === "sequential" ? "selected" : ""}>${esc(tr("pnl.task.loop.sequential"))}</option>
       </select></label>`;
   if (mode === "none") return html;
   if (mode === "loop") return html + standardLoopHTML(mi, strip);
 
-  html += `<label class="field"><span>Iterate over</span>
+  html += `<label class="field"><span>${esc(tr("pnl.task.loop.iterateOver"))}</span>
       <select id="f-mi-src">
-        <option value="collection" ${src === "collection" ? "selected" : ""}>A collection</option>
-        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>A fixed count</option>
+        <option value="collection" ${src === "collection" ? "selected" : ""}>${esc(tr("pnl.task.loop.collection"))}</option>
+        <option value="cardinality" ${src === "cardinality" ? "selected" : ""}>${esc(tr("pnl.task.loop.fixedCount"))}</option>
       </select></label>`;
   if (src === "collection") {
-    html += `<label class="field"><span>Input collection (FEEL)</span>
+    html += `<label class="field"><span>${esc(tr("pnl.task.loop.inputCollection"))}</span>
         <input type="text" id="f-mi-inputCollection" value="${esc(strip(ic))}" placeholder="orderLines"/></label>
-      <label class="field"><span>Input element</span>
+      <label class="field"><span>${esc(tr("pnl.task.loop.inputElement"))}</span>
         <input type="text" id="f-mi-inputElement" value="${esc(ie)}" placeholder="line"/></label>`;
   } else {
-    html += `<label class="field"><span>Loop cardinality (FEEL or a number)</span>
+    html += `<label class="field"><span>${esc(tr("pnl.task.loop.cardinality"))}</span>
         <input type="text" id="f-mi-cardinality" value="${esc(strip(cardBody))}" placeholder="3"/></label>`;
   }
-  html += `<label class="field"><span>Output collection <span class="muted">(optional)</span></span>
+  html += `<label class="field"><span>${esc(tr("pnl.task.loop.outputCollection"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-outputCollection" value="${esc(oc)}" placeholder="totals"/></label>
-    <label class="field"><span>Output element (FEEL) <span class="muted">(optional)</span></span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.outputElement"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-outputElement" value="${esc(strip(oe))}" placeholder="line.qty * line.price"/></label>
-    <label class="field"><span>Completion condition (FEEL) <span class="muted">(optional)</span></span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.completion"))} <span class="muted">(optional)</span></span>
       <input type="text" id="f-mi-completion" value="${esc(strip(compBody))}" placeholder="count(totals) > 2"/></label>
     <p class="muted" style="font-size:12px">${mode === "sequential"
-      ? "Runs one iteration at a time — the next starts only when the previous finishes."
-      : "Starts every iteration at once and waits until all finish."} ${src === "collection"
-      ? "One iteration per element of the <b>input collection</b>; the <b>input element</b> is the variable each iteration binds its item to (plus the built-in <code>loopCounter</code>)."
-      : "Runs <b>loop cardinality</b> times, each with a <code>loopCounter</code>."} An <b>output collection</b> gathers each iteration's <b>output element</b> into a list in order; a <b>completion condition</b> ends the loop early.</p>`;
+      ? tr("pnl.task.loop.hint.sequential")
+      : tr("pnl.task.loop.hint.parallel")} ${src === "collection"
+      ? tr("pnl.task.loop.hint.collection")
+      : tr("pnl.task.loop.hint.cardinality")} ${tr("pnl.task.loop.hint.tail")}</p>`;
   return html;
 }
 
@@ -6913,16 +6896,16 @@ function standardLoopHTML(sl, strip) {
   const cond = sl && sl.loopCondition ? (sl.loopCondition.body || "") : "";
   const max = sl && sl.loopMaximum != null ? String(sl.loopMaximum) : "";
   const before = !!(sl && sl.testBefore);
-  return `<label class="field"><span>Repeat while (FEEL)</span>
+  return `<label class="field"><span>${esc(tr("pnl.task.loop.repeatWhile"))}</span>
       <input type="text" id="f-mi-loopcond" value="${esc(strip(cond))}" placeholder="not(approved)"/></label>
-    <label class="field"><span>Check the condition</span>
+    <label class="field"><span>${esc(tr("pnl.task.loop.check"))}</span>
       <select id="f-mi-testbefore">
-        <option value="after" ${before ? "" : "selected"}>After each run — the activity always runs at least once</option>
-        <option value="before" ${before ? "selected" : ""}>Before each run — the activity may be skipped entirely</option>
+        <option value="after" ${before ? "" : "selected"}>${esc(tr("pnl.task.loop.after"))}</option>
+        <option value="before" ${before ? "selected" : ""}>${esc(tr("pnl.task.loop.before"))}</option>
       </select></label>
-    <label class="field"><span>Max iterations <span class="muted">(optional)</span></span>
-      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="no limit"/></label>
-    <p class="muted" style="font-size:12px">Runs the activity again and again while <b>repeat while</b> holds — one run at a time, each with a 1-based <code>loopCounter</code> the condition can read. What a run writes stays visible to the next run and to the rest of the process, so the loop can work towards its own exit. <b>Max iterations</b> is a hard stop; give a condition, a cap, or both. Without a cap the engine stops a loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more — a backstop for a condition that never turns false, not a limit on a cap you set yourself.</p>`;
+    <label class="field"><span>${esc(tr("pnl.task.loop.max"))} <span class="muted">(optional)</span></span>
+      <input type="number" min="1" id="f-mi-loopmax" value="${esc(max)}" placeholder="${esc(tr("pnl.task.loop.noLimit"))}"/></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.task.loop.standardHint")}</p>`;
 }
 
 // saveMultiInstance writes (or clears) an activity's bpmn:MultiInstanceLoopCharacteristics
@@ -6999,19 +6982,19 @@ function messageFieldsHTML(modeler, med, hint) {
     `<option value="${esc(m.id)}"${current && current.id === m.id ? " selected" : ""}>${esc(m.name || m.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Message name</span>
+    <label class="field"><span>${esc(tr("pnl.task.msg.name"))}</span>
       <input type="text" id="f-msgname" value="${esc(current.name || "")}" placeholder="payment-received" autocomplete="off"/></label>
     <datalist id="f-msgname-sources"></datalist>
     <p class="muted" style="font-size:12px" id="f-msgsources"></p>
-    <label class="field"><span>Correlation key (FEEL)</span>
+    <label class="field"><span>${esc(tr("pnl.task.msg.corrKey"))}</span>
       <textarea id="f-corrkey" rows="1" placeholder="orderId">${esc(messageCorrelationKey(current))}</textarea></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this message — a throw and a catch correlate when they use the same message and their keys evaluate equal.</p>` : "";
-  return `<h3>Message</h3>
-    <label class="field"><span>Message</span>
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.task.msg.shared"))}</p>` : "";
+  return `<h3 data-group="Message">${esc(tr("bpmn.group.message"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.task.msg.message"))}</span>
       <select id="f-msgref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.task.msg.none"))}</option>
         ${options}
-        <option value="__new__">＋ New message…</option>
+        <option value="__new__">${esc(tr("pnl.task.msg.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7080,16 +7063,14 @@ function newestRow(s) {
 function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
   if (!watches.length) {
     if (ownedByProduct || sentByModel) return "";
-    return `<span class="muted">No inbound event watch on this server publishes <b>${esc(want)}</b>. `
-      + `That is fine when the message is thrown inside a model or posted to <code>/api/v1/messages</code> — `
-      + `for a Jira or clio event, add a watch under <b>Workers → Events</b> in the Console.</span>`;
+    return `<span class="muted">${tr("pnl.event.watch.none", { name: esc(want) })}</span>`;
   }
   const parts = watches.map((s) => {
     const what = s.description ? ` — ${esc(s.description)}` : "";
-    const off = s.enabled ? "" : ' <span class="pill warn">off</span>';
+    const off = s.enabled ? "" : ` <span class="pill warn">${esc(tr("pnl.event.off"))}</span>`;
     return `<li>${esc(s.kind)} <b>${esc(s.connectorName)}</b>${what}${off}</li>`;
   }).join("");
-  return `Published by ${watches.length} inbound event watch${watches.length > 1 ? "es" : ""}:`
+  return esc(trPlural("pnl.event.watch.publishedBy", watches.length))
     + `<ul style="margin:4px 0 0 16px;padding:0">${parts}</ul>`;
 }
 
@@ -7101,13 +7082,12 @@ function watchSourcesHTML(want, watches, ownedByProduct, sentByModel) {
 function productOwnersHTML(actions, alsoWatched) {
   if (!actions.length) return "";
   const owners = [...new Set(actions.map((s) =>
-    `<b>${esc(s.action || "?")}</b> of <b>${esc(s.productName || s.productId || "?")}</b>`
+    tr("pnl.event.owner.actionOf", { action: esc(s.action || "?"), product: esc(s.productName || s.productId || "?") })
       + (s.effect ? ` (${esc(s.effect)})` : "")))];
   const clash = alsoWatched
-    ? ' <span class="pill warn">watched</span> Publishing the catalogue refuses an action whose message an inbound watch publishes.'
+    ? ` <span class="pill warn">${esc(tr("pnl.event.watched"))}</span> ${esc(tr("pnl.event.owner.clash"))}`
     : "";
-  return `<div style="margin-top:4px">Owned by product action${owners.length > 1 ? "s" : ""} ${owners.join(", ")}`
-    + ` — the order sends it.${clash}</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.owner.ownedBy", owners.length, { owners: owners.join(", ") })}${clash}</div>`;
 }
 
 // sendingProcessesHTML names the deployed processes whose newest version sends a message
@@ -7115,7 +7095,7 @@ function productOwnersHTML(actions, alsoWatched) {
 function sendingProcessesHTML(senders) {
   if (!senders.length) return "";
   const named = [...new Set(senders.map((s) => s.processId || "?"))].sort().map((pid) => `<code>${esc(pid)}</code>`);
-  return `<div style="margin-top:4px">Sent by deployed process${named.length > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.sentBy", named.length, { processes: named.join(", ") })}</div>`;
 }
 
 // messageReceiversHTML is a sending element's line (ADR-0446 §5): the deployed processes
@@ -7125,7 +7105,7 @@ function sendingProcessesHTML(senders) {
 function messageReceiversHTML(want, waiting) {
   const active = waiting.filter((s) => s.enabled !== false);
   if (!active.length) {
-    return `<div style="margin-top:4px">No deployed process waits for <b>${esc(want)}</b>: what this element sends is lost. ${eventsPageLink(want, "message")}</div>`;
+    return `<div style="margin-top:4px">${tr("pnl.event.msg.noReceiver", { name: esc(want) })} ${eventsPageLink(want, "message")}</div>`;
   }
   return waitingProcessesHTML(active).replace(/<\/div>$/, ` ${eventsPageLink(want, "message")}</div>`);
 }
@@ -7142,7 +7122,7 @@ function waitingProcessesHTML(waiting) {
   }
   const named = [...where.keys()].sort().map((k) => where.get(k));
   const n = new Set(waiting.map((s) => s.processId)).size;
-  return `<div style="margin-top:4px">Waited for by deployed process${n > 1 ? "es" : ""} ${named.join(", ")}.</div>`;
+  return `<div style="margin-top:4px">${trPlural("pnl.event.waitedBy", n, { processes: named.join(", ") })}</div>`;
 }
 
 // messageSourceKind says which kind of source a GET /api/v1/message-sources row is
@@ -7173,8 +7153,8 @@ const MESSAGE_SOURCE_PREFIX = "__source__:";
 // warning and not a lock: such a process may wait for a watch's event for a reason of its
 // own, beside its actions.
 const NOT_FOR_AN_ACTION = {
-  text: " — not for a product action",
-  title: "A catalogue product binds this process, and publishing the catalogue refuses an action whose message an inbound watch publishes.",
+  text: "pnl.event.notForAction",
+  title: "pnl.event.notForActionTitle",
 };
 
 // receivesMessages reports whether a message-bearing element waits for its message rather
@@ -7221,7 +7201,7 @@ function workerEventChoices(sources, declared) {
   }
   return [...byName.values()]
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : " — off") }));
+    .map((c) => ({ name: c.name, workers: c.workers.join(", ") + (c.enabled ? "" : ` — ${tr("pnl.event.off")}`) }));
 }
 
 // sourceChoices folds one kind of the listing's rows into one choice per message name,
@@ -7242,7 +7222,7 @@ function sourceChoices(rows, declared, describe) {
   }
   return [...byName.values()]
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : " — off") }));
+    .map((c) => ({ name: c.name, label: c.parts.sort().join(", ") + (c.enabled ? "" : ` — ${tr("pnl.event.off")}`) }));
 }
 
 // productActionChoices offers each product action's message, labelled with the product,
@@ -7286,8 +7266,8 @@ function addSourceGroup(select, data, label, choices, mark) {
   for (const c of choices) {
     const opt = document.createElement("option");
     opt.value = MESSAGE_SOURCE_PREFIX + c.name;
-    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? mark.text : "");
-    if (mark) opt.title = mark.title;
+    opt.textContent = (c.label ? `${c.name} — ${c.label}` : c.name) + (mark ? ` — ${tr(mark.text)}` : "");
+    if (mark) opt.title = tr(mark.title);
     group.appendChild(opt);
   }
   select.insertBefore(group, select.querySelector('option[value="__new__"]'));
@@ -7298,7 +7278,7 @@ function addSourceGroup(select, data, label, choices, mark) {
 // product action (NOT_FOR_AN_ACTION).
 function offerWorkerEvents(select, sources, declared, productBound) {
   const choices = workerEventChoices(sources, declared).map((c) => ({ name: c.name, label: c.workers }));
-  addSourceGroup(select, "worker-events", "Events from Workers", choices, productBound ? NOT_FOR_AN_ACTION : null);
+  addSourceGroup(select, "worker-events", tr("pnl.event.src.workerEvents"), choices, productBound ? NOT_FOR_AN_ACTION : null);
 }
 
 // offerMessageSources puts the names the server knows in front of the author who would
@@ -7316,15 +7296,15 @@ function offerMessageSources(select, fname, datalist, sources, modeler, bo) {
   let suggested;
   if (receivesMessages(bo)) {
     offerWorkerEvents(select, sources, declared, productBindsProcess(sources, owningProcessId(bo)));
-    addSourceGroup(select, "product-actions", "Product actions", productActionChoices(sources, declared));
-    addSourceGroup(select, "sending-processes", "Messages deployed models send", sendingProcessChoices(sources, declared));
+    addSourceGroup(select, "product-actions", tr("pnl.event.src.productActions"), productActionChoices(sources, declared));
+    addSourceGroup(select, "sending-processes", tr("pnl.event.src.modelsSend"), sendingProcessChoices(sources, declared));
     suggested = [
       ...workerEventChoices(sources, null).map((c) => ({ name: c.name, label: c.workers })),
       ...productActionChoices(sources, null),
       ...sendingProcessChoices(sources, null),
     ];
   } else if (throwsMessages(bo)) {
-    addSourceGroup(select, "waiting-processes", "Processes waiting for it", waitingProcessChoices(sources, declared));
+    addSourceGroup(select, "waiting-processes", tr("pnl.event.src.waiting"), waitingProcessChoices(sources, declared));
     suggested = waitingProcessChoices(sources, null);
   } else {
     return;
@@ -7351,15 +7331,15 @@ function messagesManagerHTML(modeler) {
   const rows = msgs.length
     ? msgs.map((m) => `
         <div class="msg-row" data-id="${esc(m.id)}">
-          <input class="msg-name" value="${esc(m.name || "")}" placeholder="message name"/>
-          <input class="msg-key" value="${esc(messageCorrelationKey(m))}" placeholder="correlationKey (FEEL)"/>
-          <button type="button" class="btn ghost danger msg-del" title="Delete message">✕</button>
+          <input class="msg-name" value="${esc(m.name || "")}" placeholder="${esc(tr("pnl.event.msg.namePh"))}"/>
+          <input class="msg-key" value="${esc(messageCorrelationKey(m))}" placeholder="${esc(tr("pnl.event.msg.keyPh"))}"/>
+          <button type="button" class="btn ghost danger msg-del" title="${esc(tr("pnl.event.msg.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No messages yet — add one, then reference it from a message throw/catch event.</p>`;
-  return `<h3>Messages</h3>
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.msg.empty"))}</p>`;
+  return `<h3 data-group="Messages">${esc(tr("bpmn.group.messages"))}</h3>
     <div class="msg-list">${rows}</div>
-    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="Add a message">＋ Add message</button>
-    <p class="muted" style="font-size:12px">A message links a <b>throw</b> event to the <b>catch</b> events waiting for it. They correlate when they share a message and their correlation keys evaluate equal.</p>`;
+    <button type="button" class="btn neutral" id="msg-add" style="margin-top:8px" title="${esc(tr("pnl.event.msg.addTitle"))}">${esc(tr("pnl.event.msg.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.msg.about")}</p>`;
 }
 
 // wireMessagesManager binds the Messages management section's inputs and buttons.
@@ -7397,16 +7377,16 @@ function timerDefOf(bo) {
 // the literal parser would take (ADR-0057).
 const TIMER_KINDS = {
   duration: {
-    prop: "timeDuration", label: "Duration", placeholder: "PT30M",
-    feel: `a <b>duration</b> in days and time (not months or years, whose length depends on the calendar) or its ISO-8601 text — e.g. <b>= wartezeit</b> or <b>= duration("P" + string(tage) + "D")</b>`,
+    prop: "timeDuration", label: "pnl.event.timer.duration", noun: "pnl.event.timer.durationNoun", placeholder: "PT30M",
+    feel: "pnl.event.timer.durationFeel",
   },
   date: {
-    prop: "timeDate", label: "Date & time", placeholder: "2026-08-01T09:00:00Z",
-    feel: `a <b>date and time</b> (or a date, read as its midnight) or its RFC 3339 text — e.g. <b>= frist</b> or <b>= date and time(termin)</b>`,
+    prop: "timeDate", label: "pnl.event.timer.date", noun: "pnl.event.timer.dateNoun", placeholder: "2026-08-01T09:00:00Z",
+    feel: "pnl.event.timer.dateFeel",
   },
   cycle: {
-    prop: "timeCycle", label: "Cycle", placeholder: "R/PT1H  ·  0 * * * *",
-    feel: `the text of a repeating interval or a cron expression — e.g. <b>= "R/PT" + string(stunden) + "H"</b>`,
+    prop: "timeCycle", label: "pnl.event.timer.cycle", noun: "pnl.event.timer.cycleNoun", placeholder: "R/PT1H  ·  0 * * * *",
+    feel: "pnl.event.timer.cycleFeel",
   },
 };
 
@@ -7431,15 +7411,15 @@ function timerFieldsHTML(timer, kinds, note, { constant = false } = {}) {
   const meta = TIMER_KINDS[kind];
   const body = (timer && timer[meta.prop] && timer[meta.prop].body) || "";
   const opts = kinds
-    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${TIMER_KINDS[k].label}</option>`)
+    .map((k) => `<option value="${k}" ${k === kind ? "selected" : ""}>${esc(tr(TIMER_KINDS[k].label))}</option>`)
     .join("");
   const feel = constant
-    ? `Switch on <b>fx</b> for a FEEL expression. A timer start has no instance yet, so the expression may read <b>no variables</b>; the deploy evaluates it once and refuses one that does not yield a valid ${esc(meta.label.toLowerCase())}.`
-    : `Switch on <b>fx</b> for a FEEL expression, evaluated when the timer is armed against the instance's variables. It must yield ${meta.feel}. If it yields neither, no timer is set: an incident is raised on the event, and resolving it once the data is fixed arms the timer again.`;
-  return `<h3>Timer</h3>
-    <label class="field"><span>Type</span>
+    ? tr("pnl.event.timer.feelConstant", { what: esc(tr(meta.noun)) })
+    : tr("pnl.event.timer.feelInstance", { feel: tr(meta.feel) });
+  return `<h3 data-group="Timer">${esc(tr("bpmn.group.timer"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.timer.type"))}</span>
       <select id="f-timerkind">${opts}</select></label>
-    <label class="field"><span>${meta.label}</span>
+    <label class="field"><span>${esc(tr(meta.label))}</span>
       <textarea id="f-timerval" rows="1" spellcheck="false" placeholder="${esc(meta.placeholder)}">${esc(body)}</textarea></label>
     <p class="muted" style="font-size:12px">${note} ${feel}</p>`;
 }
@@ -7631,22 +7611,22 @@ function signalFieldsHTML(modeler, sed, hint, listens) {
     `<option value="${esc(s.id)}"${current && current.id === s.id ? " selected" : ""}>${esc(s.name || s.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Signal name</span>
+    <label class="field"><span>${esc(tr("pnl.event.sig.name"))}</span>
       <input type="text" id="f-signame" value="${esc(current.name || "")}" placeholder="order-cancelled"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this signal — a broadcast reaches every catch, boundary, event subprocess, and start event of the same name.</p>` : "";
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.sig.shared"))}</p>` : "";
   // A receiving element is offered the events atlas emits as signals (ADR-0435); the
   // group is filled from the event catalogue once it answers, and #f-sigevent says
   // what the chosen atlas.* name means and what it carries. It is offered the names
   // the deployed models throw too (ADR-0447), and a throwing element is told who
   // receives its name (#f-sigreceivers).
-  return `<h3>Signal</h3>
-    <label class="field"><span>Signal</span>
+  return `<h3 data-group="Signal">${esc(tr("bpmn.group.signal"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.sig.label"))}</span>
       <select id="f-sigref" data-listens="${listens ? "1" : ""}">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.sig.none"))}</option>
         ${options}
-        ${listens ? `<optgroup label="Events atlas emits" id="f-sig-events"></optgroup>` : ""}
-        ${listens ? `<optgroup label="Signals deployed models throw" id="f-sig-deployed"></optgroup>` : ""}
-        <option value="__new__">＋ New signal…</option>
+        ${listens ? `<optgroup label="${esc(tr("pnl.event.sig.atlasEvents"))}" id="f-sig-events"></optgroup>` : ""}
+        ${listens ? `<optgroup label="${esc(tr("pnl.event.sig.deployed"))}" id="f-sig-deployed"></optgroup>` : ""}
+        <option value="__new__">${esc(tr("pnl.event.sig.new"))}</option>
       </select></label>
     ${fields}
     <div id="f-sigevent"></div>
@@ -7685,7 +7665,7 @@ function deployedSignalChoices(signals) {
 // eventsPageLink links a name to its row on the Console's Events page.
 function eventsPageLink(name, channel) {
   const href = `/#/console/events?name=${encodeURIComponent(name)}&channel=${channel}`;
-  return `<a href="${esc(href)}" target="_blank" rel="noopener">Events ↗</a>`;
+  return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(tr("pnl.event.eventsLink"))}</a>`;
 }
 
 // signalReceiversHTML is a throwing element's one line (ADR-0447 §6): how many deployed
@@ -7699,9 +7679,9 @@ function signalReceiversHTML(signals, name) {
   const by = [...new Set(((g && g.points) || [])
     .filter((p) => p.role !== "throw" && p.newest && !p.inactive).map((p) => p.processId))].sort();
   if (!by.length) {
-    return `No deployed process receives it: a signal is not buffered, so every throw is lost until one is deployed. ${eventsPageLink(n, "signal")}`;
+    return `${esc(tr("pnl.event.sig.noReceiver"))} ${eventsPageLink(n, "signal")}`;
   }
-  return `Received by ${by.length} deployed process${by.length > 1 ? "es" : ""}: ${by.map(esc).join(", ")}. ${eventsPageLink(n, "signal")}`;
+  return `${trPlural("pnl.event.sig.receivedBy", by.length, { processes: by.map(esc).join(", ") })} ${eventsPageLink(n, "signal")}`;
 }
 
 // eventCatalog is the event catalogue, asked for once per page (ADR-0435). A modeler
@@ -7722,14 +7702,13 @@ function signalEventNote(entries, name, listens) {
   if (!n.startsWith("atlas.")) return "";
   const e = entries.find((x) => !x.shaped && x.type === n);
   if (!listens) {
-    return `<p class="hint warn">${esc(n)} is a name atlas emits${e ? "" : " (or reserves)"}: a model that throws it speaks for atlas. Use a name of your own.</p>`;
+    return `<p class="hint warn">${esc(e ? tr("pnl.event.sig.atlasOwn", { name: n }) : tr("pnl.event.sig.atlasReserved", { name: n }))}</p>`;
   }
-  if (!e) return `<p class="hint warn">atlas emits no event named ${esc(n)}; this element would wait for something that never comes.</p>`;
+  if (!e) return `<p class="hint warn">${esc(tr("pnl.event.sig.noSuchEvent", { name: n }))}</p>`;
   const personal = (e.payload || []).filter((f) => f.data === "personal").map((f) => f.name);
   return `<p class="hint" data-event="${esc(e.type)}">${esc((e.meaning || {}).en || "")}${
-    personal.length ? ` The listener receives personal data: ${personal.map(esc).join(", ")}. ` +
-      "Only an administrator may deploy a model that listens to it." : ""
-  } <a href="/#/console/events" target="_blank" rel="noopener">Events ↗</a></p>`;
+    personal.length ? ` ${esc(tr("pnl.event.sig.personal", { fields: personal.join(", ") }))}` : ""
+  } <a href="/#/console/events" target="_blank" rel="noopener">${esc(tr("pnl.event.eventsLink"))}</a></p>`;
 }
 
 // signalsManagerHTML lists the model's signals for central management (add, rename,
@@ -7739,14 +7718,14 @@ function signalsManagerHTML(modeler) {
   const rows = sigs.length
     ? sigs.map((s) => `
         <div class="sig-row" data-id="${esc(s.id)}">
-          <input class="sig-name" value="${esc(s.name || "")}" placeholder="signal name"/>
-          <button type="button" class="btn ghost danger sig-del" title="Delete signal">✕</button>
+          <input class="sig-name" value="${esc(s.name || "")}" placeholder="${esc(tr("pnl.event.sig.namePh"))}"/>
+          <button type="button" class="btn ghost danger sig-del" title="${esc(tr("pnl.event.sig.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No signals yet — add one, then reference it from a signal throw/catch/boundary/start event.</p>`;
-  return `<h3>Signals</h3>
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.sig.empty"))}</p>`;
+  return `<h3 data-group="Signals">${esc(tr("bpmn.group.signals"))}</h3>
     <div class="sig-list">${rows}</div>
-    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="Add a signal">＋ Add signal</button>
-    <p class="muted" style="font-size:12px">A signal is a broadcast by name: a <b>throw</b> reaches every <b>catch</b>, boundary, event subprocess, and start event using the same signal — with no correlation key.</p>`;
+    <button type="button" class="btn neutral" id="sig-add" style="margin-top:8px" title="${esc(tr("pnl.event.sig.addTitle"))}">${esc(tr("pnl.event.sig.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.sig.about")}</p>`;
 }
 
 // wireSignalsManager binds the Signals management section's inputs and buttons.
@@ -7840,15 +7819,15 @@ function errorFieldsHTML(modeler, eed, hint) {
     `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.errorCode || e.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Error code</span>
+    <label class="field"><span>${esc(tr("pnl.event.err.code"))}</span>
       <input type="text" id="f-errcode" value="${esc(current.errorCode || "")}" placeholder="PAYMENT_FAILED"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this error — a thrown code is caught by the nearest enclosing error boundary or error event subprocess with the same code (an empty code is a catch-all).</p>` : "";
-  return `<h3>Error</h3>
-    <label class="field"><span>Error</span>
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.err.shared"))}</p>` : "";
+  return `<h3 data-group="Error">${esc(tr("bpmn.group.error"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.err.label"))}</span>
       <select id="f-errref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.err.none"))}</option>
         ${options}
-        <option value="__new__">＋ New error…</option>
+        <option value="__new__">${esc(tr("pnl.event.err.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -7860,14 +7839,14 @@ function errorsManagerHTML(modeler) {
   const rows = errs.length
     ? errs.map((e) => `
         <div class="err-row" data-id="${esc(e.id)}">
-          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="error code"/>
-          <button type="button" class="btn ghost danger err-del" title="Delete error">✕</button>
+          <input class="err-code" value="${esc(e.errorCode || "")}" placeholder="${esc(tr("pnl.event.err.codePh"))}"/>
+          <button type="button" class="btn ghost danger err-del" title="${esc(tr("pnl.event.err.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No errors yet — add one, then reference it from an error end event or error boundary.</p>`;
-  return `<h3>Errors</h3>
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.err.empty"))}</p>`;
+  return `<h3 data-group="Errors">${esc(tr("bpmn.group.errors"))}</h3>
     <div class="err-list">${rows}</div>
-    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="Add an error">＋ Add error</button>
-    <p class="muted" style="font-size:12px">An error is a scoped failure caught by code: an <b>error end event</b> (or a worker) throws it, and the nearest enclosing <b>error boundary</b> or <b>error event subprocess</b> with the same code catches it — always interrupting.</p>`;
+    <button type="button" class="btn neutral" id="err-add" style="margin-top:8px" title="${esc(tr("pnl.event.err.addTitle"))}">${esc(tr("pnl.event.err.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.err.about")}</p>`;
 }
 
 // wireErrorsManager binds the Errors management section's inputs and buttons.
@@ -7908,8 +7887,8 @@ function linkDefOf(bo) {
 // linkFieldsHTML renders the link-name field for a link throw or catch. A throw jumps to the
 // catch of the same name in the same scope; the name is the whole configuration (ADR-0133).
 function linkFieldsHTML(led, hint) {
-  return `<h3>Link</h3>
-    <label class="field"><span>Link name</span>
+  return `<h3 data-group="Link">${esc(tr("bpmn.group.link"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.link.name"))}</span>
       <input type="text" id="f-linkname" value="${esc(led.name || "")}" placeholder="ProceedHere"/></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
@@ -7926,8 +7905,8 @@ function conditionalDefOf(bo) {
 // the event fires when it becomes true (ADR-0137). ced is the bpmn:ConditionalEventDefinition.
 function conditionalFieldsHTML(ced, hint) {
   const condText = ((ced.condition && ced.condition.body) || "").replace(/^=\s*/, "");
-  return `<h3>Condition (FEEL)</h3>
-    <label class="field"><span>Expression</span>
+  return `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.cond.expression"))}</span>
       <textarea id="f-condition" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
     <p class="muted" style="font-size:12px">${hint}</p>`;
 }
@@ -7988,15 +7967,15 @@ function escalationFieldsHTML(modeler, eed, hint) {
     `<option value="${esc(e.id)}"${current && current.id === e.id ? " selected" : ""}>${esc(e.escalationCode || e.id)}</option>`
   ).join("");
   const fields = current ? `
-    <label class="field"><span>Escalation code</span>
+    <label class="field"><span>${esc(tr("pnl.event.esc.code"))}</span>
       <input type="text" id="f-esccode" value="${esc(current.escalationCode || "")}" placeholder="ESCALATE_TO_MANAGER"/></label>
-    <p class="muted" style="font-size:12px">Shared with every event that uses this escalation — a raised code is caught by the nearest enclosing escalation boundary or escalation event subprocess with the same code (an empty code is a catch-all).</p>` : "";
-  return `<h3>Escalation</h3>
-    <label class="field"><span>Escalation</span>
+    <p class="muted" style="font-size:12px">${esc(tr("pnl.event.esc.shared"))}</p>` : "";
+  return `<h3 data-group="Escalation">${esc(tr("bpmn.group.escalation"))}</h3>
+    <label class="field"><span>${esc(tr("pnl.event.esc.label"))}</span>
       <select id="f-escref">
-        <option value="">— none —</option>
+        <option value="">${esc(tr("pnl.event.esc.none"))}</option>
         ${options}
-        <option value="__new__">＋ New escalation…</option>
+        <option value="__new__">${esc(tr("pnl.event.esc.new"))}</option>
       </select></label>
     ${fields}
     <p class="muted" style="font-size:12px">${hint}</p>`;
@@ -8009,14 +7988,14 @@ function escalationsManagerHTML(modeler) {
   const rows = escs.length
     ? escs.map((e) => `
         <div class="esc-row" data-id="${esc(e.id)}">
-          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="escalation code"/>
-          <button type="button" class="btn ghost danger esc-del" title="Delete escalation">✕</button>
+          <input class="esc-code" value="${esc(e.escalationCode || "")}" placeholder="${esc(tr("pnl.event.esc.codePh"))}"/>
+          <button type="button" class="btn ghost danger esc-del" title="${esc(tr("pnl.event.esc.delete"))}">✕</button>
         </div>`).join("")
-    : `<p class="muted" style="font-size:12px;margin:0 0 8px">No escalations yet — add one, then reference it from an escalation throw/end event or escalation boundary.</p>`;
-  return `<h3>Escalations</h3>
+    : `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(tr("pnl.event.esc.empty"))}</p>`;
+  return `<h3 data-group="Escalations">${esc(tr("bpmn.group.escalations"))}</h3>
     ${rows}
-    <button type="button" class="btn ghost" id="esc-add" title="Add an escalation">＋ Add escalation</button>
-    <p class="muted" style="font-size:12px">An escalation is a matter raised up the scope chain: an <b>escalation throw</b> or <b>end event</b> raises it, and the nearest enclosing <b>escalation boundary</b> or <b>escalation event subprocess</b> with the same code catches it. Unlike an error, a catch may be <b>non-interrupting</b> (the activity keeps running) and an uncaught escalation is harmless.</p>`;
+    <button type="button" class="btn ghost" id="esc-add" title="${esc(tr("pnl.event.esc.addTitle"))}">${esc(tr("pnl.event.esc.add"))}</button>
+    <p class="muted" style="font-size:12px">${tr("pnl.event.esc.about")}</p>`;
 }
 
 // wireEscalationsManager binds the Escalations management section's inputs and buttons.
@@ -8354,36 +8333,36 @@ function startVarRowHTML(v, constant = false) {
   // A fact a namespace carries (server.environment) is named by Atlas, not the author: its
   // name, type and source are fixed, and only a fallback can be given.
   const info = bound && isNamespaceInfo(v.source, v.name);
-  const what = bound ? "Fallback value" : constant ? "Value" : "Default value";
+  const what = bound ? tr("pnl.event.sv.fallbackValue") : constant ? tr("pnl.event.sv.value") : tr("pnl.event.sv.defaultValue");
   // A start variable's default is what an instance starts with when its start does not
   // supply the variable, on every start path (ADR-0455) — not
   // only what the start forms prefill. Said where it is typed.
   const tip = constant ? ""
-    : ' title="What an instance starts with when its start does not supply this variable (API, timer, message, signal, call activity); the start forms prefill it"';
+    : ` title="${esc(tr("pnl.event.sv.defaultTip"))}"`;
   const defaultField = v.type === "json"
-    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? "fallback (optional)" : '{"key": "value"}'}' aria-label="${what} (JSON)"${tip}>${esc(v.default)}</textarea>`
-    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${bound ? "fallback (optional)" : constant ? "value" : "default"}" aria-label="${what}"${tip}/>`;
+    ? `<textarea class="sv-default sv-json-default" rows="2" placeholder='${bound ? esc(tr("pnl.event.sv.fallbackPh")) : '{"key": "value"}'}' aria-label="${esc(what)} (JSON)"${tip}>${esc(v.default)}</textarea>`
+    : `<input type="text" class="sv-default" value="${esc(v.default)}" placeholder="${esc(bound ? tr("pnl.event.sv.fallbackPh") : constant ? tr("pnl.event.sv.valuePh") : tr("pnl.event.sv.defaultPh"))}" aria-label="${esc(what)}"${tip}/>`;
   // A constant takes its value from the process model, or from what the installation
   // holds — for the application, or for every application — read as application.NAME or
   // server.NAME (ADR-0456).
   const src = constant ? (v.source || "") : "";
   const source = constant
-    ? `<select class="sv-source" aria-label="Source"${info ? " disabled" : ""} title="Where the value comes from: the process model, the application's constant on each installation (application.NAME), or the installation's own (server.NAME)">
-        <option value=""${src === "" ? " selected" : ""}>process</option>
-        <option value="application"${src === "application" ? " selected" : ""}>application</option>
-        <option value="server"${src === "server" ? " selected" : ""}>server</option>
+    ? `<select class="sv-source" aria-label="${esc(tr("pnl.event.sv.source"))}"${info ? " disabled" : ""} title="${esc(tr("pnl.event.sv.sourceTitle"))}">
+        <option value=""${src === "" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.process"))}</option>
+        <option value="application"${src === "application" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.application"))}</option>
+        <option value="server"${src === "server" ? " selected" : ""}>${esc(tr("pnl.event.sv.src.server"))}</option>
       </select>`
     : "";
   // A constant is never asked for, so "required" has nothing to mean on it.
   const required = constant ? ""
-    : `<label class="sv-req" title="Required"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> req</label>`;
+    : `<label class="sv-req" title="${esc(tr("pnl.event.sv.required"))}"><input type="checkbox" class="sv-required"${v.required ? " checked" : ""}/> ${esc(tr("pnl.event.sv.req"))}</label>`;
   return `<div class="sv-row${v.type === "json" ? " sv-row-json" : ""}">
-    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${constant ? "Constant name" : "Variable name"}"${info ? ` readonly title="${esc(v.source)}.${esc(v.name)} is filled by Atlas"` : ""}/>
-    <select class="sv-type" aria-label="Type"${info ? " disabled" : ""}>${opts}</select>
+    <input type="text" class="sv-name${constant && !info ? " sv-const-name" : ""}" value="${esc(v.name)}" placeholder="${constant ? "TENANT_ID" : "customer"}" aria-label="${esc(constant ? tr("pnl.event.sv.constName") : tr("pnl.event.sv.varName"))}"${info ? ` readonly title="${esc(tr("pnl.event.sv.filledByAtlas", { path: `${v.source}.${v.name}` }))}"` : ""}/>
+    <select class="sv-type" aria-label="${esc(tr("pnl.event.sv.type"))}"${info ? " disabled" : ""}>${opts}</select>
     ${source}
     ${defaultField}
     ${required}
-    <button type="button" class="sv-del icon-btn" title="Remove" aria-label="${constant ? "Remove constant" : "Remove variable"}">✕</button>
+    <button type="button" class="sv-del icon-btn" title="${esc(tr("pnl.event.sv.remove"))}" aria-label="${esc(constant ? tr("pnl.event.sv.removeConst") : tr("pnl.event.sv.removeVar"))}">✕</button>
   </div>`;
 }
 
@@ -8562,7 +8541,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (!inner || inner.stereotype === "enumeration") continue;
       const nested = (inner.attributes || []).filter((x) => x.name)
         .map((x) => option(`${a.name}.${x.name}`, `${a.name}.${x.name}${shape(x)}`)).join("");
-      if (nested) out += `<optgroup label="inside ${esc(a.name)} · ${esc(a.type)}">${nested}</optgroup>`;
+      if (nested) out += `<optgroup label="${esc(tr("pnl.main.member.inside", { name: a.name, type: a.type }))}">${nested}</optgroup>`;
     }
     return { html: out, lists: (path) => seen.includes(path) };
   }
@@ -8572,10 +8551,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   function memberSelectHTML(cls, current, attrs = `id="f-assoc-to"`) {
     const { html, lists } = memberOptionsHTML(cls, current);
     if (!html) return "";
-    return `<select ${attrs} title="The members ${esc(cls.name)} declares">
-      <option value=""${current ? "" : " selected"}>— the whole object —</option>
-      ${html}${strayOptionHTML(current, lists(current), `not a member of ${cls.name}`)}
-      <option ${OTHER}>Another member, not modelled yet…</option>
+    return `<select ${attrs} title="${esc(tr("pnl.main.member.title", { name: cls.name }))}">
+      <option value=""${current ? "" : " selected"}>${esc(tr("pnl.main.member.whole"))}</option>
+      ${html}${strayOptionHTML(current, lists(current), tr("pnl.main.member.notMember", { name: cls.name }))}
+      <option ${OTHER}>${esc(tr("pnl.main.member.other"))}</option>
     </select>`;
   }
 
@@ -8627,10 +8606,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const lit = (enumeration.literals || []).map((l) =>
       `<option value="${esc(l)}"${l === current ? " selected" : ""}>${esc(l)}</option>`).join("");
     const other = !current && String(stored || "").trim() !== "";
-    return `<select ${attrs} title="The values ${esc(enumeration.name)} declares">
-      <option value=""${current || other ? "" : " selected"}>— not set —</option>
+    return `<select ${attrs} title="${esc(tr("pnl.main.literal.title", { name: enumeration.name }))}">
+      <option value=""${current || other ? "" : " selected"}>${esc(tr("pnl.main.literal.notSet"))}</option>
       ${lit}
-      <option ${OTHER}${other ? " selected" : ""}>A FEEL expression instead…</option>
+      <option ${OTHER}${other ? " selected" : ""}>${esc(tr("pnl.main.literal.other"))}</option>
     </select>`;
   }
 
@@ -8652,10 +8631,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     const enumeration = enumTypingMember(cls, toBody);
     const chosen = enumeration ? literalOf(fromBody, enumeration) : "";
     const freeValue = `<label class="field"${enumeration && chosen ? " hidden" : ""} id="f-dw-expr-${i}-field">
-        <span>${enumeration ? "FEEL expression" : "FEEL value"} <i class="io-fx" title="This value is a FEEL expression">fx</i></span>
+        <span>${esc(enumeration ? tr("pnl.main.dw.feelExpr") : tr("pnl.main.dw.feelValue"))} <i class="io-fx" title="${esc(tr("pnl.main.dw.fxTitle"))}">fx</i></span>
         <input type="text" class="dw-from" id="f-dw-expr-${i}" value="${esc(fromBody || "")}" placeholder="=amount * 1.19" spellcheck="false"/></label>`;
     const valueField = enumeration
-      ? `<label class="field"><span>Value <span class="muted">(${esc(enumeration.name)})</span></span>
+      ? `<label class="field"><span>${esc(tr("pnl.main.dw.value"))} <span class="muted">(${esc(enumeration.name)})</span></span>
           ${literalSelectHTML(enumeration, chosen, fromBody, `class="dw-lit"`)}</label>
          ${freeValue}`
       : freeValue;
@@ -8663,12 +8642,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       <div class="io-map-head">
         <span class="io-map-chevron" aria-hidden="true">▾</span>
         <span class="io-map-title">${esc(dataWriteTitle(toBody))}</span>
-        <button type="button" class="io-map-del" title="Delete write" aria-label="Delete write">${ioTrashIcon}</button>
+        <button type="button" class="io-map-del" title="${esc(tr("pnl.main.dw.delete"))}" aria-label="${esc(tr("pnl.main.dw.delete"))}">${ioTrashIcon}</button>
       </div>
       <div class="io-map-body">
-        <label class="field"><span>Target member <span class="muted">(optional)</span></span>
+        <label class="field"><span>${esc(tr("pnl.main.dw.target"))} <span class="muted">(${esc(tr("pnl.main.optional"))})</span></span>
           ${picker || `<input type="text" class="dw-to" value="${esc(toBody || "")}" placeholder="name"/>`}</label>
-        ${picker ? otherFieldHTML(`f-dw-other-${i}`, "Member path", "customer.name") : ""}
+        ${picker ? otherFieldHTML(`f-dw-other-${i}`, tr("pnl.main.dw.memberPath"), "customer.name") : ""}
         ${valueField}
       </div>
     </div>`;
@@ -8690,9 +8669,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       (a.from && a.from.body) || "", (a.to && a.to.body) || "")).join("");
     return `<div class="io-group" data-write-group="1" data-group="Writes" data-standalone-group="1">
       <div class="io-group-head">
-        <span class="io-group-title">Writes ${esc(objectName)}</span>
-        <button type="button" class="io-group-add" title="Add a write" aria-label="Add a write">＋</button>
-        <span class="io-group-count" title="Writes">${assignments.length}</span>
+        <span class="io-group-title">${esc(tr("pnl.main.dw.groupTitle", { name: objectName }))}</span>
+        <button type="button" class="io-group-add" title="${esc(tr("pnl.main.dw.add"))}" aria-label="${esc(tr("pnl.main.dw.add"))}">＋</button>
+        <span class="io-group-count" title="${esc(tr("pnl.main.dw.count"))}">${assignments.length}</span>
         <span class="io-group-chevron" aria-hidden="true">▾</span>
       </div>
       <div class="io-group-body">
@@ -8718,12 +8697,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       `<optgroup label="${esc(g.name)}">${g.classes.map((c) => {
         const key = (c.identity || []).join(", ");
         return `<option value="${esc(c.name)}"${c.name === current ? " selected" : ""}>${esc(c.name)}${
-          key ? ` · key ${esc(key)}` : ""}</option>`;
+          key ? ` · ${esc(tr("pnl.main.class.key", { key }))}` : ""}</option>`;
       }).join("")}</optgroup>`).join("");
-    return `<select id="f-itemtype" title="The classes this application models">
-      <option value=""${current ? "" : " selected"}>— none —</option>
-      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), "not modelled yet")}
-      <option ${OTHER}>Another class, not modelled yet…</option>
+    return `<select id="f-itemtype" title="${esc(tr("pnl.main.class.title"))}">
+      <option value=""${current ? "" : " selected"}>${esc(tr("pnl.main.none"))}</option>
+      ${groups}${strayOptionHTML(current, vocab.classes.some((c) => c.name === current), tr("pnl.main.class.notModelled"))}
+      <option ${OTHER}>${esc(tr("pnl.main.class.other"))}</option>
     </select>`;
   }
 
@@ -8741,14 +8720,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         return `<li${isKey ? ' class="key"' : ""}><span class="n">${isKey ? "⚿ " : ""}${esc(a.name)}</span>` +
           `<span class="t">${esc(a.type || "")}${esc(mult)}</span></li>`;
       });
-    const empty = stereo === "enumeration" ? "no literals yet" : "no attributes yet";
+    const empty = esc(stereo === "enumeration" ? tr("pnl.main.class.noLiterals") : tr("pnl.main.class.noAttributes"));
     return `<div class="im-card">
       <div class="im-card-head">
         <span class="im-card-stereo">«${esc(stereo)}»</span>
         <b class="im-card-name">${esc(c.name)}</b>
         <span style="flex:1"></span>
         <a class="im-card-open" href="#/data/m/${encodeURIComponent(c.modelId)}" target="_blank" rel="noopener"
-           title="Open ${esc(c.modelName)} in the information model">Open ↗</a>
+           title="${esc(tr("pnl.main.class.openTitle", { name: c.modelName }))}">${esc(tr("pnl.main.class.open"))}</a>
       </div>
       <ul class="im-card-attrs">${rows.join("") || `<li class="none">${empty}</li>`}</ul>
     </div>`;
@@ -8835,7 +8814,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         .replaceElement(element, { type: "bpmn:Participant", isExpanded: true });
       selection.select(replaced);
       show(replaced); // now an executable pool: elements can be dropped in
-    } catch { toast("could not add a process to this pool", "err"); }
+    } catch { toast(tr("pnl.main.pool.addFailed"), "err"); }
   }
 
   // showPool renders the Details panel for a collaboration pool (Participant).
@@ -8843,21 +8822,21 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
   // identity — its name, and its start variables), or offers to create one when
   // the pool is an empty black box that can't yet hold elements.
   function showPool(element, bo) {
-    icon.textContent = "PL"; typename.textContent = "Pool";
-    nameEl.textContent = bo.name || bo.id || "(pool)";
+    icon.textContent = "PL"; typename.textContent = tr("pnl.main.head.pool");
+    nameEl.textContent = bo.name || bo.id || tr("pnl.main.head.poolUnnamed");
     const proc = bo.processRef;
     const poolFields = `
-      <h3>Pool</h3>
-      <label class="field"><span>Name</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
-      <label class="field"><span>Pool ID</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
-      ${documentationField(bo, "f-doc", "Who this participant is, what they are responsible for…")}`;
+      <h3 data-group="Pool">${esc(tr("bpmn.group.pool"))}</h3>
+      <label class="field"><span>${esc(tr("pnl.main.name"))}</span><input type="text" id="f-poolname" value="${esc(bo.name || "")}" placeholder="Teilnehmer"/></label>
+      <label class="field"><span>${esc(tr("pnl.main.pool.id"))}</span><input type="text" id="f-poolid" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", tr("pnl.main.pool.docPlaceholder"))}`;
 
     if (!proc) {
       body.innerHTML = `${poolFields}
-        <p class="muted" style="font-size:12px">A pool is a <b>participant</b> — it doesn't hold the flow itself, it <i>executes a process</i>. This pool has <b>no process</b>, so it can't contain elements or run.</p>
-        <h3>Process</h3>
-        <p class="muted" style="font-size:12px">Add the process that sits between the pool and its elements — the participant runs it, and the elements you draw live inside it.</p>
-        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="Add a process to this collaboration">+ Add a process</button>`;
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.noProcess")}</p>
+        <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.addProcessHint")}</p>
+        <button type="button" class="btn" id="f-addproc" style="margin-top:6px" title="${esc(tr("pnl.main.pool.addProcessTitle"))}">${esc(tr("pnl.main.pool.addProcess"))}</button>`;
       body.querySelector("#f-poolname").addEventListener("change", (e) => {
         try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
       });
@@ -8871,23 +8850,23 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     if (activeTab(root) === "implement") {
       const declared = readStartVariables(proc);
       startVarsHTML = `
-        <h3>Start variables</h3>
-        <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-        <p class="muted" style="font-size:12px">Declared on this pool's process, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks. With a start form, the ones the form does not ask for are asked beneath it. The engine ignores the declaration; it's authoring metadata, so an instance started through the API gets no default. A value nobody enters is a constant, below.</p>
-        <h3>Constants</h3>
+        <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
+        <div id="sv-list">${declared.map((v) => startVarRowHTML(v)).join("")}</div>
+        <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.pool.startVarsHint")}</p>
+        <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
         <div id="cv-list">${readConstants(proc).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
-        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-        <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+        <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
     }
     body.innerHTML = `${poolFields}
-      <p class="muted" style="font-size:12px">The pool is a <b>participant</b> that executes the process below. The elements live in that process — the pool only labels who runs it.</p>
-      <h3>Process</h3>
-      <label class="field"><span>Process name</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
-      <label class="field"><span>Process ID</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
-      <p class="muted" style="font-size:12px">Each pool deploys as its own process; the <b>Process ID</b> is that deployment's identity — instances group by it, and renaming it deploys a new process rather than a new version. The <i>first</i> pool's process id is also what this draft is stored under, so renaming that one moves the draft on the next Save.</p>
-      ${documentationField(proc, "f-procdoc", "What this process achieves, who it serves, when it runs…")}
-      <p class="muted" style="font-size:12px">Two descriptions, two subjects: the one above documents the <b>pool</b> (the participant), this one the <b>process</b> it executes. Every element inside takes its own.</p>
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.hint")}</p>
+      <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
+      <label class="field"><span>${esc(tr("pnl.main.pool.procName"))}</span><input type="text" id="f-procname" value="${esc(proc.name || "")}" placeholder="Order fulfillment"/></label>
+      <label class="field"><span>${esc(tr("pnl.main.processId"))}</span><input type="text" id="f-procid" value="${esc(proc.id || "")}" placeholder="order-fulfillment"/></label>
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.procIdHint")}</p>
+      ${documentationField(proc, "f-procdoc", tr("pnl.main.procDocPlaceholder"))}
+      <p class="muted" style="font-size:12px">${tr("pnl.main.pool.twoDocs")}</p>
       ${startVarsHTML}`;
     body.querySelector("#f-poolname").addEventListener("change", (e) => {
       try { modeling.updateProperties(element, { name: e.target.value }); } catch { /* stale */ }
@@ -8898,7 +8877,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     });
     body.querySelector("#f-procid").addEventListener("change", (e) => {
       const v = (e.target.value || "").trim();
-      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast("invalid process id", "err"); } }
+      if (v) { try { modeling.updateModdleProperties(element, proc, { id: v }); } catch { toast(tr("pnl.main.invalidProcessId"), "err"); } }
     });
     // Only the pool whose process keys the draft is renaming the artifact; the others
     // deploy under their own id and collide with nothing on disk.
@@ -8926,7 +8905,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (v === element.businessObject.id) return;
       if (!v) { show(element); return; }
       try { modeling.updateProperties(element, { id: v }); }
-      catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+      catch { toast(tr("pnl.main.invalidId"), "err"); show(element); }
     });
   }
 
@@ -8936,43 +8915,43 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // (this is how you rename a diagram; the id is the deployed process id).
       const rootBo = rootProcess(modeler);
       if (rootBo) {
-        icon.textContent = "PR"; typename.textContent = "Process";
-        nameEl.textContent = rootBo.name || rootBo.id || "(process)";
+        icon.textContent = "PR"; typename.textContent = tr("pnl.main.head.process");
+        nameEl.textContent = rootBo.name || rootBo.id || tr("pnl.main.head.processUnnamed");
         // The declaration editor is executable detail, so it lives on the
         // Implement tab (like a task's script or a branch's condition).
         let startVarsHTML = "";
         if (activeTab(root) === "implement") {
           const declared = readStartVariables(rootBo);
           startVarsHTML = `
-            <h3>Start variables</h3>
-            <div id="sv-list">${declared.map(startVarRowHTML).join("")}</div>
-            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="Add a variable">+ Add variable</button>
-            <p class="muted" style="font-size:12px">Declared here, these render as a typed form on <b>Deploy &amp; run</b> — with defaults and required checks — instead of raw JSON. With a start form on the start event, the ones the form does not ask for are asked beneath it, on Deploy &amp; run, Start instance and the Tasks app's Start. The engine ignores the declaration; it's authoring metadata, so an instance started through the API or a public link gets no default. A value nobody enters is a constant, below.</p>
-            <h3>Constants</h3>
+            <h3 data-group="Start variables">${esc(tr("bpmn.group.startVariables"))}</h3>
+            <div id="sv-list">${declared.map((v) => startVarRowHTML(v)).join("")}</div>
+            <button type="button" class="btn neutral" id="sv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addVariableTitle"))}">${esc(tr("pnl.main.addVariable"))}</button>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.proc.startVarsHint")}</p>
+            <h3 data-group="Constants">${esc(tr("bpmn.group.constants"))}</h3>
             <div id="cv-list">${readConstants(rootBo).map((c) => startVarRowHTML({ name: c.name, type: c.type, default: c.value, source: c.source }, true)).join("")}</div>
-            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="Add a constant">+ Add constant</button>
-            <p class="muted" style="font-size:12px">Values every instance starts with and nobody is asked for: set on every start path, before the start variables, and read by expressions, scripts and Worker Types like any variable. Nothing in the run can replace one; only an operator's correction can. Its name is written in capitals (TENANT_ID). Set its source to <b>application</b> or <b>server</b> and it is read as <code>application.NAME</code> or <code>server.NAME</code>, taking what the application — or the installation, for every application — holds on each installation (the application's Constants tab, Admin → Engine → Server constants), with the value here as an optional fallback. A constant is in the model and in every instance, so it is no place for a secret.</p>`;
+            <button type="button" class="btn neutral" id="cv-add" style="margin-top:6px" title="${esc(tr("pnl.main.addConstantTitle"))}">${esc(tr("pnl.main.addConstant"))}</button>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.constantsHint")}</p>`;
         }
         body.innerHTML = `
-          <h3>Process</h3>
-          <label class="field"><span>Name</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
-          <label class="field"><span>Process ID</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
-          <p class="muted" style="font-size:12px">The Process ID is the identity deployments and instances are grouped by, and it is also what this draft is stored under &mdash; so <b>renaming it moves the draft</b> to the new id on the next Save rather than leaving a copy behind at the old one. An id another draft already holds is refused, never overwritten. Renaming it and deploying creates a new process rather than a new version.</p>
-          ${documentationField(rootBo, "f-doc", "What this process achieves, who it serves, when it runs…")}
-          <p class="muted" style="font-size:12px">The <b>Documentation</b> is the process's own description — the place for the summary a reader needs before following the diagram. Every element takes one too; select it to write its part.</p>
-          <label class="field"><span>Version tag</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
-          <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>Executable</span></label>
-          <p class="muted" style="font-size:12px">An <b>executable</b> process can be started and offered in the start lists; leave it off for a descriptive-only diagram. <b>Version tag</b> is an optional label for this revision.</p>
-          <label class="field"><span>Instance TTL</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
-          <p class="muted" style="font-size:12px">A self-cleaning <b>time-to-live</b> for instances of this process, as an ISO-8601 duration (e.g. <code>P7D</code> = 7 days, <code>PT12H</code> = 12 hours, <code>PT30M</code> = 30 minutes). An instance that outlives its TTL is automatically terminated and moved to history — where it stays queryable and can still be exported. It bounds how long an instance may <i>run</i>, not how long its record is kept; <b>History TTL</b> below decides that. Leave empty for no TTL (instances live until they complete or are cancelled). Set it above the longest run you legitimately expect.</p>
-          <label class="field"><span>History TTL</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
-          <p class="muted" style="font-size:12px">How long a <b>finished</b> instance of this process is kept before it is deleted for good, as an ISO-8601 duration (e.g. <code>P30D</code> = 30 days). Completed and terminated instances stay listed, queryable and exportable until it elapses; then retention removes the instance and everything it carried — variables, step history, decisions. Leave empty to fall back to the server-wide retention age, if the operator configured one. The delete is permanent and only ever happens once the instance's events are safely exported.</p>
-          <label class="field"><span>Searchable variables</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
+          <h3 data-group="Process">${esc(tr("bpmn.group.process"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.name"))}</span><input type="text" id="f-pname" value="${esc(rootBo.name || "")}" placeholder="Order fulfillment"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.processId"))}</span><input type="text" id="f-pid" value="${esc(rootBo.id || "")}" placeholder="order-fulfillment"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.idHint")}</p>
+          ${documentationField(rootBo, "f-doc", tr("pnl.main.procDocPlaceholder"))}
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.docHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.versionTag"))}</span><input type="text" id="f-pver" value="${esc(rootBo.versionTag || "")}" placeholder="1.0.0"/></label>
+          <label class="pcheck"><input type="checkbox" id="f-pexec"${rootBo.isExecutable !== false ? " checked" : ""}/> <span>${esc(tr("pnl.main.proc.executable"))}</span></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.execHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.ttl"))}</span><input type="text" id="f-pttl" value="${esc(rootBo.instanceTtl || "")}" placeholder="P7D"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.ttlHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.historyTtl"))}</span><input type="text" id="f-phttl" value="${esc(rootBo.historyTtl || "")}" placeholder="P30D"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.historyTtlHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.searchable"))}</span><input type="text" id="f-psearch" value="${esc(rootBo.searchable || "")}" placeholder="identityId, item"/></label>
           <div id="f-psearch-marks" class="sv-marks"></div>
-          <p class="muted" style="font-size:12px">The variable names this process wants to be <b>found by</b>, comma-separated. A declared name is answered from a value index, so searching <code>identityId=MT-1998</code> over this version in Operations costs the number of matches instead of a read through every instance &mdash; and a trailing <code>*</code> asks for a prefix. Indexed is a variable at the instance's <b>top level</b> whose value is text, a number or true/false and stays under 256 bytes; a JSON structure or a variable local to one activity is not. A declared name is matched <b>exactly</b>, upper and lower case included, while an undeclared one keeps the read-through search it always had. Declaring nothing costs nothing, so name the one or two business keys you actually search by &mdash; a status that thousands of instances share is a poor declaration. It applies to instances started after the next deploy.</p>
-          <label class="field"><span>Personal variables</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
-          <label class="field"><span>Data subject variable</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
-          <p class="muted" style="font-size:12px">The variables that hold <b>personal data</b>, comma-separated, and the one variable holding the <b>id of the person</b> they are about. A declared name is enciphered under a key belonging to that person before it ever reaches the engine, and erasing the person destroys that one key &mdash; which makes every copy of every value unreadable at once, including the backups nobody can reach any more. The price is that the engine can no longer read the value: a declared variable may be written, carried and handed to a worker, but it may <b>not appear in any expression</b> the engine evaluates &mdash; no gateway or flow condition, no input/output mapping, no script. Build what you need from it inside the worker that needs the result, where the plaintext exists for one call. The deploy refuses a model that breaks this, and refuses the two declarations apart: personal data with no subject could never be erased, and a subject with nothing personal enciphers nothing.</p>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.searchHint")}</p>
+          <label class="field"><span>${esc(tr("pnl.main.proc.personal"))}</span><input type="text" id="f-ppersonal" value="${esc(rootBo.personal || "")}" placeholder="vorname, nachname"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.proc.subject"))}</span><input type="text" id="f-psubject" value="${esc(rootBo.dataSubject || "")}" placeholder="personalnummer"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.proc.personalHint")}</p>
           ${startVarsHTML}
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
@@ -8984,7 +8963,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         });
         body.querySelector("#f-pid").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
-          if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast("invalid process id", "err"); } }
+          if (v) { try { modeling.updateProperties(rootEl, { id: v }); } catch { toast(tr("pnl.main.invalidProcessId"), "err"); } }
         });
         // The Process ID is the draft's filename on the server, so it is checked as it
         // is typed: an id another draft already holds turns the field red here rather
@@ -9004,14 +8983,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // non-positive TTL at deploy (ADR-0085). Catch it here so the mistake surfaces
           // while authoring instead of as a failed deploy — but still store what was typed
           // so the field never silently drops the user's value.
-          if (v && !isValidTtl(v)) toast("Instance TTL must be a positive ISO-8601 duration, e.g. P7D or PT12H", "err");
+          if (v && !isValidTtl(v)) toast(tr("pnl.main.proc.ttlInvalid"), "err");
           try { modeling.updateProperties(rootEl, { instanceTtl: v || undefined }); } catch { /* ignore */ }
         });
         body.querySelector("#f-phttl").addEventListener("change", (e) => {
           const v = (e.target.value || "").trim();
           // Validated exactly like the instance TTL: warn while authoring, but store what
           // was typed — the deploy is the authority that rejects a bad value (ADR-0145).
-          if (v && !isValidTtl(v)) toast("History TTL must be a positive ISO-8601 duration, e.g. P30D or PT12H", "err");
+          if (v && !isValidTtl(v)) toast(tr("pnl.main.proc.historyTtlInvalid"), "err");
           try { modeling.updateProperties(rootEl, { historyTtl: v || undefined }); } catch { /* ignore */ }
         });
         // The marks are painted as the author types, not on change: the point of them is
@@ -9065,13 +9044,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // A collaboration root has no single process to rename; each pool
       // (participant) executes its own process, configured by selecting the pool.
       if (isCollaborationRoot(modeler)) {
-        icon.textContent = "CO"; typename.textContent = "Collaboration"; nameEl.textContent = "(collaboration)";
+        icon.textContent = "CO"; typename.textContent = tr("pnl.main.head.collaboration"); nameEl.textContent = tr("pnl.main.head.collaborationUnnamed");
         const collabEl = modeler.get("canvas").getRootElement();
         body.innerHTML = `
-          <h3>Collaboration</h3>
-          <p class="muted" style="font-size:12px">This diagram has several <b>pools</b>. A pool is a <b>participant</b> that <i>executes a process</i> — the process holds the flow, the pool just names who runs it, and each deploys as its own process. Select a pool to name it and configure the process it runs, or an element inside a pool to configure it. Pools talk to each other through <b>message events</b>: a throw event in one pool and a catch event in another that reference the <b>same message</b> below.</p>
-          ${documentationField(collabEl.businessObject, "f-doc", "What this collaboration is about, who the participants are…")}
-          <p class="muted" style="font-size:12px">The <b>Documentation</b> describes the collaboration as a whole; each pool and each element inside it takes its own.</p>
+          <h3 data-group="Collaboration">${esc(tr("bpmn.group.collaboration"))}</h3>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.collab.hint")}</p>
+          ${documentationField(collabEl.businessObject, "f-doc", tr("pnl.main.collab.docPlaceholder"))}
+          <p class="muted" style="font-size:12px">${tr("pnl.main.collab.docHint")}</p>
           ${messagesManagerHTML(modeler)}
           ${signalsManagerHTML(modeler)}
           ${errorsManagerHTML(modeler)}
@@ -9083,8 +9062,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         wireEscalationsManager(body, modeler, () => show(null));
         return;
       }
-      icon.textContent = "–"; typename.textContent = "No selection"; nameEl.textContent = "—";
-      body.innerHTML = `<p class="muted">Select an element to see its properties.</p>`;
+      icon.textContent = "–"; typename.textContent = tr("bpmn.props.noSelection"); nameEl.textContent = "—";
+      body.innerHTML = `<p class="muted">${esc(tr("bpmn.props.selectHint"))}</p>`;
       return;
     }
     const bo = element.businessObject || {};
@@ -9100,8 +9079,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       "bpmn:DataInputAssociation": "IA",
     };
     icon.textContent = badges[bo.$type] || type.slice(0, 2).toUpperCase();
-    typename.textContent = type;
-    nameEl.textContent = bo.name || bo.id || "(unnamed)";
+    const typeKey = "pnl.main.type." + type;
+    typename.textContent = tr(typeKey) === typeKey ? type : tr(typeKey);
+    nameEl.textContent = bo.name || bo.id || tr("pnl.main.head.unnamed");
 
     // A pool (Participant) is not itself executable — in BPMN it *executes* a
     // process: participant → processRef → the flow elements. The pool's own name
@@ -9130,11 +9110,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     // General: the descriptive view shared by both tabs. For a sequence flow the
     // name IS the diagram label (e.g. the branch outcome "Großauftrag").
     let html = `
-      <h3>General</h3>
-      <label class="field"><span>${isSeqFlow ? "Label" : "Name"}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
-      <label class="field"><span>ID</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
-      ${documentationField(bo, "f-doc", isUserTask ? "What the assignee has to check, decide or attach…" : isSeqFlow ? "When this path is taken, and why…" : "What this step is for, when it applies, who owns it…")}
-      <p class="muted" style="font-size:12px">The <b>Documentation</b> is prose about this element — what it is for, the rule behind it, who owns it. The engine never acts on it, but it is part of the model, so it travels with every deploy, export and version.${isUserTask ? " On a <b>user task</b> it is more than a note: the Tasks app shows it to the assignee as the <b>work instruction</b>, above the form — so write it to the person who will do the work." : ""}</p>`;
+      <h3 data-group="General">${esc(tr("bpmn.group.general"))}</h3>
+      <label class="field"><span>${esc(isSeqFlow ? tr("pnl.main.gen.label") : tr("pnl.main.name"))}</span><input type="text" id="f-name" value="${esc(bo.name || "")}"${isSeqFlow ? ' placeholder="Großauftrag"' : ""}/></label>
+      <label class="field"><span>${esc(tr("pnl.main.gen.id"))}</span><input type="text" id="f-id" value="${esc(bo.id || "")}" spellcheck="false"/></label>
+      ${documentationField(bo, "f-doc", isUserTask ? tr("pnl.main.gen.docUserTask") : isSeqFlow ? tr("pnl.main.gen.docFlow") : tr("pnl.main.gen.docStep"))}
+      <p class="muted" style="font-size:12px">${tr("pnl.main.gen.docHint")}${isUserTask ? " " + tr("pnl.main.gen.docHintUserTask") : ""}</p>`;
 
     // A data object is the data a process carries — first-class in Atlas, not just
     // decoration (ADR-0053). Its name is the engine's variable-like identity and its
@@ -9150,9 +9130,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const curName = (bo.dataObjectRef && (bo.dataObjectRef.name || bo.dataObjectRef.id)) || "";
       let pointsTo = "";
       if (names.length > 1) {
-        pointsTo = `<label class="field"><span>Points to</span>
+        pointsTo = `<label class="field"><span>${esc(tr("pnl.main.do.pointsTo"))}</span>
           <select id="f-pointsto">${names.map((n) => `<option value="${esc(n.id)}" ${n.name === curName ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></label>
-          <p class="muted" style="font-size:12px">Point this box at an existing data object to show <b>the same object in several places</b> — one logical object, so you can put it next to each activity without long arrows across the diagram.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.do.pointsToHint")}</p>`;
       }
       const itemType = itemTypeOf(bo.dataObjectRef);
       // A panel rendered before the fetch lands re-renders when it does. An empty
@@ -9181,39 +9161,33 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // simply nothing behind them, and now the panel says so and says what to do.
       const noApplication = !projectId;
       const nothingModelled = projectId && vocab.loaded && !vocab.classes.length;
-      html += `<h3>Data object</h3>
-        <label class="field"><span>Class <span class="muted">(what this datum is)</span></span>
+      html += `<h3 data-group="Data object">${esc(tr("bpmn.group.dataObject"))}</h3>
+        <label class="field"><span>${esc(tr("pnl.main.do.class"))} <span class="muted">(${esc(tr("pnl.main.do.classWhat"))})</span></span>
           ${vocab.classes.length ? classSelectHTML(itemType)
             : `<input type="text" id="f-itemtype" value="${esc(itemType)}" placeholder="Order"/>`}</label>
-        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", "Class name", "Order") : ""}
-        ${noApplication ? `<p class="im-nomatch">This diagram is not filed under an application, so there is
-          no information model to resolve a class against — and nothing here can be checked, which is why the
-          Problems panel is empty rather than clean. Open this process's <b>draft</b> from its application, or
-          deploy it from there, and the classes it models are offered here.</p>` : ""}
-        ${nothingModelled ? `<p class="im-nomatch">This application models no data yet, so there is no class to
-          point at. Draw one under <b>Data › Model</b> and it is offered here.
-          <a href="#/data" target="_blank" rel="noopener">Open Data ↗</a></p>` : ""}
+        ${vocab.classes.length ? otherFieldHTML("f-itemtype-other", tr("pnl.main.do.className"), "Order") : ""}
+        ${noApplication ? `<p class="im-nomatch">${tr("pnl.main.do.noApplication")}</p>` : ""}
+        ${nothingModelled ? `<p class="im-nomatch">${tr("pnl.main.do.nothingModelled")}
+          <a href="#/data" target="_blank" rel="noopener">${esc(tr("pnl.main.do.openData"))}</a></p>` : ""}
         ${known ? classCardHTML(known) : ""}
-        ${unresolved ? `<p class="im-nomatch">No class called <b>${esc(itemType)}</b> is modelled in this
-          application yet — the Problems panel lists it, and a deploy is not refused for it.
+        ${unresolved ? `<p class="im-nomatch">${tr("pnl.main.do.unresolved", { name: esc(itemType) })}
           ${vocab.models.length ? `<button type="button" class="btn ghost small" id="f-itemtype-create"
-            data-name="${esc(itemType)}">+ Model it now</button>` : ""}</p>` : ""}
-        <label class="field"><span>Data state</span>
-          ${declared.length ? `<select id="f-datastate" title="The states ${esc(known.name)} declares">
-              <option value=""${stateName ? "" : " selected"}>— none —</option>
+            data-name="${esc(itemType)}">${esc(tr("pnl.main.do.modelNow"))}</button>` : ""}</p>` : ""}
+        <label class="field"><span>${esc(tr("pnl.main.do.dataState"))}</span>
+          ${declared.length ? `<select id="f-datastate" title="${esc(tr("pnl.main.do.statesTitle", { name: known.name }))}">
+              <option value=""${stateName ? "" : " selected"}>${esc(tr("pnl.main.none"))}</option>
               ${declared.map((s) => `<option value="${esc(s.name)}"${s.name === stateName ? " selected" : ""}>${
-                esc(s.name)}${s.initial ? " · start" : ""}${s.final ? " · final" : ""}</option>`).join("")}
-              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), `not a state of ${known.name}`)}
-              <option ${OTHER}>Another state, not declared yet…</option>
+                esc(s.name)}${s.initial ? ` · ${esc(tr("pnl.main.do.stateStart"))}` : ""}${s.final ? ` · ${esc(tr("pnl.main.do.stateFinal"))}` : ""}</option>`).join("")}
+              ${strayOptionHTML(stateName, declared.some((s) => s.name === stateName), tr("pnl.main.do.notState", { name: known.name }))}
+              <option ${OTHER}>${esc(tr("pnl.main.do.otherState"))}</option>
             </select>`
             : `<input type="text" id="f-datastate" value="${esc(stateName)}" placeholder="received"/>`}</label>
-        ${declared.length ? otherFieldHTML("f-datastate-other", "State name", "received") : ""}
-        ${declared.length ? `<p class="muted" style="font-size:12px">These are the states
-          <b>${esc(known.name)}</b> declares in its lifecycle — <a href="#/data/m/${encodeURIComponent(known.modelId)}"
-          target="_blank" rel="noopener">open it ↗</a> to add one.</p>` : ""}
-        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>Collection (a list of items)</span></label>
+        ${declared.length ? otherFieldHTML("f-datastate-other", tr("pnl.main.do.stateName"), "received") : ""}
+        ${declared.length ? `<p class="muted" style="font-size:12px">${tr("pnl.main.do.statesHint", {
+          name: esc(known.name), href: esc("#/data/m/" + encodeURIComponent(known.modelId)) })}</p>` : ""}
+        <label class="field checkbox"><input type="checkbox" id="f-collection" ${collection ? "checked" : ""}/> <span>${esc(tr("pnl.main.do.collection"))}</span></label>
         ${pointsTo}
-        <p class="muted" style="font-size:12px">The <b>Class</b> is what this datum is, from the application's information model under <b>Data</b> — BPMN's <code>itemSubjectRef</code>. It is what lets two processes agree that their <code>order</code> is the same kind of thing, and what a write to a member of this object is checked against. A data object carries a value <i>and</i> a <b>data state</b> — <code>order [received]</code> → <code>[approved]</code>. The state set here is where the object starts each instance; a <b>data output association</b> (an arrow from an activity to this object) advances it and writes its value, a <b>data input association</b> reads it back, and the full state history is recorded per instance and survives restart. The <b>Name</b> is how the engine identifies it.</p>`;
+        <p class="muted" style="font-size:12px">${tr("pnl.main.do.hint")}</p>`;
     }
 
     // A data association is the arrow between an activity and a data object — it is
@@ -9236,19 +9210,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // One row per <assignment>, and one empty row for an arrow that has none yet,
         // so the arrow that writes one member looks and edits as it always did.
         const rows = (bo.assignment && bo.assignment.length) ? bo.assignment : [{}];
-        const hints = `<p class="muted io-group-hint">When the activity completes it writes <b>${esc(dataRefName(bo.targetRef))}</b>: each write's <b>FEEL value</b> (over the instance's variables) goes into its <b>Target member</b>, and the object's data state advances to the one on the target reference. Leave <b>Target member</b> empty to write the whole object; set it (e.g. <code>name</code>) to update just that field and keep the rest. Several writes are applied <b>in order</b> and recorded as <b>one</b> change to the object, so one activity that fills in a whole record is one arrow and not one arrow per field.</p>
-          ${writes ? `<p class="muted io-group-hint">The members offered are the ones
-            <b>${esc(writes.name)}</b> declares — <a href="#/data/m/${encodeURIComponent(writes.modelId)}"
-            target="_blank" rel="noopener">open it ↗</a> to add one. They say what this object is
-            <i>shaped</i> like, which is a different thing from what a <b>FEEL value</b> above can
-            read: that expression sees the instance's <b>variables</b>, and a data object is not one
-            of them.</p>` : ""}`;
+        const hints = `<p class="muted io-group-hint">${tr("pnl.main.dw.hint", { name: esc(dataRefName(bo.targetRef)) })}</p>
+          ${writes ? `<p class="muted io-group-hint">${tr("pnl.main.dw.membersHint", {
+            name: esc(writes.name), href: esc("#/data/m/" + encodeURIComponent(writes.modelId)) })}</p>` : ""}`;
         html += dataWritesGroupHTML(writes, rows, dataRefName(bo.targetRef), hints);
       } else {
-        html += `<h3>Reads data object</h3>
-          <label class="field"><span>Target variable</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
-          <label class="field"><span>Transform <span class="muted">(optional)</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
-          <p class="muted" style="font-size:12px">At activation this reads <b>${esc(dataRefName(bo.sourceRef))}</b> into the <b>Target variable</b>, so the activity's FEEL can use it. Leave <b>Transform</b> empty to copy the object's value; set it (the object is available under its name) to compute the value written into the variable.</p>`;
+        html += `<h3 data-group="Reads data object">${esc(tr("bpmn.group.readsDataObject"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.dr.target"))}</span><input type="text" id="f-assoc-to" value="${esc(toBody)}" placeholder="order"/></label>
+          <label class="field"><span>${esc(tr("pnl.main.dr.transform"))} <span class="muted">(${esc(tr("pnl.main.optional"))})</span></span><input type="text" id="f-assoc-from" value="${esc(fromBody)}" placeholder="=order.amount"/></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.dr.hint", { name: esc(dataRefName(bo.sourceRef)) })}</p>`;
       }
     }
 
@@ -9257,7 +9227,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // A receive task waits for a correlating message, then continues (ADR-0102). It is
         // an activity, so it takes the shared message picker (the receive task holds its
         // messageRef directly, which messageRefHolder resolves for the field handlers).
-        html += messageFieldsHTML(modeler, bo, "The receive task waits until this message is published (or thrown) with a matching correlation key, then continues. Attach a timer boundary event for a wait-or-time-out.");
+        html += messageFieldsHTML(modeler, bo, tr("pnl.main.rt.hint"));
         html += multiInstanceHTML(bo); // wait for the message once per iteration
       } else if (bo.$type === "bpmn:SendTask") {
         // The single outbound element (ADR-0112): a kind picker chooses what it sends —
@@ -9277,13 +9247,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       } else if (isActivity(bo)) {
         const t = bo.$type;
         html += `
-          <label class="field"><span>Task type</span>
+          <label class="field"><span>${esc(tr("pnl.main.task.type"))}</span>
             <select id="f-tasktype">
-              <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>Undefined task</option>
-              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>Script task (FEEL or a scripting language)</option>
-              <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>Service task (job worker)</option>
-              <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>Business rule task (DMN)</option>
-              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>User task</option>
+              <option value="bpmn:Task" ${t === "bpmn:Task" ? "selected" : ""}>${esc(tr("pnl.main.task.undefined"))}</option>
+              <option value="bpmn:ScriptTask" ${t === "bpmn:ScriptTask" ? "selected" : ""}>${esc(tr("pnl.main.task.script"))}</option>
+              <option value="bpmn:ServiceTask" ${t === "bpmn:ServiceTask" ? "selected" : ""}>${esc(tr("pnl.main.task.service"))}</option>
+              <option value="bpmn:BusinessRuleTask" ${t === "bpmn:BusinessRuleTask" ? "selected" : ""}>${esc(tr("pnl.main.task.businessRule"))}</option>
+              <option value="bpmn:UserTask" ${t === "bpmn:UserTask" ? "selected" : ""}>${esc(tr("pnl.main.task.user"))}</option>
             </select></label>`;
 
         if (t === "bpmn:ScriptTask") {
@@ -9293,44 +9263,44 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // which the task carries; both are still bpmn:ScriptTask.
           const js = findExt(bo, "atlas:JobScript");
           const lang = js ? (js.language || "powershell") : "feel";
-          const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>FEEL (built-in, runs in the engine)</option>`]
+          const opts = [`<option value="feel" ${lang === "feel" ? "selected" : ""}>${esc(tr("pnl.main.script.feelOption"))}</option>`]
             .concat(Object.entries(JOB_LANGS).map(([k, v]) =>
               `<option value="${k}" ${lang === k ? "selected" : ""}>${v.label}</option>`));
           // FEEL is evaluated inline by the engine and creates no job, so it has no
           // placement to report; every other language is a job the server either runs
           // itself or leaves for a worker — and it is offloaded by default, which this
           // panel never said (ADR-0183).
-          html += `<h3>Script</h3>
-            <label class="field"><span>Language${placementBadgeHTML(lang)}</span>
+          html += `<h3 data-group="Script">${esc(tr("bpmn.group.script"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.script.language"))}${placementBadgeHTML(lang)}</span>
               <select id="f-scriptlang">${opts.join("")}</select></label>
             ${placementNoticeHTML(lang, "script")}`;
           if (lang === "feel") {
             const s = findExt(bo, "zeebe:Script") || {};
             const exprText = (s.expression || "").replace(/^=\s*/, "");
-            html += `<label class="field"><span>Expression (FEEL)</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.script.expression"))}</span>
                 <textarea id="f-expr" rows="3" placeholder="amount * (1 + taxRate)">${esc(exprText)}</textarea></label>
-              <label class="field"><span>Result variable</span>
+              <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
                 <input type="text" id="f-result" value="${esc(s.resultVariable || "")}" placeholder="gross"/></label>`;
           } else {
             const meta = JOB_LANGS[lang] || JOB_LANGS.powershell;
-            html += `<label class="field"><span>Script (${meta.short})</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.script.script", { lang: meta.short }))}</span>
                 <textarea id="f-psbody" rows="6" spellcheck="false" placeholder='${meta.placeholder}'>${esc(js && js.source || "")}</textarea></label>
-              <label class="field"><span>Result variable</span>
+              <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
                 <input type="text" id="f-psresult" value="${esc((js && js.resultVariable) || "")}" placeholder="Greeting"/></label>
               <p class="muted" style="font-size:12px">${meta.hint}</p>
-              <h3>Failure handling</h3>
-              <label class="field"><span>Retries</span>
+              <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
+              <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
                 <input type="number" id="f-psretries" min="1" step="1" value="${esc((js && js.retries) || "")}" placeholder="3"/></label>
-              <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
+              <p class="muted" style="font-size:12px">${esc(kindText(RETRIES_FIELD.hint))}</p>
               <div class="feel-test" data-run-lang="${lang}">
-                <label class="field"><span>Test — sample variables (JSON)</span>
+                <label class="field"><span>${esc(tr("pnl.main.script.testVars"))}</span>
                   <textarea class="ps-run-vars" rows="2" spellcheck="false" placeholder='{ "Vorname": "Anna" }'></textarea></label>
                 <div class="feel-test-row">
-                  <button type="button" class="btn neutral ps-run" title="Run this script against the sample variables">Run</button>
+                  <button type="button" class="btn neutral ps-run" title="${esc(tr("pnl.main.script.runTitle"))}">${esc(tr("pnl.main.script.run"))}</button>
                   <span class="feel-test-out ps-run-out" aria-live="polite"></span>
                 </div>
                 <pre class="ps-run-detail" hidden></pre>
-                <p class="muted" style="font-size:12px">Runs the script through the real interpreter with these variables — no deploy needed. The language's worker must be enabled on the server.</p>
+                <p class="muted" style="font-size:12px">${tr("pnl.main.script.runHint")}</p>
               </div>`;
           }
         } else if (t === "bpmn:ServiceTask") {
@@ -9353,11 +9323,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           // select could not keep, since --offload-connectors moves either binding onto a
           // worker. The badge and notice below answer that from the server instead.
           const brtKind = mode === "connector" ? "temis" : "dmn";
-          html += `<h3>Called decision (DMN)</h3>
-            <label class="field"><span>Evaluation${placementBadgeHTML(brtKind)}</span>
+          html += `<h3 data-group="Called decision (DMN)">${esc(tr("bpmn.group.calledDecision"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.brt.evaluation"))}${placementBadgeHTML(brtKind)}</span>
               <select id="f-brt-mode">
-                <option value="local" ${mode === "local" ? "selected" : ""}>Embedded DMN — a decision deployed here</option>
-                <option value="connector" ${mode === "connector" ? "selected" : ""}>External (temis worker)</option>
+                <option value="local" ${mode === "local" ? "selected" : ""}>${esc(tr("pnl.main.brt.embedded"))}</option>
+                <option value="connector" ${mode === "connector" ? "selected" : ""}>${esc(tr("pnl.main.brt.external"))}</option>
               </select></label>
             ${placementNoticeHTML(brtKind, brtKind)}`;
           if (mode === "connector") {
@@ -9367,7 +9337,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // where it is — it belongs to the Evaluation field it sits under, and it is
             // one paragraph rather than a screen.
             html += workerTypeInfoHTML("temis", true, null);
-            html += `<label class="field"><span>Worker</span>
+            html += `<label class="field"><span>${esc(tr("pnl.main.worker"))}</span>
               <input type="text" id="f-connector" list="dl-connector" autocomplete="off" value="${esc((tc && tc.connector) || "")}" placeholder="risk-service"/>
               <datalist id="dl-connector"></datalist></label>
               <p class="muted" id="nt-connector" style="font-size:12px"></p>`;
@@ -9384,32 +9354,32 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             : "latest";
           const unknownBinding = !["latest", "version", "deployment"].includes(binding);
           const bindingField = mode === "local" ? `
-            <label class="field"><span>Binding</span>
+            <label class="field"><span>${esc(tr("pnl.main.binding"))}</span>
               <select id="f-brt-binding">
-                <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest version when the task runs</option>
-                <option value="version" ${binding === "version" ? "selected" : ""}>Version — a deployed version you choose</option>
-                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — the model deployed with this process</option>
-                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — not supported, the deploy refuses it</option>` : ""}
+                <option value="latest" ${binding === "latest" ? "selected" : ""}>${esc(tr("pnl.main.brt.latest"))}</option>
+                <option value="version" ${binding === "version" ? "selected" : ""}>${esc(tr("pnl.main.brt.version"))}</option>
+                <option value="deployment" ${binding === "deployment" ? "selected" : ""}>${esc(tr("pnl.main.brt.deployment"))}</option>
+                ${unknownBinding ? `<option value="${esc(binding)}" selected>${esc(binding)} — ${esc(tr("pnl.main.brt.unsupported"))}</option>` : ""}
               </select></label>
-            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>Version</span>
-              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : "— choose a deployed version —"}</option></select></label>` : "";
-          html += `<label class="field"><span>Decision</span>
-              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(cd.decisionId) + " (current)" : "— choose a decision —"}</option></select></label>
+            <label class="field" id="f-brt-version-wrap"${binding === "version" ? "" : " hidden"}><span>${esc(tr("pnl.main.brt.versionLabel"))}</span>
+              <select id="f-brt-version"><option value="${esc(pinnedVersion)}">${pinnedVersion ? "v" + esc(pinnedVersion) : esc(tr("pnl.main.brt.chooseVersion"))}</option></select></label>` : "";
+          html += `<label class="field"><span>${esc(tr("pnl.main.brt.decision"))}</span>
+              <select id="f-decision-pick"><option value="">${cd.decisionId ? esc(tr("pnl.main.brt.current", { id: cd.decisionId })) : esc(tr("pnl.main.brt.chooseDecision"))}</option></select></label>
             <div style="display:flex; gap:8px; margin:-4px 0 6px">
-              <button type="button" class="btn ghost" id="f-dmn-new" title="Create a new decision">＋ New decision</button>
-              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="Edit the selected decision">Edit</button>
+              <button type="button" class="btn ghost" id="f-dmn-new" title="${esc(tr("pnl.main.brt.newTitle"))}">${esc(tr("pnl.main.brt.new"))}</button>
+              <button type="button" class="btn ghost" id="f-dmn-edit"${cd.decisionId ? "" : " disabled"} title="${esc(tr("pnl.main.brt.editTitle"))}">${esc(tr("common.edit"))}</button>
             </div>
-            <label class="field"><span>Decision ID <span class="field-derived">derived</span></span>
-              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="pick a decision above" readonly title="Set by the decision picked above — no need to type it"/></label>
-            <label class="field"><span>Result variable</span>
+            <label class="field"><span>${esc(tr("pnl.main.brt.decisionId"))} <span class="field-derived">${esc(tr("pnl.main.brt.derived"))}</span></span>
+              <input type="text" id="f-decisionid" value="${esc(cd.decisionId || "")}" placeholder="${esc(tr("pnl.main.brt.decisionIdPlaceholder"))}" readonly title="${esc(tr("pnl.main.brt.decisionIdTitle"))}"/></label>
+            <label class="field"><span>${esc(tr("pnl.main.resultVar"))}</span>
               <input type="text" id="f-resultvar" value="${esc(cd.resultVariable || "")}" placeholder="dish"/></label>${bindingField}
-            <p class="muted" style="font-size:12px">Pick a decision to auto-fill its id, inputs and result variable. <b>Latest</b> evaluates the newest deployed version each time the task runs, so a newly deployed version takes effect without redeploying the process. <b>Version</b> evaluates the version you choose, whatever is deployed after it; it is an atlas setting, and Camunda ignores it and runs the newest. <b>Deployment</b> evaluates the model deployed together with this process.</p>
-            <h3>Failure handling</h3>
-            <label class="field"><span>Retries</span>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.hint")}</p>
+            <h3 data-group="Failure handling">${esc(tr("bpmn.group.failureHandling"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.retries"))}</span>
               <input type="number" id="f-brt-retries" min="1" step="1" value="${esc(cd.retries || "")}" placeholder="3"/></label>
-            <p class="muted" style="font-size:12px">${RETRIES_FIELD.hint}</p>
-            <h3>Decision inputs</h3>
-            <p class="muted" style="font-size:12px">Each row feeds one decision input. Pick a variable from the list or type any FEEL expression over the instance's variables. Leave a row's name blank to drop it.</p>
+            <p class="muted" style="font-size:12px">${esc(kindText(RETRIES_FIELD.hint))}</p>
+            <h3 data-group="Decision inputs">${esc(tr("bpmn.group.decisionInputs"))}</h3>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.brt.inputsHint")}</p>
             <div id="dmn-inputs">${inputs.map((p, i) => decisionInputRowHTML(i, p.source, p.target)).join("")}${decisionInputRowHTML(inputs.length, "", "")}</div>
             <div id="dmn-inputs-drift" class="dmn-drift" hidden></div>
             <datalist id="dmn-vars-dl">${varOpts}</datalist>
@@ -9420,27 +9390,25 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const sch = findExt(bo, "zeebe:TaskSchedule") || {};
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
-          html += `<h3>Form</h3>
-            <label class="field"><span>Linked form</span>
+          html += `<h3 data-group="Form">${esc(tr("bpmn.group.form"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.linkedForm"))}</span>
               <select id="f-form">
-                <option value="">— none —</option>
+                <option value="">${esc(tr("pnl.main.none"))}</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             ${formDoorsHTML(newFormHref(bo, true, projectId))}
-            <p class="muted" style="font-size:12px">The form the Tasks app renders for this task, submitted as its variables.
-              <b>＋ New form</b> creates one; coming back to the draft links it to this task.</p>
-            <h3>Assignment</h3>
-            <label class="field"><span>Assignee</span>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.ut.formHint")}</p>
+            <h3 data-group="Assignment">${esc(tr("bpmn.group.assignment"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.ut.assignee"))}</span>
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
-            <label class="field"><span>Candidate groups</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.candidateGroups"))}</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
-            <h3>Schedule</h3>
-            <label class="field"><span>Priority</span>
+            <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.ut.priority"))}</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
-            <label class="field"><span>Due in</span>
+            <label class="field"><span>${esc(tr("pnl.main.ut.due"))}</span>
               <textarea id="f-due" rows="1" spellcheck="false" placeholder="P2D, PT4H, PT30M">${esc(sch.dueDate || "")}</textarea></label>
-            <p class="muted" style="font-size:12px">An ISO-8601 duration measured from when the task appears
-              (e.g. <b>P2D</b> = 2 days, <b>PT4H</b> = 4 hours). Leave blank for no due date. Priority 0–100; higher sorts first.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.ut.dueHint")}</p>`;
         }
         // What this activity is to the agent, when it sits in an agent-driven ad-hoc
         // (ADR-0253). Empty everywhere else.
@@ -9471,7 +9439,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // subprocess is not a task. Input mappings write a variable into the
         // subprocess scope on entry (its inner elements see it, up the chain); output
         // mappings promote selected values to the enclosing scope on completion.
-        html += `<p class="muted" style="font-size:12px">Pass variables in and out of this subprocess. <b>Input mappings</b> create variables its inner elements see (its local scope); <b>output mappings</b> promote selected values back to the enclosing scope when it completes.</p>`;
+        html += `<p class="muted" style="font-size:12px">${tr("pnl.main.sub.hint")}</p>`;
         html += agentToolHTML(bo); // a subprocess can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: run this subprocess once per collection element
@@ -9489,44 +9457,44 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // in force — the trade-off the record accepted and asked the Modeler to carry.
         const cancelRemaining = bo.cancelRemainingInstances !== false;
         const ac = agentConnectorOf(bo);
-        html += `<h3>Ad-hoc subprocess</h3>
-          <label class="field"><span>What starts its activities${ac ? placementBadgeHTML("agent") : ""}</span>
+        html += `<h3 data-group="Ad-hoc subprocess">${esc(tr("bpmn.group.adHoc"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.adhoc.starts"))}${ac ? placementBadgeHTML("agent") : ""}</span>
             <select id="f-adhocmode">
-              <option value="all" ${ac ? "" : "selected"}>All at once — every unconnected activity starts on entry</option>
-              <option value="agent" ${ac ? "selected" : ""}>An agent decides — it picks which to run, round by round</option>
+              <option value="all" ${ac ? "" : "selected"}>${esc(tr("pnl.main.adhoc.all"))}</option>
+              <option value="agent" ${ac ? "selected" : ""}>${esc(tr("pnl.main.adhoc.agent"))}</option>
             </select></label>`;
         if (!ac) {
-          html += `<p class="muted" style="font-size:12px">Its contained activities are <b>not</b> connected by sequence flows: every activity with no incoming flow starts <b>at once</b> when the subprocess is entered, and runs independently. Use it for flexible, case-management work. With no completion condition below, it finishes when all of them are done.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.allHint")}</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">Entry starts <b>nothing</b>. Each round, the agent is offered the contained activities that no sequence flow leads to — those are its <b>tools</b> — and it either calls some of them or answers and finishes. What it may reach is this diagram and nothing else, which is what makes an agent's reach reviewable.</p>
-            <h3>Agent</h3>
-            <label class="field"><span>Worker</span>
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.agentHint")}</p>
+            <h3 data-group="Agent">${esc(tr("bpmn.group.agent"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.worker"))}</span>
               <input type="text" id="f-agent-connector" list="dl-agent-connector" autocomplete="off" value="${esc(ac.connector || "")}" placeholder="anthropic_pb"/>
               <datalist id="dl-agent-connector"></datalist></label>
             <p class="muted" id="nt-agent-connector" style="font-size:12px"></p>
-            <label class="field"><span>Model</span>
-              <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="leave empty for the Worker's own model"/></label>
-            <p class="muted" style="font-size:12px">The Worker holding the model endpoint and its credential — neither travels in the model (<b>General → Documentation</b> on this subprocess is the agent's <b>goal</b>: the sentence the model reads to know what it is here for). <b>Model</b> is which language model it asks, by the provider's own id; leave it empty and whatever that Worker is configured for runs.</p>
-            <label class="field"><span>May read</span>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.model"))}</span>
+              <input type="text" id="f-agent-model" value="${esc(ac.model || "")}" placeholder="${esc(tr("pnl.main.adhoc.modelPlaceholder"))}"/></label>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.workerHint")}</p>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.mayRead"))}</span>
               <input type="text" id="f-agent-context" value="${esc(ac.context || "")}" placeholder="dossier, kunde"/></label>
-            <p class="muted" style="font-size:12px">The variables this agent is given, by name, comma-separated. What an agent may <b>reach</b> is the diagram; what it may <b>read</b> is this list — so a reviewer sees both on the element. A name the instance does not carry is sent as <code>(not set)</code>, so the agent says so rather than inventing a value. Leave it empty and the agent knows only its goal, its tools, and what its own calls returned — which is a real design when its tools fetch what it needs.</p>
-            <h3>Tool results</h3>
-            <label class="field"><span>Collect results into</span>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.readHint")}</p>
+            <h3 data-group="Tool results">${esc(tr("bpmn.group.toolResults"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.collectInto"))}</span>
               <input type="text" id="f-agent-resultcoll" value="${esc(ac.resultCollection || "")}" placeholder="toolCallResults"/></label>
-            <label class="field"><span>What to collect (FEEL)</span>
+            <label class="field"><span>${esc(tr("pnl.main.adhoc.collectWhat"))}</span>
               <textarea id="f-agent-resultelem" rows="1" spellcheck="false" placeholder="toolCallResult">${esc((ac.resultElement || "").replace(/^=\s*/, ""))}</textarea></label>
-            <p class="muted" style="font-size:12px">After each tool call finishes, this expression is evaluated in that activity's scope and appended to the collection. The next round is given what came back — it is the agent's memory of its own run, and the reason a round can build on the one before it. Leave both empty and the agent sees nothing of what its calls returned.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.collectHint")}</p>`;
         }
-        html += `<h3>Completion condition (FEEL)</h3>
-          <label class="field"><span>Expression</span>
+        html += `<h3 data-group="Completion condition (FEEL)">${esc(tr("bpmn.group.completionCondition"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.expression"))}</span>
             <textarea id="f-adhoccond" rows="2" placeholder="approvals >= 2">${esc((bo.completionCondition && bo.completionCondition.body || "").replace(/^=\s*/, ""))}</textarea></label>
-          <p class="muted" style="font-size:12px">Re-evaluated each time a contained activity completes. The first time it is true the subprocess finishes. Leave empty to finish only when every contained activity is done.</p>`;
-        html += `<label class="field"><span>When it completes</span>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.condHint")}</p>`;
+        html += `<label class="field"><span>${esc(tr("pnl.main.adhoc.whenCompletes"))}</span>
             <select id="f-adhoccancel">
-              <option value="true" ${cancelRemaining ? "selected" : ""}>Cancel the activities still running</option>
-              <option value="false" ${cancelRemaining ? "" : "selected"}>Let them finish first</option>
+              <option value="true" ${cancelRemaining ? "selected" : ""}>${esc(tr("pnl.main.adhoc.cancelRunning"))}</option>
+              <option value="false" ${cancelRemaining ? "" : "selected"}>${esc(tr("pnl.main.adhoc.letFinish"))}</option>
             </select></label>
-          <p class="muted" style="font-size:12px">Applies when the completion condition becomes true while other contained activities are still running.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.adhoc.cancelHint")}</p>`;
         html += ioMappingsHTML(bo);
       } else if (bo.$type === "bpmn:CallActivity") {
         // A call activity invokes a *separate* deployed process as a child instance
@@ -9538,36 +9506,36 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const binding = ce.bindingType === "deployment" ? "deployment" : "latest";
         const propParent = ce.propagateAllParentVariables !== false; // default true (Zeebe)
         const propChild = ce.propagateAllChildVariables !== false;   // default true (Zeebe)
-        html += `<h3>Called process</h3>
-          <label class="field"><span>Process ID</span>
+        html += `<h3 data-group="Called process">${esc(tr("bpmn.group.calledProcess"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.processId"))}</span>
             <input type="text" id="f-call-processid" list="f-call-proc-list" autocomplete="off" value="${esc(ce.processId || "")}" placeholder="pruefe-auftrag"/>
             <datalist id="f-call-proc-list"></datalist></label>
           <div class="field-actions">
-            <button type="button" class="btn ghost small" id="f-call-open" title="Open the called process — its draft, or the newest deployed version. On the diagram, double-click the shape's ＋ (ADR-0076).">&#8627; Open called process</button>
-            <button type="button" class="btn ghost small" id="f-call-newproc" title="Create a new process for this call activity to call">&#43; Create new process</button>
+            <button type="button" class="btn ghost small" id="f-call-open" title="${esc(tr("pnl.main.call.openTitle"))}">&#8627; ${esc(tr("pnl.main.call.open"))}</button>
+            <button type="button" class="btn ghost small" id="f-call-newproc" title="${esc(tr("pnl.main.call.newProcTitle"))}">&#43; ${esc(tr("pnl.main.call.newProc"))}</button>
           </div>
-          <label class="field"><span>Binding</span>
+          <label class="field"><span>${esc(tr("pnl.main.binding"))}</span>
             <select id="f-call-binding">
-              <option value="latest" ${binding === "latest" ? "selected" : ""}>Latest — newest deployed version</option>
-              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>Deployment — pinned to this deploy</option>
+              <option value="latest" ${binding === "latest" ? "selected" : ""}>${esc(tr("pnl.main.call.latest"))}</option>
+              <option value="deployment" ${binding === "deployment" ? "selected" : ""}>${esc(tr("pnl.main.call.deployment"))}</option>
             </select></label>
-          <p class="muted" style="font-size:12px">Starts the process with this <b>id</b> as a child instance and waits for it to finish. <b>Latest</b> calls the newest deployed version; <b>Deployment</b> pins to the version deployed alongside this one.</p>
-          <h3>Variables</h3>
-          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>Pass all caller variables in</span></label>
-          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>Return all child variables out</span></label>
-          <p class="muted" style="font-size:12px">With a box <b>unchecked</b>, only the matching mappings below cross that direction — the child sees only what you map in, or the caller gets back only what you map out (isolation).</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.call.hint")}</p>
+          <h3 data-group="Variables">${esc(tr("bpmn.group.variables"))}</h3>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-parent" ${propParent ? "checked" : ""}/> <span>${esc(tr("pnl.main.call.propParent"))}</span></label>
+          <label class="field checkbox"><input type="checkbox" id="f-call-prop-child" ${propChild ? "checked" : ""}/> <span>${esc(tr("pnl.main.call.propChild"))}</span></label>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.call.propHint")}</p>`;
         html += agentToolHTML(bo); // a call activity can be an agent's tool too (ADR-0253)
         html += ioMappingsHTML(bo);
         html += multiInstanceHTML(bo); // ADR-0077: call the process once per collection element
       } else if (isDefaultFlow) {
-        html += `<h3>Condition (FEEL)</h3>
-          <p class="muted" style="font-size:12px">This is the gateway's <b>default flow</b> — taken when no other branch's condition matches, so it carries no condition of its own.</p>`;
+        html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
+          <p class="muted" style="font-size:12px">${tr("pnl.main.flow.defaultHint")}</p>`;
       } else if (isGatewayFlow) {
         const condText = ((bo.conditionExpression && bo.conditionExpression.body) || "").replace(/^=\s*/, "");
-        html += `<h3>Condition (FEEL)</h3>
-          <label class="field"><span>Expression</span>
+        html += `<h3 data-group="Condition (FEEL)">${esc(tr("bpmn.group.conditionFeel"))}</h3>
+          <label class="field"><span>${esc(tr("pnl.main.expression"))}</span>
             <textarea id="f-cond" rows="2" placeholder="amount > 100">${esc(condText)}</textarea></label>
-          <p class="muted" style="font-size:12px">Evaluated when the token reaches the gateway; the first branch whose condition holds is taken.</p>`;
+          <p class="muted" style="font-size:12px">${tr("pnl.main.flow.condHint")}</p>`;
       } else if (bo.$type === "bpmn:IntermediateCatchEvent") {
         const timer = timerDefOf(bo);
         const msg = messageDefOf(bo);
@@ -9575,19 +9543,17 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const link = linkDefOf(bo);
         const cond = conditionalDefOf(bo);
         if (timer) {
-          html += timerFieldsHTML(timer, ["duration", "date"], `The event waits, then continues (ADR-0054).
-            <b>Duration</b> waits that long (<b>PT30S</b>, <b>PT5M</b>, <b>P1DT2H</b>); <b>Date &amp; time</b> waits until that instant.
-            A catch fires once, so it has no cycle.`);
+          html += timerFieldsHTML(timer, ["duration", "date"], tr("pnl.main.ice.timer"));
         } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "The event waits until this message is published with a matching correlation key.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.ice.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "The event waits until a signal with this name is broadcast (by a throw or signal end event, in this or any other instance).", true);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.ice.sig"), true);
         } else if (link) {
-          html += linkFieldsHTML(link, "This is the landing point of a <b>link throw</b> with the same name in the same scope (an off-page connector). It does not wait — a token arriving via the link flows straight on. Draw it with no incoming sequence flow.");
+          html += linkFieldsHTML(link, tr("pnl.main.ice.link"));
         } else if (cond) {
-          html += conditionalFieldsHTML(cond, "The event waits until this boolean condition over the instance's variables becomes true — re-evaluated on every variable change — then continues. If it already holds when the token arrives, it passes straight through.");
+          html += conditionalFieldsHTML(cond, tr("pnl.main.ice.cond"));
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Conditional</b>, or <b>Link</b> intermediate catch event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ice.none")}</p>`;
         }
       } else if (bo.$type === "bpmn:IntermediateThrowEvent") {
         const msg = messageDefOf(bo);
@@ -9595,15 +9561,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const escl = escalationDefOf(bo);
         const link = linkDefOf(bo);
         if (msg) {
-          html += messageFieldsHTML(modeler, msg, "On reaching this event the message is published; any instance waiting on it with a matching correlation key continues.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.ite.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this event the signal is broadcast to every event waiting on that signal name, across all instances. The token then continues.", false);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.ite.sig"), false);
         } else if (escl) {
-          html += escalationFieldsHTML(modeler, escl, "On reaching this event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, and the token then continues on its outgoing flow (unless an interrupting catch aborts it). Uncaught, it is harmless.");
+          html += escalationFieldsHTML(modeler, escl, tr("pnl.main.ite.esc"));
         } else if (link) {
-          html += linkFieldsHTML(link, "On reaching this event the token jumps to the <b>link catch</b> with the same name in the same scope — an off-page connector / goto, in place of a sequence flow. Draw it with no outgoing sequence flow; deploy fails if no matching link catch exists.");
+          html += linkFieldsHTML(link, tr("pnl.main.ite.link"));
         } else {
-          html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Escalation</b>, or <b>Link</b> throw event, then configure it here.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ite.none")}</p>`;
         }
       } else if (bo.$type === "bpmn:BoundaryEvent") {
         // A boundary event is attached to an activity and arms while it runs. Its
@@ -9619,41 +9585,40 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cancel = cancelDefOf(bo);
         if (err) {
           // An error boundary is always interrupting — no cancelActivity toggle (ADR-0089).
-          html += `<h3>Behaviour</h3>
-            <p class="muted" style="font-size:12px">An <b>error boundary</b> is always <b>interrupting</b>: a matching thrown error cancels the attached activity (and its job) and routes the token out this event.</p>`;
-          html += errorFieldsHTML(modeler, err, "The event fires when the attached activity throws a matching error — an error end event inside it, a worker failing its job to the code, or an error propagating up from a called process.");
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.errBehaviour")}</p>`;
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.bnd.err"));
         } else if (cancel) {
           // A cancel boundary may attach only to a transaction and is always interrupting — no
           // cancelActivity toggle and no trigger fields (ADR-0108).
-          html += `<h3>Behaviour</h3>
-            <p class="muted" style="font-size:12px">A <b>cancel boundary</b> attaches only to a <b>transaction</b> and is always <b>interrupting</b>: when a cancel end event inside the transaction fires, its completed activities are compensated (in reverse order) and the token is then routed out this event. Draw it on a transaction subprocess.</p>`;
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.cancel")}</p>`;
         } else {
           const interrupting = bo.cancelActivity !== false;
-          html += `<h3>Behaviour</h3>
-            <label class="field"><span>On trigger</span>
+          html += `<h3 data-group="Behaviour">${esc(tr("bpmn.group.behaviour"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.onTrigger"))}</span>
               <select id="f-cancelactivity">
-                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the activity</option>
-                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+                <option value="true" ${interrupting ? "selected" : ""}>${esc(tr("pnl.main.bnd.interrupting"))}</option>
+                <option value="false" ${interrupting ? "" : "selected"}>${esc(tr("pnl.main.nonInterrupting"))}</option>
               </select></label>
-            <p class="muted" style="font-size:12px">Interrupting cancels the attached activity (and its job) and routes the token out this event; non-interrupting spawns a parallel token and lets the activity continue.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.bnd.behaviourHint")}</p>`;
           if (timer) {
             const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
             const cycleNote = interrupting
-              ? "An interrupting boundary fires once, so it has no cycle."
-              : "A non-interrupting boundary may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R/PT1H</b>) or cron (<b>0 * * * *</b>) — firing a fresh token each time.";
-            html += timerFieldsHTML(timer, kinds, `The event fires relative to the activity (ADR-0054).
-              <b>Duration</b> fires that long after it starts (<b>PT30S</b>, <b>PT5M</b>); <b>Date &amp; time</b> at a fixed instant.
+              ? tr("pnl.main.bnd.cycleOnce")
+              : tr("pnl.main.bnd.cycle");
+            html += timerFieldsHTML(timer, kinds, `${tr("pnl.main.bnd.timer")}
               ${cycleNote}`);
           } else if (msg) {
-            html += messageFieldsHTML(modeler, msg, "The event fires when this message is published with a matching correlation key.");
+            html += messageFieldsHTML(modeler, msg, tr("pnl.main.bnd.msg"));
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event fires when a signal with this name is broadcast (in this or any other instance) while the activity runs.", true);
+            html += signalFieldsHTML(modeler, sig, tr("pnl.main.bnd.sig"), true);
           } else if (escl) {
-            html += escalationFieldsHTML(modeler, escl, "The event fires when the attached activity raises a matching escalation — an escalation throw/end event inside it, or one propagating up from a called process. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler while the activity keeps going.");
+            html += escalationFieldsHTML(modeler, escl, tr("pnl.main.bnd.esc"));
           } else if (cond) {
-            html += conditionalFieldsHTML(cond, "The event fires while the activity runs, when this boolean condition over the instance's variables becomes true — re-evaluated on every variable change. Interrupting cancels the activity and routes out this event; non-interrupting runs the handler once while the activity keeps going.");
+            html += conditionalFieldsHTML(cond, tr("pnl.main.bnd.cond"));
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> boundary event, then configure its trigger here.</p>`;
+            html += `<p class="muted" style="font-size:12px">${tr("pnl.main.bnd.none")}</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent" && isEventSubStart(element)) {
@@ -9669,36 +9634,35 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cond = conditionalDefOf(bo);
         if (err) {
           // An error event subprocess is always interrupting — no toggle (ADR-0089).
-          html += `<h3>Event subprocess trigger</h3>
-            <p class="muted" style="font-size:12px">An <b>error event subprocess</b> is always <b>interrupting</b>: a matching thrown error terminates the enclosing scope's other work, then runs this handler.</p>`;
-          html += errorFieldsHTML(modeler, err, "The event subprocess fires when its enclosing scope throws a matching error, terminating the scope's other work and running this handler.");
+          html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.esp.errBehaviour")}</p>`;
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.esp.err"));
         } else {
           const interrupting = bo.isInterrupting !== false;
-          html += `<h3>Event subprocess trigger</h3>
-            <label class="field"><span>On trigger</span>
+          html += `<h3 data-group="Event subprocess trigger">${esc(tr("bpmn.group.eventSubTrigger"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.onTrigger"))}</span>
               <select id="f-interrupting">
-                <option value="true" ${interrupting ? "selected" : ""}>Interrupting — cancel the enclosing scope</option>
-                <option value="false" ${interrupting ? "" : "selected"}>Non-interrupting — run alongside</option>
+                <option value="true" ${interrupting ? "selected" : ""}>${esc(tr("pnl.main.esp.interrupting"))}</option>
+                <option value="false" ${interrupting ? "" : "selected"}>${esc(tr("pnl.main.nonInterrupting"))}</option>
               </select></label>
-            <p class="muted" style="font-size:12px">This start event triggers the event subprocess while its enclosing scope (the process or subprocess) runs. <b>Interrupting</b> terminates the scope's other work, then runs this handler; <b>non-interrupting</b> runs it in parallel and can fire again.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.esp.behaviourHint")}</p>`;
           if (timer) {
             const kinds = interrupting ? ["duration", "date"] : ["duration", "date", "cycle"];
             const cycleNote = interrupting
-              ? "An interrupting timer fires once, so it has no cycle."
-              : "A non-interrupting timer may <b>Cycle</b> — an ISO-8601 repeating interval (<b>R3/PT1H</b>) or cron (<b>0 * * * *</b>) — firing the handler each time.";
-            html += timerFieldsHTML(timer, kinds, `The event subprocess fires on this schedule while its scope runs (ADR-0082).
-              <b>Duration</b> fires that long after the scope is entered; <b>Date &amp; time</b> at a fixed instant.
+              ? tr("pnl.main.esp.cycleOnce")
+              : tr("pnl.main.esp.cycle");
+            html += timerFieldsHTML(timer, kinds, `${tr("pnl.main.esp.timer")}
               ${cycleNote}`);
           } else if (msg) {
-            html += messageFieldsHTML(modeler, msg, "The event subprocess fires when this message is published with a matching correlation key, while its scope runs.");
+            html += messageFieldsHTML(modeler, msg, tr("pnl.main.esp.msg"));
           } else if (sig) {
-            html += signalFieldsHTML(modeler, sig, "The event subprocess fires when a signal with this name is broadcast while its scope runs. A non-interrupting trigger re-arms and can fire again.", true);
+            html += signalFieldsHTML(modeler, sig, tr("pnl.main.esp.sig"), true);
           } else if (escl) {
-            html += escalationFieldsHTML(modeler, escl, "The event subprocess fires when its enclosing scope raises a matching escalation. Interrupting terminates the scope's other work first; non-interrupting runs this handler alongside the still-running scope.");
+            html += escalationFieldsHTML(modeler, escl, tr("pnl.main.esp.esc"));
           } else if (cond) {
-            html += conditionalFieldsHTML(cond, "The event subprocess fires when this boolean condition over the scope's variables becomes true — re-evaluated on every variable change. Interrupting terminates the scope's other work first; non-interrupting runs this handler once alongside the still-running scope.");
+            html += conditionalFieldsHTML(cond, tr("pnl.main.esp.cond"));
           } else {
-            html += `<p class="muted" style="font-size:12px">Use the wrench icon on this start event to give it a <b>Timer</b>, <b>Message</b>, <b>Signal</b>, <b>Error</b>, <b>Escalation</b>, or <b>Conditional</b> trigger, then configure it here.</p>`;
+            html += `<p class="muted" style="font-size:12px">${tr("pnl.main.esp.none")}</p>`;
           }
         }
       } else if (bo.$type === "bpmn:StartEvent") {
@@ -9706,31 +9670,28 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
         if (timer) {
-          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], `A timer start event fires on this schedule with no incoming token (ADR-0051).
-            <b>Duration</b> and <b>Date &amp; time</b> fire once — that long after deploy, or at that instant;
-            <b>Cycle</b> recurs, either an ISO-8601 repeating interval (<b>R/PT1H</b>, <b>R3/P1D</b>) or a cron expression (<b>0 * * * *</b>).`, { constant: true });
+          html += timerFieldsHTML(timer, ["duration", "date", "cycle"], tr("pnl.main.start.timer"), { constant: true });
         } else if (msg) {
-          html += messageFieldsHTML(modeler, msg, "A message start event: publishing this message starts a new instance of this process, matched by message name (the correlation key is shared with the throwing event but is not yet evaluated for starts).");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.start.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "A signal start event: broadcasting this signal starts a new instance of this process, matched by signal name. One broadcast starts every deployed process with a matching signal start.", true);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.start.sig"), true);
         } else {
           const fd = findExt(bo, "zeebe:FormDefinition") || {};
           const curForm = fd.formId || "";
-          html += `<h3>Start form</h3>
-            <label class="field"><span>Linked form</span>
+          html += `<h3 data-group="Start form">${esc(tr("bpmn.group.startForm"))}</h3>
+            <label class="field"><span>${esc(tr("pnl.main.linkedForm"))}</span>
               <select id="f-form">
-                <option value="">— none —</option>
+                <option value="">${esc(tr("pnl.main.none"))}</option>
                 ${curForm ? `<option value="${esc(curForm)}" selected>${esc(curForm)}</option>` : ""}
               </select></label>
             ${formDoorsHTML(newFormHref(bo, false, projectId))}
-            <p class="muted" style="font-size:12px">Shown before the process starts — from the Tasks app's <b>Start</b> view — its data becomes the instance's start variables.
-              <b>＋ New form</b> creates one; coming back to the draft links it to this start event.</p>
-            <p class="muted" style="font-size:12px">A plain start event begins an instance directly. Use the wrench icon on the element to make this a <b>Timer</b>, <b>Message</b>, or <b>Signal</b> start event instead.</p>`;
+            <p class="muted" style="font-size:12px">${tr("pnl.main.start.formHint")}</p>
+            <p class="muted" style="font-size:12px">${tr("pnl.main.start.plain")}</p>`;
         }
       } else if (bo.$type === "bpmn:EventBasedGateway") {
         // A deferred choice: no configuration of its own — the branches are the
         // catch events it points at (ADR-0110).
-        html += `<p class="muted" style="font-size:12px">An <b>event-based gateway</b> is a <b>deferred choice</b>: reaching it arms every branch's catch event at once (each outgoing flow must lead to a <b>message</b>, <b>timer</b>, or <b>signal</b> intermediate catch event), and the branch whose event fires <b>first</b> is taken — the others are cancelled. The classic use is a request with a timeout (a message catch raced against a timer catch).</p>`;
+        html += `<p class="muted" style="font-size:12px">${tr("pnl.main.ebg.hint")}</p>`;
       } else if (bo.$type === "bpmn:EndEvent") {
         const msg = messageDefOf(bo);
         const sig = signalDefOf(bo);
@@ -9738,33 +9699,33 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const escl = escalationDefOf(bo);
         const cancel = cancelDefOf(bo);
         if (msg) {
-          html += messageFieldsHTML(modeler, msg, "On reaching this end event the message is published; any instance waiting on it with a matching correlation key continues. The instance then ends.");
+          html += messageFieldsHTML(modeler, msg, tr("pnl.main.end.msg"));
         } else if (sig) {
-          html += signalFieldsHTML(modeler, sig, "On reaching this end event the signal is broadcast to every event waiting on that signal name, across all instances. The instance then ends.", false);
+          html += signalFieldsHTML(modeler, sig, tr("pnl.main.end.sig"), false);
         } else if (err) {
-          html += errorFieldsHTML(modeler, err, "On reaching this end event the error is thrown, aborting its scope and propagating up to the nearest matching error boundary or error event subprocess. Uncaught, it raises an incident.");
+          html += errorFieldsHTML(modeler, err, tr("pnl.main.end.err"));
         } else if (escl) {
-          html += escalationFieldsHTML(modeler, escl, "On reaching this end event the escalation is raised, propagating up to the nearest matching escalation boundary or event subprocess, then this path ends. Unlike an error end, a matching catch may be non-interrupting, and an uncaught escalation is harmless (no incident).");
+          html += escalationFieldsHTML(modeler, escl, tr("pnl.main.end.esc"));
         } else if (cancel) {
           // A cancel end event is only meaningful inside a transaction (ADR-0108).
-          html += `<p class="muted" style="font-size:12px">A <b>cancel end event</b> cancels its enclosing <b>transaction</b>: its completed activities are compensated (in reverse order), then the token is routed out the transaction's <b>cancel boundary</b>. Use it only inside a transaction subprocess.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.end.cancel")}</p>`;
         } else {
-          html += `<p class="muted" style="font-size:12px">A plain end event ends the instance. Use the wrench icon on the element to make this a <b>Message</b>, <b>Signal</b>, <b>Error</b>, or <b>Escalation</b> end event.</p>`;
+          html += `<p class="muted" style="font-size:12px">${tr("pnl.main.end.plain")}</p>`;
         }
       }
     } else if (isGatewayFlow && !isDefaultFlow) {
       // Design tab: point to where the executable rule lives.
       const has = bo.conditionExpression && bo.conditionExpression.body;
       html += `<p class="muted" style="font-size:12px">${has
-        ? "A FEEL condition is set on this branch — edit it in the <b>Implement</b> tab."
-        : "Set this branch's FEEL condition in the <b>Implement</b> tab."}</p>`;
+        ? tr("pnl.main.flow.designHas")
+        : tr("pnl.main.flow.designSet")}</p>`;
     }
     // A loop marker on an element that has no Loop section above is one Atlas does not
     // run: the shape would show a ∥/≡/↻ icon the engine ignores. Say so rather than let
     // the diagram claim behavior it doesn't have (ADR-0133).
     if (bo.loopCharacteristics && !html.includes("f-mi-mode")) {
-      html += `<h3>Loop</h3>
-        <p class="muted" style="font-size:12px">This element carries a <b>loop marker</b> atlas does not execute here — it will run <b>once</b>, whatever the icon suggests. Loops run on <b>activities</b>: every task kind, call activities and subprocesses (a message-kind send task is a throw, not an activity). Remove the marker (the wrench icon on the shape) or move the work to one of those.</p>`;
+      html += `<h3 data-group="Loop">${esc(tr("bpmn.group.loop"))}</h3>
+        <p class="muted" style="font-size:12px">${tr("pnl.main.loop.hint")}</p>`;
     }
     body.innerHTML = html;
 
@@ -9795,7 +9756,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (v === bo.id) return;
         if (!v) { show(element); return; } // empty is not a valid id → revert to the current one
         try { modeling.updateProperties(element, { id: v }); }
-        catch { toast("invalid id — must be unique and a valid identifier", "err"); show(element); }
+        catch { toast(tr("pnl.main.invalidId"), "err"); show(element); }
       });
     }
 
@@ -9852,11 +9813,11 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         if (vocab.models.length > 1) {
           const { openPickModal } = await import("./pickmodal.js");
           const picked = await openPickModal({
-            title: `Model ${name}`,
-            label: "Information model",
+            title: tr("pnl.main.do.modelTitle", { name }),
+            label: tr("pnl.main.do.modelLabel"),
             options: vocab.models.map((m) => ({ value: m.id, label: m.name })),
-            hint: `${name} is added as a business object with no attributes yet. Open the model to give it its business key.`,
-            okLabel: "Add class",
+            hint: tr("pnl.main.do.modelHint", { name }),
+            okLabel: tr("pnl.main.do.modelOk"),
           });
           if (!picked) return;
           target = vocab.models.find((m) => m.id === picked.option.value);
@@ -9884,10 +9845,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             });
           }
           await loadVocabulary();
-          toast(`${name} added to ${target.name} — open it to give it its business key`, "ok");
+          toast(tr("pnl.main.do.added", { name, model: target.name }), "ok");
         } catch (err) {
           fcreate.disabled = false;
-          toast(err && err.message ? err.message : `could not add ${name}`, "err");
+          toast(err && err.message ? err.message : tr("pnl.main.do.addFailed", { name }), "err");
           return;
         }
         show(element);
@@ -10341,7 +10302,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
     for (const f of stKind.fields) {
       if (f.group || f.type === "map" || !f.fx) continue;
       const tl = stTemplateLang(f);
-      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: f.label } : undefined);
+      stAttachFx(body.querySelector("#f-st-" + f.key), tl ? { lang: tl, title: kindText(f.label) } : undefined);
     }
     // Markup fields (the mail worker's HTML body) get the shared code editor with
     // the HTML language module — tag/attribute colouring and variable completion
@@ -10355,7 +10316,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       // template. The Developer View is where it gets a gutter and the full width.
       const markup = stTemplateLang(f) || htmlLang;
       attachCodeEditor(el, { lang: markup.module, variables: stFeelVars, gutter: false, wrap: true });
-      markDevField(el, markup.id, { title: f.label });
+      markDevField(el, markup.id, { title: kindText(f.label) });
     }
     // JSON fields (the Entra attributes template) get the shared JSON editor:
     // highlighting, live validation and auto-format. A '=' inside a string value is
@@ -10440,16 +10401,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       const extra = [...mapped].filter((n) => !declared.has(n));
       const parts = [];
       if (missing.length) {
-        parts.push(`The decision reads ${missing.map((n) => `<b>${esc(n)}</b>`).join(", ")}, and `
-          + `no row feeds ${missing.length > 1 ? "them" : "it"}. `
-          + `${missing.length > 1 ? "They arrive" : "It arrives"} empty, and the rules that `
-          + `test ${missing.length > 1 ? "them" : "it"} do not match.`);
+        parts.push(trPlural("pnl.more.decision.driftMissing", missing.length,
+          { names: missing.map((n) => `<b>${esc(n)}</b>`).join(", ") }));
       }
       if (extra.length) {
-        parts.push(`${extra.map((n) => `<b>${esc(n)}</b>`).join(", ")} `
-          + `${extra.length > 1 ? "are" : "is"} fed and the decision does not declare `
-          + `${extra.length > 1 ? "them" : "it"}. `
-          + `${extra.length > 1 ? "They are" : "It is"} ignored.`);
+        parts.push(trPlural("pnl.more.decision.driftExtra", extra.length,
+          { names: extra.map((n) => `<b>${esc(n)}</b>`).join(", ") }));
       }
       note.hidden = parts.length === 0;
       note.innerHTML = parts.map((t) => `<p>${t}</p>`).join("");
@@ -10480,15 +10437,15 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       if (id) {
         try { rows = (await api("GET", `/api/v1/decision-deployments?decisionId=${encodeURIComponent(id)}`)) || []; } catch { rows = []; }
       }
-      const opts = [`<option value="">— choose a deployed version —</option>`];
+      const opts = [`<option value="">${esc(tr("pnl.more.decision.chooseVersion"))}</option>`];
       const seen = new Set();
       for (const r of rows) {
         const v = String(r.version || "");
         if (!v || seen.has(v)) continue;
         seen.add(v);
-        opts.push(`<option value="${esc(v)}">v${esc(v)}${r.current ? " — current" : ""}</option>`);
+        opts.push(`<option value="${esc(v)}">${r.current ? esc(tr("pnl.more.decision.versionCurrent", { version: v })) : "v" + esc(v)}</option>`);
       }
-      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">v${esc(keep)} — not deployed</option>`);
+      if (keep && !seen.has(keep)) opts.push(`<option value="${esc(keep)}">${esc(tr("pnl.more.decision.versionNotDeployed", { version: keep }))}</option>`);
       fversion.innerHTML = opts.join("");
       fversion.value = keep;
     };
@@ -10591,7 +10548,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             let f = files.get(key);
             if (!f) {
               f = {
-                model: d.model || d.modelRef || "(unnamed model)",
+                model: d.model || d.modelRef || tr("pnl.more.decision.unnamedModel"),
                 mine: mine,
                 deployed: !d.modelRef,
                 items: [],
@@ -10615,10 +10572,10 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // exists to give them (DMN §10.4).
         const noteFor = (d, service) => {
           const notes = [];
-          if (d.service) notes.push("decision service");
-          else if (service && service.internal) notes.push(`internal to ${service.name} — bypasses it`);
-          else if (service) notes.push("published by " + service.name);
-          if (!d.deployed) notes.push("not deployed");
+          if (d.service) notes.push(tr("pnl.more.decision.noteService"));
+          else if (service && service.internal) notes.push(tr("pnl.more.decision.noteInternal", { service: service.name }));
+          else if (service) notes.push(tr("pnl.more.decision.notePublished", { service: service.name }));
+          if (!d.deployed) notes.push(tr("pnl.more.decision.noteNotDeployed"));
           return notes.join(" · ");
         };
         const optionFor = (d, note) => {
@@ -10651,12 +10608,12 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))))
             .concat(decisions.filter(isInternal)
               .map((d) => optionFor(d, noteFor(d, belongsTo.get(d.id)))));
-          const where = f.deployed
-            ? " — deployed only"
-            : !f.mine && projectId ? " — other application" : "";
-          return `<optgroup label="${esc(f.model + where)}">${opts.join("")}</optgroup>`;
+          const label = f.deployed
+            ? tr("pnl.more.decision.fileDeployedOnly", { model: f.model })
+            : !f.mine && projectId ? tr("pnl.more.decision.fileOtherApp", { model: f.model }) : f.model;
+          return `<optgroup label="${esc(label)}">${opts.join("")}</optgroup>`;
         };
-        const parts = [`<option value="">— choose a decision —</option>`]
+        const parts = [`<option value="">${esc(tr("pnl.more.decision.choose"))}</option>`]
           .concat(Array.from(files.values(), groupFor));
         fpick.innerHTML = parts.join("");
         fpick._catalog = catalog;
@@ -10757,7 +10714,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         fedit.addEventListener("click", async () => {
           const cur = (fpick._catalog || []).find((x) => x.id === (fdecision?.value || "").trim());
           if (!cur || !cur.modelRef) {
-            toast && toast("This decision has no locally editable model.", "err");
+            toast && toast(tr("pnl.more.decision.noLocalModel"), "err");
             return;
           }
           // The panel knows the model handle; the editor's route addresses the
@@ -10766,7 +10723,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           try { refs = (await api("GET", "/api/v1/dmnrefs")) || []; } catch { /* reported below */ }
           const ref = refs.find((r) => r.modelRef === cur.modelRef);
           if (!ref) {
-            toast && toast("This decision has no reference to open — add it to an application first.", "err");
+            toast && toast(tr("pnl.more.decision.noRef"), "err");
             return;
           }
           openDecisionPage("e/" + encodeURIComponent(ref.id));
@@ -10928,9 +10885,9 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               opts.push(`<option value="${esc(id)}">${esc(label)}</option>`);
             };
             (procs || []).forEach((p) => add(p.processId,
-              (p.name && p.name !== p.processId ? p.name + " · " : "") + "deployed" + (p.version ? " v" + p.version : "")));
+              (p.name && p.name !== p.processId ? p.name + " · " : "") + tr("pnl.more.call.deployed") + (p.version ? " v" + p.version : "")));
             (drafts || []).forEach((d) => add(d.processId,
-              (d.name && d.name !== d.processId ? d.name + " · " : "") + "draft"));
+              (d.name && d.name !== d.processId ? d.name + " · " : "") + tr("pnl.more.call.draft")));
             proclist.innerHTML = opts.join("");
           } catch { /* suggestions are best-effort */ }
         })();
@@ -10945,7 +10902,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         newbtn.addEventListener("click", async () => {
           let pid = (fcallpid.value || "").trim();
           if (!pid) {
-            const typed = prompt("Process ID for the new called process:", "");
+            const typed = prompt(tr("pnl.more.call.newPrompt"), "");
             if (typed == null) return;
             pid = typed.trim();
             if (!pid) return;
@@ -10971,14 +10928,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
             // refuses instead of being overwritten (ADR-0222).
             const existing = await api("GET", "/api/v1/drafts").catch(() => []);
             if ((existing || []).some((d) => (d.processId || "") === pid)) {
-              toast(`Opening existing draft “${pid}”`, "ok");
+              toast(tr("pnl.more.call.openingDraft", { id: pid }), "ok");
             } else {
               await api("POST", savePath(""), calleeXML(pid, pid), true);
-              toast(`Created called process “${pid}”`, "ok");
+              toast(tr("pnl.more.call.created", { id: pid }), "ok");
             }
             location.hash = `#/modeler/draft/${encodeURIComponent(pid)}`;
           } catch (e) {
-            toast("Could not create the process: " + e.message, "err");
+            toast(tr("pnl.more.call.createFailed", { error: e.message }), "err");
             newbtn.disabled = false;
           }
         });
@@ -11069,14 +11026,14 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
       api("GET", "/api/v1/forms").then((forms) => {
         if (!document.body.contains(fform)) return; // selection moved on
         const cur = fform.value;
-        const opts = [`<option value="">— none —</option>`];
+        const opts = [`<option value="">${esc(tr("pnl.more.form.none"))}</option>`];
         let sawCur = false;
         for (const f of forms || []) {
           const sel = f.id === cur ? " selected" : "";
           if (f.id === cur) sawCur = true;
           opts.push(`<option value="${esc(f.id)}"${sel}>${esc(f.name || f.id)}</option>`);
         }
-        if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(cur)} (missing)</option>`);
+        if (cur && !sawCur) opts.push(`<option value="${esc(cur)}" selected>${esc(tr("pnl.more.form.missing", { id: cur }))}</option>`);
         fform.innerHTML = opts.join("");
         setFormOpen(fopen, cur, !!cur && !sawCur);
       }).catch(() => { /* leave the current single-option select as-is */ });
@@ -11210,7 +11167,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const mine = new Set(listSignals(modeler).map((x) => x.name));
           group.innerHTML = deployedSignalChoices(signals)
             .map((c) => `<option value="${esc(SIGNAL_EVENT_PREFIX + c.name)}">${
-              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — new"}</option>`).join("");
+              esc(c.name)} — ${esc(c.by.join(", "))}${mine.has(c.name) ? "" : " — " + esc(tr("pnl.more.signal.new"))}</option>`).join("");
           if (!group.children.length) group.remove();
         }
         const line = body.querySelector("#f-sigreceivers");
@@ -11224,7 +11181,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           const mine = new Set(listSignals(modeler).map((x) => x.name));
           group.innerHTML = entries.filter((e) => e.listenable && (e.channels || []).includes("signal"))
             .map((e) => `<option value="${esc(SIGNAL_EVENT_PREFIX + e.type)}" title="${esc((e.meaning || {}).en || "")}">${
-              esc(e.type)}${mine.has(e.type) ? "" : " — new"}</option>`).join("");
+              esc(e.type)}${mine.has(e.type) ? "" : " — " + esc(tr("pnl.more.signal.new"))}</option>`).join("");
           if (!group.children.length) group.remove();
         }
         const sed = signalDefOf(element.businessObject);
@@ -11469,7 +11426,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
           if (e.target.closest(".io-map-del")) return;
           card.classList.toggle("collapsed");
         });
-        name.addEventListener("input", () => { title.textContent = name.value.trim() || "parameter"; });
+        name.addEventListener("input", () => { title.textContent = name.value.trim() || tr("pnl.more.agent.param"); });
         for (const sel of [".ap-name", ".ap-type", ".ap-desc", ".ap-required"]) {
           card.querySelector(sel).addEventListener("change", saveParams);
         }

@@ -25,7 +25,7 @@ async function mount(page, which) {
 async function openGroup(page, title, probe) {
   await expect(page.locator(probe)).toHaveCount(1);
   if (!(await page.locator(probe).isVisible())) {
-    await page.locator(".pgroup-head .pgroup-title").filter({ hasText: new RegExp(`^${title}$`) }).click();
+    await page.locator(`.pgroup[data-group="${title}"] > .pgroup-head .pgroup-title`).click();
   }
   await expect(page.locator(probe)).toBeVisible();
 }
@@ -107,7 +107,7 @@ test("a shop task read from the model shows what it declares", async ({ page }) 
   const chosen = page.locator(".stkind-row-on");
   await expect(chosen).toHaveAttribute("data-kind", "shop");
   await expect(chosen).toContainText("Shop");
-  await expect(chosen).toContainText("Reports how a product action ended, or asks a held position for one (ADR-0429).");
+  await expect(chosen).toContainText("Meldet, wie eine Produktaktion ausging, oder fordert eine von einer gehaltenen Position an (ADR-0429).");
 
   await openShop(page);
   const modes = await page.locator("#f-shop-mode option").evaluateAll((os) => os.map((o) => o.value));
@@ -160,7 +160,7 @@ test("an action key no catalogue could declare shows the validation hint", async
   // Said as it is typed, before anything is saved.
   await action.fill("Password Reset");
   await expect(hint).toBeVisible();
-  await expect(hint).toContainText("lower-case letters, digits and dashes");
+  await expect(hint).toContainText("Kleinbuchstaben, Ziffern und Bindestrichen");
   await action.fill("password-reset");
   await expect(hint).toBeHidden();
   await action.fill("x".repeat(65));

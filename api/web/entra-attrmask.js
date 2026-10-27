@@ -10,6 +10,8 @@
 // build/parse pair does the type coercion (a boolean field's "true"/"false" become
 // real JSON booleans, so Graph gets a boolean and not the string "true").
 
+import { t } from "./i18n.js";
+
 // ENTRA_ATTR_SPECS names, per operation, the fields the mask shows and how each maps
 // into the request body. `kind`:
 //   text  — a plain string value (literal or =FEEL); stored as a JSON string.
@@ -22,38 +24,38 @@
 // A field with `nested:"passwordProfile"` is assembled into that sub-object.
 export const ENTRA_ATTR_SPECS = {
   "create-user": [
-    { key: "displayName", label: "Anzeigename", kind: "text", hint: "displayName. Literal oder =FEEL, z. B. =vorname + \" \" + nachname." },
-    { key: "mailNickname", label: "Mail-Nickname", kind: "text", hint: "mailNickname — der Teil vor dem @." },
-    { key: "userPrincipalName", label: "User Principal Name", kind: "text", hint: "userPrincipalName, z. B. =upn." },
-    { key: "password", label: "Initialpasswort", kind: "password", nested: "passwordProfile", hint: "Fast immer eine FEEL-Variable (=tempPasswort), damit das Passwort ein Laufzeitwert bleibt." },
-    { key: "forceChange", label: "Passwort bei 1. Login ändern", kind: "bool", nested: "passwordProfile", nestedKey: "forceChangePasswordNextSignIn", hint: "true / false — forceChangePasswordNextSignIn." },
-    { key: "accountEnabled", label: "Konto aktiviert", kind: "bool", hint: "true / false / =Ausdruck (z. B. =profil.accountEnabled)." },
-    { key: "usageLocation", label: "Nutzungsstandort", kind: "text", hint: "Zwei-Buchstaben-Land, z. B. CH. Nötig, bevor eine Lizenz zugewiesen werden kann." },
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text", hint: "pnl.ops.entra.hint.create-user.displayName" },
+    { key: "mailNickname", label: "pnl.ops.entra.field.mailNickname", kind: "text", hint: "pnl.ops.entra.hint.create-user.mailNickname" },
+    { key: "userPrincipalName", label: "pnl.ops.entra.field.userPrincipalName", kind: "text", hint: "pnl.ops.entra.hint.create-user.userPrincipalName" },
+    { key: "password", label: "pnl.ops.entra.field.password", kind: "password", nested: "passwordProfile", hint: "pnl.ops.entra.hint.create-user.password" },
+    { key: "forceChange", label: "pnl.ops.entra.field.forceChange", kind: "bool", nested: "passwordProfile", nestedKey: "forceChangePasswordNextSignIn", hint: "pnl.ops.entra.hint.create-user.forceChange" },
+    { key: "accountEnabled", label: "pnl.ops.entra.field.accountEnabled", kind: "bool", hint: "pnl.ops.entra.hint.create-user.accountEnabled" },
+    { key: "usageLocation", label: "pnl.ops.entra.field.usageLocation", kind: "text", hint: "pnl.ops.entra.hint.create-user.usageLocation" },
   ],
   "update-user": [
-    { key: "displayName", label: "Anzeigename", kind: "text" },
-    { key: "jobTitle", label: "Position", kind: "text", hint: "jobTitle." },
-    { key: "department", label: "Abteilung", kind: "text", hint: "department." },
-    { key: "accountEnabled", label: "Konto aktiviert", kind: "bool", hint: "true / false / =Ausdruck." },
-    { key: "usageLocation", label: "Nutzungsstandort", kind: "text" },
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text" },
+    { key: "jobTitle", label: "pnl.ops.entra.field.jobTitle", kind: "text", hint: "pnl.ops.entra.hint.update-user.jobTitle" },
+    { key: "department", label: "pnl.ops.entra.field.department", kind: "text", hint: "pnl.ops.entra.hint.update-user.department" },
+    { key: "accountEnabled", label: "pnl.ops.entra.field.accountEnabled", kind: "bool", hint: "pnl.ops.entra.hint.update-user.accountEnabled" },
+    { key: "usageLocation", label: "pnl.ops.entra.field.usageLocation", kind: "text" },
   ],
   "create-group": [
-    { key: "displayName", label: "Anzeigename", kind: "text" },
-    { key: "mailNickname", label: "Mail-Nickname", kind: "text" },
-    { key: "mailEnabled", label: "Mail-aktiviert", kind: "bool", hint: "true / false — mailEnabled." },
-    { key: "securityEnabled", label: "Sicherheits-Gruppe", kind: "bool", hint: "true / false — securityEnabled." },
-    { key: "unified", label: "Microsoft-365-Gruppe (Unified)", kind: "unified", hint: "Setzt groupTypes:[\"Unified\"] — nötig, damit später ein Team darauf entstehen kann." },
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text" },
+    { key: "mailNickname", label: "pnl.ops.entra.field.mailNickname", kind: "text" },
+    { key: "mailEnabled", label: "pnl.ops.entra.field.mailEnabled", kind: "bool", hint: "pnl.ops.entra.hint.create-group.mailEnabled" },
+    { key: "securityEnabled", label: "pnl.ops.entra.field.securityEnabled", kind: "bool", hint: "pnl.ops.entra.hint.create-group.securityEnabled" },
+    { key: "unified", label: "pnl.ops.entra.field.unified", kind: "unified", hint: "pnl.ops.entra.hint.create-group.unified" },
   ],
   "update-group": [
-    { key: "displayName", label: "Anzeigename", kind: "text" },
-    { key: "description", label: "Beschreibung", kind: "text", hint: "description." },
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text" },
+    { key: "description", label: "pnl.ops.entra.field.description", kind: "text", hint: "pnl.ops.entra.hint.update-group.description" },
   ],
   "create-channel": [
-    { key: "displayName", label: "Anzeigename", kind: "text", hint: "Name des Kanals." },
-    { key: "description", label: "Beschreibung", kind: "text" },
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text", hint: "pnl.ops.entra.hint.create-channel.displayName" },
+    { key: "description", label: "pnl.ops.entra.field.description", kind: "text" },
   ],
   "assign-role": [
-    { key: "roleDefinitionId", label: "Rollen-Definition-Id", kind: "text", hint: "roleDefinitionId der Verzeichnisrolle (GUID oder Template-Id)." },
+    { key: "roleDefinitionId", label: "pnl.ops.entra.field.roleDefinitionId", kind: "text", hint: "pnl.ops.entra.hint.assign-role.roleDefinitionId" },
   ],
 };
 
@@ -70,27 +72,27 @@ export function hasMask(operation) {
 export function entraResultShape(operation) {
   switch (operation) {
     case "get-user":
-      return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …) — mit «Properties» genau die genannten Eigenschaften, z. B. assignedLicenses oder employeeId.";
+      return t("pnl.ops.entra.result.getUser");
     case "get-user-manager":
-      return "Bei Read manager das Objekt der vorgesetzten Person (id, displayName, mail, userPrincipalName, …) — nicht das des Benutzers. Mit «Properties» genau die genannten Eigenschaften der vorgesetzten Person. Ist keine vorgesetzte Person eingetragen, ist die Variable null — ein Gateway fragt das mit = <Variable> = null ab. Ein unbekannter Benutzer lässt den Task dagegen fehlschlagen; fängt ein Fehler-Grenzereignis den Code ENTRA_USER_NOT_FOUND, endet der Task stattdessen mit diesem BPMN-Fehler.";
+      return t("pnl.ops.entra.result.getUserManager");
     case "create-user":
     case "update-user":
-      return "Bei dieser Operation das Benutzer-Objekt (id, displayName, userPrincipalName, mail, …).";
+      return t("pnl.ops.entra.result.user");
     case "list-users":
-      return "Bei List users ein JSON-Array aller passenden Benutzer (hier erforderlich).";
+      return t("pnl.ops.entra.result.listUsers");
     case "create-group":
     case "get-group":
     case "update-group":
-      return "Bei dieser Operation das Gruppen-Objekt (id, displayName, mailNickname, …).";
+      return t("pnl.ops.entra.result.group");
     case "list-groups":
-      return "Bei List groups ein JSON-Array aller passenden Gruppen (erforderlich).";
+      return t("pnl.ops.entra.result.listGroups");
     case "delta-users":
     case "delta-groups":
-      return "Bei einer Delta-Abfrage ein Objekt { value: [Änderungen], deltaLink: \"…\" } — value die geänderten Objekte (gelöschte mit @removed markiert), deltaLink der Cursor für den nächsten Lauf (erforderlich).";
+      return t("pnl.ops.entra.result.delta");
     case "create-team":
-      return "Bei Create team das Team-Objekt — seine id ist die der zugrunde liegenden Gruppe.";
+      return t("pnl.ops.entra.result.createTeam");
     case "create-channel":
-      return "Bei Create channel das angelegte Kanal-Objekt (id, displayName).";
+      return t("pnl.ops.entra.result.createChannel");
     case "assign-license":
     case "assign-role":
     case "enable":
@@ -105,9 +107,9 @@ export function entraResultShape(operation) {
     case "add-team-member":
     case "add-team-owner":
     case "archive-team":
-      return "Diese Operation gibt nichts zurück — Graph antwortet ohne Inhalt (204), die Variable bleibt leer.";
+      return t("pnl.ops.entra.result.none");
     default:
-      return "Das Antwort-Objekt der Operation.";
+      return t("pnl.ops.entra.result.default");
   }
 }
 
@@ -276,15 +278,15 @@ export function attachEntraAttributeMask(host, ta, getOperation, onChange, esc) 
   let html = "";
   for (const f of spec) {
     const id = "f-emask-" + f.key;
-    html += `<label class="emask-row"><span>${escFn(f.label)}</span>` +
+    html += `<label class="emask-row"><span>${escFn(t(f.label))}</span>` +
       `<input id="${id}" type="text" value="${escFn(state.fields[f.key] || "")}" ` +
-      `placeholder="${escFn(f.kind === "bool" ? "true / false / =Ausdruck" : "")}"/>` +
-      (f.hint ? `<small class="muted">${escFn(f.hint)}</small>` : "") +
+      `placeholder="${escFn(f.kind === "bool" ? t("pnl.ops.entra.boolPlaceholder") : "")}"/>` +
+      (f.hint ? `<small class="muted">${escFn(t(f.hint))}</small>` : "") +
       `</label>`;
   }
-  html += `<label class="emask-row emask-extra"><span>Weitere Attribute (JSON)</span>` +
+  html += `<label class="emask-row emask-extra"><span>${escFn(t("pnl.ops.entra.extra.label"))}</span>` +
     `<textarea id="f-emask-extra" rows="3" spellcheck="false" placeholder='{ "jobTitle": "…" }'>${escFn(state.extra || "")}</textarea>` +
-    `<small class="muted">Alles, was die Maske oben nicht abdeckt — als JSON-Objekt. Wird mit den Feldern zusammengeführt (Maske gewinnt bei gleichem Schlüssel).</small></label>`;
+    `<small class="muted">${escFn(t("pnl.ops.entra.extra.hint"))}</small></label>`;
   html += `<div class="emask-err" id="f-emask-err" role="alert" hidden></div>`;
   wrap.innerHTML = html;
   host.appendChild(wrap);
@@ -304,7 +306,7 @@ export function attachEntraAttributeMask(host, ta, getOperation, onChange, esc) 
       // Keep the last good textarea value; flag the escape hatch as the culprit so a
       // malformed extra JSON does not overwrite the saved body with garbage.
       errEl.hidden = false;
-      errEl.textContent = "Weitere Attribute: kein gültiges JSON — " + (e && e.message ? e.message : "");
+      errEl.textContent = t("pnl.ops.entra.extra.invalid", { error: e && e.message ? e.message : "" });
       return;
     }
     onChange();

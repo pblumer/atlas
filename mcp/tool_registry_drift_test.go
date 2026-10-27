@@ -35,6 +35,11 @@ var mcpToolRoutes = map[string]string{
 	"atlas_list_processes": "GET /api/v1/processes",
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
 
+	// Whether and where the server is slow, and the profile that says why
+	// (ADR-0502): reads an administrator's agent diagnoses with.
+	"atlas_runtime_health":  "GET /api/v1/debug/runtime",
+	"atlas_runtime_profile": "GET /api/v1/debug/pprof/{profile}/summary",
+
 	// The portal catalogue an agent maintains as a product manager
 	// (ADR-0376). A product is withdrawn through the ordinary save, because an
 	// order placed years ago still resolves through it; the one delete is the
@@ -248,6 +253,9 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/connections/{id}/workers":                            "a person's consent to which Workers act as them: theirs alone",
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// A binary profile for `go tool pprof`, and a recording that costs the server while it
+	// runs: read by a person with a profiler, not by an agent (ADR-0502).
+	"GET /api/v1/debug/pprof/{profile}": "admin diagnostics: a binary profile for go tool pprof, not an agent action",
 	// The order starting its own positions (ADR-0425) is the fulfilment and approval
 	// models' call, made with the position's state behind it; an agent that wants a
 	// position worked places or returns the order instead.
