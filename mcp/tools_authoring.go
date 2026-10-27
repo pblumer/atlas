@@ -911,7 +911,10 @@ func authoringTools() []Tool {
 				"From format version 6 the business layer (layers=business) holds the processes as work, the " +
 				"roles their tasks and lanes name and the catalogue products they carry out — a product only for " +
 				"a caller who may maintain its catalogue — and the strategy layer (layers=strategy) the " +
-				"capabilities the release realises and the value streams that use them. " +
+				"capabilities the release realises and the value streams that use them. From format version 7 " +
+				"the application layer also holds the coupling: the messages and signals the release throws " +
+				"and catches, the processes of other applications at the other end of each, and the event " +
+				"feed; another application is named only to a caller who may see it. " +
 				"A Worker's configuration the " +
 				"caller may not see, and the instances for a caller who is not an operator, are withheld. " +
 				"layers narrows the answer: application is the logical part, technology the physical part, and " +
