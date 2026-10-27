@@ -96,6 +96,10 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 ## As built (2026-10-27)
 
+**BMP1 transport landed:** PR #1411 added an off-loop, pinned-key public HTTPS catalogue client with response limits, redirect/DNS/IP checks and compressed archive digest verification. It is a library, not a user-facing registry endpoint. **Archive inspection is in review:** draft PR #1415 adds bounded, in-memory tar.gz/member/manifest checks; the existing application importer remains authoritative for model validation and explicit publish. No design-time provenance or Console installation is yet implemented.
+
+
+
 The accepted registry v1 schema and fixtures are in `docs/contracts/blueprint-registry/v1/`. **BMP0 is complete:** PR #1405 implemented the pure offline `api/blueprintregistry` verifier for pinned Ed25519 signatures, bounded strict index metadata, SemVer and SHA-256 over exact compressed package bytes; positive/negative tests are in `api/blueprintregistry/verify_test.go` and `semver_test.go`. **BMP1 is in progress:** network fetching, operator-owned registry configuration, API/Console browse, package extraction/import plans, provenance and explicit publish are not yet shipped. No engine run-loop, WAL or execution changes are involved.
 
 ## Links

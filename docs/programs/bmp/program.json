@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "BMP1: review and test fail-closed public HTTPS registry transport, then connect verified package bytes to existing import-plan and explicit publish APIs through an authorized operator flow.",
+  "next_action": "Review BMP1 package-inspection PR #1415 and complete its security, race, Windows and archive test gates; then build authorized registry browsing and import-plan/publish using established application APIs.",
   "slices": [
     {
       "id": "BMP0",
@@ -38,9 +38,10 @@
       ],
       "issues": [],
       "prs": [
-        1411
+        1411,
+        1415
       ],
-      "note": "Draft PR #1411 adds bounded, fail-closed public HTTPS index/package transport and negative SSRF/redirect tests. No Console/API installation or persistence yet; archive inspection, import decisions, publish and recovery remain."
+      "note": "PR #1411 merged: safe pinned HTTPS transport. Draft PR #1415 adds bounded, fail-closed in-memory inspection of the existing tar.gz application package with malicious-entry, expansion, duplicate-name, manifest, CRC and truncated-stream tests. Import plan, authorization, publish, provenance and recovery remain outstanding."
     },
     {
       "id": "BMP2",
