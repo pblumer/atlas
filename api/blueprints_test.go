@@ -187,3 +187,36 @@ func TestBlueprintAPIRefusesIncompatibleReleaseBeforeFetch(t *testing.T) {
 		t.Fatalf("incompatible release fetched: status=%d count=%d", response.Code, f.fetches)
 	}
 }
+
+
+func TestBlueprintAPIPreviewIncludesProductsAndCatalogues(t *testing.T) {
+	f := sampleBlueprintSource(t)
+	var archive bytes.Buffer
+	if err := writeSourceArchive(&archive, []sourceFile{
+		{Path: "atlas.json", Data: []byte(`{"formatVersion":1,"key":"service","name":"Service","processes":[],"forms":[],"decisions":[]}`)},
+		{Path: "katalog.json", Data: []byte(`{"catalogs":[{"id":"cat-requests","items":["item-a"]}],"products":[{"id":"item-a","homeCatalog":"cat-requests"}]}`)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.packageBytes = archive.Bytes()
+	digest := sha256.Sum256(f.packageBytes)
+	f.release.Artifact.SizeBytes = int64(len(f.packageBytes))
+	f.release.Artifact.Digest = "sha256:" + hex.EncodeToString(digest[:])
+	f.index.Releases[0] = f.release
+
+	resp := blueprintRequest(&Server{blueprints: f}, "GET", "/api/v1/blueprints/org.example.purchase/releases/1.0.0/preview", "org.example.purchase", "1.0.0", "")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("preview = %d %s", resp.Code, resp.Body.String())
+	}
+	var result struct {
+		Catalogues []blueprintregistry.PackageCatalogue `json:"catalogues"`
+		Products   []blueprintregistry.PackageProduct   `json:"products"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Catalogues) != 1 || result.Catalogues[0].ID != "cat-requests" ||
+		len(result.Products) != 1 || result.Products[0].HomeCatalog != "cat-requests" {
+		t.Fatalf("preview omitted real shop identities: %+v", result)
+	}
+}
