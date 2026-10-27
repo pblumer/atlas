@@ -26,7 +26,7 @@ func (s *Server) handleBeginBlueprintInstallation(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	if r.Header.Get("If-Match") != "\"" + release.Artifact.Digest + "\"" {
+	if r.Header.Get("If-Match") != "\""+release.Artifact.Digest+"\"" {
 		httpapi.Error(w, http.StatusPreconditionFailed, "Blueprint digest changed since preview; review again")
 		return
 	}
