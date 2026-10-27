@@ -5247,7 +5247,7 @@ const SERVICE_TASK_KINDS = [
         // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
         showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.propertiesVariable,
         placeholder: (v) => wikiPropertiesPlaceholder(v.operation || "create-item"),
-        hint: "Property values by the field's name, as the item's type defines them — the person a task is assigned to is one of them, e.g. assignee. A string starting with = is a FEEL expression. A value that is null changes nothing (an absent variable does not clear a due date); \"\" unsets the property.",
+        hint: () => tr("pnl.ops.wiki.propertiesHint"),
       },
       {
         key: "propertiesVariable", label: "Properties variable", placeholder: "felder",

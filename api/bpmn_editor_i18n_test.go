@@ -12,8 +12,8 @@ import (
 // panel, the problems bar, the deploy and documentation panels, the Playground tab, the
 // chip that says which record is shown, the documentation PDF and the start form dialog —
 // and its properties panel with the modules the panel draws from: the FEEL fields and
-// variable references, the collapsible groups, the operation tables of the mail, contact
-// and directory Worker Types, the PowerShell editor, the Worker Type setup docs, the
+// variable references, the collapsible groups, the operation tables of the mail, contact,
+// directory and wiki Worker Types, the PowerShell editor, the Worker Type setup docs, the
 // Developer View and the decision graph. Every key these modules name is in every
 // locale. A key is named three ways: looked up directly, looked up as a plural (which
 // needs both forms), or held as a literal in a table or a ternary and looked up later —
@@ -32,7 +32,7 @@ func TestEveryMessageTheBPMNEditorFrameAsksForExists(t *testing.T) {
 		"web/editor.js", "web/playground.js", "web/shown-version.js", "web/process-doc.js",
 		"web/token-simulation.js", "web/idcheck.js", "web/startvars.js",
 		"web/pgroup.js", "web/feel.js", "web/varrefs.js", "web/exchange-ops.js",
-		"web/googlecontacts-ops.js", "web/carddav-ops.js", "web/entra-attrmask.js",
+		"web/googlecontacts-ops.js", "web/carddav-ops.js", "web/wikiwikibangbang-ops.js", "web/entra-attrmask.js",
 		"web/powershell.js", "web/workertypedocs.js", "web/dev-view.js", "web/decision-graph.js",
 	} {
 		src, err := os.ReadFile(file)
@@ -82,6 +82,7 @@ func TestEveryMessageTheBPMNEditorFrameAsksForExists(t *testing.T) {
 // would show the author something else in English than the table says; both mean the
 // table changed under its translation, which then silently stops applying.
 func TestEveryWorkerTypeTranslationNamesATextTheTablesHold(t *testing.T) {
+	markup := regexp.MustCompile(`&[a-z]+;|&#[0-9]+;|</?[a-z][^>]*>`)
 	src, err := os.ReadFile("web/editor.js")
 	if err != nil {
 		t.Fatalf("read the editor: %v", err)
@@ -101,6 +102,11 @@ func TestEveryWorkerTypeTranslationNamesATextTheTablesHold(t *testing.T) {
 			}
 			if !strings.Contains(editor, `"`+text+`"`) {
 				t.Errorf("locale %q translates the Worker Type text %q, which no table in the editor holds", locale, text)
+			}
+			// The panel draws these texts escaped, so markup the table's own text does not
+			// carry would reach the author as characters: z.&nbsp;B. instead of z. B.
+			if got, want := markup.FindAllString(msgs[k], -1), markup.FindAllString(text, -1); strings.Join(got, "") != strings.Join(want, "") {
+				t.Errorf("locale %q gives the Worker Type text %q markup it is drawn without: %q", locale, text, got)
 			}
 		}
 		if n < 500 {

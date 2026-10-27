@@ -206,7 +206,7 @@ _Changed_ / _Removed_ for each version.
   and call activity wiring, the mappings and loops, and the Worker Type picker with each
   Worker Type's operations, fields and hints. So do the modules the panel draws from: the
   FEEL fields and variable references, the operation tables of the Exchange, Google
-  Contacts and CardDAV Worker Types, the Entra attribute mask, the PowerShell editor, the
+  Contacts, CardDAV and wikiwikibangbang Worker Types, the Entra attribute mask, the PowerShell editor, the
   Worker Type setup docs, the Developer View and the decision graph. The Worker Type tables
   keep their English, because a text there is also data — a field's group is its section's
   identity — and are translated where they are drawn, by `wt.` messages that a test holds
