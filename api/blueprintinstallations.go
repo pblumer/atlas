@@ -46,13 +46,12 @@ func (s *Server) handleBeginBlueprintInstallation(w http.ResponseWriter, r *http
 		RegistryOrigin: origin, SignerFingerprint: fingerprint,
 		PublisherID: release.PublisherID, BlueprintID: release.BlueprintID,
 		Version: release.Version, Digest: release.Artifact.Digest,
-		CatalogueIDs: catalogueIDs, Status: "pending", RequestedAt: time.Now().Unix(),
+		CatalogueIDs: catalogueIDs, Status: "pending", RequestedAt: s.now() / int64(time.Second),
 	}
 	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 		rec.RequestedBy = p.UserID
 	}
-	var status, message int // status is an HTTP status code; message isn't used for public detail
-	_ = message
+	var status int
 	var errSave error
 	s.do(func() {
 		// This check is on the same single-writer loop as source imports.
