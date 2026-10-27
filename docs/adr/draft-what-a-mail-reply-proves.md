@@ -11,7 +11,9 @@
   that a plain mail does not meet a written-form requirement under Swiss law, and that only
   a qualified electronic signature with a qualified time stamp is equated with a
   handwritten one (Art. 14 para. 2bis CO, ZertES) — is the maintainers' understanding,
-  not legal advice, and an installation has to have it confirmed for its contracts. And
+  not legal advice, and an installation has to have it confirmed for its contracts; the
+  same holds for the reading of Art. 21a of the Administrative Procedure Act and for the
+  statement that an on-premises Exchange Server has no native subaddressing. And
   whether the Swiss e-ID, adopted in 2025, is available to a relying party in a form Atlas
   could verify is not known here.
 - **Question checked:** 2026-10
@@ -29,6 +31,12 @@ approval, a termination or a payment release, and nothing in Atlas today says wh
 line runs. A modeler who can correlate a reply will use it for whatever the process waits
 for, and the first time it matters is the first time somebody other than the customer
 answered.
+
+Who is on the other side cannot be known in advance. An installation may be a federal
+administration writing to citizens and businesses, an SME writing to its customers through
+a model from the marketplace, or anyone else, in any jurisdiction. So Atlas can fix the
+mechanism — what it establishes and how a model states what it needs — but not the line
+itself, and it can state no legal effect for anything it establishes.
 
 The question: **what can Atlas establish about who sent a reply and what they agreed to,
 how does a model state what a decision needs, and where does the line run between what a
@@ -136,21 +144,63 @@ behaviour). Its rules:
 The requirement stands in the diagram, where the process owner and a reviewer read it,
 and the engine enforces it. A modeler cannot meet it by configuring a watch differently.
 
+`none` stays the default so that every deployed model behaves as it does today. The
+Modeler's problems panel therefore flags a receiving element whose message a mail watch
+publishes and that states no minimum: the choice of `none` is then made, not inherited.
+It is a warning, never a refusal, so it cannot stop a stored model from loading.
+
 ### Where the line runs — the handbook's default
 
-An installation decides this for itself; the handbook offers this as the starting point:
+An installation decides this for itself. The handbook offers this as the starting point,
+ordered by the damage a wrong decision does rather than by any one country's law:
 
 | The reply decides… | Minimum | Why |
 |---|---|---|
 | an answer to a question, a document sent in | `none` | the content is checked anyway; a wrong answer costs a correction |
 | a confirmed appointment, contact data, a non-binding choice | `domain`, and the model compares `mail.from` with the address it wrote to | reversible, little damage |
 | an approval within an existing agreement (an offer below a limit, an order release) | `signed`, or a form behind sign-in | binding: who and what must both be established |
-| a termination or change of a contract, a waived right | not a mail reply: a form behind sign-in; where written form is required, a qualified electronic signature | legal form and evidence |
+| a termination or change of a contract, a waived right | not a mail reply: a form behind sign-in; where the applicable law or the contract requires written form, a qualified electronic signature | legal form and evidence |
 | a payment release, a change of bank details | never by mail: two people, in an authenticated channel | the target of business e-mail compromise fraud |
 
 The last row is not about signatures. Mail is the channel that fraud uses to change
 where money goes, so a process that pays on a mail's word has already lost the argument
 whatever level the mail reaches.
+
+Written form is the jurisdiction's to define: in Switzerland Art. 14 para. 2bis CO with
+ZertES, in the European Union Art. 25(2) eIDAS, elsewhere whatever the installation's
+counsel says. The handbook names the first two as examples and claims no legal effect for
+any level.
+
+### Two deployments this record was checked against
+
+**A federal administration.**
+
+- The strong path is the signed-in one. Staff, and through the federal login services
+  the public, reach Atlas over OIDC ([ADR-0210](0210-federated-authentication.md)),
+  which is where an approval or a termination belongs. The ISDS concept
+  (`docs/compliance/isds-konzept.md`) still lists a working eIAM integration as not
+  demonstrated, so this path is open in design and unproven in operation.
+- Level 2 fits authority-to-authority traffic and business partners whose certificates
+  come from a known PKI. The federal administration's own PKI is then a trust anchor the
+  installation configures on the Worker.
+- A submission with legal effect in an administrative procedure does not arrive as a
+  plain mail at all: as the maintainers read Art. 21a of the Administrative Procedure Act,
+  it needs a qualified signature and a recognised delivery platform. Atlas does not offer
+  a mail reply as that channel, and the legal row of the matrix says so.
+- An on-premises Exchange Server offers neither Graph nor, to the maintainers'
+  knowledge, native subaddressing. Replies there are routed by the `Message-ID` and the
+  subject tag over SMTP and IMAP, and IMAP has to be enabled for the watch.
+
+**An SME using a marketplace model.**
+
+- Microsoft 365, Google Workspace or a hoster's IMAP, and customers with neither an
+  S/MIME certificate nor a portal account. Level 1 plus a comparison of `mail.from` with
+  the address written to is the realistic ceiling. The value lies in routing and in no
+  reply being lost, not in signatures.
+- The marketplace ships the pattern as a blueprint
+  ([ADR-0499](0499-blueprint-registry-and-distribution.md)): a reply watch, a catch event
+  with its minimum already stated, a timer and a reminder. The SME starts from the safe
+  default instead of modelling it.
 
 ### What Atlas offers above a mail
 

@@ -137,7 +137,9 @@ key, so the at-least-once retry ADR-0079 accepts writes the same headers.
   never write the same one.
 - The plus address is configured on the Worker, because whether it works is a property
   of the receiving server: Gmail and Google Workspace accept it, Exchange Online by its
-  documentation does by default, other servers need a recipient delimiter configured.
+  documentation does by default, an on-premises Exchange Server to the maintainers'
+  knowledge does not, and other servers need a recipient delimiter configured. The
+  delimiter is the Worker's setting, `+` by default, because not every server uses `+`.
   The Worker refuses a reply address whose local part leaves no room for the token in
   the 64 octets RFC 5321 §4.5.3.1.1 allows. The address may name another mailbox than the
   sender's: a shared `noreply@` sender (ADR-0438's recommendation) can route replies to a
@@ -301,6 +303,9 @@ publish, deterministically, from the processor — and it gets its own record.
     receiving de-duplicator would not recognise it as the same mail.
 - **Follow-ups / risks to watch:**
   - The fallback message on expiry (own record).
+  - A marketplace blueprint ([ADR-0499](0499-blueprint-registry-and-distribution.md))
+    carrying the pattern pre-wired — reply watch, catch event, timer, reminder — so an
+    installation without modelling experience starts from it.
   - Bounces: a VERP return path carrying the token would route a non-delivery report to
     the instance whose mail bounced. Not decided here; SMTP can set it, Graph and Gmail
     cannot.
