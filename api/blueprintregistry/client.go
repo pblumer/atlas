@@ -280,6 +280,7 @@ func publicAddress(ip netip.Addr) bool {
 			if prefix.Contains(ip) {
 				return false
 			}
+		}
 	}
 	return true
 }
