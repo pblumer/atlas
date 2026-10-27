@@ -353,6 +353,13 @@ var (
 	ApplicationSourceStreamFailed = newEvent("application_source.stream_failed")
 )
 
+// Profiling a running server on an administrator's request (ADR-draft-admin-profiling).
+var (
+	// ProfileDownloaded is one profile or trace an administrator took, with who, which
+	// and, for a recording, over how many seconds.
+	ProfileDownloaded = newEvent("profile.downloaded")
+)
+
 // The inbound event bridge (ADR-0075/0214).
 var (
 	// InboundWatchMinuteOverflowed reports a jira watch whose page filled the batch
