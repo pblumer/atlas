@@ -165,6 +165,16 @@ func inspectManifest(raw []byte, result *PackageInspection) error {
 	if !json.Valid(raw) {
 		return errors.New("invalid application manifest JSON")
 	}
+	// Reject an ambiguous manifest before the later source importer can see it.
+	// Duplicate JSON keys are legal to the standard decoder but not a trusted
+	// description of a pinned package's identity.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if err := checkUniqueJSON(decoder, 0); err != nil {
+		return fmt.Errorf("invalid application manifest: %w", err)
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return errors.New("application manifest must contain exactly one JSON value")
+	}
 	var manifest struct {
 		Key  string `json:"key"`
 		Name string `json:"name"`
