@@ -80,10 +80,6 @@ func TestRegistryV1SchemaRejectsBadShapeAndLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var original map[string]any
-	if err := json.Unmarshal(raw, &original); err != nil {
-		t.Fatal(err)
-	}
 	// Fresh decoding per case prevents mutations from leaking between tests.
 	for _, tc := range []struct {
 		name   string
@@ -101,10 +97,18 @@ func TestRegistryV1SchemaRejectsBadShapeAndLimits(t *testing.T) {
 		}},
 		{"missing publisher", func(v map[string]any) { delete(v["releases"].([]any)[0].(map[string]any), "publisherId") }},
 		{"unexpected release field", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["credentials"] = "secret" }},
-		{"oversized compressed package", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["sizeBytes"] = 52428801 }},
-		{"missing digest", func(v map[string]any) { delete(v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any), "digest") }},
-		{"absolute artifact URL", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["path"] = "https://attacker.invalid/p.tar.gz" }},
-		{"escaped traversal artifact", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["path"] = "packages/%2e%2e/p.tar.gz" }},
+		{"oversized compressed package", func(v map[string]any) {
+			v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["sizeBytes"] = 52428801
+		}},
+		{"missing digest", func(v map[string]any) {
+			delete(v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any), "digest")
+		}},
+		{"absolute artifact URL", func(v map[string]any) {
+			v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["path"] = "https://attacker.invalid/p.tar.gz"
+		}},
+		{"escaped traversal artifact", func(v map[string]any) {
+			v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["path"] = "packages/%2e%2e/p.tar.gz"
+		}},
 		{"blank license", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["license"] = "" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
