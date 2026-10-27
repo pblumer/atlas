@@ -19,7 +19,7 @@ const ADMIN = { id: "usr_root", username: "root", roles: ["admin"] };
 const MODELLER = { id: "usr_mona", username: "mona", roles: ["modeler", "operator", "user"] };
 const WORKER = { id: "usr_tina", username: "tina", roles: ["user"] };
 const OPERATOR = { id: "usr_otto", username: "otto", roles: ["operator", "user"] };
-const ADMIN_PAGES = ["Engine", "Logs", "Backup", "Organization", "API tokens", "Security", "Audit log", "Content sources"];
+const ADMIN_PAGES = ["Engine", "Logs", "Backup", "Organization", "API tokens", "Secrets", "Security", "Audit log", "Content sources"];
 
 // stubAPI answers /auth/me as the given account and everything else benignly. The
 // catch-all is registered first because Playwright matches the most recently

@@ -795,6 +795,26 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   with enforcement off it is offered. Operations keeps its working pages and the incident
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
+- **`card-fold.spec.mjs`**
+  ([ADR-draft-every-topic-folds](../docs/adr/draft-every-topic-folds.md)): every topic of a
+  Console page folds, the same way, against `card-fold-harness.html`, which drives the real
+  `api/web/fold.js` and `app.css`:
+  - **Which cards:** a card headed by an `<h2>`, alone or in a row with its actions, gets the
+    caret toggle; a page title, a form, a card that opted out, a heading with nothing under
+    it and a section with its own toggle get none.
+  - **Folded:** the body is hidden and the heading row stays, buttons included; a card with
+    no padding pads its folded heading; pressing a heading's button opens the card first.
+  - **Remembered:** per page and topic across a reload, and a card redrawn in place keeps
+    its toggle and state; redrawn into something that is no topic, nothing stays hidden.
+  - **In the Console:** Security, which says nothing about folding, gets a toggle on each of
+    its five topics, and one folded topic stays folded after a reload while the others stay
+    open.
+- **`console-secrets.spec.mjs`**
+  ([ADR-0069](../docs/adr/0069-engine-internal-encrypted-secret-vault.md)): Console ›
+  Administration › Secrets against a stubbed API. The menu leads there, the handbook's
+  `#/console/secrets` lands there instead of on the dashboard, each secret names the
+  workers that use it, a new secret is saved and the page stays the vault, and a refused
+  or unconfigured vault says so.
 - **`release-architecture-layers.spec.mjs`**
   ([ADR-0495](../docs/adr/0495-layered-release-architecture.md)):
   **Applications → Deployments → Release history → Architecture** against a stubbed API.

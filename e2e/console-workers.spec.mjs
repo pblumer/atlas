@@ -57,7 +57,10 @@ test("Workers presents catalog and configured workers over the compatibility API
   await expect(view.locator("h2").filter({ hasText: "Worker catalog" })).toBeVisible();
   await expect(view.locator("h2").filter({ hasText: "Configured workers" })).toBeVisible();
   await expect(page.locator("#worker-rows")).toContainText("clio-prod");
-  await expect(view.locator("h2").filter({ hasText: "Secrets" })).toBeVisible();
+  // The vault has a page of its own (Console › Administration › Secrets); the worker
+  // card's word for it leads there.
+  await expect(view.locator("h2").filter({ hasText: "Secrets" })).toHaveCount(0);
+  await expect(view.locator('a[href="#/console/secrets"]')).toHaveText("the vault");
   expect(page.__errors).toEqual([]);
 });
 
@@ -124,7 +127,7 @@ test("the New worker form says how the picked type is set up, and links to the h
 // The catalog lists every Worker Type this Atlas serves, which is two dozen rows of
 // prose; the configured workers grow with the installation. Both are lists, so both
 // get the table's own filter row (ADR-0286), and both fold away so an operator who
-// came for the vault or a mockup switch scrolls past neither.
+// came for a mockup switch scrolls past neither.
 test("the Worker catalog is a filterable list", async ({ page }) => {
   await goto(page, "#/console/workers");
   const catalog = page.locator("#sec-workers-catalog table");
@@ -156,8 +159,6 @@ test("both worker sections fold away, and stay folded", async ({ page }) => {
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
   await expect(page.locator("#sec-workers-catalog")).toBeHidden();
   await expect(page.locator("#sec-workers-configured")).toBeHidden();
-  // The vault below is not folded with them.
-  await expect(page.locator("#view h2").filter({ hasText: "Secrets" })).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 
