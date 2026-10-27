@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/pblumer/atlas/api/blueprintregistry"
