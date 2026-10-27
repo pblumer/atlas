@@ -2809,6 +2809,10 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
+/* Console › Workers: a folding heading with the count beside it, which is what a
+   folded section still says about what it holds. */
+.workers-sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.workers-sec-head h2 { margin: 0; }
 
 /* ---------- Tasks (Outlook-style inbox, ADR-0028) ---------- */
 .tasks-mode main { max-width: none; }

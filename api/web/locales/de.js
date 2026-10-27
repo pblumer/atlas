@@ -593,6 +593,16 @@ export default {
   "table.toggleFilters": "Spaltenfilter ein- oder ausblenden",
   "table.noMatch": "Keine Zeile passt zu den Filtern.",
 
+  // Console › Workers (viewConsoleWorkers in app.js): the two sections that fold away,
+  // and what each one's heading says while it is folded.
+  "workers.section.toggle": "Abschnitt ein- oder ausklappen",
+  "workers.catalog.th.type": "Worker Type",
+  "workers.catalog.th.status": "Status",
+  "workers.catalog.count.one": "{n} Worker Type",
+  "workers.catalog.count.other": "{n} Worker Types",
+  "workers.configured.count.one": "{n} Worker",
+  "workers.configured.count.other": "{n} Worker",
+
   // The Modeler's application landscape (viewModelerHome in app.js): the applications,
   // the deployed processes, importing an application (packageimport.js, importchoices.js)
   // and the mark on a definition whose decisions were frozen at deploy
