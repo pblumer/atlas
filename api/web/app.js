@@ -2590,14 +2590,8 @@ async function viewConsoleWorkers() {
       ${statusCell(c)}
       <td class="row-actions"></td></tr>`;
   // Both this card and the catalog above it fold away, each remembered on its own
-  // (sectionState): an operator who came for the vault scrolls past neither. The
-  // heading keeps the count, so a folded section still says what it holds, and New
-  // worker stays beside it because it unfolds the section the form opens in.
-  const sectionHead = (id, title, count) => `<div class="workers-sec-head">
-      <h2><button class="section-toggle" aria-expanded="${sectionState(id)}" data-section="${id}"
-        title="${esc(tr("workers.section.toggle"))}">${title}</button></h2>
-      <span class="muted small">${esc(count)}</span></div>`;
-  const sectionBody = (id) => `<div class="section-body" id="sec-${id}"${sectionState(id) ? "" : " hidden"}>`;
+  // (sectionState): an operator who came for the vault scrolls past neither. New
+  // worker stays beside the heading because it unfolds the section the form opens in.
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 12px">
@@ -2811,8 +2805,7 @@ async function viewConsoleWorkers() {
     ${adMockCard}
     ${sqlMockCard}
     ${secretsCard}`;
-  for (const t of view.querySelectorAll(".section-toggle"))
-    t.addEventListener("click", () => toggleSection(t.dataset.section, t));
+  wireSections(view);
   wireWorkerManagement(workers);
   wireADMock();
   wireSQLMock();
@@ -3463,6 +3456,23 @@ function openSection(id) {
   const body = document.getElementById("sec-" + id);
   const btn = document.querySelector(`.section-toggle[data-section="${id}"]`);
   if (body && body.hidden && btn) toggleSection(id, btn);
+}
+// sectionHead and sectionBody draw a list that folds away under its heading, as
+// Console › Workers and an application's Deployments tab do. The heading keeps the
+// count beside it, which is what a folded section still says about what it holds.
+// title is HTML; the caller escapes it. sectionBody opens the element the caller closes.
+function sectionHead(id, title, count) {
+  return `<div class="sec-head">
+      <h2><button class="section-toggle" aria-expanded="${sectionState(id)}" data-section="${id}"
+        title="${esc(tr("section.toggle"))}">${title}</button></h2>
+      <span class="muted small">${esc(count)}</span></div>`;
+}
+function sectionBody(id) {
+  return `<div class="section-body" id="sec-${id}"${sectionState(id) ? "" : " hidden"}>`;
+}
+function wireSections(root) {
+  for (const t of root.querySelectorAll(".section-toggle"))
+    t.addEventListener("click", () => toggleSection(t.dataset.section, t));
 }
 
 // viewModelerHome is the application landscape: a clean table of process
@@ -4142,13 +4152,18 @@ async function renderAppDeployments(id) {
     </tr>`;
   };
 
+  // Each of the tab's lists folds away under its heading (sectionHead), remembered per
+  // browser rather than per application: a long release history is folded once, not
+  // once for every application it is opened in.
   const targetsSection = targets.length ? `
-    <h2 style="margin:22px 0 10px; font-size:15px">${esc(tr("deployments.targets"))}</h2>
+    ${sectionHead("appdep-targets", esc(tr("deployments.targets")), trPlural("deployments.targets.count", targets.length))}
+    ${sectionBody("appdep-targets")}
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>${esc(tr("deployments.th.target"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th></tr></thead>
         <tbody>${targets.map(targetRow).join("")}</tbody>
       </table>
+    </div>
     </div>` : "";
 
   const relRow = (r) => `<tr>
@@ -4170,6 +4185,8 @@ async function renderAppDeployments(id) {
         <div class="stat"><b>${view.finished}</b><span>${esc(tr("deployments.stat.finished"))}</span></div>
       </div>
     </div>
+    ${sectionHead("appdep-definitions", esc(tr("deployments.definitions")), trPlural("deployments.definitions.count", orderedDefs.length))}
+    ${sectionBody("appdep-definitions")}
     <div class="card" style="padding:0">
       <table>
         <thead><tr><th>${esc(tr("deployments.th.definition"))}</th><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.state"))}</th><th>${esc(tr("deployments.th.running"))}</th><th>${esc(tr("deployments.th.finished"))}</th><th>${esc(tr("deployments.th.deployed"))}</th></tr></thead>
@@ -4177,16 +4194,20 @@ async function renderAppDeployments(id) {
           `<tr><td colspan="6" class="empty">${tr("deployments.empty", { publish: esc(tr("application.publish")) })}</td></tr>`}</tbody>
       </table>
     </div>
+    </div>
     ${targetsSection}
-    <h2 style="margin:22px 0 10px; font-size:15px">${esc(tr("deployments.releases"))}</h2>
+    ${sectionHead("appdep-releases", esc(tr("deployments.releases")), trPlural("deployments.releases.count", releases.length))}
+    ${sectionBody("appdep-releases")}
     <div class="card" style="padding:0" id="pd-releases">
       <table>
         <thead><tr><th>${esc(tr("deployments.th.version"))}</th><th>${esc(tr("deployments.th.published"))}</th><th>${esc(tr("deployments.th.artifacts"))}</th><th>${esc(tr("deployments.th.note"))}</th><th></th></tr></thead>
         <tbody>${releases.map(relRow).join("") ||
           `<tr><td colspan="5" class="empty">${esc(tr("deployments.releasesEmpty"))}</td></tr>`}</tbody>
       </table>
+    </div>
     </div>`;
 
+  wireSections(host);
   for (const b of host.querySelectorAll("button[data-promote]"))
     b.addEventListener("click", () => promoteRelease(id, Number(b.dataset.promote), targets));
   for (const b of host.querySelectorAll("button[data-architecture]"))

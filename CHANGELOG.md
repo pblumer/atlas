@@ -161,6 +161,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **An application's Deployments tab folds its lists away.** The deployed definitions,
+  the deployment targets and the release history each fold under their heading, which
+  still shows how many entries the list holds, and the browser remembers each choice for
+  every application it opens. The summary of the published version and its instances
+  above them stays in view, and each list keeps its filter row and sorting.
+
 - **Console › Workers folds and filters both of its lists.** The Worker catalog and
   the configured workers each fold away under their heading, which still shows how many
   entries the section holds, and the browser remembers each choice; **New worker**
