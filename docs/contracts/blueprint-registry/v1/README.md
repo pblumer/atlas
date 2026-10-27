@@ -1,6 +1,6 @@
 # Blueprint Registry v1: contract review fixtures
 
-**Status: proposed; not implemented.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md), which remains **Proposed / Not started** until maintainers approve the security and distribution profile. The material in this folder is a wire-contract draft, **not** an active atlas endpoint or installable package.
+**Status: accepted contract, implementation in progress.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Not started**). Maintainer approval dated 2026-10-27. The material in this folder is a wire-contract draft, **not** an active atlas endpoint or installable package.
 
 ## Publication layout
 
