@@ -2378,7 +2378,7 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   schema-only validation and [PR #1360](https://github.com/pblumer/atlas/pull/1360)
   contract digests over the file's bytes, [PR #1388](https://github.com/pblumer/atlas/pull/1388)
   the implementation digest of built-in Worker Types; evidence records with
-  a CI gate that fails on stale evidence are in review. No contract is
+  a CI gate that fails on stale evidence are in review ([PR #1401](https://github.com/pblumer/atlas/pull/1401)). No contract is
   published, no record exists, and revocation is not yet implemented. No Worker Type
   can certify its own claims or obtain runtime routing from JSON validation.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**

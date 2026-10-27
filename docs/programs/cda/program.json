@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/capability-driven-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-cda--capability-driven-automation-",
-  "next_action": "Review and merge the evidence records (workertype/evidence); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks.",
+  "next_action": "Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks.",
   "slices": [
     {
       "id": "CDA0",
@@ -57,9 +57,10 @@
       "prs": [
         1357,
         1360,
-        1388
+        1388,
+        1401
       ],
-      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types whose roots cover every runtime path (variant A, decided 2026-10-27). Merged: schema-only validation (PR #1357), contract digests over the file's bytes (PR #1360) and the implementation digest (PR #1388). In review: evidence records, their CI gate and CODEOWNERS (workertype/evidence). No contract is published and no record exists; withdrawal is not implemented; no Worker is verified."
+      "note": "ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types whose roots cover every runtime path (variant A, decided 2026-10-27). Merged: schema-only validation (PR #1357), contract digests over the file's bytes (PR #1360) and the implementation digest (PR #1388). In review: evidence records, their CI gate and CODEOWNERS (PR #1401). No contract is published and no record exists; withdrawal is not implemented; no Worker is verified."
     },
     {
       "id": "CDA3",
