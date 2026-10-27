@@ -237,6 +237,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
+		// What the server spends its time on and what it holds, as `go tool pprof` reads it
+		// (ADR-draft-admin-profiling). Admin-only: a profile shows the server's insides,
+		// and a recording costs the server while it runs.
+		{"GET", "/api/v1/debug/pprof/{profile}", s.handlePprof, apiOp{
+			summary: "A runtime profile of this server for `go tool pprof`: `profile` records CPU samples over `?seconds=` (default 30, at most 120), `trace` an execution trace for `go tool trace` (default 5, at most 30); `heap`, `allocs`, `goroutine` and `threadcreate` are taken at once, `?debug=1` as text (`goroutine?debug=2`: every stack), `heap?gc=1` after a collection. One CPU profile and one trace at a time (409 while one runs); the command line is not offered. Audited as profile.downloaded (admin-only when auth is on) (ADR-draft-admin-profiling)", tag: "System", role: RoleAdmin,
+			resp: &bodySpec{mediaType: "application/octet-stream", schema: tString(), desc: "A gzip-compressed pprof profile, an execution trace, or text with ?debug="}}},
 		{"GET", "/api/v1/storage", s.storage.HandleGet, apiOp{
 			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-0481)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Storage status", schemaObj(map[string]any{

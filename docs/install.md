@@ -1037,6 +1037,7 @@ Event names an operator is most likely to alert on:
 | `history.purged` | INFO | An administrator deleted a batch of a version's finished instances, with `by`, `process`, `version`, `instances` and `held` |
 | `server.instance_purge_enabled` | WARN | Said at every start while an administrator may delete finished instances for good; set `--instance-purge=false` on production |
 | `wal_compaction.requested` | INFO | An administrator asked for one compaction pass on a server not started with `--compact-wal`, with `by` |
+| `profile.downloaded` | INFO | An administrator took a runtime profile or trace from `/api/v1/debug/pprof/{profile}`, with `actor`, `profile` and, for a recording, `seconds` |
 | `order.instance_unrecorded` | WARN | An instance working an order position started but could not be noted on the order; the shop shows no tasks for that position |
 | `script_worker.binary_missing` | WARN | A script language is enabled but its interpreter is absent; those tasks park |
 | `feed.push_failing` | WARN | A push subscription's endpoint refused a batch or did not answer, said once when the failures begin; delivery holds and retries on a widening interval, and nothing is skipped |

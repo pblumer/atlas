@@ -9885,6 +9885,50 @@ groups:
         expr: atlas_api_token_next_expiry_timestamp_seconds - time() &lt; 7 * 86400
         labels: { severity: critical }</code></pre>
 
+      <div id="profiling" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Profiling</h4><h4 data-l="en">Profiling</h4>
+      <p data-l="de">Wird der Server langsam, sagen die Metriken <i>dass</i> er es ist; <i>wo</i> er die Zeit
+        verbringt, sagt ein Profil. Ein Administrator holt es unter <code>GET /api/v1/debug/pprof/{profile}</code>
+        vom laufenden Server – ohne Neustart, ohne zweiten Port, im Format, das <code>go tool pprof</code> liest.
+        <code>profile</code> zeichnet die CPU über <code>?seconds=</code> auf (Standard 30, höchstens 120),
+        <code>trace</code> einen Ausführungstrace für <code>go tool trace</code> (Standard 5, höchstens 30);
+        <code>heap</code>, <code>allocs</code>, <code>goroutine</code> und <code>threadcreate</code> kommen sofort.
+        <code>?debug=1</code> liefert Text, <code>goroutine?debug=2</code> jeden Stack so, wie ihn ein Panic
+        ausgibt, <code>heap?gc=1</code> den Heap nach einer Garbage Collection. Es läuft je eine CPU-Aufzeichnung
+        und ein Trace; eine zweite Anfrage währenddessen bekommt <i>409</i>. Die Kommandozeile liefert Atlas
+        bewusst nicht aus, weil ein Flag ein Geheimnis tragen kann. Jeder Abruf steht als
+        <code>profile.downloaded</code> im Log, mit dem, der ihn auslöste, und dem Profil.</p>
+      <p data-l="en">When the server slows down, the metrics say <i>that</i> it does; <i>where</i> it spends the
+        time is what a profile says. An administrator takes one from the running server at
+        <code>GET /api/v1/debug/pprof/{profile}</code> – no restart, no second port, in the format
+        <code>go tool pprof</code> reads. <code>profile</code> records the CPU over <code>?seconds=</code> (default
+        30, at most 120), <code>trace</code> an execution trace for <code>go tool trace</code> (default 5, at most
+        30); <code>heap</code>, <code>allocs</code>, <code>goroutine</code> and <code>threadcreate</code> come at
+        once. <code>?debug=1</code> returns text, <code>goroutine?debug=2</code> every stack the way a panic prints
+        it, <code>heap?gc=1</code> the heap after a garbage collection. One CPU recording and one trace run at a
+        time; a second request meanwhile gets <i>409</i>. Atlas deliberately does not hand out the command line,
+        because a flag can carry a secret. Every download is logged as <code>profile.downloaded</code>, with who took it
+        and which.</p>
+      <p data-l="de">Die Route verlangt die Rolle <code>admin</code>, und ein API-Token trägt diese Rolle nie.
+        Am einfachsten öffnest du die URL im angemeldeten Browser; er lädt die Datei herunter. Von der
+        Kommandozeile meldest du dich mit <code>curl</code> an und schickst das Session-Cookie mit:</p>
+      <p data-l="en">The route requires the <code>admin</code> role, and an API token never carries it. The
+        simplest way is to open the URL in a signed-in browser, which downloads the file. From the command line,
+        sign in with <code>curl</code> and send the session cookie along:</p>
+      <pre><code># Anmelden, Cookie behalten  ·  sign in, keep the cookie
+curl -c jar -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}' https://atlas.example.com/api/v1/auth/login
+# 30 Sekunden CPU  ·  30 seconds of CPU
+curl -b jar -o cpu.pb.gz 'https://atlas.example.com/api/v1/debug/pprof/profile?seconds=30'
+go tool pprof -http=:8081 cpu.pb.gz
+# Heap und jede Goroutine  ·  the heap and every goroutine
+curl -b jar -o heap.pb.gz 'https://atlas.example.com/api/v1/debug/pprof/heap?gc=1'
+curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | less</code></pre>
+      <p data-l="de">Ein CPU-Profil kostet den Server während der Aufzeichnung in der Regel wenige Prozent, ein Trace unter Last
+        deutlich mehr und wächst um Megabytes pro Sekunde – nimm für einen Trace Sekunden, nicht Minuten.</p>
+      <p data-l="en">A CPU profile typically costs the server a few percent while it records; a trace under load costs
+        noticeably more and grows by megabytes a second – take seconds for a trace, not minutes.</p>
+
       <div id="speicher" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Speicherplatz</h4><h4 data-l="en">Disk space</h4>
       <p data-l="de">Ein Administrator sieht auf dem <a href="/#/console">Dashboard</a> jedes Dateisystem, auf das
@@ -10099,6 +10143,9 @@ groups:
           <tr><td><code>GET /api/v1/backup/full</code></td><td><code>admin</code></td>
             <td data-l="de">die ganze Instanz sichern (mit WAL, Konten, Vault)</td>
             <td data-l="en">back up the whole instance (WAL, accounts, vault)</td></tr>
+          <tr><td><code>GET /api/v1/debug/pprof/{profile}</code></td><td><code>admin</code></td>
+            <td data-l="de">ein Laufzeitprofil für <code>go tool pprof</code> holen (siehe <a href="#profiling">Profiling</a>)</td>
+            <td data-l="en">take a runtime profile for <code>go tool pprof</code> (see <a href="#profiling">Profiling</a>)</td></tr>
         </tbody>
       </table>
       <p data-l="de"><code>/metrics</code> steht bewusst nicht in dieser Tabelle: es liegt neben dem

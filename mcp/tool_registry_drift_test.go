@@ -248,6 +248,9 @@ var mcpOmittedRoutes = map[string]string{
 	"PUT /api/v1/connections/{id}/workers":                            "a person's consent to which Workers act as them: theirs alone",
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
+	// A binary profile for `go tool pprof`, and a recording that costs the server while it
+	// runs: read by a person with a profiler, not by an agent (ADR-draft-admin-profiling).
+	"GET /api/v1/debug/pprof/{profile}": "admin diagnostics: a binary profile for go tool pprof, not an agent action",
 	// The order starting its own positions (ADR-0425) is the fulfilment and approval
 	// models' call, made with the position's state behind it; an agent that wants a
 	// position worked places or returns the order instead.

@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An administrator can profile the running server.** `GET /api/v1/debug/pprof/{profile}`
+  hands out what `go tool pprof` reads, from the server that is slow and without a restart
+  or a second port: `profile` records CPU samples over `?seconds=` (default 30, at most
+  120), `trace` an execution trace for `go tool trace` (default 5, at most 30), and
+  `heap`, `allocs`, `goroutine` and `threadcreate` come at once — as text with `?debug=1`,
+  every stack with `goroutine?debug=2`, the heap after a collection with `heap?gc=1`. One
+  CPU recording and one trace run at a time (409 while one does). The route is admin-only
+  at the boundary, every download is audited as `profile.downloaded`, and the command line
+  is not offered, since a flag can carry a secret. Atlas does not link `net/http/pprof`,
+  whose handlers would sit unauthenticated on the default mux, and a test keeps it that
+  way ([ADR-draft-admin-profiling](docs/adr/draft-admin-profiling.md)).
 - **The architecture sketch has a data layer, with the personal data a release declares.**
   A release now records what its processes keep and read: each data object with its
   declared class, the state it starts in, and the elements that write it (with the state
