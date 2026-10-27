@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -146,5 +147,29 @@ func TestBeginBlueprintInstallRejectsProtectedApplicationAndTamperedArchive(t *t
 	list, err := srv.blueprintInstalls.LoadAll()
 	if err != nil || len(list) != 0 {
 		t.Fatalf("failed first install left a record: %v, %v", list, err)
+	}
+}
+
+func TestBeginBlueprintInstallationFailsClosedWhenJournalCannotFsync(t *testing.T) {
+	srv, err := newServerAtDir(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	f := sampleBlueprintSource(t)
+	srv.blueprints = f
+	// Occupying the sidecar writer's temporary path blocks the durable rename
+	// before any native application or catalogue import could start.
+	tempPath := srv.blueprintInstalls.FileFor("purchase") + ".tmp"
+	if err := os.Mkdir(tempPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	match := "\""+f.release.Artifact.Digest+"\""
+	got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, match)
+	if got.Code != http.StatusInternalServerError {
+		t.Fatalf("journal write failed but install began: %d %s", got.Code, got.Body.String())
+	}
+	if _, found, err := srv.blueprintInstalls.Get("purchase"); err != nil || found {
+		t.Fatalf("failed journal became visible as a pending selection: found=%t error=%v", found, err)
 	}
 }
