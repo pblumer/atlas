@@ -200,6 +200,7 @@ func TestPublicClientIPRestrictions(t *testing.T) {
 		{"203.0.113.10", false}, {"0.0.0.0", false},
 		{"::1", false}, {"fc00::1", false}, {"fe80::1", false},
 		{"2001:db8::1", false}, {"::ffff:127.0.0.1", false},
+		{"64:ff9b::a9fe:a9fe", false}, {"2002:0a00:0001::1", false},
 	} {
 		ip := netip.MustParseAddr(tc.address)
 		if got := publicAddress(ip); got != tc.allowed {
