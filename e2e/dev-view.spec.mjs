@@ -729,7 +729,12 @@ test("the double-click reset restores every part of the layout", async ({ page }
   await page.mouse.up();
   expect((await geo()).w).toBeLessThan(defaults.geo.w - 100);
 
-  await page.locator(".dev-head").dblclick();
+  // On the header's free stretch between the title and the buttons, not its middle: in
+  // a shrunken modal a button can sit there (the German labels are wider), and a
+  // double-click on a button is not a reset.
+  const title = await page.locator(".dev-title").boundingBox();
+  const button = await page.locator(".dev-head button").first().boundingBox();
+  await page.mouse.dblclick((title.x + title.width + button.x) / 2, title.y + title.height / 2);
   expect(await geo()).toEqual(defaults.geo);
   expect(await sideWidth()).toBe(defaults.side);
 
