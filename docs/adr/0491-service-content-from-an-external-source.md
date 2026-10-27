@@ -1,6 +1,6 @@
 # ADR-0491: A service's content may come from an external source, copied into the draft and frozen with the release
 
-- **Status:** Accepted (amended 2026-10-26 — an unlink restores the product's own content; see the amendment below)
+- **Status:** Accepted (amended 2026-10-26 — an unlink restores the product's own content; amended 2026-10-27 — a child page may describe a service of its own; see the amendments below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -224,7 +224,8 @@ shows one slot per language the catalogue declares, and the primary slot is mark
   in one draft save.
 - **What linking refuses:** a page the account cannot read; a page in a space not
   released for the shop; any page that fails a security rule (§ 8); the same page in
-  two slots, or bound to another item, naming that item.
+  two slots, or another item's own page, naming that item. A child page another
+  item's description holds may be linked — see the amendment of 2026-10-27.
 
 ### 6. Unlinking is allowed and recorded
 
@@ -353,6 +354,12 @@ The backend and its screens are built; the finance-system cost (§ 2), more than
 picture, an administrator's purge of quarantined content, and telling the product owner
 about an unlink (the open question) are not.
 
+- **A child page describing a service of its own** (amendment of 2026-10-27).
+  `contentsource.PreviewExcept` and `GatherExcept` take the pages that are other
+  items' own pages and drop them, with everything below, from the walk;
+  `catalog.Service.ownPages` supplies them, `boundElsewhere` refuses only another
+  item's own page, the preview answers `carriedBy`, and `contentProblems` holds back a
+  publish while a copy still holds such a page.
 - **Where it lives.** `api/contentsource` holds the source configuration and its store
   (`contentsources`, an instance store), the adapter contract (`Adapter`, with every
   security fact a three-valued `Fact` whose zero value is *unknown*, so a fact an adapter
@@ -458,6 +465,36 @@ it back**, quarantined or not, since the own content was never in question; a pr
 that had no picture is left with none. **Unlinking one language** puts that language's
 own description back and leaves the rest bound. A binding made before this amendment
 has nothing set aside, and its unlink behaves as § 6 first said.
+
+## Amendment (2026-10-27): a child page may describe a service of its own
+
+§ 5 first refused any page another item's description held, child pages included.
+In use that blocked the shape a product owner reaches for first: a market offering
+kept as one page, its services kept as child pages below it — "Notebook Hardware"
+with "Tastatur", "Maus" and "Dockingstation" beneath. The offering could be linked
+to the page, or a service to its child page, never both.
+
+What stays exclusive is a page that describes an item: an item's **own page** — a
+language page of its binding — describes that item and no other, and linking it to a
+second item is refused, naming the first. A **child page** is part of a description,
+not the subject of one, so it may become an item's own page:
+
+- **A fetch leaves out every other item's own page.** A child page that is another
+  item's own page is that item's description; the fetch drops it with everything
+  below it, as it drops a restricted page, and the preview names the item it
+  describes. The rest of the walk is taken as before.
+- **Linking a child page another item holds is allowed.** The preview names the items
+  whose description holds it (`carriedBy`). Each of them keeps the copied text until
+  its next refresh, which leaves the page out.
+- **The publish gate waits for that refresh.** A bound item whose copy still holds a
+  child page that is now another item's own page refuses to publish, naming that item,
+  so the shop never shows one page's text under two products.
+- A child page linked to another item while a fetch reads the pages makes that
+  fetch's write stale: it is refused, and repeated, rather than written with text that
+  is now another item's.
+
+The security rules of § 8 are unchanged: every page, own or child, passes them where
+it is taken.
 
 ## Pros and cons of the options
 

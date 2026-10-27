@@ -169,10 +169,19 @@ func WalkAncestors(ctx context.Context, read func(context.Context, string) (Page
 // rules would drop and every reason they refuse (§ 5). It never fails on a rule:
 // a refusal is part of the answer. It fails on a source it cannot talk to.
 func Preview(ctx context.Context, ad Adapter, st Standing, input string) (Language, error) {
-	return preview(ctx, newPages(ad), st, input)
+	return PreviewExcept(ctx, ad, st, input, nil)
 }
 
-func preview(ctx context.Context, c *pages, st Standing, input string) (Language, error) {
+// PreviewExcept is [Preview] for a source some of whose pages already describe
+// other products. others maps such a page's id to the product it describes: a
+// child page found there is that product's description and not this one's, so it
+// is dropped with everything below it, naming the product. The page asked for is
+// never skipped — whether it may be bound is the caller's question.
+func PreviewExcept(ctx context.Context, ad Adapter, st Standing, input string, others map[string]string) (Language, error) {
+	return preview(ctx, newPages(ad), st, input, others)
+}
+
+func preview(ctx context.Context, c *pages, st Standing, input string, others map[string]string) (Language, error) {
 	l := Language{Input: input}
 	id, err := c.ad.Resolve(ctx, input)
 	switch {
@@ -229,6 +238,13 @@ func preview(ctx context.Context, c *pages, st Standing, input string) (Language
 			}
 			if err != nil {
 				return err
+			}
+			if other, ok := others[child.ID]; ok {
+				// Another product's own page: its text describes that product,
+				// and below it lies that product's description, not this one's.
+				l.Dropped = append(l.Dropped, Dropped{Page: name(child), What: "page",
+					Reasons: []string{"it describes product " + other + ", which is linked to it"}})
+				continue
 			}
 			// The chain is the walk's own, which is exactly the child's when the
 			// source agrees the child is below its parent. When it does not, the
@@ -311,6 +327,15 @@ func droppedOf(p Page, c Converted) []Dropped {
 // one, and refuses the whole of it if any part fails (§ 7: per item, all or
 // nothing). slots maps a language tag to what to read for it.
 func Gather(ctx context.Context, ad Adapter, src Source, slots map[string]string, primary string, maxPicture int64) (Content, error) {
+	return GatherExcept(ctx, ad, src, slots, primary, maxPicture, nil)
+}
+
+// GatherExcept is [Gather] for a source some of whose pages already describe
+// other products: others maps such a page's id to its product, and a child page
+// among them is left out of every language page's description with everything
+// below it, as [PreviewExcept] leaves it out.
+func GatherExcept(ctx context.Context, ad Adapter, src Source, slots map[string]string, primary string, maxPicture int64,
+	others map[string]string) (Content, error) {
 	st, err := ad.Standing(ctx)
 	if err != nil {
 		return Content{}, err
@@ -340,7 +365,7 @@ func Gather(ctx context.Context, ad Adapter, src Source, slots map[string]string
 	where := map[string]string{}
 	var labels [][]string
 	for _, lang := range langs {
-		l, err := preview(ctx, c, st, slots[lang])
+		l, err := preview(ctx, c, st, slots[lang], others)
 		if err != nil {
 			return Content{}, err
 		}

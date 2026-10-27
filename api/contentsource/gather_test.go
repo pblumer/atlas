@@ -579,3 +579,49 @@ func TestMoreThanFiveHundredPagesBelowRefuseThePreview(t *testing.T) {
 		t.Fatalf("refusals = %v", l.Refusals)
 	}
 }
+
+// TestAChildPageDescribingAnotherProductIsLeftOut: a child page that is another
+// product's own page is that product's description. The walk leaves it out with
+// everything below it, naming the product, and takes the rest; the page asked
+// for is read whatever the map says, since whether it may be bound is the
+// catalogue's question.
+func TestAChildPageDescribingAnotherProductIsLeftOut(t *testing.T) {
+	f := wiki(t)
+	f.Put(wikifake.Page{ID: "it_c5", Key: "SVC-24", Space: "SVC", Parent: "it_c1", Title: "Unter Details",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Noch mehr Details."}}})
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	others := map[string]string{"it_c1": "notebook-maus", "it_de": "notebook"}
+	l, err := PreviewExcept(ctx(t), ad, st, "SVC-12", others)
+	if err != nil || len(l.Refusals) != 0 {
+		t.Fatalf("preview: %v %v", err, l.Refusals)
+	}
+	if strings.Contains(l.Text, "Für alle Mitarbeitenden.") || strings.Contains(l.Text, "Noch mehr Details.") {
+		t.Fatalf("the other product's page was taken: %q", l.Text)
+	}
+	if !strings.Contains(l.Text, "Nur lesen.") {
+		t.Fatalf("the rest was not taken: %q", l.Text)
+	}
+	for _, c := range l.Children {
+		if c.ID == "it_c1" || c.ID == "it_c5" {
+			t.Fatalf("children = %+v", l.Children)
+		}
+	}
+	found := false
+	for _, d := range l.Dropped {
+		if d.Page == "SVC-20" && d.What == "page" && strings.Join(d.Reasons, ",") == "it describes product notebook-maus, which is linked to it" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("dropped = %+v", l.Dropped)
+	}
+
+	c, err := GatherExcept(ctx(t), ad, testSource(f), map[string]string{"de": "SVC-12"}, "de", 1<<20, others)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Languages["de"].Text; strings.Contains(got, "Für alle Mitarbeitenden.") {
+		t.Fatalf("gathered text = %q", got)
+	}
+}

@@ -57,8 +57,10 @@ func contentTools() []Tool {
 			Description: "Read one page as linking would take it, without writing anything: its stable id, title, " +
 				"state and version, the plain text it would supply (its body, then every readable child page " +
 				"depth first), the keywords, every protected passage and child page the security rules drop, " +
-				"every reason the page is refused, and `boundTo` when another product holds it. Preview before " +
-				"atlas_link_catalog_product_content.",
+				"every reason the page is refused, `boundTo` when the page is another product's own page (it " +
+				"cannot be linked), and `carriedBy` naming the products whose description holds it as a child " +
+				"page (it can be linked: a child page may describe a service of its own, and those products leave " +
+				"it out from their next refresh on). Preview before atlas_link_catalog_product_content.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{
 				"id":     stringProp("The product the page is for."),
 				"source": stringProp("The content source id."),
@@ -77,8 +79,12 @@ func contentTools() []Tool {
 			Name: "atlas_link_catalog_product_content",
 			Description: "Bind a product to one page per language its home catalogue declares and write the " +
 				"descriptions, keywords and picture fetched from them in one draft save. All or nothing: every " +
-				"refusal is answered at once and nothing is written. While bound, those fields are read-only " +
-				"through atlas_save_catalog_product. State `revision` to make it a safe read-modify-write.",
+				"refusal is answered at once and nothing is written. A page may be a child page of another " +
+				"product's page — a service described by a child page of its offering's page: from then on the " +
+				"offering leaves that page and everything below it out of its description, from its next refresh " +
+				"(which publishing waits for). A page that is another product's own page is refused. While " +
+				"bound, those fields are read-only through atlas_save_catalog_product. State `revision` to make " +
+				"it a safe read-modify-write.",
 			InputSchema: map[string]any{"type": "object", "properties": map[string]any{
 				"id":       stringProp("The product id."),
 				"source":   stringProp("The content source id."),

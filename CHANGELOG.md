@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A service can be described by a child page of its offering's wiki page.** A market
+  offering kept as one wiki page with its services as child pages below it can now be
+  linked as such: the offering to the page, each service to its child page. A child
+  page that is another product's own page is left out of every other description with
+  everything below it, and the preview names the product it describes; previewing a
+  child page another product's description holds names that product (`carriedBy`), and
+  publishing waits until that product is refreshed, so no page's text appears under two
+  products. A page that is another product's own page is still refused (ADR-0491,
+  amended 2026-10-27).
+
 - **The architecture sketch has business and strategy layers.** A release now records its
   processes as the work they do, with how their user tasks say who does them (for a
   group, for a named person, decided at run time, or nobody); the roles they name — each

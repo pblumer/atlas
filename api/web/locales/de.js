@@ -43,6 +43,7 @@ export default {
   "content.version": "Version {n}",
   "content.refusals": "Diese Seite darf den Shop nicht beliefern:",
   "content.boundTo": "Diese Seite ist bereits mit dem Produkt {item} verknüpft. Eine Seite beschreibt genau einen Service.",
+  "content.carriedBy": "Diese Seite ist heute eine Unterseite in der Beschreibung von {items}. Nach dem Verknüpfen beschreibt sie diesen Service; die Beschreibung von {items} lässt sie ab der nächsten Aktualisierung weg, und das Publizieren wartet auf diese Aktualisierung.",
   "content.passes": "Die Seite erfüllt jede Regel.",
   "content.dropped": "Weggelassen:",
   "content.dropped.page": "Unterseite, mit allem darunter",

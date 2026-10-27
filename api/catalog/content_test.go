@@ -319,15 +319,86 @@ func TestWhatLinkingRefuses(t *testing.T) {
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "product vpn") {
 		t.Fatalf("bound elsewhere = %d %s", rec.Code, rec.Body)
 	}
-	// So is a child page another product's description holds.
-	rec = b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-14"}}`)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("child bound elsewhere = %d %s", rec.Code, rec.Body)
-	}
 	// The source unreachable: nothing is written.
 	b.wiki.Set(func(s *wikifake.Server) { s.Down = true })
 	if rec := b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-30"}}`); rec.Code != http.StatusBadGateway {
 		t.Fatalf("down = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestAChildPageCanDescribeAServiceOfItsOwn: a market offering bound to a page
+// and a service bound to one of its child pages. The child page is the service's
+// description from the link on; the offering's copy still holds its text until a
+// refresh, which the publish gate asks for, and the refresh leaves it out with
+// everything below it, naming the service. The service's own page stays its own:
+// the offering cannot bind it as a language page.
+func TestAChildPageCanDescribeAServiceOfItsOwn(t *testing.T) {
+	b := newBoundFixture(t)
+	b.linkVPN(t)
+	if d := b.item(t, "vpn").Descriptions["de"]; !strings.Contains(d, "Für Büro und unterwegs.") {
+		t.Fatalf("the offering does not carry its child page: %q", d)
+	}
+
+	rec := call(t, b.s.HandleContentPreview, b.owner, "GET", "/x?source=wiki&page=SVC-14", "", "id", "mail")
+	var pv contentPreview
+	_ = json.Unmarshal(rec.Body.Bytes(), &pv)
+	if rec.Code != 200 || pv.BoundTo != "" || strings.Join(pv.CarriedBy, ",") != "vpn" {
+		t.Fatalf("preview of a child page = %d %s", rec.Code, rec.Body)
+	}
+	rec = b.link(t, "mail", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("link a child page = %d %s", rec.Code, rec.Body)
+	}
+	if d := b.item(t, "mail").Descriptions["de"]; d != "Für Büro und unterwegs." {
+		t.Fatalf("the service's description = %q", d)
+	}
+
+	// The offering's copy still holds the service's text: publishing waits for
+	// its refresh.
+	rec = b.publish(t)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "now describes product mail") {
+		t.Fatalf("publish with the text twice = %d %s", rec.Code, rec.Body)
+	}
+	rec = as(t, b.s.HandleContentRefresh, b.owner, "POST", "", "id", "vpn")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh the offering = %d %s", rec.Code, rec.Body)
+	}
+	vpn := b.item(t, "vpn")
+	if d := vpn.Descriptions["de"]; strings.Contains(d, "Für Büro") || !strings.Contains(d, "Sicherer Zugang") {
+		t.Fatalf("the refreshed offering = %q", d)
+	}
+	if kids := vpn.ContentSource.Pages["de"].Children; len(kids) != 0 {
+		t.Fatalf("the refreshed offering still takes %+v", kids)
+	}
+	rec = call(t, b.s.HandleContentPreview, b.owner, "GET", "/x?source=wiki&page=SVC-12", "", "id", "vpn")
+	if !strings.Contains(rec.Body.String(), "describes product mail") {
+		t.Fatalf("the offering's preview does not name the service: %s", rec.Body)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
+	}
+
+	// The service's page is its own: nobody else binds it as a language page.
+	if rec := b.link(t, "vpn", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`); rec.Code != http.StatusConflict ||
+		!strings.Contains(rec.Body.String(), "product mail") {
+		t.Fatalf("bind the service's page = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestAServiceLinkedFirstIsLeftOutOfItsOffering: the other order. The service is
+// bound to the child page first; linking the offering to the parent page leaves
+// the service's page out from the start, and publishing goes through.
+func TestAServiceLinkedFirstIsLeftOutOfItsOffering(t *testing.T) {
+	b := newBoundFixture(t)
+	if rec := b.link(t, "mail", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("link the service = %d %s", rec.Code, rec.Body)
+	}
+	vpn := b.linkVPN(t)
+	if d := vpn.Descriptions["de"]; strings.Contains(d, "Für Büro") {
+		t.Fatalf("the offering took the service's page: %q", d)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
 	}
 }
 

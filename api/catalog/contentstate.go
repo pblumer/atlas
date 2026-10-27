@@ -140,14 +140,32 @@ func pictureShown(it Item, st ContentState, found bool, now int64) bool {
 
 // contentProblems is the publish gate of § 9: a bound product refuses while it is
 // quarantined, while its copy predates a lifted quarantine, or while no recheck
-// passed within the last interval. It reads Atlas's own record only. Runs on the
-// loop.
+// passed within the last interval. It refuses too while its description still
+// holds a child page that has since been linked to another product of its own:
+// that text describes the other product now, and a refresh leaves it out. It
+// reads Atlas's own record only. Runs on the loop.
 func (s *Service) contentProblems(items []Item) ([]Problem, error) {
 	var out []Problem
 	now := s.now()
+	own := map[string]map[string]string{}
 	for _, it := range items {
 		if it.ContentSource == nil {
 			continue
+		}
+		src := it.ContentSource.Source
+		if _, read := own[src]; !read {
+			pages, err := s.ownPages(src, "")
+			if err != nil {
+				return nil, err
+			}
+			own[src] = pages
+		}
+		for _, ref := range childRefs(it.ContentSource) {
+			if other := own[src][ref]; other != "" && other != it.ID {
+				out = append(out, Problem{Item: it.ID, Message: "still holds the text of a child page that now describes product " +
+					other + "; refresh it, which leaves that page out"})
+				break
+			}
 		}
 		st, found, err := s.store.ContentState(it.ID)
 		if err != nil {

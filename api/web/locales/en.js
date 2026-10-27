@@ -67,6 +67,7 @@ export default {
   "content.version": "version {n}",
   "content.refusals": "This page may not supply the shop:",
   "content.boundTo": "This page is already linked to product {item}. One page describes exactly one service.",
+  "content.carriedBy": "This page is a child page in the description of {items} today. Once linked it describes this service; the description of {items} leaves it out from its next refresh on, and publishing waits for that refresh.",
   "content.passes": "The page passes every rule.",
   "content.dropped": "Left out:",
   "content.dropped.page": "child page, with everything below it",

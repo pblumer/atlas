@@ -157,6 +157,9 @@ export function previewBox(pv) {
       : null,
     pv.boundTo ? el("p", { class: "content-refusals", role: "alert" }, t("content.boundTo", { item: pv.boundTo })) : null,
     !refusals.length && !pv.boundTo ? el("p", { class: "content-passes" }, t("content.passes")) : null,
+    !pv.boundTo && (pv.carriedBy || []).length
+      ? el("p", { class: "content-carried muted" }, t("content.carriedBy", { items: pv.carriedBy.join(", ") }))
+      : null,
     dropped.length
       ? el("div", { class: "content-dropped" },
         el("b", {}, t("content.dropped")),
