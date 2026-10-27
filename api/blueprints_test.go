@@ -188,7 +188,6 @@ func TestBlueprintAPIRefusesIncompatibleReleaseBeforeFetch(t *testing.T) {
 	}
 }
 
-
 func TestBlueprintAPIPreviewIncludesProductsAndCatalogues(t *testing.T) {
 	f := sampleBlueprintSource(t)
 	var archive bytes.Buffer
