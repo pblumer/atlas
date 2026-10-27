@@ -191,3 +191,45 @@ func TestInspectPackageAcceptsBoundedValidArchive(t *testing.T) {
 		t.Fatalf("bounded normal tar failed: %#v / %v", got, err)
 	}
 }
+
+
+func TestInspectPackageSummarizesApplicationCataloguesAndProducts(t *testing.T) {
+	data := packageFixture(t,
+		packageTestEntry{name: "atlas.json", data: `{"formatVersion":1,"key":"service","name":"Service","processes":[],"forms":[],"decisions":[]}`},
+		packageTestEntry{name: "katalog.json", data: `{"publish":true,"catalogs":[{"id":"cat-a","items":["badge","license"]},{"id":"cat-b","items":["badge"]}],"products":[{"id":"badge","homeCatalog":"cat-a"},{"id":"license","homeCatalog":"cat-a"}]}`},
+	)
+	got, err := InspectPackage(packageRelease(data), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.CataloguePublish || len(got.Catalogues) != 2 || len(got.Products) != 2 {
+		t.Fatalf("catalogue bundle summary is incomplete: %+v", got)
+	}
+	if got.Catalogues[0].ID != "cat-a" || len(got.Catalogues[0].Items) != 2 ||
+		got.Catalogues[1].ID != "cat-b" || got.Catalogues[1].Items[0] != "badge" ||
+		got.Products[0].ID != "badge" || got.Products[0].HomeCatalog != "cat-a" {
+		t.Fatalf("catalogue and product identities were lost: %+v", got)
+	}
+}
+
+func TestInspectPackageRejectsAmbiguousCataloguePreview(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		shop string
+	}{
+		{"malformed", `{"catalogs":[`},
+		{"duplicate JSON key", `{"catalogs":[],"catalogs":[]}`},
+		{"duplicate catalog ID", `{"catalogs":[{"id":"cat-a"},{"id":"cat-a"}],"products":[]}`},
+		{"missing catalog ID", `{"catalogs":[{"items":["badge"]}],"products":[]}`},
+		{"missing product ID", `{"catalogs":[],"products":[{"homeCatalog":"cat-a"}]}`},
+		{"duplicate product ID", `{"catalogs":[],"products":[{"id":"x"},{"id":"x"}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := packageFixture(t, packageTestEntry{name: "atlas.json", data: `{"key":"service","name":"Service"}`},
+				packageTestEntry{name: "katalog.json", data: tc.shop})
+			if _, err := InspectPackage(packageRelease(data), data); err == nil {
+				t.Fatal("invalid or ambiguous catalogue preview was accepted")
+			}
+		})
+	}
+}
