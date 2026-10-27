@@ -124,7 +124,7 @@ func (s *Server) handleReleaseMesh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var live *releaseLive
-	rel, code, msg := s.releaseArchitecture(r, appID, int32(version64), func(rel *applicationRelease) (err error) {
+	rel, code, msg := s.releaseArchitecture(r, appID, int32(version64), nil, func(rel *applicationRelease) (err error) {
 		if overlay {
 			live, err = s.releaseLive(r, rel)
 		}

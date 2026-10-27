@@ -1030,7 +1030,7 @@ export default {
   "apitokens.new.submit": "Create token",
   "apitokens.scope.metrics": "Only GET /metrics. The narrowest scope there is, for a Prometheus scraper.",
   "apitokens.scope.status": "Only GET /api/v1/node, this server's descriptor – for another Atlas that wants to know whom it is talking to.",
-  "apitokens.scope.diagrams": "Read-only: the deployed processes, a definition's model and its runtime counts – for a system that shows the processes elsewhere, such as a wiki. It cannot deploy, start or read instances.",
+  "apitokens.scope.diagrams": "Read-only: the deployed processes, a definition's model and its runtime counts, and a release's architecture sketch as everybody may see it – for a system that shows them elsewhere, such as a wiki. It cannot deploy, start or read instances, a Worker's configuration or a person.",
   "apitokens.scope.worker": "Only what “atlas worker” does: lease jobs, settle each one either way, and post a preview mail back to the outbox. The right scope for a worker in another network zone.",
   "apitokens.scope.events": "Only GET /api/v1/events, the event feed: how actions ended and which rights were granted and revoked. For a CMDB or a billing system; the token carries the feedreader role and no other.",
   "apitokens.scope.landscape": "Only the derived landscape – the mesh, its ArchiMate projection and the descriptor – for another Atlas asking for that picture. It must name the applications it may see.",
