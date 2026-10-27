@@ -9925,9 +9925,15 @@ go tool pprof -http=:8081 cpu.pb.gz
 curl -b jar -o heap.pb.gz 'https://atlas.example.com/api/v1/debug/pprof/heap?gc=1'
 curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | less</code></pre>
       <p data-l="de">Ein CPU-Profil kostet den Server während der Aufzeichnung in der Regel wenige Prozent, ein Trace unter Last
-        deutlich mehr und wächst um Megabytes pro Sekunde – nimm für einen Trace Sekunden, nicht Minuten.</p>
+        deutlich mehr und wächst um Megabytes pro Sekunde – nimm für einen Trace Sekunden, nicht Minuten. Ein Trace
+        lässt sich nur mit einem <code>go tool trace</code> öffnen, das mindestens so neu ist wie das Go, mit dem der
+        Server gebaut wurde (<code>go</code> in <code>GET /api/v1/info</code>); ein älteres meldet
+        <i>unsupported trace version</i>. Die pprof-Profile sind davon nicht betroffen.</p>
       <p data-l="en">A CPU profile typically costs the server a few percent while it records; a trace under load costs
-        noticeably more and grows by megabytes a second – take seconds for a trace, not minutes.</p>
+        noticeably more and grows by megabytes a second – take seconds for a trace, not minutes. A trace opens only
+        in a <code>go tool trace</code> at least as new as the Go the server was built with (<code>go</code> in
+        <code>GET /api/v1/info</code>); an older one reports <i>unsupported trace version</i>. The pprof profiles
+        are not affected.</p>
 
       <div id="speicher" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Speicherplatz</h4><h4 data-l="en">Disk space</h4>
