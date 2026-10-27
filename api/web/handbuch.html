@@ -6233,11 +6233,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="de">Der Dialog unter <a href="/#/console/workers">Console → Workers</a> zeigt die erwartete Form als
         Platzhaltertext an – aber erst, wenn du schon darin stehst. Hier steht sie vorher, damit das Geheimnis fertig
         ist, bevor du den Worker anlegst. Reihenfolge: <b>zuerst</b> das Secret unter
-        <a href="/#/console/secrets">Console → Secrets</a>, <b>dann</b> den Worker, der es beim Namen nennt.</p>
+        <a href="/#/console/secrets">Console → Administration → Secrets</a>, <b>dann</b> den Worker, der es beim Namen nennt.</p>
       <p data-l="en">The dialog under <a href="/#/console/workers">Console → Workers</a> shows the expected shape as
         placeholder text – but only once you are already in it. Here it is beforehand, so the secret is ready before
         you create the worker. The order: <b>first</b> the secret under
-        <a href="/#/console/secrets">Console → Secrets</a>, <b>then</b> the worker that names it.</p>
+        <a href="/#/console/secrets">Console → Administration → Secrets</a>, <b>then</b> the worker that names it.</p>
       <table>
         <thead><tr>
           <th data-l="de">Worker-Typ</th><th data-l="en">Worker type</th>
@@ -6494,10 +6494,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <span data-l="en">The temptation to grant "everything" so it finally works is strong. That is exactly the
             finding an audit writes up later. Every runbook section names the smallest set that suffices.</span></li>
         <li><b data-l="de">Das Secret anlegen</b><b data-l="en">Create the secret</b>
-          <span data-l="de"><a href="/#/console/secrets">Console → Secrets</a>, <b>vor</b> dem Worker. Der Worker
+          <span data-l="de"><a href="/#/console/secrets">Console → Administration → Secrets</a>, <b>vor</b> dem Worker. Der Worker
             nennt nur den Namen; der Wert bleibt im Vault. So wechselst du später ein abgelaufenes Passwort, indem du
             den Vault-Schlüssel überschreibst – Worker und Modelle bleiben unangetastet.</span>
-          <span data-l="en"><a href="/#/console/secrets">Console → Secrets</a>, <b>before</b> the worker.
+          <span data-l="en"><a href="/#/console/secrets">Console → Administration → Secrets</a>, <b>before</b> the worker.
             The worker names only the key; the value stays in the vault. Which is how you later rotate an expired
             password by overwriting the vault key – the worker and every model stay untouched.</span></li>
         <li><b data-l="de">Den Worker anlegen</b><b data-l="en">Create the worker</b>
@@ -7932,9 +7932,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           temis – the built-in decision engine evaluates them.</p>
         <ol>
           <li data-l="de">Token, falls der Dienst einen verlangt, unter
-            <a href="/#/console/secrets">Console → Secrets</a> ablegen, z.&nbsp;B. <code>temis_token</code>.</li>
+            <a href="/#/console/secrets">Console → Administration → Secrets</a> ablegen, z.&nbsp;B. <code>temis_token</code>.</li>
           <li data-l="en">Where the service requires one, store the token under
-            <a href="/#/console/secrets">Console → Secrets</a>, e.g. <code>temis_token</code>.</li>
+            <a href="/#/console/secrets">Console → Administration → Secrets</a>, e.g. <code>temis_token</code>.</li>
           <li data-l="de"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>temis</b>,
             ein Name, der Endpoint, die Token-Referenz.</li>
           <li data-l="en"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: type
@@ -7952,8 +7952,8 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p data-l="en">Writes and reads events in an event store. Like temis: an endpoint
           (<code>https://clio.example.com</code>) and optionally a token reference, no account at a provider.</p>
         <ol>
-          <li data-l="de">Token, falls nötig, unter <a href="/#/console/secrets">Console → Secrets</a> ablegen.</li>
-          <li data-l="en">Store the token under <a href="/#/console/secrets">Console → Secrets</a> if there is one.</li>
+          <li data-l="de">Token, falls nötig, unter <a href="/#/console/secrets">Console → Administration → Secrets</a> ablegen.</li>
+          <li data-l="en">Store the token under <a href="/#/console/secrets">Console → Administration → Secrets</a> if there is one.</li>
           <li data-l="de"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: Typ <b>clio</b>,
             ein Name – <b>genau den</b> nennt jeder Task –, der Endpoint, die Token-Referenz.</li>
           <li data-l="en"><a href="/#/console/workers">Console → Workers</a> → <b>New worker</b>: type <b>clio</b>,
@@ -8148,10 +8148,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
       <h3 class="rz-group"><span data-l="de">Typen ohne Konfiguration</span><span data-l="en">Types with nothing to configure</span></h3>
       <p data-l="de">Diese Worker-Typen brauchen <b>keinen</b> konfigurierten Worker: Ihre Aufgaben tragen alles im
         Modell, es gibt also keinen Namen und keinen Dialog. Ein Credential kann trotzdem nötig sein – es steht dann
-        als <b>Referenz</b> im Task und der Wert unter <a href="/#/console/secrets">Console → Secrets</a>.</p>
+        als <b>Referenz</b> im Task und der Wert unter <a href="/#/console/secrets">Console → Administration → Secrets</a>.</p>
       <p data-l="en">These worker types need <b>no</b> configured worker: their tasks carry everything in the model,
         so there is no name and no dialog. A credential may still be needed – it then sits in the task as a
-        <b>reference</b>, with the value under <a href="/#/console/secrets">Console → Secrets</a>.</p>
+        <b>reference</b>, with the value under <a href="/#/console/secrets">Console → Administration → Secrets</a>.</p>
       <div class="grid2">
         <div class="card" id="runbook-rest">
           <b>HTTP REST</b>
@@ -8223,13 +8223,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <b>LDAP</b>
           <p class="lead" data-l="de">Sucht in einem Verzeichnis oder legt Einträge an, ändert und löscht sie. Kein
             konfigurierter Worker: Server-URL und Bind-DN stehen im Task, das <b>Bind-Passwort ist eine Referenz</b>
-            auf ein Secret unter <a href="/#/console/secrets">Console → Secrets</a>. Nimm <code>ldaps://</code> oder
+            auf ein Secret unter <a href="/#/console/secrets">Console → Administration → Secrets</a>. Nimm <code>ldaps://</code> oder
             <code>ldap://</code> mit STARTTLS. Für Active&nbsp;Directory gibt es den spezialisierten Typ – der kennt
             die Eigenheiten, die ein generischer Aufruf dir überlässt. <b>Vorsicht:</b> Eine Suche ohne Berechtigung
             antwortet „nichts gefunden" statt mit einem Fehler.</p>
           <p class="lead" data-l="en">Searches a directory, or adds, modifies and deletes entries. No configured
             worker: the server URL and the bind DN live in the task, and the <b>bind password is a reference</b> to a
-            secret under <a href="/#/console/secrets">Console → Secrets</a>. Use <code>ldaps://</code>, or
+            secret under <a href="/#/console/secrets">Console → Administration → Secrets</a>. Use <code>ldaps://</code>, or
             <code>ldap://</code> with STARTTLS. For Active&nbsp;Directory take the specialised type – it knows the
             quirks a generic call leaves to you. <b>Careful:</b> a search without permission answers "nothing found"
             rather than failing.</p>
@@ -8239,13 +8239,13 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           <b>SCIM</b>
           <p class="lead" data-l="de">Legt Benutzer und Gruppen bei einem Identity-Provider über SCIM&nbsp;2.0 an,
             liest und ändert sie. Basis-URL und Ressource stehen im Task; das Provisioning-Token des Providers legst
-            du unter <a href="/#/console/secrets">Console → Secrets</a> ab und nennst es als Secret-Referenz
+            du unter <a href="/#/console/secrets">Console → Administration → Secrets</a> ab und nennst es als Secret-Referenz
             (Authentifizierung <i>Bearer-Token</i>). Beginne mit einer <b>Suche</b> statt mit einem Anlegen: Ein
             Filter wie <code>userName eq "arno"</code> beweist Token und Basis-URL, ohne etwas zu schreiben – aber
             beachte, dass eine unberechtigte Suche „keine Ressourcen" antwortet und nicht scheitert.</p>
           <p class="lead" data-l="en">Creates, reads and updates users and groups at an identity provider over
             SCIM&nbsp;2.0. Base URL and resource live in the task; store the provider's provisioning token under
-            <a href="/#/console/secrets">Console → Secrets</a> and name it as the secret reference (authentication
+            <a href="/#/console/secrets">Console → Administration → Secrets</a> and name it as the secret reference (authentication
             <i>Bearer token</i>). Start with a <b>search</b> rather than a create: a filter such as
             <code>userName eq "arno"</code> proves the token and the base URL without writing anything – but note
             that an unentitled search answers "no resources" instead of failing.</p>
@@ -8819,7 +8819,7 @@ atlas playground --server "$ATLAS" --file scenarios/guest-access.json</code></pr
         der Zweck ist: Ein Simple Bind, der einen DN nennt und kein Passwort schickt, wird abgelehnt – so, wie
         ein echtes Active Directory ihn ablehnt. Die Token-Referenz, die deine Aufgabe nennt, muss also auch im
         Mockup auflösbar sein; <i>welchen Wert</i> sie hat, ist dabei völlig egal. Leg sie unter demselben Namen
-        in <a href="/#/console/workers">Workers</a> → Karte <b>Secrets</b> an, oder setze die Variable,
+        in <a href="/#/console/secrets">Console → Administration → Secrets</a> an, oder setze die Variable,
         die der Incident nennt, in der Umgebung des Workers. Fehlt sie, scheitert die Aufgabe, <i>bevor</i> der
         Mock überhaupt gefragt wird – der Incident nennt dann die Referenz und die Variable, die ihr fehlt.</p>
       <p data-l="de">Dieselbe Karte nimmt optional einen <b>Startbestand</b> entgegen – die Konten und Gruppen,
@@ -8838,7 +8838,7 @@ atlas playground --server "$ATLAS" --file scenarios/guest-access.json</code></pr
         the point: a simple bind that names a DN and sends no password is refused, the way a real Active
         Directory refuses it. So the token reference your task names has to resolve in mockup mode too;
         <i>what its value is</i> does not matter in the slightest. Store it under the same name in
-        <a href="/#/console/workers">Workers</a> → the <b>Secrets</b> card, or set the variable the
+        <a href="/#/console/secrets">Console → Administration → Secrets</a>, or set the variable the
         incident names in the worker's environment. Without it the task fails <i>before</i> the mock is ever
         asked – and the incident names the reference and the variable it is missing.</p>
       <p data-l="en">The same card takes optional <b>starting entries</b> – the accounts and groups your process
@@ -9394,6 +9394,35 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         feed endpoint is shown only to whoever may see its Worker; no credential is recorded. Another
         application's name and processes are shown only to a reader who may see that application; everyone else
         reads "another application". The same now holds for the application a call activity reaches.</p>
+      <p data-l="de">Mit <b>In Panorama öffnen</b> im Architektur-Dialog öffnet sich ein Release in der
+        <b>Starmap</b>, statt der Live-Landschaft: Die Kopfzeile sagt «Release vN of …, as recorded …», damit das Bild
+        nie für die laufende Landschaft gehalten wird. Gezeichnet wird jede Ebene, die der Release festhält – seine
+        Prozesse, die Nachrichten und Signale, die er empfängt und wirft, und wer in anderen Applikationen am anderen
+        Ende steht, seine Worker, Job-Typen und die Systeme, die sie erreichen, der Event-Feed, Rollen, Produkte,
+        Capabilities, Value Streams, Datenobjekte und Klassen. Die Elementtypen lassen sich nach Ebene ein- und
+        ausblenden; Drilldown, Wirkungspfade und gespeicherte Ansichten funktionieren wie in der Live-Starmap, und eine
+        gespeicherte Ansicht gehört zu ihrem Release. Ein Prozess öffnet seine Version in Operations, eine Capability
+        und ein Value Stream ihr Register. Der Schalter <i>Live overlay</i> legt für Operatoren den aktuellen Zustand
+        genau der Prozessversionen, die der Release ausgeliefert hat, und seiner Worker darüber: Incidents, wo Arbeit
+        hängt, und Instanzzahlen; den Zustand eines Workers sieht nur, wer seine Konfiguration sehen darf. Wer kein
+        Operator ist, sieht den Release so, wie er festgehalten wurde, mit dem Hinweis, dass das Overlay Operatoren
+        vorbehalten ist. Was die Skizze einem Leser vorenthält, bleibt auch hier vorenthalten; eine andere
+        Applikation erscheint als Platzhalter. Der ArchiMate-Knopf lädt das Dokument des ganzen Release nach Ebenen.
+        Abweichungen gegenüber den heutigen Registern (Drift) zeigt die Ansicht noch nicht.</p>
+      <p data-l="en"><b>Open in Panorama</b> in the architecture dialog opens a release in the <b>Starmap</b> in
+        place of the live landscape: the header says "Release vN of …, as recorded …", so the picture is never taken
+        for the landscape that runs. It draws every layer the release records – its processes, the messages and
+        signals it receives and throws and who in other applications is at the other end, its workers, job types
+        and the systems they reach, the event feed, roles, products, capabilities, value streams, data objects and
+        classes. Element types are shown and hidden by layer; drilldown, impact paths and saved views work as on
+        the live Starmap, and a saved view belongs to its release. A process opens its version in Operations, a
+        capability or value stream its register. For operators, the <i>Live overlay</i> switch lays the current
+        state of exactly the process versions the release shipped, and of its Workers, over it: incidents, where
+        work is parked, and instance counts; a Worker's state goes only to whoever may see its configuration. A
+        reader who is not an operator sees the release as recorded, with a note that the overlay is for
+        operators. What the sketch withholds from a reader stays withheld here; another application appears as a
+        placeholder. The ArchiMate button downloads the whole release's document by layer. Drift against today's
+        registers is not shown yet.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
@@ -11364,11 +11393,16 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <td data-l="de">Ein System, das die Prozesse dieses Servers anderswo zeigt, etwa ein Wiki, das in einer
               Seite immer die neuste Version eines Prozesses zeichnet. Es liest die Liste der deployten Prozesse, das
               Modell einer Definition und ihre Laufzeit-Zähler; deployen, starten und Instanzen lesen kann es nicht.
-              Es sieht, wie viele Incidents offen sind, aber nie ihre Meldungen.</td>
+              Es sieht, wie viele Incidents offen sind, aber nie ihre Meldungen. Ausserdem liest es die
+              Architektur-Skizzen der Applikationen, die seine Reichweite (<code>reach</code>) nennt, so wie alle sie
+              sehen dürfen: ohne Endpunkte und Konfiguration der Worker, ohne Produkte, andere Applikationen und
+              Verantwortliche – auch wenn ein Administrator den Token ausgestellt hat.</td>
             <td data-l="en">A system that shows this server's processes elsewhere, such as a wiki that always draws a
               process's newest version in a page. It reads the list of deployed processes, a definition's model and
               its runtime counts; it cannot deploy, start or read instances. It sees how many incidents are open,
-              never their messages.</td></tr>
+              never their messages. It also reads the architecture sketches of the applications its
+              <code>reach</code> names, as everybody may see them: without Workers' endpoints and configuration,
+              products, other applications and owners – even when an administrator minted the token.</td></tr>
           <tr><td><code>events</code></td>
             <td data-l="de">Eine CMDB oder eine Verrechnung, die dem Ereignis-Feed folgt. Du kannst es auf
               Kataloge beschränken, die du pflegst.</td>

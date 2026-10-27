@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas card fold e2e harness</title>
+    <!-- Drives the real api/web/fold.js against the real app.css over cards shaped the
+         way the Console's pages draw them: a topic headed by an <h2>, a topic whose
+         heading shares a row with its actions in a card with no padding of its own,
+         and the cards that are not topics — a page title (<h1>), a form (<h3>), a
+         section that folds itself (sectionHead), a card that opts out, and a heading
+         with nothing under it. Whether a folded card hides its body and keeps its
+         heading row is a question of what app.css displays, which only a browser can
+         answer. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main id="host" style="width:760px; margin:20px">
+      <div class="card" id="c-title"><h1>Security</h1><p class="muted" id="c-title-body">Which Workers act as whom.</p></div>
+
+      <div class="card" id="c-plain"><h2>Readiness</h2><p class="muted">Every configured Worker.</p>
+        <div id="c-plain-body">a table</div></div>
+
+      <div class="card" id="c-actions" style="padding:0">
+        <div class="between" style="padding:16px 18px 0"><h2>Policies</h2>
+          <button class="btn" type="button" id="c-actions-new">New policy</button></div>
+        <p class="muted" style="padding:0 18px">Drafts are edited as their JSON document.</p>
+        <div id="c-actions-slot" style="padding:0 18px 16px"></div></div>
+
+      <div class="card" id="c-link"><h2>Linked <a href="#elsewhere" id="c-link-a">elsewhere</a></h2>
+        <div id="c-link-body">body</div></div>
+
+      <div class="card" id="c-form"><h3>New user</h3><form id="c-form-body"><input name="x" /></form></div>
+
+      <div class="card" id="c-section"><div class="sec-head"><h2><button class="section-toggle"
+        aria-expanded="true" data-section="h-own">Configured workers</button></h2></div>
+        <div class="section-body" id="sec-h-own">own body</div></div>
+
+      <div class="card no-fold" id="c-optout"><h2>Opted out</h2><p id="c-optout-body">stays</p></div>
+
+      <div class="card" id="c-alone"><h2>Nothing under me</h2></div>
+    </main>
+    <script type="module">
+      import { foldCards, pageOf } from "/fold.js";
+
+      const host = document.getElementById("host");
+      // "New policy" puts its form below the heading, as the Security page does.
+      document.getElementById("c-actions-new").addEventListener("click", () => {
+        document.getElementById("c-actions-slot").innerHTML = `<form id="c-actions-form"><textarea></textarea></form>`;
+      });
+      const page = new URLSearchParams(location.search).get("page") || "harness";
+      foldCards(host, page);
+      window.__fold = { foldCards: () => foldCards(host, page), pageOf };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

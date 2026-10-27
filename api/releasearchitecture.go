@@ -436,7 +436,26 @@ func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot
 		return snap
 	}
 	out := *snap
-	mayViewWorker := func(id string) bool {
+	mayViewWorker := s.workerViewer(r)
+	if snap.Business != nil {
+		b := s.withholdProducts(r, *snap.Business)
+		out.Business = &b
+	}
+	s.redactCoupling(r, &out, mayViewWorker)
+	if snap.Physical == nil {
+		return &out
+	}
+	red := snap.Physical.Redacted(mayViewWorker, mayReach(httpapi.PrincipalFrom(r.Context()), RoleOperator))
+	out.Physical = &red
+	return &out
+}
+
+// workerViewer says, for a configured Worker's id, whether this reader may see that
+// Worker's configuration (connectorRole). An empty id is no configuration to see, and
+// a Worker that no longer exists is judged as an ownerless one. Run-loop goroutine
+// only: it reads the worker store.
+func (s *Server) workerViewer(r *http.Request) func(id string) bool {
+	return func(id string) bool {
 		if id == "" {
 			return true
 		}
@@ -450,17 +469,6 @@ func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot
 		code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer)
 		return code == 0
 	}
-	if snap.Business != nil {
-		b := s.withholdProducts(r, *snap.Business)
-		out.Business = &b
-	}
-	s.redactCoupling(r, &out, mayViewWorker)
-	if snap.Physical == nil {
-		return &out
-	}
-	red := snap.Physical.Redacted(mayViewWorker, mayReach(httpapi.PrincipalFrom(r.Context()), RoleOperator))
-	out.Physical = &red
-	return &out
 }
 
 // releaseArchitectureResp is the JSON answer: the release's names beside the snapshot,
@@ -494,6 +502,15 @@ func (s *Server) handleReleaseArchitectureXML(w http.ResponseWriter, r *http.Req
 	s.serveReleaseArchitecture(w, r, "xml")
 }
 
+// handleReleaseArchitectureEmbed answers the sketch for a page outside Atlas — a wiki
+// that shows it to everybody who can open the page (ADR-0493, as amended): the same
+// picture, read as [archsketch.Snapshot.Minimal] reads it whoever asks. It is a route
+// of its own rather than a parameter, so what the diagrams scope reaches stays
+// readable in its allowlist alone and no handler has to know the caller's scope.
+func (s *Server) handleReleaseArchitectureEmbed(w http.ResponseWriter, r *http.Request) {
+	s.serveReleaseArchitecture(w, r, "embed")
+}
+
 // serveReleaseArchitecture answers one release's snapshot under the application's
 // sharing scope (ADR-0071), in the format the route names. The rendering runs off the
 // loop: it reads nothing but the snapshot it is handed.
@@ -515,39 +532,16 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 		httpapi.Error(w, code, msg)
 		return
 	}
-
-	var (
-		rel     *applicationRelease
-		loadErr error
-	)
-	s.do(func() {
-		rels, err := s.releases.forApplication(appID)
-		if err != nil {
-			loadErr = err
-			return
+	var everyone func(*archsketch.Snapshot) *archsketch.Snapshot
+	if format == "embed" {
+		everyone = func(snap *archsketch.Snapshot) *archsketch.Snapshot {
+			m := snap.Minimal(appID)
+			return &m
 		}
-		for i := range rels {
-			if rels[i].Version == version {
-				rel = &rels[i]
-				rel.Architecture = s.redactedArchitecture(r, rel.Architecture)
-				return
-			}
-		}
-	})
-	switch {
-	case loadErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "load releases: "+loadErr.Error())
-		return
-	case rel == nil:
-		httpapi.Error(w, http.StatusNotFound, "no release v"+strconv.Itoa(int(version))+" of this application")
-		return
-	case rel.Architecture == nil:
-		// Said in words rather than left as a bare 404, because the two read alike and
-		// send somebody to different places: this release exists and simply predates
-		// snapshots, so publishing again is the remedy, not looking for a typo.
-		httpapi.Error(w, http.StatusNotFound, "release v"+strconv.Itoa(int(version))+
-			" has no architecture snapshot: it was recorded before Atlas took them (ADR-0471). "+
-			"A release published from now on carries one.")
+	}
+	rel, code, msg := s.releaseArchitecture(r, appID, version, everyone, nil)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 
@@ -563,7 +557,7 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 
 	m := archsketch.Meta{ApplicationID: appID, Application: proj.Name, ReleaseID: rel.ID, Version: rel.Version}
 	switch format {
-	case "svg":
+	case "svg", "embed":
 		serveSketch(w, "image/svg+xml; charset=utf-8", archsketch.SVG(view, m))
 	case "xml":
 		serveSketch(w, "application/xml; charset=utf-8", archsketch.ArchiMate(view, m))
@@ -575,6 +569,59 @@ func (s *Server) serveReleaseArchitecture(w http.ResponseWriter, r *http.Request
 			Architecture: &view,
 		})
 	}
+}
+
+// releaseArchitecture is one release of an application with its snapshot as this
+// reader may see it, or the status and the words to refuse with. view, when set,
+// replaces the reader's redaction with a view of the stored snapshot that every
+// reader gets alike (see [archsketch.Snapshot.Minimal]). onLoop, when set, runs on
+// the loop in the same turn as the read, with the release found, for whatever else
+// the caller needs from the loop's stores; an error it returns is answered as a
+// server error. The caller has authorized the reader for the application.
+func (s *Server) releaseArchitecture(r *http.Request, appID string, version int32, view func(*archsketch.Snapshot) *archsketch.Snapshot, onLoop func(*applicationRelease) error) (*applicationRelease, int, string) {
+	var (
+		rel             *applicationRelease
+		loadErr, runErr error
+	)
+	s.do(func() {
+		rels, err := s.releases.forApplication(appID)
+		if err != nil {
+			loadErr = err
+			return
+		}
+		for i := range rels {
+			if rels[i].Version == version {
+				rel = &rels[i]
+				switch {
+				case rel.Architecture == nil:
+				case view != nil:
+					rel.Architecture = view(rel.Architecture)
+				default:
+					rel.Architecture = s.redactedArchitecture(r, rel.Architecture)
+				}
+				if onLoop != nil && rel.Architecture != nil {
+					runErr = onLoop(rel)
+				}
+				return
+			}
+		}
+	})
+	switch {
+	case loadErr != nil:
+		return nil, http.StatusInternalServerError, "load releases: " + loadErr.Error()
+	case runErr != nil:
+		return nil, http.StatusInternalServerError, runErr.Error()
+	case rel == nil:
+		return nil, http.StatusNotFound, "no release v" + strconv.Itoa(int(version)) + " of this application"
+	case rel.Architecture == nil:
+		// Said in words rather than left as a bare 404, because the two read alike and
+		// send somebody to different places: this release exists and simply predates
+		// snapshots, so publishing again is the remedy, not looking for a typo.
+		return nil, http.StatusNotFound, "release v" + strconv.Itoa(int(version)) +
+			" has no architecture snapshot: it was recorded before Atlas took them (ADR-0471). " +
+			"A release published from now on carries one."
+	}
+	return rel, 0, ""
 }
 
 // serveSketch writes a rendering under the headers that keep it inert wherever it is

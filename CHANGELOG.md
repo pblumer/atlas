@@ -15,6 +15,33 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
+- **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
+  wikiwikibangbang already holds to draw processes and decisions in its pages, now also
+  lists the releases with a sketch (`GET /api/v1/architectures`) and reads one
+  (`GET /api/v1/applications/{id}/releases/{version}/architecture.embed.svg`). The sketch
+  is read the same way whoever asks, because the wiki shows it to everybody who can open
+  the page: Workers keep their names and lose their endpoints and configuration, products
+  and instances are counted, another application is "another application", and the
+  owners of capabilities and value streams are withheld, even when an administrator
+  minted the token. A token sees the applications its reach names; one minted without a
+  reach lists none.
+- **A release opens in Panorama's starmap, with every layer it records and its live state laid over it.**
+  The architecture dialog's "Open in Panorama" draws one release with the starmap: its
+  processes; the messages and signals it receives and throws, and who in other
+  applications is at the other end; its workers, job types and the systems they reach;
+  the event feed; the roles, products, capabilities and value streams; and its data
+  objects and classes. Each kind can be shown or hidden by layer, and the starmap's
+  drill, impact paths and saved views work on it, with saved views kept per release. A
+  process opens its version in Operations, a capability or value stream its register. The
+  header says "Release vN of <application>, as recorded <time>", so the picture is never
+  taken for the live landscape. For an operator, the live overlay lays the current state
+  of the release's own process versions and workers over it: incidents, where work is
+  parked, and instance counts. Everyone else sees the release as recorded and is told the
+  overlay is for operators. The ArchiMate button downloads the whole release by layer.
+  Another application, an endpoint or a product the reader may not see stays withheld,
+  as in the sketch. `GET /api/v1/applications/{id}/releases/{version}/mesh` serves the
+  graph, with `?overlay=1` for the live state. Drift against today's registers is not
+  shown yet.
 - **An agent can tell whether, and where, the server is slow.** Two MCP tools for an
   administrator's agent: `atlas_runtime_health` (`GET /api/v1/debug/runtime`) measures a
   window of up to 20 seconds and answers with the run loop's wait and hold latencies, the
@@ -185,6 +212,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every topic of a Console page folds away, and the browser remembers it.** A card
+  headed by its title — the five on Console › Administration › Security, the mockup cards
+  on Console › Workers, and every other one on every page — gets the caret toggle the
+  Workers and Deployments sections already had, without the page asking for it. Folded,
+  a card keeps its heading row, its own buttons included; pressing one of those opens
+  the card first, because what it opens appears below the heading. The state is kept per
+  page and topic in the browser, open until somebody folds it, and a card a page redraws
+  keeps its state ([ADR-0505](docs/adr/0505-every-topic-folds.md)).
+- **The secret vault has a page of its own: Console › Administration › Secrets.** It was
+  the last card of the Workers page, which everybody may open while only an administrator
+  may use the vault, and which no longer holds all of the vault's readers: content
+  sources name vault secrets too. Each secret still says which workers use it and what
+  shape their value has to have. The handbook has linked `#/console/secrets` all along,
+  which used to land on the dashboard and now opens the page; the worker card's word for
+  the vault links to it.
 - **An application's Deployments tab folds its lists away.** The deployed definitions,
   the deployment targets and the release history each fold under their heading, which
   still shows how many entries the list holds, and the browser remembers each choice for

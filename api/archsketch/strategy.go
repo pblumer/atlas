@@ -44,6 +44,9 @@ type StrategyOmitted struct {
 type Owner struct {
 	Name string `json:"name,omitempty"`
 	Role string `json:"role,omitempty"`
+	// Withheld is set by a read for a reader outside Atlas (see [Snapshot.Minimal]):
+	// an owner is recorded, and the person is not what such a reader is shown.
+	Withheld bool `json:"withheld,omitempty"`
 }
 
 // Capability is one capability the release realises.
@@ -175,6 +178,8 @@ func (o StrategyOmitted) text() string {
 // text names an owner as the register gives them.
 func (o *Owner) text() string {
 	switch {
+	case o != nil && o.Withheld:
+		return "owner withheld from this reader"
 	case o == nil || (o.Name == "" && o.Role == ""):
 		return "no owner recorded"
 	case o.Role == "":

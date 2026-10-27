@@ -159,6 +159,12 @@ type Status struct {
 	Unavailable []UnavailableState `json:"unavailable"`
 }
 
+// ApplyStatus is [applyStatus] for a graph built outside this package: the release
+// lens (ADR-0495 §4) draws a release's recorded architecture with Panorama's renderer,
+// and its severities and status summary have to come from the one mapping above
+// rather than from a second copy of it.
+func ApplyStatus(g *Graph, partial bool) { applyStatus(g, partial) }
+
 // applyStatus sets each node's severity from the state the server observed, then
 // aggregates worst-of up the containment edges (ADR-0211 §4).
 //

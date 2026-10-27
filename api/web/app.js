@@ -10,6 +10,7 @@ import {
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
+import { foldCards, pageOf } from "./fold.js";
 import { renderTraceTable, tablesOf as traceTablesOf, matchedRuleNumbers, fmtVal as traceValue } from "./dmn-trace.js";
 import { renderDrgSvg, openDecisionGraph } from "./decision-graph.js";
 import { copyText } from "./clipboard.js";
@@ -68,6 +69,12 @@ import { prefs, loadPrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
 
 const view = document.getElementById("view");
+// Every topic folds (fold.js). route() gives a view's cards their toggles once the view
+// has rendered; this gives them to a page that later redraws itself by replacing the
+// view's contents, which is how most pages save, reload and refresh. Only the view's
+// own children are watched, never its subtree: the modeler's canvas mutates by the
+// thousand, and none of that is a card.
+new MutationObserver(() => foldCards(view, pageOf(location.hash))).observe(view, { childList: true });
 
 // navGen guards the async router against re-entrancy. route() is async and
 // re-fires on every hashchange, so two navigations can be in flight at once. Each
@@ -751,6 +758,9 @@ const TOPNAV = {
       // The credentials machines sign in with (ADR-0194). Admin, like the three routes
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      // The vault (ADR-0069): the credentials atlas signs in elsewhere with, where API
+      // tokens are the ones machines sign in to atlas with. Admin, like every vault route.
+      { name: "Secrets", route: "#/console/secrets", role: "admin" },
       // Which Workers act as whom, by which policy: readiness, policies, the simulator
       // and the recorded decisions (ADR-0475).
       { name: "Security", route: "#/console/security", role: "admin" },
@@ -1235,6 +1245,9 @@ function handbookHelp(path) {
   // sit on it; with those on their own page it points there instead, and Organization
   // falls through to the Console's own chapter.
   if (path.startsWith("#/console/workers")) return H("formulare", "Forms & workers");
+  // A secret is stored for a worker to resolve, and the worker chapter is where the
+  // handbook says how.
+  if (path.startsWith("#/console/secrets")) return H("formulare", "Forms & workers");
   if (path.startsWith("#/console")) return H("schnellstart", "Quick start");
   return H("willkommen", "Welcome to atlas");
 }
@@ -2452,17 +2465,15 @@ async function removeGroupMember(groupId, userId, reload) {
   reload();
 }
 
-// viewConsoleWorkers is the Console's Workers page: what Atlas can delegate to,
-// what this instance has actually configured, and the vault those configurations
-// resolve their credentials from. The three read in that order because that is the
-// order an operator works in — pick a Worker Type, point it somewhere, give it a
-// credential — and the secrets stay with the workers because a token *reference* and
-// the secret it resolves to are one setting entered in two places (ADR-0041 · ADR-0069).
+// viewConsoleWorkers is the Console's Workers page: what Atlas can delegate to and
+// what this instance has actually configured. The two read in that order because that
+// is the order an operator works in — pick a Worker Type, point it somewhere.
 //
-// They were the bottom three cards of Organization, under the user roster, the groups
-// and the colour picker. That page answers "who uses this instance"; a worker is not
-// a person, and the integrations are what an operator comes back to — past everything
-// they were filed behind.
+// They were the bottom cards of Organization, under the user roster, the groups and
+// the colour picker. That page answers "who uses this instance"; a worker is not a
+// person, and the integrations are what an operator comes back to — past everything
+// they were filed behind. The vault they resolve their credentials from was the last
+// card here too, and has a page of its own now (viewConsoleSecrets).
 async function viewConsoleWorkers() {
   const gen = navGen;
   const pill = (c) => c.status === "active"
@@ -2591,8 +2602,8 @@ async function viewConsoleWorkers() {
       ${statusCell(c)}
       <td class="row-actions"></td></tr>`;
   // Both this card and the catalog above it fold away, each remembered on its own
-  // (sectionState): an operator who came for the vault scrolls past neither. New
-  // worker stays beside the heading because it unfolds the section the form opens in.
+  // (sectionState). New worker stays beside the heading because it unfolds the section
+  // the form opens in.
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
       <div class="between" style="padding:16px 18px 12px">
@@ -2603,8 +2614,9 @@ async function viewConsoleWorkers() {
       <p class="muted" style="padding:0 18px; margin:0 0 12px">A configured worker binds a
       <b>Worker Type</b> to one concrete endpoint and identity, and a task references it by name
       (ADR-0036/0041/0050). The endpoint is stored; the token is a <b>reference</b> resolved from
-      the vault (or <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored
-      here, and never in a process model.</p>
+      ${mayUse("admin") ? `<a href="#/console/secrets">the vault</a>` : "the vault"} (or
+      <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored here, and never
+      in a process model.</p>
       <div id="worker-form-slot" style="padding:0 18px"></div>
       <table data-dt-key="connectors">
         <thead><tr><th>Worker</th><th class="conn-status-col">Status</th><th></th></tr></thead>
@@ -2730,9 +2742,58 @@ async function viewConsoleWorkers() {
       </div>
     </div>`;
 
-  // Encrypted secret vault (ADR-0069): credentials a worker's token reference
-  // resolves to, sealed at rest. Every op is admin-gated and the vault may be
-  // unconfigured (no master key), so distinguish those states from a populated list.
+  if (superseded(gen)) return; // navigated away while the workers loaded
+  view.innerHTML = `
+    <div class="card" style="padding:0">
+      <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
+      <div style="padding:12px 18px">
+        ${sectionHead("workers-catalog", "Worker catalog", trPlural("workers.catalog.count", WORKER_TYPES.length))}
+      </div>
+      ${sectionBody("workers-catalog")}
+      <p class="muted" style="padding:0 18px; margin:0 0 12px">The Worker Types available to
+      this atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
+      that capability to one concrete target and identity, org-wide and shared across every
+      process.</p>
+      <table data-dt-key="worker-types">
+        <thead><tr><th>${esc(tr("workers.catalog.th.type"))}</th><th style="text-align:right">${esc(tr("workers.catalog.th.status"))}</th></tr></thead>
+        <tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody>
+      </table>
+      </div>
+    </div>
+    ${managedCard}
+    ${adMockCard}
+    ${sqlMockCard}`;
+  wireSections(view);
+  wireWorkerManagement(workers);
+  wireADMock();
+  wireSQLMock();
+  // Editing, enabling or deleting a worker re-renders this page without going through
+  // route(), whose enhanceViewTables would otherwise be the only one to give the new
+  // tables their sorting and filter row back.
+  enhanceViewTables();
+}
+
+// viewConsoleSecrets is Console › Administration › Secrets: the encrypted vault
+// (ADR-0069), credentials sealed at rest that a reference resolves to.
+//
+// It was the last card of the Workers page, on the grounds that a worker's token
+// reference and the secret it names are one setting entered in two places. Three
+// things outgrew that. The vault is the administrator's alone while the Workers page
+// is everybody's, so everybody else who opened it met a card saying they may not use
+// it. Workers are no longer its only readers: a content source names a vault
+// secret (ADR-0491), and the client secret of Microsoft account linking is kept in it
+// (Console › Administration › Security). And the handbook has sent people to
+// "Console → Secrets" all along, a route that did not exist and landed them on the
+// dashboard. What still ties a secret to its workers travels with the page: each row
+// says which workers use it, and the form says what shape their value has to have.
+async function viewConsoleSecrets() {
+  const gen = navGen;
+  // The workers are read only for what the list says about each secret; a caller who
+  // may not read them still gets the vault.
+  let workers = [];
+  try { workers = (await api("GET", "/api/v1/connectors")) || []; } catch { /* leave empty */ }
+  // Every op is admin-gated and the vault may be unconfigured (no master key), so
+  // distinguish those states from a populated list.
   let secrets = [];
   let secretsState = "ok"; // "ok" | "denied" | "unconfigured"
   try {
@@ -2762,15 +2823,15 @@ async function viewConsoleWorkers() {
       </td></tr>`;
   };
   const secretsCard = secretsState === "denied"
-    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">Managing secrets requires the admin role.</p></div>`
+    ? `<div class="card"><h1>Secrets</h1><p class="muted">Managing secrets requires the admin role.</p></div>`
     : secretsState === "unconfigured"
-    ? `<div class="card" style="margin-top:18px"><h2>Secrets</h2><p class="muted">The encrypted
+    ? `<div class="card"><h1>Secrets</h1><p class="muted">The encrypted
         secret vault is not configured. Start the server with <code>ATLAS_VAULT_KEY</code> (a
         32-byte key, base64 or hex) or <code>ATLAS_VAULT_KEY_FILE</code> to store worker
         credentials here, encrypted at rest (ADR-0069).</p></div>`
-    : `<div class="card" style="padding:0; margin-top:18px">
+    : `<div class="card" style="padding:0">
         <div class="between" style="padding:16px 18px 0">
-          <h2>Secrets</h2><button class="btn" id="new-secret" title="Store a new secret in the encrypted vault">New secret</button>
+          <h1 style="margin:0">Secrets</h1><button class="btn" id="new-secret" title="Store a new secret in the encrypted vault">New secret</button>
         </div>
         <p class="muted" style="padding:0 18px; margin:6px 0 12px">Credentials a worker's
         <b>token reference</b> resolves to, sealed at rest with AES-256-GCM (ADR-0069). The value
@@ -2784,36 +2845,11 @@ async function viewConsoleWorkers() {
         </table>
       </div>`;
 
-  if (superseded(gen)) return; // navigated away while the workers/secrets loaded
-  view.innerHTML = `
-    <div class="card" style="padding:0">
-      <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
-      <div style="padding:12px 18px">
-        ${sectionHead("workers-catalog", "Worker catalog", trPlural("workers.catalog.count", WORKER_TYPES.length))}
-      </div>
-      ${sectionBody("workers-catalog")}
-      <p class="muted" style="padding:0 18px; margin:0 0 12px">The Worker Types available to
-      this atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
-      that capability to one concrete target and identity, org-wide and shared across every
-      process.</p>
-      <table data-dt-key="worker-types">
-        <thead><tr><th>${esc(tr("workers.catalog.th.type"))}</th><th style="text-align:right">${esc(tr("workers.catalog.th.status"))}</th></tr></thead>
-        <tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody>
-      </table>
-      </div>
-    </div>
-    ${managedCard}
-    ${adMockCard}
-    ${sqlMockCard}
-    ${secretsCard}`;
-  wireSections(view);
-  wireWorkerManagement(workers);
-  wireADMock();
-  wireSQLMock();
+  if (superseded(gen)) return; // navigated away while the vault loaded
+  view.innerHTML = secretsCard;
   wireSecretsManagement(secrets, secretsState, workers);
-  // Editing, enabling or deleting a worker re-renders this page without going through
-  // route(), whose enhanceViewTables would otherwise be the only one to give the new
-  // tables their sorting and filter row back.
+  // Saving, rotating or deleting a secret re-renders this page without going through
+  // route(), so the new table asks for its sorting and filter row itself.
   enhanceViewTables();
 }
 
@@ -4243,6 +4279,10 @@ async function openReleaseArchitecture(appID, appName, version) {
     technology: tr("deployments.architecture.layer.technology"),
   };
   const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
+  // The same release in Panorama's starmap, every recorded layer to show, hide and drill
+  // into (ADR-0495 §4). Offered to whoever can open this dialog, which is whoever may
+  // read the release: see viewPanoramaStarmap for why the route lets them in.
+  const lensHref = `#/panorama/starmap?release=${encodeURIComponent(appID)}/${encodeURIComponent(version)}`;
 
   const ov = document.createElement("div");
   ov.className = "modal-ov";
@@ -4261,6 +4301,7 @@ async function openReleaseArchitecture(appID, appName, version) {
       </div>
       <div class="modal-foot">
         <span class="muted small">${esc(tr("deployments.architecture.foot"))}</span>
+        <a class="btn ghost" data-panorama href="${esc(lensHref)}" title="${esc(tr("deployments.architecture.panoramaTitle"))}">${esc(tr("deployments.architecture.panorama"))}</a>
         <a class="btn ghost" data-xml download="${esc(file)}.xml" title="${esc(tr("deployments.architecture.xmlTitle"))}">ArchiMate (.xml)</a>
         <a class="btn" data-svg download="${esc(file)}.svg" title="${esc(tr("deployments.architecture.svgTitle"))}">${esc(tr("deployments.architecture.svg"))}</a>
       </div>
@@ -4302,6 +4343,9 @@ async function openReleaseArchitecture(appID, appName, version) {
   document.addEventListener("keydown", onKey);
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
   ov.querySelector("[data-x]").addEventListener("click", close);
+  // The link navigates; the dialog is the page's, not the route's, so it would stay
+  // open over the starmap unless it is closed on the way out.
+  ov.querySelector("[data-panorama]").addEventListener("click", close);
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The
@@ -5978,7 +6022,7 @@ function wireSQLMock() {
 // the vault is denied (non-admin) or unconfigured there is nothing to wire.
 function wireSecretsManagement(secrets, state, workers) {
   if (state !== "ok") return;
-  const reload = () => viewConsoleWorkers();
+  const reload = () => viewConsoleSecrets();
   const put = (name, value) => api("PUT", "/api/v1/secrets/" + encodeURIComponent(name), { value });
   const slot = document.getElementById("secret-form-slot");
   const newBtn = document.getElementById("new-secret");
@@ -11279,11 +11323,37 @@ async function viewPanoramaModels() {
 // "Starmap" is the name on the page; the record and the code that draws it still say
 // landscape and mesh, which is what they are describing. The rename is of the view,
 // not of the thing it draws.
+//
+// With ?release=<application>/<version> it is the release lens (ADR-0495 §4): the same
+// renderer, drawing that release's recorded architecture instead of the live landscape.
+// The architecture dialog's "Open in Panorama" links here.
+//
+// Nothing extra is needed to let a reader in who is not a modeler, and that is checked
+// rather than assumed: the router gates no route by role. The role on a menu entry
+// decides only whether the menus offer it (`offered`), and the server refuses what the
+// principal may not read. So the lens opens for whoever followed the link, and the
+// release's mesh route answers by the application's viewer scope — the same rule as the
+// dialog the link is in. What a non-modeler loses is only the notation table, which is
+// already optional to this view, and the Panorama menu entries, which they were never
+// offered.
 async function viewPanoramaStarmap() {
   const gen = navGen;
   const mod = await import("./panorama-mesh.js");
   if (superseded(gen)) return;
-  await mod.mountPanoramaMesh(view, { api, toast });
+  const release = new URLSearchParams(location.hash.split("?")[1] || "").get("release");
+  if (release === null) return await mod.mountPanoramaMesh(view, { api, toast });
+  // The version is the last segment, so an application id is read whole whatever it
+  // holds; the link encodes it, and URLSearchParams has already decoded it.
+  const cut = release.lastIndexOf("/");
+  const appID = cut > 0 ? release.slice(0, cut) : "";
+  const version = cut > 0 ? Number(release.slice(cut + 1)) : NaN;
+  if (!appID || !Number.isInteger(version) || version <= 0) {
+    view.innerHTML = `<div class="card empty"><h1>Release</h1>
+      <p>This link does not name a release: it needs an application and a version, as
+      <code>?release=application/3</code>.</p></div>`;
+    return;
+  }
+  await mod.mountPanoramaMesh(view, { api, toast, source: mod.releaseSource(api, appID, version) });
 }
 
 async function viewPanoramaEstate() {
@@ -11742,6 +11812,7 @@ async function route() {
     if (path === "#/console/backup") return await viewConsoleBackup();
     if (path === "#/console/org") return await viewConsoleOrg();
     if (path === "#/console/workers") return await viewConsoleWorkers();
+    if (path === "#/console/secrets") return await viewConsoleSecrets();
     if (path === "#/console/ai-access") {
       const gen = navGen;
       return await viewAIAccess({ api, toast, view, isSuperseded: () => superseded(gen) });
@@ -11961,6 +12032,9 @@ async function route() {
     // opts out with class "no-enhance"; enhanceTable itself skips any table without a
     // header row and never double-enhances, so this is safe to run on every route.
     enhanceViewTables();
+    // The same for topics: every card headed by an <h2> folds under it, remembered
+    // per page (fold.js). It re-syncs a card it has seen, so it is safe here too.
+    foldCards(view, pageOf(location.hash));
   }
 }
 

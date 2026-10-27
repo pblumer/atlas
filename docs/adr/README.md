@@ -590,6 +590,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0502](0502-admin-profiling.md) | An administrator profiles the running server through the API | Accepted | Landed |
 | [0503](0503-mail-reply-routing.md) | A customer's reply finds the process that wrote to them | Proposed | Not started |
 | [0504](0504-what-a-mail-reply-proves.md) | What a mail reply proves, and what a decision may rest on | Proposed | Not started |
+| [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted | Landed |
+| [0506](0506-marketplace-catalogue-bundles-and-updates.md) | Marketplace catalogue bundles and opt-in updates | Proposed | Not started |
 
 ## The two states of a record
 
