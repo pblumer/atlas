@@ -44,7 +44,7 @@ func TestBeginBlueprintInstallJournalsSignedCataloguesBeforeNativeWrites(t *test
 	f.index.Releases[0] = f.release
 	srv.blueprints = f
 	srv.now = func() int64 { return 42_000_000_000 }
-	match := "\"" + f.release.Artifact.Digest + "\""
+	match := "\""+f.release.Artifact.Digest+"\""
 
 	if got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, ""); got.Code != http.StatusPreconditionRequired || f.fetches != 0 {
 		t.Fatalf("missing If-Match: %d, fetches=%d", got.Code, f.fetches)
@@ -102,7 +102,7 @@ func TestBeginBlueprintInstallRejectsConflictingPinWithoutOverwritingJournal(t *
 	defer srv.Close()
 	f := sampleBlueprintSource(t)
 	srv.blueprints = f
-	match := "\"" + f.release.Artifact.Digest + "\""
+	match := "\""+f.release.Artifact.Digest+"\""
 	if got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, match); got.Code != http.StatusOK {
 		t.Fatalf("first pin: %d %s", got.Code, got.Body.String())
 	}
@@ -130,7 +130,7 @@ func TestBeginBlueprintInstallRejectsProtectedApplicationAndTamperedArchive(t *t
 	if storeErr != nil {
 		t.Fatal(storeErr)
 	}
-	match := "\"" + f.release.Artifact.Digest + "\""
+	match := "\""+f.release.Artifact.Digest+"\""
 	if got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, match); got.Code != http.StatusConflict {
 		t.Fatalf("protected application accepted: %d %s", got.Code, got.Body.String())
 	}
