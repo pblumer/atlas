@@ -146,7 +146,23 @@ test("failed provenance journal aborts import before any native writes", async (
   await page.locator("[data-install]").click();
   await expect(page.locator("#result")).toContainText("Unable to persist installation");
   expect(requests.filter((r) => r.path.endsWith("/installations"))).toHaveLength(1);
-  expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+  expect((await page.evaluate(() => window.__calls)).map((x) => x.path)).toEqual([
+    "/api/v1/applications/source?dryRun=true",
+  ]);
+});
+
+test("cancelled native conflict decision never creates a pending journal", async ({ page }) => {
+  const requests = await stubRegistry(page);
+  await page.evaluate(() => { window.__forceConflict = true; window.__open(); });
+  await page.locator('[data-preview="0"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("[data-install]").click();
+  await expect(page.locator(".import-choices [data-cancel]")).toBeVisible();
+  await page.locator(".import-choices [data-cancel]").click();
+  expect(requests.filter((r) => r.path.endsWith("/installations"))).toHaveLength(0);
+  expect((await page.evaluate(() => window.__calls)).map((x) => x.path)).toEqual([
+    "/api/v1/applications/source?dryRun=true",
+  ]);
 });
 
 test("changed digest prevents import even when operator confirms", async ({ page }) => {
