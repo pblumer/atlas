@@ -30,7 +30,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 - **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
   the Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
-  performs no write on preview or cancellation, sends the reviewed `If-Match` digest
+  performs no write on preview or cancellation, durably journals the pinned package before native writes and refuses to import if journalling fails, sends the reviewed `If-Match` digest
   on download, and hands the package to the existing dry-run and authorized import
   flow; mismatched digests and an absent registry fail closed.
 

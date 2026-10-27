@@ -37,7 +37,7 @@ const pkg = tarGz([["atlas.json", JSON.stringify({
   formatVersion: 1, key: "purchase", name: "Purchase", processes: [], forms: [], decisions: [],
 })]]);
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview } = {}) {
+async function stubRegistry(page, { status = 200, downloadStatus = 200, beginStatus = 200, previewBody = preview } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
@@ -48,6 +48,9 @@ async function stubRegistry(page, { status = 200, downloadStatus = 200, previewB
         body: JSON.stringify(status === 200 ? index : { error: "Registry not configured" }) });
     } else if (path.endsWith("/preview")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewBody) });
+    } else if (path.endsWith("/installations")) {
+      await route.fulfill({ status: beginStatus, contentType: "application/json",
+        body: JSON.stringify(beginStatus === 200 ? { status: "pending", applicationKey: "purchase" } : { error: "Unable to persist installation" }) });
     } else if (path.endsWith("/package")) {
       await route.fulfill(downloadStatus === 200
         ? { status: 200, contentType: "application/gzip", body: pkg }
@@ -108,7 +111,7 @@ test("cancelled operator confirmation never downloads or imports", async ({ page
   await expect(page.locator("[data-install]")).toBeVisible();
   page.once("dialog", (dialog) => dialog.dismiss());
   await page.locator("[data-install]").click();
-  expect(requests.filter((r) => r.path.endsWith("/package"))).toHaveLength(0);
+  expect(requests.filter((r) => r.path.endsWith("/package") || r.path.endsWith("/installations"))).toHaveLength(0);
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
 });
 
@@ -123,6 +126,9 @@ test("explicit confirmation and matching digest reuses existing dry-run and impo
   const downloaded = requests.filter((r) => r.path.endsWith("/package"));
   expect(downloaded).toHaveLength(1);
   expect(downloaded[0].ifMatch).toBe('"' + digest + '"');
+  const journal = requests.filter((r) => r.path.endsWith("/installations"));
+  expect(journal).toHaveLength(1);
+  expect(journal[0].ifMatch).toBe('"' + digest + '"');
   const calls = await page.evaluate(() => window.__calls);
   expect(calls.map((x) => x.path)).toEqual([
     "/api/v1/applications/source?dryRun=true",
@@ -130,6 +136,33 @@ test("explicit confirmation and matching digest reuses existing dry-run and impo
   ]);
   expect(await page.evaluate(() => window.__reloads)).toBe(1);
   await expect(page.locator(".modal-ov")).toHaveCount(0);
+});
+
+test("failed provenance journal aborts import before any native writes", async ({ page }) => {
+  const requests = await stubRegistry(page, { beginStatus: 500 });
+  await page.evaluate(() => window.__open());
+  await page.locator('[data-preview="0"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("[data-install]").click();
+  await expect(page.locator("#result")).toContainText("Unable to persist installation");
+  expect(requests.filter((r) => r.path.endsWith("/installations"))).toHaveLength(1);
+  expect((await page.evaluate(() => window.__calls)).map((x) => x.path)).toEqual([
+    "/api/v1/applications/source?dryRun=true",
+  ]);
+});
+
+test("cancelled native conflict decision never creates a pending journal", async ({ page }) => {
+  const requests = await stubRegistry(page);
+  await page.evaluate(() => { window.__forceConflict = true; window.__open(); });
+  await page.locator('[data-preview="0"]').click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator("[data-install]").click();
+  await expect(page.locator(".import-choices [data-cancel]")).toBeVisible();
+  await page.locator(".import-choices [data-cancel]").click();
+  expect(requests.filter((r) => r.path.endsWith("/installations"))).toHaveLength(0);
+  expect((await page.evaluate(() => window.__calls)).map((x) => x.path)).toEqual([
+    "/api/v1/applications/source?dryRun=true",
+  ]);
 });
 
 test("changed digest prevents import even when operator confirms", async ({ page }) => {

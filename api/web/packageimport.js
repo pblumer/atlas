@@ -116,7 +116,7 @@ export function openAnswers(problems, directory) {
 // request — body raw bytes with a type, or anything else as JSON — and resolves to
 // { status, data }, the answer decoded. Resolves to what each step did, or null when
 // the person cancelled; nothing is written before the last question is answered.
-export async function importPackage(file, { call, title = t("package.title") }) {
+export async function importPackage(file, { call, title = t("package.title"), beforeWrite }) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const files = await readArchive(bytes);
   const json = (name) => (files.has(name) ? JSON.parse(text(files.get(name))) : null);
@@ -188,6 +188,12 @@ export async function importPackage(file, { call, title = t("package.title") }) 
     if (!choice) return null;
     query = decisionQuery(choice);
   }
+
+  // No native write (source, constants, publish, catalogue or mappings) may
+  // precede this optional durability gate. A cancelled conflict/answers dialog
+  // never creates a pending Marketplace journal. Ordinary file imports do not
+  // provide the hook and keep their existing behaviour.
+  if (beforeWrite) await beforeWrite();
 
   // The steps, in the order `atlas import` takes them.
   const out = { source: await source(query), constants: null, published: null, catalogue: null, warnings: [],

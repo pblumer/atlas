@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Marketplace installations are journalled before import.** After an explicit, verified Blueprint selection the Console first saves a durable pending record with its pinned signing-key fingerprint, registry origin, package digest, application key and catalogue IDs. The native importer runs only after that write succeeds. The journal remains pending after a browser-reported success until a future server-side reconciliation verifies all native writes (ADR-0499, BMP1).
 - **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
 - **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
   wikiwikibangbang already holds to draw processes and decisions in its pages, now also

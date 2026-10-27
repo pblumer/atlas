@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/pblumer/atlas/api/blueprintregistry"
@@ -19,6 +20,7 @@ import (
 type blueprintSource interface {
 	LoadIndex(context.Context) (blueprintregistry.Index, error)
 	Fetch(context.Context, string, string) (blueprintregistry.Release, []byte, error)
+	TrustIdentity() (origin, signerFingerprint string)
 }
 
 // configuredBlueprintSource accepts a single static operator-owned HTTPS
@@ -74,51 +76,57 @@ func (s *Server) handleListBlueprints(w http.ResponseWriter, r *http.Request) {
 
 // selectedBlueprint checks selection against the signed index, rather than
 // sending an arbitrary user-supplied location to the outbound HTTP client.
-func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blueprintregistry.Release, []byte, bool) {
+func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blueprintregistry.Release, []byte, string, bool) {
 	if !s.requireBlueprints(w) {
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
 	}
 	id, version := r.PathValue("id"), r.PathValue("version")
 	if id == "" || version == "" {
 		httpapi.Error(w, http.StatusBadRequest, "Blueprint identifier and version are required")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
 	}
 	index, err := s.blueprints.LoadIndex(r.Context())
 	if err != nil {
 		httpapi.Error(w, http.StatusBadGateway, "trusted Blueprint registry is unavailable or invalid")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
 	}
 	found := false
+	var indexedRelease blueprintregistry.Release
 	for _, rel := range index.Releases {
 		if rel.BlueprintID == id && rel.Version == version {
 			if !blueprintregistry.Compatible(rel.Atlas, Version) {
 				httpapi.Error(w, http.StatusConflict, "Blueprint is incompatible with this atlas version")
-				return blueprintregistry.Release{}, nil, false
+				return blueprintregistry.Release{}, nil, "", false
 			}
 			found = true
+			indexedRelease = rel
 			break
 		}
 	}
 	if !found {
 		httpapi.Error(w, http.StatusNotFound, "Blueprint release not in the trusted registry")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
 	}
 	// Fetch independently re-verifies the current signed index; a changed or
 	// revoked release is never silently replaced by an untrusted package.
 	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadGateway, "Blueprint package download or signature/digest verification failed")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
+	}
+	if !reflect.DeepEqual(indexedRelease, release) {
+		httpapi.Error(w, http.StatusConflict, "Blueprint changed between signed index reads; review again")
+		return blueprintregistry.Release{}, nil, "", false
 	}
 	if !blueprintregistry.Compatible(release.Atlas, Version) {
 		httpapi.Error(w, http.StatusConflict, "Blueprint release compatibility changed; review again")
-		return blueprintregistry.Release{}, nil, false
+		return blueprintregistry.Release{}, nil, "", false
 	}
-	return release, bytes, true
+	return release, bytes, index.RegistryID, true
 }
 
 func (s *Server) handleBlueprintPreview(w http.ResponseWriter, r *http.Request) {
-	release, archive, ok := s.selectedBlueprint(w, r)
+	release, archive, _, ok := s.selectedBlueprint(w, r)
 	if !ok {
 		return
 	}
@@ -159,7 +167,7 @@ func (s *Server) handleBlueprintPackage(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusPreconditionRequired, "preview a Blueprint before requesting its package")
 		return
 	}
-	release, compressed, ok := s.selectedBlueprint(w, r)
+	release, compressed, _, ok := s.selectedBlueprint(w, r)
 	if !ok {
 		return
 	}

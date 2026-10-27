@@ -124,6 +124,7 @@ var persistentStores = []storeEntry{
 	{name: "information-models", class: classInstance, why: "the vocabulary data objects are typed against"},
 	{name: "playground-scenarios", class: classInstance, why: "saved playground scenarios"},
 	{name: "call-overrides", class: classInstance, why: "which process a call activity resolves to on this server"},
+	{name: "blueprint-installations", class: classInstance, why: "this server\u0027s verified Blueprint origin, pinned version/digest and pending install requests; not portable authoring data and never an engine event (ADR-0499)"},
 	{name: "import-baselines", class: classInstance, why: "what the last import brought to this installation, per artifact, as a hash: the base an import tells an edit made here from an update by (ADR-0467). It describes this installation's history of imports, so it means nothing on another one and never travels with an export"},
 	{name: "package-mappings", class: classInstance, why: "what the names an application package gives its catalogues' groups, people and approvers mean on this installation, as people chose them when a name was not found here (ADR-0467). It is this installation's answer to another's names, so it means nothing elsewhere and never travels with an export"},
 	{name: "application-constants", class: classInstance, why: "the constants each application holds on this installation — the tenant, app id or suffix its processes read as application.NAME here, which differ between DEV, INT and PROD and so never travel with an export (ADR-0453)"},

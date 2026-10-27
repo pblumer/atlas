@@ -126,7 +126,21 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
           const file = new File([await res.blob()], "blueprint-" + inspected.version + ".tar.gz", {
             type: "application/gzip",
           });
-          const out = await importPackage(file, { call, title: t("blueprint.title") });
+          // The native importer calls beforeWrite only after conflict and
+          // principal-mapping choices were accepted, but before its first write.
+          // A cancelled dialog creates no stale pending installation.
+          const out = await importPackage(file, {
+            call, title: t("blueprint.title"),
+            beforeWrite: async () => {
+              const started = await fetch(route(inspected.blueprintId, inspected.version) + "/installations", {
+                method: "POST", cache: "no-store", headers: { "If-Match": '"' + inspected.digest + '"' },
+              });
+              if (!started.ok) {
+                const data = await started.json().catch(() => ({}));
+                throw new Error(data.error || t("blueprint.failed"));
+              }
+            },
+          });
           if (out) {
             closeAfterImport();
             notify(t("blueprint.imported") + (packageSummary(out) ? " · " + packageSummary(out) : ""), "ok");

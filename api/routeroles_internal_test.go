@@ -212,6 +212,10 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/settings/oidc-mapping",
 	"PUT /api/v1/settings/oidc-mapping",
 
+	// The instance-local Marketplace journal reveals who selected which
+	// Blueprint and signing origin; only administrators inspect its recovery state.
+	"GET /api/v1/blueprints/installations",
+
 	// Who exists, what they may do, and the record of what they did.
 	"GET /api/v1/users",
 	// Who is signed in this minute. Same list, same reach: presence says where a
