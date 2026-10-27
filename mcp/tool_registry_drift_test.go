@@ -840,6 +840,8 @@ var mcpOmittedRoutes = map[string]string{
 	// application APIs, returning a raw downloaded package to an MCP agent
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
+	"GET /api/v1/blueprints/installations":                   "instance-local administrative provenance journal; not an agent-executable import or remote discovery operation",
+	"POST /api/v1/blueprints/{id}/releases/{version}/installations": "Console-only human confirmation journals the pinned package before native import; agent must not imply a completed install",
 	"GET /api/v1/blueprints":                                 "Console discovery of operator-pinned signed releases, with no standalone agent workflow yet",
 	"GET /api/v1/blueprints/{id}/releases/{version}/preview": "Console design-time safety and dependency preview before a human import decision",
 	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; MCP does not download raw package bytes",
