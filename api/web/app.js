@@ -17,6 +17,7 @@ import { copyText } from "./clipboard.js";
 import { outcomeSummary } from "./importchoices.js";
 import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.js";
 import { importPackage, packageSummary } from "./packageimport.js";
+import { openBlueprintMarketplace } from "./blueprint-marketplace.js";
 import { installFeelAssistant } from "./feel-assistant.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
@@ -3530,6 +3531,7 @@ async function viewModelerHome() {
         { label: tr("create.importFile"), icon: "📥", act: "import" },
         { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
         { label: tr("create.importApplication"), icon: "🗂", act: "import-source" },
+        { label: tr("blueprint.browse"), icon: "📦", act: "browse-blueprints" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -3604,6 +3606,7 @@ async function viewModelerHome() {
     if (act === "import") importArtifact("", renderProjects);
     if (act === "import-mim") importMIM("", renderProjects);
     if (act === "import-source") importApplicationSource(renderProjects);
+    if (act === "browse-blueprints") openBlueprintMarketplace({ call: packageCall, reload: renderProjects, notify: toast });
   });
 
   // One deployed process = one row. A process may have several deployed versions;

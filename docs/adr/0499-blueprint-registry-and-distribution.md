@@ -96,6 +96,9 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 ## As built (2026-10-27)
 
+**BMP1 Console integration under review:** Draft PR #1416 provides operator-pinned registry discovery, signed package previews, a digest-conditional download and a Console handoff to the existing source import with explicit operator confirmation. This is not yet durable installation provenance or a complete BMP1 release.
+
+
 **BMP1 transport landed:** PR #1411 added an off-loop, pinned-key public HTTPS catalogue client with response limits, redirect/DNS/IP checks and compressed archive digest verification. It is a library, not a user-facing registry endpoint. **Archive inspection is in review:** draft PR #1415 adds bounded, in-memory tar.gz/member/manifest checks; the existing application importer remains authoritative for model validation and explicit publish. No design-time provenance or Console installation is yet implemented.
 
 
