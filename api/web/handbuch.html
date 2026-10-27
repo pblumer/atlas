@@ -9373,6 +9373,27 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         as bands above the sketch, or alone; in the ArchiMate document each process becomes a Business Process its
         Application Process realises, with the roles assigned to it, the products, and the capabilities serving
         the value streams' stages.</p>
+      <p data-l="de">Eine Nachricht wird über ihren Namen im ganzen atlas zugestellt, ein Signal an jeden Prozess
+        gesendet, der seinen Namen fängt. Deshalb zeigt die Skizze die <b>Kopplung</b> zu anderen Applikationen:
+        Ein Release hält die Nachrichten und Signale fest, die seine Prozesse werfen, und die Signale, die sie
+        fangen, und zu jedem Namen die Prozesse anderer Applikationen am anderen Ende – gelesen aus der neuesten
+        aktiven Version jedes deployten Modells. Ein Nachrichtenkasten sagt, wer die Nachricht wirft; für jeden
+        geworfenen Namen kommt ein Kasten «Sends message …» oder «Broadcasts signal …» hinzu, der sagt, wer ihn
+        empfängt. Seine Linie ist gestrichelt, weil atlas den Namen selbst zuordnet und keine Verbindung sie
+        kreuzt. Der Event-Feed erscheint als Kasten, wenn die Installation einen ausliefert. Einen Feed-Endpunkt
+        sieht nur, wer den Worker sehen darf; ein Credential wird nie aufgezeichnet. Name und Prozesse einer
+        anderen Applikation sieht nur, wer diese Applikation sehen darf; alle anderen lesen «another
+        application». Dasselbe gilt jetzt für die Applikation, die ein Call Activity aufruft.</p>
+      <p data-l="en">A message is delivered by its name across the whole of atlas, and a signal to every process
+        that catches its name. So the sketch shows the <b>coupling</b> to other applications: a release records
+        the messages and signals its processes throw and the signals they catch, and for each name the processes
+        of other applications at the other end – read from the newest active version of every deployed model. A
+        message box says who throws the message; each name the release throws gets a box, "Sends message …" or
+        "Broadcasts signal …", saying who receives it. Its line is dashed, because atlas correlates the name
+        itself and no connection crosses it. The event feed appears as a box when the installation pushes one. A
+        feed endpoint is shown only to whoever may see its Worker; no credential is recorded. Another
+        application's name and processes are shown only to a reader who may see that application; everyone else
+        reads "another application". The same now holds for the application a call activity reaches.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist

@@ -1,9 +1,10 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to D —
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to E —
   the banded layout moved to slice C; a Worker's owner and call budget are not recorded;
   versions rise with each slice; personal data names every worker it is handed to; a
-  product is shown to whoever may maintain its catalogue; see the notes below)
+  product is shown to whoever may maintain its catalogue; another application, called or
+  coupled, is shown to whoever may see it; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -175,6 +176,51 @@
 >   processes; its capability register is empty. The business bounds sit well above what
 >   was seen; the strategy bounds are guards with no measurement behind them yet, and are
 >   revisited once a register with content can be measured.
+
+> **Implementation status and amendment (2026-10-27): slice E has landed.** A snapshot
+> records the release's coupling as part of its application layer: the messages and
+> signals its processes throw, the signals they catch, and for each name the processes
+> of other applications on the recording installation at the other end — those that
+> throw a message the release receives or a signal it catches, and those that receive a
+> message or signal it throws — read from the newest active version of every deployed
+> definition, as the message and signal inventories read them (ADR-0446, ADR-0447). It
+> records the event feed's enabled subscriptions and, per subscription, the cloudevents
+> Worker and its endpoint as scheme, host and port. The SVG says on a message box who
+> throws it, adds a box for each signal the release catches and each name it throws,
+> drawn with a dashed line because Atlas correlates a name itself, and one box for the
+> event feed. The ArchiMate document writes each peer process as an Application Process
+> assigned from its application's Application Component, triggering the release's
+> processes that receive the name or triggered by those that throw it, and the feed as an
+> Application Service serving the application. Format and mapping version 7.
+>
+> **Amendment:**
+>
+> - **Another application is shown to whoever may see it — called as well as coupled.**
+>   §5 names message coupling; the calls recorded since ADR-0471 named the called
+>   application to every reader of the release. The same rule now holds for both: a reader
+>   who may not see the application (`canViewArtifact`, the starmap's filter) reads
+>   *another application*, and a process filed in no application is judged by who
+>   deployed its current version, as the starmap judges it. A call records
+>   `targetWithheld` for such a reader.
+> - **Coupling is drawn without Application Events.** §1 names Application Event; it is
+>   outside Panorama's subset, and Panorama allows flow and triggering only between
+>   behaviour, not between components. So a peer is the process at the other end, and the
+>   coupling is triggering between processes; the name travels in the documentation.
+> - **Senders the models do not show are listed as not shown.** A message published
+>   through the API, by an order or by a Worker outside an inbound subscription has no
+>   sender in any deployed model. Inbound subscriptions are recorded in the technology
+>   layer (slice B), product actions in the business layer (slice D).
+> - **The event feed is installation-wide.** A subscription filters by catalogue reach,
+>   not by event type or application (ADR-0433), so the record names the subscriptions
+>   and endpoints, and the picture says the release's incidents travel on it, and its
+>   products' outcomes when the business layer shows products. No credential is
+>   recorded; an endpoint is shown only to whoever may see its Worker.
+> - **The bounds (§6)** are 100 names, 200 peer processes and 20 feed endpoints. The
+>   installation measured holds 139 message names with at most two sending elements
+>   each, at most 23 names received by one application, and three signal names; no name
+>   there couples two applications, five reach one application from processes filed in
+>   no application, and the feed has no subscription. The bounds are guards well above
+>   that.
 
 ## Context and problem statement
 

@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pblumer/atlas/blob/main/docs/contracts/blueprint-registry/v1/index.schema.json",
+  "title": "atlas Blueprint Registry index v1",
+  "description": "Signed registry metadata; signature is a separate Ed25519 detached file, never a field inside this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "registryId",
+    "releases"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "registryId": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 180,
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\\.[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "releases": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "$ref": "#/$defs/release"
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "namespace": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 180,
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\\.[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+    },
+    "stringList": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blueprintId",
+        "version",
+        "publisherId",
+        "title",
+        "description",
+        "license",
+        "atlas",
+        "artifact",
+        "needs"
+      ],
+      "properties": {
+        "blueprintId": {
+          "$ref": "#/$defs/namespace"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "publisherId": {
+          "$ref": "#/$defs/namespace"
+        },
+        "title": {
+          "$ref": "#/$defs/name"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        },
+        "atlas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minVersion"
+          ],
+          "properties": {
+            "minVersion": {
+              "$ref": "#/$defs/version"
+            },
+            "maxVersionExclusive": {
+              "$ref": "#/$defs/version"
+            }
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "digest",
+            "sizeBytes"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 256,
+              "pattern": "^(?:[A-Za-z0-9][A-Za-z0-9._-]*/)*[A-Za-z0-9][A-Za-z0-9._-]*\\.tar\\.gz$"
+            },
+            "digest": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 52428800
+            }
+          }
+        },
+        "needs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workerTypes",
+            "serverConstants"
+          ],
+          "properties": {
+            "workerTypes": {
+              "$ref": "#/$defs/stringList"
+            },
+            "serverConstants": {
+              "$ref": "#/$defs/stringList"
+            }
+          }
+        }
+      }
+    }
+  }
+}
