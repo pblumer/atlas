@@ -114,3 +114,77 @@ func TestAgainstARealWiki(t *testing.T) {
 	}
 	t.Logf("wrote page %v and task %v", page["key"], task["key"])
 }
+
+// TestAWatchAgainstARealWiki walks the watch on finished tasks against a wiki, with the
+// variables above and one more:
+//
+//	ATLAS_TEST_WWBB_READ_TOKEN  an API token of scope read of an account that is a
+//	                            viewer of the space (the same account will do)
+//
+// It opens a task with the token that writes, finishes it, and reads it back through
+// the watch, which reads with the token that cannot write — and refuses the other.
+func TestAWatchAgainstARealWiki(t *testing.T) {
+	base, readToken := os.Getenv("ATLAS_TEST_WWBB_URL"), os.Getenv("ATLAS_TEST_WWBB_READ_TOKEN")
+	if base == "" || readToken == "" {
+		t.Skip("set ATLAS_TEST_WWBB_READ_TOKEN beside the variables of TestAgainstARealWiki to run the watch against a real wiki")
+	}
+	space, taskType := os.Getenv("ATLAS_TEST_WWBB_SPACE"), os.Getenv("ATLAS_TEST_WWBB_TASK_TYPE")
+	writer, err := NewClient(base, `{"token":"`+os.Getenv("ATLAS_TEST_WWBB_TOKEN")+`"}`, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := NewClient(base, `{"token":"`+readToken+`"}`, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err := writer.WatchTip(ctx, space); err == nil || !strings.Contains(err.Error(), "scope read") {
+		t.Errorf("a watch with the token that writes = %v, want refused", err)
+	}
+	cursor, err := reader.WatchTip(ctx, space)
+	if err != nil {
+		t.Fatalf("WatchTip: %v", err)
+	}
+
+	reg := NewRegistry()
+	reg.Register("wiki", writer)
+	runID := time.Now().UTC().Format("20060102T150405.000")
+	do := func(j Job) map[string]any {
+		t.Helper()
+		j.Connector, j.ResultVariable, j.ErrorCodes = "wiki", "out", Codes
+		out, err := Run(ctx, j, reg)
+		if err != nil {
+			t.Fatalf("%s: %v", j.Operation, err)
+		}
+		return out["out"].(map[string]any)
+	}
+	task := do(Job{Operation: "create-item", Space: space, ItemType: taskType, Title: "Atlas live watch " + runID})
+	id := fmt.Sprint(task["id"])
+	do(Job{Operation: "transition-item", Item: id, Transition: "finish"})
+
+	find := func(page WatchPage) (Finished, bool) {
+		for _, f := range page.Finished {
+			if f.ID == id {
+				return f, true
+			}
+		}
+		return Finished{}, false
+	}
+	page, err := reader.FinishedSince(ctx, WatchRequest{Space: space, Cursor: cursor})
+	if err != nil {
+		t.Fatalf("FinishedSince: %v", err)
+	}
+	finished, ok := find(page)
+	if !ok || finished.Item["key"] != task["key"] {
+		t.Fatalf("the finished task %v was not read: %+v", task["key"], page.Finished)
+	}
+	do(Job{Operation: "update-item", Item: id, Title: "Atlas live watch " + runID + " (edited)"})
+	edited, err := reader.FinishedSince(ctx, WatchRequest{Space: space, Cursor: page.Cursor})
+	if err != nil {
+		t.Fatalf("FinishedSince: %v", err)
+	}
+	if again, ok := find(edited); !ok || !again.At.Equal(finished.At) {
+		t.Errorf("after an edit: %+v, want the same task finished at %v", again, finished.At)
+	}
+	t.Logf("watched %v finish at %v; cursor %s", task["key"], finished.At, edited.Cursor)
+}

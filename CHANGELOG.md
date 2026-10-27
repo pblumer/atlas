@@ -14,6 +14,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process can wait for a wikiwikibangbang task to be done.** A wikiwikibangbang Worker
+  carries an inbound watch now: under **Events…** it names a space, and every task the
+  space finishes is published as a message — so a process that opened a task waits for it
+  at a message catch event correlated on the task's id, and a finished task can start a
+  process. The watch follows the wiki's change feed, every 30 seconds by default, and asks
+  which of the items that changed are finished; a task is published once each time it is
+  finished, so an edit of a finished task is not published again and one reopened and
+  finished again is. An optional query in the wiki's own language narrows which tasks
+  count. The engine reads the feed itself, so a watch reads only with a Worker whose token
+  has scope read and refuses any other: a token that writes stays with the supervised
+  worker. The process receives the task as one variable, `wikiEvent`. A watch is
+  forward-only, and a task finished while no instance waits for it is not kept
+  ([ADR-draft-wikiwikibangbang-task-watch](docs/adr/draft-wikiwikibangbang-task-watch.md)).
 - **The architecture sketch has a data layer, with the personal data a release declares.**
   A release now records what its processes keep and read: each data object with its
   declared class, the state it starts in, and the elements that write it (with the state

@@ -115,6 +115,18 @@ type inboundSubscription struct {
 	AllowedSenders   []string `json:"allowedSenders,omitempty"`
 	RequireDmarcPass bool     `json:"requireDmarcPass,omitempty"`
 
+	// The fields below are a *wikiwikibangbang watch*
+	// (ADR-draft-wikiwikibangbang-task-watch): the tasks one space of the wiki
+	// finishes, so a process can wait for one.
+	//
+	// WikiSpace is the space's key. WikiQuery narrows which finished tasks count, in the
+	// wiki's own query language (label = "atlas"); the watch groups it before its own
+	// conditions, so it narrows and never widens. The cursor is the wiki's change-feed
+	// number and the time from which a finished task is published, and each task has its
+	// own mark, sequenced by when it was finished.
+	WikiSpace string `json:"wikiSpace,omitempty"`
+	WikiQuery string `json:"wikiQuery,omitempty"`
+
 	// LastPolledAt is when this watch was last read, in unix seconds. It is what makes
 	// PollSeconds a cadence rather than a wish, and like LastEventID it is
 	// best-effort: losing it re-reads, which the marks make harmless.

@@ -68,6 +68,11 @@ type managedConnectorKind struct {
 	// engine (ADR-0172). The store entry exists only so an operator can configure it in
 	// the Console and the supervised worker is provisioned from it (superviseEnv). Its
 	// newRegistry/rebuild/registerHandlers are therefore nil and skipped at setup.
+	//
+	// One read is the exception, and it is not a task: a wikiwikibangbang watch is read
+	// by the inbound bridge, with a client built for it alone and only with a token of
+	// scope read, which the connector checks before it reads
+	// (ADR-draft-wikiwikibangbang-task-watch).
 	workerOnly bool
 }
 
@@ -469,7 +474,8 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		// wikiwikibangbang wiki, comments on it, queries items, reads a page as Markdown or
 		// appends to one (ADR-0498). Worker-only for CardDAV's
 		// reason: the token writes as the wiki account and has no business on the engine's
-		// run loop.
+		// run loop. A watch on finished tasks reads with a Worker of its own whose token
+		// only reads (wikiwatch.go).
 		name:           connectorKindWiki,
 		workerOnly:     true,
 		validateCreate: validateWikiConnector,

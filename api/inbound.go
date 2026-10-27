@@ -92,6 +92,8 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		IncludeBody    bool     `json:"includeBody"`
 		AllowedSenders []string `json:"allowedSenders"`
 		RequireDmarc   bool     `json:"requireDmarcPass"`
+		WikiSpace      string   `json:"wikiSpace"`
+		WikiQuery      string   `json:"wikiQuery"`
 		CursorField    string   `json:"cursorField"`
 		LagSeconds     int      `json:"lagSeconds"`
 		PollSeconds    int      `json:"pollSeconds"`
@@ -179,6 +181,8 @@ func (s *Server) handleCreateInboundSubscription(w http.ResponseWriter, r *http.
 		IncludeBody:      p.IncludeBody,
 		AllowedSenders:   p.AllowedSenders,
 		RequireDmarcPass: p.RequireDmarc,
+		WikiSpace:        strings.TrimSpace(p.WikiSpace),
+		WikiQuery:        strings.TrimSpace(p.WikiQuery),
 		CursorField:      strings.TrimSpace(p.CursorField),
 		LagSeconds:       p.LagSeconds,
 		PollSeconds:      p.PollSeconds,

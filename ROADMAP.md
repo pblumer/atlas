@@ -667,12 +667,15 @@ The control-flow basics most real models use.
   (`connector/wikiwikibangbang/catalog`), spelled like Jira's where the meaning is the same.
   The account is a technical one with no system role; `matchField` makes a create find the
   item an earlier round made, a transition already made counts as made, and a redelivered
-  append or comment does not write twice. Worker-only and supervised by default. Walked
-  against wikiwikibangbang at commit 928fec0; still open: as whom a task writes (one
+  append or comment does not write twice. Worker-only and supervised by default. A process
+  waits for a task to be done by a message: a watch on a Worker whose token only reads
+  publishes the tasks a space finishes
+  ([ADR-draft-wikiwikibangbang-task-watch](docs/adr/draft-wikiwikibangbang-task-watch.md)).
+  Walked against wikiwikibangbang at commit 928fec0; still open: as whom a task writes (one
   account, not the person behind the process — ADR-0475's question), a precondition on the
-  wiki's body commit to close the append window, waiting on a task by a message instead of
-  polling, and no capability claim — the work-item contract ADR-0480 anticipates has two
-  implementations now, not a contract.
+  wiki's body commit to close the append window, keeping a finished task's message for an
+  instance that is not waiting yet, and no capability claim — the work-item contract
+  ADR-0480 anticipates has two implementations now, not a contract.
   **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
   reference-only document search, authenticated presentation, safe metadata operations
   and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a

@@ -374,6 +374,8 @@ func inboundWatched(sub inboundSubscription) string {
 		return "channel " + sub.ChannelID
 	case sub.MailFolder != "":
 		return "mail folder " + sub.MailFolder
+	case sub.WikiSpace != "":
+		return "finished tasks in space " + sub.WikiSpace
 	}
 	return ""
 }

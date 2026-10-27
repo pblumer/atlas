@@ -2518,7 +2518,7 @@ async function viewConsoleWorkers() {
     // Kind-specific first: these are the reasons an operator came to this row rather
     // than to any other, and they exist on no other kind.
     if (c.kind === "clio") items.push({ label: "Provision access…", icon: "🔑", act: "provision" });
-    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail") items.push({ label: "Events…", icon: "⇄", act: "subs" });
+    if (c.kind === "clio" || c.kind === "jira" || c.kind === "googlesheets" || c.kind === "discord" || c.kind === "mail" || c.kind === "wikiwikibangbang") items.push({ label: "Events…", icon: "⇄", act: "subs" });
     // A CloudEvents endpoint is subscribed to the event feed, which is administrator
     // configuration: the panel lists what the worker is sent and how delivery stands.
     // The feed carries the engine's facts too, so it stays when the service catalogue
@@ -5398,7 +5398,7 @@ async function toggleInboundSubs(row, workerId, kind) {
   }
   const subs = (await api("GET", "/api/v1/connectors/" + encodeURIComponent(workerId) + "/inbound-subscriptions")) || [];
   const list = subs.map((s) => `<tr data-sid="${esc(s.id)}">
-      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.watchedSubject)}</code>${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
+      <td><code>${esc(s.jql || s.spreadsheetId || s.folderId || s.channelId || s.mailFolder || s.wikiSpace || s.watchedSubject)}</code>${s.wikiSpace ? ` <span class="muted">(finished tasks${s.wikiQuery ? " matching " + esc(s.wikiQuery) : ""})</span>` : ""}${s.mailFolder ? ` <span class="muted">(new mail${(s.allowedSenders || []).length ? " from " + esc(s.allowedSenders.join(", ")) : " from anyone"}${s.requireDmarcPass ? ", DMARC pass" : ""}${s.includeBody ? ", with body" : ", metadata only"})</span>` : ""}${s.recursive ? ' <span class="muted">(recursive)</span>' : ""}${s.jql ? ` <span class="muted">(on ${esc(s.cursorField || "created")})</span>` : ""}${s.spreadsheetId ? ` <span class="muted">(rows in ${esc(s.watchRange || "A:Z")})</span>` : ""}${s.folderId ? ` <span class="muted">(files ${esc(s.cursorField || "created")})</span>` : ""}${s.channelId ? ' <span class="muted">(new messages)</span>' : ""}</td>
       <td>→ message <span class="chip">${esc(s.messageName)}</span>${s.correlationKey ? ` on <code>${esc(s.correlationKey)}</code>` : ""}</td>
       <td>${!s.enabled
         ? `<span class="pill warn" title="${esc(s.disabledReason || "Switched off.")}"><span class="dot"></span>off</span>`
@@ -5413,7 +5413,10 @@ async function toggleInboundSubs(row, workerId, kind) {
   const isGoogle = kind === "googlesheets";
   const isDiscord = kind === "discord";
   const isMail = kind === "mail";
-  const what = isMail
+  const isWiki = kind === "wikiwikibangbang";
+  const what = isWiki
+    ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the tasks one space of the wiki finishes are published as atlas messages, so a process that opened a task can <b>wait for it</b> at a message catch event correlated on the task's id (<code>= aufgabe.id</code>, when create-item kept its result in <code>aufgabe</code>), and a finished task can start a process. Atlas reads the wiki's change feed every 30 seconds by default. <b>This Worker's token must have scope read</b>: the engine reads the feed itself, and a token that can write stays with the worker — so configure a second wikiwikibangbang Worker for the watch, with a read token of an account that is a viewer of the space. The watch makes that account watch the space. <b>Max events/hour</b> is the loop guard. Empty uses 60.</div>`
+    : isMail
     ? `<div class="muted" style="margin-bottom:8px">Inbound mail watches — the mail arriving in one folder of this Worker's mailbox is published as atlas messages, so a mail starts a process (ADR-0438). Atlas polls once a minute by default and <b>never changes the mailbox</b>: model a task to file or mark a message. <b>Who may start a process</b> is anyone who can write to the address — restrict it with <i>Allowed senders</i>, and since a sender address is a claim anybody can make, require a <b>DMARC pass</b> too. <b>What a process receives</b> is the envelope — sender, recipients, subject, attachment names and sizes — and the text only when you include it; on a shared server every operator can read what a process receives. <b>Max events/hour</b> is the loop guard; an auto-reply ping-pong is exactly the loop it stops. Empty uses 60.</div>`
     : isDiscord
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the messages posted in a Discord channel are published as atlas messages, so a message starts a process. Atlas polls every 15 seconds by default; nothing has to reach this server from the internet. <b>The bot needs the Message Content intent</b> — without it Discord returns every message with an empty <code>content</code>, no error and no warning, and a correlation key over it quietly matches nothing. Enable it under <i>Developer Portal &rsaquo; your application &rsaquo; Bot &rsaquo; Privileged Gateway Intents</i>. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a channel the Worker also posts into has no natural end. Empty uses 60.</div>`
@@ -5422,7 +5425,9 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<div class="muted" style="margin-bottom:8px">Inbound event watches — the issues a JQL matches are published as atlas messages, so a new ticket starts a process (ADR-0214). Atlas polls; nothing has to reach this server from the internet. <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`
     : `<div class="muted" style="margin-bottom:8px">Inbound event subscriptions — a watched clio subject's events are published as atlas messages (ADR-0075). <b>Max events/hour</b> is the loop guard: a watch that publishes more than this within an hour switches itself off, because a query that matches what its own processes write has no natural end. Empty uses 60.</div>`;
-  const source = isMail
+  const source = isWiki
+    ? `<label class="field" style="margin:0"><span>Space</span><input name="wikiSpace" placeholder="OPS" required/></label>`
+    : isMail
     ? `<label class="field" style="margin:0"><span>Folder</span><input name="mailFolder" placeholder="INBOX"/></label>`
     : isDiscord
     ? `<label class="field" style="margin:0"><span>Channel</span><input name="channelId" placeholder="123456789012345678" required/></label>`
@@ -5435,7 +5440,10 @@ async function toggleInboundSubs(row, workerId, kind) {
     : isJira
     ? `<label class="field" style="margin:0"><span>JQL</span><input name="jql" placeholder="project = OPS AND issuetype = Bug" required/></label>`
     : `<label class="field" style="margin:0"><span>Watched subject</span><input name="watchedSubject" placeholder="/employees" required/></label>`;
-  const extra = isMail
+  const extra = isWiki
+    ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Query (optional, the wiki's query language)</span><input name="wikiQuery" placeholder='label = "atlas"'/></label>
+      <div class="muted" style="grid-column:1 / -1">A task is published when it reaches a finished state of its workflow. An edit of a finished task is not published again; a task reopened and finished again is. The query narrows which tasks count and cannot widen them; write no <code>ORDER BY</code>. The correlation key (FEEL) sees <code>itemId</code>, <code>itemKey</code>, <code>itemType</code>, <code>space</code>, <code>title</code>, <code>state</code>, <code>finishedAt</code>, <code>eventType</code>, and <code>item</code> — the task as get-item returns it, without its body — by these names or under <code>wikiEvent</code>. The process receives them as one variable, <code>wikiEvent</code>: <code>wikiEvent.itemKey</code>, <code>wikiEvent.item.properties</code>. A watch is forward-only: a task finished before it began is skipped, and so is one finished while no instance waits for it — model the wait right after the task is opened.</div>`
+    : isMail
     ? `<label class="field" style="grid-column:1 / span 2;margin:0"><span>Allowed senders (optional, comma-separated)</span><input name="allowedSenders" placeholder="kunde@example.com, @lieferant.ch"/></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="requireDmarcPass"/><span>Require a DMARC pass</span></label>
       <label class="check" style="margin:0 0 8px;display:flex;gap:8px;align-items:center"><input type="checkbox" name="includeBody"/><span>Include the text</span></label>
@@ -5481,8 +5489,8 @@ async function toggleInboundSubs(row, workerId, kind) {
     <table style="width:100%"><tbody id="subs-body">${list}</tbody></table>
     <form id="subs-form" style="display:grid;gap:8px;grid-template-columns:1fr 1fr 1fr auto;align-items:end;margin-top:10px">
       ${source}
-      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isMail ? "mail.eingegangen" : isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
-      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isMail ? "= internetMessageId" : isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
+      <label class="field" style="margin:0"><span>Message name</span><input name="messageName" placeholder="${isWiki ? "aufgabe.erledigt" : isMail ? "mail.eingegangen" : isGoogle ? "antrag.eingegangen" : isJira ? "jira.ticket.created" : "employee.created"}" required/></label>
+      <label class="field" style="margin:0"><span>Correlation key (FEEL, optional)</span><input name="correlationKey" placeholder="${isWiki ? "= itemId" : isMail ? "= internetMessageId" : isGoogle ? "= Antragsnummer" : isJira ? "= issueKey" : "= subjectTail"}"/></label>
       <label class="field" style="margin:0"><span>Max events/hour</span><input name="maxPerHour" type="number" min="0" placeholder="60"/></label>
       <button class="btn" type="submit" title="Add this inbound event watch">Add</button>
       ${extra}
@@ -5514,7 +5522,10 @@ async function toggleInboundSubs(row, workerId, kind) {
         correlationKey: (f.get("correlationKey") || "").trim(),
         maxPerHour: Number(f.get("maxPerHour") || 0) || 0,
       };
-      if (isMail) {
+      if (isWiki) {
+        body.wikiSpace = (f.get("wikiSpace") || "").trim();
+        body.wikiQuery = (f.get("wikiQuery") || "").trim();
+      } else if (isMail) {
         body.mailFolder = (f.get("mailFolder") || "").trim();
         body.allowedSenders = String(f.get("allowedSenders") || "").split(",").map((x) => x.trim()).filter(Boolean);
         body.requireDmarcPass = f.get("requireDmarcPass") === "on";

@@ -360,6 +360,12 @@ func describeInboundWatch(kind string, sub inboundSubscription) string {
 		}
 		return fmt.Sprintf("new mail in folder %s", folder)
 	}
+	if kind == connectorKindWiki {
+		if q := strings.TrimSpace(sub.WikiQuery); q != "" {
+			return fmt.Sprintf("tasks finished in space %s matching %s", sub.WikiSpace, q)
+		}
+		return fmt.Sprintf("tasks finished in space %s", sub.WikiSpace)
+	}
 	if kind == connectorKindJira {
 		field := strings.TrimSpace(sub.CursorField)
 		if field == "" {

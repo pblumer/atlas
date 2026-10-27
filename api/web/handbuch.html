@@ -6941,6 +6941,57 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           end; every existing block stays as it was. If somebody changes the page exactly between that read and that
           write, the worker overwrites the change. It stays in the page's history and can be restored from there.
           While somebody edits the page live, the worker waits and tries again.</p>
+        <p data-l="de"><b>Auf erledigte Aufgaben warten:</b> Ein Prozess kann warten, bis eine Aufgabe, die er
+          angelegt hat, erledigt ist, statt das Wiki immer wieder abzufragen. Dafür liest atlas den Änderungs-Feed des
+          Wikis selbst – und zwar nur mit einem Token, das <b>nur lesen</b> kann. Ein Token, das schreibt, bleibt beim
+          beaufsichtigten Worker.</p>
+        <p data-l="en"><b>Waiting for a task to be done:</b> a process can wait until a task it opened is done,
+          instead of asking the wiki again and again. For that, atlas reads the wiki's change feed itself – and only
+          with a token that can <b>only read</b>. A token that writes stays with the supervised worker.</p>
+        <ol>
+          <li data-l="de">Als dasselbe Konto – oder als eines, das im Space mindestens <b>viewer</b> ist – ein zweites
+            Token mit dem Umfang <b>read</b> erstellen und als Secret ablegen, z.&nbsp;B. <code>wiki_leser</code>.</li>
+          <li data-l="en">As the same account – or one that is at least a <b>viewer</b> of the space – create a second
+            token of scope <b>read</b> and store it as a secret, e.g. <code>wiki_leser</code>.</li>
+          <li data-l="de">Einen zweiten wikiwikibangbang-Worker mit diesem Secret anlegen, z.&nbsp;B.
+            <code>wiki-lesen</code>. Ein Watch auf einem Worker, dessen Token schreiben kann, liest nichts und zeigt in
+            seiner Zeile <i>not reading</i> mit dem Grund.</li>
+          <li data-l="en">Create a second wikiwikibangbang worker with that secret, e.g. <code>wiki-lesen</code>. A
+            watch on a worker whose token can write reads nothing and shows <i>not reading</i> in its row, with the
+            reason.</li>
+          <li data-l="de">Beim Worker <code>wiki-lesen</code> unter <b>Events…</b>: den Space (<code>OPS</code>), einen
+            Nachrichtennamen (<code>aufgabe.erledigt</code>) und den Korrelationsschlüssel <code>= itemId</code>;
+            optional eine Abfrage, die eingrenzt, welche Aufgaben zählen (<code>label = "atlas"</code>). atlas lässt
+            das Konto den Space beobachten und liest alle 30&nbsp;Sekunden.</li>
+          <li data-l="en">On the worker <code>wiki-lesen</code> under <b>Events…</b>: the space (<code>OPS</code>), a
+            message name (<code>aufgabe.erledigt</code>) and the correlation key <code>= itemId</code>; optionally a
+            query that narrows which tasks count (<code>label = "atlas"</code>). atlas makes the account watch the
+            space and reads every 30&nbsp;seconds.</li>
+          <li data-l="de">Im Modell behält der Task, der die Aufgabe anlegt, sein Ergebnis (<code>aufgabe</code>); direkt
+            danach folgt ein Nachrichten-Zwischenereignis <code>aufgabe.erledigt</code> mit dem Korrelationsschlüssel
+            <code>= aufgabe.id</code>. Ist die Aufgabe erledigt, läuft genau diese Instanz weiter und erhält die
+            Aufgabe als Variable <code>wikiEvent</code> (<code>wikiEvent.itemKey</code>,
+            <code>wikiEvent.item.properties</code>).</li>
+          <li data-l="en">In the model, the task that opens the task keeps its result (<code>aufgabe</code>), and right
+            after it comes a message intermediate catch event <code>aufgabe.erledigt</code> with the correlation key
+            <code>= aufgabe.id</code>. When the task is done, exactly that instance moves on and receives the task as
+            the variable <code>wikiEvent</code> (<code>wikiEvent.itemKey</code>,
+            <code>wikiEvent.item.properties</code>).</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Gemeldet wird nur, wer gerade wartet</span><span class="lbl" data-l="en">Only an instance that is waiting is told</span>
+          <p data-l="de" style="margin:.3em 0 0">atlas behält die Meldung nicht auf: Wird eine Aufgabe erledigt, während
+            die Instanz noch nicht am Zwischenereignis steht – etwa weil zwischen Anlegen und Warten ein weiterer
+            Schritt liegt –, weckt die Meldung sie später nicht mehr. Modelliere das Warten deshalb unmittelbar nach
+            dem Anlegen. Als erledigt gilt der letzte Zustand des Workflows oder einer, aus dem keine Transition
+            hinausführt. Wird eine Aufgabe wieder geöffnet und erneut erledigt, meldet atlas sie noch einmal; eine
+            blosse Änderung einer erledigten Aufgabe nicht.</p>
+          <p data-l="en" style="margin:.3em 0 0">atlas does not keep the message: if a task is done while the instance
+            is not yet at the catch event – because another step lies between opening and waiting, say – the message
+            does not wake it later. So model the wait right after the task is opened. Done is the workflow's last state,
+            or one no transition leaves. A task reopened and done again is reported again; a mere change to a done
+            task is not.</p>
+        </div>
         <p data-l="de"><b>Fehler abfangen:</b> Existiert ein Item nicht oder darf das Konto es nicht lesen, endet der
           Task mit dem Fehlercode <code>WIKIWIKIBANGBANG_ITEM_NOT_FOUND</code>; lehnt das Wiki einen Wert ab – ein
           Pflichtfeld fehlt, eine Transition ist aus dem aktuellen Zustand nicht erlaubt, eine Abfrage ist fehlerhaft

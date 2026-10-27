@@ -969,6 +969,9 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 		(rec.MailFolder != "" || rec.IncludeBody || len(rec.AllowedSenders) > 0 || rec.RequireDmarcPass) {
 		return "mailFolder, includeBody, allowedSenders and requireDmarcPass belong to a mail watch"
 	}
+	if kind != connectorKindWiki && kind != "" && (rec.WikiSpace != "" || rec.WikiQuery != "") {
+		return "wikiSpace and wikiQuery belong to a wikiwikibangbang watch"
+	}
 	switch kind {
 	case connectorKindClio:
 		if rec.WatchedSubject == "" {
@@ -1051,10 +1054,13 @@ func validateInboundWatch(kind string, rec *inboundSubscription) string {
 	case connectorKindMail:
 		return validateMailWatch(rec)
 
+	case connectorKindWiki:
+		return validateWikiWatch(rec)
+
 	case "":
 		return "no worker with that id"
 	default:
-		return "Worker Type " + kind + " has no inbound half: only clio, jira, googlesheets, discord and mail workers can carry a watch"
+		return "Worker Type " + kind + " has no inbound half: only clio, jira, googlesheets, discord, mail and wikiwikibangbang workers can carry a watch"
 	}
 }
 

@@ -210,6 +210,8 @@ func inboundCadence(kind string, rec inboundSubscription) time.Duration {
 		return discordDefaultPoll
 	case connectorKindMail:
 		return mailDefaultPoll
+	case connectorKindWiki:
+		return wikiDefaultPoll
 	}
 	return 0
 }
@@ -371,6 +373,15 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 	var out []pendingSub
 	live := make(map[string]bool, len(recs))
 	defer s.inboundHealth.retain(live)
+	// A wiki client no enabled watch reads with any more is let go.
+	wikis := map[string]bool{}
+	defer func() {
+		for id := range s.wikiWatchClients {
+			if !wikis[id] {
+				delete(s.wikiWatchClients, id)
+			}
+		}
+	}()
 	for _, r := range recs {
 		if !r.Enabled {
 			continue
@@ -441,6 +452,17 @@ func (s *Server) resolveInboundSubs() []pendingSub {
 				continue
 			}
 			src = mailSource{mb: mb}
+		case connectorKindWiki:
+			// The kind is worker-only, so there is no registry to ask: the watch's client
+			// is built here, from the Worker's endpoint and credential, and the connector
+			// refuses on the first read a token that could write (ADR-0498).
+			client, err := s.wikiWatchClientOf(c, s.inboundNow())
+			if err != nil {
+				s.noteInboundFailure(r, err.Error())
+				continue
+			}
+			wikis[c.ID] = true
+			src = wikiSource{client: client}
 		default:
 			// A kind with no inbound half; its worker is outbound only.
 			s.noteInboundFailure(r, "Worker Type "+c.Kind+" has no inbound half, so nothing reads this watch")

@@ -690,6 +690,10 @@ type Server struct {
 	// the run loop so a large backlog drains as bounded catch-up across ticks rather
 	// than monopolizing the single writer with one unbounded publish storm (ADR-0075).
 	inboundBatch int
+	// wikiWatchClients are the clients the inbound bridge reads wikis with, by Worker id:
+	// the one read the engine makes of a worker-only kind, with a token of scope read
+	// (ADR-draft-wikiwikibangbang-task-watch). Owned by the run-loop goroutine.
+	wikiWatchClients map[string]wikiWatchClient
 
 	// osExportCfg is the OpenSearch event-exporter configuration (ADR-0114); it is
 	// enabled only when a URL is set (WithOpenSearchExporter). exporter is the built
