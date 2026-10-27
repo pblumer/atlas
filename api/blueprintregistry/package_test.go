@@ -192,7 +192,6 @@ func TestInspectPackageAcceptsBoundedValidArchive(t *testing.T) {
 	}
 }
 
-
 func TestInspectPackageSummarizesApplicationCataloguesAndProducts(t *testing.T) {
 	data := packageFixture(t,
 		packageTestEntry{name: "atlas.json", data: `{"formatVersion":1,"key":"service","name":"Service","processes":[],"forms":[],"decisions":[]}`},
