@@ -36,7 +36,9 @@
       "depends_on": [
         "BMP0"
       ],
-      "issues": [],
+      "issues": [
+        1422
+      ],
       "prs": [
         1411,
         1415,
