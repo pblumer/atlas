@@ -6,7 +6,7 @@ import zlib from "node:zlib";
 
 const release = {
   blueprintId: "org.example.purchase", publisherId: "org.example", version: "1.0.0",
-  title: "Purchase approvals", description: "Approval example", license: "Apache-2.0",
+  title: "Purchase approvals", description: '<img src=x onerror="alert(1)">', license: "Apache-2.0",
   needs: { workerTypes: [], serverConstants: [] },
 };
 const digest = "sha256:" + "a".repeat(64);
@@ -67,6 +67,8 @@ test("only signed registry metadata is rendered and safe escaped; preview does n
   await page.evaluate(() => window.__open());
   await expect(page.locator(".modal-ov")).toBeVisible();
   await expect(page.locator(".modal-ov")).toContainText("Purchase approvals");
+  await expect(page.locator(".modal-ov")).toContainText("<img src=x");
+  await expect(page.locator(".modal-ov img")).toHaveCount(0);
   await page.locator('[data-preview="0"]').click();
   await expect(page.locator("[data-install]")).toBeVisible();
   await expect(page.locator(".modal-ov")).toContainText(digest);
