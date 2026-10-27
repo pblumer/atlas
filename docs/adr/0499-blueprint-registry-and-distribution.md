@@ -1,9 +1,9 @@
 # ADR-0499: Open Blueprint registries for process applications
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-26
-- **Deciders:** atlas maintainers (review pending)
+- **Deciders:** pblumer (maintainer; approval to implement on 2026-10-27)
 
 ## Context and problem statement
 
@@ -28,7 +28,7 @@ We want a reusable, immutable Blueprint of a process application from an indepen
 3. Require all Blueprint consumers to clone GitHub repositories directly.
 4. Distribute only a curated catalog embedded into the atlas binary.
 
-## Decision outcome (proposed)
+## Decision outcome
 
 Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper around the **existing application package**. The marketplace can also list element-template and Worker Type packages, but it does not replace their native package formats.
 
@@ -73,9 +73,9 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 
 ## BMP0 registry v1 contract profile (under review)
 
-This section refines the **proposed** option 2 with an intentionally narrow, testable v1. It does not change the status of this ADR from Proposed to Accepted, and does not authorize executing untrusted downloadable code.
+The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Not started** describes the runtime integration; the checked-in schema/fixtures are a contract, not a deployed registry, an installer, or authorization to execute untrusted downloaded code.
 
-**Decision recommendation: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
+**Decision: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
 
 The index declares a registry ID, a bounded list of immutable Blueprint releases, semver versions, publishers, descriptions, licence labels, atlas compatibility and required Worker Type/server-constant names. Every release names its **relative** application package path, compressed byte size and exact `sha256:` digest of the package bytes. A signed index does not make the package safe to execute; existing ADR-0467 source/import validation and manual publication remain mandatory.
 
@@ -85,14 +85,18 @@ Release identity is `(registry signing trust, publisherId, blueprintId, version,
 
 Compatibility is inclusive `minVersion` and optional exclusive `maxVersionExclusive`; mismatches are surfaced before install. Declared `needs` are advisory until independently checked from the actual imported application models. Installation stores immutable provenance in design-time state, pins the exact package and never alters deployed instances or runs licence checks in `applyToState`.
 
-The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Registry v1 contract](../contracts/blueprint-registry/v1/README.md). **Acceptance gate:** maintainer review of this trust model, tests for signature/digest/identity/format failure, and explicit BMP0 slice ownership before implementing a production network installer. This profile deliberately does not define external publisher onboarding, automatic key rotation, payment processing or multiple re-keyed installations.
+The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Registry v1 contract](../contracts/blueprint-registry/v1/README.md). **Implementation gate:** ADR accepted and BMP0 assigned to pblumer; deterministic tests for signature/digest/identity/format failure and independent security review of the production network/installation boundary are required before enabling registry downloads. This profile deliberately does not define external publisher onboarding, automatic key rotation, payment processing or multiple re-keyed installations.
 
-### Security trade-offs for review
+### Accepted security trade-offs
 
 - **Operator-pinned signing key vs. HTTPS-only:** HTTPS alone identifies the server connection but not an immutable community publishing authority across mirrors; pinning adds operational overhead and requires key rotation procedures.
 - **Signed raw bytes vs. canonical JSON:** raw bytes are straightforward to verify across programming languages, at the cost of resigning when formatting changes.
 - **Signed index vs. individually signed packages:** a signed index and pinned package digest prove the exact downloaded bytes originated from that trusted catalog listing. Per-publisher signatures could be added for third-party creators after publisher identity verification and revocation policy are designed.
 - **Same-origin artifacts vs. arbitrary CDN URLs:** same-origin is restrictive for future paid content delivery but avoids a broad server-side SSRF/credential forwarding surface in the initial release.
+
+## As built (2026-10-27)
+
+The accepted registry v1 design currently has a JSON Schema, valid/invalid examples and schema-only tests in `docs/contracts/blueprint-registry/v1/`. **No signature verifier, registry client, production package fetch, persistent installation provenance or user-visible installer is implemented by this ADR acceptance.** BMP0 is in progress and must prove the accepted model through code/tests before the implementation status changes.
 
 ## Links
 
