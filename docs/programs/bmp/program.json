@@ -2,25 +2,25 @@
   "id": "bmp",
   "name": "Blueprint Marketplace",
   "summary": "Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.",
-  "status": "planned",
+  "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review BMP0 registry v1 contract in draft PR #1402 and proposed ADR-0499; assign a BMP0 slice owner and approve trust/identity gates before implementing the remote installer.",
+  "next_action": "BMP0: implement and verify offline signed-index and package integrity validation; keep network/install code gated until tests and ADR security requirements are met.",
   "slices": [
     {
       "id": "BMP0",
       "title": "Registry and trust contract",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [
         1395,
         1402
       ],
-      "note": "PR #1395 is merged. Draft PR #1402 proposes signed registry schema, negative fixtures and schema-only tests; ADR-0499 remains Proposed, no production network/installation code is implemented."
+      "note": "Maintainer accepted ADR-0499 on 2026-10-27. BMP0 owner pblumer. PR #1402 defines signed v1 schema/tests; the offline verifier, signature and digest checks are next. No runtime registry integration claimed."
     },
     {
       "id": "BMP1",
