@@ -65,8 +65,12 @@ func TestRuntimeHealthMeasuresTheWindow(t *testing.T) {
 	if resp.RunLoop == nil || resp.Writer == nil {
 		t.Fatalf("a server with metrics reports no run loop or writer: %+v", resp)
 	}
-	if resp.RunLoop.Turns == 0 || resp.RunLoop.Wait.Count != resp.RunLoop.Turns || resp.RunLoop.Held.Count != resp.RunLoop.Turns {
-		t.Errorf("run loop: %+v, want the turns of the window counted once in each distribution", resp.RunLoop)
+	// The loop observes a turn's wait and then its hold, and a snapshot reads them in the
+	// same order without stopping the loop, so a turn can sit between the two at either
+	// end of the window: the distributions agree to within one turn, not exactly.
+	if d := int64(resp.RunLoop.Held.Count) - int64(resp.RunLoop.Wait.Count); resp.RunLoop.Turns == 0 ||
+		resp.RunLoop.Wait.Count != resp.RunLoop.Turns || d < -1 || d > 1 {
+		t.Errorf("run loop: %+v, want the turns of the window counted once in each distribution, give or take the one turn a snapshot can fall inside", resp.RunLoop)
 	}
 	if resp.RunLoop.TurnsPerSecond <= 0 || resp.RunLoop.Held.MeanMillis == nil || resp.RunLoop.Held.P99Millis < resp.RunLoop.Held.P50Millis {
 		t.Errorf("run loop distributions: %+v", resp.RunLoop)

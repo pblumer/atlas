@@ -203,7 +203,11 @@ func (s *Server) healthSnapshot() *healthSnapshot {
 		}
 	}
 	if rl := s.runLoopStats; rl != nil {
-		snap.runLoop = &[2]promHistogram{readPromHistogram(rl.waited), readPromHistogram(rl.held)}
+		// Read without stopping the loop, in the order the loop observes a turn: wait,
+		// then hold. A turn that finishes between the two reads is in wait and not yet in
+		// held, so the two counts of a window can differ by one; nothing is lost.
+		waited := readPromHistogram(rl.waited)
+		snap.runLoop = &[2]promHistogram{waited, readPromHistogram(rl.held)}
 	}
 	if em := s.engineStats; em != nil {
 		snap.writer = &healthWriterSnapshot{
