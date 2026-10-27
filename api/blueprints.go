@@ -128,18 +128,18 @@ func (s *Server) handleBlueprintPreview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	httpapi.JSON(w, http.StatusOK, struct {
-		BlueprintID     string                          `json:"blueprintId"`
-		Version         string                          `json:"version"`
-		PublisherID     string                          `json:"publisherId"`
-		License         string                          `json:"license"`
-		Digest          string                          `json:"digest"`
-		Needs           blueprintregistry.Needs         `json:"needs"`
-		ApplicationKey  string                          `json:"applicationKey"`
-		ApplicationName string                          `json:"applicationName"`
-		Files           []blueprintregistry.PackageFile `json:"files"`
-		Catalogues      []blueprintregistry.PackageCatalogue `json:"catalogues"`
-		Products        []blueprintregistry.PackageProduct `json:"products"`
-		CataloguePublish bool `json:"cataloguePublish"`
+		BlueprintID      string                               `json:"blueprintId"`
+		Version          string                               `json:"version"`
+		PublisherID      string                               `json:"publisherId"`
+		License          string                               `json:"license"`
+		Digest           string                               `json:"digest"`
+		Needs            blueprintregistry.Needs              `json:"needs"`
+		ApplicationKey   string                               `json:"applicationKey"`
+		ApplicationName  string                               `json:"applicationName"`
+		Files            []blueprintregistry.PackageFile      `json:"files"`
+		Catalogues       []blueprintregistry.PackageCatalogue `json:"catalogues"`
+		Products         []blueprintregistry.PackageProduct   `json:"products"`
+		CataloguePublish bool                                 `json:"cataloguePublish"`
 	}{
 		BlueprintID: release.BlueprintID, Version: release.Version,
 		PublisherID: release.PublisherID, License: release.License,
