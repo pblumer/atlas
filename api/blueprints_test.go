@@ -17,12 +17,12 @@ import (
 )
 
 type fakeBlueprintSource struct {
-	index     blueprintregistry.Index
-	release   blueprintregistry.Release
+	index        blueprintregistry.Index
+	release      blueprintregistry.Release
 	packageBytes []byte
-	loadError error
-	fetchError error
-	fetches   int
+	loadError    error
+	fetchError   error
+	fetches      int
 }
 
 func (f *fakeBlueprintSource) LoadIndex(context.Context) (blueprintregistry.Index, error) {
@@ -80,7 +80,7 @@ func blueprintRequest(s *Server, method, path, id, version, match string) *httpt
 
 func TestBlueprintAPIDisabledWithoutOperatorRegistry(t *testing.T) {
 	s := &Server{}
-	for _, p := range []struct{path, id, version string}{
+	for _, p := range []struct{ path, id, version string }{
 		{"/api/v1/blueprints", "", ""},
 		{"/api/v1/blueprints/org.example.purchase/releases/1.0.0/preview", "org.example.purchase", "1.0.0"},
 		{"/api/v1/blueprints/org.example.purchase/releases/1.0.0/package", "org.example.purchase", "1.0.0"},
@@ -104,10 +104,10 @@ func TestBlueprintAPIListAndPreviewNoWrites(t *testing.T) {
 		t.Fatalf("preview %d (%d fetches): %s", preview.Code, f.fetches, preview.Body.String())
 	}
 	var result struct {
-		ApplicationKey string `json:"applicationKey"`
-		ApplicationName string `json:"applicationName"`
-		Digest string `json:"digest"`
-		Files []blueprintregistry.PackageFile `json:"files"`
+		ApplicationKey  string                          `json:"applicationKey"`
+		ApplicationName string                          `json:"applicationName"`
+		Digest          string                          `json:"digest"`
+		Files           []blueprintregistry.PackageFile `json:"files"`
 	}
 	if err := json.Unmarshal(preview.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
