@@ -3,7 +3,7 @@
 **Programme:** BMP (Blueprint Marketplace)  
 **Baseline:** Public atlas repository checked on 2026-10-26.  
 **Milestone:** [Milestone 6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-).  
-**Architecture authority:** [Proposed Blueprint registry ADR](../adr/draft-blueprint-registry-and-distribution.md).  
+**Architecture authority:** [Proposed Blueprint registry ADR](../adr/0499-blueprint-registry-and-distribution.md).  
 **Owner:** Unassigned. A human maintainer must accept programme and slice responsibility before implementation starts.
 
 ## User outcome

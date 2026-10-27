@@ -1,4 +1,4 @@
-# ADR-DRAFT: Open Blueprint registries for process applications
+# ADR-0499: Open Blueprint registries for process applications
 
 - **Status:** Proposed
 - **Implementation:** Not started
