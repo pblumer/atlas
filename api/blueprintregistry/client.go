@@ -257,8 +257,10 @@ var blockedPublicIPv4 = [...]netip.Prefix{
 }
 var blockedPublicIPv6 = [...]netip.Prefix{
 	netip.MustParsePrefix("2001:db8::/32"),
-	netip.MustParsePrefix("2001::/32"), // special-purpose protocol assignments
-	netip.MustParsePrefix("64:ff9b:1::/48"), // protocol translation range
+	// Special-purpose protocol assignments.
+	netip.MustParsePrefix("2001::/32"),
+	// Protocol translation range.
+	netip.MustParsePrefix("64:ff9b:1::/48"),
 }
 
 func publicAddress(ip netip.Addr) bool {
