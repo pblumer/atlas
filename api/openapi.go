@@ -1682,7 +1682,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Trusted Blueprint index", tObject())}},
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
-			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
+			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, catalogue IDs, offered products and home-catalogue ownership, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Verified Blueprint preview", tObject())}},
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,

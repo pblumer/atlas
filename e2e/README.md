@@ -27,6 +27,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
+  the Console displays only an operator-pinned signed index, safely escapes remote text,
+  previews the application's included product catalogues and their offered products,
+  performs no write on preview or cancellation, sends the reviewed `If-Match` digest
+  on download, and hands the package to the existing dry-run and authorized import
+  flow; mismatched digests and an absent registry fail closed.
+
 - **`application-delete.spec.mjs`**
   ([ADR-0468](../docs/adr/0468-deleting-an-application-with-its-contents.md)):
   the application delete dialog against previews of its own — the default keeps the contents and
