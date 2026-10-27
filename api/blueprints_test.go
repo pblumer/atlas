@@ -49,6 +49,7 @@ func sampleBlueprintSource(t *testing.T) *fakeBlueprintSource {
 		BlueprintID: "org.example.purchase", PublisherID: "org.example",
 		Version: "1.0.0", Title: "Purchase approvals",
 		License: "Apache-2.0", Description: "Example",
+		Atlas: blueprintregistry.Compatibility{MinVersion: "0.1.0"},
 		Artifact: blueprintregistry.Artifact{Path: "packages/purchase.tar.gz", SizeBytes: int64(len(payload)),
 			Digest: "sha256:" + hex.EncodeToString(digest[:])},
 	}
@@ -172,5 +173,17 @@ func TestBlueprintRegistryOperatorConfigFailsClosed(t *testing.T) {
 	t.Setenv("ATLAS_BLUEPRINT_REGISTRY_URL", "http://169.254.169.254/index.json")
 	if _, err := configuredBlueprintSource(); err == nil {
 		t.Fatal("operator configuration accepted private HTTP metadata endpoint")
+	}
+}
+
+func TestBlueprintAPIRefusesIncompatibleReleaseBeforeFetch(t *testing.T) {
+	f := sampleBlueprintSource(t)
+	f.release.Atlas.MinVersion = "999.0.0"
+	f.index.Releases[0].Atlas.MinVersion = "999.0.0"
+	s := &Server{blueprints: f}
+	url := "/api/v1/blueprints/org.example.purchase/releases/1.0.0/preview"
+	response := blueprintRequest(s, "GET", url, "org.example.purchase", "1.0.0", "")
+	if response.Code != http.StatusConflict || f.fetches != 0 {
+		t.Fatalf("incompatible release fetched: status=%d count=%d", response.Code, f.fetches)
 	}
 }
