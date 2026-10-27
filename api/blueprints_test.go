@@ -54,7 +54,7 @@ func sampleBlueprintSource(t *testing.T) *fakeBlueprintSource {
 			Digest: "sha256:" + hex.EncodeToString(digest[:])},
 	}
 	return &fakeBlueprintSource{
-		index: blueprintregistry.Index{SchemaVersion: 1, RegistryID: "org.example.catalog", Releases: []blueprintregistry.Release{release}},
+		index:   blueprintregistry.Index{SchemaVersion: 1, RegistryID: "org.example.catalog", Releases: []blueprintregistry.Release{release}},
 		release: release, packageBytes: payload,
 	}
 }
