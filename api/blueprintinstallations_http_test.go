@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pblumer/atlas/api/blueprintregistry"
 )
 
 func pendingBlueprintRequest(s *Server, id, version, match string) *httptest.ResponseRecorder {
@@ -127,20 +126,19 @@ func TestBeginBlueprintInstallRejectsProtectedApplicationAndTamperedArchive(t *t
 	defer srv.Close()
 	f := sampleBlueprintSource(t)
 	srv.blueprints = f
-	srv.do(func() {
-		if err := srv.projects.Save(project{ID: "platform", Key: "purchase", Protected: true}); err != nil {
-			t.Fatal(err)
-		}
-	})
+	var storeErr error
+	srv.do(func() { storeErr = srv.projects.Save(project{ID: "platform", Key: "purchase", Protected: true}) })
+	if storeErr != nil {
+		t.Fatal(storeErr)
+	}
 	match := "\"" + f.release.Artifact.Digest + "\""
 	if got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, match); got.Code != http.StatusConflict {
 		t.Fatalf("protected application accepted: %d %s", got.Code, got.Body.String())
 	}
-	srv.do(func() {
-		if err := srv.projects.Delete("platform"); err != nil {
-			t.Fatal(err)
-		}
-	})
+	srv.do(func() { storeErr = srv.projects.Delete("platform") })
+	if storeErr != nil {
+		t.Fatal(storeErr)
+	}
 	f.packageBytes = append([]byte(nil), f.packageBytes...)
 	f.packageBytes[len(f.packageBytes)-1] ^= 1
 	if got := pendingBlueprintRequest(srv, f.release.BlueprintID, f.release.Version, match); got.Code != http.StatusBadGateway {
@@ -152,4 +150,3 @@ func TestBeginBlueprintInstallRejectsProtectedApplicationAndTamperedArchive(t *t
 	}
 }
 
-var _ = blueprintregistry.PackageInspection{}
