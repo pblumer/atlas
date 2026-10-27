@@ -1,5 +1,5 @@
 // fold.js — every topic of a Console page folds away under its heading, and the
-// browser remembers the choice (ADR-draft-every-topic-folds).
+// browser remembers the choice (ADR-0505).
 //
 // A topic is a card whose first element is its heading: an <h2> on its own, or an <h2>
 // in the row it shares with the card's actions (a .between). That one rule finds the

@@ -191,7 +191,7 @@ _Changed_ / _Removed_ for each version.
   a card keeps its heading row, its own buttons included; pressing one of those opens
   the card first, because what it opens appears below the heading. The state is kept per
   page and topic in the browser, open until somebody folds it, and a card a page redraws
-  keeps its state ([ADR-draft-every-topic-folds](docs/adr/draft-every-topic-folds.md)).
+  keeps its state ([ADR-0505](docs/adr/0505-every-topic-folds.md)).
 - **The secret vault has a page of its own: Console › Administration › Secrets.** It was
   the last card of the Workers page, which everybody may open while only an administrator
   may use the vault, and which no longer holds all of the vault's readers: content

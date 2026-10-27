@@ -796,7 +796,7 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   count on the bar and puts the rest behind **Diagnostics**, whose mock tools only an
   administrator sees.
 - **`card-fold.spec.mjs`**
-  ([ADR-draft-every-topic-folds](../docs/adr/draft-every-topic-folds.md)): every topic of a
+  ([ADR-0505](../docs/adr/0505-every-topic-folds.md)): every topic of a
   Console page folds, the same way, against `card-fold-harness.html`, which drives the real
   `api/web/fold.js` and `app.css`:
   - **Which cards:** a card headed by an `<h2>`, alone or in a row with its actions, gets the

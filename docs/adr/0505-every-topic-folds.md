@@ -1,4 +1,4 @@
-# ADR-DRAFT: Every topic of a Console page folds, the same way, and the browser remembers
+# ADR-0505: Every topic of a Console page folds, the same way, and the browser remembers
 
 - **Status:** Accepted
 - **Implementation:** Landed

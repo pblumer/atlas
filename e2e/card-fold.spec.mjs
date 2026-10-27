@@ -1,5 +1,5 @@
 // Every topic of a Console page folds away under its heading, the same way on every
-// page, and the browser remembers the choice (fold.js, ADR-draft-every-topic-folds).
+// page, and the browser remembers the choice (fold.js, ADR-0505).
 //
 // The harness drives fold.js over cards shaped like the pages' own; the last tests
 // boot the real Console and look at a page nobody wrote any folding for, because
