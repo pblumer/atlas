@@ -166,7 +166,8 @@ func TestVerifySignedIndexRejectsInvalidReleaseMetadata(t *testing.T) {
 			}
 			v["releases"] = releases
 		}},
-	} {
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := verifyTestIndex(t, mutateTestIndex(t, tc.mutate)); err == nil {
 				t.Fatal("invalid metadata accepted")
