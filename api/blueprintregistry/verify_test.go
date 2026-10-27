@@ -146,13 +146,23 @@ func TestVerifySignedIndexRejectsInvalidReleaseMetadata(t *testing.T) {
 		{"empty version range", func(v map[string]any) { releaseFields(v)["atlas"].(map[string]any)["maxVersionExclusive"] = "0.2.0" }},
 		{"bad artifact digest", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["digest"] = "sha256:abc" }},
 		{"relative traversal", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["path"] = "../archive.tar.gz" }},
-		{"absolute artifact", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["path"] = "https://evil.invalid/archive.tar.gz" }},
-		{"url-escaped traversal", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["path"] = "packages/%2e%2e/a.tar.gz" }},
+		{"absolute artifact", func(v map[string]any) {
+			releaseFields(v)["artifact"].(map[string]any)["path"] = "https://evil.invalid/archive.tar.gz"
+		}},
+		{"url-escaped traversal", func(v map[string]any) {
+			releaseFields(v)["artifact"].(map[string]any)["path"] = "packages/%2e%2e/a.tar.gz"
+		}},
 		{"wrong extension", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["path"] = "p.zip" }},
-		{"too large", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["sizeBytes"] = MaxPackageBytes + 1 }},
+		{"too large", func(v map[string]any) {
+			releaseFields(v)["artifact"].(map[string]any)["sizeBytes"] = MaxPackageBytes + 1
+		}},
 		{"zero size", func(v map[string]any) { releaseFields(v)["artifact"].(map[string]any)["sizeBytes"] = 0 }},
-		{"secret-shaped need", func(v map[string]any) { releaseFields(v)["needs"].(map[string]any)["workerTypes"] = []string{"access/token"} }},
-		{"duplicate need", func(v map[string]any) { releaseFields(v)["needs"].(map[string]any)["serverConstants"] = []string{"DB", "DB"} }},
+		{"secret-shaped need", func(v map[string]any) {
+			releaseFields(v)["needs"].(map[string]any)["workerTypes"] = []string{"access/token"}
+		}},
+		{"duplicate need", func(v map[string]any) {
+			releaseFields(v)["needs"].(map[string]any)["serverConstants"] = []string{"DB", "DB"}
+		}},
 		{"empty licence", func(v map[string]any) { releaseFields(v)["license"] = "" }},
 		{"duplicate release", func(v map[string]any) {
 			r := releaseFields(v)
