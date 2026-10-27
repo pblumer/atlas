@@ -9283,9 +9283,9 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         ausgeschalteten Ebenen. Dieselbe Wahl nehmen die Routen und <code>atlas_release_architecture</code> als
         <code>?layers=</code> entgegen (<code>strategy</code>, <code>business</code>, <code>application</code>,
         <code>data</code>, <code>technology</code>). Ohne Angabe gelten Application und Technology; ein Link oder ein
-        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Strategie- und Business-Ebene
-        zeichnet noch kein Release auf; wer nur nach solchen Ebenen fragt, erhält eine Antwort, die sagt, welche
-        Ebenen der Release aufzeichnet.</p>
+        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Ein früher aufgezeichneter
+        Release kennt nicht alle Ebenen; wer nur nach solchen fragt, erhält eine Antwort, die sagt, welche Ebenen
+        der Release aufzeichnet.</p>
       <p data-l="en">The sketch is organised in <b>layers</b>. The <i>Architecture</i> dialog offers one checkbox per
         layer the release records: <i>Application</i> is the logical view (what the release's content fixes),
         <i>Technology</i> the physical one (what the installation had in place). Without Technology the sketch shows
@@ -9295,8 +9295,8 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         routes and <code>atlas_release_architecture</code> take the same choice as <code>?layers=</code>
         (<code>strategy</code>, <code>business</code>, <code>application</code>, <code>data</code>,
         <code>technology</code>). Without it, Application and Technology apply, so a link or an embedded picture
-        without <code>layers</code> shows exactly what it showed before. No release records the strategy or business
-        layer yet; asking for those alone gets an answer that says which layers the release records.</p>
+        without <code>layers</code> shows exactly what it showed before. A release recorded earlier does not know every
+        layer; asking for those alone gets an answer that says which layers the release records.</p>
       <p data-l="de">Ein Release hält ausserdem fest, was die Konfiguration eines Workers sonst noch sagt, soweit es
         kein Geheimnis ist: den Mail-Provider, die Adresse des Malware-Scanners, das Modell, das ein Agent-Worker
         fragt, die Identitätsregel (Modus und ob sie durchgesetzt wird) und ob ein Credential hinterlegt ist – nie
@@ -9346,6 +9346,32 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         their classes. Without a choice the band stays off and the sketch says so; <code>?layers=data</code> asks
         for it. Which activity reads or writes a data store is not in the compiled model and is therefore not
         shown.</p>
+      <p data-l="de">Die <b>Business-Ebene</b> zeigt die Prozesse als Arbeit, mit der Angabe, wie ihre
+        Benutzeraufgaben sagen, wer sie erledigt (für eine Gruppe, für eine namentlich genannte Person, zur
+        Laufzeit entschieden oder niemand); die Rollen, die sie nennen – jede Kandidatengruppe so, wie das Modell
+        sie schreibt, und jede Lane; und die Katalogprodukte, deren Bereitstellung, Rücknahme oder Lebenszyklus ein
+        Prozess des Release ausführt, so wie jeder Katalog sie zuletzt veröffentlicht hat, mit den Aktionen eines
+        Lebenszyklus-Produkts und dem Ereignistyp jedes Ergebnisses. Ein Produkt sieht nur, wer seinen Katalog
+        pflegen darf; alle anderen erfahren, wie viele zurückgehalten wurden. Wem eine Aufgabe namentlich
+        zugewiesen ist, wird nur gezählt, nie genannt. Die <b>Strategie-Ebene</b> zeigt die Capabilities, die ein
+        Prozess des Release oder ein von ihm genannter Worker realisiert, mit Zustand, letzter Bestätigung,
+        Verantwortlicher (nur Name und Rolle), KPIs und SLAs, und die Value Streams, deren Stufen sie nutzen, mit
+        allen Stufen in ihrer Reihenfolge. Beide Ebenen erscheinen als Bänder über der Skizze oder allein; im
+        ArchiMate-Dokument wird jeder Prozess zu einem Business Process, den sein Application Process realisiert,
+        mit den zugewiesenen Rollen, den Produkten und den Capabilities, die die Stufen der Value Streams
+        bedienen.</p>
+      <p data-l="en">The <b>business layer</b> shows the processes as work, with how their user tasks say who does
+        them (for a group, for a named person, decided at run time, or nobody); the roles they name – each
+        candidate group as the model writes it, and each lane; and the catalogue products whose provisioning,
+        deprovisioning or lifecycle a release process carries out, as each catalogue last published them, with a
+        lifecycle product's actions and the event type each outcome publishes. A product is shown only to whoever
+        may maintain its catalogue; everyone else learns how many were withheld. Whom a task is assigned to by
+        name is counted, never named. The <b>strategy layer</b> shows the capabilities a release process or a
+        Worker the release names realises, with their state, last confirmation, owner (name and role only), KPIs
+        and SLAs, and the value streams whose stages use them, with all their stages in order. Both layers appear
+        as bands above the sketch, or alone; in the ArchiMate document each process becomes a Business Process its
+        Application Process realises, with the roles assigned to it, the products, and the capabilities serving
+        the value streams' stages.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist

@@ -908,6 +908,10 @@ func authoringTools() []Tool {
 				"layer (layers=data) holds the data objects with the elements that read and write them, the " +
 				"stores, the classes and whether the information model defines them, and each personal-data " +
 				"declaration with the workers and job types that can read it in plaintext; never a value. " +
+				"From format version 6 the business layer (layers=business) holds the processes as work, the " +
+				"roles their tasks and lanes name and the catalogue products they carry out — a product only for " +
+				"a caller who may maintain its catalogue — and the strategy layer (layers=strategy) the " +
+				"capabilities the release realises and the value streams that use them. " +
 				"A Worker's configuration the " +
 				"caller may not see, and the instances for a caller who is not an operator, are withheld. " +
 				"layers narrows the answer: application is the logical part, technology the physical part, and " +
