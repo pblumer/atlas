@@ -224,3 +224,25 @@ func TestPublicClientDialRefusesPrivateDNSBeforeConnect(t *testing.T) {
 		t.Fatalf("mixed public/private DNS was not refused before dialing: lookup=%v, dialed=%v, err=%v", lookedUp, dialed, err)
 	}
 }
+
+func TestPublicClientTrustIdentityUsesOnlyOperatorPinnedKey(t *testing.T) {
+	key := make(ed25519.PublicKey, ed25519.PublicKeySize)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	client, err := NewPublicClient("https://catalog.example.org/blueprints/index.json", key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origin, fingerprint := client.TrustIdentity()
+	digest := sha256.Sum256(key)
+	expected := "sha256:" + hex.EncodeToString(digest[:])
+	if origin != "https://catalog.example.org/blueprints/index.json" || fingerprint != expected {
+		t.Fatalf("trust identity is not the operator-pinned origin and public key: %q %q", origin, fingerprint)
+	}
+	key[0] ^= 0xff // mutating the caller's key must not alter the retained pin
+	_, after := client.TrustIdentity()
+	if after != fingerprint {
+		t.Fatal("caller mutated the pinned public key after construction")
+	}
+}
