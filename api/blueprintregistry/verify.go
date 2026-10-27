@@ -42,15 +42,15 @@ type Index struct {
 // Release is a version-pinned Blueprint description, distinct from a local
 // application release or from a bpmn.io element template.
 type Release struct {
-	BlueprintID string       `json:"blueprintId"`
-	Version     string       `json:"version"`
-	PublisherID string       `json:"publisherId"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	License     string       `json:"license"`
+	BlueprintID string        `json:"blueprintId"`
+	Version     string        `json:"version"`
+	PublisherID string        `json:"publisherId"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	License     string        `json:"license"`
 	Atlas       Compatibility `json:"atlas"`
-	Artifact    Artifact     `json:"artifact"`
-	Needs       Needs        `json:"needs"`
+	Artifact    Artifact      `json:"artifact"`
+	Needs       Needs         `json:"needs"`
 }
 
 // Compatibility uses an inclusive minimum and optional exclusive maximum.
