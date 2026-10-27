@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -142,8 +141,5 @@ func TestRegistryV1SchemaRejectsMissingFields(t *testing.T) {
 			}
 			validateFixture(t, s, encoded, false)
 		})
-	}
-	if strings.Contains(t.Name(), "integration") {
-		t.Fatal("these are schema contract tests, not network integration tests")
 	}
 }
