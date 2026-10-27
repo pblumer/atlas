@@ -40,7 +40,7 @@ func NewPublicClient(indexURL string, publicKey ed25519.PublicKey) (*PublicClien
 		return nil, errors.New("registry requires a pinned 32-byte Ed25519 public key")
 	}
 	transport := &http.Transport{
-		Proxy:               nil, // never forward public registry requests via ambient proxy
+		Proxy:               nil,  // never forward public registry requests via ambient proxy
 		DisableCompression:  true, // bound exact response bytes, not auto-decompressed content
 		DisableKeepAlives:   true, // force DNS/IP validation for each outbound connection
 		MaxConnsPerHost:     2,
