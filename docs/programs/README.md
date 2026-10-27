@@ -6,11 +6,11 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**3 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 1 · complete: 0
+**3 programmes** · active: 3 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | planned | 0/4 | pblumer | Review BMP0 registry v1 contract in draft PR #1402 and proposed ADR-0499; assign a BMP0 slice owner and approve trust/identity gates before implementing the remote installer. |
+| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | active | 0/4 | pblumer | BMP0: implement and verify offline signed-index and package integrity validation; keep network/install code gated until tests and ADR security requirements are met. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since a supervised worker runs it through the worker package, whose closure reaches every connector, and the engine can run eleven of them through api, whose closure is nearly the whole module; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
@@ -22,7 +22,7 @@ Distribute versioned Process Application Blueprints from independently operated 
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **BMP0** — Registry and trust contract | planned | unassigned | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395), [PR #1402](https://github.com/pblumer/atlas/pull/1402) | PR #1395 is merged. Draft PR #1402 proposes signed registry schema, negative fixtures and schema-only tests; ADR-0499 remains Proposed, no production network/installation code is implemented. |
+| **BMP0** — Registry and trust contract | active | pblumer | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395), [PR #1402](https://github.com/pblumer/atlas/pull/1402) | Maintainer accepted ADR-0499 on 2026-10-27. BMP0 owner pblumer. PR #1402 defines signed v1 schema/tests; the offline verifier, signature and digest checks are next. No runtime registry integration claimed. |
 | **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
 | **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
 | **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
