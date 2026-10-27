@@ -1,4 +1,4 @@
-# ADR-DRAFT: A customer's reply finds the process that wrote to them
+# ADR-0503: A customer's reply finds the process that wrote to them
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -150,7 +150,7 @@ key, so the at-least-once retry ADR-0079 accepts writes the same headers.
 - The body is not a routing carrier: quoting, HTML rewriting and mobile clients make it
   the least reliable and the most visible. The reference line a task writes into the body
   when it asks for a signed answer binds the signature to the request
-  ([ADR-draft-what-a-mail-reply-proves](draft-what-a-mail-reply-proves.md)); the watch
+  ([ADR-0504](0504-what-a-mail-reply-proves.md)); the watch
   does not route on it.
 
 **Graph** sends through `sendMail` with the message as MIME, framed by the same
@@ -213,7 +213,7 @@ Two correlation patterns follow, and the handbook shows both:
 Sender rules (`allowedSenders`, `requireDmarcPass`) still apply first. A token proves
 that a reply answers an Atlas mail, not who wrote it: a customer who forwards the mail
 hands the token on. What a reply proves about its sender, and what a decision may
-therefore rest on, is [ADR-draft-what-a-mail-reply-proves](draft-what-a-mail-reply-proves.md).
+therefore rest on, is [ADR-0504](0504-what-a-mail-reply-proves.md).
 
 ### A reply that arrives when nothing waits: it waits, as a reference
 

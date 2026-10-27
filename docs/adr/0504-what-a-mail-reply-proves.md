@@ -1,4 +1,4 @@
-# ADR-DRAFT: What a mail reply proves, and what a decision may rest on
+# ADR-0504: What a mail reply proves, and what a decision may rest on
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -20,7 +20,7 @@
 
 ## Context and problem statement
 
-[ADR-draft-mail-reply-routing](draft-mail-reply-routing.md) routes a customer's reply to
+[ADR-0503](0503-mail-reply-routing.md) routes a customer's reply to
 the instance that wrote to them, with a signed token the customer's client carries back.
 The token proves that the mail **answers** an Atlas mail. It does not prove **who** wrote
 it: a customer who forwards the mail hands the token on, a shared mailbox has many
@@ -283,7 +283,7 @@ that relied on level 2 should keep the raw message, so the follow-up is an
 
 ## Links
 
-- builds on [ADR-draft-mail-reply-routing](draft-mail-reply-routing.md) (the token and the
+- builds on [ADR-0503](0503-mail-reply-routing.md) (the token and the
   reply watch) and [ADR-0438](0438-mailbox-worker.md) (the `Authentication-Results`
   verdict and the mailbox read)
 - correlation as [ADR-0020](0020-message-correlation.md) decided, waiting as
