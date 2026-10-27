@@ -1,4 +1,4 @@
-# ADR-DRAFT: A data run checks a whole file against a model in throwaway sandboxes, and hands the file back
+# ADR-0501: A data run checks a whole file against a model in throwaway sandboxes, and hands the file back
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -360,5 +360,5 @@ decisions.
   take, without replacing that path for checks that need systems or people
 - respects [ADR-0294](0294-a-variable-is-a-record.md) (a variable is a record) and
   [ADR-0010](0010-go-and-no-cgo.md) (no cgo)
-- relates to ADR-draft-playground-data-from-history-and-model, whose trial depends on the same
+- relates to ADR-0500, whose trial depends on the same
   decision evaluation

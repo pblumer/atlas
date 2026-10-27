@@ -1,4 +1,4 @@
-# ADR-DRAFT: Playground data is profiled from history and proposed from the model, and the sandbox checks both
+# ADR-0500: Playground data is profiled from history and proposed from the model, and the sandbox checks both
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -257,7 +257,7 @@ own open request plus the proposed variants, and the proposed cases. Each case's
 compared with its targets: its elements, and its flows folded out of the causal token history
 as the heat map folds them (ADR-0136). A path through a business rule task is only worth
 comparing once the sandbox actually evaluates the decision. Today it does not; making it do so
-is the prerequisite in ADR-draft-playground-data-run. The following go back to the model with
+is the prerequisite in ADR-0501. The following go back to the model with
 the engine's own words:
 
 - a target missed ("case 3 aimed at `Flow_hoch` (`betrag > 50000`) and went through
@@ -533,7 +533,7 @@ leave matters.
 - reads [ADR-0048](0048-per-step-variable-snapshots.md)'s variable history; respects
   [ADR-0314](0314-portal-personal-data.md)'s enciphered personal data
 - adds one tool to [ADR-0016](0016-mcp-server-over-http-api.md)'s MCP surface; depends on
-  the sandbox evaluating decisions (ADR-draft-playground-data-run)
+  the sandbox evaluating decisions (ADR-0501)
 - composes with [ADR-0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md)
   (`minMatched`) and [ADR-0230](0230-process-information-model.md) (the information model's
   schema)
