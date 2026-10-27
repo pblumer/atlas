@@ -141,7 +141,7 @@ func (s *Server) handleBlueprintPreview(w http.ResponseWriter, r *http.Request) 
 		BlueprintID: release.BlueprintID, Version: release.Version,
 		PublisherID: release.PublisherID, License: release.License,
 		Digest: release.Artifact.Digest, Needs: release.Needs,
-		ApplicationKey: inspection.ApplicationKey,
+		ApplicationKey:  inspection.ApplicationKey,
 		ApplicationName: inspection.ApplicationName, Files: inspection.Files,
 	})
 }
