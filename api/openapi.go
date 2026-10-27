@@ -1676,8 +1676,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
-		// The public Blueprint Marketplace is read-only here. Import remains behind
-		// the existing application source/plan/publish routes, not a new write API.
+		// Marketplace selection records a pending journal entry before the
+		// existing authorized ADR-0467 import APIs apply independent writes.
+		// No browser acknowledgement is treated as completion (BMP1 / ADR-0499).
+		{"GET", "/api/v1/blueprints/installations", s.handleListBlueprintInstallations, apiOp{
+			summary: "Read instance-local verified Blueprint installation journal, including pending imports; admin-only and independent of registry availability (ADR-0499)", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Pinned pending Blueprint installations", tArray())}},
+		{"POST", "/api/v1/blueprints/{id}/releases/{version}/installations", s.handleBeginBlueprintInstallation, apiOp{
+			summary: "Durably record a pending Blueprint installation after a verified immutable download and matching If-Match digest, before native application/catalogue import. A pending record never implies completion. Reject conflicting pins and private application scopes (ADR-0499)", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Durable pending Blueprint selection", tObject())}},
 		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Trusted Blueprint index", tObject())}},
