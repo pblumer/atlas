@@ -142,6 +142,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Console › Workers folds and filters both of its lists.** The Worker catalog and
+  the configured workers each fold away under their heading, which still shows how many
+  entries the section holds, and the browser remembers each choice; **New worker**
+  unfolds the section its form opens in. The catalog has the filter row and sorting of
+  every other list in the Console, searching each type's name, kind and description.
+  The configured workers keep their filter row after a worker is changed, which used to
+  redraw the list without it.
+
 - **The heatmap's figures cost the server once, not once per tab.** The Operations
   heatmap reads its statistics when it opens, when the period changes, every five minutes
   while the tab is visible and on **Refresh** — no longer every fifteen seconds — and the
