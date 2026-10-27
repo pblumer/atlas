@@ -5,6 +5,8 @@ package blueprintregistry
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
@@ -61,6 +63,14 @@ func NewPublicClient(indexURL string, publicKey ed25519.PublicKey) (*PublicClien
 			},
 		},
 	}, nil
+}
+
+// TrustIdentity returns the operator-configured canonical registry origin and
+// SHA-256 fingerprint of the pinned Ed25519 PUBLIC key. It does not expose
+// credentials and does not rely on an index-supplied signing key.
+func (c *PublicClient) TrustIdentity() (string, string) {
+	sum := sha256.Sum256(c.publicKey)
+	return c.indexURL.String(), "sha256:" + hex.EncodeToString(sum[:])
 }
 
 // LoadIndex fetches signed metadata and refuses to expose any release until

@@ -488,12 +488,13 @@ type Server struct {
 	dmnrefs          *dmnRefStore              // durable sidecar for DMN reference artifacts (ADR-0034)
 	favourites       *favouriteStore           // one list of marked products per account (ADR-0348)
 	dmnDrafts        *dmnDraftStore            // durable sidecar for decision work in progress (ADR-0321)
-	connectors       *connectorStore           // durable sidecar for managed workers (ADR-0041)
-	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
-	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
-	baselines        *importBaselineStore      // what the last import brought, per artifact: the base an import compares with (ADR-0467)
-	mappings         *packageMappingStore      // what a package's names mean on this installation (ADR-0467)
-	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
+	connectors        *connectorStore           // durable sidecar for managed workers (ADR-0041)
+	callOverrides     *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
+	appConstants      *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
+	baselines         *importBaselineStore      // what the last import brought, per artifact: the base an import compares with (ADR-0467)
+	blueprintInstalls *blueprintInstallationStore // durable pending Marketplace imports (ADR-0499)
+	mappings          *packageMappingStore      // what a package's names mean on this installation (ADR-0467)
+	srvConstants      *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
 	repository       []repositoryPackage       // curated, bundled repository catalog, immutable after New (ADR-0081)
 	repositoryStore  *repositoryStore          // durable sidecar for installed repository templates (ADR-0081)
 	settings         *settingsStore            // durable sidecar for org-wide UI settings, e.g. the brand theme (ADR-0113)
@@ -1671,6 +1672,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	blueprintInstalls, err := newBlueprintInstallationStore(filepath.Join(dataDir, "blueprint-installations"))
+	if err != nil {
+		return nil, err
+	}
 	mappings, err := newPackageMappingStore(filepath.Join(dataDir, "package-mappings"))
 	if err != nil {
 		return nil, err
@@ -1796,6 +1801,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		callOverrides:     callOverrides,
 		appConstants:      appConstants,
 		baselines:         baselines,
+		blueprintInstalls: blueprintInstalls,
 		mappings:          mappings,
 		srvConstants:      srvConstants,
 		repository:        repositoryCatalog,

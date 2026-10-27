@@ -36,6 +36,7 @@ var serverStoreDirs = []string{
 	"information-models", "releases", "grant-audit", "api-tokens", "deploy-tokens",
 	"oauth-clients", "oauth-grants", "targets", "dmnrefs", "dmn-drafts", "users", "groups",
 	"connectors", "call-overrides", "repository", "inbound-subscriptions", "settings",
+	"blueprint-installations",
 }
 
 // newServerAtDir is New with the engine and log a server needs, over a data directory

@@ -25,6 +25,10 @@ type fakeBlueprintSource struct {
 	fetches      int
 }
 
+func (f *fakeBlueprintSource) TrustIdentity() (string, string) {
+	return "https://catalog.example.org/blueprints/index.json", "sha256:fixture-public-key"
+}
+
 func (f *fakeBlueprintSource) LoadIndex(context.Context) (blueprintregistry.Index, error) {
 	return f.index, f.loadError
 }
