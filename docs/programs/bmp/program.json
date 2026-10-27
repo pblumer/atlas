@@ -3,11 +3,11 @@
   "name": "Blueprint Marketplace",
   "summary": "Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.",
   "status": "planned",
-  "owner": "unassigned",
-  "last_reviewed": "2026-10-26",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Assign human programme owner and review proposed Blueprint registry ADR; only then begin BMP0 contract and trust tests.",
+  "next_action": "Review proposed ADR-0499, assign the BMP0 slice owner, then agree registry identity, signing trust and manifest test fixtures before implementation.",
   "slices": [
     {
       "id": "BMP0",
@@ -19,7 +19,7 @@
       "prs": [
         1395
       ],
-      "note": "Architecture and programme proposal in draft PR #1395; BMP0 is not started. Review identity, trust, package contract and tests before acceptance."
+      "note": "Programme proposal PR #1395 merged; ADR-0499 remains Proposed / Not started. BMP0 awaits a named slice owner, design review and contract-validation tests."
     },
     {
       "id": "BMP1",
