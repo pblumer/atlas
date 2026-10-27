@@ -1676,6 +1676,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
+		// The public Blueprint Marketplace is read-only here. Import remains behind
+		// the existing application source/plan/publish routes, not a new write API.
+		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
+			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Trusted Blueprint index", tObject())}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
+			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Verified Blueprint preview", tObject())}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
+			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
+
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
 		// surface is /api/v1/applications; each route binds to the same handler as
