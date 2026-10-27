@@ -14,7 +14,7 @@ func TestBlueprintPendingInstallationSurvivesRestartWithoutClaimingSuccess(t *te
 	}
 	pending := blueprintInstallation{
 		ApplicationKey: "office", RegistryID: "org.example.community",
-		RegistryOrigin: "https://registry.example.org/blueprints/index.json",
+		RegistryOrigin:    "https://registry.example.org/blueprints/index.json",
 		SignerFingerprint: "sha256:trust", PublisherID: "org.example",
 		BlueprintID: "org.example.office", Version: "1.0.0",
 		Digest: "sha256:package", CatalogueIDs: []string{"cat-a", "cat-b"},
