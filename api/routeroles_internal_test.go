@@ -64,6 +64,8 @@ var wantAdminRoutes = []string{
 	// And what the server spends its time on and holds (ADR-draft-admin-profiling): a
 	// profile shows its insides, and a CPU profile or a trace costs it while it runs.
 	"GET /api/v1/debug/pprof/{profile}",
+	"GET /api/v1/debug/pprof/{profile}/summary",
+	"GET /api/v1/debug/runtime",
 
 	// Code execution outside a deployment, and the overrides that decide which
 	// process a call activity reaches on this server.

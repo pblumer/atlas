@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An agent can tell whether, and where, the server is slow.** Two MCP tools for an
+  administrator's agent: `atlas_runtime_health` (`GET /api/v1/debug/runtime`) measures a
+  window of up to 20 seconds and answers with the run loop's wait and hold latencies, the
+  writer's throughput, queue and fsync and commit latencies, the scheduler latency and
+  runnable goroutines, the garbage collector's cycles, pauses and CPU share, the allocation
+  rate and the heap — the figures that were only in `/metrics` — with a note on how to read
+  them. `atlas_runtime_profile` (`GET /api/v1/debug/pprof/{profile}/summary`) takes a CPU,
+  heap, allocation or goroutine profile and answers with the top functions by their own
+  time and with their callees, or the largest groups of goroutines sharing a stack, instead
+  of a binary file; no argument values are included, and a CPU window is at most 20
+  seconds so the call finishes within the MCP client's timeout. Both are admin-only like
+  the profiles they read ([ADR-draft-admin-profiling](docs/adr/draft-admin-profiling.md)).
 - **An administrator can profile the running server.** `GET /api/v1/debug/pprof/{profile}`
   hands out what `go tool pprof` reads, from the server that is slow and without a restart
   or a second port: `profile` records CPU samples over `?seconds=` (default 30, at most

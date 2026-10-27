@@ -418,6 +418,11 @@ type Server struct {
 	// feelMetrics counts what the FEEL assistant's requests came to; nil when this
 	// server exports no metrics (feelgeneration.go).
 	feelMetrics *feelAssistantMetrics
+	// runLoopStats and engineStats are the run loop's and the writer's own histograms,
+	// read back by the runtime health (runtimehealth.go); nil when this server exports
+	// no metrics, because then nothing observes them.
+	runLoopStats *runLoopMetrics
+	engineStats  *engineMetrics
 	// releaseNotes serves the Console's release notes, read from the CHANGELOG this
 	// binary embeds (ADR-0444). Like formGen it
 	// owns no state and holds no run loop.

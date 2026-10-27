@@ -9934,6 +9934,45 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
         in a <code>go tool trace</code> at least as new as the Go the server was built with (<code>go</code> in
         <code>GET /api/v1/info</code>); an older one reports <i>unsupported trace version</i>. The pprof profiles
         are not affected.</p>
+      <p data-l="de"><b>Vor dem Profil: ist der Server überhaupt langsam, und wo?</b>
+        <code>GET /api/v1/debug/runtime</code> liest alle Kennzahlen, wartet <code>?seconds=</code> (Standard 5,
+        höchstens 20; 0 antwortet sofort mit Werten seit dem Start) und antwortet mit dem, was dazwischen geschah:
+        wie lange Aufrufe auf den Single Writer warteten (<code>runLoop.wait</code>) und wie lange jeder Turn ihn
+        hielt (<code>runLoop.held</code>), Durchsatz, Warteschlange und fsync- und Commit-Latenz des Schreibers, die
+        Scheduler-Latenz und die lauffähigen Goroutinen, Zyklen, Pausen und CPU-Anteil der Garbage Collection, die
+        Allokationsrate und der Heap. Latenzen kommen als Anzahl, Mittel, p50, p90, p99 und Maximum in
+        Millisekunden; die Perzentile sind Bucket-Grenzen und heissen «höchstens». Die Antwort trägt Faustregeln
+        zum Lesen mit – Faustregeln, keine auf Atlas gemessenen Grenzwerte.</p>
+      <p data-l="en"><b>Before the profile: is the server slow at all, and where?</b>
+        <code>GET /api/v1/debug/runtime</code> reads every figure, waits <code>?seconds=</code> (default 5, at most
+        20; 0 answers at once with figures since the start) and answers with what happened in between: how long
+        calls waited for the single writer (<code>runLoop.wait</code>) and how long each turn held it
+        (<code>runLoop.held</code>), the writer's throughput, queue and fsync and commit latency, the scheduler
+        latency and the runnable goroutines, the garbage collector's cycles, pauses and CPU share, the allocation
+        rate and the heap. Latencies come as count, mean, p50, p90, p99 and maximum in milliseconds; the
+        percentiles are bucket bounds and read "at most". The answer carries rules of thumb for reading it – rules
+        of thumb, not limits measured on Atlas.</p>
+      <p data-l="de"><b>Für einen Agenten.</b> Ein Agent hat kein <code>go tool pprof</code>, und eine
+        Binärdatei in seinem Kontext hilft ihm nicht. <code>GET /api/v1/debug/pprof/{profile}/summary</code> liest
+        deshalb das eigene Profil des Servers und antwortet als Liste: für <code>profile</code> (CPU über höchstens
+        20 s, Standard 10), <code>heap</code> und <code>allocs</code> die Funktionen nach Eigenanteil
+        (<code>flat</code>) und mit allem, was sie aufriefen (<code>cum</code>); für <code>goroutine</code> die
+        grössten Gruppen mit gleichem Stack. <code>?top=</code> begrenzt jede Liste (Standard 20, höchstens 50);
+        Argumentwerte sind nie enthalten. Über MCP heissen die beiden <code>atlas_runtime_health</code> und
+        <code>atlas_runtime_profile</code>. Sie verlangen wie die Profile die Rolle <code>admin</code>: Ein Agent,
+        den ein Administrator per OAuth zugelassen hat, erreicht sie; einer mit API-Token nicht, weil kein Token
+        die Admin-Rolle trägt. Was ein Agent so liest, verlässt den Server Richtung seines Sprachmodells –
+        Funktionsnamen, Aufrufgraph und Grössen, keine Geschäftsdaten.</p>
+      <p data-l="en"><b>For an agent.</b> An agent has no <code>go tool pprof</code>, and a binary file in its
+        context does not help it. <code>GET /api/v1/debug/pprof/{profile}/summary</code> therefore reads the
+        server's own profile and answers as a list: for <code>profile</code> (CPU over at most 20 s, default 10),
+        <code>heap</code> and <code>allocs</code> the functions by their own share (<code>flat</code>) and with
+        everything they called (<code>cum</code>); for <code>goroutine</code> the largest groups sharing a stack.
+        <code>?top=</code> bounds each list (default 20, at most 50); argument values are never included. Over MCP
+        the two are <code>atlas_runtime_health</code> and <code>atlas_runtime_profile</code>. Like the profiles they
+        require the <code>admin</code> role: an agent an administrator approved over OAuth reaches them, one with an
+        API token does not, because no token carries the admin role. What an agent reads this way leaves the server
+        for its language model – function names, the call graph and sizes, no business data.</p>
 
       <div id="speicher" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Speicherplatz</h4><h4 data-l="en">Disk space</h4>
@@ -10152,6 +10191,12 @@ curl -b jar 'https://atlas.example.com/api/v1/debug/pprof/goroutine?debug=2' | l
           <tr><td><code>GET /api/v1/debug/pprof/{profile}</code></td><td><code>admin</code></td>
             <td data-l="de">ein Laufzeitprofil für <code>go tool pprof</code> holen (siehe <a href="#profiling">Profiling</a>)</td>
             <td data-l="en">take a runtime profile for <code>go tool pprof</code> (see <a href="#profiling">Profiling</a>)</td></tr>
+          <tr><td><code>GET /api/v1/debug/pprof/{profile}/summary</code></td><td><code>admin</code></td>
+            <td data-l="de">dasselbe Profil als Liste, für einen Agenten</td>
+            <td data-l="en">the same profile as a list, for an agent</td></tr>
+          <tr><td><code>GET /api/v1/debug/runtime</code></td><td><code>admin</code></td>
+            <td data-l="de">ob und wo der Server langsam ist, über ein Zeitfenster</td>
+            <td data-l="en">whether and where the server is slow, over a window</td></tr>
         </tbody>
       </table>
       <p data-l="de"><code>/metrics</code> steht bewusst nicht in dieser Tabelle: es liegt neben dem

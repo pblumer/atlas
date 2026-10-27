@@ -81,8 +81,42 @@ route goes through, and it costs about a hundred and fifty lines.
   profile is not cut off.
 - **Audited.** Every download writes `profile.downloaded` at INFO with the actor, the
   profile and, for a recording, the seconds.
-- **The MCP surface does not carry it.** A binary profile is read by a person with a
-  profiler, not by an agent; the route is in `mcpOmittedRoutes` with that reason.
+- **The binary route is not an MCP tool; a summary of it is.** A gzip-compressed protobuf
+  is a file for a person with a profiler, and in an agent's context it is worse than
+  nothing — but what it says is exactly what an agent diagnosing a slow server needs. So
+  `GET /api/v1/debug/pprof/{profile}/summary` reads the server's own profile and answers
+  as a list, and `atlas_runtime_profile` is the tool over it:
+  - `profile` records CPU time over at most 20 s (default 10) — inside the thirty seconds
+    the MCP client waits for a call — and lists the functions by their own time (flat) and
+    with their callees (cum), in milliseconds and percent, with the cores used;
+  - `heap` and `allocs` list live and allocated memory the same way, in bytes;
+  - `goroutine` counts the goroutines and lists the largest groups sharing a stack, leaf
+    frame first, at most 16 frames kept from both ends.
+
+  Every list is bounded by `?top=` (default 20, at most 50), and every answer carries a
+  note saying what its figures mean. The goroutine summary is built from the aggregated
+  profile, never from the panic-style dump, which prints each frame's arguments as raw
+  words. The profile is decoded in `api/pprofproto.go` — varints and four wire types —
+  rather than by adding `github.com/google/pprof` as a module.
+- **And the figures that come before a profile.** A profile says where the time goes;
+  first somebody has to know whether the server is slow and in which part. Those figures
+  were only in `/metrics`, which a scraper with a metrics token reads.
+  `GET /api/v1/debug/runtime`, and `atlas_runtime_health` over it, read them twice
+  `?seconds=` apart (default 5, at most 20; 0 answers at once, since the start) and answer
+  with the window between: the run loop's turns and how long callers waited for the writer
+  and each turn held it, the writer's throughput, queue and fsync and commit latencies,
+  the scheduler latency and the runnable goroutines, the collector's cycles and pauses,
+  the allocation rate and the heap. The run loop's and the writer's histograms are the
+  Prometheus ones, so the route has them only where metrics are on, and says so where
+  they are not. Percentiles are bucket bounds and read "at most". The collector's share
+  of the CPU is since the start, because the runtime updates its CPU figures only at a
+  collection.
+- **Both stay admin-only.** A tool call carries its caller's roles, and an OAuth grant
+  carries the roles of the person who approved it (ADR-0200), so the tools serve an
+  administrator's agent and answer 403 to anybody else's — and to every API token, which
+  never carries the admin role. The data leaves the server for whatever model the agent
+  runs on; what it holds is function names, the call graph and sizes, no business data,
+  which is less than the log the MCP surface already leaves out.
 
 ### Consequences
 
@@ -104,7 +138,10 @@ route goes through, and it costs about a hundred and fifty lines.
 - **Follow-ups / risks to watch:** the open question in the front matter. If unattended
   capture is needed, the candidates are a dedicated token scope with its own non-admin
   role, or option 2 beside this route; either one widens who can reach the server's
-  insides and needs its own record.
+  insides and needs its own record. The rules of thumb the runtime health's note gives
+  (a run-loop wait well above its hold, an fsync above about 50 ms, a scheduler latency
+  above about 10 ms, a collector share above about a quarter) are starting points for a
+  reading, not thresholds anybody measured on Atlas; an agent should treat them so.
 
 ## Pros and cons of the options
 

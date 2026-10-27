@@ -97,13 +97,8 @@ func (s *Server) handlePprof(w http.ResponseWriter, r *http.Request) {
 		}
 		debug = n
 	}
-	switch r.URL.Query().Get("gc") {
-	case "", "0":
-	case "1":
-		// What is live rather than what is merely not yet collected.
-		runtime.GC()
-	default:
-		httpapi.Error(w, http.StatusBadRequest, "gc must be 0 or 1")
+	if msg := pprofCollect(r, name); msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -118,27 +113,61 @@ func (s *Server) handlePprof(w http.ResponseWriter, r *http.Request) {
 	_ = pprof.Lookup(name).WriteTo(w, debug)
 }
 
+// pprofCollect honours ?gc=1 on a memory profile: a collection first, so the heap shows
+// what is live rather than what is merely not yet collected. The message refuses
+// anything but 0 or 1.
+func pprofCollect(r *http.Request, name string) string {
+	switch r.URL.Query().Get("gc") {
+	case "", "0":
+	case "1":
+		if name == "heap" || name == "allocs" {
+			runtime.GC()
+		}
+	default:
+		return "gc must be 0 or 1"
+	}
+	return ""
+}
+
 // servePprofWindow records a CPU profile or a trace into the response for ?seconds=, or
 // until the client goes away, whichever is first.
 func servePprofWindow(w http.ResponseWriter, r *http.Request, name, what string, def, max int, ext string, start func(io.Writer) error, stop func()) {
-	seconds := def
-	if v := r.URL.Query().Get("seconds"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > max {
-			httpapi.Error(w, http.StatusBadRequest, fmt.Sprintf("seconds must be a whole number from 1 to %d for %s", max, name))
-			return
-		}
-		seconds = n
-	}
-	pprofAttachment(w, name, ext)
-	if err := start(w); err != nil {
-		// The runtime keeps one of each. Somebody else's recording is running; this one
-		// would not be a recording at all.
-		w.Header().Del("Content-Disposition")
-		httpapi.Error(w, http.StatusConflict, what+" is already being recorded on this server ("+err.Error()+"); try again when it has finished")
+	seconds, msg := pprofSeconds(r, name, def, max)
+	if msg != "" {
+		httpapi.Error(w, http.StatusBadRequest, msg)
 		return
 	}
-	audit(r, logging.ProfileDownloaded, "profile recording", slog.String("profile", name), slog.Int("seconds", seconds))
+	pprofAttachment(w, name, ext)
+	if err := recordPprof(r, w, seconds, start, stop, func() {
+		audit(r, logging.ProfileDownloaded, "profile recording", slog.String("profile", name), slog.Int("seconds", seconds))
+	}); err != nil {
+		w.Header().Del("Content-Disposition")
+		pprofBusy(w, what, err)
+	}
+}
+
+// pprofSeconds reads a recording's ?seconds=, or def without one; the message is the
+// refusal of anything outside 1..max.
+func pprofSeconds(r *http.Request, name string, def, max int) (int, string) {
+	v := r.URL.Query().Get("seconds")
+	if v == "" {
+		return def, ""
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > max {
+		return 0, fmt.Sprintf("seconds must be a whole number from 1 to %d for %s", max, name)
+	}
+	return n, ""
+}
+
+// recordPprof runs one recording into dst for seconds, or until the client goes away,
+// whichever is first. started is called once the runtime has taken the recording, so
+// a refused one leaves no audit line claiming it ran.
+func recordPprof(r *http.Request, dst io.Writer, seconds int, start func(io.Writer) error, stop func(), started func()) error {
+	if err := start(dst); err != nil {
+		return err
+	}
+	started()
 	timer := time.NewTimer(time.Duration(seconds) * time.Second)
 	select {
 	case <-timer.C:
@@ -146,6 +175,13 @@ func servePprofWindow(w http.ResponseWriter, r *http.Request, name, what string,
 		timer.Stop()
 	}
 	stop()
+	return nil
+}
+
+// pprofBusy refuses a recording the runtime would not start. It keeps one of each, so
+// somebody else's is running; this one would not be a recording at all.
+func pprofBusy(w http.ResponseWriter, what string, err error) {
+	httpapi.Error(w, http.StatusConflict, what+" is already being recorded on this server ("+err.Error()+"); try again when it has finished")
 }
 
 // pprofAttachment names the download for the profile and the moment it was taken, so two
