@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 // openRepair selects a task and expands its Repair form group.
 async function openRepair(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Repair form" }).click();
+  await page.locator('.pgroup[data-group*="Repair form" i] > .pgroup-head').click();
 }
 
 // taskXML returns the exported XML of one element.
@@ -39,7 +39,7 @@ test("a service task reads the repair form its model carries", async ({ page }) 
 
   // And the panel says what the binding is *for* — a repair form is not a work form,
   // and the difference is the whole point.
-  await expect(page.locator(".pgroup", { hasText: "Repair form" })).toContainText("parks behind an incident");
+  await expect(page.locator('.pgroup[data-group="Repair form"]')).toContainText("hinter einem Incident wartet");
 
   expect(page.__errors, "page errors").toEqual([]);
 });
@@ -88,11 +88,11 @@ test("a user task's form is its work form, and is not offered as a repair form",
   // A user task has no Repair form group at all: its zeebe:formDefinition is the form a
   // person fills in to *do* the task. Offering a second binding on the same element
   // under the same extension would be ambiguous in the model as well as on screen.
-  // The group heads carry a collapse marker, so they are read as text and compared by
-  // name rather than matched as selectors — "Form" and "Repair form" would otherwise
+  // A group is named by its identity (data-group), which stays English whatever the
+  // heading reads in, and compared whole — "Form" and "Repair form" would otherwise
   // both match a loose text filter, which is exactly the distinction under test.
   const groups = await page.evaluate(() =>
-    [...document.querySelectorAll(".pgroup-head")].map((h) => h.textContent.replace(/^[^A-Za-z]+/, "").trim()));
+    [...document.querySelectorAll(".pgroup")].map((g) => g.dataset.group));
   expect(groups).not.toContain("Repair form");
   // It does still have its own Form section — that binding is unaffected.
   expect(groups).toContain("Form");

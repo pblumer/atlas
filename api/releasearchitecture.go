@@ -53,6 +53,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 	placement := map[[2]string]string{}
 	data := &archsketch.Data{}
 	business := &archsketch.Business{}
+	coupling := &archsketch.Coupling{}
 	for _, m := range members {
 		if m.Kind == "process" {
 			shipped[m.Ref] = true
@@ -140,6 +141,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 
 		collectData(data, cp, m.Ref)
 		collectBusiness(business, cp, m.Ref, d.Name)
+		collectNames(coupling, cp, m.Ref)
 	}
 	received := map[string]bool{}
 	for _, e := range snap.EntryPoints {
@@ -149,6 +151,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 	snap.Data = s.dataPart(appID, data, snap.Dependencies)
 	snap.Business = s.businessPart(business, shipped)
 	snap.Strategy = s.strategyPart(appID, shipped, snap.Dependencies)
+	snap.Coupling = s.couplingPart(appID, coupling, snap.EntryPoints)
 	snap.Normalize()
 	return snap
 }
@@ -420,9 +423,10 @@ func (s *Server) reportedEndpointsOf(name string) []string {
 
 // redactedArchitecture is the snapshot as this reader may see it: a worker's endpoint
 // only for a reader who may see that worker's configuration, the worker instances
-// only for a reader who may see the Workers view, and a catalogue product only for a
-// reader who may maintain its catalogue. Run-loop goroutine only: it reads the worker
-// and catalogue stores.
+// only for a reader who may see the Workers view, a catalogue product only for a
+// reader who may maintain its catalogue, and another application — called, or coupled
+// through a name — only for a reader who may see it. Run-loop goroutine only: it reads
+// the worker, catalogue and project stores.
 //
 // A worker that no longer exists is judged as an ownerless one, which only an
 // administrator may see (connectorRole) — its endpoint was somebody's configuration,
@@ -432,13 +436,6 @@ func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot
 		return snap
 	}
 	out := *snap
-	if snap.Business != nil {
-		b := s.withholdProducts(r, *snap.Business)
-		out.Business = &b
-	}
-	if snap.Physical == nil {
-		return &out
-	}
 	mayViewWorker := func(id string) bool {
 		if id == "" {
 			return true
@@ -452,6 +449,14 @@ func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot
 		}
 		code, _ := s.checkConnectorRole(r, c, ScopeRoleViewer)
 		return code == 0
+	}
+	if snap.Business != nil {
+		b := s.withholdProducts(r, *snap.Business)
+		out.Business = &b
+	}
+	s.redactCoupling(r, &out, mayViewWorker)
+	if snap.Physical == nil {
+		return &out
 	}
 	red := snap.Physical.Redacted(mayViewWorker, mayReach(httpapi.PrincipalFrom(r.Context()), RoleOperator))
 	out.Physical = &red

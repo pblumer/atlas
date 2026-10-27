@@ -3,8 +3,8 @@
 **Programme:** BMP (Blueprint Marketplace)  
 **Baseline:** Public atlas repository checked on 2026-10-26.  
 **Milestone:** [Milestone 6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-).  
-**Architecture authority:** [Proposed Blueprint registry ADR](../adr/0499-blueprint-registry-and-distribution.md).  
-**Programme owner:** pblumer (accepted 2026-10-27). BMP0 and later slices require their own accountable owners before implementation.
+**Architecture authority:** [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Not started**).  
+**Programme owner:** pblumer (accepted 2026-10-27). **BMP0 owner:** pblumer (started 2026-10-27). Later slices require their own accountable owners before implementation.
 
 ## User outcome
 
@@ -35,6 +35,9 @@ An authorized atlas operator finds a free Blueprint from an independent static r
 
 ### BMP0 — Contract and trust foundation (architecture gate)
 
+**Current review:** [Draft PR #1402](https://github.com/pblumer/atlas/pull/1402) proposes a [versioned registry index schema](../contracts/blueprint-registry/v1/index.schema.json), positive/negative fixture tests and an Ed25519 registry signing profile for [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md). These are **contract and schema-only checks**, not a working remote registry. ADR-0499 and BMP0 ownership were accepted on 2026-10-27; the runtime verifier, archive/network threat model and production tests are still implementation gates.
+
+
 Define and review the versioned registry index, globally namespaced publisher/Blueprint identity, immutable release digest, compatibility, installation needs, signature/trust bootstrap, source collisions and threat model. Propose installation provenance representation and required authorization gates.
 
 **Done only when:** ADR is accepted or replaced; human owner assigned; validated examples and invalid contract fixtures exist. No premature registry implementation.
@@ -59,7 +62,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## Engineering gates
 
-- ADR-0499 review before conflicting architectural changes and before BMP1; programme ownership is assigned to pblumer, but individual slice ownership remains unassigned until explicitly accepted.
+- ADR-0499 is Accepted; BMP0 is owned by pblumer, and later implementation slices require separately accepted ownership and dependency gates. Security and network tests must pass before BMP1.
 - Follow AGENTS.md, TDD, API route table/OpenAPI, MCP drift classification, Console security, and changelog discipline.
 - Sidecar state on the run-loop owner and new network operations off the run loop. Do not touch engine, WAL or applyToState.
 - Reuse one portable application package and the existing import-plan machinery.
@@ -68,7 +71,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-Review proposed ADR-0499, assign a named owner for BMP0, and resolve architecture questions on publisher identity, registry trust keys, source collisions, one-install-per-server and native package reuse. **Do not start BMP1 or any parallel implementation while required architecture decisions or slice ownership are missing.**
+Implement the bounded offline registry verifier with test-first Ed25519 signature, SHA-256 exact bytes, strict manifest identity/version checks and negative fixtures. Demonstrate trustworthy package acceptance without HTTP, deployment or payment. **Do not begin BMP1 until BMP0 passes all review and security gates.**
 
 ## References
 

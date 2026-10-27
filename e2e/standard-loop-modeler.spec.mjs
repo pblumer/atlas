@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 // collapsed), so the section's fields are on screen.
 async function openLoop(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Loop" }).click();
+  await page.locator('.pgroup[data-group*="Loop" i] > .pgroup-head').click();
 }
 
 test("the panel reads the standard loop an imported activity carries", async ({ page }) => {

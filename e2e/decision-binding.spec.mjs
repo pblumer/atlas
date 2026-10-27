@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 
 async function openBinding(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator("#f-brt-binding")).toBeVisible();
 }
 
@@ -28,11 +28,11 @@ test("the binding field offers latest, a chosen version and the deployment, and 
   await openBinding(page, "Activity_rule");
   const options = await page.locator("#f-brt-binding option").allTextContents();
   expect(options).toEqual([
-    "Latest — newest version when the task runs",
-    "Version — a deployed version you choose",
-    "Deployment — the model deployed with this process",
+    "Neueste — die neueste Version, wenn die Task läuft",
+    "Version — eine deployte Version deiner Wahl",
+    "Deploy — das mit diesem Prozess deployte Modell",
   ]);
-  await expect(page.locator(".pgroup", { hasText: "Called decision" })).toContainText("each time the task runs");
+  await expect(page.locator('.pgroup[data-group^="Called decision"]')).toContainText("bei jedem Lauf der Task");
   await expect(page.locator("#f-brt-version-wrap")).toBeHidden();
   expect(page.__errors).toEqual([]);
 });
@@ -42,8 +42,8 @@ test("choosing a version lists the deployed ones and writes atlas:version", asyn
   await page.locator("#f-brt-binding").selectOption("version");
   await expect(page.locator("#f-brt-version-wrap")).toBeVisible();
   await expect(page.locator("#f-brt-version option")).toHaveText([
-    "— choose a deployed version —",
-    "v2 — current",
+    "— wähle eine deployte Version —",
+    "v2 — aktuell",
     "v1",
   ]);
   await page.locator("#f-brt-version").selectOption("1");
@@ -64,7 +64,7 @@ test("choosing a version lists the deployed ones and writes atlas:version", asyn
 test("a binding the panel does not offer is shown and kept, not rewritten to latest", async ({ page }) => {
   await openBinding(page, "Activity_tag");
   await expect(page.locator("#f-brt-binding")).toHaveValue("versionTag");
-  await expect(page.locator("#f-brt-binding option:checked")).toHaveText("versionTag — not supported, the deploy refuses it");
+  await expect(page.locator("#f-brt-binding option:checked")).toHaveText("versionTag — nicht unterstützt, der Deploy lehnt sie ab");
   // Any save of the called decision used to write bindingType="latest" back.
   await page.locator("#f-resultvar").fill("tarif2");
   await page.locator("#f-resultvar").dispatchEvent("change");

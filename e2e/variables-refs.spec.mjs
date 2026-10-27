@@ -50,7 +50,7 @@ test("hovering a reference says what it is and that the name is read now", async
   await expect(pop).toContainText(ORDERER);
   // A replay shows a past step; the name is today's. Saying so keeps a renamed account
   // from reading as what the process saw.
-  await expect(pop).toContainText(/now/i);
+  await expect(pop).toContainText(/jetzt/i);
   await page.mouse.move(0, 0);
   await expect(pop).toBeHidden();
   expect(page.__errors).toEqual([]);
@@ -71,12 +71,12 @@ test("an id no account answers to says so instead of guessing", async ({ page })
   await open(page);
   const chip = ref(page, "recipient");
   await expect(chip).toHaveClass(/missing/);
-  await expect(chip).toContainText(/no account/i);
+  await expect(chip).toContainText(/kein Konto/i);
   await chip.hover();
   // Deleted and disabled read alike here — the directory lists neither — so the
   // popover names both rather than picking one.
-  await expect(page.locator("#ref-pop")).toContainText(/deleted/i);
-  await expect(page.locator("#ref-pop")).toContainText(/disabled/i);
+  await expect(page.locator("#ref-pop")).toContainText(/gelöscht/i);
+  await expect(page.locator("#ref-pop")).toContainText(/deaktiviert/i);
   await expect(page.locator("#ref-pop")).toContainText(GONE);
   expect(page.__errors).toEqual([]);
 });
@@ -85,7 +85,7 @@ test("a group's id names the group", async ({ page }) => {
   await open(page);
   await expect(ref(page, "approvalRef")).toContainText("IT-Leitung");
   await ref(page, "approvalRef").hover();
-  await expect(page.locator("#ref-pop")).toContainText("Group");
+  await expect(page.locator("#ref-pop")).toContainText("Gruppe");
   expect(page.__errors).toEqual([]);
 });
 
@@ -93,11 +93,11 @@ test("a group nobody lists was deleted, and is not called disabled", async ({ pa
   await open(page);
   const chip = ref(page, "formerTeam");
   await expect(chip).toHaveClass(/missing/);
-  await expect(chip).toContainText(/no group/i);
+  await expect(chip).toContainText(/keine Gruppe/i);
   await chip.hover();
   // A group has no disabled state, so the card names the one thing that happened.
-  await expect(page.locator("#ref-pop")).toContainText(/deleted/i);
-  await expect(page.locator("#ref-pop")).not.toContainText(/disabled/i);
+  await expect(page.locator("#ref-pop")).toContainText(/gelöscht/i);
+  await expect(page.locator("#ref-pop")).not.toContainText(/deaktiviert/i);
   expect(page.__errors).toEqual([]);
 });
 
@@ -107,7 +107,7 @@ test("a process id opens the newest deployed version's live view", async ({ page
   await expect(chip).toContainText("M365 Funktionspostfach");
   await expect(chip).toHaveAttribute("href", "#/operations/p/22");
   await chip.hover();
-  await expect(page.locator("#ref-pop")).toContainText("Process");
+  await expect(page.locator("#ref-pop")).toContainText("Prozess");
   await expect(page.locator("#ref-pop")).toContainText(/version 2/i);
   expect(page.__errors).toEqual([]);
 });
@@ -121,7 +121,7 @@ test("a product and a position name the product and its variant, and lead to its
   await expect(pos).toContainText("Shared mailbox");
   await expect(pos).toContainText("Large");
   await pos.hover();
-  await expect(page.locator("#ref-pop")).toContainText("Product");
+  await expect(page.locator("#ref-pop")).toContainText("Produkt");
   await expect(page.locator("#ref-pop")).toContainText("m365");
   expect(page.__errors).toEqual([]);
 });

@@ -65,7 +65,7 @@ test("a decision the caller supplied is drawn as given, not as computed", async 
   expect(given).toBe("#eff6ff");
   expect(computed).not.toBe(given);
   await expect(nodeText(page, "Bonität").locator("title"))
-    .toHaveText(/supplied, not computed/);
+    .toHaveText(/geliefert, nicht berechnet/);
 });
 
 test("a node the case never touched says so rather than showing nothing", async ({ page }) => {
@@ -73,7 +73,7 @@ test("a node the case never touched says so rather than showing nothing", async 
   await page.waitForSelector(".drg-canvas svg");
   const idle = nodeText(page, "zahlungsstoerungen");
   await expect(idle).toHaveClass(/is-idle/);
-  await expect(idle).toContainText("not part of this case");
+  await expect(idle).toContainText("nicht Teil dieses Falls");
 });
 
 test("the rule that carried the answer is shown, with why the ones above it did not", async ({ page }) => {
@@ -100,24 +100,24 @@ test("a decision service shows its rules like a decision does", async ({ page })
   await page.evaluate(() => window.__open(window.__atServiceTraced));
   await page.waitForSelector(".drg-rules .mgrid");
 
-  await expect(page.locator(".drg-tag")).toHaveText(/decision service/i);
+  await expect(page.locator(".drg-tag")).toHaveText(/Entscheidungsservice/i);
   await expect(page.locator(".drg-rules .mtable-head")).toContainText("Regel 6 hat gegriffen");
   await expect(page.locator(".drg-rules tr.mrule.is-hit")).toHaveCount(1);
   // And none of the older record's apology.
-  await expect(page.locator(".drg-rules")).not.toContainText("No rule matrix was recorded");
+  await expect(page.locator(".drg-rules")).not.toContainText("Für diesen Fall wurde keine Regelmatrix aufgezeichnet");
 });
 
 test("a service record made before the engine could trace one says so", async ({ page }) => {
   await page.evaluate(() => window.__open(window.__atService));
   await page.waitForSelector(".drg-canvas svg");
 
-  await expect(page.locator(".drg-tag")).toHaveText(/decision service/i);
+  await expect(page.locator(".drg-tag")).toHaveText(/Entscheidungsservice/i);
   // The distinction the window turns on: the values are exact, only the rule-level
   // detail is missing, and it is missing because of when the record was made — not
   // because nothing matched, which would be a different and false account.
   const rules = page.locator(".drg-rules");
-  await expect(rules).toContainText("No rule matrix was recorded");
-  await expect(rules).toContainText("exactly what it carried");
+  await expect(rules).toContainText("Für diesen Fall wurde keine Regelmatrix aufgezeichnet");
+  await expect(rules).toContainText("genau das, was er enthielt");
   await expect(page.locator(".drg-rules .mgrid")).toHaveCount(0);
 
   // The graph still carries the case, which is the point of saying it that way.
@@ -125,13 +125,13 @@ test("a service record made before the engine could trace one says so", async ({
   await expect(nodeText(page, "Kreditentscheid")).toContainText("abgelehnt");
   // With no trace there is nothing that can speak for the encapsulated decision, so
   // it is left blank rather than guessed at.
-  await expect(nodeText(page, "Tragbarkeit")).toContainText("not part of this case");
+  await expect(nodeText(page, "Tragbarkeit")).toContainText("nicht Teil dieses Falls");
 });
 
 test("a decision whose model is gone says so rather than drawing an empty frame", async ({ page }) => {
   await page.evaluate(() => window.__open(window.__atGone));
   await page.waitForSelector(".drg-canvas");
-  await expect(page.locator(".drg-canvas")).toContainText("no graph to draw");
+  await expect(page.locator(".drg-canvas")).toContainText("keinen Graphen zu zeichnen");
   // The record itself still stands, and still answers the first question asked of it.
   await expect(page.locator(".drg-result")).toContainText("abgelehnt");
 });
@@ -182,8 +182,8 @@ test("the plain renderer the Modeler shares still draws a model with no case on 
   const svg = await page.evaluate(() => window.__plain());
   expect(svg).toContain("<svg");
   expect(svg).toContain("Kreditentscheid");
-  expect(svg).toContain("decision table");
-  expect(svg).not.toContain("not part of this case");
+  expect(svg).toContain("Entscheidungstabelle");
+  expect(svg).not.toContain("nicht Teil dieses Falls");
 });
 
 // The DRD notation, held as one table.

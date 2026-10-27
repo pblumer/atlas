@@ -14,6 +14,48 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An agent can tell whether, and where, the server is slow.** Two MCP tools for an
+  administrator's agent: `atlas_runtime_health` (`GET /api/v1/debug/runtime`) measures a
+  window of up to 20 seconds and answers with the run loop's wait and hold latencies, the
+  writer's throughput, queue and fsync and commit latencies, the scheduler latency and
+  runnable goroutines, the garbage collector's cycles, pauses and CPU share, the allocation
+  rate and the heap — the figures that were only in `/metrics` — with a note on how to read
+  them. `atlas_runtime_profile` (`GET /api/v1/debug/pprof/{profile}/summary`) takes a CPU,
+  heap, allocation or goroutine profile and answers with the top functions by their own
+  time and with their callees, or the largest groups of goroutines sharing a stack, instead
+  of a binary file; no argument values are included, and a CPU window is at most 20
+  seconds so the call finishes within the MCP client's timeout. Both are admin-only like
+  the profiles they read ([ADR-0502](docs/adr/0502-admin-profiling.md)).
+- **An administrator can profile the running server.** `GET /api/v1/debug/pprof/{profile}`
+  hands out what `go tool pprof` reads, from the server that is slow and without a restart
+  or a second port: `profile` records CPU samples over `?seconds=` (default 30, at most
+  120), `trace` an execution trace for `go tool trace` (default 5, at most 30), and
+  `heap`, `allocs`, `goroutine` and `threadcreate` come at once — as text with `?debug=1`,
+  every stack with `goroutine?debug=2`, the heap after a collection with `heap?gc=1`. One
+  CPU recording and one trace run at a time (409 while one does). The route is admin-only
+  at the boundary, every download is audited as `profile.downloaded`, and the command line
+  is not offered, since a flag can carry a secret. Atlas does not link `net/http/pprof`,
+  whose handlers would sit unauthenticated on the default mux, and a test keeps it that
+  way ([ADR-0502](docs/adr/0502-admin-profiling.md)).
+- **The architecture sketch shows who else is at the other end of a release's messages and signals.**
+  A release now records the messages and signals its processes throw and the signals they
+  catch, and, for each name, the processes of other applications on the installation at
+  the other end: those that throw a message the release receives or a signal it catches,
+  and those that receive a message or signal it throws, read from the newest active
+  version of every deployed model. A message box says who throws it, and the picture
+  gains a box for each name the release throws — "Sends message …", "Broadcasts signal
+  …" — saying who receives it, drawn with a dashed line because Atlas correlates a name
+  itself and no connection crosses it. The event feed appears as one box when the
+  installation pushes one: how many subscriptions, and that the release's incidents (and,
+  with the business layer, its products' outcomes) travel on it; a feed endpoint is shown
+  only to whoever may see its Worker, and no credential is recorded. In ArchiMate each
+  peer process is an application process of its application, triggering or triggered by
+  the release's processes. Another application's name and processes are shown only to a
+  reader who may see that application — elsewhere the picture says "another application"
+  — and the same now holds for the application a call activity reaches, which every reader
+  of the release saw before. Snapshots are now format and mapping version 7; a release
+  recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **The architecture sketch has business and strategy layers.** A release now records its
   processes as the work they do, with how their user tasks say who does them (for a
   group, for a named person, decided at run time, or nobody); the roles they name — each
@@ -142,6 +184,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Console › Workers folds and filters both of its lists.** The Worker catalog and
+  the configured workers each fold away under their heading, which still shows how many
+  entries the section holds, and the browser remembers each choice; **New worker**
+  unfolds the section its form opens in. The catalog has the filter row and sorting of
+  every other list in the Console, searching each type's name, kind and description.
+  The configured workers keep their filter row after a worker is changed, which used to
+  redraw the list without it.
+
 - **The heatmap's figures cost the server once, not once per tab.** The Operations
   heatmap reads its statistics when it opens, when the period changes, every five minutes
   while the tab is visible and on **Refresh** — no longer every fifteen seconds — and the
@@ -176,7 +226,9 @@ _Changed_ / _Removed_ for each version.
   of every table, the buttons of the pick dialog, the import choices of a catalogue
   import, the Server constants section of Admin → Engine, and the mark on a definition
   whose decisions were frozen at deploy, also in the editors. Messages the server
-  composes stay in its English. `?lang=en` keeps the English pages.
+  composes stay in its English. `?lang=en` keeps the English pages, and there the menu
+  names the same things as in German: "Process diagram (BPMN)", "Decision diagram
+  (DMN)", "Upload decision model (.dmn)".
 - **The decision editor and the form editor speak German, down to the libraries they
   embed.** Their bars, hints, menus, dialogs, toasts, the test panel and its rule trace,
   the decision documentation and its PDF, the XML source dialog, the collaboration
@@ -195,8 +247,22 @@ _Changed_ / _Removed_ for each version.
   the chip that says which record is shown, the marks on the canvas, the Playground tab
   and the process documentation PDF read from the message catalogue. bpmn-js's palette,
   context pad and replace menu take their words from the same catalogue through
-  `lib-translate.js`. The properties panel follows area by area; messages the server
-  composes — the compiler's problems, a verdict's checks — stay in its English.
+  `lib-translate.js`. Messages the server composes — the compiler's problems, a
+  verdict's checks — stay in its English.
+- **The BPMN editor's properties panel speaks German too.** Every group, field, hint,
+  option and button of the details panel reads from the message catalogue: the process,
+  pool and collaboration settings, the events with their messages, timers, signals,
+  errors and escalations, the start variables and constants, the script, decision, form
+  and call activity wiring, the mappings and loops, and the Worker Type picker with each
+  Worker Type's operations, fields and hints. So do the modules the panel draws from: the
+  FEEL fields and variable references, the operation tables of the Exchange, Google
+  Contacts, CardDAV and wikiwikibangbang Worker Types, the Entra attribute mask, the PowerShell editor, the
+  Worker Type setup docs, the Developer View and the decision graph. The Worker Type tables
+  keep their English, because a text there is also data — a field's group is its section's
+  identity — and are translated where they are drawn, by `wt.` messages that a test holds
+  to the texts the tables still carry. A collapsible group keeps its English name as its
+  identity, so what an author folded stays folded in either language. Example values in
+  placeholders, product and protocol names, and what the server sends stay as they are.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the
@@ -206,6 +272,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The Playground evaluates decisions.** A business rule task in a Playground sandbox
+  was answered like any other job: by the default stub, which completed it without a
+  result, or not at all. The decision it calls was never evaluated, although the
+  Playground was documented to run DMN as production does. A sandbox now evaluates the
+  decision the way production's DMN worker does, over the case's own variables and
+  against the decisions deployed on the server, and keeps the evaluation record:
+  - a fixed `atlas:version` is resolved when the session opens, as a deploy resolves
+    it, so a version that is not deployed refuses the session;
+  - a deployed version's deployment-bound decision runs the model bundled with it, and a
+    draft's runs the latest deployed decision of its id;
+  - a decision routed to a temis Worker is evaluated in the sandbox, which dials
+    nothing;
+  - a decision that cannot be found raises an incident naming it.
+
+  A stub an author names for the task itself still answers it. **Runs of a model with a
+  business rule task now carry the decision's result where they carried none**, so a
+  saved scenario's baseline shows the difference.
+- **Every declared start variable shows as a start variable in the Modeler.** The
+  process and pool panels handed each row its position in the list as the flag that marks
+  a constant, so from the second declared variable on, a row came with a source picker
+  and without its *required* box, and saving read a box that was not there.
 - **A picture of any size is taken, for a person and for a product.** Console →
   Organization and the catalogue's product editor passed the chosen file on unchanged, so
   a photograph straight off a phone was refused with "the picture exceeds the 524288 byte

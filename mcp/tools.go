@@ -761,6 +761,97 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_runtime_health",
+			Description: "Measure whether, and where, the server is slow, over a window of 'seconds' (default 5, " +
+				"at most 20; 0 answers at once with figures since the start). Read it first when the server is " +
+				"reported slow, before taking a profile. It returns the run loop's turns per second and how long " +
+				"callers waited for the single writer (wait) and how long each turn held it (held); the writer's " +
+				"batches, commands and events per second, its queue and its fsync and commit latencies; the " +
+				"scheduler latency and the goroutines (runnable, running, waiting); the garbage collector's cycles, " +
+				"pauses and share of the CPU, the allocation rate and the heap. Latencies are count, mean, p50, p90, " +
+				"p99 and max in milliseconds; percentiles are bucket bounds. The answer's note gives rules of thumb " +
+				"for reading it and which profile to take next (atlas_runtime_profile). Administrators only.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"seconds": map[string]any{
+						"type":        "integer",
+						"description": "Optional window in seconds, 0 to 20 (default 5).",
+					},
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path := "/api/v1/debug/runtime"
+				if _, ok := args["seconds"]; ok {
+					n, err := argUint(args, "seconds")
+					if err != nil {
+						return "", err
+					}
+					path += "?seconds=" + strconv.FormatUint(n, 10)
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_runtime_profile",
+			Description: "Take a runtime profile of the server and get it summarized: 'profile' records CPU time " +
+				"over 'seconds' (default 10, at most 20) and lists the functions by their own time (flat) and with " +
+				"what they called (cum), in milliseconds and percent, with the cores used; 'heap' lists the live " +
+				"memory and 'allocs' the memory allocated since the start the same way, in bytes ('gc' true " +
+				"collects first); 'goroutine' counts the goroutines and lists the largest groups sharing a stack, " +
+				"leaf frame first. 'top' bounds each list (default 20, at most 50). Function names are Go " +
+				"package paths, so a hot spot maps to the source; no argument values are included. One CPU " +
+				"profile runs at a time (an error while another does). Take it after atlas_runtime_health has " +
+				"said where to look. Administrators only.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"kind": map[string]any{
+						"type":        "string",
+						"enum":        []any{"profile", "heap", "allocs", "goroutine"},
+						"description": "Which profile: profile (CPU), heap, allocs or goroutine.",
+					},
+					"seconds": map[string]any{
+						"type":        "integer",
+						"description": "Optional CPU window in seconds, 1 to 20 (default 10). Only for kind profile.",
+					},
+					"top": map[string]any{
+						"type":        "integer",
+						"description": "Optional length of each list, 1 to 50 (default 20).",
+					},
+					"gc": map[string]any{
+						"type":        "boolean",
+						"description": "Optional: collect garbage first, so heap shows what is live now. Only for heap and allocs.",
+					},
+				},
+				"required": []any{"kind"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				kind, err := argString(args, "kind")
+				if err != nil {
+					return "", err
+				}
+				q := url.Values{}
+				for _, name := range []string{"seconds", "top"} {
+					n, ok, err := optPositiveUint(args, name)
+					if err != nil {
+						return "", err
+					}
+					if ok {
+						q.Set(name, strconv.FormatUint(n, 10))
+					}
+				}
+				if gc, _ := args["gc"].(bool); gc {
+					q.Set("gc", "1")
+				}
+				path := "/api/v1/debug/pprof/" + url.PathEscape(kind) + "/summary"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_publish_message",
 			Description: "Publish a message for correlation: any instance waiting at a message catch event " +
 				"whose correlation key matches is delivered the message and advances. Provide the message " +

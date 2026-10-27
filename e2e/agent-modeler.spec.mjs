@@ -32,13 +32,13 @@ async function open(page, id) {
 // collapsed, which is what an author sees — so a test that drives a field has to open
 // its section first, exactly as a person would.
 async function expand(page, title) {
-  await openSection(page, page.locator(".pgroup-head", { hasText: title }).first(), ".pgroup");
+  await openSection(page, page.locator(`.pgroup[data-group*="${title}" i] > .pgroup-head`).first(), ".pgroup");
 }
 
 // expandGroup opens one of the mapping-style groups (Parameters), which carry their own
 // head markup rather than the <h3> one.
 async function expandGroup(page, title) {
-  await openSection(page, page.locator(".io-group-head", { hasText: title }).first(), ".io-group");
+  await openSection(page, page.locator(`.io-group[data-group*="${title}" i] .io-group-head`).first(), ".io-group");
 }
 
 // openSection clicks a section head only when its section is collapsed. The head is a
@@ -79,9 +79,9 @@ test("an agent-driven ad-hoc shows its agent, and a plain one does not", async (
 // everything starts at once, the other says entry starts nothing.
 test("the panel says which entry semantics is in force", async ({ page }) => {
   await open(page, "plain");
-  await expect(page.locator("#p-body")).toContainText("starts at once");
+  await expect(page.locator("#p-body")).toContainText("startet sofort");
   await open(page, "agent");
-  await expect(page.locator("#p-body")).toContainText("Entry starts nothing");
+  await expect(page.locator("#p-body")).toContainText("Der Eintritt startet nichts");
 });
 
 test("switching a plain ad-hoc to an agent writes the connector, and back removes it", async ({ page }) => {
@@ -125,7 +125,7 @@ test("the result collection and its FEEL element are stored the way the compiler
 
 test("a tool shows what it is to the agent, and its declared parameters", async ({ page }) => {
   await open(page, "zinsen_holen");
-  await expect(page.locator("#p-body")).toContainText("Agent tool");
+  await expect(page.locator('.pgroup[data-group="Agent tool"]')).toHaveCount(1);
   await expect(page.locator("#p-body")).toContainText("agent");
 
   await expandGroup(page, "Parameters");
@@ -164,7 +164,7 @@ test("an added parameter lands in the XML, and a deleted one leaves", async ({ p
 // pressing Deploy.
 test("an undocumented tool is warned about where it is written", async ({ page }) => {
   await open(page, "historie_lesen");
-  await expect(page.locator(".warn-note")).toContainText("no documentation");
+  await expect(page.locator(".warn-note")).toContainText("keine Dokumentation");
   await expect(page.locator(".warn-note")).toContainText("agent.tool");
 
   // A documented one is not nagged.
@@ -178,7 +178,7 @@ test("an undocumented tool is warned about where it is written", async ({ page }
 // half of the truth: it runs as a later step of the tool that starts its chain.
 test("a chained inner activity is told it is not a tool", async ({ page }) => {
   await open(page, "pruefen");
-  await expect(page.locator("#p-body")).toContainText("not a tool the agent can call");
+  await expect(page.locator("#p-body")).toContainText("kein Werkzeug, das der Agent aufrufen kann");
   await expect(page.locator("[data-agent-param-group]")).toHaveCount(0);
 
   // And an activity outside any agent container gets none of this at all.
@@ -205,7 +205,7 @@ test("an ai task shows its worker, model, prompt and result variable", async ({ 
 
   // The picker recognised it as an ai task rather than falling back to "Job worker",
   // which is the failure a missing catalog entry produces.
-  await expect(page.locator("#p-body")).toContainText("AI Task");
+  await expect(page.locator("#p-body")).toContainText("KI-Task");
   expect(page.__errors).toEqual([]);
 });
 

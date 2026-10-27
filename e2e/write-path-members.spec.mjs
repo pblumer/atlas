@@ -51,10 +51,10 @@ test("the members the class declares are what the path offers", async ({ page })
   const options = await member(page).locator("option").allTextContents();
 
   // The whole object first, then the members, then the escape.
-  expect(options[0]).toContain("the whole object");
+  expect(options[0]).toContain("das ganze Objekt");
   expect(options.some((o) => o.includes("⚿ id"))).toBe(true);
   expect(options.some((o) => o.includes("total") && o.includes("number [0..1]"))).toBe(true);
-  expect(options[options.length - 1]).toContain("not modelled yet");
+  expect(options[options.length - 1]).toContain("noch nicht modelliert");
   expect(page.__errors).toEqual([]);
 });
 
@@ -62,14 +62,14 @@ test("a member whose type is a class offers what is inside it, one level down", 
   await selectWrite(page);
   // `customer` is typed as Customer, and Customer says what is inside one — so the
   // dotted path ADR-0060 allows can be picked rather than spelled.
-  const group = member(page).locator('optgroup[label*="inside customer"]');
+  const group = member(page).locator('optgroup[label^="in customer ·"]');
   await expect(group).toHaveCount(1);
   await expect(group.locator("option")).toHaveCount(1);
   await expect(group.locator("option")).toHaveText(/customer\.name/);
 
   // `tags` is untyped, so nothing is claimed about what is inside it. Guessing there
   // would be the false knowledge the derived model reports as a gap.
-  await expect(member(page).locator('optgroup[label*="inside tags"]')).toHaveCount(0);
+  await expect(member(page).locator('optgroup[label^="in tags ·"]')).toHaveCount(0);
 });
 
 test("choosing a member writes it into the assignment", async ({ page }) => {
@@ -90,7 +90,7 @@ test("the whole object is a choice, not the absence of one", async ({ page }) =>
 
 test("a path the class does not declare is kept and named, not silently dropped", async ({ page }) => {
   await selectWrite(page);
-  await member(page).selectOption({ label: "Another member, not modelled yet…" });
+  await member(page).selectOption({ label: "Ein anderes Attribut, noch nicht modelliert …" });
   const escape = page.locator("#f-dw-other-0");
   await expect(escape).toBeVisible();
   await escape.fill("versandart");
@@ -101,7 +101,7 @@ test("a path the class does not declare is kept and named, not silently dropped"
   await expect.poll(() => targetMember(page)).toBe("versandart");
   await selectWrite(page);
   await expect(member(page)).toHaveValue("versandart");
-  await expect(member(page).locator("option[selected]")).toContainText("not a member of Order");
+  await expect(member(page).locator("option[selected]")).toContainText("kein Attribut von Order");
   expect(page.__errors).toEqual([]);
 });
 
@@ -111,9 +111,9 @@ test("the panel says the members are a shape, not what an expression can read", 
   // The distinction the whole feature turns on. A data object is not a process
   // variable, so a reader about to type into FEEL value must not take the member list
   // beside it as the scope of that expression.
-  await expect(panel).toContainText("shaped");
-  await expect(panel).toContainText("variables");
-  await expect(panel).toContainText("a data object is not one of them");
+  await expect(panel).toContainText("welche Form dieses Objekt hat");
+  await expect(panel).toContainText("Variablen");
+  await expect(panel).toContainText("ein Datenobjekt ist keine davon");
 });
 
 test("an object whose class nothing models leaves the path as free text", async ({ page }) => {
@@ -197,7 +197,7 @@ test("each row's escape field belongs to its own row", async ({ page }) => {
   // the author typed into a member they were not editing.
   await selectWrite(page);
   await addWrite(page);
-  await member(page, 1).selectOption({ label: "Another member, not modelled yet…" });
+  await member(page, 1).selectOption({ label: "Ein anderes Attribut, noch nicht modelliert …" });
 
   await expect(page.locator("#f-dw-other-1")).toBeVisible();
   await expect(page.locator("#f-dw-other-0")).toBeHidden();
@@ -215,8 +215,8 @@ test("the panel says several writes are one change, applied in order", async ({ 
   // each behind the author's back.
   await selectWrite(page);
   const panel = page.locator("#p-body");
-  await expect(panel).toContainText("in order");
-  await expect(panel).toContainText("one");
+  await expect(panel).toContainText("der Reihe nach");
+  await expect(panel).toContainText("als eine Änderung");
 });
 
 test("a row added after a deletion does not inherit another row's escape field", async ({ page }) => {
@@ -237,7 +237,7 @@ test("a row added after a deletion does not inherit another row's escape field",
   expect(new Set(ids).size).toBe(ids.length);
 
   const last = ids.length - 1;
-  await member(page, last).selectOption({ label: "Another member, not modelled yet…" });
+  await member(page, last).selectOption({ label: "Ein anderes Attribut, noch nicht modelliert …" });
   await expect(page.locator(`#f-dw-other-${ids[last]}`)).toBeVisible();
   await expect(page.locator("#f-dw-other-0")).toBeHidden();
   expect(page.__errors).toEqual([]);
@@ -263,8 +263,8 @@ test("a member an enumeration types is written from a list of its literals", asy
   await member(page).selectOption("priority");
   const values = page.locator(".dw-lit");
   await expect(values).toHaveCount(1);
-  await expect(values.locator("option")).toHaveText(["— not set —", "low", "normal", "urgent",
-    "A FEEL expression instead…"]);
+  await expect(values.locator("option")).toHaveText(["— nicht gesetzt —", "low", "normal", "urgent",
+    "Stattdessen ein FEEL-Ausdruck …"]);
   expect(page.__errors).toEqual([]);
 });
 
@@ -295,7 +295,7 @@ test("an expression is still possible, and is what the field opens on", async ({
   // it on the next save.
   await selectWrite(page);
   await member(page).selectOption("priority");
-  await page.locator(".dw-lit").selectOption({ label: "A FEEL expression instead…" });
+  await page.locator(".dw-lit").selectOption({ label: "Stattdessen ein FEEL-Ausdruck …" });
   const expr = page.locator("#f-dw-expr-0");
   await expect(expr).toBeVisible();
   await expr.fill("=if urgent then \"urgent\" else \"low\"");
@@ -304,7 +304,7 @@ test("an expression is still possible, and is what the field opens on", async ({
 
   // Re-rendered, the row opens on the escape with the expression intact.
   await selectWrite(page);
-  await expect(page.locator(".dw-lit option[selected]")).toHaveText("A FEEL expression instead…");
+  await expect(page.locator(".dw-lit option[selected]")).toHaveText("Stattdessen ein FEEL-Ausdruck …");
   await expect(page.locator("#f-dw-expr-0")).toHaveValue('=if urgent then "urgent" else "low"');
   expect(page.__errors).toEqual([]);
 });

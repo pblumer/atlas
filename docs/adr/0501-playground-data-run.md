@@ -1,7 +1,7 @@
 # ADR-0501: A data run checks a whole file against a model in throwaway sandboxes, and hands the file back
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-27
 - **Deciders:** Patrick Blumer
 - **Open question:** Two figures this record's defaults rest on are not measured:
@@ -250,6 +250,29 @@ model with `--process` or `--draft`. It uploads, prints progress, and downloads 
 **Not over MCP, in this record.** A file of tens of megabytes is not a tool argument, and the
 command is the automation path. A tool that reads a run's status could follow without new
 decisions.
+
+### As built
+
+The prerequisite has landed. The data run itself has not.
+
+- `playground/decisions.go`: `decisionBinding` and `decisionKey`, choosing the deployed
+  model a sandbox's business rule task evaluates, as listed above.
+- `playground/sandbox.go`:
+  - `Options` gains `Decisions`, `DecisionPins` and `BundledDecisions`;
+  - `Open` resolves fixed versions before anything runs;
+  - `decisionAnswer` answers a business rule task's job through `dmn.DecisionHandler`,
+    due at once, with an incident when the decision cannot be evaluated, unless a
+    `byElement` stub names the task;
+  - `answer` completes it with the evaluation record.
+- `api/playground/service.go` and `api/server.go`: the service carries the server's DMN
+  registry and resolves pins with the deploy's own `resolveVersionPins`, on the loop. A
+  session on a deployed definition passes that definition's key as `BundledDecisions`.
+- Tests: `playground/decisions_test.go` covers every case in the list below, and two HTTP
+  tests in `api/playground_http_test.go` cover a session evaluating a deployed decision and
+  refusing an undeployed version.
+
+Not yet built: the run's report saying which deployment answered a draft's
+deployment-bound task. The evaluation record carries the key, but nothing surfaces it.
 
 ### Consequences
 

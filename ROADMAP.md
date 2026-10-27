@@ -2026,6 +2026,25 @@ dataset of up to 50 000 cases":
   `when` has to select, and the variables it reads that no case carried
   ([ADR-0424](docs/adr/0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md),
   proposed).
+- ✅ **Decisions are evaluated in the sandbox.** A business rule task used to be answered by
+  the default stub, so its decision never ran. Now it runs the way production's DMN worker
+  runs it, against the server's deployed decisions:
+  - a fixed version is resolved as a deploy resolves it;
+  - a decision that is not there is an incident;
+  - a stub named for the task still wins.
+
+  [`playground/decisions.go`](playground/decisions.go), the prerequisite of
+  [ADR-0501](docs/adr/0501-playground-data-run.md).
+- 🔲 **A data run**: a CSV or XLSX file of any length, checked row by row in a sequence of
+  throwaway sandboxes and handed back with each row's state, end event and corrections
+  ([ADR-0501](docs/adr/0501-playground-data-run.md), proposed).
+- 🔲 **Data from history and from the model** ([ADR-0500](docs/adr/0500-playground-data-from-history-and-model.md),
+  proposed):
+  - a dataset description profiled from finished instances;
+  - a report of the flows no case reached;
+  - edge cases proposed by the agent Worker and checked by running them;
+  - a one-shot trial, offered over MCP, so an agent can run what it wrote without
+    deploying it.
 
 **Working on a diagram:**
 - ✅ **Token simulation** in the Design view: a client-side walkthrough of the control

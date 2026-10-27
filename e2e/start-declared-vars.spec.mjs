@@ -106,6 +106,30 @@ test.describe("Deploy & run", () => {
   });
 });
 
+// The panel drew the declaration with declared.map(startVarRowHTML), which handed map's
+// index to the row as its "constant" flag: from the second variable on, each row was a
+// constant's — a source picker and no required box — and saving read a box that was not
+// there. Every declared variable is a start variable's row.
+test("the process panel draws every declared variable as a start variable", async ({ page }) => {
+  await openHarness(page);
+  await page.evaluate(() => window.__mountEditor());
+  await expect(page.locator("#p-body")).toBeVisible();
+  await page.locator('[data-tab="implement"]').click();
+  const group = page.locator('.pgroup[data-group="Start variables"]');
+  await expect(group).toHaveCount(1);
+  if (await group.evaluate((g) => g.classList.contains("collapsed"))) {
+    await group.locator(".pgroup-head").click();
+  }
+  const rows = page.locator("#sv-list .sv-row");
+  await expect(rows).toHaveCount(7);
+  await expect(rows.locator(".sv-required")).toHaveCount(7);
+  await expect(rows.locator(".sv-source")).toHaveCount(0);
+  // The required marks are the declaration's: ApplicationId and Name.
+  expect(await rows.locator(".sv-required").evaluateAll((els) => els.map((e) => e.checked)))
+    .toEqual([true, false, false, false, true, false, false]);
+  expect(page.__errors).toEqual([]);
+});
+
 test("without a declaration the modal is the form alone", async ({ page }) => {
   await openHarness(page, "?declared=0");
   await page.evaluate(() => window.__mountEditor());

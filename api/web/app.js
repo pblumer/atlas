@@ -2467,8 +2467,10 @@ async function viewConsoleWorkers() {
   const pill = (c) => c.status === "active"
     ? `<span class="pill ok"><span class="dot"></span>${esc(c.statusLabel)}</span>`
     : `<span class="pill warn"><span class="dot"></span>${esc(c.statusLabel)}</span>`;
+  // The cell sorts by the type's name rather than by everything it says about it; the
+  // filter still reads the whole cell, description and records included.
   const workerTypeRow = (c) => `<tr>
-      <td>
+      <td data-sort="${esc(c.name)}">
         <span class="chip">${esc(c.name)}</span>
         <span class="muted" style="font-size:12px; margin-left:6px">${esc(c.kind)}</span>
         <div class="muted" style="font-size:13px; margin-top:4px">${esc(c.desc)}${
@@ -2587,12 +2589,23 @@ async function viewConsoleWorkers() {
         A model can still reference it by name — what it connects to is theirs to see.</div></td>
       ${statusCell(c)}
       <td class="row-actions"></td></tr>`;
+  // Both this card and the catalog above it fold away, each remembered on its own
+  // (sectionState): an operator who came for the vault scrolls past neither. The
+  // heading keeps the count, so a folded section still says what it holds, and New
+  // worker stays beside it because it unfolds the section the form opens in.
+  const sectionHead = (id, title, count) => `<div class="workers-sec-head">
+      <h2><button class="section-toggle" aria-expanded="${sectionState(id)}" data-section="${id}"
+        title="${esc(tr("workers.section.toggle"))}">${title}</button></h2>
+      <span class="muted small">${esc(count)}</span></div>`;
+  const sectionBody = (id) => `<div class="section-body" id="sec-${id}"${sectionState(id) ? "" : " hidden"}>`;
   const managedCard = `
     <div class="card" style="padding:0; margin-top:18px">
-      <div class="between" style="padding:16px 18px 0">
-        <h2>Configured workers</h2><button class="btn" id="new-worker" title="Configure a new worker">New worker</button>
+      <div class="between" style="padding:16px 18px 12px">
+        ${sectionHead("workers-configured", "Configured workers", trPlural("workers.configured.count", workers.length))}
+        <button class="btn" id="new-worker" title="Configure a new worker">New worker</button>
       </div>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">A configured worker binds a
+      ${sectionBody("workers-configured")}
+      <p class="muted" style="padding:0 18px; margin:0 0 12px">A configured worker binds a
       <b>Worker Type</b> to one concrete endpoint and identity, and a task references it by name
       (ADR-0036/0041/0050). The endpoint is stored; the token is a <b>reference</b> resolved from
       the vault (or <code>ATLAS_CONNECTOR_&lt;REF&gt;_TOKEN</code>) at runtime — never stored
@@ -2603,6 +2616,7 @@ async function viewConsoleWorkers() {
         <tbody id="worker-rows">${workers.map(managedRow).join("")
           || `<tr><td colspan="3" class="muted" style="padding:14px 18px">None configured. Business rule tasks marked <i>External (temis worker)</i> resolve by name to these.</td></tr>`}</tbody>
       </table>
+      </div>
     </div>`;
 
   // The Active-Directory mockup switch (ADR-0181). It sits with the workers
@@ -2779,21 +2793,34 @@ async function viewConsoleWorkers() {
   view.innerHTML = `
     <div class="card" style="padding:0">
       <div class="between" style="padding:16px 18px 0"><h1 style="margin:0">Workers</h1></div>
-      <h2 style="padding:0 18px; margin:12px 0 4px">Worker catalog</h2>
-      <p class="muted" style="padding:0 18px; margin:6px 0 12px">The Worker Types available to
+      <div style="padding:12px 18px">
+        ${sectionHead("workers-catalog", "Worker catalog", trPlural("workers.catalog.count", WORKER_TYPES.length))}
+      </div>
+      ${sectionBody("workers-catalog")}
+      <p class="muted" style="padding:0 18px; margin:0 0 12px">The Worker Types available to
       this atlas instance. A <b>Worker Type</b> is a capability; a configured worker below binds
       that capability to one concrete target and identity, org-wide and shared across every
       process.</p>
-      <table><tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody></table>
+      <table data-dt-key="worker-types">
+        <thead><tr><th>${esc(tr("workers.catalog.th.type"))}</th><th style="text-align:right">${esc(tr("workers.catalog.th.status"))}</th></tr></thead>
+        <tbody>${WORKER_TYPES.map(workerTypeRow).join("")}</tbody>
+      </table>
+      </div>
     </div>
     ${managedCard}
     ${adMockCard}
     ${sqlMockCard}
     ${secretsCard}`;
+  for (const t of view.querySelectorAll(".section-toggle"))
+    t.addEventListener("click", () => toggleSection(t.dataset.section, t));
   wireWorkerManagement(workers);
   wireADMock();
   wireSQLMock();
   wireSecretsManagement(secrets, secretsState, workers);
+  // Editing, enabling or deleting a worker re-renders this page without going through
+  // route(), whose enhanceViewTables would otherwise be the only one to give the new
+  // tables their sorting and filter row back.
+  enhanceViewTables();
 }
 
 async function viewConsoleOrg() {
@@ -3429,6 +3456,13 @@ function toggleSection(id, btn) {
   body.hidden = !open;
   btn.setAttribute("aria-expanded", String(open));
   try { localStorage.setItem("atlas.sec." + id, open ? "1" : "0"); } catch { /* ignore */ }
+}
+// openSection unfolds a section that an action is about to put something into: a form
+// opened inside a folded section opens where nobody can see it.
+function openSection(id) {
+  const body = document.getElementById("sec-" + id);
+  const btn = document.querySelector(`.section-toggle[data-section="${id}"]`);
+  if (body && body.hidden && btn) toggleSection(id, btn);
 }
 
 // viewModelerHome is the application landscape: a clean table of process
@@ -5039,7 +5073,13 @@ function wireWorkerManagement(workers) {
   const newBtn = document.getElementById("new-worker");
   if (newBtn && slot) {
     newBtn.addEventListener("click", () => {
-      if (slot.dataset.open === "1") { slot.innerHTML = ""; slot.dataset.open = ""; return; }
+      // A form left open in a section folded since is shown again, not closed unseen.
+      const folded = document.getElementById("sec-workers-configured")?.hidden;
+      openSection("workers-configured");
+      if (slot.dataset.open === "1") {
+        if (!folded) { slot.innerHTML = ""; slot.dataset.open = ""; }
+        return;
+      }
       slot.dataset.open = "1";
       slot.innerHTML = `<form class="worker-form" style="display:flex;flex-wrap:wrap;gap:8px;align-items:end;margin:4px 0 14px">
         <label class="field" style="margin:0"><span>Worker type</span><select name="kind"><option value="temis">temis</option><option value="clio">clio</option><option value="mail">mail</option><option value="sharepoint">sharepoint</option><option value="remedy">remedy</option><option value="jira">jira</option><option value="googlesheets">Google Sheets</option><option value="discord">Discord</option><option value="s3">S3 object storage</option><option value="entra">entra</option><option value="exchange">Microsoft Exchange</option><option value="teamsphone">Microsoft Teams Phone</option><option value="googlecontacts">Google Contacts</option><option value="carddav">CardDAV contacts</option><option value="wikiwikibangbang">wikiwikibangbang</option><option value="ad">Active Directory</option><option value="agent">AI agent model</option><option value="cloudevents">CloudEvents endpoint</option><option value="postgres">PostgreSQL</option><option value="mariadb">MariaDB</option><option value="mssql">Microsoft SQL Server</option></select></label>
