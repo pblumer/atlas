@@ -1,7 +1,9 @@
 package archsketch
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -44,18 +46,25 @@ const (
 	boxHeight = 56
 	// physicalBoxHeight is a box with a third line: where a worker's work goes.
 	physicalBoxHeight = 72
-	boxGap            = 12
-	headerH           = 92
-	nodeHeadH         = 30
-	lineHeight        = 17
-	labelChars        = 36
-	fontStack         = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+	// detailBoxHeight is a box with a fourth line: what else a Worker's configuration
+	// says (mapping version 4).
+	detailBoxHeight = 88
+	boxGap          = 12
+	headerH         = 92
+	nodeHeadH       = 30
+	lineHeight      = 17
+	labelChars      = 36
+	fontStack       = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 	// ArchiMate's own layer colours (ADR-0189 §6: the layer fills are never
 	// recoloured), with a neutral ink and a white sheet, because the file is pasted
 	// into pages whose theme it cannot know.
 	colorApplication = "#b5ffff"
 	colorTechnology  = "#c9e7b7"
+	colorBusiness    = "#ffffb5"
+	colorStrategy    = "#f5deaa"
+	colorBand        = "#f6f8fa"
+	colorRule        = "#d0d7de"
 	colorInk         = "#1f2328"
 	colorMuted       = "#57606a"
 	colorStroke      = "#4b5563"
@@ -64,9 +73,16 @@ const (
 
 // SVG renders the snapshot as a standalone SVG document. A value [Snapshot.Select]
 // narrowed to the technology layer is drawn as the installation alone.
+//
+// A value whose selection holds the data layer gets a band below the picture (ADR-0495
+// §3); a value whose selection holds only the data layer is drawn as that band alone.
 func SVG(s Snapshot, m Meta) []byte {
+	s = s.selected()
 	if s.technologyOnly() {
 		return drawSketch(s, m, technologyParts(s, m))
+	}
+	if s.bandsOnly() {
+		return drawSketch(s, m, sketchParts{})
 	}
 	return drawSketch(s, m, sketchParts{
 		left:       inboundBoxes(s),
@@ -101,14 +117,44 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	bh := boxHeight
 	if s.Physical != nil {
 		bh = physicalBoxHeight
+		if slices.ContainsFunc(slices.Concat(left, right), func(b box) bool { return b.extra != "" }) {
+			bh = detailBoxHeight
+		}
 	}
+
+	// The strategy and business bands sit above the picture and push it down; the data
+	// band sits below it (ADR-0495 §3). A value drawn as bands alone has no picture.
+	main := !s.bandsOnly()
+	type placed struct {
+		band *bandView
+		top  int
+	}
+	var bands []placed
+	y := headerH - 16
+	for _, band := range []*bandView{strategyBand(s), businessBand(s)} {
+		if band != nil {
+			bands = append(bands, placed{band, y})
+			y += band.height() + 16
+		}
+	}
+	head := headerH + y - (headerH - 16)
 
 	rows := max(len(left), len(right), 3)
 	contentH := rows*bh + (rows-1)*boxGap
-	nodeTop := headerH + 18
+	nodeTop := head + 18
 	top := nodeTop + nodeHeadH
 	notes := footerLines(s, m, parts.key)
 	footerTop := top + contentH + 40
+	if main {
+		y = top + contentH + 32
+	}
+	if band := dataBand(s); band != nil {
+		bands = append(bands, placed{band, y})
+		y += band.height() + 16
+	}
+	if !main || len(bands) > 0 && bands[len(bands)-1].top > top {
+		footerTop = y + 8
+	}
 	height := footerTop + 22 + len(notes)*lineHeight + 16
 
 	var b strings.Builder
@@ -123,69 +169,82 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	// into a page has nobody beside it to ask.
 	fmt.Fprintf(&b, `<text x="%d" y="34" font-size="20" font-weight="600" fill="%s">%s</text>`+"\n", colLeftX, colorInk, esc(title(m)))
 	fmt.Fprintf(&b, `<text x="%d" y="56" fill="%s">%s</text>`+"\n", colLeftX, colorMuted, esc(stampLine(s, m)))
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, headerH+10, colorInk)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, headerH+10, colorInk, esc(parts.rightTitle))
+	if main {
+		drawMain(&b, parts, bh, head, top, contentH, nodeTop)
+	}
+	for _, p := range bands {
+		p.band.draw(&b, p.top)
+	}
+
+	// Footer: the key, and what this sketch does not show.
+	fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s"/>`+"\n", colLeftX, footerTop, svgWidth-colLeftX, footerTop, colorRule)
+	for i, line := range notes {
+		fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, footerTop+22+i*lineHeight, colorMuted, esc(line))
+	}
+	b.WriteString("</svg>\n")
+	return []byte(b.String())
+}
+
+// drawMain draws the picture's frame: the two columns and the Atlas node between them,
+// with what runs inside it.
+func drawMain(b *strings.Builder, parts sketchParts, bh, head, top, contentH, nodeTop int) {
+	left, right := parts.left, parts.right
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, head+10, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, head+10, colorInk, esc(parts.rightTitle))
 
 	// The Atlas node, and what runs inside it.
 	nodeH := nodeHeadH + contentH + 16
-	fmt.Fprintf(&b, `<g><title>%s</title>`, esc("Atlas — the server the application runs on"))
-	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, nodeX, nodeTop, nodeWidth, nodeH, colorTechnology, colorStroke)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Atlas</text>`, nodeX+12, nodeTop+20, colorInk)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">Node</text></g>`+"\n", nodeX+nodeWidth-10, nodeTop+20, colorMuted)
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc("Atlas — the server the application runs on"))
+	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, nodeX, nodeTop, nodeWidth, nodeH, colorTechnology, colorStroke)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Atlas</text>`, nodeX+12, nodeTop+20, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">Node</text></g>`+"\n", nodeX+nodeWidth-10, nodeTop+20, colorMuted)
 
 	appX := nodeX + appInset
 	appW := nodeWidth - 2*appInset
 	appTop := top
-	fmt.Fprintf(&b, `<g><title>%s</title>`, esc(parts.center.tooltip))
-	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, parts.center.fill, colorStroke)
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc(parts.center.tooltip))
+	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, parts.center.fill, colorStroke)
 	for i, line := range parts.center.lines {
 		weight := ""
 		if i == 0 {
 			weight = ` font-weight="600"`
 		}
-		fmt.Fprintf(&b, `<text x="%d" y="%d"%s fill="%s">%s</text>`, appX+12, appTop+24+i*lineHeight, weight, colorInk, esc(cut(line, 30)))
+		fmt.Fprintf(b, `<text x="%d" y="%d"%s fill="%s">%s</text>`, appX+12, appTop+24+i*lineHeight, weight, colorInk, esc(cut(line, 30)))
 	}
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
 
 	// The ways in, each with a solid arrow into the application.
 	for i, box := range left {
 		y := top + i*(bh+boxGap)
-		drawBox(&b, colLeftX, y, bh, box)
+		drawBox(b, colLeftX, y, bh, box)
 		mid := y + bh/2
-		fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+		fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke)
 	}
 
 	// The right column: a solid arrow from whichever side opens the connection, or a
 	// dashed line where no connection is recorded.
 	if len(right) == 0 {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colRightX, top+bh/2+5, colorMuted, esc(parts.noRight))
+		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colRightX, top+bh/2+5, colorMuted, esc(parts.noRight))
 	}
 	for i, box := range right {
 		y := top + i*(bh+boxGap)
-		drawBox(&b, colRightX, y, bh, box)
+		drawBox(b, colRightX, y, bh, box)
 		mid := y + bh/2
 		appY := clampY(mid, appTop, contentH)
 		switch box.arrow {
 		case arrowIn:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 				colRightX, mid, appX+appW, appY, colorStroke)
 		case arrowOut:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 				appX+appW, appY, colRightX, mid, colorStroke)
 		default:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
 				appX+appW, appY, colRightX, mid, colorStroke)
 		}
 	}
 
-	// Footer: the key, and what this sketch does not show.
-	fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#d0d7de"/>`+"\n", colLeftX, footerTop, svgWidth-colLeftX, footerTop)
-	for i, line := range notes {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, footerTop+22+i*lineHeight, colorMuted, esc(line))
-	}
-	b.WriteString("</svg>\n")
-	return []byte(b.String())
 }
 
 // technologyParts is the picture of the installation alone: the Atlas system software
@@ -195,7 +254,7 @@ func technologyParts(s Snapshot, m Meta) sketchParts {
 	p := *s.Physical
 	return sketchParts{
 		left:       []box{apiBox(s)},
-		right:      technologyBoxes(p),
+		right:      technologyBoxes(p, s.MappingVersion),
 		rightTitle: "Worker processes and the systems reached",
 		noRight:    "No worker served this release here.",
 		center: centerBox{fill: colorTechnology, tooltip: "Atlas — the system software the release runs in", kind: "System software",
@@ -211,6 +270,7 @@ type box struct {
 	label   string
 	detail  string
 	site    string // the third line, drawn only on a sketch with a physical part
+	extra   string // the fourth line, drawn only where some box in the picture has one
 	tooltip string
 	kind    string // the ArchiMate element type, written small in the corner
 	arrow   arrow
@@ -233,6 +293,9 @@ func drawBox(b *strings.Builder, x, y, height int, bx box) {
 	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+48, colorMuted, esc(cut(bx.detail, labelChars+10)))
 	if bx.site != "" && height > boxHeight {
 		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`, x+12, y+64, colorInk, esc(cut(bx.site, labelChars+10)))
+	}
+	if bx.extra != "" && height >= detailBoxHeight {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" fill="%s">%s</text>`, x+12, y+80, colorMuted, esc(cut(bx.extra, labelChars+14)))
 	}
 	b.WriteString("</g>\n")
 }
@@ -268,13 +331,29 @@ func inboundBoxes(s Snapshot) []box {
 		if e.Starts {
 			effect = "starts an instance"
 		}
-		out = append(out, box{
+		bx := box{
 			fill:    colorApplication,
 			label:   "Message " + e.Name,
 			detail:  effect + " · " + elementCount(len(e.UsedBy)),
 			tooltip: "Message " + e.Name + " — " + effect + "; received at " + usesText(e.UsedBy),
 			kind:    "Application interface",
-		})
+		}
+		// Where the message comes from, when an inbound subscription brings it in
+		// (mapping version 4): the one way in whose sender the installation knows.
+		switch ins := s.Physical.inboundFor(e.Name); len(ins) {
+		case 0:
+		case 1:
+			bx.site = "← " + ins[0].sourceText()
+			bx.tooltip += "; published by the inbound subscription of " + ins[0].sourceText()
+		default:
+			bx.site = "← " + plural(len(ins), "inbound subscription", "inbound subscriptions")
+			sources := make([]string, len(ins))
+			for i, in := range ins {
+				sources[i] = in.sourceText()
+			}
+			bx.tooltip += "; published by the inbound subscriptions of " + strings.Join(sources, ", ")
+		}
+		out = append(out, bx)
 	}
 	if p := s.Physical; p != nil {
 		for _, l := range p.PublicStartLinks {
@@ -310,6 +389,11 @@ func outboundBoxes(s Snapshot) []box {
 					bx.arrow = arrowIn
 				}
 				bx.tooltip += "; " + bx.detail + "; " + bx.site
+				if s.MappingVersion >= 4 {
+					if bx.extra = site.detailText(); bx.extra != "" {
+						bx.tooltip += "; " + bx.extra
+					}
+				}
 			}
 		case DependencyJobType:
 			bx.label = "Job type " + d.Name
@@ -343,8 +427,9 @@ func outboundBoxes(s Snapshot) []box {
 
 // technologyBoxes is the right column of a picture of the installation alone: each
 // worker process with the system it reaches, each connection Atlas opens itself, and
-// the job types worker processes lease.
-func technologyBoxes(p Physical) []box {
+// the job types worker processes lease. What else a Worker's configuration says is drawn
+// from mapping version 4, as in the picture with both layers.
+func technologyBoxes(p Physical, mapping int) []box {
 	var out []box
 	for _, w := range p.Workers {
 		bx := box{fill: colorTechnology, label: w.Name, site: w.siteText()}
@@ -359,6 +444,21 @@ func technologyBoxes(p Physical) []box {
 			bx.tooltip = "Worker process serving " + w.Name + " (" + workerTypeText(w.WorkerType) + "), leasing its work from Atlas; " +
 				w.Observers.text() + "; " + bx.site
 			bx.arrow = arrowIn
+		}
+		if mapping >= 4 {
+			if bx.extra = w.detailText(); bx.extra != "" {
+				bx.tooltip += "; " + bx.extra
+			}
+		}
+		out = append(out, bx)
+	}
+	for _, in := range p.Inbound {
+		bx := box{fill: colorTechnology, kind: "Path", label: "Inbound " + in.MessageName,
+			detail: "watches " + in.sourceText(), arrow: arrowOut,
+			tooltip: "Atlas watches " + in.sourceText() + " and publishes each new event as message " + in.MessageName}
+		if in.Endpoint != nil {
+			bx.site = "→ " + in.Endpoint.String()
+			bx.tooltip += "; " + bx.site
 		}
 		out = append(out, bx)
 	}
@@ -398,7 +498,14 @@ func footerKey(s Snapshot) string {
 func footerLines(s Snapshot, m Meta, key string) []string {
 	lines := []string{
 		fmt.Sprintf("Generated by Atlas from release v%d of %s; nothing here was drawn by a person.", m.Version, m.Application),
-		key,
+	}
+	if key != "" {
+		lines = append(lines, key)
+	}
+	if s.Data != nil {
+		lines = append(lines,
+			"Data band: each box is a declaration in the release's process models, never a value an instance held.",
+			"Personal data: each worker named can read every variable visible at its task in plaintext, whether or not its task names one.")
 	}
 	if note := s.layerNote(); note != "" {
 		lines = append(lines, note)
@@ -425,6 +532,10 @@ func stampLine(s Snapshot, m Meta) string {
 		if s.technologyOnly() {
 			view = "Physical view of " + installationName(*p)
 		}
+	}
+	if s.bandsOnly() {
+		name := s.bandsName()
+		view = strings.ToUpper(name[:1]) + name[1:] + " view"
 	}
 	line := fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
 		view, formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
@@ -454,6 +565,8 @@ func formatTime(unix int64) string {
 	}
 	return time.Unix(unix, 0).UTC().Format("2006-01-02 15:04 UTC")
 }
+
+func formatDate(unix int64) string { return time.Unix(unix, 0).UTC().Format("2006-01-02") }
 
 func workerTypeText(t string) string {
 	if t == "" {
@@ -536,4 +649,255 @@ func esc(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// The data band (ADR-0495 §3, slice C): the data layer below the picture, or alone.
+
+const (
+	bandColumns = 3
+	bandHeadH   = 34
+)
+
+// The bands' caps, per kind, so a release with many of one kind still shows the
+// others. What does not fit is counted under the band; the JSON answer and the
+// ArchiMate document list it all.
+const (
+	bandMaxPersonal     = 6
+	bandMaxObjects      = 9
+	bandMaxStores       = 6
+	bandMaxClasses      = 6
+	bandMaxProcesses    = 6
+	bandMaxRoles        = 6
+	bandMaxProducts     = 6
+	bandMaxCapabilities = 9
+	bandMaxStreams      = 3
+)
+
+// bandColumnX puts the band's three columns at the picture's two columns and midway
+// between them.
+var bandColumnX = [bandColumns]int{colLeftX, (colLeftX + colRightX) / 2, colRightX}
+
+// bandView is one band as it is drawn: its heading, its boxes, the cell each one takes
+// — each kind starts a row of its own — the line naming what the caps left out, and a
+// note under it.
+type bandView struct {
+	title, tooltip, subtitle, empty string
+	boxH                            int
+	boxes                           []box
+	cells                           []int
+	cut, note                       string
+}
+
+// bandEntry is one box a band would draw, with its kind and that kind's cap.
+type bandEntry struct {
+	kind, kinds string
+	max         int
+	box         box
+}
+
+// layout places the entries, kind by kind, up to each kind's cap, and counts the rest.
+func (v *bandView) layout(all []bandEntry) *bandView {
+	drawn, cut := map[string]int{}, map[string]int{}
+	var kinds []bandEntry
+	cell := 0
+	for i, e := range all {
+		if drawn[e.kind] < e.max {
+			if i > 0 && e.kind != all[i-1].kind && cell%bandColumns != 0 {
+				cell += bandColumns - cell%bandColumns
+			}
+			v.boxes = append(v.boxes, e.box)
+			v.cells = append(v.cells, cell)
+			drawn[e.kind]++
+			cell++
+			continue
+		}
+		if cut[e.kind] == 0 {
+			kinds = append(kinds, e)
+		}
+		cut[e.kind]++
+	}
+	if len(kinds) > 0 {
+		parts := make([]string, 0, len(kinds))
+		for _, k := range kinds {
+			parts = append(parts, plural(cut[k.kind], k.kind, k.kinds))
+		}
+		v.cut = "Not drawn for lack of room: " + strings.Join(parts, ", ") + " — the JSON answer and the ArchiMate document list them all."
+	}
+	return v
+}
+
+// dataBand lays out the data layer of a value whose selection holds it: personal-data
+// declarations first, because they answer the question nobody else does, then the
+// data objects, the stores and the classes. Nil when the value has no data part.
+func dataBand(s Snapshot) *bandView {
+	d := s.Data
+	if d == nil {
+		return nil
+	}
+	var all []bandEntry
+	for _, p := range d.Personal {
+		vars := strings.Join(p.Variables, ", ")
+		all = append(all, bandEntry{"personal-data declaration", "personal-data declarations", bandMaxPersonal, box{fill: colorApplication,
+			kind: "Data object · personal, about " + p.Subject, label: "Personal data of " + p.ProcessID, detail: vars, site: p.handedToText(),
+			tooltip: "Process " + p.ProcessID + " declares " + plural(len(p.Variables), "personal variable", "personal variables") + " (" + vars +
+				"), about the person " + p.Subject + " names; " + p.handedToText() + ". Only the declaration is recorded, never a value."}})
+	}
+	for _, o := range d.Objects {
+		label := o.Name
+		if o.Collection {
+			label += " (collection)"
+		}
+		detail := "in " + o.ProcessID + " · no declared type"
+		if o.Class != "" {
+			detail = "in " + o.ProcessID + " · class " + o.Class
+		}
+		site := o.useText()
+		if states := o.states(); len(states) > 0 {
+			site += " · states " + strings.Join(states, ", ")
+		}
+		all = append(all, bandEntry{"data object", "data objects", bandMaxObjects, box{fill: colorApplication, kind: "Data object", label: label, detail: detail, site: site,
+			tooltip: "Data object " + label + " of process " + o.ProcessID + "; " + detail + "; " + o.useDetail()}})
+	}
+	for _, st := range d.Stores {
+		detail := "no class named for it in the information model"
+		if st.Class != "" {
+			detail = "keeps class " + st.Class
+		}
+		all = append(all, bandEntry{"data store", "data stores", bandMaxStores, box{fill: colorApplication, kind: "Data object · store", label: st.Name, detail: detail,
+			site:    "named at " + usesText(st.UsedBy),
+			tooltip: "Data store " + st.Name + " — " + detail + "; named at " + usesText(st.UsedBy)}})
+	}
+	for _, c := range d.Classes {
+		detail := "declared type, not in the information model"
+		if c.Modeled {
+			detail = "defined in the information model"
+		}
+		site := "kept " + d.keptAs(c.Name)
+		all = append(all, bandEntry{"class", "classes", bandMaxClasses, box{fill: colorBusiness, kind: "Business object", label: c.Name, detail: detail, site: site,
+			tooltip: "Class " + c.Name + " — " + detail + "; " + site}})
+	}
+	v := &bandView{title: "Data", boxH: physicalBoxHeight,
+		tooltip:  "The data layer: what the release's processes keep and read, the classes they keep it as, and the personal data they declare",
+		subtitle: "what the processes keep and read, and the personal data they declare",
+		empty:    "This release declares no data objects, data stores or personal data."}
+	return v.layout(all)
+}
+
+// businessBand lays out the business layer: the processes as the work they do, the
+// roles their tasks and lanes name, and the products they carry out. Nil when the
+// value has no business part.
+func businessBand(s Snapshot) *bandView {
+	bz := s.Business
+	if bz == nil {
+		return nil
+	}
+	var all []bandEntry
+	for _, p := range bz.Processes {
+		label := cmp.Or(p.Name, p.ProcessID)
+		all = append(all, bandEntry{"business process", "business processes", bandMaxProcesses, box{fill: colorBusiness, kind: "Business process",
+			label: label, detail: "realised by process " + p.ProcessID, site: p.tasksText(),
+			tooltip: "Business process " + label + ", realised by process " + p.ProcessID + "; its user tasks: " + p.tasksText()}})
+	}
+	for _, r := range bz.Roles {
+		what := "candidate group · " + plural(len(r.UsedBy), "task", "tasks")
+		if r.Kind == RoleLane {
+			what = "lane · " + plural(len(r.UsedBy), "process", "processes")
+		}
+		all = append(all, bandEntry{"role", "roles", bandMaxRoles, box{fill: colorBusiness, kind: "Business role", label: r.Name, detail: what, site: r.usesText(),
+			tooltip: "Role " + r.Name + " — " + what + ": " + r.usesText()}})
+	}
+	for _, p := range bz.Products {
+		catalog := cmp.Or(p.CatalogName, p.CatalogID)
+		detail := "in " + catalog + " · " + p.bindingsText()
+		if p.State != "" && p.State != "active" {
+			detail += " · " + p.State
+		}
+		all = append(all, bandEntry{"product", "products", bandMaxProducts, box{fill: colorBusiness, kind: "Product", label: p.Name, detail: detail, site: p.actionsText(),
+			tooltip: "Product " + p.Name + " of catalogue " + catalog + " — " + p.bindingText() + "; " + p.actionsText()}})
+	}
+	v := &bandView{title: "Business", boxH: physicalBoxHeight,
+		tooltip:  "The business layer: the work the release's processes do, the roles that do it, and the catalogue products they carry out",
+		subtitle: "the work the processes do, who does it, and the products they carry out",
+		empty:    "This release names no role and carries out no product."}
+	if bz.ProductsWithheld > 0 {
+		v.note = plural(bz.ProductsWithheld, "product", "products") + " withheld from this reader, who may not maintain its catalogue."
+	}
+	return v.layout(all)
+}
+
+// strategyBand lays out the strategy layer: the capabilities the release realises and
+// the value streams that use them. Nil when the value has no strategy part.
+func strategyBand(s Snapshot) *bandView {
+	st := s.Strategy
+	if st == nil {
+		return nil
+	}
+	names := map[string]string{}
+	var all []bandEntry
+	for _, c := range st.Capabilities {
+		names[c.Key] = c.Name
+		tooltip := "Capability " + c.Name + " — " + c.realizedText() + "; " + c.stateText() + "; " + c.Owner.text()
+		if m := c.measuresText(); m != "" {
+			tooltip += "; " + m
+		}
+		all = append(all, bandEntry{"capability", "capabilities", bandMaxCapabilities, box{fill: colorStrategy, kind: "Capability",
+			label: c.Name, detail: c.realizedText(), site: c.stateText(), extra: c.Owner.text(), tooltip: tooltip}})
+	}
+	name := func(key string) string { return cmp.Or(names[key], key) }
+	for _, v := range st.ValueStreams {
+		all = append(all, bandEntry{"value stream", "value streams", bandMaxStreams, box{fill: colorStrategy, kind: "Value stream",
+			label: v.Name, detail: v.stagesText(), site: v.usesText(name), extra: v.Owner.text(),
+			tooltip: "Value stream " + v.Name + ": " + v.stagesText() + " — " + v.usesText(name) + "; " + v.Owner.text()}})
+	}
+	v := &bandView{title: "Strategy", boxH: detailBoxHeight,
+		tooltip:  "The strategy layer: the capabilities the release realises and the value streams that use them",
+		subtitle: "the capabilities the release realises and the value streams that use them",
+		empty:    "No capability in the register is realised by this release's processes or Workers."}
+	return v.layout(all)
+}
+
+func (v *bandView) rows() int {
+	if len(v.cells) == 0 {
+		return 0
+	}
+	return v.cells[len(v.cells)-1]/bandColumns + 1
+}
+
+func (v *bandView) height() int {
+	h := bandHeadH + 16 + lineHeight
+	if rows := v.rows(); rows > 0 {
+		h = bandHeadH + 16 + rows*v.boxH + (rows-1)*boxGap
+	}
+	if v.cut != "" {
+		h += lineHeight + 4
+	}
+	if v.note != "" {
+		h += lineHeight + 4
+	}
+	return h
+}
+
+func (v *bandView) draw(b *strings.Builder, top int) {
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc(v.tooltip))
+	fmt.Fprintf(b, `<rect x="16" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, top, svgWidth-32, v.height(), colorBand, colorRule)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`, colLeftX, top+22, colorInk, esc(v.title))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", svgWidth-colLeftX, top+22, colorMuted, esc(v.subtitle))
+	y0 := top + bandHeadH
+	if len(v.boxes) == 0 {
+		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colLeftX, y0+lineHeight, colorMuted, esc(v.empty))
+	}
+	for i, bx := range v.boxes {
+		c := v.cells[i]
+		drawBox(b, bandColumnX[c%bandColumns], y0+(c/bandColumns)*(v.boxH+boxGap), v.boxH, bx)
+	}
+	lines := []string{}
+	if v.cut != "" {
+		lines = append(lines, v.cut)
+	}
+	if v.note != "" {
+		lines = append(lines, v.note)
+	}
+	for i, line := range lines {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, top+v.height()-12-(len(lines)-1-i)*(lineHeight+4), colorMuted, esc(line))
+	}
 }

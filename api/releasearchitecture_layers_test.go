@@ -32,8 +32,10 @@ func TestAReadShowsTheLayersItAsksFor(t *testing.T) {
 	if err := json.Unmarshal(mustCall(t, c, http.MethodGet, base, "", "", http.StatusOK), &whole); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(whole.Layers.Recorded, ",") != "application,technology" || strings.Join(whole.Layers.Shown, ",") != "application,technology" {
-		t.Errorf("layers = %+v, want both recorded and both shown by default", whole.Layers)
+	// The release records every layer (slices C and D); the default shows the two
+	// layers every sketch was drawn with before layers existed.
+	if strings.Join(whole.Layers.Recorded, ",") != "strategy,business,application,data,technology" || strings.Join(whole.Layers.Shown, ",") != "application,technology" {
+		t.Errorf("layers = %+v, want all five recorded and application and technology shown by default", whole.Layers)
 	}
 
 	var logical struct {
@@ -68,8 +70,6 @@ func TestAReadShowsTheLayersItAsksFor(t *testing.T) {
 		!strings.Contains(string(body), "netzwerk") {
 		t.Errorf("an unknown layer answers %d %s, want 400 naming it", code, body)
 	}
-	if code, body := call(t, c, http.MethodGet, base+".svg?layers=strategy", "", ""); code != http.StatusNotFound ||
-		!strings.Contains(string(body), "records none of the layers asked for (strategy); it records application,technology") {
-		t.Errorf("a layer the release does not record answers %d %s, want 404 saying what it records", code, body)
-	}
+	// A release recorded before a layer existed answers for it in words: see
+	// TestALayerAnOlderReleaseDoesNotRecordIsRefusedInWords.
 }

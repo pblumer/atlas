@@ -1,7 +1,9 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Accepted (2026-10-26; amended 2026-10-26 — the banded layout lands with the
-  first slice that has a band to draw, slice C; see the note below)
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to D —
+  the banded layout moved to slice C; a Worker's owner and call budget are not recorded;
+  versions rise with each slice; personal data names every worker it is handed to; a
+  product is shown to whoever may maintain its catalogue; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -31,6 +33,148 @@
 > and technology layers holding anything, there is no band to draw, and a layout with
 > nothing in it would be code no test can exercise. It lands with slice C, the first
 > slice that records a new layer (data); §7 is read with that move.
+
+> **Implementation status and amendment (2026-10-26): slice B has landed.** A snapshot
+> records, per configured Worker the release names, the rest of its configuration that is
+> not a secret: the mail provider, the malware scanner's endpoint, the model an agent
+> Worker asks, the identity mode and enforcement (ADR-0475), and whether a credential
+> reference is set, never its name. It also records the enabled inbound subscriptions
+> (ADR-0205) that publish a message the release receives: the Worker and its Worker Type,
+> what the subscription watches in that kind's terms (a clio subject, a JQL query, a
+> spreadsheet and range, a folder, a channel, a mail folder), and the Worker's endpoint as
+> scheme, host and port. The SVG writes the configuration on a fourth line of the Worker's
+> box and the subscription under the message it feeds; the installation alone draws each
+> subscription as a Path Atlas opens. The ArchiMate document adds the mailbox and the
+> scanner as further target Nodes, and each subscription as a Path from the Atlas node to
+> the system it reads from, associated with the application interface of its message.
+> A reader who may not view the Worker's configuration sees the Worker named and the
+> detail marked withheld (§5).
+>
+> **Amendment:**
+>
+> - **A Worker's owner is not recorded.** The owner is an Atlas account. §5 already keeps
+>   Atlas usernames out of the record for capability owners, and the same reason holds
+>   here: a release record is never rewritten, so an account written into it could not be
+>   taken out again when the person leaves or ownership moves.
+> - **The outbound-call budget is not recorded.** §1 assumed a budget per Worker kind.
+>   ADR-0149 set one budget for every Worker (`nettimeout.Default`, 10 seconds), so
+>   recording it per Worker would repeat one installation constant on every box. It is
+>   recorded once a per-kind budget exists.
+> - **Versions rise with each slice that records something new.** §6 named version 4 for
+>   the whole record. Slice B takes 4; slice C takes 5, slice D 6. A snapshot of an
+>   earlier version renders byte for byte as before; this includes a version-3 mailbox
+>   endpoint, which stays on the third line and does not become a target system.
+> - **List bounds are set in slice C.** Slice B's only new list, the inbound
+>   subscriptions, is limited by the messages the release receives and the subscriptions
+>   configured for them. The first lists that grow with the size of the models (data
+>   objects, information-model classes) arrive in slice C, and §6's bounds are measured
+>   and set there.
+
+> **Implementation status and amendment (2026-10-26): slice C has landed.** A snapshot
+> records a data part: each data object a release process declares, with its class, its
+> initial state, and the elements whose associations write it (with the target state and
+> the members written) and read it; each data store the processes name, with the class
+> the application's information model keeps in it; each class a data object declares or
+> a store holds, marked when the information model defines it; and for each process
+> declaring personal data, its personal variables, its data-subject variable and the
+> workers, runtime workers and job types it hands work to. `layers=data` selects it. The
+> SVG draws it as a band below the picture — personal data, data objects, stores and
+> classes, each kind on rows of its own, capped per kind (6, 9, 6, 6) with the rest
+> counted under the band — or as the band alone. The ArchiMate document writes each
+> process as an Application Process assigned from the component, each data object as a
+> Data Object it accesses with the access type its associations give (Read, Write,
+> ReadWrite), realising the Business Object of its class, each store as a Data Object
+> associated with the processes naming it, and each personal-data declaration as a Data
+> Object with `atlas.personal` that each worker of the process reads. Format and mapping
+> version 5.
+>
+> **Amendment:**
+>
+> - **Personal data names every worker it is handed to, not the expressions that read
+>   it.** §1 said "which Workers receive personal values in the expressions they
+>   evaluate". The strongest case for that reading: it names exactly the values a task
+>   sends, and a worker whose task names no personal variable looks clean. The code says
+>   otherwise. A leased job carries every variable visible at its task, deciphered
+>   (`pulledJob`, `api/handlers.go`), and a Worker Atlas runs resolves its task through
+>   the personal reader (`Server.drive`, `api/server.go`); a REST body without input
+>   mappings sends every visible variable. An expression-level list would understate
+>   what reaches a worker, which for a data-protection reading is the worse error. So
+>   the snapshot names every worker and job type the declaring process hands work to,
+>   and the picture says each can read every visible variable in plaintext. What a
+>   worker passes on to the system it reaches is listed as not shown.
+> - **A store records where it is named, not who reads or writes it.** The compiled
+>   model keeps a store's name and the element that names it, and refuses a data
+>   association to a store, so the access a store box could show does not exist yet.
+> - **The data layer is off by default.** §3 keeps the default selection at
+>   application and technology. A snapshot that records more now says in its default
+>   picture which recorded layers that leaves off; a snapshot recording only the
+>   default layers draws the bytes it drew before.
+> - **The bounds (§6) are 200 data objects, 100 stores, 100 classes and 100 personal
+>   variables per process.** They were measured on a real installation (49
+>   applications, 239 processes, 60 of them read in full): no process there declared
+>   more than two data objects or six personal variables, no application more than
+>   eighteen distinct personal variables, and its three information models held 25
+>   classes in all. Real models are that small, so each bound guards against a
+>   generated or pathological model and sits well above what was seen; what a bound
+>   leaves out is counted in `omitted` and listed as not shown.
+> - **A class is recorded by name.** Its members and lifecycle stay in the
+>   information model; the snapshot records whether the model defined the class when
+>   the release was taken, and the drift view of §2 is where a later change shows.
+
+> **Implementation status and amendment (2026-10-27): slice D has landed.** A snapshot
+> records a business part: each release process with how its user tasks say who does
+> them (for a group, for a named person, decided at run time, or nobody); each role its
+> tasks and lanes name; and each catalogue product a release process provisions,
+> deprovisions or runs the lifecycle of, from the newest published release of each
+> catalogue, with a lifecycle product's actions, their messages, effects and triggers,
+> and the event type each outcome publishes (`order.EventTypeOf`). It records a
+> strategy part: each capability a release process — matched by the application's
+> portable key and the process id — or a Worker the release names realises, with its
+> state, last confirmation, owner (name and role), KPIs and SLAs as declared; and each
+> value stream a stage of which uses one, with all its stages in order. `layers=business`
+> and `layers=strategy` select them. The SVG draws both as bands above the picture,
+> capped per kind (processes, roles and products 6, capabilities 9, value streams 3), or
+> as bands alone. The ArchiMate document writes each process as a Business Process its
+> Application Process realises, each role as a Business Role assigned to it, each
+> product as a Product associated with the processes that carry it out, each capability
+> as a Capability its Application Process — or, with the application layer, its
+> worker's Application Service — realises, and each value stream as a Value Stream
+> composed of its stages, each served by the capabilities it uses. Format and mapping
+> version 6.
+>
+> **Amendment:**
+>
+> - **A product is shown to whoever may maintain its catalogue.** §5 says "readers
+>   within the catalogue's audience, by the check the starmap applies (ADR-0396)", but
+>   those are two different rules: the starmap shows a catalogue to the people who
+>   maintain it (`catalog.Service.MayMaintain` — owner, editor or viewer member, an
+>   administrator), not to the people it is offered to. The strongest case for the
+>   audience: a person who may order a product knows it exists. They meet it in the
+>   shop, though, and an architecture reading needs no wider circle than the starmap's;
+>   the audience check also asks the run loop again, which the read already holds. The
+>   record applies the starmap's check, as §5 names it, and counts what it withheld.
+> - **Products come from the newest published catalogue release.** The starmap reads
+>   the working items; the order path reads the published release. A release record
+>   answers what could be ordered when it shipped, so it reads what was published.
+> - **A person is counted, never named; a group is named as written.** A literal
+>   assignee is an Atlas account, which a release record cannot take back, so a task
+>   assigned to one is counted. A candidate group is recorded as the model writes it,
+>   not resolved to the group store's name, which would show a reader what that store
+>   holds. A lane is recorded by name: the compiled form keeps no lane id.
+> - **A product's actions are properties, not Business Services or Business Events.**
+>   Panorama refuses Business Process → Business Service as a realization, and Business
+>   Event is outside its subset. Product is written as §3 writes Path: valid ArchiMate,
+>   refused by `MayConnect` only as out of subset, and tested as exactly that.
+> - **The strategy layer needs no redaction.** The register is readable by every
+>   signed-in identity (ADR-0305). Who confirmed or edited a capability, and an owner's
+>   contact and account, are never recorded.
+> - **The bounds (§6)** are 100 roles, 200 tasks per role, 100 products with 50 actions
+>   each, 100 capabilities, 20 KPIs and SLAs per capability, 50 value streams and 30
+>   stages per stream. The installation measured holds 8 catalogues with 47 products, at
+>   most 4 actions per product and at most 9 products bound to one application's
+>   processes; its capability register is empty. The business bounds sit well above what
+>   was seen; the strategy bounds are guards with no measurement behind them yet, and are
+>   revisited once a register with content can be measured.
 
 ## Context and problem statement
 

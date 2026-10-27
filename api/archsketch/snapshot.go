@@ -28,20 +28,30 @@ import (
 // expected to carry. A snapshot is never rewritten when this changes.
 //
 // Version 2 added the physical part and job-type dependencies; version 3 the
-// endpoints worker instances report for the names they serve.
-const FormatVersion = 3
+// endpoints worker instances report for the names they serve; version 4 the rest of a
+// configured Worker and the inbound subscriptions (ADR-0495 slice B); version 5 the
+// data layer (slice C); version 6 the business and strategy layers (slice D).
+const FormatVersion = 6
 
 // MappingVersion versions how a snapshot is drawn and written as ArchiMate: which
 // facts become which elements and relationships. It is a small public contract — a
 // document generated under one version stays what it was — and every rendering
 // states it. Version 2 draws the physical part: connections from the side that opens
 // them, target systems, and job types. Version 3 draws a reported endpoint as
-// reported.
+// reported. Version 4 draws what else a Worker's configuration says, its mailbox and
+// scanner as further target systems, and the inbound subscriptions that feed a
+// message. Version 5 draws the data layer: a band of data objects, stores, classes and
+// personal-data declarations, and in ArchiMate each process as an Application Process
+// accessing its data objects, which realise the Business Objects of their classes.
+// Version 6 draws the business and strategy layers as bands above the picture, and in
+// ArchiMate each process as a Business Process its Application Process realises, the
+// roles assigned to it, the products it carries out, and the capabilities and value
+// streams it serves.
 //
 // A snapshot keeps the version it was taken under, and a snapshot without a physical
 // part is drawn exactly as version 1 drew it, so the version a rendering states is
 // the snapshot's own.
-const MappingVersion = 3
+const MappingVersion = 6
 
 // Snapshot is the logical part of one release's architecture.
 type Snapshot struct {
@@ -58,6 +68,12 @@ type Snapshot struct {
 	// Physical is the recording installation's half, absent on a snapshot taken
 	// before format version 2.
 	Physical *Physical `json:"physical,omitempty"`
+	// Data is the data layer, absent on a snapshot taken before format version 5.
+	Data *Data `json:"data,omitempty"`
+	// Business and Strategy are the business and strategy layers, absent on a
+	// snapshot taken before format version 6.
+	Business *Business `json:"business,omitempty"`
+	Strategy *Strategy `json:"strategy,omitempty"`
 
 	// shown is the layer selection a rendering of this value draws, and recorded the
 	// layers the stored snapshot held before the selection narrowed it; both are set
@@ -195,6 +211,15 @@ func (s *Snapshot) Normalize() {
 	if s.Physical != nil {
 		s.Physical.normalize()
 	}
+	if s.Data != nil {
+		s.Data.normalize()
+	}
+	if s.Business != nil {
+		s.Business.normalize()
+	}
+	if s.Strategy != nil {
+		s.Strategy.normalize()
+	}
 }
 
 // dependencyRank orders the kinds the way the sketch lists them: the dependencies
@@ -277,10 +302,37 @@ func (s Snapshot) NotShown() []string {
 	case s.Physical != nil:
 		first = "the endpoint of a worker that keeps its own configuration, which such a worker does not report yet"
 	}
-	return []string{
+	gaps := []string{
 		first,
 		"this installation's own communication: outbound proxy, identity providers, exporters, metrics scraping, deployment targets",
 		"addresses a task builds at run time, and which worker a name authored as FEEL reaches",
 		"what sits behind a target system: gateways, load balancers, the systems they forward to",
 	}
+	if d := s.Data; d != nil {
+		gaps = append(gaps,
+			"variable values, and personal data a process does not declare personal",
+			"which activity reads or writes a data store: the compiled model keeps only where a store is named",
+			"what a worker that can read personal data passes on to the system it reaches")
+		if o := d.Omitted; o != (DataOmitted{}) {
+			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
+		}
+	}
+	if b := s.Business; b != nil {
+		gaps = append(gaps,
+			"who a task assigned to one person by name is assigned to, and the members of a group or lane",
+			"products whose catalogue has not published them, and catalogues with this installation's catalogue switched off")
+		if b.ProductsWithheld > 0 {
+			gaps = append(gaps, plural(b.ProductsWithheld, "product", "products")+" withheld from this reader, who may not maintain its catalogue")
+		}
+		if o := b.Omitted; o != (BusinessOmitted{}) {
+			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
+		}
+	}
+	if st := s.Strategy; st != nil {
+		gaps = append(gaps, "a capability's owner beyond name and role, and who confirmed or edited it")
+		if o := st.Omitted; o != (StrategyOmitted{}) {
+			gaps = append(gaps, "beyond the snapshot's bounds: "+o.text())
+		}
+	}
+	return gaps
 }

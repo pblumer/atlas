@@ -246,6 +246,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   switching a find to an update drops what only a find takes; a delete offers and writes
   no result variable; and a contact given by a variable hides the inline values and keeps
   the variable across an unrelated edit. Assertions are on the exported XML.
+- **`wikiwikibangbang-modeler.spec.mjs`** (ADR-0498): the
+  **wikiwikibangbang Worker Type in the Implement panel** — choosing it starts on Create
+  item and shows the space, type, title, parent, properties, matching field and body a
+  create takes; switching a create to a transition drops what only a create takes; a query
+  shows its bound and keeps its result variable; and properties given by a variable hide
+  the inline values and keep the variable across an unrelated edit. Assertions are on the
+  exported XML.
 - **`documentation-modeler.spec.mjs`** (ADR-0025): the **Documentation** property — every
   element (task, gateway, event, sequence flow, data object) shows the `<bpmn:documentation>`
   its model carries and writes an edit back onto that element, blanking it drops the child
@@ -791,10 +798,11 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
 - **`release-architecture-layers.spec.mjs`**
   ([ADR-0495](../docs/adr/0495-layered-release-architecture.md)):
   **Applications → Deployments → Release history → Architecture** against a stubbed API.
-  Every layer the release records is a ticked checkbox; switching one off redraws the
-  picture for the remaining layers and points both downloads at the same selection. The
-  last ticked layer cannot be switched off, and a release that records one layer offers
-  no choice.
+  Every layer the release records is a checkbox, ticked when the server shows it by
+  default; switching one off redraws the picture for the remaining layers and points both
+  downloads at the same selection. The last ticked layer cannot be switched off, a
+  release that records one layer offers no choice, and a recorded data layer is offered
+  unticked and adds itself to the selection when ticked.
 - **`workers-endpoints.spec.mjs`**
   ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
   against a stubbed API. A worker name a Worker Instance holds shows the endpoint the

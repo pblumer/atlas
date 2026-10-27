@@ -532,6 +532,21 @@ const CardDAVJobType = "io.atlas.carddav"
 // every compiled process: NewBuilder reserves it thirty-eighth, so it is always 37.
 const CardDAVJobTypeIndex int32 = 37
 
+// WikiwikibangbangJobType is the reserved job type a wikiwikibangbang task carries
+// (ADR-0498). One job type serves every operation on the wiki —
+// create, read, update and move an item, comment on it, query items, read a page as
+// Markdown and append to one — because they share a wiki, an account and its error
+// envelope; the operation is a modeled value, as it is for Jira (ADR-0201).
+//
+// Like CardDAV's, nothing in the engine subscribes to it: the kind is worker-only, so
+// the token that writes as the wiki account never enters the engine.
+const WikiwikibangbangJobType = "io.atlas.wikiwikibangbang"
+
+// WikiwikibangbangJobTypeIndex is the interned index WikiwikibangbangJobType is
+// guaranteed to occupy in every compiled process: NewBuilder reserves it thirty-ninth,
+// so it is always 38.
+const WikiwikibangbangJobTypeIndex int32 = 38
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -579,6 +594,8 @@ var reservedJobTypes = []string{
 	// appending one does not realign every index before it.
 	GoogleContactsJobType, // 36
 	CardDAVJobType,        // 37
+
+	WikiwikibangbangJobType, // 38
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2504,6 +2521,76 @@ func (b *Builder) AddCardDAVConnectorTask(cfg CardDAVConfig) int32 {
 		CardDAVContact:    cfg.Contact,
 		CardDAVContactVar: b.intern(cfg.ContactVar),
 		CardDAVMaxResults: cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// WikiConfig is the deploy-time configuration of a wikiwikibangbang task
+// (ADR-0498). Worker names the configured wiki and WorkerExpr
+// carries it as literal-or-FEEL; Op is a row of connector/wikiwikibangbang/catalog. Item,
+// Space, ItemType, Parent, Title, MatchField, Labels, Text, Blocks, Transition, Comment
+// and Query are literal-or-FEEL values; a literal Blocks is the JSON array the compiler
+// has checked. Properties is the authored properties object compiled to one FEEL
+// context, PropertiesVar the variable holding it instead; the compiler has refused a
+// model that sets both. MaxResults bounds a query, with its default applied, and is zero
+// on every other operation.
+type WikiConfig struct {
+	Worker        string
+	WorkerExpr    RestExpr
+	Op            string
+	Item          RestExpr
+	Space         RestExpr
+	ItemType      RestExpr
+	Parent        RestExpr
+	Title         RestExpr
+	Properties    RestExpr
+	PropertiesVar string
+	MatchField    RestExpr
+	Labels        RestExpr
+	Text          RestExpr
+	Blocks        RestExpr
+	Transition    RestExpr
+	Comment       RestExpr
+	Query         RestExpr
+	MaxResults    int32
+	ResultVar     string
+	Retries       int32
+}
+
+// AddWikiConnectorTask adds a wikiwikibangbang task and returns its element id. Like a
+// service task it creates a job on activation and waits; the job carries the reserved
+// WikiwikibangbangJobType, which nothing in the engine subscribes to — the kind is
+// worker-only, so the job waits for a worker that holds the wiki account's token.
+func (b *Builder) AddWikiConnectorTask(cfg WikiConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:           b.intern(WikiwikibangbangJobType),
+		Connector:         b.intern(cfg.Worker),
+		WikiConnector:     cfg.WorkerExpr,
+		Subject:           -1, // not a clio task
+		EventType:         -1,
+		ClioQuery:         -1,
+		ReduceSpec:        -1,
+		Method:            -1, // a wiki operation, not an HTTP method, is authored
+		Auth:              -1, // the token lives on the worker
+		ResultVar:         b.intern(cfg.ResultVar),
+		Retries:           cfg.Retries,
+		WikiOp:            b.intern(cfg.Op),
+		WikiItem:          cfg.Item,
+		WikiSpace:         cfg.Space,
+		WikiItemType:      cfg.ItemType,
+		WikiParent:        cfg.Parent,
+		WikiTitle:         cfg.Title,
+		WikiProperties:    cfg.Properties,
+		WikiPropertiesVar: b.intern(cfg.PropertiesVar),
+		WikiMatchField:    cfg.MatchField,
+		WikiLabels:        cfg.Labels,
+		WikiText:          cfg.Text,
+		WikiBlocks:        cfg.Blocks,
+		WikiTransition:    cfg.Transition,
+		WikiComment:       cfg.Comment,
+		WikiQuery:         cfg.Query,
+		WikiMaxResults:    cfg.MaxResults,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

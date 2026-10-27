@@ -763,6 +763,11 @@ type Server struct {
 	// with the engine so a finished instance's CompletedAt and the sweep's "now"
 	// come from a single controllable source.
 	now func() int64
+	// statsCaches holds what the statistics endpoint has already read: results shared
+	// for a minute, and the contributions of finished instances, whose history no longer
+	// changes (ADR-0496). Built on first use by statsCachesFor.
+	statsCachesOnce sync.Once
+	statsCaches     *processStatsCaches
 	// retentionTicks, when non-nil, replaces the retention sweep's real ticker so a
 	// test triggers each sweep explicitly rather than racing a wall-clock cadence.
 	// retentionSwept, when non-nil, receives once after each triggered sweep

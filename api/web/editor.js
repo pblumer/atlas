@@ -14,6 +14,7 @@ import { hasMask, attachEntraAttributeMask, entraResultShape, entraResultType } 
 import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParametersHint, exchangeIsListing, exchangeResultType, exchangeResultShape } from "./exchange-ops.js";
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
+import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMaxPlaceholder, wikiMaxHint, wikiPropertiesPlaceholder } from "./wikiwikibangbang-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -5194,6 +5195,112 @@ const SERVICE_TASK_KINDS = [
         resultType: (v) => cardDAVResultType(v.operation || "find-contacts"),
         showIf: (v) => !!cardDAVResultType(v.operation || "find-contacts"),
         hint: (v) => cardDAVResultShape(v.operation || "find-contacts"),
+      },
+    ],
+  },
+  {
+    id: "wikiwikibangbang", name: "wikiwikibangbang", group: "Applications",
+    desc: "Open, read, change and move tasks in a wikiwikibangbang wiki, comment on them and find them by a query; create a page, read it as Markdown and append to it",
+    icon: "W",
+    // A page with a check mark on indigo: knowledge and work in one wiki, told apart at a
+    // glance from Jira's blue and the contact Worker Types' cards.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#4338ca"/><path d="M4 2.8h5.6L12 5.2v8H4z" fill="#fff"/><path d="M9.6 2.8v2.4H12" fill="#c7d2fe"/><rect x="5.4" y="6.4" width="4.6" height=".9" fill="#4338ca"/><path d="M5.6 9.9l1.3 1.3 2.6-2.7" stroke="#4338ca" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    ext: "atlas:WikiwikibangbangConnector",
+    fields: [
+      { group: "Wiki" },
+      {
+        key: "connector", label: "Worker", datalist: "wikiwikibangbang", placeholder: "wiki",
+        hint: "The configured wikiwikibangbang Worker whose wiki this task writes to, by its name under Workers in the Console. The wiki's address and the account's token reach that worker and never the engine. A value starting with = is a FEEL expression, so one process can choose the wiki at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: wikiOperationOptions(),
+      },
+      {
+        key: "item", label: "Item", placeholder: "=aufgabe.id", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "item"),
+        hint: "The item, by its id or its key (OPS-12). Usually a FEEL expression (fx) naming the id an earlier create or read answered with, e.g. =aufgabe.id — a key changes when the item moves to another space, the id never does.",
+      },
+      {
+        key: "space", label: "Space", placeholder: "OPS", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "space"),
+        hint: "The space's key, e.g. OPS. The Worker's account needs the role editor there.",
+      },
+      {
+        key: "itemType", label: "Item type", placeholder: "task", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "itemType"),
+        hint: "The type's name as the wiki's administrators defined it: a type with a workflow for a task, a type with a body for a page.",
+      },
+      {
+        key: "parent", label: "Parent", placeholder: "=protokollseite.id", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "parent"),
+        hint: "Optional. The item to place the new one under, by its id or key — a page below a page.",
+      },
+      {
+        key: "title", label: "Title", placeholder: "=\"Laptop für \" + mitarbeiter.name", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "title"),
+        hint: (v) => (v.operation === "update-item" ? "Optional. The item's new title." : "The new item's title."),
+      },
+      {
+        key: "properties", label: "Properties", type: "json", rows: 6,
+        // Inline JSON and a variable are mutually exclusive (the compiler refuses both).
+        showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.propertiesVariable,
+        placeholder: (v) => wikiPropertiesPlaceholder(v.operation || "create-item"),
+        hint: "Property values by the field's name, as the item's type defines them — the person a task is assigned to is one of them, e.g. assignee. A string starting with = is a FEEL expression. A value that is null changes nothing (an absent variable does not clear a due date); \"\" unsets the property.",
+      },
+      {
+        key: "propertiesVariable", label: "Properties variable", placeholder: "felder",
+        showIf: (v) => wikiUses(v.operation || "create-item", "properties") && !v.properties,
+        hint: "Instead of the values above: a process variable holding the properties object, for a process that assembles it itself — a form's answers, say.",
+      },
+      {
+        key: "matchField", label: "Matching field", placeholder: "source-id",
+        showIf: (v) => wikiUses(v.operation || "create-item", "matchField"),
+        hint: "Optional. The property that identifies the item, e.g. source-id. When an item of this type in this space already has the value the properties set, it is answered instead of a second one — which also makes a repeated job safe. Without it a repeated create can create a second item.",
+      },
+      {
+        key: "labels", label: "Labels", placeholder: "onboarding, it", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "labels"),
+        hint: "Optional. Replaces the item's labels: a comma-separated list, or a FEEL list. An empty list clears them.",
+      },
+      {
+        key: "text", label: "Text", placeholder: "=\"Schritt \" + string(schritt) + \" erledigt.\"", fx: true, rows: 4,
+        showIf: (v) => wikiUses(v.operation || "create-item", "body") && !v.blocks,
+        hint: (v) => (v.operation === "append-to-page" ? "What is appended at the end of the page, as plain text: an empty line starts a new paragraph, a single line break stays inside its paragraph. Everything already on the page is kept." : "Optional. The new item's body, as plain text: an empty line starts a new paragraph, a single line break stays inside its paragraph."),
+      },
+      {
+        key: "blocks", label: "Blocks", placeholder: "[{\"kind\": \"heading\", \"level\": 2, \"text\": \"Protokoll\"}]", fx: true, rows: 4,
+        showIf: (v) => wikiUses(v.operation || "create-item", "body") && !v.text,
+        hint: "Instead of text: the wiki's own blocks, for headings, lists, tables or panels — a JSON list, or a FEEL expression that evaluates to one. Each block is an object with a kind (paragraph, heading, bullet, ordered, task, quote, code, panel, table, divider) and its text.",
+      },
+      {
+        key: "transition", label: "Transition", placeholder: "finish", fx: true,
+        showIf: (v) => wikiUses(v.operation || "create-item", "transition"),
+        hint: "The transition's name as the item's type defines it, e.g. finish. If the item already stands in the state the transition leads to, the task succeeds.",
+      },
+      {
+        key: "comment", label: "Comment", placeholder: "Laptop bestellt.", fx: true, rows: 3,
+        showIf: (v) => wikiUses(v.operation || "create-item", "comment"),
+        hint: "The comment, as plain text. It is written as the Worker's account.",
+      },
+      {
+        key: "query", label: "Query", placeholder: "type = task AND assignee = currentUser() AND state != done ORDER BY due", rows: 2,
+        showIf: (v) => wikiUses(v.operation || "create-item", "query"),
+        hint: "A query in the wiki's own query language: conditions joined with AND, OR and NOT, then ORDER BY. currentUser() is the Worker's account. Only items the account may read are found.",
+      },
+      {
+        key: "maxResults", label: "Maximum results",
+        placeholder: (v) => wikiMaxPlaceholder(v.operation || "create-item"),
+        showIf: (v) => !!wikiMaxPlaceholder(v.operation || "create-item"),
+        hint: (v) => wikiMaxHint(v.operation || "create-item"),
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "aufgabe",
+        resultType: (v) => wikiResultType(v.operation || "create-item"),
+        showIf: (v) => !!wikiResultType(v.operation || "create-item"),
+        hint: (v) => wikiResultShape(v.operation || "create-item"),
       },
     ],
   },
@@ -12622,14 +12729,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const TERMINATE_TYPE_THRESHOLD = 50;
 
   // The heatmap (ADR-0496). heat is what the strip chose — remembered
-  // in this browser — and the rest is what the last poll read for it. The statistics are
-  // a fold over history on the server, so they are re-read when the period changes and
-  // otherwise at most every HEAT_STATS_MS, not on every 1.5s tick.
+  // in this browser — and the rest is what the last poll read for it. The statistics
+  // describe history, not the moment: a median over thirty days does not move in fifteen
+  // seconds. So they are read when the heatmap opens and when the period changes, then
+  // every HEAT_STATS_MS while the tab is visible, or when somebody presses Refresh — never
+  // on the live view's 1.5s tick, which is what made each open tab a steady load.
   let heat = loadHeatPrefs();
   let heatStats = null, heatStatsPeriod = "", heatStatsAt = 0, heatStatsErr = "";
+  let heatStatsBusy = false; // a read in flight, so overlapping polls do not ask twice
   let heatView = null;   // { values, flows, max } the diagram is shaded with, or null in Live
   let heatRT = null;     // the runtime overlay the counts since deployment come from
-  const HEAT_STATS_MS = 15000;
+  const HEAT_STATS_MS = 5 * 60 * 1000;
   const heatOn = () => heat.mode !== "live";
 
   // refreshInstances pulls this version's instances and, only when the set of
@@ -13180,12 +13290,15 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
 
   // refreshHeatStats re-reads the statistics the heatmap needs: on a new period at once,
-  // otherwise every HEAT_STATS_MS. Best-effort like the other polled reads — a failure
+  // otherwise every HEAT_STATS_MS, and not at all while the tab is hidden — a tab nobody
+  // looks at has nothing to show them. Best-effort like the other polled reads: a failure
   // is shown in the panel and the next tick tries again.
   async function refreshHeatStats() {
-    if (!heatOn()) return;
+    if (!heatOn() || heatStatsBusy) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     if (heatStats && heatStatsPeriod === heat.period && Date.now() - heatStatsAt < HEAT_STATS_MS) return;
     const period = heat.period;
+    heatStatsBusy = true;
     try {
       const st = await api("GET", `/api/v1/processes/${key}/statistics${heatStatsQuery(period)}`);
       if (period !== heat.period) return; // the period changed while this was in flight
@@ -13193,6 +13306,8 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       heatStatsErr = "";
     } catch (e) {
       heatStatsErr = `Could not read the statistics: ${e.message}`;
+    } finally {
+      heatStatsBusy = false;
     }
     heatStatsPeriod = period;
     heatStatsAt = Date.now();
@@ -13208,8 +13323,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // carries the scale, and a key to colours that are not on screen only misleads.
     liveLegend.hidden = heatOn();
     const note = heatOn() && heatStats && heatStats.truncated ? "newest instances only" : "";
+    // "as of" is when the server folded the figures — `to`, in unix nanoseconds — which
+    // can be up to a minute before they were fetched, since the server shares a result.
+    const asOf = heatOn() && heatStats && heatStats.to ? fmtTime(heatStats.to / 1e6) : "";
     const html = heatStripHTML(heat, {
-      max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note,
+      max: heatView ? heatView.max : 0, format: heatFormat(heat.mode), note, asOf,
     });
     // Only a change is drawn: the poll calls this every 1.5 seconds, and replacing the
     // strip would close the period list under the pointer of somebody choosing from it.
@@ -13235,6 +13353,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     poll();
   }
   heatStrip.addEventListener("click", (e) => {
+    if (e.target.closest("button[data-heat-refresh]")) {
+      heatStatsAt = 0; // stale now: the poll below reads them again
+      poll();
+      return;
+    }
     const b = e.target.closest("button[data-heat-mode], button[data-heat-style]");
     if (!b) return;
     if (b.dataset.heatMode) setHeat({ mode: b.dataset.heatMode });

@@ -40,12 +40,34 @@ var builtInManagedWorkerTypes = []builtInWorkerTypeMetadata{
 	{ConnectorKind: connectorKindTeamsPhone, ID: "atlas.teamsphone", Version: initialBuiltInWorkerTypeVersion, Title: "Microsoft Teams Phone", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindGoogleContacts, ID: "atlas.googlecontacts", Version: initialBuiltInWorkerTypeVersion, Title: "Google Contacts", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindCardDAV, ID: "atlas.carddav", Version: initialBuiltInWorkerTypeVersion, Title: "CardDAV contacts", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
+	{ConnectorKind: connectorKindWiki, ID: "atlas.wikiwikibangbang", Version: initialBuiltInWorkerTypeVersion, Title: "wikiwikibangbang", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindAD, ID: "atlas.ad", Version: initialBuiltInWorkerTypeVersion, Title: "Microsoft Active Directory", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindAgent, ID: "atlas.agent", Version: initialBuiltInWorkerTypeVersion, Title: "AI agent model", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindCloudEvents, ID: "atlas.cloudevents", Version: initialBuiltInWorkerTypeVersion, Title: "CloudEvents endpoint", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasEmbedded},
 	{ConnectorKind: connectorKindPostgres, ID: "atlas.postgres", Version: initialBuiltInWorkerTypeVersion, Title: "PostgreSQL", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindMariaDB, ID: "atlas.mariadb", Version: initialBuiltInWorkerTypeVersion, Title: "MariaDB", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 	{ConnectorKind: connectorKindMSSQL, ID: "atlas.mssql", Version: initialBuiltInWorkerTypeVersion, Title: "Microsoft SQL Server", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
+}
+
+// BuiltInWorkerType is a built-in Worker Type's identity as build tooling reads it.
+// Conformance evidence (ADR-0483) binds to the ID and version, and finds the
+// operations and runtime paths through the connector kind.
+type BuiltInWorkerType struct {
+	ID            string
+	Version       string
+	ConnectorKind string
+}
+
+// LookupBuiltInWorkerType finds a built-in Worker Type by its Worker Type ID, the
+// identity evidence names. It reads the metadata the Worker Type API serves, so a
+// record cannot name a Worker Type this release does not ship.
+func LookupBuiltInWorkerType(id string) (BuiltInWorkerType, bool) {
+	for _, meta := range builtInManagedWorkerTypes {
+		if meta.ID == id {
+			return BuiltInWorkerType{ID: meta.ID, Version: meta.Version, ConnectorKind: meta.ConnectorKind}, true
+		}
+	}
+	return BuiltInWorkerType{}, false
 }
 
 func lookupBuiltInManagedWorkerType(connectorKind string) (builtInWorkerTypeMetadata, bool) {

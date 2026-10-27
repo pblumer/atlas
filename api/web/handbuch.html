@@ -6872,6 +6872,88 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-wikiwikibangbang">
+        <h4>wikiwikibangbang</h4>
+        <p data-l="de">Ein wikiwikibangbang-Worker steht für <b>ein Wiki und ein Konto</b> darin. Ein Prozess legt damit
+          eine Aufgabe für eine Person an, liest sie, ändert Titel, Felder und Labels, führt sie durch ihren Workflow,
+          kommentiert sie und findet Aufgaben mit einer Abfrage. Er legt eine Seite an, liest sie als Markdown und
+          ergänzt sie am Ende. <i>Die Schritte sind mit wikiwikibangbang (Commit 928fec0, lokal betrieben)
+          durchgegangen worden.</i></p>
+        <p data-l="en">A wikiwikibangbang worker stands for <b>one wiki and one account</b> in it. A process uses it
+          to open a task for a person, read it, change its title, properties and labels, move it through its workflow,
+          comment on it and find tasks with a query. It creates a page, reads it as Markdown and appends to it at the
+          end. <i>These steps have been walked with wikiwikibangbang at commit 928fec0, run locally.</i></p>
+        <ol>
+          <li data-l="de">Im Wiki legt eine Administratorin oder ein Administrator ein <b>technisches Konto</b> für
+            atlas an, z.&nbsp;B. <code>atlas-bot</code>, und gibt ihm in jedem Space, in den Prozesse schreiben, die
+            Rolle <b>editor</b> – sonst nichts. Ein Konto mit der Systemrolle <b>admin</b> oder <b>erasure</b> lehnt
+            der Worker ab. Es ist nicht das Konto, mit dem der Katalog das Wiki nur liest.</li>
+          <li data-l="en">In the wiki, an administrator creates a <b>technical account</b> for atlas, e.g.
+            <code>atlas-bot</code>, and grants it the role <b>editor</b> in each space processes write to – and nothing
+            else. The worker refuses an account with the system role <b>admin</b> or <b>erasure</b>. It is not the
+            account the catalogue reads the wiki with.</li>
+          <li data-l="de">Als dieses Konto angemeldet unter <i>Konto → API-Token</i> ein Token mit dem Umfang
+            <b>full</b> erstellen (höchstens 366 Tage) und das Ablaufdatum notieren: Danach funktioniert das Token
+            nicht mehr und der Worker auch nicht. Ein Worker, der nur liest, kommt mit dem Umfang <b>read</b> aus.</li>
+          <li data-l="en">Signed in as that account, create a token of scope <b>full</b> under <i>Account → API
+            tokens</i> (at most 366 days) and note its expiry: the token stops working then, and the worker with it.
+            A worker that only reads does with scope <b>read</b>.</li>
+          <li data-l="de">Secret anlegen, z.&nbsp;B. <code>wiki_bot</code>: <code>{"token": "wwbb_…"}</code>.</li>
+          <li data-l="en">Create a secret, e.g. <code>wiki_bot</code>: <code>{"token": "wwbb_…"}</code>.</li>
+          <li data-l="de">Worker anlegen: Typ <b>wikiwikibangbang</b>, ein Name (den ein Task nennt), die Basis-URL des
+            Wikis als Endpoint (<code>https://wiki.example.ch</code>) und die Credential-Referenz
+            <code>wiki_bot</code>. Pro Wiki und Konto ein Worker. Speichern genügt; atlas startet den beaufsichtigten
+            Worker mit der neuen Umgebung selbst neu.</li>
+          <li data-l="en">Create the worker: type <b>wikiwikibangbang</b>, a name (which a task states), the wiki's
+            base URL as endpoint (<code>https://wiki.example.ch</code>) and the credential reference
+            <code>wiki_bot</code>. One worker per wiki and account. Saving is enough; atlas restarts the supervised
+            worker with the new environment by itself.</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Alles erscheint als das Konto des Workers</span><span class="lbl" data-l="en">Everything appears as the worker's account</span>
+          <p data-l="de" style="margin:.3em 0 0">Was der Worker schreibt, schreibt er als <i>atlas-bot</i>: Verlauf und
+            Kommentare im Wiki nennen dieses Konto, nicht die Person, die den Prozess gestartet hat. Ein Prozess kann
+            überall schreiben, wo das Konto darf – gib ihm deshalb nur die Spaces, die Prozesse wirklich brauchen.
+            Das Wiki prüft zudem nicht, ob ein Benutzerfeld wie <code>assignee</code> ein bestehendes Konto nennt: Ein
+            falsch geschriebener Benutzername weist die Aufgabe niemandem zu, ohne dass jemand es merkt.</p>
+          <p data-l="en" style="margin:.3em 0 0">What the worker writes, it writes as <i>atlas-bot</i>: the wiki's
+            history and comments name that account, not the person who started the process. A process can write
+            wherever the account may – so give it only the spaces processes really need. The wiki also does not check
+            that a user field such as <code>assignee</code> names an existing account: a misspelt username assigns
+            the task to nobody, and nobody notices.</p>
+        </div>
+        <p data-l="de"><b>Keine doppelten Aufgaben:</b> Nennt der Task ein <i>Abgleichfeld</i> (z.&nbsp;B.
+          <code>source-id</code>), sucht der Worker vor dem Anlegen ein Item dieses Typs im Space mit diesem Wert und
+          gibt es zurück, statt ein zweites anzulegen. Ist das Feld im Typ als eindeutig markiert, können auch zwei
+          gleichzeitige Versuche kein Duplikat erzeugen. Ohne Abgleichfeld kann eine Wiederholung ein zweites Item
+          anlegen.</p>
+        <p data-l="en"><b>No duplicate tasks:</b> when the task names a <i>matching field</i> (e.g.
+          <code>source-id</code>), the worker looks for an item of that type in the space with that value before it
+          creates one, and answers with it instead of creating a second. Where the type marks the field unique, not
+          even two attempts at once can create a duplicate. Without a matching field a repetition can create a second
+          item.</p>
+        <p data-l="de"><b>Seiten ergänzen:</b> Der Worker liest die Seite und schreibt sie mit den neuen Blöcken am
+          Ende zurück; jeder bestehende Block bleibt, wie er war. Ändert jemand die Seite genau zwischen diesem Lesen
+          und Schreiben, überschreibt der Worker diese Änderung. Sie bleibt im Verlauf der Seite und lässt sich von
+          dort wiederherstellen. Während jemand die Seite live bearbeitet, wartet der Worker und versucht es
+          erneut.</p>
+        <p data-l="en"><b>Extending pages:</b> the worker reads the page and writes it back with the new blocks at the
+          end; every existing block stays as it was. If somebody changes the page exactly between that read and that
+          write, the worker overwrites the change. It stays in the page's history and can be restored from there.
+          While somebody edits the page live, the worker waits and tries again.</p>
+        <p data-l="de"><b>Fehler abfangen:</b> Existiert ein Item nicht oder darf das Konto es nicht lesen, endet der
+          Task mit dem Fehlercode <code>WIKIWIKIBANGBANG_ITEM_NOT_FOUND</code>; lehnt das Wiki einen Wert ab – ein
+          Pflichtfeld fehlt, eine Transition ist aus dem aktuellen Zustand nicht erlaubt, eine Abfrage ist fehlerhaft
+          –, mit <code>WIKIWIKIBANGBANG_VALIDATION_FAILED</code>. Beides wird zum BPMN-Fehler, wenn der Prozess den Code
+          mit einem Fehler-Grenzereignis abfängt; sonst entsteht ein Vorfall.</p>
+        <p data-l="en"><b>Catching errors:</b> if an item does not exist or the account may not read it, the task ends
+          with the error code <code>WIKIWIKIBANGBANG_ITEM_NOT_FOUND</code>; if the wiki refuses a value – a required
+          field is missing, a transition is not allowed from the current state, a query is malformed – with
+          <code>WIKIWIKIBANGBANG_VALIDATION_FAILED</code>. Either becomes a BPMN error when the process catches the
+          code with an error boundary event; otherwise an incident is raised.</p>
+        <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
       <div class="card" id="runbook-entra">
         <h4>Microsoft Entra ID</h4>
         <p data-l="de">Das wertvollste Geheimnis, das ein atlas-Worker hält: Eine Anwendungsberechtigung wie
@@ -9202,9 +9284,9 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         ausgeschalteten Ebenen. Dieselbe Wahl nehmen die Routen und <code>atlas_release_architecture</code> als
         <code>?layers=</code> entgegen (<code>strategy</code>, <code>business</code>, <code>application</code>,
         <code>data</code>, <code>technology</code>). Ohne Angabe gelten Application und Technology; ein Link oder ein
-        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Strategie-, Business- und
-        Datenebene zeichnet noch kein Release auf; wer nur nach solchen Ebenen fragt, erhält eine Antwort, die sagt,
-        welche Ebenen der Release aufzeichnet.</p>
+        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Ein früher aufgezeichneter
+        Release kennt nicht alle Ebenen; wer nur nach solchen fragt, erhält eine Antwort, die sagt, welche Ebenen
+        der Release aufzeichnet.</p>
       <p data-l="en">The sketch is organised in <b>layers</b>. The <i>Architecture</i> dialog offers one checkbox per
         layer the release records: <i>Application</i> is the logical view (what the release's content fixes),
         <i>Technology</i> the physical one (what the installation had in place). Without Technology the sketch shows
@@ -9214,8 +9296,83 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         routes and <code>atlas_release_architecture</code> take the same choice as <code>?layers=</code>
         (<code>strategy</code>, <code>business</code>, <code>application</code>, <code>data</code>,
         <code>technology</code>). Without it, Application and Technology apply, so a link or an embedded picture
-        without <code>layers</code> shows exactly what it showed before. No release records the strategy, business
-        or data layer yet; asking for those alone gets an answer that says which layers the release records.</p>
+        without <code>layers</code> shows exactly what it showed before. A release recorded earlier does not know every
+        layer; asking for those alone gets an answer that says which layers the release records.</p>
+      <p data-l="de">Ein Release hält ausserdem fest, was die Konfiguration eines Workers sonst noch sagt, soweit es
+        kein Geheimnis ist: den Mail-Provider, die Adresse des Malware-Scanners, das Modell, das ein Agent-Worker
+        fragt, die Identitätsregel (Modus und ob sie durchgesetzt wird) und ob ein Credential hinterlegt ist – nie
+        welches. Die Skizze schreibt das in eine vierte Zeile des Worker-Kastens; im ArchiMate-Dokument werden
+        Postfach und Scanner zu weiteren Zielsystemen. Bei einer Nachricht, die der Release empfängt, nennt die Skizze
+        das Inbound-Abonnement, das sie veröffentlicht: welcher Worker was beobachtet (ein clio-Subject, eine
+        Jira-Abfrage, einen Tabellenbereich, einen Ordner, einen Kanal oder einen Mail-Ordner) und das System, aus dem
+        er liest. Die Installation allein zeigt jedes Abonnement als Verbindung, die atlas selbst öffnet. Wer den
+        Worker nicht sehen darf, erfährt, dass mehr konfiguriert ist und dass ein Abonnement die Nachricht speist,
+        aber nicht was und wo. Der Eigentümer eines Workers wird nicht aufgezeichnet, ebenso wenig das Zeitbudget
+        für ausgehende Aufrufe, das für alle Worker dasselbe ist. Ein früher aufgezeichneter Release wird genau wie
+        bisher gezeichnet.</p>
+      <p data-l="en">A release also records what else a Worker's configuration says, as far as it is not a secret: the
+        mail provider, the malware scanner's address, the model an agent Worker asks, the identity policy (its mode
+        and whether it is enforced) and whether a credential is configured – never which one. The sketch writes this
+        on a fourth line of the Worker's box; in the ArchiMate document the mailbox and the scanner become further
+        target systems. For a message the release receives, the sketch names the inbound subscription that publishes
+        it: which Worker watches what (a clio subject, a Jira query, a spreadsheet range, a folder, a channel or a
+        mail folder) and the system it reads from. The installation alone draws each subscription as a connection
+        atlas opens itself. A reader who may not see the Worker learns that more is configured and that a
+        subscription feeds the message, not what or where. A Worker's owner is not recorded, nor the budget for
+        outbound calls, which is the same for every Worker. A release recorded earlier is drawn exactly as
+        before.</p>
+      <p data-l="de">Die <b>Datenebene</b> hält fest, was die Prozesse eines Release speichern und lesen: jedes
+        Datenobjekt mit seiner deklarierten Klasse, seinem Anfangszustand und den Elementen, die es schreiben (mit
+        Zielzustand und geschriebenen Feldern) und lesen; die Datenspeicher, die die Prozesse nennen; jede Klasse,
+        in der sie Daten halten, und ob das Informationsmodell der Applikation sie definiert; und für jeden Prozess,
+        der personenbezogene Daten deklariert, die Variablen, die Variable, die die betroffene Person nennt, und
+        jeden Worker und Job-Typ, dem der Prozess Arbeit übergibt. Jeder von ihnen kann jede an seiner Aufgabe
+        sichtbare Variable im Klartext lesen; deshalb nennt die Skizze alle, nicht nur jene, deren Aufgabe eine
+        personenbezogene Variable erwähnt. Werte werden nie aufgezeichnet. Die Checkbox <i>Data</i> zeichnet die
+        Ebene als Band unter der Skizze oder allein, jede Art auf eigenen Zeilen; was nicht Platz hat, wird unter
+        dem Band gezählt. Im ArchiMate-Dokument wird jeder Prozess zu einem Application Process, der auf seine
+        Data Objects lesend, schreibend oder beides zugreift; diese realisieren die Business Objects ihrer Klassen.
+        Ohne Auswahl bleibt das Band aus, und die Skizze sagt das; <code>?layers=data</code> fragt danach. Welche
+        Aktivität einen Datenspeicher liest oder schreibt, steht nicht im kompilierten Modell und fehlt deshalb.</p>
+      <p data-l="en">The <b>data layer</b> records what a release's processes keep and read: each data object with
+        its declared class, the state it starts in and the elements that write it (with the target state and the
+        members they write) and read it; the data stores the processes name; each class they keep data as, and
+        whether the application's information model defines it; and for each process that declares personal data,
+        the variables, the variable naming the person they are about, and every worker and job type the process
+        hands work to. Each of them can read every variable visible at its task in plaintext, which is why the
+        sketch names them all, not only those whose task names a personal variable. Values are never recorded. The
+        <i>Data</i> checkbox draws the layer as a band below the sketch, or alone, each kind on rows of its own;
+        what does not fit is counted under the band. In the ArchiMate document each process becomes an
+        Application Process that reads, writes or both its Data Objects, which realise the Business Objects of
+        their classes. Without a choice the band stays off and the sketch says so; <code>?layers=data</code> asks
+        for it. Which activity reads or writes a data store is not in the compiled model and is therefore not
+        shown.</p>
+      <p data-l="de">Die <b>Business-Ebene</b> zeigt die Prozesse als Arbeit, mit der Angabe, wie ihre
+        Benutzeraufgaben sagen, wer sie erledigt (für eine Gruppe, für eine namentlich genannte Person, zur
+        Laufzeit entschieden oder niemand); die Rollen, die sie nennen – jede Kandidatengruppe so, wie das Modell
+        sie schreibt, und jede Lane; und die Katalogprodukte, deren Bereitstellung, Rücknahme oder Lebenszyklus ein
+        Prozess des Release ausführt, so wie jeder Katalog sie zuletzt veröffentlicht hat, mit den Aktionen eines
+        Lebenszyklus-Produkts und dem Ereignistyp jedes Ergebnisses. Ein Produkt sieht nur, wer seinen Katalog
+        pflegen darf; alle anderen erfahren, wie viele zurückgehalten wurden. Wem eine Aufgabe namentlich
+        zugewiesen ist, wird nur gezählt, nie genannt. Die <b>Strategie-Ebene</b> zeigt die Capabilities, die ein
+        Prozess des Release oder ein von ihm genannter Worker realisiert, mit Zustand, letzter Bestätigung,
+        Verantwortlicher (nur Name und Rolle), KPIs und SLAs, und die Value Streams, deren Stufen sie nutzen, mit
+        allen Stufen in ihrer Reihenfolge. Beide Ebenen erscheinen als Bänder über der Skizze oder allein; im
+        ArchiMate-Dokument wird jeder Prozess zu einem Business Process, den sein Application Process realisiert,
+        mit den zugewiesenen Rollen, den Produkten und den Capabilities, die die Stufen der Value Streams
+        bedienen.</p>
+      <p data-l="en">The <b>business layer</b> shows the processes as work, with how their user tasks say who does
+        them (for a group, for a named person, decided at run time, or nobody); the roles they name – each
+        candidate group as the model writes it, and each lane; and the catalogue products whose provisioning,
+        deprovisioning or lifecycle a release process carries out, as each catalogue last published them, with a
+        lifecycle product's actions and the event type each outcome publishes. A product is shown only to whoever
+        may maintain its catalogue; everyone else learns how many were withheld. Whom a task is assigned to by
+        name is counted, never named. The <b>strategy layer</b> shows the capabilities a release process or a
+        Worker the release names realises, with their state, last confirmation, owner (name and role only), KPIs
+        and SLAs, and the value streams whose stages use them, with all their stages in order. Both layers appear
+        as bands above the sketch, or alone; in the ArchiMate document each process becomes a Business Process its
+        Application Process realises, with the roles assigned to it, the products, and the capabilities serving
+        the value streams' stages.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist
@@ -9467,7 +9624,9 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           Konturen. <b>Period</b> grenzt den Zeitraum ein; <i>Since deployment</i> liest die Zähler der Engine,
           die auch erhalten bleiben, wenn alte Instanzen gelöscht werden. Rechts stehen die Zahlen dazu: die
           Instanzen, die Aufgaben sortiert nach dem, was das Diagramm gerade zeigt, die Aufteilung jedes
-          Gateways und was im Zeitraum nie erreicht wurde. Die Farben richten sich nach dem grössten Wert im
+          Gateways und was im Zeitraum nie erreicht wurde. Diese Zahlen beschreiben die Vergangenheit und werden
+          deshalb nicht laufend neu gelesen, sondern beim Öffnen, beim Wechsel des Zeitraums, alle fünf Minuten
+          und mit <b>Refresh</b>; neben dem Knopf steht, von wann sie sind. Die Farben richten sich nach dem grössten Wert im
           Bild; zwei Zeiträume oder Versionen vergleichst du deshalb über die Zahlen, nicht über die Farben.
           Zeiten werden pro Aufgabe ausgewertet, nie pro Person. Eine Aufgabe, die ohne Übernahme abgeschlossen
           wurde, hat eine Dauer, aber keine Aufteilung in Warten und Arbeiten, und die Übernahmen werden erst
@@ -9483,7 +9642,9 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           coloured outlines. <b>Period</b> narrows the time span; <i>Since deployment</i> reads the engine's
           counters, which are kept when old instances are deleted. On the right are the figures behind it: the
           instances, the tasks ordered by what the diagram shows, how each gateway split, and what the period
-          never reached. The colours are scaled to the largest value in the picture, so you compare two periods
+          never reached. These figures describe the past, so they are not re-read all the time: they are read
+          when you open the heatmap, when you change the period, every five minutes and on <b>Refresh</b>, and
+          the strip says when they are from. The colours are scaled to the largest value in the picture, so you compare two periods
           or versions by their figures, not by their colours. Times are measured per task, never per person.
           A task completed without anybody claiming it has a duration but no split into waiting and working,
           and claims are only recorded from this version on. Choosing a single instance switches back to Live,

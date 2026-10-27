@@ -8,6 +8,7 @@ import (
 
 	"github.com/pblumer/atlas/api/archsketch"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/compiler"
 )
 
 // A release's architecture sketch (ADR-0471).
@@ -22,7 +23,10 @@ import (
 // they evaluate and the calls they make into processes the release did not ship. The
 // physical part is this installation's, at that moment: its name and environment, the
 // address it is configured to be reached under, the public start links its processes
-// have, and for each worker name and job type what serves it here (ADR-0471 §1).
+// have, and for each worker name and job type what serves it here (ADR-0471 §1). The
+// data part is fixed by the content again, with the class names checked against the
+// application's information model at that moment: the data objects, stores and
+// personal-data declarations of its processes (ADR-0495 slice C).
 //
 // What a reader sees of the physical part is decided when it is read, not when it is
 // recorded: a worker's endpoint only by a reader who may see that worker's
@@ -47,6 +51,8 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 	}
 	shipped := map[string]bool{}
 	placement := map[[2]string]string{}
+	data := &archsketch.Data{}
+	business := &archsketch.Business{}
 	for _, m := range members {
 		if m.Kind == "process" {
 			shipped[m.Ref] = true
@@ -131,8 +137,18 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 			}
 			snap.Dependencies = append(snap.Dependencies, dep)
 		}
+
+		collectData(data, cp, m.Ref)
+		collectBusiness(business, cp, m.Ref, d.Name)
 	}
-	snap.Physical = s.physicalPart(shipped, snap.Dependencies, placement)
+	received := map[string]bool{}
+	for _, e := range snap.EntryPoints {
+		received[e.Name] = true
+	}
+	snap.Physical = s.physicalPart(shipped, received, snap.Dependencies, placement)
+	snap.Data = s.dataPart(appID, data, snap.Dependencies)
+	snap.Business = s.businessPart(business, shipped)
+	snap.Strategy = s.strategyPart(appID, shipped, snap.Dependencies)
 	snap.Normalize()
 	return snap
 }
@@ -145,12 +161,16 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 // in it: a missing worker record would otherwise read as "this worker keeps its own
 // configuration", which is a claim, and the renderings of a snapshot with no physical
 // part say plainly that it has none.
-func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Dependency, placement map[[2]string]string) *archsketch.Physical {
+func (s *Server) physicalPart(shipped, received map[string]bool, deps []archsketch.Dependency, placement map[[2]string]string) *archsketch.Physical {
 	links, err := s.publicLinks.LoadAll()
 	if err != nil {
 		return nil
 	}
 	recs, err := s.connectors.LoadAll()
+	if err != nil {
+		return nil
+	}
+	subs, err := s.inboundSubs.LoadAll()
 	if err != nil {
 		return nil
 	}
@@ -195,6 +215,16 @@ func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Depende
 				site.ConfiguredID = c.ID
 				site.Endpoint = archsketch.ParseEndpoint(c.Endpoint)
 				site.MailboxEndpoint = archsketch.ParseEndpoint(c.MailboxEndpoint)
+				// The rest of the configuration, none of it a secret: which credential
+				// a Worker uses is the vault's business, so only that it has one is
+				// recorded (ADR-0495 slice B).
+				site.Provider = c.Provider
+				site.ScannerEndpoint = archsketch.ParseEndpoint(c.Scanner)
+				site.Model = c.Model
+				site.Credential = c.CredentialsRef != ""
+				if c.Identity != nil {
+					site.Identity = &archsketch.WorkerIdentity{Mode: c.Identity.Mode, Enforcement: c.Identity.Enforcement}
+				}
 			}
 			if site.Endpoint == nil {
 				// What the instances serving the name reported, when this installation
@@ -217,7 +247,139 @@ func (s *Server) physicalPart(shipped map[string]bool, deps []archsketch.Depende
 				Observers: archsketch.Observers{ObservedBy: s.workerInstances(func(st *workerStat) bool { return slices.Contains(st.Serves, d.Name) })}})
 		}
 	}
+
+	// The inbound subscriptions that publish a message the release receives. A
+	// subscription whose Worker was deleted since keeps that Worker's id, so a read
+	// judges it as the ownerless configuration it was.
+	byID := make(map[string]connector, len(recs))
+	for _, c := range recs {
+		byID[c.ID] = c
+	}
+	for _, sub := range subs {
+		if !sub.Enabled || !received[sub.MessageName] {
+			continue
+		}
+		in := archsketch.InboundSite{MessageName: sub.MessageName, ConfiguredID: sub.ConnectorID,
+			Subject: inboundWatched(sub), Recursive: sub.Recursive && sub.WatchedSubject != ""}
+		if c, ok := byID[sub.ConnectorID]; ok {
+			in.Worker, in.WorkerType, in.Endpoint = c.Name, c.Kind, archsketch.ParseEndpoint(c.Endpoint)
+		}
+		p.Inbound = append(p.Inbound, in)
+	}
 	return p
+}
+
+// collectData adds one process's data objects with the elements that read and write
+// them, the stores it names and its personal-data declaration to the data part being
+// gathered (ADR-0495 slice C). A process declares its data objects at its root, so a
+// name is one object within it.
+func collectData(d *archsketch.Data, cp *compiler.CompiledProcess, processID string) {
+	index := map[string]int{}
+	for _, do := range cp.DataObjects() {
+		name := cp.Intern(do.Name)
+		index[name] = len(d.Objects)
+		d.Objects = append(d.Objects, archsketch.DataObject{ProcessID: processID, Name: name, Class: cp.Intern(do.ItemType),
+			Collection: do.IsCollection, InitialState: cp.Intern(do.InitialState)})
+	}
+	for id := range int32(cp.NodeCount()) {
+		element := cp.ElementBpmnId(id)
+		for _, in := range cp.DataInputAssociations(id) {
+			if i, ok := index[cp.Intern(in.DataObject)]; ok {
+				d.Objects[i].ReadBy = append(d.Objects[i].ReadBy, element)
+			}
+		}
+		for _, out := range cp.DataOutputAssociations(id) {
+			i, ok := index[cp.Intern(out.DataObject)]
+			if !ok {
+				continue
+			}
+			w := archsketch.DataWrite{ElementID: element, State: cp.Intern(out.TargetState)}
+			for _, write := range out.Writes {
+				if member := cp.Intern(write.TargetPath); member != "" {
+					w.Members = append(w.Members, member)
+				}
+			}
+			d.Objects[i].WrittenBy = append(d.Objects[i].WrittenBy, w)
+		}
+	}
+	for _, st := range cp.DataStores() {
+		d.Stores = append(d.Stores, archsketch.DataStore{Name: cp.Intern(st.Name),
+			UsedBy: []archsketch.Use{{ProcessID: processID, ElementID: cp.Intern(st.ElementId)}}})
+	}
+	if cp.HasPersonalVariables() {
+		d.Personal = append(d.Personal, archsketch.PersonalDeclaration{ProcessID: processID,
+			Variables: slices.Clone(cp.PersonalVariables()), Subject: cp.DataSubjectVariable()})
+	}
+}
+
+// dataPart completes the data part: each class a data object declares or a store
+// holds, checked against the application's information model, and for each process
+// declaring personal data the workers and job types it hands work to. Each of those
+// can read every variable visible at its task in plaintext — a leased job carries them
+// all deciphered (pulledJob), and a Worker Atlas runs resolves its task through the
+// personal reader (drive) — so the snapshot names them all rather than only those
+// whose expressions name a personal variable, which would understate it.
+//
+// Nil when the information models cannot be read: a class recorded as not modeled
+// because the store failed would be a claim, and a snapshot without a data part says
+// plainly that it has none. Run-loop goroutine only.
+func (s *Server) dataPart(appID string, d *archsketch.Data, deps []archsketch.Dependency) *archsketch.Data {
+	vocab, err := s.infomodel.VocabularyOnLoop(appID)
+	if err != nil {
+		return nil
+	}
+	for i := range d.Stores {
+		if st, ok := vocab.Store(d.Stores[i].Name); ok {
+			d.Stores[i].Class = st.Class
+		}
+	}
+	class := func(name string) {
+		if name == "" {
+			return
+		}
+		_, modeled := vocab.Class(name)
+		d.Classes = append(d.Classes, archsketch.DataClass{Name: name, Modeled: modeled})
+	}
+	for _, o := range d.Objects {
+		class(o.Class)
+	}
+	for _, st := range d.Stores {
+		class(st.Class)
+	}
+	for i := range d.Personal {
+		p := &d.Personal[i]
+		for _, dep := range deps {
+			if dep.Kind != archsketch.DependencyWorker && dep.Kind != archsketch.DependencyRuntimeWorker && dep.Kind != archsketch.DependencyJobType {
+				continue
+			}
+			if slices.ContainsFunc(dep.UsedBy, func(u archsketch.Use) bool { return u.ProcessID == p.ProcessID }) {
+				p.HandedTo = append(p.HandedTo, archsketch.PersonalRecipient{Kind: dep.Kind, Name: dep.Name, WorkerType: dep.WorkerType})
+			}
+		}
+	}
+	return d
+}
+
+// inboundWatched says what an inbound subscription watches, in the terms of the
+// Worker kind it reads through: a clio subject, a Jira query, a spreadsheet and its
+// range, a folder, a channel or a mail folder (ADR-0075, ADR-0214, ADR-0234). A
+// subscription names exactly one of them.
+func inboundWatched(sub inboundSubscription) string {
+	switch {
+	case sub.WatchedSubject != "":
+		return sub.WatchedSubject
+	case sub.JQL != "":
+		return "JQL " + sub.JQL
+	case sub.SpreadsheetID != "":
+		return strings.TrimSpace("spreadsheet " + sub.SpreadsheetID + " " + sub.WatchRange)
+	case sub.FolderID != "":
+		return "folder " + sub.FolderID
+	case sub.ChannelID != "":
+		return "channel " + sub.ChannelID
+	case sub.MailFolder != "":
+		return "mail folder " + sub.MailFolder
+	}
+	return ""
 }
 
 // workerInstances names the worker instances seen this run that match. The registry
@@ -257,18 +419,26 @@ func (s *Server) reportedEndpointsOf(name string) []string {
 }
 
 // redactedArchitecture is the snapshot as this reader may see it: a worker's endpoint
-// only for a reader who may see that worker's configuration, and the worker instances
-// only for a reader who may see the Workers view. Run-loop goroutine only: it reads
-// the worker store.
+// only for a reader who may see that worker's configuration, the worker instances
+// only for a reader who may see the Workers view, and a catalogue product only for a
+// reader who may maintain its catalogue. Run-loop goroutine only: it reads the worker
+// and catalogue stores.
 //
 // A worker that no longer exists is judged as an ownerless one, which only an
 // administrator may see (connectorRole) — its endpoint was somebody's configuration,
 // and that it was deleted since is no reason to show it to everybody.
 func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot) *archsketch.Snapshot {
-	if snap == nil || snap.Physical == nil {
+	if snap == nil {
 		return snap
 	}
 	out := *snap
+	if snap.Business != nil {
+		b := s.withholdProducts(r, *snap.Business)
+		out.Business = &b
+	}
+	if snap.Physical == nil {
+		return &out
+	}
 	mayViewWorker := func(id string) bool {
 		if id == "" {
 			return true

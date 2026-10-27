@@ -5877,6 +5877,7 @@ line.mesh-in-impact { stroke: var(--accent); stroke-width: 2.5; }
   border: 1.5px dashed var(--border-strong); border-radius: 2px;
 }
 .heat-note-inline { color: var(--warn); margin-right: 8px; }
+.heat-strip .heat-asof { margin-left: 2px; }
 .heat-glow .djs-shape .djs-visual > :is(rect, circle, polygon):first-child { fill-opacity: .55 !important; }
 .token-badge.heat { white-space: nowrap; }
 .token-badge.heat.cold {

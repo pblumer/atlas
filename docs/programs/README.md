@@ -6,24 +6,38 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**2 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**3 programmes** · active: 2 · blocked: 0 · paused: 0 · planned: 1 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since a supervised worker runs it through the worker package, whose closure reaches every connector, and the engine can run eleven of them through api, whose closure is nearly the whole module; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code. |
+| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | planned | 0/4 | pblumer | Review proposed ADR-0499, assign the BMP0 slice owner, then agree registry identity, signing trust and manifest test fixtures before implementation. |
+| [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+
+## Blueprint Marketplace (BMP)
+
+Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.
+
+**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-27**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **BMP0** — Registry and trust contract | planned | unassigned | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395) | Programme proposal PR #1395 merged; ADR-0499 remains Proposed / Not started. BMP0 awaits a named slice owner, design review and contract-validation tests. |
+| **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
+| **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
+| **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
 
 ## Capability-driven Automation (CDA)
 
 Connect business outcomes to verified technical operation semantics and, only after architectural approval, deterministic and policy-authorized Worker execution. Discovery and execution are separate delivery gates.
 
-**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-26**
+**[Programme plan](../planning/capability-driven-automation-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cda--capability-driven-automation-) · [Manifest](cda/program.json) · Reviewed: 2026-10-27**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
 | **CDA0** — Declarative operation claims | complete | pblumer | — | [PR #1343](https://github.com/pblumer/atlas/pull/1343) | Complete: PR #1343 merged; ADR-0480 Accepted (2026-10-26). Claims stay descriptive and never authorize; one claim per contract id@version per operation, deliberately.; [Evidence 1](../../workertype/capability_test.go), [Evidence 2](../adr/0480-technical-capability-contract.md) |
 | **CDA1** — Semantic contract envelope | complete | pblumer | CDA0 | [PR #1346](https://github.com/pblumer/atlas/pull/1346) | Complete: PR #1346 merged; ADR-0485 Accepted (2026-10-26) with a reservation: contract identity (id, version, profile) and immutability are binding, the v1alpha1 fields may change until the first published contract (CDA3). No provider conformance claim.; [Evidence 1](../../workertype/contract_test.go), [Evidence 2](../adr/0485-technical-capability-semantics.md) |
-| **CDA2** — Contract governance and conformance | active | pblumer | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [PR #1360](https://github.com/pblumer/atlas/pull/1360), [PR #1388](https://github.com/pblumer/atlas/pull/1388), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types. Merged: schema-only validation (PR #1357) and contract digests over the file's bytes (PR #1360). In review: the implementation digest (PR #1388). Evidence records, renewal, withdrawal and publication are not yet implemented; no Worker is verified. |
+| **CDA2** — Contract governance and conformance | active | pblumer | CDA1 | [PR #1357](https://github.com/pblumer/atlas/pull/1357), [PR #1360](https://github.com/pblumer/atlas/pull/1360), [PR #1388](https://github.com/pblumer/atlas/pull/1388), [PR #1401](https://github.com/pblumer/atlas/pull/1401), [Issue #1358](https://github.com/pblumer/atlas/issues/1358) | ADR-0483 Accepted (option 3), with approval by repository provenance (maintainer as sole reviewer), raw-byte contract digests and dependency digests for built-in Worker Types whose roots cover every runtime path (variant A, decided 2026-10-27). Merged: schema-only validation (PR #1357), contract digests over the file's bytes (PR #1360) and the implementation digest (PR #1388). In review: evidence records, their CI gate and CODEOWNERS (PR #1401). No contract is published and no record exists; withdrawal is not implemented; no Worker is verified. |
 | **CDA3** — Verified Worker Type mappings | planned | unassigned | CDA2 | — | Prove account versus contact distinction; source-derived provider mappings with no drift. |
 | **CDA4** — Cross-layer architecture graph | planned | unassigned | CDA2, CDA3 | — | Accept/extend ADR-0420; stable identities, provenance, bounded traversals and visibility. |
 | **CDA5** — Panorama and API/MCP discovery | planned | unassigned | CDA4 | — | Read-only impact, coverage and gap queries; no unsupported runtime claims. |

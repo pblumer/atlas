@@ -383,6 +383,19 @@ export const WORKER_TYPE_DOCS = {
     trap: "workerDoc.carddav.trap",
   },
 
+  wikiwikibangbang: {
+    anchor: "runbook-wikiwikibangbang", title: "wikiwikibangbang",
+    checked: "2026-10",
+    needs: `A configured wikiwikibangbang Worker in ${WORKERS} per wiki: the wiki's base URL, and a vault bundle with the API token of a technical account of its own — an editor in the spaces processes write to, with no system role. <i>Walked against wikiwikibangbang run locally at commit 928fec0.</i>`,
+    steps: [
+      `In the wiki, an administrator creates a <b>technical account</b> for Atlas, e.g. <code>atlas-bot</code>, and grants it the role <b>editor</b> in each space processes write to — and nothing else: an account with the system role <b>admin</b> or <b>erasure</b> is refused. It is not the read-only account the catalogue reads the wiki with.`,
+      `Signed in as that account, create an <b>API token</b> of scope <b>full</b> under <i>Account</i> &rarr; <b>API tokens</b> (at most 366 days), and note its expiry: the token stops working then, and the Worker with it. A Worker that only reads may use a token of scope <b>read</b>.`,
+      `Store the bundle in the vault: ${VAULT}, e.g. <code>wiki_bot</code> holding <code>{"token": "wwbb_…"}</code>.`,
+      `${WORKERS} &rarr; <b>New worker</b>: type <b>wikiwikibangbang</b>, a name, the wiki's base URL as endpoint (<code>https://wiki.example.ch</code>), credential reference <code>wiki_bot</code>. One Worker per wiki and account.`,
+    ],
+    trap: `Everything the Worker writes is written as its account: the wiki's history and comments name <i>atlas-bot</i>, not the person behind the process. And a user property accepts any text — the wiki does not check that <code>assignee</code> names an account, so a misspelt username assigns the task to nobody, silently.`,
+  },
+
   discord: {
     anchor: "runbook-discord", title: "workerDoc.discord.title",
     checked: "2026-09",

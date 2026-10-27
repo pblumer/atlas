@@ -96,6 +96,58 @@ type Physical struct {
 	PublicStartLinks []StartLinks  `json:"publicStartLinks"`
 	Workers          []WorkerSite  `json:"workers"`
 	JobTypes         []JobTypeSite `json:"jobTypes"`
+	// Inbound are the inbound subscriptions that turned an external system's events
+	// into a message the release receives (format version 4, ADR-0495 slice B). A
+	// disabled subscription feeds nothing and is not recorded.
+	Inbound []InboundSite `json:"inbound,omitempty"`
+}
+
+// InboundSite is one inbound subscription (ADR-0205): a configured Worker watches a
+// subject on the system it reaches and republishes each new event there as a message
+// this release receives. Atlas opens that connection itself.
+type InboundSite struct {
+	MessageName string `json:"messageName"`
+	// Worker and WorkerType name the configured Worker the subscription reads
+	// through; empty when the Worker had been deleted since, which leaves the
+	// subscription with nowhere to read from.
+	Worker     string `json:"worker,omitempty"`
+	WorkerType string `json:"workerType,omitempty"`
+	// ConfiguredID is that Worker's id, kept so a read can ask who may see the
+	// subscription's subject and endpoint: both are the Worker's configuration.
+	ConfiguredID string `json:"configuredId,omitempty"`
+	// Subject is what the subscription watches, in the terms of the Worker's kind: a
+	// clio subject (Recursive when it takes the subtree too), a Jira query, a
+	// spreadsheet, a folder, a channel or a mail folder.
+	Subject   string    `json:"subject,omitempty"`
+	Recursive bool      `json:"recursive,omitempty"`
+	Endpoint  *Endpoint `json:"endpoint,omitempty"`
+	// Withheld is set on a read by somebody who may not see the Worker's
+	// configuration: the subscription is still there, its subject and endpoint are not.
+	Withheld bool `json:"withheld,omitempty"`
+}
+
+// WorkerIdentity is which identity a Worker's actions run as (ADR-0475): the service's
+// own, a fixed delegated connection, or the person who started each instance; and
+// whether the policy decision beside it is enforced or only recorded.
+type WorkerIdentity struct {
+	Mode        string `json:"mode"`
+	Enforcement string `json:"enforcement,omitempty"`
+}
+
+// text names the identity the way a reader says it.
+func (i WorkerIdentity) text() string {
+	mode := map[string]string{
+		"service":           "service identity",
+		"delegated-fixed":   "delegated, fixed connection",
+		"delegated-per-job": "delegated per instance",
+	}[i.Mode]
+	if mode == "" {
+		mode = "identity " + i.Mode
+	}
+	if i.Enforcement == "shadow" {
+		mode += " (policy recorded, not enforced)"
+	}
+	return mode
 }
 
 // StartLinks is how many public start links one process had.
@@ -123,7 +175,97 @@ type WorkerSite struct {
 	// endpoints. None of them is recorded then: picking one would draw a single
 	// system where the installation reaches several.
 	EndpointsDiffer bool `json:"endpointsDiffer,omitempty"`
+	// The rest of the configured Worker, from format version 4 (ADR-0495 slice B),
+	// none of it a secret: the mail transport, the malware scanner a mail Worker hands
+	// messages to, the model an agent Worker asks (ADR-0255), the identity its actions
+	// run as, and whether a credential is configured — never which one.
+	Provider        string          `json:"provider,omitempty"`
+	ScannerEndpoint *Endpoint       `json:"scannerEndpoint,omitempty"`
+	Model           string          `json:"model,omitempty"`
+	Identity        *WorkerIdentity `json:"identity,omitempty"`
+	Credential      bool            `json:"credential,omitempty"`
+	// DetailWithheld is set on a read by somebody who may not see the Worker's
+	// configuration and the snapshot held some of it.
+	DetailWithheld bool `json:"detailWithheld,omitempty"`
 	Observers
+}
+
+// detailText is the fourth line of a worker's box: what else its configuration says.
+// Empty when it says nothing more, so a box only grows for a Worker that has more to
+// say.
+func (w WorkerSite) detailText() string {
+	if w.DetailWithheld {
+		return "configuration withheld from this reader"
+	}
+	var parts []string
+	if w.Identity != nil {
+		parts = append(parts, w.Identity.text())
+	}
+	if w.Credential {
+		parts = append(parts, "credential configured")
+	}
+	if w.Model != "" {
+		parts = append(parts, "model "+w.Model)
+	}
+	if w.Provider != "" {
+		parts = append(parts, "via "+w.Provider)
+	}
+	if w.MailboxEndpoint != nil {
+		parts = append(parts, "mailbox "+w.MailboxEndpoint.String())
+	}
+	if w.ScannerEndpoint != nil {
+		parts = append(parts, "scanner "+w.ScannerEndpoint.String())
+	}
+	return strings.Join(parts, " · ")
+}
+
+// hasDetail reports whether the site carries any of the format-version-4 detail. The
+// mailbox endpoint is older (version 2) and keeps the endpoint's own rule.
+func (w WorkerSite) hasDetail() bool {
+	return w.Provider != "" || w.ScannerEndpoint != nil || w.Model != "" || w.Identity != nil || w.Credential
+}
+
+// inboundSubscriptions is the recorded inbound subscriptions, none for a snapshot
+// without a physical part.
+func (p *Physical) inboundSubscriptions() []InboundSite {
+	if p == nil {
+		return nil
+	}
+	return p.Inbound
+}
+
+// inboundFor is the inbound subscriptions that publish one message name.
+func (p *Physical) inboundFor(message string) []InboundSite {
+	if p == nil {
+		return nil
+	}
+	var out []InboundSite
+	for _, in := range p.Inbound {
+		if in.MessageName == message {
+			out = append(out, in)
+		}
+	}
+	return out
+}
+
+// sourceText says where an inbound subscription reads from, as far as this reader may
+// know it.
+func (in InboundSite) sourceText() string {
+	worker := in.Worker
+	if worker == "" {
+		worker = "a deleted worker"
+	}
+	switch {
+	case in.Withheld:
+		return worker + " (subject withheld from this reader)"
+	case in.Subject == "":
+		return worker
+	}
+	subject := in.Subject
+	if in.Recursive {
+		subject += "/…"
+	}
+	return worker + " · " + subject
 }
 
 // JobTypeSite is what the installation had seen serve one job type.
@@ -165,6 +307,9 @@ func (p *Physical) normalize() {
 		return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.WorkerType, b.WorkerType))
 	})
 	slices.SortFunc(p.JobTypes, func(a, b JobTypeSite) int { return cmp.Compare(a.JobType, b.JobType) })
+	slices.SortFunc(p.Inbound, func(a, b InboundSite) int {
+		return cmp.Or(cmp.Compare(a.MessageName, b.MessageName), cmp.Compare(a.Worker, b.Worker), cmp.Compare(a.Subject, b.Subject))
+	})
 	for i := range p.Workers {
 		slices.Sort(p.Workers[i].ObservedBy)
 		p.Workers[i].Observed = len(p.Workers[i].ObservedBy)
@@ -194,8 +339,21 @@ func (p Physical) Redacted(mayViewWorker func(configuredID string) bool, mayView
 			w.Endpoint = withheld(w.Endpoint)
 			w.MailboxEndpoint = withheld(w.MailboxEndpoint)
 		}
+		if !mayViewWorker(w.ConfiguredID) && w.hasDetail() {
+			w.Provider, w.ScannerEndpoint, w.Model, w.Identity, w.Credential = "", nil, "", nil, false
+			w.DetailWithheld = true
+		}
 		w.Observers = w.Observers.redacted(mayViewInstances)
 		out.Workers[i] = w
+	}
+	if p.Inbound != nil {
+		out.Inbound = make([]InboundSite, len(p.Inbound))
+		for i, in := range p.Inbound {
+			if !mayViewWorker(in.ConfiguredID) {
+				in.Subject, in.Recursive, in.Endpoint, in.Withheld = "", false, nil, true
+			}
+			out.Inbound[i] = in
+		}
 	}
 	out.JobTypes = make([]JobTypeSite, len(p.JobTypes))
 	for i, j := range p.JobTypes {

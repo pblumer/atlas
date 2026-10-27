@@ -147,6 +147,9 @@ internal/certstore/ Signing with a key in the Windows certificate store, named b
             certificate's thumbprint, without reading the key out (ADR-0172, amended)
 internal/impldigest/ The dependency digest that names a built-in Worker Type's implementation
             for conformance evidence (ADR-0483); build and review tooling, never the engine
+workertype/evidence/ Conformance evidence records for built-in Worker Type operations: the
+            format, the offline verifier, the CI gate over records/ and the evidence
+            command (ADR-0483); build and review tooling, never the engine
 ```
 
 **`connector/` holds the Worker Types.** Every capability a model can put on a
@@ -166,6 +169,7 @@ connector/s3/          S3-compatible object storage (ADR-0442)
 connector/exchange/    Microsoft Exchange Online and Exchange Server administration (ADR-0462)
 connector/googlecontacts/ Google Contacts: find, keep and label contacts, search the directory (ADR-0476)
 connector/carddav/     CardDAV address books (iCloud, Nextcloud, mail providers): Google Contacts' operations (ADR-0490)
+connector/wikiwikibangbang/ wikiwikibangbang wikis: tasks and pages, spelled like Jira's operations (ADR-0498)
 connector/webscrape/   Web scraping (ADR-0118)
 connector/clio/        clio event store: read, write, query (ADR-0036)
 connector/temis/       temis decision service (ADR-0050)

@@ -10,6 +10,8 @@
 //     not change what is counted.
 //   - The time modes read the statistics endpoint, a window adds `from=` to it, and the
 //     panel ranks the tasks by what the diagram shows.
+//   - The figures describe history, so they are read when the heatmap opens and on
+//     Refresh, not on the live view's 1.5s tick, and not while the tab is hidden.
 //   - The heatmap is about the version: picking one instance goes back to Live.
 //   - The choice survives a reload, like the live view's badge switches.
 import { test, expect } from "@playwright/test";
@@ -108,5 +110,45 @@ test("picking one instance goes back to live, and the choice survives a reload",
   await page.evaluate(() => window.__mountLive());
   await expect(mode(page, "runs")).toHaveAttribute("aria-pressed", "true");
   await expect(style(page, "outline")).toHaveAttribute("aria-pressed", "true");
+  expect(page.__errors).toEqual([]);
+});
+
+const statsRequests = (page) => page.evaluate(() =>
+  window.__requests.filter((u) => u.includes("/statistics")).length);
+
+test("the figures are read once, again on Refresh, and never on the live tick", async ({ page }) => {
+  test.setTimeout(45000);
+  await open(page);
+  await mode(page, "runs").click();
+  await expect(page.locator("#var-panel .heat-panel")).toContainText("Since deployment");
+  await expect.poll(() => statsRequests(page)).toBe(1);
+  await expect(page.locator("#heat-strip .heat-asof")).toContainText("as of");
+
+  // Ten polls of the live view later — past the fifteen seconds the figures were once
+  // re-read at — still the one read, and the glow drawn then is the glow still shown:
+  // unchanged values do not rebuild the blurred layer.
+  const glow = await page.locator(".layer-atlas-heat g.atlas-heat-glow").elementHandle();
+  await page.waitForTimeout(18000);
+  expect(await statsRequests(page)).toBe(1);
+  expect(await glow.evaluate((n) => n.isConnected)).toBe(true);
+
+  await page.locator("#heat-strip button[data-heat-refresh]").click();
+  await expect.poll(() => statsRequests(page)).toBe(2);
+  expect(page.__errors).toEqual([]);
+});
+
+test("a hidden tab reads nothing until it is shown again", async ({ page }) => {
+  await open(page);
+  await mode(page, "runs").click();
+  await expect.poll(() => statsRequests(page)).toBe(1);
+
+  await page.evaluate(() => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" }));
+  await page.locator("#heat-period").selectOption("7d");
+  await page.waitForTimeout(3500);
+  expect(await statsRequests(page)).toBe(1);
+
+  await page.evaluate(() => Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" }));
+  await expect.poll(() => page.evaluate(() =>
+    window.__requests.filter((u) => u.includes("/statistics?from=")).length)).toBe(1);
   expect(page.__errors).toEqual([]);
 });

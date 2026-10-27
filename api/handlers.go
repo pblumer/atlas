@@ -44,6 +44,7 @@ import (
 	"github.com/pblumer/atlas/connector/teamsphone"
 	"github.com/pblumer/atlas/connector/temis"
 	"github.com/pblumer/atlas/connector/webscrape"
+	"github.com/pblumer/atlas/connector/wikiwikibangbang"
 	"github.com/pblumer/atlas/dmn"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/expr"
@@ -2031,24 +2032,6 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 				})
 			})
 			scan(func() error {
-				// One instance's arrows, folded from its own trail under the counter's
-				// rule — bounded by that instance's history, like the visits above.
-				visits := make([]int, d.cp.FlowCount())
-				if err := foldInstanceTrail(s.store, instanceFilter, key, d.cp, func(_ int64, _ state.ElementReplayValue, flow int32) {
-					if flow >= 0 {
-						visits[flow]++
-					}
-				}); err != nil {
-					return err
-				}
-				for i, n := range visits {
-					if id := d.cp.FlowBpmnId(int32(i)); id != "" && n > 0 {
-						resp.Flows = append(resp.Flows, runtimeFlow{FlowID: id, Visits: n})
-					}
-				}
-				return nil
-			})
-			scan(func() error {
 				// Filtered to one instance: ask for that instance, do not walk
 				// the family looking for it (ADR-0080's rule, applied to the one
 				// scan its own view had left).
@@ -2079,6 +2062,16 @@ func (s *Server) serveProcessRuntime(w http.ResponseWriter, r *http.Request, ans
 	// running would deadlock.
 	if found && scanErr == nil && instanceFilter == 0 {
 		applyIncidentOverlay(s, key, cp, &resp)
+	}
+	// One isolated instance's arrows are folded from its trail, on a snapshot after the
+	// loop turn rather than inside it: the trail grows with every round an instance loops,
+	// and the overlay is polled every 1.5 seconds (ADR-0496).
+	if found && scanErr == nil && instanceFilter != 0 {
+		scanErr = s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+			flows, err := instanceFlowVisits(rv, instanceFilter, key, cp)
+			resp.Flows = flows
+			return err
+		})
 	}
 	switch {
 	case !found:
@@ -7227,6 +7220,24 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"query": j.Query, "field": j.Field, "group": j.Group, "contact": j.Contact,
 			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 			"createKey": j.CreateKey,
+		}}
+	case compiler.WikiwikibangbangJobTypeIndex:
+		// The evaluated values travel, and nothing that says which wiki or as whom
+		// (ADR-0498). So does whether the job has been leased
+		// before: an append or a comment checks for its earlier round's write only then,
+		// and the lease epoch is a fact of the job the worker does not otherwise read.
+		j, err := wikiwikibangbang.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		j.Redelivered = jv.LeaseEpoch > 1
+		return &connectorPayload{Kind: "wikiwikibangbang", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "item": j.Item, "space": j.Space,
+			"itemType": j.ItemType, "parent": j.Parent, "title": j.Title, "properties": j.Properties,
+			"matchField": j.MatchField, "labels": j.Labels, "text": j.Text, "blocks": j.Blocks,
+			"transition": j.Transition, "comment": j.Comment, "query": j.Query,
+			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
+			"redelivered": j.Redelivered,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

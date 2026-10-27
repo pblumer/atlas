@@ -207,7 +207,8 @@ func runtimeTools() []Tool {
 				"claimed has a duration but no split. Also the instances started, finished and running. 'from' and " +
 				"'to' are RFC 3339 moments or unix nanoseconds (default: the beginning of retained history, and now). " +
 				"At most a bounded number of instances is read, newest first; 'truncated' says when the bound cut " +
-				"the period short. Times are per task, never per person.",
+				"the period short. A result is shared for a minute, so 'to' says when it was folded. Times are " +
+				"per task, never per person.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

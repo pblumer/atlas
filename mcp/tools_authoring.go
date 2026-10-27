@@ -901,7 +901,18 @@ func authoringTools() []Tool {
 				"tasks hand to subscribed workers. A release recorded since the physical view exists also carries " +
 				"what this installation had in place for it: its name and environment, its external address, the " +
 				"public start links, and per worker whether Atlas runs it or a worker process leases it, its " +
-				"endpoint as scheme, host and port, and the worker instances seen serving it. An endpoint the " +
+				"endpoint as scheme, host and port, and the worker instances seen serving it; from format " +
+				"version 4 also the rest of its configuration that is not a secret (mail provider, scanner " +
+				"endpoint, agent model, identity policy, whether a credential is configured) and the inbound " +
+				"subscriptions that publish a message the release receives. From format version 5 the data " +
+				"layer (layers=data) holds the data objects with the elements that read and write them, the " +
+				"stores, the classes and whether the information model defines them, and each personal-data " +
+				"declaration with the workers and job types that can read it in plaintext; never a value. " +
+				"From format version 6 the business layer (layers=business) holds the processes as work, the " +
+				"roles their tasks and lanes name and the catalogue products they carry out — a product only for " +
+				"a caller who may maintain its catalogue — and the strategy layer (layers=strategy) the " +
+				"capabilities the release realises and the value streams that use them. " +
+				"A Worker's configuration the " +
 				"caller may not see, and the instances for a caller who is not an operator, are withheld. " +
 				"layers narrows the answer: application is the logical part, technology the physical part, and " +
 				"the answer's layers field says which the release records and which it shows. A release " +

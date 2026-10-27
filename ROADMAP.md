@@ -659,6 +659,20 @@ The control-flow basics most real models use.
   record's open question), Exchange mailbox contacts through Microsoft Graph, and no
   capability claim yet — the two contact Worker Types are not declared interchangeable
   ([ADR-0480](docs/adr/0480-technical-capability-contract.md)).
+  **wikiwikibangbang wikis are a Worker Type too**
+  ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)): a
+  service task marked `<atlas:wikiwikibangbangConnector connector operation …>` opens,
+  reads, changes and moves tasks, comments on them and queries items, and creates, reads (as
+  Markdown) and extends pages — eight operations in one table
+  (`connector/wikiwikibangbang/catalog`), spelled like Jira's where the meaning is the same.
+  The account is a technical one with no system role; `matchField` makes a create find the
+  item an earlier round made, a transition already made counts as made, and a redelivered
+  append or comment does not write twice. Worker-only and supervised by default. Walked
+  against wikiwikibangbang at commit 928fec0; still open: as whom a task writes (one
+  account, not the person behind the process — ADR-0475's question), a precondition on the
+  wiki's body commit to close the append window, waiting on a task by a message instead of
+  polling, and no capability claim — the work-item contract ADR-0480 anticipates has two
+  implementations now, not a contract.
   **Proposed: Paperless-ngx Worker** ([ADR draft](docs/adr/0479-paperless-ngx-worker.md)):
   reference-only document search, authenticated presentation, safe metadata operations
   and retry-safe `add-correspondent` (lookup/create with conflict recovery) before a
@@ -1303,6 +1317,8 @@ Beyond a single node.
 ## Milestone 6 — Ecosystem 🚧
 
 Adoption and polish.
+
+- 🔲 **Blueprint Marketplace (BMP):** source-independent public/private Blueprint registries for versioned process-application packages, safe install/update using existing import baselines, and optional independent commercial distribution. The free engine does not depend on payments or runtime licence checks. [Programme](docs/planning/blueprint-marketplace-program.md) · [Proposed ADR](docs/adr/0499-blueprint-registry-and-distribution.md).
 
 - 🚧 **Technical capability semantics (T1a).** A strict, independent, versioned
   descriptor for a Worker Type operation's claimed semantics: resource kind and
@@ -2360,9 +2376,10 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   digest-bound evidence, explicit reviewer approval and withdrawal.
   [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged offline,
   schema-only validation and [PR #1360](https://github.com/pblumer/atlas/pull/1360)
-  contract digests over the file's bytes; the implementation digest of
-  built-in Worker Types is in review; publication, verified
-  provider evidence and revocation are not yet implemented. No Worker Type
+  contract digests over the file's bytes, [PR #1388](https://github.com/pblumer/atlas/pull/1388)
+  the implementation digest of built-in Worker Types; evidence records with
+  a CI gate that fails on stale evidence are in review ([PR #1401](https://github.com/pblumer/atlas/pull/1401)). No contract is
+  published, no record exists, and revocation is not yet implemented. No Worker Type
   can certify its own claims or obtain runtime routing from JSON validation.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
   Derive from existing provider operation catalogues, first distinguishing

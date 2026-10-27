@@ -231,6 +231,9 @@ func (s *Server) provisionedConnectorKinds() map[string]func() []string {
 		// CardDAV likewise: the bundle holds the password and the endpoint says which
 		// server, and a supervised worker has neither of its own.
 		connectorKindCardDAV: s.cardDAVWorkerEnv,
+		// The wiki likewise: the bundle holds the token and the endpoint says which wiki,
+		// and a supervised worker has neither of its own.
+		connectorKindWiki: s.wikiWorkerEnv,
 		// The three SQL products. Unlike every kind above them the *whole* configuration
 		// is the secret — a DSN has no public half — so what is rendered here is one
 		// connection string per configured database and nothing else

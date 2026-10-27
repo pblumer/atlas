@@ -465,6 +465,17 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		jobTypes:       []int32{compiler.CardDAVJobTypeIndex},
 	},
 	{
+		// A wikiwikibangbang task creates, reads, updates or moves an item of a
+		// wikiwikibangbang wiki, comments on it, queries items, reads a page as Markdown or
+		// appends to one (ADR-0498). Worker-only for CardDAV's
+		// reason: the token writes as the wiki account and has no business on the engine's
+		// run loop.
+		name:           connectorKindWiki,
+		workerOnly:     true,
+		validateCreate: validateWikiConnector,
+		jobTypes:       []int32{compiler.WikiwikibangbangJobTypeIndex},
+	},
+	{
 		// An Active Directory task performs one directory operation against a
 		// domain controller an operator configured here
 		// (ADR-0206). The URL lives in the record and the
@@ -726,7 +737,7 @@ func DefaultOffloadedKinds() []string {
 // flag, no restart of Atlas. That is what makes the tenant a Console entry rather than a
 // deployment change.
 func DefaultSupervisedWorkerOnlyKinds() []string {
-	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
+	return []string{connectorKindAgent, connectorKindEntra, connectorKindExchange, connectorKindTeamsPhone, connectorKindGoogleContacts, connectorKindCardDAV, connectorKindWiki, connectorKindPostgres, connectorKindMariaDB, connectorKindMSSQL}
 }
 
 // applyOffloadedKinds removes the in-process handlers for the kinds an operator
@@ -1053,6 +1064,22 @@ func validateCardDAVConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a carddav worker requires a credentialsRef naming a vault bundle: {username, password, groups}"
+	}
+	return ""
+}
+
+// validateWikiConnector checks a wiki a Console operator is adding: CardDAV's shape — an
+// endpoint, the wiki's base URL, and a credentialsRef naming the vault bundle with the
+// account's API token. Whether the endpoint is https and the bundle well-formed is decided
+// where the client is built (wikiwikibangbang.CheckBundle), which is also what supervision
+// asks; whether the account holds a system role is asked of the wiki on the first call.
+func validateWikiConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if p.Endpoint == "" {
+		return "a wikiwikibangbang worker requires an endpoint: the wiki's base URL (https://wiki.example.ch)"
+	}
+	if p.CredentialsRef == "" {
+		return "a wikiwikibangbang worker requires a credentialsRef naming a vault bundle: {token}"
 	}
 	return ""
 }

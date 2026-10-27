@@ -14,6 +14,73 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The architecture sketch has business and strategy layers.** A release now records its
+  processes as the work they do, with how their user tasks say who does them (for a
+  group, for a named person, decided at run time, or nobody); the roles they name — each
+  candidate group as the model writes it and each lane; the catalogue products a release
+  process provisions, deprovisions or runs the lifecycle of, as each catalogue last
+  published them, with the actions a lifecycle product declares and the event type each
+  outcome publishes; the capabilities a release process or a Worker the release names
+  realises, with their state, last confirmation, owner (name and role only), KPIs and
+  SLAs; and the value streams whose stages use them, with all their stages in order.
+  **Strategy** and **Business** in the architecture dialog draw them as bands above the
+  picture, or alone; the ArchiMate document writes each process as a business process its
+  application process realises, the roles assigned to it, each product associated with
+  the processes that carry it out, and each capability realised by its process or worker
+  and serving the value-stream stages that use it. A product is shown only to whoever
+  may maintain its catalogue — everyone else is told how many were withheld — and a person
+  a task is assigned to by name, an owner's contact and account, and who confirmed a
+  capability are never recorded. `?layers=strategy,business` and
+  `atlas_release_architecture` ask for them. Snapshots are now format and mapping
+  version 6; a release recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
+- **The architecture sketch has a data layer, with the personal data a release declares.**
+  A release now records what its processes keep and read: each data object with its
+  declared class, the state it starts in, and the elements that write it (with the state
+  and the members they write) and read it; the data stores the processes name; each class
+  they keep data as, and whether the application's information model defines it; and
+  for each process that declares personal data, the variables, the variable naming
+  whose data it is, and every worker and job type the process hands work to — each of
+  them can read every variable visible at its task in plaintext, so all of them are
+  named, not only those whose task names a personal variable. Values are never recorded.
+  **Data** in the architecture dialog draws it as a band below the picture, or alone,
+  with each kind on rows of its own and what does not fit counted under it; the ArchiMate
+  document writes each process as an application process accessing its data objects —
+  read, written or both — which realise the business objects of their classes, and each
+  personal-data declaration as a data object the workers read. The default picture
+  leaves the band off and says so; `?layers=data` and `atlas_release_architecture`
+  ask for it. Snapshots are now format and mapping version 5; a release recorded earlier
+  is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
+- **The architecture sketch says more about each Worker and where a message comes from.** A
+  release now records what else each configured Worker's configuration says, as far as it is
+  not a secret: the mail provider, the malware scanner's address, the model an agent Worker
+  asks, its identity policy (mode, and whether it is enforced) and whether a credential is
+  configured — never which one. The sketch writes it on a fourth line of the Worker's box, and
+  the ArchiMate document adds the mailbox and the scanner as further target systems. A message
+  the release receives names the inbound subscription that publishes it: the Worker, what it
+  watches (a clio subject, a Jira query, a spreadsheet range, a folder, a channel or a mail
+  folder) and the system it reads from; the installation alone draws each subscription as a
+  connection Atlas opens. A reader who may not see the Worker learns that more is configured
+  and that a subscription feeds the message, not what or where. A Worker's owner is not
+  recorded, nor the outbound-call budget, which is one setting for every Worker. Snapshots are
+  now format and mapping version 4; a release recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
+- **A process opens and moves tasks, and writes and reads pages, in a wikiwikibangbang wiki.** A new
+  wikiwikibangbang Worker Type has eight operations, spelled like the Jira Worker's where
+  the two mean the same thing: create, read, update and move an item through its workflow,
+  comment on it, query items in the wiki's own query language, read a page as Markdown and
+  append to a page. A Worker names the wiki's base URL and a vault bundle with the API token
+  of a technical account of its own — an editor in the spaces processes write to, never the
+  read-only account the catalogue reads the wiki with; an account with a system role is
+  refused. A body is plain text or the wiki's own blocks, and an append carries every block
+  of the page back unchanged. With a matching field such as `source-id` a repeated create
+  answers with the item an earlier round made, a transition whose target state the item
+  already stands in succeeds, and an append or comment delivered again does not write
+  twice; a missing item and a refused value can be caught as
+  `WIKIWIKIBANGBANG_ITEM_NOT_FOUND` and `WIKIWIKIBANGBANG_VALIDATION_FAILED`. No capability
+  claim is made: the record lists where the wiki and Jira differ
+  ([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)).
 - **The Operations view has a heatmap.** A strip over a version's live diagram switches
   from **Live** to **Runs**, **Waiting**, **Working** or **Duration**. Runs shades every
   element *and* every sequence flow by how many tokens passed it, and draws what nothing
@@ -74,6 +141,17 @@ _Changed_ / _Removed_ for each version.
   ([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed).
 
 ### Changed
+
+- **The heatmap's figures cost the server once, not once per tab.** The Operations
+  heatmap reads its statistics when it opens, when the period changes, every five minutes
+  while the tab is visible and on **Refresh** — no longer every fifteen seconds — and the
+  strip says when they were folded. `GET /api/v1/processes/{key}/statistics` shares a
+  result for a minute per definition and window, lets requests that arrive while a fold
+  runs wait for it, and keeps each finished instance's contribution, so a fold re-reads
+  only the instances still running and those the window cuts. The runtime overlay folds
+  an isolated instance's sequence flows on a snapshot instead of on the run loop, and the
+  glow is redrawn only when its values change
+  ([ADR-0496](docs/adr/0496-operations-heatmap.md)).
 
 - **The Console's languages are one file each, and none ships incomplete.** The
   message catalogue is split into `api/web/locales/de.js` and `en.js`, listed once by

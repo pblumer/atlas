@@ -1,13 +1,14 @@
 // End-to-end coverage for the layers of a release's architecture sketch
-// (ADR-0495, slice A): Applications → Deployments →
+// (ADR-0495, slices A and C): Applications → Deployments →
 // Release history → Architecture offers one checkbox per layer the release records,
-// and the picture and both downloads follow what is ticked.
+// ticks the ones the server shows by default, and the picture and both downloads
+// follow what is ticked.
 import { test, expect } from "@playwright/test";
 
 const APP = "app-1";
 const BASE = `/api/v1/applications/${APP}/releases/2/architecture`;
 
-function installMock(page, { recorded = ["application", "technology"] } = {}) {
+function installMock(page, { recorded = ["application", "technology"], shown = recorded } = {}) {
   const svgRequests = [];
   page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
@@ -21,7 +22,7 @@ function installMock(page, { recorded = ["application", "technology"] } = {}) {
       return route.fulfill({ json: [{ id: "rel-2", version: 2, publishedAt: 1792000000, members: [], note: "" }] });
     }
     if (path === BASE) {
-      return route.fulfill({ json: { version: 2, layers: { recorded, shown: recorded }, architecture: {} } });
+      return route.fulfill({ json: { version: 2, layers: { recorded, shown }, architecture: {} } });
     }
     if (path === BASE + ".svg") {
       const layers = url.searchParams.get("layers") || "";
@@ -85,4 +86,17 @@ test("a release that records one layer offers no choice", async ({ page }) => {
   await openArchitecture(page);
   await expect(page.locator("[data-layers]")).toHaveCount(0);
   await expect.poll(() => svgRequests).toEqual(["application"]);
+});
+
+test("a recorded data layer is offered unticked, and ticking it adds the band", async ({ page }) => {
+  const svgRequests = installMock(page, { recorded: ["application", "data", "technology"], shown: ["application", "technology"] });
+  await openArchitecture(page);
+  const data = page.locator('[data-layers] input[value="data"]');
+  await expect(page.locator("[data-layers] input[type=checkbox]")).toHaveCount(3);
+  await expect(data).not.toBeChecked();
+  await expect.poll(() => svgRequests).toEqual(["application,technology"]);
+
+  await data.check();
+  await expect.poll(() => svgRequests.at(-1)).toBe("application,data,technology");
+  await expect(page.locator("[data-xml]")).toHaveAttribute("href", `${BASE}.xml?layers=application%2Cdata%2Ctechnology`);
 });
