@@ -150,7 +150,7 @@ test("both worker sections fold away, and stay folded", async ({ page }) => {
     await expect(body).toBeHidden();
   }
   // A folded section still says what it holds.
-  await expect(page.locator(".workers-sec-head").last()).toContainText("1 Worker");
+  await expect(page.locator(".sec-head").last()).toContainText("1 Worker");
 
   await page.reload();
   await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });

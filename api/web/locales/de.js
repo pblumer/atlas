@@ -311,6 +311,11 @@ export default {
   "deployments.target.unreachable": "nicht erreichbar",
   "deployments.target.noAnswer": "keine Antwort",
   "deployments.targets": "Deployment-Ziele",
+  "deployments.targets.count.one": "{n} Ziel",
+  "deployments.targets.count.other": "{n} Ziele",
+  "deployments.definitions": "Definitionen",
+  "deployments.definitions.count.one": "{n} Definition",
+  "deployments.definitions.count.other": "{n} Definitionen",
   "deployments.th.target": "Ziel",
   "deployments.th.state": "Status",
   "deployments.th.version": "Version",
@@ -332,6 +337,8 @@ export default {
   "deployments.stat.finished": "Beendete Instanzen",
   "deployments.empty": "Noch nichts deployt — veröffentliche diese Anwendung mit <b>{publish}</b>.",
   "deployments.releases": "Release-Verlauf",
+  "deployments.releases.count.one": "{n} Release",
+  "deployments.releases.count.other": "{n} Releases",
   "deployments.releasesEmpty": "Noch keine Releases.",
   "deployments.architecture.title": "Architektur von v{version}",
   "deployments.architecture.alt": "Architekturskizze von Release v{version}",
@@ -592,10 +599,11 @@ export default {
   "table.column": "Spalte {n}",
   "table.toggleFilters": "Spaltenfilter ein- oder ausblenden",
   "table.noMatch": "Keine Zeile passt zu den Filtern.",
+  // The heading of a list that folds away (sectionHead in app.js).
+  "section.toggle": "Abschnitt ein- oder ausklappen",
 
   // Console › Workers (viewConsoleWorkers in app.js): the two sections that fold away,
   // and what each one's heading says while it is folded.
-  "workers.section.toggle": "Abschnitt ein- oder ausklappen",
   "workers.catalog.th.type": "Worker Type",
   "workers.catalog.th.status": "Status",
   "workers.catalog.count.one": "{n} Worker Type",
