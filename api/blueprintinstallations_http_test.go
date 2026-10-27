@@ -148,4 +148,3 @@ func TestBeginBlueprintInstallRejectsProtectedApplicationAndTamperedArchive(t *t
 		t.Fatalf("failed first install left a record: %v, %v", list, err)
 	}
 }
-
