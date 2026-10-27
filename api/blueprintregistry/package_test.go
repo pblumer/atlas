@@ -232,3 +232,14 @@ func TestInspectPackageRejectsAmbiguousCataloguePreview(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectPackageRejectsOversizedCataloguePreview(t *testing.T) {
+	data := packageFixture(t,
+		packageTestEntry{name: "atlas.json", data: `{"key":"service","name":"Service"}`},
+		packageTestEntry{name: "katalog.json", data: strings.Repeat(" ", maxPackageCatalogue+1)},
+	)
+	if _, err := InspectPackage(packageRelease(data), data); err == nil ||
+		!strings.Contains(err.Error(), "catalogue document exceeds preview limit") {
+		t.Fatalf("catalogue beyond bounded preview limit: %v", err)
+	}
+}
