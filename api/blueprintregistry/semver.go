@@ -91,3 +91,21 @@ func compareVersion(a, b string) int {
 	}
 	return 0
 }
+
+// Compatible checks the signed Blueprint's inclusive atlas minimum and optional
+// exclusive maximum against the version of the target installation. Unknown,
+// malformed and conflicting ranges fail closed rather than silently installing.
+func Compatible(requirement Compatibility, atlasVersion string) bool {
+	if !validVersion(atlasVersion) || !validVersion(requirement.MinVersion) {
+		return false
+	}
+	if compareVersion(atlasVersion, requirement.MinVersion) < 0 {
+		return false
+	}
+	if requirement.MaxVersionExclusive == "" {
+		return true
+	}
+	return validVersion(requirement.MaxVersionExclusive) &&
+		compareVersion(requirement.MinVersion, requirement.MaxVersionExclusive) < 0 &&
+		compareVersion(atlasVersion, requirement.MaxVersionExclusive) < 0
+}
