@@ -14,6 +14,8 @@ const index = { schemaVersion: 1, registryId: "org.example.community", releases:
 const preview = {
   ...release, applicationKey: "purchase", applicationName: "Purchase",
   digest, files: [{ Path: "atlas.json", SizeBytes: 80 }],
+  catalogues: [{ id: "cat-requests", items: ["badge", "access"] }, { id: "cat-department", items: ["badge"] }],
+  products: [{ id: "badge", homeCatalog: "cat-requests" }, { id: "access", homeCatalog: "cat-requests" }],
 };
 
 function tarGz(files) {
@@ -72,6 +74,10 @@ test("only signed registry metadata is rendered and safe escaped; preview does n
   await page.locator('[data-preview="0"]').click();
   await expect(page.locator("[data-install]")).toBeVisible();
   await expect(page.locator(".modal-ov")).toContainText(digest);
+  await expect(page.locator(".modal-ov")).toContainText("cat-requests");
+  await expect(page.locator(".modal-ov")).toContainText("cat-department");
+  await expect(page.locator(".modal-ov")).toContainText("badge");
+  await expect(page.locator(".modal-ov")).toContainText("access");
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
   expect(requests.map((r) => r.path).every((p) => !p.endsWith("/package"))).toBe(true);
   await page.locator("[data-back]").click();
