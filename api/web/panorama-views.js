@@ -58,6 +58,23 @@ export function writeViews(storage, views) {
 // space are not what somebody means by a different view.
 const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+// sourceOf is which picture a view was saved on: "" for the live landscape, and the
+// source's own id — `release:<application>/<version>` for the release lens
+// (ADR-0495 §4) — for anything else. A view stored before there was a second source
+// carries no field, and the live landscape is the only picture it can have been of.
+const sourceOf = (view) => (typeof view?.source === "string" ? view.source : "");
+
+// viewsOf is the views saved on one source, in the order they were saved.
+//
+// The list in storage is one list, so the bound below is one bound and a reader's
+// views do not multiply into a separate quota per release; what a panel offers is
+// only its own picture's. A view is a walk through nodes, a selection and an
+// arrangement, and opening one on a different picture restores those against nodes
+// that picture does not have.
+export function viewsOf(views, source = "") {
+  return views.filter((v) => sourceOf(v) === (source || ""));
+}
+
 // saveView adds a view, or replaces the one that already carries its name.
 //
 // Replacing rather than duplicating is the point: "Billing watch" is a thing
@@ -66,7 +83,10 @@ const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 // reader, not a code, because the only two failures are "name it" and "you are full".
 export function saveView(views, view) {
   if (!view.name.trim()) return { views, error: "Give the view a name first." };
-  const at = views.findIndex((v) => sameName(v.name, view.name));
+  // A name is somebody's name for a way of looking at *one* picture, so it replaces a
+  // view of the same picture only: "Billing watch" on the landscape and on a release
+  // are two views that happen to share a name.
+  const at = views.findIndex((v) => sourceOf(v) === sourceOf(view) && sameName(v.name, view.name));
   if (at >= 0) {
     const next = views.slice();
     next[at] = { ...view, id: views[at].id };
@@ -105,7 +125,7 @@ const strings = (list) =>
     ? [...list].filter((v) => typeof v === "string").sort()
     : []);
 
-export function captureView({ name, term, band, direction, depth, notation, selected, picked, instances, drafts, hiddenKinds, hiddenStates, hiddenApprovals, trail, frameView, world, pinned, at, id }) {
+export function captureView({ name, term, band, direction, depth, notation, selected, picked, instances, drafts, hiddenKinds, hiddenStates, hiddenApprovals, trail, frameView, world, pinned, at, id, source }) {
   const width = Math.max(world?.width || 0, 1), height = Math.max(world?.height || 0, 1);
   const zoom = frameView ? Math.min(Math.max(frameView.w / width, 0), 1) : 1;
   const centre = frameView
@@ -114,6 +134,10 @@ export function captureView({ name, term, band, direction, depth, notation, sele
   return {
     id: id || `view-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     name: name.trim().slice(0, MAX_NAME),
+    // Which picture this is a view of (see sourceOf), and only when it is not the live
+    // landscape: a view of that is written exactly as every view before the lens was,
+    // so an older build reading it back finds nothing it does not know.
+    ...(source ? { source } : {}),
     at: at ?? Date.now(),
     term: term || "",
     // The band of the heat scale the picture was narrowed to, as that mark's own

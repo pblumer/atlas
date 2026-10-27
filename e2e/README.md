@@ -803,6 +803,25 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   downloads at the same selection. The last ticked layer cannot be switched off, a
   release that records one layer offers no choice, and a recorded data layer is offered
   unticked and adds itself to the selection when ticked.
+- **`release-lens.spec.mjs`**
+  ([ADR-0495](../docs/adr/0495-layered-release-architecture.md) §4): the **release lens**,
+  Panorama's starmap opened on one release (`#/panorama/starmap?release=<app>/<version>`)
+  against a stubbed lens answer with one node of every kind the lens adds. The header names
+  the release and when it was recorded and never says Starmap; the type filter is grouped
+  by layer, a layer's box puts its whole band down (unticking Data takes the data and
+  business objects off) and is half-ticked when only part of it is shown, and the layers
+  a release did not record are named under it. A capability and a value stream open their
+  records, the ArchiMate button downloads the release with every recorded layer, and the
+  Live overlay switch asks for the record alone (every node recorded, no badge, no
+  re-read, no heat weightings) and for the overlay again (asked at once, then re-read). An
+  overlay the server withholds from a non-operator leaves the switch off and disabled with
+  a note, and nothing is re-read. Saved views belong to the picture they were saved on: a
+  release's views carry its source, the live landscape's carry none, and a name is per
+  picture. An exported picture is stamped with the release and when it was recorded (with
+  the live state's moment only when the overlay was on), never "Observed", and its file is
+  named after the release. The architecture dialog's **In Panorama öffnen** opens the lens
+  and closes itself, and a reader without the modeler role opens it too, because the
+  router gates no route by role. No test throws a page error.
 - **`workers-endpoints.spec.mjs`**
   ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
   against a stubbed API. A worker name a Worker Instance holds shows the endpoint the

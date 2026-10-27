@@ -4219,6 +4219,10 @@ async function openReleaseArchitecture(appID, appName, version) {
     technology: tr("deployments.architecture.layer.technology"),
   };
   const file = `architecture-${(appName || "application").replace(/[^A-Za-z0-9._-]+/g, "-")}-v${version}`;
+  // The same release in Panorama's starmap, every recorded layer to show, hide and drill
+  // into (ADR-0495 §4). Offered to whoever can open this dialog, which is whoever may
+  // read the release: see viewPanoramaStarmap for why the route lets them in.
+  const lensHref = `#/panorama/starmap?release=${encodeURIComponent(appID)}/${encodeURIComponent(version)}`;
 
   const ov = document.createElement("div");
   ov.className = "modal-ov";
@@ -4237,6 +4241,7 @@ async function openReleaseArchitecture(appID, appName, version) {
       </div>
       <div class="modal-foot">
         <span class="muted small">${esc(tr("deployments.architecture.foot"))}</span>
+        <a class="btn ghost" data-panorama href="${esc(lensHref)}" title="${esc(tr("deployments.architecture.panoramaTitle"))}">${esc(tr("deployments.architecture.panorama"))}</a>
         <a class="btn ghost" data-xml download="${esc(file)}.xml" title="${esc(tr("deployments.architecture.xmlTitle"))}">ArchiMate (.xml)</a>
         <a class="btn" data-svg download="${esc(file)}.svg" title="${esc(tr("deployments.architecture.svgTitle"))}">${esc(tr("deployments.architecture.svg"))}</a>
       </div>
@@ -4278,6 +4283,9 @@ async function openReleaseArchitecture(appID, appName, version) {
   document.addEventListener("keydown", onKey);
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
   ov.querySelector("[data-x]").addEventListener("click", close);
+  // The link navigates; the dialog is the page's, not the route's, so it would stay
+  // open over the starmap unless it is closed on the way out.
+  ov.querySelector("[data-panorama]").addEventListener("click", close);
 }
 
 // promoteRelease ships an existing release to a chosen target (ADR-0129). The
@@ -11255,11 +11263,37 @@ async function viewPanoramaModels() {
 // "Starmap" is the name on the page; the record and the code that draws it still say
 // landscape and mesh, which is what they are describing. The rename is of the view,
 // not of the thing it draws.
+//
+// With ?release=<application>/<version> it is the release lens (ADR-0495 §4): the same
+// renderer, drawing that release's recorded architecture instead of the live landscape.
+// The architecture dialog's "Open in Panorama" links here.
+//
+// Nothing extra is needed to let a reader in who is not a modeler, and that is checked
+// rather than assumed: the router gates no route by role. The role on a menu entry
+// decides only whether the menus offer it (`offered`), and the server refuses what the
+// principal may not read. So the lens opens for whoever followed the link, and the
+// release's mesh route answers by the application's viewer scope — the same rule as the
+// dialog the link is in. What a non-modeler loses is only the notation table, which is
+// already optional to this view, and the Panorama menu entries, which they were never
+// offered.
 async function viewPanoramaStarmap() {
   const gen = navGen;
   const mod = await import("./panorama-mesh.js");
   if (superseded(gen)) return;
-  await mod.mountPanoramaMesh(view, { api, toast });
+  const release = new URLSearchParams(location.hash.split("?")[1] || "").get("release");
+  if (release === null) return await mod.mountPanoramaMesh(view, { api, toast });
+  // The version is the last segment, so an application id is read whole whatever it
+  // holds; the link encodes it, and URLSearchParams has already decoded it.
+  const cut = release.lastIndexOf("/");
+  const appID = cut > 0 ? release.slice(0, cut) : "";
+  const version = cut > 0 ? Number(release.slice(cut + 1)) : NaN;
+  if (!appID || !Number.isInteger(version) || version <= 0) {
+    view.innerHTML = `<div class="card empty"><h1>Release</h1>
+      <p>This link does not name a release: it needs an application and a version, as
+      <code>?release=application/3</code>.</p></div>`;
+    return;
+  }
+  await mod.mountPanoramaMesh(view, { api, toast, source: mod.releaseSource(api, appID, version) });
 }
 
 async function viewPanoramaEstate() {

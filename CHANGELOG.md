@@ -14,6 +14,23 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A release opens in Panorama's starmap, with every layer it records and its live state laid over it.**
+  The architecture dialog's "Open in Panorama" draws one release with the starmap: its
+  processes; the messages and signals it receives and throws, and who in other
+  applications is at the other end; its workers, job types and the systems they reach;
+  the event feed; the roles, products, capabilities and value streams; and its data
+  objects and classes. Each kind can be shown or hidden by layer, and the starmap's
+  drill, impact paths and saved views work on it, with saved views kept per release. A
+  process opens its version in Operations, a capability or value stream its register. The
+  header says "Release vN of <application>, as recorded <time>", so the picture is never
+  taken for the live landscape. For an operator, the live overlay lays the current state
+  of the release's own process versions and workers over it: incidents, where work is
+  parked, and instance counts. Everyone else sees the release as recorded and is told the
+  overlay is for operators. The ArchiMate button downloads the whole release by layer.
+  Another application, an endpoint or a product the reader may not see stays withheld,
+  as in the sketch. `GET /api/v1/applications/{id}/releases/{version}/mesh` serves the
+  graph, with `?overlay=1` for the live state. Drift against today's registers is not
+  shown yet.
 - **The architecture sketch shows who else is at the other end of a release's messages and signals.**
   A release now records the messages and signals its processes throw and the signals they
   catch, and, for each name, the processes of other applications on the installation at

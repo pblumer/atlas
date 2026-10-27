@@ -908,6 +908,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/applications/{id}/source":                              "bulk source-tree download; an agent reads artifacts individually via atlas_get_draft_xml / atlas_get_form",
 	"GET /api/v1/applications/{id}/releases/{version}/architecture.svg": "a rendering for people to look at; atlas_release_architecture returns the same facts as data",
 	"GET /api/v1/applications/{id}/releases/{version}/architecture.xml": "a document for architecture tools; atlas_release_architecture returns the same facts as data",
+	"GET /api/v1/applications/{id}/releases/{version}/mesh":             "the release lens's graph for Panorama's starmap, in the landscape mesh's still-moving shape; atlas_release_architecture returns the same facts as data",
 	"POST /api/v1/applications/source":                                  "bulk source-tree upload that rewrites a whole application; an agent authors via atlas_save_draft / atlas_save_form",
 	"GET /api/v1/applications/{id}/needs":                               "the list the Console's source download names before it downloads; an agent reads the same facts through atlas_application_constants, atlas_server_constants and atlas_workers",
 	"GET /api/v1/applications/{id}/package":                             "bulk package download, the source tree and its shop in one archive; an agent reads the application through the source tools and a catalogue through atlas_export_catalog",

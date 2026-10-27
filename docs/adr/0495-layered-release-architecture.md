@@ -1,19 +1,14 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to E —
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to F —
   the banded layout moved to slice C; a Worker's owner and call budget are not recorded;
   versions rise with each slice; personal data names every worker it is handed to; a
   product is shown to whoever may maintain its catalogue; another application, called or
-  coupled, is shown to whoever may see it; see the notes below)
+  coupled, is shown to whoever may see it; the lens is a route of its own, exports the
+  whole release by layer, and leaves drift for later; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
-- **Open question:** §4 assumes the starmap's renderer (`api/web/panorama-mesh.js`, fed
-  by `GET /api/v1/panorama/mesh`) can take a release snapshot as a second source
-  without being forked. Nothing in this repository shows a source abstraction there
-  today; the lens is planned with a spike as its first step, and §4 is revisited if
-  the spike says the renderer cannot carry a second source.
-- **Question checked:** 2026-10
 
 > **Implementation status and amendment (2026-10-26): slice A has landed.** Every read of a
 > release's architecture takes `layers=` (`archsketch.ParseSelection`): the application
@@ -222,6 +217,75 @@
 >   no application, and the feed has no subscription. The bounds are guards well above
 >   that.
 
+> **Implementation status and amendment (2026-10-27): slice F has landed, without drift.**
+> The spike answered the open question this record carried: the starmap's renderer takes
+> a release as a second source without a fork. `panorama-mesh.js` consumes one graph
+> shape, and its show/hide, path drill and saved views run over whatever graph it
+> received; what assumes the live landscape sits where it loads from (the first read,
+> the drafts fallback, the subjects, the periodic re-read) and in the ArchiMate
+> download. `mountPanoramaMesh` now takes a source, and the live source is the old
+> behaviour unchanged. `GET /api/v1/applications/{id}/releases/{version}/mesh` answers
+> the release's snapshot as the starmap's graph — redacted for its reader exactly as the
+> architecture routes redact it — plus a `lens` object naming the release, the moment
+> of its snapshot and the layers it records. The architecture dialog's **Open in
+> Panorama** opens it at `#/panorama/starmap?release=<application>/<version>`.
+>
+> **Amendment:**
+>
+> - **The lens has a route of its own.** `/api/v1/panorama/mesh` is also a peer
+>   contract (ADR-0402), and its graph means "this server's resources now"; a parameter
+>   that made it mean "what a release recorded" would change what a peer reads. The
+>   lens's graph is built in package `api`, because `archsketch` imports `panorama`,
+>   and it takes its severities from `panorama.ApplyStatus`, the one mapping ADR-0211 §4
+>   requires.
+> - **Kinds.** The kinds both pictures draw keep the live mesh's meaning: application,
+>   process (keyed by the deployment key the release recorded, so its link opens that
+>   version in Operations), definition (a process the release did not ship — a call
+>   target, or a peer at the other end of a name — inside its application where this
+>   reader may see it), worker, decision, unresolved (a worker decided at run time),
+>   restricted, catalogue and product. New are message, signal, job type and the event
+>   feed in the application layer, endpoint in the technology layer, role in the
+>   business layer, capability and value stream in the strategy layer, and data object
+>   and business object in the data layer; and the edges receives, throws, accesses,
+>   realizes, assigned, serves and reaches. A peer withheld from the reader is one
+>   restricted placeholder per name and direction, since a withheld peer keeps nothing
+>   that tells two apart; a withheld call target or feed endpoint is one each; a
+>   withheld product is left out, as the business layer leaves it out.
+> - **The ArchiMate button downloads the whole release by layer.** §4 says export works
+>   as it does today; today's ArchiMate export is derived on the server from the live
+>   landscape, so it cannot describe a release. The lens downloads the release's own
+>   document (`architecture.xml?layers=` with every recorded layer). SVG and PNG export
+>   of the narrowed picture work as they do on the live starmap.
+> - **Drilldown ends where routes exist.** A process opens its version in Operations, a
+>   decision its Operations page, a catalogue or product its catalogue, a capability or
+>   value stream its Panorama register. §4 also names the element in the Modeler and the
+>   Worker; the live starmap links to neither, a released version's element is not a
+>   draft to edit, and building those links is not this record's to decide.
+> - **The live overlay is the operators'** (§5): the state of the release's own process
+>   versions — read by the deployment keys it recorded, not the newest version under the
+>   same id — with their incidents, parked sites and instance counts, and the state of
+>   its Workers where the reader may see that Worker's configuration. A version no
+>   longer deployed is unbound, since nothing runs in it; a worker name nothing
+>   configures is not ready, as the live starmap reads it. A reader who is not an
+>   operator is answered the graph as recorded, with `overlayWithheld` set.
+> - **Show, hide, impact and saved views.** The lens groups the hidden kinds by layer,
+>   with a box per layer; the live starmap's kind filter is unchanged. Impact analysis
+>   walks receives, throws, accesses and reaches as dependencies; realizes, assigned and
+>   serves point from the provider to what it provides, so the walk does not follow them,
+>   and "what stops if this process stops" does not reach capabilities or value streams.
+>   A saved view records the source it was saved on and is offered only there; a view
+>   saved before the lens is a view of the live landscape, as it always was.
+> - **Who may open it.** The Console's router gates no route by role — a menu entry's
+>   role decides only what the menus offer — so the lens opens for whoever follows the
+>   link, and the route answers by the application's viewer scope, the rule of the
+>   dialog the link sits in.
+> - **Drift is left for later.** §2 and §4 promise drift markings against today's
+>   registers. Each kind needs its own rule — a capability deprecated since, a product
+>   bound to another process, a Worker reconfigured, a newer version deployed — and each
+>   rule is a decision about what counts as drift. None is made here; the overlay shows
+>   the release's own state, not its distance from today. Implementation stays Partial
+>   until drift is built or decided against.
+
 ## Context and problem statement
 
 [ADR-0471](0471-release-architecture-sketch.md) gave every release an architecture
@@ -400,9 +464,9 @@ bound to another process) without writing anything back.
 - **Live overlay:** optional. It adds the observation states and the drift markings
   of §2.
 
-This is the part the open question is about. The first step is a spike that tries
-the second source in `panorama-mesh.js`. If the renderer cannot carry it without a
-fork, this section is revisited before any lens code lands.
+This was the part the open question was about. The first step was a spike that tried
+the second source in `panorama-mesh.js`; it found that the renderer carries it without
+a fork (see the slice F note).
 
 ### 5. Disclosure
 
