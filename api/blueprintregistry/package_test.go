@@ -6,7 +6,6 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"strings"
 	"testing"
 )
@@ -130,6 +129,7 @@ func TestInspectPackageRejectsMalformedOrAmbiguousContents(t *testing.T) {
 		{"missing manifest", []packageTestEntry{{name: "processes/p.bpmn", data: "a"}}},
 		{"blank manifest", []packageTestEntry{{name: "atlas.json", data: ""}}},
 		{"invalid JSON", []packageTestEntry{{name: "atlas.json", data: "{"}}},
+		{"duplicate manifest field", []packageTestEntry{{name: "atlas.json", data: `{"key":"x","key":"y","name":"X"}`}}},
 		{"blank key", []packageTestEntry{{name: "atlas.json", data: `{"key":"","name":"Example"}`}}},
 		{"blank name", []packageTestEntry{{name: "atlas.json", data: `{"key":"x","name":""}`}}},
 		{"duplicate manifest", []packageTestEntry{{name: "atlas.json", data: `{"key":"x","name":"X"}`}, {name: "atlas.json", data: `{"key":"y","name":"Y"}`}}},
@@ -191,7 +191,3 @@ func TestInspectPackageAcceptsBoundedValidArchive(t *testing.T) {
 		t.Fatalf("bounded normal tar failed: %#v / %v", got, err)
 	}
 }
-
-// Not an install path: no filesystem writes, API calls or execution are
-// permitted here, even when the source package has a valid signed digest.
-var _ io.Reader = (*bytes.Reader)(nil)
