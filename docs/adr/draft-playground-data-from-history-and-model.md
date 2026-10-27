@@ -101,7 +101,14 @@ For the environment of one case:
 
 ## Decision outcome
 
-Chosen: **H2, a gap report, M2 and E2**, delivered as three stages. H3 is deferred.
+Chosen: **H2, a gap report, M2 and M3 over one shared check, and E2**, delivered as three
+stages. H3 is deferred.
+
+M2 and M3 stop being alternatives once the check they both need is an operation of its own
+(*The trial*, below). An author in the panel gets M2: Atlas asks the configured agent Worker
+and checks the answer. An agent connected over MCP gets the check directly and brings its own
+model. As ADR-0445 put it for FEEL, the caller of a tool is already a model, so for that
+caller a model inside Atlas is a detour; what it lacks is a way to run what it wrote.
 
 ### Stage 1 — A description read off the history
 
@@ -245,11 +252,13 @@ sent.
 Beside the cases come stub variants (below) for the environment edge cases. The answer is read
 as feelgen reads one: a contract, a fenced block, or prose that cannot be used.
 
-**The check.** A fresh sandbox is opened, never the author's own session. It gets the session's
-own open request plus the proposed variants. Every case is started and run to rest within the
-session's budget. Each case's path is then compared with its targets: its elements, and its
-flows folded out of the causal token history as the heat map folds them (ADR-0136). The
-following go back to the model with the engine's own words:
+**The check** is a trial (below), never the author's own session. The trial gets the session's
+own open request plus the proposed variants, and the proposed cases. Each case's path is then
+compared with its targets: its elements, and its flows folded out of the causal token history
+as the heat map folds them (ADR-0136). A path through a business rule task is only worth
+comparing once the sandbox actually evaluates the decision. Today it does not; making it do so
+is the prerequisite in ADR-draft-playground-data-run. The following go back to the model with
+the engine's own words:
 
 - a target missed ("case 3 aimed at `Flow_hoch` (`betrag > 50000`) and went through
   `Flow_tief`; its `betrag` was 50000");
@@ -275,6 +284,53 @@ does, which the run already shows. For each accepted case the panel instead offe
 rule**: the `when` is the case's checked selector, the `then` is left empty for the author, and
 `minMatched` is 1 where ADR-0424 is implemented. The oracle stays with the person who knows
 what the process is for.
+
+### The trial: one check, two callers
+
+`POST /api/v1/playground/trials` runs a small batch in one request and leaves nothing behind.
+It opens a sandbox, starts the cases, runs them to rest, judges them and closes the sandbox.
+
+**Request**
+- `open`: the body `POST /playground/sessions` takes, with model source, seed, stubs and
+  variants.
+- Either `cases` or `generate`, never both, as the run endpoint already insists.
+- Optionally `expect`, the verdict body.
+
+**Response**
+- Per case: its position, its state, the end it reached, the elements and flows it went
+  through, its variables and its incidents.
+- The report's outcome counts.
+- The gaps (stage 2).
+- The verdict, when `expect` was sent.
+
+**Why one request.** ADR-0215 rejected a one-shot "run and return a report" for the batch run
+only because of its 50 000-case ceiling, which needed streaming aggregation and paging. A trial
+is bounded far below that, so the reason does not apply:
+- at most 1 000 cases;
+- a wall-clock budget, 30 seconds by default.
+
+**Not a session.** A trial never holds one of the eight session places
+(`playgroundMaxSessions`, `api/server.go`), so an agent cannot crowd out an author. It has
+quotas of its own: one trial in flight per principal and two per server. A caller over the
+limit gets 429 with `Retry-After`. Both numbers sit beside the session bounds as resource
+limits. They are a starting point, not a measurement.
+
+**Two callers.**
+- Stage 3's check is a trial run on the server's own behalf.
+- Over MCP, `atlas_playground_trial` proxies it, one tool for one operation, as ADR-0016 has
+  every tool.
+
+`mcp/tool_registry_drift_test.go` moves the trial from the omitted routes to the tools and
+amends the omission's own reasoning. The reasoning sent an agent to the durable surface ("deploy
+it and drive the instance"), which is the path with versions, real instances and real side
+effects that ADR-0215 exists to avoid. The interactive session routes stay omitted. They are
+made for a person stepping through a run, and twenty tools for that would cost an agent context
+and buy it nothing.
+
+**Saved scenarios stay off MCP.** A saved scenario is a CI gate, and `atlas playground` leaves
+status 3 when it fails. An agent that saves scenarios decides whether builds go red. Who
+reviews such a gate before it binds is a decision of its own, and this record does not take
+it.
 
 ### Stub variants
 
@@ -315,6 +371,8 @@ leave matters.
   - Structured start data becomes describable by hand as well.
   - The gap report closes a coverage hole permanently through `minVisits`.
   - Environment edge cases become reachable per case.
+  - An agent over MCP can run what it wrote without deploying it, side-effect free. That
+    replaces the only path it had, which minted versions and fired real side effects.
   - No personal value is copied, opened or sent anywhere. Nothing reaches the engine.
 - **Negative / trade-offs accepted:**
   - **Correlations are lost.** A profile draws each field independently, so a profiled run has
@@ -330,12 +388,16 @@ leave matters.
   - **Proposals cost.** One proposal costs up to three model calls and three sandbox runs.
   - **The panel grows.** The field table has to render nested fields, the heat map a gap list,
     and the stub editor variants.
+  - **Trials cost the server.** Every trial costs a sandbox for up to its wall-clock budget.
+    The per-principal and per-server quotas bound that, and a refused trial says when to come
+    back.
 - **Follow-ups / risks to watch:**
   - A joint choice over frequently seen tuples of low-cardinality fields, under the same
     five-sightings threshold, would restore the most important correlations without copying a
     rare combination.
   - Gaps inside called processes.
   - H3, as above.
+  - Saved scenarios over MCP, once it is decided who reviews a gate an agent wrote.
   - Whether the threshold of five is right is a question for the data protection officer, not
     for the code. It is one constant.
 
@@ -373,6 +435,14 @@ leave matters.
   choice values.
 - A `when` that does not select its own case is reported.
 - The prompt-fingerprint test moves with the prompt version.
+
+**Trial**
+
+- A trial returns each case's path and the gaps, and leaves no directory behind.
+- A trial with more than 1 000 cases, or with both `cases` and `generate`, is refused.
+- A second concurrent trial for one principal gets 429 with `Retry-After`.
+- A trial never takes one of the eight session places.
+- The drift test lists `atlas_playground_trial` as a tool and still omits the session routes.
 
 **Variants**
 
@@ -429,12 +499,15 @@ leave matters.
 - Bad: up to three calls per proposal, business logic sent to the configured endpoint, and
   quality on a weak model unmeasured (the open question).
 
-### M3 — Leave it to MCP
+### M3 — Leave it to MCP (chosen beside M2, through the trial)
 
-- Good: nothing to build in the panel. Any agent already able to read the model could write
-  cases.
-- Bad: the check would live in each client, or nowhere. The Playground exposes no MCP tools,
-  so the agent could not run its own proposal. Authors work in the panel.
+- Good: an agent the user already runs brings a model at least as strong as the agent Worker,
+  at no cost to the installation, and needs no prompt maintained in Atlas. With the trial it
+  has the whole loop: propose, run, read the paths and gaps, correct.
+- Bad: on its own it serves only people who have an MCP client, while authors work in the
+  panel. Hence beside M2, not instead of it. An earlier draft of this record rejected M3
+  because the Playground had no MCP tools. That argued from a choice this record is free to
+  change, and the trial changes it.
 
 ### E1 — One scenario per environment variant
 
@@ -459,6 +532,8 @@ leave matters.
   [ADR-0260](0260-ai-form-generation.md)'s agent Worker access
 - reads [ADR-0048](0048-per-step-variable-snapshots.md)'s variable history; respects
   [ADR-0314](0314-portal-personal-data.md)'s enciphered personal data
+- adds one tool to [ADR-0016](0016-mcp-server-over-http-api.md)'s MCP surface; depends on
+  the sandbox evaluating decisions (ADR-draft-playground-data-run)
 - composes with [ADR-0424](0424-a-playground-rule-can-demand-the-cases-it-speaks-about.md)
   (`minMatched`) and [ADR-0230](0230-process-information-model.md) (the information model's
   schema)
