@@ -71,6 +71,29 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 - **Negative:** new versioned metadata, trust/bootstrap, source precedence, provenance persistence and update UX; commercial operations have separate infrastructure and support costs.
 - **Follow-ups:** settle registry wire schema, signature/trust roots and key rotation, compatibility rules, provenance lifecycle, reliable rollback, licensing, and a separate ADR for multiple installations/remapping.
 
+## BMP0 registry v1 contract profile (under review)
+
+This section refines the **proposed** option 2 with an intentionally narrow, testable v1. It does not change the status of this ADR from Proposed to Accepted, and does not authorize executing untrusted downloadable code.
+
+**Decision recommendation: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
+
+The index declares a registry ID, a bounded list of immutable Blueprint releases, semver versions, publishers, descriptions, licence labels, atlas compatibility and required Worker Type/server-constant names. Every release names its **relative** application package path, compressed byte size and exact `sha256:` digest of the package bytes. A signed index does not make the package safe to execute; existing ADR-0467 source/import validation and manual publication remain mandatory.
+
+**MVP policy:** a maximum 1 MiB signed index and 512 entries; 50 MiB compressed package cap and a proposed 200 MiB extracted cap; metadata cannot request arbitrary remote URLs. Package paths are confined to the registry base directory and same HTTPS origin, with cross-origin redirects refused. An admin-managed allowlist for private networks is an explicit configuration decision; user-supplied registry URLs and automatic trust-on-first-use are out of scope. Network/validation runs outside the run loop. Paid packages use an authenticated registry extension later, not reusable public signed URLs.
+
+Release identity is `(registry signing trust, publisherId, blueprintId, version, digest)`. Within an index, `(blueprintId, version)` must be unique and a Blueprint ID must belong to its declared publisher namespace; unknown JSON properties, duplicate object keys and unsupported major schema versions fail closed. Multiple independent registries claiming the same Blueprint identifier are not automatically merged or given implicit priority. A known publisher is **attested by the registry operator**, not proven by mere DNS-shaped metadata.
+
+Compatibility is inclusive `minVersion` and optional exclusive `maxVersionExclusive`; mismatches are surfaced before install. Declared `needs` are advisory until independently checked from the actual imported application models. Installation stores immutable provenance in design-time state, pins the exact package and never alters deployed instances or runs licence checks in `applyToState`.
+
+The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Registry v1 contract](../contracts/blueprint-registry/v1/README.md). **Acceptance gate:** maintainer review of this trust model, tests for signature/digest/identity/format failure, and explicit BMP0 slice ownership before implementing a production network installer. This profile deliberately does not define external publisher onboarding, automatic key rotation, payment processing or multiple re-keyed installations.
+
+### Security trade-offs for review
+
+- **Operator-pinned signing key vs. HTTPS-only:** HTTPS alone identifies the server connection but not an immutable community publishing authority across mirrors; pinning adds operational overhead and requires key rotation procedures.
+- **Signed raw bytes vs. canonical JSON:** raw bytes are straightforward to verify across programming languages, at the cost of resigning when formatting changes.
+- **Signed index vs. individually signed packages:** a signed index and pinned package digest prove the exact downloaded bytes originated from that trusted catalog listing. Per-publisher signatures could be added for third-party creators after publisher identity verification and revocation policy are designed.
+- **Same-origin artifacts vs. arbitrary CDN URLs:** same-origin is restrictive for future paid content delivery but avoids a broad server-side SSRF/credential forwarding surface in the initial release.
+
 ## Links
 
 - [ADR-0128](0128-process-applications.md)
