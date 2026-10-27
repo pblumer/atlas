@@ -188,6 +188,8 @@ type deployment struct {
 // Server hosts the engine behind an HTTP surface. Construct it with New, mount
 // Handler on an http.Server, and call Close to stop the run loop.
 type Server struct {
+	blueprintInstalls *blueprintInstallationStore // instance-local verified pending Blueprint journal (ADR-0499)
+
 	proc  *engine.Processor
 	store *state.Store
 
@@ -492,8 +494,6 @@ type Server struct {
 	callOverrides    *callOverrideStore        // durable sidecar for per-server call-activity target overrides (ADR-0105)
 	appConstants     *applicationConstantStore // durable sidecar for each application's constants on this installation (ADR-0453)
 	baselines        *importBaselineStore      // what the last import brought, per artifact: the base an import compares with (ADR-0467)
-
-	blueprintInstalls *blueprintInstallationStore // durable pending Marketplace imports (ADR-0499)
 
 	mappings         *packageMappingStore      // what a package's names mean on this installation (ADR-0467)
 	srvConstants     *serverConstantStore      // durable sidecar for the installation's constants for every application (ADR-0456)
@@ -1734,6 +1734,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// built from it rather than owning it.
 	quit := make(chan struct{})
 	s := &Server{
+		blueprintInstalls: blueprintInstalls,
+
 		proc:             proc,
 		store:            store,
 		dataDir:          dataDir,
@@ -1803,8 +1805,6 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		callOverrides:     callOverrides,
 		appConstants:      appConstants,
 		baselines:         baselines,
-
-		blueprintInstalls: blueprintInstalls,
 
 		mappings:          mappings,
 		srvConstants:      srvConstants,
