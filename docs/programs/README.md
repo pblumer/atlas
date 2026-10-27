@@ -10,7 +10,7 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | planned | 0/4 | unassigned | Assign human programme owner and review proposed Blueprint registry ADR; only then begin BMP0 contract and trust tests. |
+| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | planned | 0/4 | pblumer | Review proposed ADR-0499, assign the BMP0 slice owner, then agree registry identity, signing trust and manifest test fixtures before implementation. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Merge the implementation digest (PR #1388); decide which root packages serve each built-in Worker Type, since a supervised worker runs it through the worker package, whose closure reaches every connector, and the engine can run eleven of them through api, whose closure is nearly the whole module; configure branch protection on main with code-owner review; then the first evidence record, with CODEOWNERS for its path and the CI check that renews evidence in the PR that changes the code. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
@@ -18,11 +18,11 @@ See [delivery protocol](../development/program-delivery.md) and
 
 Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.
 
-**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-26**
+**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-27**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **BMP0** — Registry and trust contract | planned | unassigned | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395) | Architecture and programme proposal in draft PR #1395; BMP0 is not started. Review identity, trust, package contract and tests before acceptance. |
+| **BMP0** — Registry and trust contract | planned | unassigned | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395) | Programme proposal PR #1395 merged; ADR-0499 remains Proposed / Not started. BMP0 awaits a named slice owner, design review and contract-validation tests. |
 | **BMP1** — Free registry to installed application | planned | unassigned | BMP0 | — | Prove static public catalog, verified package install, existing import plan, explicit publish, safe failures and restart. |
 | **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
 | **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
