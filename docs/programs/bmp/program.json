@@ -37,8 +37,10 @@
         "BMP0"
       ],
       "issues": [],
-      "prs": [],
-      "note": "First BMP1 PR adds bounded public HTTPS transport, rejects redirects/private or rebinding DNS, verifies index and pinned compressed bytes; Console/API install, provenance, archive validation and publish remain pending."
+      "prs": [
+        1411
+      ],
+      "note": "Draft PR #1411 adds bounded, fail-closed public HTTPS index/package transport and negative SSRF/redirect tests. No Console/API installation or persistence yet; archive inspection, import decisions, publish and recovery remain."
     },
     {
       "id": "BMP2",
