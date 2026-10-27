@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"os"
 	"strings"
 
@@ -90,6 +91,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 		return blueprintregistry.Release{}, nil, "", false
 	}
 	found := false
+	var indexedRelease blueprintregistry.Release
 	for _, rel := range index.Releases {
 		if rel.BlueprintID == id && rel.Version == version {
 			if !blueprintregistry.Compatible(rel.Atlas, Version) {
@@ -97,6 +99,7 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 				return blueprintregistry.Release{}, nil, "", false
 			}
 			found = true
+			indexedRelease = rel
 			break
 		}
 	}
@@ -109,6 +112,10 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadGateway, "Blueprint package download or signature/digest verification failed")
+		return blueprintregistry.Release{}, nil, "", false
+	}
+	if !reflect.DeepEqual(indexedRelease, release) {
+		httpapi.Error(w, http.StatusConflict, "Blueprint changed between signed index reads; review again")
 		return blueprintregistry.Release{}, nil, "", false
 	}
 	if !blueprintregistry.Compatible(release.Atlas, Version) {
