@@ -1,6 +1,7 @@
 package archsketch
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -78,8 +79,18 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 		elements, relationships = applicationGraph(s, m)
 		app = "id-application"
 	}
-	if s.Data != nil {
-		elements, relationships = dataGraph(s, elements, relationships, app)
+	if s.Strategy != nil || s.Business != nil || s.Data != nil {
+		g := &layerGraph{s: s, elements: elements, relationships: relationships, app: app, processes: map[string]string{}}
+		if s.Strategy != nil {
+			g.strategy()
+		}
+		if s.Business != nil {
+			g.business()
+		}
+		if s.Data != nil {
+			g.data()
+		}
+		elements, relationships = g.elements, g.relationships
 	}
 	return exchangeDocument(s, m, elements, relationships)
 }
@@ -524,47 +535,197 @@ func exchangeDocument(s Snapshot, m Meta, elements []archElement, relationships 
 	return []byte(out.String())
 }
 
-// dataGraph adds the data layer (mapping version 5): each process that keeps data or
+// layerGraph is what the writers of the strategy, business and data layers share: the
+// elements and relationships written so far, the application component when the
+// application layer is shown, and the Application Process each process became, so the
+// layers meet at one element per process.
+type layerGraph struct {
+	s             Snapshot
+	elements      []archElement
+	relationships []archRelationship
+	app           string
+	processes     map[string]string
+}
+
+func (g *layerGraph) add(e archElement) string {
+	g.elements = append(g.elements, e)
+	return e.id
+}
+
+func (g *layerGraph) relate(typ, source, target, access string) {
+	g.relationships = append(g.relationships, archRelationship{typ: typ, source: source, target: target, access: access})
+}
+
+// process is the Application Process of one release process, written the first time a
+// layer needs it and assigned from the component when there is one.
+func (g *layerGraph) process(pid string) string {
+	if id, ok := g.processes[pid]; ok {
+		return id
+	}
+	name, doc := pid, "Process "+pid+" as the release shipped it."
+	n := len(g.s.Processes) + len(g.processes) + 1
+	for i, p := range g.s.Processes {
+		if p.ProcessID == pid {
+			n = i + 1
+			if p.Name != "" {
+				name = p.Name
+			}
+			doc = fmt.Sprintf("Process %s v%d as the release shipped it.", pid, p.Version)
+			break
+		}
+	}
+	id := g.add(archElement{id: fmt.Sprintf("id-process-%d", n), typ: "ApplicationProcess", name: "Process " + name, doc: doc,
+		props: map[string]string{"atlas.derivedKind": "process", panorama.KeyProcessID: pid}})
+	if g.app != "" {
+		g.relate("Assignment", g.app, id, "")
+	}
+	g.processes[pid] = id
+	return id
+}
+
+// dependencies maps each dependency the application layer wrote to the identifier it
+// gave it; empty when the application layer is not shown.
+func (g *layerGraph) dependencies() map[PersonalRecipient]string {
+	ids := map[PersonalRecipient]string{}
+	if g.app != "" {
+		for i, dep := range g.s.Outbound() {
+			ids[PersonalRecipient{Kind: dep.Kind, Name: dep.Name, WorkerType: dep.WorkerType}] = fmt.Sprintf("id-dependency-%d", i+1)
+		}
+	}
+	return ids
+}
+
+// strategy adds the strategy layer (mapping version 6): each capability the release
+// realises as a Capability its Application Process — or, with the application layer,
+// its worker's Application Service — realises, and each value stream using one as a
+// Value Stream composed of its stages, each stage served by the capabilities it uses.
+func (g *layerGraph) strategy() {
+	st := g.s.Strategy
+	deps := g.dependencies()
+	workers := map[string]string{}
+	for dep, id := range deps {
+		if dep.Kind == DependencyWorker {
+			workers[dep.Name] = id
+		}
+	}
+	capabilities := map[string]string{}
+	for i, c := range st.Capabilities {
+		props := map[string]string{
+			"atlas.derivedKind":           "capability",
+			"atlas.capability.key":        c.Key,
+			"atlas.capability.state":      c.State,
+			"atlas.capability.measures":   c.measuresText(),
+			"atlas.capability.realizedBy": strings.TrimPrefix(c.realizedText(), "realised by "),
+		}
+		if c.Owner != nil {
+			props["atlas.capability.owner"] = strings.TrimPrefix(c.Owner.text(), "owner ")
+		}
+		if c.ConfirmedAt > 0 {
+			props["atlas.capability.confirmed"] = formatDate(c.ConfirmedAt)
+		}
+		id := g.add(archElement{id: fmt.Sprintf("id-capability-%d", i+1), typ: "Capability", name: c.Name,
+			doc:   "A capability the release realises: " + c.realizedText() + "; " + c.stateText() + "; " + c.Owner.text() + ".",
+			props: props})
+		capabilities[c.Key] = id
+		for _, r := range c.RealizedBy {
+			switch {
+			case r.Kind == RealizedByProcess:
+				g.relate("Realization", g.process(r.ProcessID), id, "")
+			case workers[r.Worker] != "":
+				g.relate("Realization", workers[r.Worker], id, "")
+			}
+		}
+	}
+	for i, v := range st.ValueStreams {
+		owner := ""
+		if v.Owner != nil {
+			owner = strings.TrimPrefix(v.Owner.text(), "owner ")
+		}
+		stream := g.add(archElement{id: fmt.Sprintf("id-valuestream-%d", i+1), typ: "ValueStream", name: v.Name,
+			doc:   "A value stream a stage of which uses a capability the release realises: " + v.stagesText() + ".",
+			props: map[string]string{"atlas.derivedKind": "valueStream", "atlas.valueStream.key": v.Key, "atlas.valueStream.owner": owner}})
+		for j, stage := range v.Stages {
+			id := g.add(archElement{id: fmt.Sprintf("id-stage-%d-%d", i+1, j+1), typ: "ValueStream", name: stage.Name,
+				doc:   fmt.Sprintf("Stage %d of value stream %s.", j+1, v.Name),
+				props: map[string]string{"atlas.derivedKind": "valueStreamStage", "atlas.valueStream.stage": stage.Key}})
+			g.relate("Composition", stream, id, "")
+			for _, key := range stage.Capabilities {
+				if c := capabilities[key]; c != "" {
+					g.relate("Serving", c, id, "")
+				}
+			}
+		}
+	}
+}
+
+// business adds the business layer (mapping version 6): each process as a Business
+// Process its Application Process realises, each role as a Business Role assigned to
+// the processes that name it, and each product as a Product associated with the
+// processes that carry it out. Product is ArchiMate 3.2 and outside Panorama's
+// authoring subset, written the way Path is (ADR-0495, decision drivers).
+func (g *layerGraph) business() {
+	bz := g.s.Business
+	bprocesses := map[string]string{}
+	for i, p := range bz.Processes {
+		id := g.add(archElement{id: fmt.Sprintf("id-bprocess-%d", i+1), typ: "BusinessProcess", name: cmp.Or(p.Name, p.ProcessID),
+			doc: "The work process " + p.ProcessID + " does. Its user tasks: " + p.tasksText() + ".",
+			props: map[string]string{
+				"atlas.derivedKind":   "businessProcess",
+				panorama.KeyProcessID: p.ProcessID,
+				"atlas.tasks":         p.tasksText(),
+			}})
+		g.relate("Realization", g.process(p.ProcessID), id, "")
+		bprocesses[p.ProcessID] = id
+	}
+	for i, r := range bz.Roles {
+		id := g.add(archElement{id: fmt.Sprintf("id-role-%d", i+1), typ: "BusinessRole", name: r.Name,
+			doc:   map[string]string{RoleLane: "A lane", RoleCandidateGroup: "A candidate group"}[r.Kind] + " the release's processes name, as the model writes it: " + r.usesText() + ".",
+			props: map[string]string{"atlas.derivedKind": "role", "atlas.role.kind": r.Kind}})
+		last := ""
+		for _, u := range r.UsedBy {
+			if bp := bprocesses[u.ProcessID]; bp != "" && u.ProcessID != last {
+				g.relate("Assignment", id, bp, "")
+				last = u.ProcessID
+			}
+		}
+	}
+	for i, p := range bz.Products {
+		actions := make([]string, 0, len(p.Actions))
+		for _, a := range p.Actions {
+			text := a.Key + " (message " + a.Message
+			for _, o := range a.Outcomes {
+				text += "; " + o.Outcome + " publishes " + o.EventType
+			}
+			actions = append(actions, text+")")
+		}
+		id := g.add(archElement{id: fmt.Sprintf("id-product-%d", i+1), typ: "Product", name: p.Name,
+			doc: "A catalogue product a release process carries out: " + p.bindingText() + ".",
+			props: map[string]string{
+				"atlas.derivedKind":     "product",
+				"atlas.product.id":      p.ID,
+				"atlas.product.catalog": cmp.Or(p.CatalogName, p.CatalogID),
+				"atlas.product.state":   p.State,
+				"atlas.product.actions": strings.Join(actions, ", "),
+			}})
+		last := ""
+		for _, b := range p.Bindings {
+			if bp := bprocesses[b.ProcessID]; bp != "" && b.ProcessID != last {
+				g.relate("Association", id, bp, "")
+				last = b.ProcessID
+			}
+		}
+	}
+}
+
+// data adds the data layer (mapping version 5): each process that keeps data or
 // declares personal data as an Application Process the component is assigned to, each
 // data object as a Data Object it accesses — read, written or both, as its
 // associations say — realising the Business Object of its class, each store as a Data
 // Object associated with the processes that name it, and each personal-data
 // declaration as a Data Object every worker the process hands work to reads.
-func dataGraph(s Snapshot, elements []archElement, relationships []archRelationship, app string) ([]archElement, []archRelationship) {
-	d := s.Data
-	add := func(e archElement) string {
-		elements = append(elements, e)
-		return e.id
-	}
-	relate := func(typ, source, target, access string) {
-		relationships = append(relationships, archRelationship{typ: typ, source: source, target: target, access: access})
-	}
-
-	processes := map[string]string{}
-	process := func(pid string) string {
-		if id, ok := processes[pid]; ok {
-			return id
-		}
-		name, doc := pid, "Process "+pid+" as the release shipped it."
-		n := len(s.Processes) + len(processes) + 1
-		for i, p := range s.Processes {
-			if p.ProcessID == pid {
-				n = i + 1
-				if p.Name != "" {
-					name = p.Name
-				}
-				doc = fmt.Sprintf("Process %s v%d as the release shipped it.", pid, p.Version)
-				break
-			}
-		}
-		id := add(archElement{id: fmt.Sprintf("id-process-%d", n), typ: "ApplicationProcess", name: "Process " + name, doc: doc,
-			props: map[string]string{"atlas.derivedKind": "process", panorama.KeyProcessID: pid}})
-		if app != "" {
-			relate("Assignment", app, id, "")
-		}
-		processes[pid] = id
-		return id
-	}
+func (g *layerGraph) data() {
+	d := g.s.Data
+	add, relate, process := g.add, g.relate, g.process
 
 	classes := map[string]string{}
 	for i, c := range d.Classes {
@@ -612,14 +773,7 @@ func dataGraph(s Snapshot, elements []archElement, relationships []archRelations
 		}
 	}
 
-	// The workers, runtime workers and job types the application layer wrote, by the
-	// identifiers it gave them.
-	recipients := map[PersonalRecipient]string{}
-	if app != "" {
-		for i, dep := range s.Outbound() {
-			recipients[PersonalRecipient{Kind: dep.Kind, Name: dep.Name, WorkerType: dep.WorkerType}] = fmt.Sprintf("id-dependency-%d", i+1)
-		}
-	}
+	recipients := g.dependencies()
 	for i, p := range d.Personal {
 		names := make([]string, 0, len(p.HandedTo))
 		for _, r := range p.HandedTo {
@@ -643,7 +797,6 @@ func dataGraph(s Snapshot, elements []archElement, relationships []archRelations
 			}
 		}
 	}
-	return elements, relationships
 }
 
 // archiProvenance is the paragraph that keeps the document from being mistaken for one
@@ -674,8 +827,8 @@ func archiProvenance(s Snapshot, m Meta) string {
 
 // view names what the document holds, the way the image's stamp does.
 func view(s Snapshot) string {
-	if s.dataOnly() {
-		return "data architecture"
+	if s.bandsOnly() {
+		return s.bandsName() + " architecture"
 	}
 	if p := s.Physical; p != nil {
 		if s.technologyOnly() {

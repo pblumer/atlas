@@ -1,6 +1,7 @@
 package archsketch
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -61,6 +62,7 @@ const (
 	colorApplication = "#b5ffff"
 	colorTechnology  = "#c9e7b7"
 	colorBusiness    = "#ffffb5"
+	colorStrategy    = "#f5deaa"
 	colorBand        = "#f6f8fa"
 	colorRule        = "#d0d7de"
 	colorInk         = "#1f2328"
@@ -79,7 +81,7 @@ func SVG(s Snapshot, m Meta) []byte {
 	if s.technologyOnly() {
 		return drawSketch(s, m, technologyParts(s, m))
 	}
-	if s.dataOnly() {
+	if s.bandsOnly() {
 		return drawSketch(s, m, sketchParts{})
 	}
 	return drawSketch(s, m, sketchParts{
@@ -120,20 +122,38 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 		}
 	}
 
+	// The strategy and business bands sit above the picture and push it down; the data
+	// band sits below it (ADR-0495 §3). A value drawn as bands alone has no picture.
+	main := !s.bandsOnly()
+	type placed struct {
+		band *bandView
+		top  int
+	}
+	var bands []placed
+	y := headerH - 16
+	for _, band := range []*bandView{strategyBand(s), businessBand(s)} {
+		if band != nil {
+			bands = append(bands, placed{band, y})
+			y += band.height() + 16
+		}
+	}
+	head := headerH + y - (headerH - 16)
+
 	rows := max(len(left), len(right), 3)
 	contentH := rows*bh + (rows-1)*boxGap
-	nodeTop := headerH + 18
+	nodeTop := head + 18
 	top := nodeTop + nodeHeadH
 	notes := footerLines(s, m, parts.key)
 	footerTop := top + contentH + 40
-	main := !s.dataOnly()
-	band := dataBand(s)
-	bandTop := top + contentH + 32
-	if !main {
-		bandTop = headerH - 16
+	if main {
+		y = top + contentH + 32
 	}
-	if band != nil {
-		footerTop = bandTop + band.height() + 24
+	if band := dataBand(s); band != nil {
+		bands = append(bands, placed{band, y})
+		y += band.height() + 16
+	}
+	if !main || len(bands) > 0 && bands[len(bands)-1].top > top {
+		footerTop = y + 8
 	}
 	height := footerTop + 22 + len(notes)*lineHeight + 16
 
@@ -150,10 +170,10 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	fmt.Fprintf(&b, `<text x="%d" y="34" font-size="20" font-weight="600" fill="%s">%s</text>`+"\n", colLeftX, colorInk, esc(title(m)))
 	fmt.Fprintf(&b, `<text x="%d" y="56" fill="%s">%s</text>`+"\n", colLeftX, colorMuted, esc(stampLine(s, m)))
 	if main {
-		drawMain(&b, parts, bh, top, contentH, nodeTop)
+		drawMain(&b, parts, bh, head, top, contentH, nodeTop)
 	}
-	if band != nil {
-		band.draw(&b, bandTop)
+	for _, p := range bands {
+		p.band.draw(&b, p.top)
 	}
 
 	// Footer: the key, and what this sketch does not show.
@@ -167,10 +187,10 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 
 // drawMain draws the picture's frame: the two columns and the Atlas node between them,
 // with what runs inside it.
-func drawMain(b *strings.Builder, parts sketchParts, bh, top, contentH, nodeTop int) {
+func drawMain(b *strings.Builder, parts sketchParts, bh, head, top, contentH, nodeTop int) {
 	left, right := parts.left, parts.right
-	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, headerH+10, colorInk)
-	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, headerH+10, colorInk, esc(parts.rightTitle))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, head+10, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, head+10, colorInk, esc(parts.rightTitle))
 
 	// The Atlas node, and what runs inside it.
 	nodeH := nodeHeadH + contentH + 16
@@ -513,8 +533,9 @@ func stampLine(s Snapshot, m Meta) string {
 			view = "Physical view of " + installationName(*p)
 		}
 	}
-	if s.dataOnly() {
-		view = "Data view"
+	if s.bandsOnly() {
+		name := s.bandsName()
+		view = strings.ToUpper(name[:1]) + name[1:] + " view"
 	}
 	line := fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
 		view, formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
@@ -544,6 +565,8 @@ func formatTime(unix int64) string {
 	}
 	return time.Unix(unix, 0).UTC().Format("2006-01-02 15:04 UTC")
 }
+
+func formatDate(unix int64) string { return time.Unix(unix, 0).UTC().Format("2006-01-02") }
 
 func workerTypeText(t string) string {
 	if t == "" {
@@ -635,87 +658,47 @@ const (
 	bandHeadH   = 34
 )
 
-// The band's caps, per kind, so a release with many data objects still shows its
-// stores and classes. What does not fit is counted under the band; the JSON answer
-// and the ArchiMate document list it all.
+// The bands' caps, per kind, so a release with many of one kind still shows the
+// others. What does not fit is counted under the band; the JSON answer and the
+// ArchiMate document list it all.
 const (
-	bandMaxPersonal = 6
-	bandMaxObjects  = 9
-	bandMaxStores   = 6
-	bandMaxClasses  = 6
+	bandMaxPersonal     = 6
+	bandMaxObjects      = 9
+	bandMaxStores       = 6
+	bandMaxClasses      = 6
+	bandMaxProcesses    = 6
+	bandMaxRoles        = 6
+	bandMaxProducts     = 6
+	bandMaxCapabilities = 9
+	bandMaxStreams      = 3
 )
 
 // bandColumnX puts the band's three columns at the picture's two columns and midway
 // between them.
 var bandColumnX = [bandColumns]int{colLeftX, (colLeftX + colRightX) / 2, colRightX}
 
-// dataBandView is the band as it is drawn: its boxes, the cell each one takes — each
-// kind starts a row of its own — and the line naming what the cap left out.
-type dataBandView struct {
-	boxes []box
-	cells []int
-	cut   string
+// bandView is one band as it is drawn: its heading, its boxes, the cell each one takes
+// — each kind starts a row of its own — the line naming what the caps left out, and a
+// note under it.
+type bandView struct {
+	title, tooltip, subtitle, empty string
+	boxH                            int
+	boxes                           []box
+	cells                           []int
+	cut, note                       string
 }
 
-// dataBand lays out the data layer of a value whose selection holds it: personal-data
-// declarations first, because they answer the question nobody else does, then the
-// data objects, the stores and the classes. Nil when the value has no data part.
-func dataBand(s Snapshot) *dataBandView {
-	d := s.Data
-	if d == nil {
-		return nil
-	}
-	type entry struct {
-		kind, kinds string
-		max         int
-		box         box
-	}
-	var all []entry
-	for _, p := range d.Personal {
-		vars := strings.Join(p.Variables, ", ")
-		all = append(all, entry{"personal-data declaration", "personal-data declarations", bandMaxPersonal, box{fill: colorApplication,
-			kind: "Data object · personal, about " + p.Subject, label: "Personal data of " + p.ProcessID, detail: vars, site: p.handedToText(),
-			tooltip: "Process " + p.ProcessID + " declares " + plural(len(p.Variables), "personal variable", "personal variables") + " (" + vars +
-				"), about the person " + p.Subject + " names; " + p.handedToText() + ". Only the declaration is recorded, never a value."}})
-	}
-	for _, o := range d.Objects {
-		label := o.Name
-		if o.Collection {
-			label += " (collection)"
-		}
-		detail := "in " + o.ProcessID + " · no declared type"
-		if o.Class != "" {
-			detail = "in " + o.ProcessID + " · class " + o.Class
-		}
-		site := o.useText()
-		if states := o.states(); len(states) > 0 {
-			site += " · states " + strings.Join(states, ", ")
-		}
-		all = append(all, entry{"data object", "data objects", bandMaxObjects, box{fill: colorApplication, kind: "Data object", label: label, detail: detail, site: site,
-			tooltip: "Data object " + label + " of process " + o.ProcessID + "; " + detail + "; " + o.useDetail()}})
-	}
-	for _, st := range d.Stores {
-		detail := "no class named for it in the information model"
-		if st.Class != "" {
-			detail = "keeps class " + st.Class
-		}
-		all = append(all, entry{"data store", "data stores", bandMaxStores, box{fill: colorApplication, kind: "Data object · store", label: st.Name, detail: detail,
-			site:    "named at " + usesText(st.UsedBy),
-			tooltip: "Data store " + st.Name + " — " + detail + "; named at " + usesText(st.UsedBy)}})
-	}
-	for _, c := range d.Classes {
-		detail := "declared type, not in the information model"
-		if c.Modeled {
-			detail = "defined in the information model"
-		}
-		site := "kept " + d.keptAs(c.Name)
-		all = append(all, entry{"class", "classes", bandMaxClasses, box{fill: colorBusiness, kind: "Business object", label: c.Name, detail: detail, site: site,
-			tooltip: "Class " + c.Name + " — " + detail + "; " + site}})
-	}
+// bandEntry is one box a band would draw, with its kind and that kind's cap.
+type bandEntry struct {
+	kind, kinds string
+	max         int
+	box         box
+}
 
-	v := &dataBandView{}
+// layout places the entries, kind by kind, up to each kind's cap, and counts the rest.
+func (v *bandView) layout(all []bandEntry) *bandView {
 	drawn, cut := map[string]int{}, map[string]int{}
-	var kinds []entry
+	var kinds []bandEntry
 	cell := 0
 	for i, e := range all {
 		if drawn[e.kind] < e.max {
@@ -743,40 +726,178 @@ func dataBand(s Snapshot) *dataBandView {
 	return v
 }
 
-func (v *dataBandView) rows() int {
+// dataBand lays out the data layer of a value whose selection holds it: personal-data
+// declarations first, because they answer the question nobody else does, then the
+// data objects, the stores and the classes. Nil when the value has no data part.
+func dataBand(s Snapshot) *bandView {
+	d := s.Data
+	if d == nil {
+		return nil
+	}
+	var all []bandEntry
+	for _, p := range d.Personal {
+		vars := strings.Join(p.Variables, ", ")
+		all = append(all, bandEntry{"personal-data declaration", "personal-data declarations", bandMaxPersonal, box{fill: colorApplication,
+			kind: "Data object · personal, about " + p.Subject, label: "Personal data of " + p.ProcessID, detail: vars, site: p.handedToText(),
+			tooltip: "Process " + p.ProcessID + " declares " + plural(len(p.Variables), "personal variable", "personal variables") + " (" + vars +
+				"), about the person " + p.Subject + " names; " + p.handedToText() + ". Only the declaration is recorded, never a value."}})
+	}
+	for _, o := range d.Objects {
+		label := o.Name
+		if o.Collection {
+			label += " (collection)"
+		}
+		detail := "in " + o.ProcessID + " · no declared type"
+		if o.Class != "" {
+			detail = "in " + o.ProcessID + " · class " + o.Class
+		}
+		site := o.useText()
+		if states := o.states(); len(states) > 0 {
+			site += " · states " + strings.Join(states, ", ")
+		}
+		all = append(all, bandEntry{"data object", "data objects", bandMaxObjects, box{fill: colorApplication, kind: "Data object", label: label, detail: detail, site: site,
+			tooltip: "Data object " + label + " of process " + o.ProcessID + "; " + detail + "; " + o.useDetail()}})
+	}
+	for _, st := range d.Stores {
+		detail := "no class named for it in the information model"
+		if st.Class != "" {
+			detail = "keeps class " + st.Class
+		}
+		all = append(all, bandEntry{"data store", "data stores", bandMaxStores, box{fill: colorApplication, kind: "Data object · store", label: st.Name, detail: detail,
+			site:    "named at " + usesText(st.UsedBy),
+			tooltip: "Data store " + st.Name + " — " + detail + "; named at " + usesText(st.UsedBy)}})
+	}
+	for _, c := range d.Classes {
+		detail := "declared type, not in the information model"
+		if c.Modeled {
+			detail = "defined in the information model"
+		}
+		site := "kept " + d.keptAs(c.Name)
+		all = append(all, bandEntry{"class", "classes", bandMaxClasses, box{fill: colorBusiness, kind: "Business object", label: c.Name, detail: detail, site: site,
+			tooltip: "Class " + c.Name + " — " + detail + "; " + site}})
+	}
+	v := &bandView{title: "Data", boxH: physicalBoxHeight,
+		tooltip:  "The data layer: what the release's processes keep and read, the classes they keep it as, and the personal data they declare",
+		subtitle: "what the processes keep and read, and the personal data they declare",
+		empty:    "This release declares no data objects, data stores or personal data."}
+	return v.layout(all)
+}
+
+// businessBand lays out the business layer: the processes as the work they do, the
+// roles their tasks and lanes name, and the products they carry out. Nil when the
+// value has no business part.
+func businessBand(s Snapshot) *bandView {
+	bz := s.Business
+	if bz == nil {
+		return nil
+	}
+	var all []bandEntry
+	for _, p := range bz.Processes {
+		label := cmp.Or(p.Name, p.ProcessID)
+		all = append(all, bandEntry{"business process", "business processes", bandMaxProcesses, box{fill: colorBusiness, kind: "Business process",
+			label: label, detail: "realised by process " + p.ProcessID, site: p.tasksText(),
+			tooltip: "Business process " + label + ", realised by process " + p.ProcessID + "; its user tasks: " + p.tasksText()}})
+	}
+	for _, r := range bz.Roles {
+		what := "candidate group · " + plural(len(r.UsedBy), "task", "tasks")
+		if r.Kind == RoleLane {
+			what = "lane · " + plural(len(r.UsedBy), "process", "processes")
+		}
+		all = append(all, bandEntry{"role", "roles", bandMaxRoles, box{fill: colorBusiness, kind: "Business role", label: r.Name, detail: what, site: r.usesText(),
+			tooltip: "Role " + r.Name + " — " + what + ": " + r.usesText()}})
+	}
+	for _, p := range bz.Products {
+		catalog := cmp.Or(p.CatalogName, p.CatalogID)
+		detail := "in " + catalog + " · " + p.bindingsText()
+		if p.State != "" && p.State != "active" {
+			detail += " · " + p.State
+		}
+		all = append(all, bandEntry{"product", "products", bandMaxProducts, box{fill: colorBusiness, kind: "Product", label: p.Name, detail: detail, site: p.actionsText(),
+			tooltip: "Product " + p.Name + " of catalogue " + catalog + " — " + p.bindingText() + "; " + p.actionsText()}})
+	}
+	v := &bandView{title: "Business", boxH: physicalBoxHeight,
+		tooltip:  "The business layer: the work the release's processes do, the roles that do it, and the catalogue products they carry out",
+		subtitle: "the work the processes do, who does it, and the products they carry out",
+		empty:    "This release names no role and carries out no product."}
+	if bz.ProductsWithheld > 0 {
+		v.note = plural(bz.ProductsWithheld, "product", "products") + " withheld from this reader, who may not maintain its catalogue."
+	}
+	return v.layout(all)
+}
+
+// strategyBand lays out the strategy layer: the capabilities the release realises and
+// the value streams that use them. Nil when the value has no strategy part.
+func strategyBand(s Snapshot) *bandView {
+	st := s.Strategy
+	if st == nil {
+		return nil
+	}
+	names := map[string]string{}
+	var all []bandEntry
+	for _, c := range st.Capabilities {
+		names[c.Key] = c.Name
+		tooltip := "Capability " + c.Name + " — " + c.realizedText() + "; " + c.stateText() + "; " + c.Owner.text()
+		if m := c.measuresText(); m != "" {
+			tooltip += "; " + m
+		}
+		all = append(all, bandEntry{"capability", "capabilities", bandMaxCapabilities, box{fill: colorStrategy, kind: "Capability",
+			label: c.Name, detail: c.realizedText(), site: c.stateText(), extra: c.Owner.text(), tooltip: tooltip}})
+	}
+	name := func(key string) string { return cmp.Or(names[key], key) }
+	for _, v := range st.ValueStreams {
+		all = append(all, bandEntry{"value stream", "value streams", bandMaxStreams, box{fill: colorStrategy, kind: "Value stream",
+			label: v.Name, detail: v.stagesText(), site: v.usesText(name), extra: v.Owner.text(),
+			tooltip: "Value stream " + v.Name + ": " + v.stagesText() + " — " + v.usesText(name) + "; " + v.Owner.text()}})
+	}
+	v := &bandView{title: "Strategy", boxH: detailBoxHeight,
+		tooltip:  "The strategy layer: the capabilities the release realises and the value streams that use them",
+		subtitle: "the capabilities the release realises and the value streams that use them",
+		empty:    "No capability in the register is realised by this release's processes or Workers."}
+	return v.layout(all)
+}
+
+func (v *bandView) rows() int {
 	if len(v.cells) == 0 {
 		return 0
 	}
 	return v.cells[len(v.cells)-1]/bandColumns + 1
 }
 
-func (v *dataBandView) height() int {
+func (v *bandView) height() int {
 	h := bandHeadH + 16 + lineHeight
 	if rows := v.rows(); rows > 0 {
-		h = bandHeadH + 16 + rows*physicalBoxHeight + (rows-1)*boxGap
+		h = bandHeadH + 16 + rows*v.boxH + (rows-1)*boxGap
 	}
 	if v.cut != "" {
+		h += lineHeight + 4
+	}
+	if v.note != "" {
 		h += lineHeight + 4
 	}
 	return h
 }
 
-func (v *dataBandView) draw(b *strings.Builder, top int) {
-	fmt.Fprintf(b, `<g><title>%s</title>`, esc("The data layer: what the release's processes keep and read, the classes they keep it as, and the personal data they declare"))
+func (v *bandView) draw(b *strings.Builder, top int) {
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc(v.tooltip))
 	fmt.Fprintf(b, `<rect x="16" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, top, svgWidth-32, v.height(), colorBand, colorRule)
-	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Data</text>`, colLeftX, top+22, colorInk)
-	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", svgWidth-colLeftX, top+22, colorMuted,
-		esc("what the processes keep and read, and the personal data they declare"))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`, colLeftX, top+22, colorInk, esc(v.title))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", svgWidth-colLeftX, top+22, colorMuted, esc(v.subtitle))
 	y0 := top + bandHeadH
 	if len(v.boxes) == 0 {
-		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colLeftX, y0+lineHeight, colorMuted,
-			esc("This release declares no data objects, data stores or personal data."))
+		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colLeftX, y0+lineHeight, colorMuted, esc(v.empty))
 	}
 	for i, bx := range v.boxes {
 		c := v.cells[i]
-		drawBox(b, bandColumnX[c%bandColumns], y0+(c/bandColumns)*(physicalBoxHeight+boxGap), physicalBoxHeight, bx)
+		drawBox(b, bandColumnX[c%bandColumns], y0+(c/bandColumns)*(v.boxH+boxGap), v.boxH, bx)
 	}
+	lines := []string{}
 	if v.cut != "" {
-		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, top+v.height()-12, colorMuted, esc(v.cut))
+		lines = append(lines, v.cut)
+	}
+	if v.note != "" {
+		lines = append(lines, v.note)
+	}
+	for i, line := range lines {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, top+v.height()-12-(len(lines)-1-i)*(lineHeight+4), colorMuted, esc(line))
 	}
 }

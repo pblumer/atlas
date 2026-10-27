@@ -1,9 +1,9 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Accepted (2026-10-26; amended 2026-10-26 with slices A, B and C — the banded
-  layout moved to slice C; a Worker's owner and call budget are not recorded; versions
-  rise with each slice; personal data names every worker it is handed to; see the notes
-  below)
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 and 2026-10-27 with slices A to D —
+  the banded layout moved to slice C; a Worker's owner and call budget are not recorded;
+  versions rise with each slice; personal data names every worker it is handed to; a
+  product is shown to whoever may maintain its catalogue; see the notes below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -120,6 +120,61 @@
 > - **A class is recorded by name.** Its members and lifecycle stay in the
 >   information model; the snapshot records whether the model defined the class when
 >   the release was taken, and the drift view of §2 is where a later change shows.
+
+> **Implementation status and amendment (2026-10-27): slice D has landed.** A snapshot
+> records a business part: each release process with how its user tasks say who does
+> them (for a group, for a named person, decided at run time, or nobody); each role its
+> tasks and lanes name; and each catalogue product a release process provisions,
+> deprovisions or runs the lifecycle of, from the newest published release of each
+> catalogue, with a lifecycle product's actions, their messages, effects and triggers,
+> and the event type each outcome publishes (`order.EventTypeOf`). It records a
+> strategy part: each capability a release process — matched by the application's
+> portable key and the process id — or a Worker the release names realises, with its
+> state, last confirmation, owner (name and role), KPIs and SLAs as declared; and each
+> value stream a stage of which uses one, with all its stages in order. `layers=business`
+> and `layers=strategy` select them. The SVG draws both as bands above the picture,
+> capped per kind (processes, roles and products 6, capabilities 9, value streams 3), or
+> as bands alone. The ArchiMate document writes each process as a Business Process its
+> Application Process realises, each role as a Business Role assigned to it, each
+> product as a Product associated with the processes that carry it out, each capability
+> as a Capability its Application Process — or, with the application layer, its
+> worker's Application Service — realises, and each value stream as a Value Stream
+> composed of its stages, each served by the capabilities it uses. Format and mapping
+> version 6.
+>
+> **Amendment:**
+>
+> - **A product is shown to whoever may maintain its catalogue.** §5 says "readers
+>   within the catalogue's audience, by the check the starmap applies (ADR-0396)", but
+>   those are two different rules: the starmap shows a catalogue to the people who
+>   maintain it (`catalog.Service.MayMaintain` — owner, editor or viewer member, an
+>   administrator), not to the people it is offered to. The strongest case for the
+>   audience: a person who may order a product knows it exists. They meet it in the
+>   shop, though, and an architecture reading needs no wider circle than the starmap's;
+>   the audience check also asks the run loop again, which the read already holds. The
+>   record applies the starmap's check, as §5 names it, and counts what it withheld.
+> - **Products come from the newest published catalogue release.** The starmap reads
+>   the working items; the order path reads the published release. A release record
+>   answers what could be ordered when it shipped, so it reads what was published.
+> - **A person is counted, never named; a group is named as written.** A literal
+>   assignee is an Atlas account, which a release record cannot take back, so a task
+>   assigned to one is counted. A candidate group is recorded as the model writes it,
+>   not resolved to the group store's name, which would show a reader what that store
+>   holds. A lane is recorded by name: the compiled form keeps no lane id.
+> - **A product's actions are properties, not Business Services or Business Events.**
+>   Panorama refuses Business Process → Business Service as a realization, and Business
+>   Event is outside its subset. Product is written as §3 writes Path: valid ArchiMate,
+>   refused by `MayConnect` only as out of subset, and tested as exactly that.
+> - **The strategy layer needs no redaction.** The register is readable by every
+>   signed-in identity (ADR-0305). Who confirmed or edited a capability, and an owner's
+>   contact and account, are never recorded.
+> - **The bounds (§6)** are 100 roles, 200 tasks per role, 100 products with 50 actions
+>   each, 100 capabilities, 20 KPIs and SLAs per capability, 50 value streams and 30
+>   stages per stream. The installation measured holds 8 catalogues with 47 products, at
+>   most 4 actions per product and at most 9 products bound to one application's
+>   processes; its capability register is empty. The business bounds sit well above what
+>   was seen; the strategy bounds are guards with no measurement behind them yet, and are
+>   revisited once a register with content can be measured.
 
 ## Context and problem statement
 
