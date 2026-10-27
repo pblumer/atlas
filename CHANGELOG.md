@@ -14,6 +14,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The architecture sketch has a data layer, with the personal data a release declares.**
+  A release now records what its processes keep and read: each data object with its
+  declared class, the state it starts in, and the elements that write it (with the state
+  and the members they write) and read it; the data stores the processes name; each class
+  they keep data as, and whether the application's information model defines it; and
+  for each process that declares personal data, the variables, the variable naming
+  whose data it is, and every worker and job type the process hands work to — each of
+  them can read every variable visible at its task in plaintext, so all of them are
+  named, not only those whose task names a personal variable. Values are never recorded.
+  **Data** in the architecture dialog draws it as a band below the picture, or alone,
+  with each kind on rows of its own and what does not fit counted under it; the ArchiMate
+  document writes each process as an application process accessing its data objects —
+  read, written or both — which realise the business objects of their classes, and each
+  personal-data declaration as a data object the workers read. The default picture
+  leaves the band off and says so; `?layers=data` and `atlas_release_architecture`
+  ask for it. Snapshots are now format and mapping version 5; a release recorded earlier
+  is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **The architecture sketch says more about each Worker and where a message comes from.** A
   release now records what else each configured Worker's configuration says, as far as it is
   not a secret: the mail provider, the malware scanner's address, the model an agent Worker

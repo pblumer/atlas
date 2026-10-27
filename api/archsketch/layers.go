@@ -11,10 +11,11 @@ import (
 // A layer is a band of the picture and a part of what a read returns. The application
 // layer is the snapshot's logical part, what the release's content fixes; the
 // technology layer is its physical part, what the recording installation had in place.
-// Strategy, business and data are named here so that a selection can already ask for
-// them and a link written today keeps meaning the same thing; no snapshot records
-// them yet, and a read that asks only for layers a snapshot does not hold is refused
-// in words rather than answered with an empty picture.
+// The data layer, from format version 5, is what the processes keep and read and the
+// personal data they declare. Strategy and business are named here so that a
+// selection can already ask for them and a link written today keeps meaning the same
+// thing; no snapshot records them yet, and a read that asks only for layers a snapshot
+// does not hold is refused in words rather than answered with an empty picture.
 //
 // A public start link is an application interface that only the installation
 // records, so it belongs to both layers and is drawn only when both are shown.
@@ -104,7 +105,9 @@ func ParseSelection(raw string) (Selection, error) {
 }
 
 // Recorded is the layers this snapshot holds something for: the application layer
-// always, the technology layer when the snapshot carries a physical part. On a value
+// always, the technology layer when the snapshot carries a physical part, the data
+// layer when it carries a data part — even an empty one, which says the release
+// declares no data. On a value
 // [Snapshot.Select] returned it is still the stored snapshot's answer, so a picture
 // can say which recorded layers were switched off.
 func (s Snapshot) Recorded() Selection {
@@ -115,6 +118,9 @@ func (s Snapshot) Recorded() Selection {
 	if s.Physical != nil {
 		out |= SelectionOf(LayerTechnology)
 	}
+	if s.Data != nil {
+		out |= SelectionOf(LayerData)
+	}
 	return out
 }
 
@@ -122,12 +128,16 @@ func (s Snapshot) Recorded() Selection {
 // layer it has no physical part and is drawn as a logical view; without the
 // application layer it keeps its processes, so a reader still learns what the release
 // shipped, but none of its ways in or dependencies, and none of the public start
-// links. The snapshot it is called on is not changed.
+// links. Without the data layer it has no data part. The snapshot it is called on is
+// not changed.
 func (s Snapshot) Select(sel Selection) Snapshot {
 	out := s
 	out.shown, out.recorded = sel, s.Recorded()
 	if !sel.Has(LayerTechnology) {
 		out.Physical = nil
+	}
+	if !sel.Has(LayerData) {
+		out.Data = nil
 	}
 	if !sel.Has(LayerApplication) {
 		out.EntryPoints = nil
@@ -139,6 +149,16 @@ func (s Snapshot) Select(sel Selection) Snapshot {
 		}
 	}
 	return out
+}
+
+// selected is the value a rendering draws: itself when [Snapshot.Select] made it, and
+// otherwise the default selection of it, so a snapshot rendered as stored draws what a
+// read that names no layers draws.
+func (s Snapshot) selected() Snapshot {
+	if s.shown != 0 {
+		return s
+	}
+	return s.Select(DefaultSelection)
 }
 
 // Shown is the selection a rendering of this value draws.
@@ -156,16 +176,23 @@ func (s Snapshot) technologyOnly() bool {
 	return !sel.Has(LayerApplication) && sel.Has(LayerTechnology) && s.Physical != nil
 }
 
+// dataOnly reports whether this value is drawn as the data layer alone: the data
+// layer without the application layer, and without a technology layer drawn as the
+// installation.
+func (s Snapshot) dataOnly() bool {
+	return s.Data != nil && !s.Shown().Has(LayerApplication) && !s.technologyOnly()
+}
+
 // layerNote is what a rendering says about its layers when they are not the default:
 // which it shows, which were switched off, and which the reader asked for that this
-// snapshot does not record. Empty for the default selection, so a picture nobody
-// narrowed carries no line about narrowing.
+// snapshot does not record. Empty for the default selection of a snapshot that records
+// nothing beyond it, so a picture nobody narrowed carries no line about narrowing; a
+// snapshot that records more says which of its layers the default leaves off.
 func (s Snapshot) layerNote() string {
-	sel := s.Shown()
-	if sel == DefaultSelection {
+	sel, recorded := s.Shown(), s.Recorded()
+	if sel == DefaultSelection && recorded&^sel == 0 {
 		return ""
 	}
-	recorded := s.Recorded()
 	var off, missing []string
 	for _, l := range layerOrder {
 		switch {

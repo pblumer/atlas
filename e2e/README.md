@@ -798,10 +798,11 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
 - **`release-architecture-layers.spec.mjs`**
   ([ADR-0495](../docs/adr/0495-layered-release-architecture.md)):
   **Applications → Deployments → Release history → Architecture** against a stubbed API.
-  Every layer the release records is a ticked checkbox; switching one off redraws the
-  picture for the remaining layers and points both downloads at the same selection. The
-  last ticked layer cannot be switched off, and a release that records one layer offers
-  no choice.
+  Every layer the release records is a checkbox, ticked when the server shows it by
+  default; switching one off redraws the picture for the remaining layers and points both
+  downloads at the same selection. The last ticked layer cannot be switched off, a
+  release that records one layer offers no choice, and a recorded data layer is offered
+  unticked and adds itself to the selection when ticked.
 - **`workers-endpoints.spec.mjs`**
   ([ADR-0471](../docs/adr/0471-release-architecture-sketch.md)): **Operations → Workers**
   against a stubbed API. A worker name a Worker Instance holds shows the endpoint the

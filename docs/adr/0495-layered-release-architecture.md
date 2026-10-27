@@ -1,9 +1,9 @@
 # ADR-0495: A release's architecture is drawn in layers, from what Atlas already holds
 
-- **Status:** Accepted (2026-10-26; amended 2026-10-26 — the banded layout lands with the
-  first slice that has a band to draw, slice C; amended again with slice B — a Worker's
-  owner and call budget are not recorded, versions rise with each slice, and list bounds
-  are set in slice C; see the notes below)
+- **Status:** Accepted (2026-10-26; amended 2026-10-26 with slices A, B and C — the banded
+  layout moved to slice C; a Worker's owner and call budget are not recorded; versions
+  rise with each slice; personal data names every worker it is handed to; see the notes
+  below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -69,6 +69,57 @@
 >   configured for them. The first lists that grow with the size of the models (data
 >   objects, information-model classes) arrive in slice C, and §6's bounds are measured
 >   and set there.
+
+> **Implementation status and amendment (2026-10-26): slice C has landed.** A snapshot
+> records a data part: each data object a release process declares, with its class, its
+> initial state, and the elements whose associations write it (with the target state and
+> the members written) and read it; each data store the processes name, with the class
+> the application's information model keeps in it; each class a data object declares or
+> a store holds, marked when the information model defines it; and for each process
+> declaring personal data, its personal variables, its data-subject variable and the
+> workers, runtime workers and job types it hands work to. `layers=data` selects it. The
+> SVG draws it as a band below the picture — personal data, data objects, stores and
+> classes, each kind on rows of its own, capped per kind (6, 9, 6, 6) with the rest
+> counted under the band — or as the band alone. The ArchiMate document writes each
+> process as an Application Process assigned from the component, each data object as a
+> Data Object it accesses with the access type its associations give (Read, Write,
+> ReadWrite), realising the Business Object of its class, each store as a Data Object
+> associated with the processes naming it, and each personal-data declaration as a Data
+> Object with `atlas.personal` that each worker of the process reads. Format and mapping
+> version 5.
+>
+> **Amendment:**
+>
+> - **Personal data names every worker it is handed to, not the expressions that read
+>   it.** §1 said "which Workers receive personal values in the expressions they
+>   evaluate". The strongest case for that reading: it names exactly the values a task
+>   sends, and a worker whose task names no personal variable looks clean. The code says
+>   otherwise. A leased job carries every variable visible at its task, deciphered
+>   (`pulledJob`, `api/handlers.go`), and a Worker Atlas runs resolves its task through
+>   the personal reader (`Server.drive`, `api/server.go`); a REST body without input
+>   mappings sends every visible variable. An expression-level list would understate
+>   what reaches a worker, which for a data-protection reading is the worse error. So
+>   the snapshot names every worker and job type the declaring process hands work to,
+>   and the picture says each can read every visible variable in plaintext. What a
+>   worker passes on to the system it reaches is listed as not shown.
+> - **A store records where it is named, not who reads or writes it.** The compiled
+>   model keeps a store's name and the element that names it, and refuses a data
+>   association to a store, so the access a store box could show does not exist yet.
+> - **The data layer is off by default.** §3 keeps the default selection at
+>   application and technology. A snapshot that records more now says in its default
+>   picture which recorded layers that leaves off; a snapshot recording only the
+>   default layers draws the bytes it drew before.
+> - **The bounds (§6) are 200 data objects, 100 stores, 100 classes and 100 personal
+>   variables per process.** They were measured on a real installation (49
+>   applications, 239 processes, 60 of them read in full): no process there declared
+>   more than two data objects or six personal variables, no application more than
+>   eighteen distinct personal variables, and its three information models held 25
+>   classes in all. Real models are that small, so each bound guards against a
+>   generated or pathological model and sits well above what was seen; what a bound
+>   leaves out is counted in `omitted` and listed as not shown.
+> - **A class is recorded by name.** Its members and lifecycle stay in the
+>   information model; the snapshot records whether the model defined the class when
+>   the release was taken, and the drift view of §2 is where a later change shows.
 
 ## Context and problem statement
 

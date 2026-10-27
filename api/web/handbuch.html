@@ -9283,9 +9283,9 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         ausgeschalteten Ebenen. Dieselbe Wahl nehmen die Routen und <code>atlas_release_architecture</code> als
         <code>?layers=</code> entgegen (<code>strategy</code>, <code>business</code>, <code>application</code>,
         <code>data</code>, <code>technology</code>). Ohne Angabe gelten Application und Technology; ein Link oder ein
-        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Strategie-, Business- und
-        Datenebene zeichnet noch kein Release auf; wer nur nach solchen Ebenen fragt, erhält eine Antwort, die sagt,
-        welche Ebenen der Release aufzeichnet.</p>
+        eingebettetes Bild ohne <code>layers</code> zeigt also unverändert dasselbe. Strategie- und Business-Ebene
+        zeichnet noch kein Release auf; wer nur nach solchen Ebenen fragt, erhält eine Antwort, die sagt, welche
+        Ebenen der Release aufzeichnet.</p>
       <p data-l="en">The sketch is organised in <b>layers</b>. The <i>Architecture</i> dialog offers one checkbox per
         layer the release records: <i>Application</i> is the logical view (what the release's content fixes),
         <i>Technology</i> the physical one (what the installation had in place). Without Technology the sketch shows
@@ -9295,8 +9295,8 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         routes and <code>atlas_release_architecture</code> take the same choice as <code>?layers=</code>
         (<code>strategy</code>, <code>business</code>, <code>application</code>, <code>data</code>,
         <code>technology</code>). Without it, Application and Technology apply, so a link or an embedded picture
-        without <code>layers</code> shows exactly what it showed before. No release records the strategy, business
-        or data layer yet; asking for those alone gets an answer that says which layers the release records.</p>
+        without <code>layers</code> shows exactly what it showed before. No release records the strategy or business
+        layer yet; asking for those alone gets an answer that says which layers the release records.</p>
       <p data-l="de">Ein Release hält ausserdem fest, was die Konfiguration eines Workers sonst noch sagt, soweit es
         kein Geheimnis ist: den Mail-Provider, die Adresse des Malware-Scanners, das Modell, das ein Agent-Worker
         fragt, die Identitätsregel (Modus und ob sie durchgesetzt wird) und ob ein Credential hinterlegt ist – nie
@@ -9320,6 +9320,32 @@ curl -X POST https://atlas-test.example.com/api/v1/applications/$APP/publish \
         subscription feeds the message, not what or where. A Worker's owner is not recorded, nor the budget for
         outbound calls, which is the same for every Worker. A release recorded earlier is drawn exactly as
         before.</p>
+      <p data-l="de">Die <b>Datenebene</b> hält fest, was die Prozesse eines Release speichern und lesen: jedes
+        Datenobjekt mit seiner deklarierten Klasse, seinem Anfangszustand und den Elementen, die es schreiben (mit
+        Zielzustand und geschriebenen Feldern) und lesen; die Datenspeicher, die die Prozesse nennen; jede Klasse,
+        in der sie Daten halten, und ob das Informationsmodell der Applikation sie definiert; und für jeden Prozess,
+        der personenbezogene Daten deklariert, die Variablen, die Variable, die die betroffene Person nennt, und
+        jeden Worker und Job-Typ, dem der Prozess Arbeit übergibt. Jeder von ihnen kann jede an seiner Aufgabe
+        sichtbare Variable im Klartext lesen; deshalb nennt die Skizze alle, nicht nur jene, deren Aufgabe eine
+        personenbezogene Variable erwähnt. Werte werden nie aufgezeichnet. Die Checkbox <i>Data</i> zeichnet die
+        Ebene als Band unter der Skizze oder allein, jede Art auf eigenen Zeilen; was nicht Platz hat, wird unter
+        dem Band gezählt. Im ArchiMate-Dokument wird jeder Prozess zu einem Application Process, der auf seine
+        Data Objects lesend, schreibend oder beides zugreift; diese realisieren die Business Objects ihrer Klassen.
+        Ohne Auswahl bleibt das Band aus, und die Skizze sagt das; <code>?layers=data</code> fragt danach. Welche
+        Aktivität einen Datenspeicher liest oder schreibt, steht nicht im kompilierten Modell und fehlt deshalb.</p>
+      <p data-l="en">The <b>data layer</b> records what a release's processes keep and read: each data object with
+        its declared class, the state it starts in and the elements that write it (with the target state and the
+        members they write) and read it; the data stores the processes name; each class they keep data as, and
+        whether the application's information model defines it; and for each process that declares personal data,
+        the variables, the variable naming the person they are about, and every worker and job type the process
+        hands work to. Each of them can read every variable visible at its task in plaintext, which is why the
+        sketch names them all, not only those whose task names a personal variable. Values are never recorded. The
+        <i>Data</i> checkbox draws the layer as a band below the sketch, or alone, each kind on rows of its own;
+        what does not fit is counted under the band. In the ArchiMate document each process becomes an
+        Application Process that reads, writes or both its Data Objects, which realise the Business Objects of
+        their classes. Without a choice the band stays off and the sketch says so; <code>?layers=data</code> asks
+        for it. Which activity reads or writes a data store is not in the compiled model and is therefore not
+        shown.</p>
 
       <h3 data-l="de">Ein Ziel und sein Token</h3><h3 data-l="en">A target and its token</h3>
       <p data-l="de">Ein <b>Deployment-Ziel</b> ist ein anderer atlas-Server, an den dieser hier promotet. Es ist

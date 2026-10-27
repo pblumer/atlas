@@ -57,17 +57,30 @@ type archElement struct {
 
 type archRelationship struct {
 	typ, source, target string
+	// access is an Access relationship's accessType: Read, Write, ReadWrite or Access.
+	access string
 }
 
 // ArchiMate renders the snapshot as an ArchiMate Model Exchange document. A value
 // [Snapshot.Select] narrowed to the technology layer is written as the installation
 // alone.
+//
+// A value whose selection holds the data layer also carries the data layer's
+// elements, joined to the application component when the application layer is shown.
 func ArchiMate(s Snapshot, m Meta) []byte {
+	s = s.selected()
+	var elements []archElement
+	var relationships []archRelationship
+	app := ""
 	if s.technologyOnly() {
-		elements, relationships := technologyGraph(s, m)
-		return exchangeDocument(s, m, elements, relationships)
+		elements, relationships = technologyGraph(s, m)
+	} else {
+		elements, relationships = applicationGraph(s, m)
+		app = "id-application"
 	}
-	elements, relationships := applicationGraph(s, m)
+	if s.Data != nil {
+		elements, relationships = dataGraph(s, elements, relationships, app)
+	}
 	return exchangeDocument(s, m, elements, relationships)
 }
 
@@ -81,7 +94,7 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		return e.id
 	}
 	relate := func(typ, source, target string) {
-		relationships = append(relationships, archRelationship{typ, source, target})
+		relationships = append(relationships, archRelationship{typ: typ, source: source, target: target})
 	}
 
 	node := add(archElement{id: "id-atlas-node", typ: "Node", name: "Atlas",
@@ -281,7 +294,7 @@ func technologyGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 		return e.id
 	}
 	relate := func(typ, source, target string) {
-		relationships = append(relationships, archRelationship{typ, source, target})
+		relationships = append(relationships, archRelationship{typ: typ, source: source, target: target})
 	}
 	p := *s.Physical
 
@@ -492,8 +505,12 @@ func exchangeDocument(s Snapshot, m Meta, elements []archElement, relationships 
 
 	out.WriteString("  <relationships>")
 	for i, r := range relationships {
-		fmt.Fprintf(&out, "\n    <relationship identifier=%q source=%q target=%q xsi:type=%q/>",
-			fmt.Sprintf("id-rel-%d", i+1), r.source, r.target, r.typ)
+		access := ""
+		if r.access != "" {
+			access = fmt.Sprintf(" accessType=%q", r.access)
+		}
+		fmt.Fprintf(&out, "\n    <relationship identifier=%q source=%q target=%q xsi:type=%q%s/>",
+			fmt.Sprintf("id-rel-%d", i+1), r.source, r.target, r.typ, access)
 	}
 	out.WriteString("\n  </relationships>\n")
 
@@ -505,6 +522,128 @@ func exchangeDocument(s Snapshot, m Meta, elements []archElement, relationships 
 	out.WriteString("\n  </propertyDefinitions>\n")
 	out.WriteString("</model>\n")
 	return []byte(out.String())
+}
+
+// dataGraph adds the data layer (mapping version 5): each process that keeps data or
+// declares personal data as an Application Process the component is assigned to, each
+// data object as a Data Object it accesses — read, written or both, as its
+// associations say — realising the Business Object of its class, each store as a Data
+// Object associated with the processes that name it, and each personal-data
+// declaration as a Data Object every worker the process hands work to reads.
+func dataGraph(s Snapshot, elements []archElement, relationships []archRelationship, app string) ([]archElement, []archRelationship) {
+	d := s.Data
+	add := func(e archElement) string {
+		elements = append(elements, e)
+		return e.id
+	}
+	relate := func(typ, source, target, access string) {
+		relationships = append(relationships, archRelationship{typ: typ, source: source, target: target, access: access})
+	}
+
+	processes := map[string]string{}
+	process := func(pid string) string {
+		if id, ok := processes[pid]; ok {
+			return id
+		}
+		name, doc := pid, "Process "+pid+" as the release shipped it."
+		n := len(s.Processes) + len(processes) + 1
+		for i, p := range s.Processes {
+			if p.ProcessID == pid {
+				n = i + 1
+				if p.Name != "" {
+					name = p.Name
+				}
+				doc = fmt.Sprintf("Process %s v%d as the release shipped it.", pid, p.Version)
+				break
+			}
+		}
+		id := add(archElement{id: fmt.Sprintf("id-process-%d", n), typ: "ApplicationProcess", name: "Process " + name, doc: doc,
+			props: map[string]string{"atlas.derivedKind": "process", panorama.KeyProcessID: pid}})
+		if app != "" {
+			relate("Assignment", app, id, "")
+		}
+		processes[pid] = id
+		return id
+	}
+
+	classes := map[string]string{}
+	for i, c := range d.Classes {
+		doc := "A class the release keeps data as. The process models declare it as a type; the application's information model does not define it."
+		modeled := ""
+		if c.Modeled {
+			doc, modeled = "A class the release keeps data as, defined in the application's information model.", "true"
+		}
+		classes[c.Name] = add(archElement{id: fmt.Sprintf("id-class-%d", i+1), typ: "BusinessObject", name: c.Name, doc: doc,
+			props: map[string]string{"atlas.derivedKind": "class", "atlas.class.modeled": modeled}})
+	}
+	for i, o := range d.Objects {
+		collection := ""
+		if o.Collection {
+			collection = "true"
+		}
+		id := add(archElement{id: fmt.Sprintf("id-dataobject-%d", i+1), typ: "DataObject", name: o.Name,
+			doc: "A data object of process " + o.ProcessID + ": " + o.useDetail() + ".",
+			props: map[string]string{
+				"atlas.derivedKind":           "dataObject",
+				panorama.KeyProcessID:         o.ProcessID,
+				"atlas.dataObject.class":      o.Class,
+				"atlas.dataObject.collection": collection,
+				"atlas.dataObject.states":     strings.Join(o.states(), ", "),
+			}})
+		relate("Access", process(o.ProcessID), id, o.accessType())
+		if c := classes[o.Class]; c != "" {
+			relate("Realization", id, c, "")
+		}
+	}
+	for i, st := range d.Stores {
+		id := add(archElement{id: fmt.Sprintf("id-datastore-%d", i+1), typ: "DataObject", name: st.Name,
+			doc: "A data store, where instances of a class outlive the process that made them. Named at " + usesText(st.UsedBy) +
+				". Which activity reads or writes it is not in the compiled model.",
+			props: map[string]string{"atlas.derivedKind": "dataStore", "atlas.dataStore.class": st.Class}})
+		last := "" // UsedBy is sorted by process, so one association per process
+		for _, u := range st.UsedBy {
+			if u.ProcessID != last {
+				relate("Association", process(u.ProcessID), id, "")
+				last = u.ProcessID
+			}
+		}
+		if c := classes[st.Class]; c != "" {
+			relate("Realization", id, c, "")
+		}
+	}
+
+	// The workers, runtime workers and job types the application layer wrote, by the
+	// identifiers it gave them.
+	recipients := map[PersonalRecipient]string{}
+	if app != "" {
+		for i, dep := range s.Outbound() {
+			recipients[PersonalRecipient{Kind: dep.Kind, Name: dep.Name, WorkerType: dep.WorkerType}] = fmt.Sprintf("id-dependency-%d", i+1)
+		}
+	}
+	for i, p := range d.Personal {
+		names := make([]string, 0, len(p.HandedTo))
+		for _, r := range p.HandedTo {
+			names = append(names, r.text())
+		}
+		id := add(archElement{id: fmt.Sprintf("id-personal-%d", i+1), typ: "DataObject", name: "Personal data of " + p.ProcessID,
+			doc: "Process " + p.ProcessID + " declares " + strings.Join(p.Variables, ", ") + " personal, about the person " + p.Subject +
+				" names; " + p.handedToText() + ". Only the declaration is recorded, never a value.",
+			props: map[string]string{
+				"atlas.derivedKind":        "personalData",
+				panorama.KeyProcessID:      p.ProcessID,
+				"atlas.personal":           "true",
+				"atlas.personal.variables": strings.Join(p.Variables, ", "),
+				"atlas.personal.subject":   p.Subject,
+				"atlas.personal.handedTo":  strings.Join(names, ", "),
+			}})
+		relate("Association", process(p.ProcessID), id, "")
+		for _, r := range p.HandedTo {
+			if rid := recipients[r]; rid != "" {
+				relate("Access", rid, id, "Read")
+			}
+		}
+	}
+	return elements, relationships
 }
 
 // archiProvenance is the paragraph that keeps the document from being mistaken for one
@@ -535,6 +674,9 @@ func archiProvenance(s Snapshot, m Meta) string {
 
 // view names what the document holds, the way the image's stamp does.
 func view(s Snapshot) string {
+	if s.dataOnly() {
+		return "data architecture"
+	}
 	if p := s.Physical; p != nil {
 		if s.technologyOnly() {
 			return "physical architecture on " + installationName(*p)
