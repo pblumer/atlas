@@ -40,7 +40,7 @@ ADR-0208 specifies the Worker Type package trust model but its package-provenanc
 
 **Decision: option 3 — accepted.** Initially only maintainer-reviewed definitions and independently reviewed evidence committed alongside atlas can be trusted. This decision establishes the publication and conformance governance model; it does **not** certify existing providers or make a runtime selection decision. Do not derive `verified` from schema-only fixture success, a self-declared reviewer string or a submitted report.
 
-**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. [PR #1360](https://github.com/pblumer/atlas/pull/1360) added contract digests over the file's bytes, and `internal/impldigest` computes the dependency digest of a built-in Worker Type's implementation. The publication, approval and revocation workflow is not implemented, and nothing on `main` is independently verified evidence.
+**Implementation status:** Step 1's validator is on `main`: [PR #1357](https://github.com/pblumer/atlas/pull/1357) added offline Draft 2020-12 schema validation with remote loading disabled and schema-only fixtures. [PR #1360](https://github.com/pblumer/atlas/pull/1360) added contract digests over the file's bytes, and [PR #1388](https://github.com/pblumer/atlas/pull/1388) the dependency digest of a built-in Worker Type's implementation (`internal/impldigest`). `workertype/evidence` defines the evidence record, derives and verifies it offline, and a CI gate fails on a stale record (see *Evidence records*). No contract is published and no record exists yet, so nothing on `main` is independently verified evidence. Withdrawal records and the projection of claim states are not implemented.
 
 ### Initial publication and trust boundary (accepted)
 
@@ -129,21 +129,64 @@ Decided by the maintainer on 2026-10-26:
   happens to run is left out, because CI and contributors differ in it.
   `internal/impldigest` computes it. Which root packages serve a Worker Type is
   named in its evidence record and reviewed with it, and the roots cover every
-  path the Worker Type can run on. Today there are two: a supervised worker runs
-  it through the shared `worker` package, whose closure reaches every
-  connector; the engine runs it through `api`, whose closure is nearly the whole
-  module. Nine built-in Worker Types are worker-only, CloudEvents runs only in
-  the engine, and the other ten run in a supervised worker by default and in the
-  engine under `--in-process-connectors`. A Worker Type installed as a package
-  binds to its ADR-0208 package digest once that exists. A build commit was
-  rejected: evidence kept in the repository cannot name the commit that
-  contains it.
+  path the Worker Type can run on (decided 2026-10-27, variant A). Today there
+  are two: a supervised worker runs it through the shared `worker` package,
+  whose closure reaches every connector; the engine runs it through `api`, whose
+  closure is nearly the whole module. Which paths a Worker Type has is read from
+  the lists the runtime decides with, not kept in this record: a kind the
+  `worker` package serves can run in a supervised worker, and a kind that is not
+  worker-only has an in-engine form. A worker-only kind has the `worker` path
+  alone, CloudEvents has only the engine, and an offloadable kind has both,
+  because `--in-process-connectors` moves it into the engine. The narrower
+  alternative, splitting each Worker Type's glue into its own package so its
+  roots shrink, is a refactor that waits until renewals show it is needed. A
+  Worker Type installed as a package binds to its ADR-0208 package digest once
+  that exists. A build commit was rejected: evidence kept in the repository
+  cannot name the commit that contains it.
 - **Renewal in the same change.** A pull request that changes the dependency
   digest of an operation with evidence must refresh that evidence (re-run the
   approved conformance cases and record the new digest) in the same pull
   request; CI fails otherwise. The maintainer's merge of that pull request is
   the renewed approval under *Approval authority in the initial phase*. `main`
   therefore never carries evidence for code it no longer contains.
+
+### Evidence records (as built, for review)
+
+`workertype/evidence` implements the record. These points refine the decisions
+above and are open to review until the first record is published:
+
+- **Where.** Published contracts live under `workertype/contracts/` and records
+  under `workertype/evidence/records/`. `.github/CODEOWNERS` assigns both, the
+  verifier, `internal/impldigest` and the contract digest to the maintainer.
+- **Bound and derived.** A record binds four values a reviewer chooses: the
+  contract file, the Worker Type ID, the operation ID and the conformance suite.
+  The verifier derives everything else from the module: the contract's identity
+  and digest, the Worker Type's version (from the built-in metadata), the job
+  type and the operation's existence (from the Worker Type's own operation
+  table, not a copy), the runtime roots and their digest, the suite's digest,
+  every case's outcome and the approval rule. A record is current exactly when
+  deriving it again gives its bytes; the verifier names what moved otherwise.
+- **The contract digest is never renewed.** Contract bytes that changed after
+  a record named them are refused rather than reported as stale: a changed
+  meaning needs a new version.
+- **Renewal rewrites the record in place.** The previous version stays in the
+  protected history, which is where approval lives anyway. Append-only applies
+  to publication and withdrawal history, which is a separate slice.
+- **Suites run in process against fakes.** A suite is Go code registered by
+  name, with its own package whose dependency digest is the fixture revision;
+  through `go.sum` it also fixes the schema validator's version. It reports
+  each case as passed, failed or not exercised, and says what it ran against. A
+  live provider is out of scope for a record; a case only a live tenant can
+  show is reported as not exercised.
+- **The approval is not in the file.** The record carries only the rule it was
+  approved under (`repository-provenance/single-maintainer`), so a stricter rule
+  can tell these records apart. A record with a failed or unexercised case is
+  still current evidence of what the operation does; it verifies no claim.
+- **The gate.** `go test ./workertype/evidence/gate` verifies every record with
+  every registered suite and runs in the ordinary test jobs, so a pull request
+  that moves a record's implementation fails until it carries the renewed
+  record. `go run ./workertype/evidence/cmd/evidence` creates, renews and
+  verifies records and prints the digest of any packages.
 
 ### Normative identity and artifact ownership
 
