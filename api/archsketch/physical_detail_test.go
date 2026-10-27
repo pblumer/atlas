@@ -1,6 +1,7 @@
 package archsketch
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -41,7 +42,7 @@ func TestAWorkersConfigurationIsDrawnOnAFourthLine(t *testing.T) {
 		"delegated per instance (policy recorded, not enforced) · credential configured · model gpt-4o-mini",
 		"credential configured · via smtp · mailbox imaps://mail.example.com:993 · scanner clamd://av.example.com:3310",
 		"← events · orders/new/…",
-		"mapping version 4",
+		fmt.Sprintf("mapping version %d", MappingVersion),
 	} {
 		if !strings.Contains(svg, want) {
 			t.Errorf("the sketch lacks %q", want)

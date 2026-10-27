@@ -60,6 +60,9 @@ const (
 	// into pages whose theme it cannot know.
 	colorApplication = "#b5ffff"
 	colorTechnology  = "#c9e7b7"
+	colorBusiness    = "#ffffb5"
+	colorBand        = "#f6f8fa"
+	colorRule        = "#d0d7de"
 	colorInk         = "#1f2328"
 	colorMuted       = "#57606a"
 	colorStroke      = "#4b5563"
@@ -68,9 +71,16 @@ const (
 
 // SVG renders the snapshot as a standalone SVG document. A value [Snapshot.Select]
 // narrowed to the technology layer is drawn as the installation alone.
+//
+// A value whose selection holds the data layer gets a band below the picture (ADR-0495
+// §3); a value whose selection holds only the data layer is drawn as that band alone.
 func SVG(s Snapshot, m Meta) []byte {
+	s = s.selected()
 	if s.technologyOnly() {
 		return drawSketch(s, m, technologyParts(s, m))
+	}
+	if s.dataOnly() {
+		return drawSketch(s, m, sketchParts{})
 	}
 	return drawSketch(s, m, sketchParts{
 		left:       inboundBoxes(s),
@@ -116,6 +126,15 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	top := nodeTop + nodeHeadH
 	notes := footerLines(s, m, parts.key)
 	footerTop := top + contentH + 40
+	main := !s.dataOnly()
+	band := dataBand(s)
+	bandTop := top + contentH + 32
+	if !main {
+		bandTop = headerH - 16
+	}
+	if band != nil {
+		footerTop = bandTop + band.height() + 24
+	}
 	height := footerTop + 22 + len(notes)*lineHeight + 16
 
 	var b strings.Builder
@@ -130,69 +149,82 @@ func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	// into a page has nobody beside it to ask.
 	fmt.Fprintf(&b, `<text x="%d" y="34" font-size="20" font-weight="600" fill="%s">%s</text>`+"\n", colLeftX, colorInk, esc(title(m)))
 	fmt.Fprintf(&b, `<text x="%d" y="56" fill="%s">%s</text>`+"\n", colLeftX, colorMuted, esc(stampLine(s, m)))
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, headerH+10, colorInk)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, headerH+10, colorInk, esc(parts.rightTitle))
+	if main {
+		drawMain(&b, parts, bh, top, contentH, nodeTop)
+	}
+	if band != nil {
+		band.draw(&b, bandTop)
+	}
+
+	// Footer: the key, and what this sketch does not show.
+	fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s"/>`+"\n", colLeftX, footerTop, svgWidth-colLeftX, footerTop, colorRule)
+	for i, line := range notes {
+		fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, footerTop+22+i*lineHeight, colorMuted, esc(line))
+	}
+	b.WriteString("</svg>\n")
+	return []byte(b.String())
+}
+
+// drawMain draws the picture's frame: the two columns and the Atlas node between them,
+// with what runs inside it.
+func drawMain(b *strings.Builder, parts sketchParts, bh, top, contentH, nodeTop int) {
+	left, right := parts.left, parts.right
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Reached from outside</text>`+"\n", colLeftX, headerH+10, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">%s</text>`+"\n", colRightX, headerH+10, colorInk, esc(parts.rightTitle))
 
 	// The Atlas node, and what runs inside it.
 	nodeH := nodeHeadH + contentH + 16
-	fmt.Fprintf(&b, `<g><title>%s</title>`, esc("Atlas — the server the application runs on"))
-	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, nodeX, nodeTop, nodeWidth, nodeH, colorTechnology, colorStroke)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-weight="600" fill="%s">Atlas</text>`, nodeX+12, nodeTop+20, colorInk)
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">Node</text></g>`+"\n", nodeX+nodeWidth-10, nodeTop+20, colorMuted)
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc("Atlas — the server the application runs on"))
+	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, nodeX, nodeTop, nodeWidth, nodeH, colorTechnology, colorStroke)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Atlas</text>`, nodeX+12, nodeTop+20, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">Node</text></g>`+"\n", nodeX+nodeWidth-10, nodeTop+20, colorMuted)
 
 	appX := nodeX + appInset
 	appW := nodeWidth - 2*appInset
 	appTop := top
-	fmt.Fprintf(&b, `<g><title>%s</title>`, esc(parts.center.tooltip))
-	fmt.Fprintf(&b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, parts.center.fill, colorStroke)
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc(parts.center.tooltip))
+	fmt.Fprintf(b, `<rect x="%d" y="%d" width="%d" height="%d" rx="6" fill="%s" stroke="%s"/>`, appX, appTop, appW, contentH, parts.center.fill, colorStroke)
 	for i, line := range parts.center.lines {
 		weight := ""
 		if i == 0 {
 			weight = ` font-weight="600"`
 		}
-		fmt.Fprintf(&b, `<text x="%d" y="%d"%s fill="%s">%s</text>`, appX+12, appTop+24+i*lineHeight, weight, colorInk, esc(cut(line, 30)))
+		fmt.Fprintf(b, `<text x="%d" y="%d"%s fill="%s">%s</text>`, appX+12, appTop+24+i*lineHeight, weight, colorInk, esc(cut(line, 30)))
 	}
-	fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
 
 	// The ways in, each with a solid arrow into the application.
 	for i, box := range left {
 		y := top + i*(bh+boxGap)
-		drawBox(&b, colLeftX, y, bh, box)
+		drawBox(b, colLeftX, y, bh, box)
 		mid := y + bh/2
-		fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+		fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke)
 	}
 
 	// The right column: a solid arrow from whichever side opens the connection, or a
 	// dashed line where no connection is recorded.
 	if len(right) == 0 {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colRightX, top+bh/2+5, colorMuted, esc(parts.noRight))
+		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colRightX, top+bh/2+5, colorMuted, esc(parts.noRight))
 	}
 	for i, box := range right {
 		y := top + i*(bh+boxGap)
-		drawBox(&b, colRightX, y, bh, box)
+		drawBox(b, colRightX, y, bh, box)
 		mid := y + bh/2
 		appY := clampY(mid, appTop, contentH)
 		switch box.arrow {
 		case arrowIn:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 				colRightX, mid, appX+appW, appY, colorStroke)
 		case arrowOut:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
 				appX+appW, appY, colRightX, mid, colorStroke)
 		default:
-			fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
+			fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" stroke-dasharray="6 4"/>`+"\n",
 				appX+appW, appY, colRightX, mid, colorStroke)
 		}
 	}
 
-	// Footer: the key, and what this sketch does not show.
-	fmt.Fprintf(&b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="#d0d7de"/>`+"\n", colLeftX, footerTop, svgWidth-colLeftX, footerTop)
-	for i, line := range notes {
-		fmt.Fprintf(&b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, footerTop+22+i*lineHeight, colorMuted, esc(line))
-	}
-	b.WriteString("</svg>\n")
-	return []byte(b.String())
 }
 
 // technologyParts is the picture of the installation alone: the Atlas system software
@@ -446,7 +478,14 @@ func footerKey(s Snapshot) string {
 func footerLines(s Snapshot, m Meta, key string) []string {
 	lines := []string{
 		fmt.Sprintf("Generated by Atlas from release v%d of %s; nothing here was drawn by a person.", m.Version, m.Application),
-		key,
+	}
+	if key != "" {
+		lines = append(lines, key)
+	}
+	if s.Data != nil {
+		lines = append(lines,
+			"Data band: each box is a declaration in the release's process models, never a value an instance held.",
+			"Personal data: each worker named can read every variable visible at its task in plaintext, whether or not its task names one.")
 	}
 	if note := s.layerNote(); note != "" {
 		lines = append(lines, note)
@@ -473,6 +512,9 @@ func stampLine(s Snapshot, m Meta) string {
 		if s.technologyOnly() {
 			view = "Physical view of " + installationName(*p)
 		}
+	}
+	if s.dataOnly() {
+		view = "Data view"
 	}
 	line := fmt.Sprintf("%s · snapshot taken %s · mapping version %d · release %s",
 		view, formatTime(s.TakenAt), s.MappingVersion, m.ReleaseID)
@@ -584,4 +626,157 @@ func esc(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// The data band (ADR-0495 §3, slice C): the data layer below the picture, or alone.
+
+const (
+	bandColumns = 3
+	bandHeadH   = 34
+)
+
+// The band's caps, per kind, so a release with many data objects still shows its
+// stores and classes. What does not fit is counted under the band; the JSON answer
+// and the ArchiMate document list it all.
+const (
+	bandMaxPersonal = 6
+	bandMaxObjects  = 9
+	bandMaxStores   = 6
+	bandMaxClasses  = 6
+)
+
+// bandColumnX puts the band's three columns at the picture's two columns and midway
+// between them.
+var bandColumnX = [bandColumns]int{colLeftX, (colLeftX + colRightX) / 2, colRightX}
+
+// dataBandView is the band as it is drawn: its boxes, the cell each one takes — each
+// kind starts a row of its own — and the line naming what the cap left out.
+type dataBandView struct {
+	boxes []box
+	cells []int
+	cut   string
+}
+
+// dataBand lays out the data layer of a value whose selection holds it: personal-data
+// declarations first, because they answer the question nobody else does, then the
+// data objects, the stores and the classes. Nil when the value has no data part.
+func dataBand(s Snapshot) *dataBandView {
+	d := s.Data
+	if d == nil {
+		return nil
+	}
+	type entry struct {
+		kind, kinds string
+		max         int
+		box         box
+	}
+	var all []entry
+	for _, p := range d.Personal {
+		vars := strings.Join(p.Variables, ", ")
+		all = append(all, entry{"personal-data declaration", "personal-data declarations", bandMaxPersonal, box{fill: colorApplication,
+			kind: "Data object · personal, about " + p.Subject, label: "Personal data of " + p.ProcessID, detail: vars, site: p.handedToText(),
+			tooltip: "Process " + p.ProcessID + " declares " + plural(len(p.Variables), "personal variable", "personal variables") + " (" + vars +
+				"), about the person " + p.Subject + " names; " + p.handedToText() + ". Only the declaration is recorded, never a value."}})
+	}
+	for _, o := range d.Objects {
+		label := o.Name
+		if o.Collection {
+			label += " (collection)"
+		}
+		detail := "in " + o.ProcessID + " · no declared type"
+		if o.Class != "" {
+			detail = "in " + o.ProcessID + " · class " + o.Class
+		}
+		site := o.useText()
+		if states := o.states(); len(states) > 0 {
+			site += " · states " + strings.Join(states, ", ")
+		}
+		all = append(all, entry{"data object", "data objects", bandMaxObjects, box{fill: colorApplication, kind: "Data object", label: label, detail: detail, site: site,
+			tooltip: "Data object " + label + " of process " + o.ProcessID + "; " + detail + "; " + o.useDetail()}})
+	}
+	for _, st := range d.Stores {
+		detail := "no class named for it in the information model"
+		if st.Class != "" {
+			detail = "keeps class " + st.Class
+		}
+		all = append(all, entry{"data store", "data stores", bandMaxStores, box{fill: colorApplication, kind: "Data object · store", label: st.Name, detail: detail,
+			site:    "named at " + usesText(st.UsedBy),
+			tooltip: "Data store " + st.Name + " — " + detail + "; named at " + usesText(st.UsedBy)}})
+	}
+	for _, c := range d.Classes {
+		detail := "declared type, not in the information model"
+		if c.Modeled {
+			detail = "defined in the information model"
+		}
+		site := "kept " + d.keptAs(c.Name)
+		all = append(all, entry{"class", "classes", bandMaxClasses, box{fill: colorBusiness, kind: "Business object", label: c.Name, detail: detail, site: site,
+			tooltip: "Class " + c.Name + " — " + detail + "; " + site}})
+	}
+
+	v := &dataBandView{}
+	drawn, cut := map[string]int{}, map[string]int{}
+	var kinds []entry
+	cell := 0
+	for i, e := range all {
+		if drawn[e.kind] < e.max {
+			if i > 0 && e.kind != all[i-1].kind && cell%bandColumns != 0 {
+				cell += bandColumns - cell%bandColumns
+			}
+			v.boxes = append(v.boxes, e.box)
+			v.cells = append(v.cells, cell)
+			drawn[e.kind]++
+			cell++
+			continue
+		}
+		if cut[e.kind] == 0 {
+			kinds = append(kinds, e)
+		}
+		cut[e.kind]++
+	}
+	if len(kinds) > 0 {
+		parts := make([]string, 0, len(kinds))
+		for _, k := range kinds {
+			parts = append(parts, plural(cut[k.kind], k.kind, k.kinds))
+		}
+		v.cut = "Not drawn for lack of room: " + strings.Join(parts, ", ") + " — the JSON answer and the ArchiMate document list them all."
+	}
+	return v
+}
+
+func (v *dataBandView) rows() int {
+	if len(v.cells) == 0 {
+		return 0
+	}
+	return v.cells[len(v.cells)-1]/bandColumns + 1
+}
+
+func (v *dataBandView) height() int {
+	h := bandHeadH + 16 + lineHeight
+	if rows := v.rows(); rows > 0 {
+		h = bandHeadH + 16 + rows*physicalBoxHeight + (rows-1)*boxGap
+	}
+	if v.cut != "" {
+		h += lineHeight + 4
+	}
+	return h
+}
+
+func (v *dataBandView) draw(b *strings.Builder, top int) {
+	fmt.Fprintf(b, `<g><title>%s</title>`, esc("The data layer: what the release's processes keep and read, the classes they keep it as, and the personal data they declare"))
+	fmt.Fprintf(b, `<rect x="16" y="%d" width="%d" height="%d" rx="4" fill="%s" stroke="%s"/>`, top, svgWidth-32, v.height(), colorBand, colorRule)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-weight="600" fill="%s">Data</text>`, colLeftX, top+22, colorInk)
+	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", svgWidth-colLeftX, top+22, colorMuted,
+		esc("what the processes keep and read, and the personal data they declare"))
+	y0 := top + bandHeadH
+	if len(v.boxes) == 0 {
+		fmt.Fprintf(b, `<text x="%d" y="%d" fill="%s">%s</text>`+"\n", colLeftX, y0+lineHeight, colorMuted,
+			esc("This release declares no data objects, data stores or personal data."))
+	}
+	for i, bx := range v.boxes {
+		c := v.cells[i]
+		drawBox(b, bandColumnX[c%bandColumns], y0+(c/bandColumns)*(physicalBoxHeight+boxGap), physicalBoxHeight, bx)
+	}
+	if v.cut != "" {
+		fmt.Fprintf(b, `<text x="%d" y="%d" font-size="12" fill="%s">%s</text>`+"\n", colLeftX, top+v.height()-12, colorMuted, esc(v.cut))
+	}
 }
