@@ -184,6 +184,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every topic of a Console page folds away, and the browser remembers it.** A card
+  headed by its title — the five on Console › Administration › Security, the mockup cards
+  on Console › Workers, and every other one on every page — gets the caret toggle the
+  Workers and Deployments sections already had, without the page asking for it. Folded,
+  a card keeps its heading row, its own buttons included; pressing one of those opens
+  the card first, because what it opens appears below the heading. The state is kept per
+  page and topic in the browser, open until somebody folds it, and a card a page redraws
+  keeps its state ([ADR-draft-every-topic-folds](docs/adr/draft-every-topic-folds.md)).
+- **The secret vault has a page of its own: Console › Administration › Secrets.** It was
+  the last card of the Workers page, which everybody may open while only an administrator
+  may use the vault, and which no longer holds all of the vault's readers: content
+  sources name vault secrets too. Each secret still says which workers use it and what
+  shape their value has to have. The handbook has linked `#/console/secrets` all along,
+  which used to land on the dashboard and now opens the page; the worker card's word for
+  the vault links to it.
 - **An application's Deployments tab folds its lists away.** The deployed definitions,
   the deployment targets and the release history each fold under their heading, which
   still shows how many entries the list holds, and the browser remembers each choice for

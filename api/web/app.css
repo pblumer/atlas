@@ -2813,6 +2813,12 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
 .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* Every card headed by an <h2> folds the same way (fold.js): folded, it keeps its
+   heading row, the title and the card's own actions, and nothing else. */
+.card[data-folded] > :not(.fold-head) { display: none !important; }
+.card[data-folded] > .fold-head,
+.card[data-folded] > .fold-head h2 { margin-bottom: 0; }
+.card.fold-flush[data-folded] > .fold-head { padding-bottom: 16px !important; }
 .sec-head h2 { margin: 0; }
 #pd-deployments .sec-head { margin: 22px 0 10px; }
 #pd-deployments .sec-head h2 { font-size: 15px; }
