@@ -71,7 +71,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-BMP1 first: provide a bounded public HTTPS fetcher with a pinned trust root, no redirects, safe DNS/IP resolution and verified compressed bytes. Next, connect the verified archive to existing import planning and explicit publish with authorization and restart/recovery tests. **No automatic installation, runtime licence checks or direct Worker code execution.**
+BMP1: PR #1411 merged the bounded public HTTPS registry client with pinned Ed25519 identity, no redirects, DNS/IP checks and verified archive digests. Draft PR #1415 inspects the existing tar.gz application package with bounded expansion, path/link/duplicate/manifest/CRC guards, returning metadata without installing. After that passes review, connect it to authorized source and catalogue import-plan APIs, explicit publish and durable provenance with restart/recovery tests. **No automatic installation, runtime licence checks or direct Worker code execution.**
 
 ## References
 
