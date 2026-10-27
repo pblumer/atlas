@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-27",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review proposed ADR-0499, assign the BMP0 slice owner, then agree registry identity, signing trust and manifest test fixtures before implementation.",
+  "next_action": "Review BMP0 registry v1 contract in draft PR #1402 and proposed ADR-0499; assign a BMP0 slice owner and approve trust/identity gates before implementing the remote installer.",
   "slices": [
     {
       "id": "BMP0",
@@ -17,9 +17,10 @@
       "depends_on": [],
       "issues": [],
       "prs": [
-        1395
+        1395,
+        1402
       ],
-      "note": "Programme proposal PR #1395 merged; ADR-0499 remains Proposed / Not started. BMP0 awaits a named slice owner, design review and contract-validation tests."
+      "note": "PR #1395 is merged. Draft PR #1402 proposes signed registry schema, negative fixtures and schema-only tests; ADR-0499 remains Proposed, no production network/installation code is implemented."
     },
     {
       "id": "BMP1",
