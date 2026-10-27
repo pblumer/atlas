@@ -841,8 +841,8 @@ var mcpOmittedRoutes = map[string]string{
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
 	"GET /api/v1/blueprints":                                 "Console discovery of operator-pinned signed releases, with no standalone agent workflow yet",
-	"GET /api/v1/blueprints/{id}/releases/{version}/preview":  "Console design-time safety and dependency preview before a human import decision",
-	"GET /api/v1/blueprints/{id}/releases/{version}/package":  "binary download for an explicitly reviewed Console import; MCP does not download raw package bytes",
+	"GET /api/v1/blueprints/{id}/releases/{version}/preview": "Console design-time safety and dependency preview before a human import decision",
+	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; MCP does not download raw package bytes",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",
