@@ -49,6 +49,27 @@ var builtInManagedWorkerTypes = []builtInWorkerTypeMetadata{
 	{ConnectorKind: connectorKindMSSQL, ID: "atlas.mssql", Version: initialBuiltInWorkerTypeVersion, Title: "Microsoft SQL Server", Vendor: "Atlas", Origin: WorkerTypeOriginBuiltIn, RuntimeMode: WorkerRuntimeModeAtlasSupervised},
 }
 
+// BuiltInWorkerType is a built-in Worker Type's identity as build tooling reads it.
+// Conformance evidence (ADR-0483) binds to the ID and version, and finds the
+// operations and runtime paths through the connector kind.
+type BuiltInWorkerType struct {
+	ID            string
+	Version       string
+	ConnectorKind string
+}
+
+// LookupBuiltInWorkerType finds a built-in Worker Type by its Worker Type ID, the
+// identity evidence names. It reads the metadata the Worker Type API serves, so a
+// record cannot name a Worker Type this release does not ship.
+func LookupBuiltInWorkerType(id string) (BuiltInWorkerType, bool) {
+	for _, meta := range builtInManagedWorkerTypes {
+		if meta.ID == id {
+			return BuiltInWorkerType{ID: meta.ID, Version: meta.Version, ConnectorKind: meta.ConnectorKind}, true
+		}
+	}
+	return BuiltInWorkerType{}, false
+}
+
 func lookupBuiltInManagedWorkerType(connectorKind string) (builtInWorkerTypeMetadata, bool) {
 	for _, meta := range builtInManagedWorkerTypes {
 		if meta.ConnectorKind == connectorKind {

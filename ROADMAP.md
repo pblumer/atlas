@@ -2374,9 +2374,10 @@ Milestone P** or duplicate Level-5 integration capabilities in `api/capability`.
   digest-bound evidence, explicit reviewer approval and withdrawal.
   [PR #1357](https://github.com/pblumer/atlas/pull/1357) merged offline,
   schema-only validation and [PR #1360](https://github.com/pblumer/atlas/pull/1360)
-  contract digests over the file's bytes; the implementation digest of
-  built-in Worker Types is in review; publication, verified
-  provider evidence and revocation are not yet implemented. No Worker Type
+  contract digests over the file's bytes, [PR #1388](https://github.com/pblumer/atlas/pull/1388)
+  the implementation digest of built-in Worker Types; evidence records with
+  a CI gate that fails on stale evidence are in review. No contract is
+  published, no record exists, and revocation is not yet implemented. No Worker Type
   can certify its own claims or obtain runtime routing from JSON validation.
 - 🔲 **CDA3 — Verifiable built-in operation mappings (T2 / Milestone 6).**
   Derive from existing provider operation catalogues, first distinguishing
