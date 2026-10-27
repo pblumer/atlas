@@ -238,15 +238,15 @@ func (s *Server) apiRoutes() []apiRoute {
 			}))}},
 
 		// What the server spends its time on and what it holds, as `go tool pprof` reads it
-		// (ADR-draft-admin-profiling). Admin-only: a profile shows the server's insides,
+		// (ADR-0502). Admin-only: a profile shows the server's insides,
 		// and a recording costs the server while it runs.
 		{"GET", "/api/v1/debug/pprof/{profile}", s.handlePprof, apiOp{
-			summary: "A runtime profile of this server for `go tool pprof`: `profile` records CPU samples over `?seconds=` (default 30, at most 120), `trace` an execution trace for `go tool trace` (default 5, at most 30); `heap`, `allocs`, `goroutine` and `threadcreate` are taken at once, `?debug=1` as text (`goroutine?debug=2`: every stack), `heap?gc=1` after a collection. One CPU profile and one trace at a time (409 while one runs); the command line is not offered. Audited as profile.downloaded (admin-only when auth is on) (ADR-draft-admin-profiling)", tag: "System", role: RoleAdmin,
+			summary: "A runtime profile of this server for `go tool pprof`: `profile` records CPU samples over `?seconds=` (default 30, at most 120), `trace` an execution trace for `go tool trace` (default 5, at most 30); `heap`, `allocs`, `goroutine` and `threadcreate` are taken at once, `?debug=1` as text (`goroutine?debug=2`: every stack), `heap?gc=1` after a collection. One CPU profile and one trace at a time (409 while one runs); the command line is not offered. Audited as profile.downloaded (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
 			resp: &bodySpec{mediaType: "application/octet-stream", schema: tString(), desc: "A gzip-compressed pprof profile, an execution trace, or text with ?debug="}}},
 		// Whether, and where, the server is slow: the figures to read before a profile
-		// (ADR-draft-admin-profiling).
+		// (ADR-0502).
 		{"GET", "/api/v1/debug/runtime", s.handleRuntimeHealth, apiOp{
-			summary: "How this server is doing over a window of `?seconds=` (default 5, at most 20; 0 answers at once, with distributions since the start): the run loop's turns per second and how long callers waited for the single writer and how long each turn held it; the writer's batches, commands and events per second, its queue and its fsync and commit latencies; the scheduler latency, the goroutines (runnable, running, waiting), the garbage collector's cycles, pauses and share of the CPU, the allocation rate and the heap. Latencies are count, mean, p50, p90, p99 and max in milliseconds, the percentiles bucket bounds. runLoop and writer are absent on a server without metrics (admin-only when auth is on) (ADR-draft-admin-profiling)", tag: "System", role: RoleAdmin,
+			summary: "How this server is doing over a window of `?seconds=` (default 5, at most 20; 0 answers at once, with distributions since the start): the run loop's turns per second and how long callers waited for the single writer and how long each turn held it; the writer's batches, commands and events per second, its queue and its fsync and commit latencies; the scheduler latency, the goroutines (runnable, running, waiting), the garbage collector's cycles, pauses and share of the CPU, the allocation rate and the heap. Latencies are count, mean, p50, p90, p99 and max in milliseconds, the percentiles bucket bounds. runLoop and writer are absent on a server without metrics (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Runtime health", schemaObj(map[string]any{
 				"version": tString(), "go": tString(), "uptimeSeconds": tInteger(), "cpus": tInteger(),
 				"gomaxprocs": tInteger(), "windowSeconds": tInteger(), "goroutines": tObject(),
@@ -254,9 +254,9 @@ func (s *Server) apiRoutes() []apiRoute {
 				"runLoop": tObject(), "writer": tObject(), "note": tString(),
 			}, "go", "windowSeconds", "goroutines", "memory", "gc", "note"))}},
 		// The same profiles, read by the server and answered as a top-N list, for an agent
-		// without a profiler (ADR-draft-admin-profiling).
+		// without a profiler (ADR-0502).
 		{"GET", "/api/v1/debug/pprof/{profile}/summary", s.handlePprofSummary, apiOp{
-			summary: "A runtime profile of this server summarized for reading rather than for `go tool pprof`: `profile` records CPU time over `?seconds=` (default 10, at most 20) and lists the functions by their own time (flat) and with their callees (cum), in milliseconds and percent, with the cores used; `heap` lists live memory and `allocs` allocated memory the same way, in bytes (`gc=1` collects first); `goroutine` counts every goroutine and lists the largest groups with the same stack, leaf frame first. `?top=` bounds each list (default 20, at most 50). No argument values are included. One CPU profile at a time (409 while one runs). Audited as profile.downloaded (admin-only when auth is on) (ADR-draft-admin-profiling)", tag: "System", role: RoleAdmin,
+			summary: "A runtime profile of this server summarized for reading rather than for `go tool pprof`: `profile` records CPU time over `?seconds=` (default 10, at most 20) and lists the functions by their own time (flat) and with their callees (cum), in milliseconds and percent, with the cores used; `heap` lists live memory and `allocs` allocated memory the same way, in bytes (`gc=1` collects first); `goroutine` counts every goroutine and lists the largest groups with the same stack, leaf frame first. `?top=` bounds each list (default 20, at most 50). No argument values are included. One CPU profile at a time (409 while one runs). Audited as profile.downloaded (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Profile summary", schemaObj(map[string]any{
 				"profile": tString(), "unit": tString(), "seconds": tInteger(), "samples": tInteger(),
 				"cores": map[string]any{"type": "number"}, "total": map[string]any{"type": "number"}, "objects": tInteger(),

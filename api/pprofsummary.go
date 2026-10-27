@@ -14,7 +14,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// A profile an agent can read (ADR-draft-admin-profiling).
+// A profile an agent can read (ADR-0502).
 //
 // The binary route serves what `go tool pprof` opens, which is a file for a person with a
 // profiler. An agent diagnosing a slow server over MCP has no profiler, and a megabyte of

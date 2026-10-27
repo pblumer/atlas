@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// A reader for the profiles runtime/pprof writes (ADR-draft-admin-profiling).
+// A reader for the profiles runtime/pprof writes (ADR-0502).
 //
 // The summary an agent reads is built from the server's own profile, so the server has to
 // read the format it writes: gzip-compressed protobuf, the profile.proto of

@@ -61,7 +61,7 @@ var wantAdminRoutes = []string{
 	// The disk under the data directory and its reserve (ADR-0481):
 	// the same paths and sizes the checkpoint status names.
 	"GET /api/v1/storage",
-	// And what the server spends its time on and holds (ADR-draft-admin-profiling): a
+	// And what the server spends its time on and holds (ADR-0502): a
 	// profile shows its insides, and a CPU profile or a trace costs it while it runs.
 	"GET /api/v1/debug/pprof/{profile}",
 	"GET /api/v1/debug/pprof/{profile}/summary",

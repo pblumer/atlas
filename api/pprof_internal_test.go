@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// Profiling a running server (ADR-draft-admin-profiling): an administrator can take what
+// Profiling a running server (ADR-0502): an administrator can take what
 // `go tool pprof` reads from the server that is slow, without a restart, a second port or
 // a build with a debug flag — and nobody else can, and nothing that would carry a secret
 // is offered.

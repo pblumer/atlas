@@ -15,7 +15,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// Whether, and where, the server is slow (ADR-draft-admin-profiling).
+// Whether, and where, the server is slow (ADR-0502).
 //
 // A profile says where the time goes. Before one is worth taking, somebody has to know
 // whether the server is slow at all, and in which part: callers queueing for the single

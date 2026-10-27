@@ -9,7 +9,7 @@ import (
 // TestTheStandardPprofHandlersAreNotLinked: importing net/http/pprof registers its
 // handlers on http.DefaultServeMux as a side effect — without a login, a role or a bound
 // on a recording. Atlas serves profiles behind the admin role instead
-// (ADR-draft-admin-profiling), and nothing serves that mux today; this keeps the day
+// (ADR-0502), and nothing serves that mux today; this keeps the day
 // something does from being the day the profiler goes public. It sits here because this
 // test binary links everything the server does, dependencies included.
 func TestTheStandardPprofHandlersAreNotLinked(t *testing.T) {

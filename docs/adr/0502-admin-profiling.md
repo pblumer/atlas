@@ -1,4 +1,4 @@
-# ADR-DRAFT: An administrator profiles the running server through the API
+# ADR-0502: An administrator profiles the running server through the API
 
 - **Status:** Accepted
 - **Implementation:** Landed

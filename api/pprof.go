@@ -17,7 +17,7 @@ import (
 	"github.com/pblumer/atlas/logging"
 )
 
-// Profiling a running server (ADR-draft-admin-profiling).
+// Profiling a running server (ADR-0502).
 //
 // "The server is slow" is answered by where it spends its time, and the only server that
 // can say is the one that is slow: a profile taken on a laptop against a test load

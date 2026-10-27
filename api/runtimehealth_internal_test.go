@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// Whether, and where, the server is slow (ADR-draft-admin-profiling): the figures read
+// Whether, and where, the server is slow (ADR-0502): the figures read
 // before a profile is worth taking, measured over a window rather than since the start.
 
 func readRuntimeHealth(t *testing.T, h http.Handler, query string) runtimeHealthResp {

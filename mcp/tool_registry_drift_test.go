@@ -36,7 +36,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_product_usage":  "GET /api/v1/catalog-products/{id}/usage",
 
 	// Whether and where the server is slow, and the profile that says why
-	// (ADR-draft-admin-profiling): reads an administrator's agent diagnoses with.
+	// (ADR-0502): reads an administrator's agent diagnoses with.
 	"atlas_runtime_health":  "GET /api/v1/debug/runtime",
 	"atlas_runtime_profile": "GET /api/v1/debug/pprof/{profile}/summary",
 
@@ -254,7 +254,7 @@ var mcpOmittedRoutes = map[string]string{
 	// Server introspection / diagnostics an agent does not drive scenarios with.
 	"GET /api/v1/logs": "admin diagnostics, not an agent authoring/runtime action",
 	// A binary profile for `go tool pprof`, and a recording that costs the server while it
-	// runs: read by a person with a profiler, not by an agent (ADR-draft-admin-profiling).
+	// runs: read by a person with a profiler, not by an agent (ADR-0502).
 	"GET /api/v1/debug/pprof/{profile}": "admin diagnostics: a binary profile for go tool pprof, not an agent action",
 	// The order starting its own positions (ADR-0425) is the fulfilment and approval
 	// models' call, made with the position's state behind it; an agent that wants a

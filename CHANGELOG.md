@@ -25,7 +25,7 @@ _Changed_ / _Removed_ for each version.
   time and with their callees, or the largest groups of goroutines sharing a stack, instead
   of a binary file; no argument values are included, and a CPU window is at most 20
   seconds so the call finishes within the MCP client's timeout. Both are admin-only like
-  the profiles they read ([ADR-draft-admin-profiling](docs/adr/draft-admin-profiling.md)).
+  the profiles they read ([ADR-0502](docs/adr/0502-admin-profiling.md)).
 - **An administrator can profile the running server.** `GET /api/v1/debug/pprof/{profile}`
   hands out what `go tool pprof` reads, from the server that is slow and without a restart
   or a second port: `profile` records CPU samples over `?seconds=` (default 30, at most
@@ -36,7 +36,7 @@ _Changed_ / _Removed_ for each version.
   at the boundary, every download is audited as `profile.downloaded`, and the command line
   is not offered, since a flag can carry a secret. Atlas does not link `net/http/pprof`,
   whose handlers would sit unauthenticated on the default mux, and a test keeps it that
-  way ([ADR-draft-admin-profiling](docs/adr/draft-admin-profiling.md)).
+  way ([ADR-0502](docs/adr/0502-admin-profiling.md)).
 - **The architecture sketch shows who else is at the other end of a release's messages and signals.**
   A release now records the messages and signals its processes throw and the signals they
   catch, and, for each name, the processes of other applications on the installation at

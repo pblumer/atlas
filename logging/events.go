@@ -353,7 +353,7 @@ var (
 	ApplicationSourceStreamFailed = newEvent("application_source.stream_failed")
 )
 
-// Profiling a running server on an administrator's request (ADR-draft-admin-profiling).
+// Profiling a running server on an administrator's request (ADR-0502).
 var (
 	// ProfileDownloaded is one profile or trace an administrator took, with who, which
 	// and, for a recording, over how many seconds.

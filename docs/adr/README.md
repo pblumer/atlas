@@ -587,6 +587,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0499](0499-blueprint-registry-and-distribution.md) | Open Blueprint registries for process applications | Accepted | Not started |
 | [0500](0500-playground-data-from-history-and-model.md) | Playground data is profiled from history and proposed from the model, and the sandbox checks both | Proposed | Not started |
 | [0501](0501-playground-data-run.md) | A data run checks a whole file against a model in throwaway sandboxes, and hands the file back | Proposed | Partial |
+| [0502](0502-admin-profiling.md) | An administrator profiles the running server through the API | Accepted | Landed |
 
 ## The two states of a record
 

@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// The summary an agent reads (ADR-draft-admin-profiling): the server reads its own profile
+// The summary an agent reads (ADR-0502): the server reads its own profile
 // and answers with the functions and stacks a diagnosis starts from.
 
 func readPprofSummary(t *testing.T, path string) pprofSummaryResp {
