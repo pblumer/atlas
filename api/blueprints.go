@@ -91,6 +91,10 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	found := false
 	for _, rel := range index.Releases {
 		if rel.BlueprintID == id && rel.Version == version {
+			if !blueprintregistry.Compatible(rel.Atlas, Version) {
+				httpapi.Error(w, http.StatusConflict, "Blueprint is incompatible with this atlas version")
+				return blueprintregistry.Release{}, nil, false
+			}
 			found = true
 			break
 		}
@@ -104,6 +108,10 @@ func (s *Server) selectedBlueprint(w http.ResponseWriter, r *http.Request) (blue
 	release, bytes, err := s.blueprints.Fetch(r.Context(), id, version)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadGateway, "Blueprint package download or signature/digest verification failed")
+		return blueprintregistry.Release{}, nil, false
+	}
+	if !blueprintregistry.Compatible(release.Atlas, Version) {
+		httpapi.Error(w, http.StatusConflict, "Blueprint release compatibility changed; review again")
 		return blueprintregistry.Release{}, nil, false
 	}
 	return release, bytes, true
