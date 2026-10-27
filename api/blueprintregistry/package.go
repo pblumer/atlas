@@ -18,7 +18,7 @@ import (
 const MaxPackageExpandedBytes int64 = 200 << 20
 
 const (
-	maxPackageEntries  = 2000
+	maxPackageEntries   = 2000
 	maxPackageManifest  = 2 << 20
 	maxPackageCatalogue = 16 << 20
 )
@@ -36,7 +36,7 @@ type PackageFile struct {
 }
 
 // PackageCatalogue lists one catalogue and the product IDs it offers.
-//type PackageCatalogue struct {
+type PackageCatalogue struct {
 	ID    string   `json:"id"`
 	Items []string `json:"items"`
 }
@@ -50,12 +50,12 @@ type PackageProduct struct {
 // PackageInspection describes the transport-level contents of a pinned
 // Blueprint package. It does not prove that its BPMN, DMN or forms are valid.
 type PackageInspection struct {
-	ApplicationKey  string
-	ApplicationName   string
-	Files             []PackageFile
-	Catalogues        []PackageCatalogue
-	Products          []PackageProduct
-	CataloguePublish  bool
+	ApplicationKey   string
+	ApplicationName  string
+	Files            []PackageFile
+	Catalogues       []PackageCatalogue
+	Products         []PackageProduct
+	CataloguePublish bool
 }
 
 // InspectPackage verifies the exact signed archive bytes and inspects a bounded
