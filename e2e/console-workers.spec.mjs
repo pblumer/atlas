@@ -112,12 +112,12 @@ test("the New worker form says how the picked type is set up, and links to the h
   await expect(doc.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-temis");
 
   await page.selectOption('.worker-form [name="kind"]', "googlesheets");
-  await expect(doc.locator(".wtdoc-needs")).toContainText("service account key");
+  await expect(doc.locator(".wtdoc-needs")).toContainText("Dienstkonto-Schlüssel");
   await expect(doc.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-googlesheets");
   await page.locator(".conn-setup .wtdoc-more > summary").click();
   // The step that is forgotten more often than any other, on the screen where the
   // worker is created rather than in an incident an hour later.
-  await expect(page.locator(".conn-setup .wtdoc-steps")).toContainText("Share the spreadsheet");
+  await expect(page.locator(".conn-setup .wtdoc-steps")).toContainText("Gib die Tabelle für das Dienstkonto frei");
   expect(page.__errors).toEqual([]);
 });
 

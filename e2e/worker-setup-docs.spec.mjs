@@ -60,7 +60,7 @@ test("a type that configures nothing starts folded", async ({ page }) => {
   // User provisioning names no configured Worker: its setup is a one-time read, so it
   // does not take the panel on every selection.
   await page.evaluate(() => window.__select("Activity_login"));
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
   await expect(page.locator(".wt-group")).toHaveClass(/collapsed/);
   expect(page.__errors).toEqual([]);
 });
@@ -72,7 +72,7 @@ test("a Worker Type that needs an account says so, and links to its own handbook
   await expect(doc).toBeVisible();
   // The one line someone who has configured nothing has to read: whether this needs a
   // Worker record at all.
-  await expect(doc.locator(".wtdoc-needs")).toContainText("configured mail Worker");
+  await expect(doc.locator(".wtdoc-needs")).toContainText("konfigurierter Mail-Worker");
   const link = doc.locator(".wtdoc-link");
   await expect(link).toHaveAttribute("href", "/handbuch.html#runbook-mail");
   // The handbook is this server's own asset, so the link opens it rather than reaching
@@ -105,21 +105,21 @@ test("the steps say when they were last checked against the provider", async ({ 
   await expect(checked).toBeHidden();
   await page.locator(".wtdoc-more > summary").click();
   await expect(checked).toBeVisible();
-  await expect(checked).toContainText(/Steps last checked \w+ 20\d\d/);
+  await expect(checked).toContainText(/Schritte zuletzt geprüft: \S+ 20\d\d/);
   // Machine-readable alongside the prose, and it says which source wins when they differ.
   await expect(checked.locator("time")).toHaveAttribute("datetime", /^20\d\d-\d\d$/);
-  await expect(checked).toContainText("the current interface takes precedence");
+  await expect(checked).toContainText("bei Abweichungen gilt die aktuelle Oberfläche");
   expect(page.__errors).toEqual([]);
 });
 
 test("a type that needs nothing says that, instead of showing nothing", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_login"));
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
   await openSetup(page);
   // User provisioning acts on this server's own login store: no Worker record, no
   // credential. An empty panel there would read exactly like a type whose setup nobody
   // wrote down.
-  await expect(page.locator(".wtdoc-needs")).toContainText("No Worker record");
+  await expect(page.locator(".wtdoc-needs")).toContainText("Kein konfigurierter Worker");
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-userprov");
   expect(page.__errors).toEqual([]);
 });
@@ -139,13 +139,13 @@ test("switching the Worker Type switches the setup with it", async ({ page }) =>
 
 test("the business rule task's temis binding carries its setup too", async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_rule_temis"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await openSetup(page);
   await expect(page.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-temis");
   // The embedded binding configures no worker, so it gets no setup block: there is
   // nothing outside Atlas to do.
   await page.evaluate(() => window.__select("Activity_rule"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator(".wtdoc")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });

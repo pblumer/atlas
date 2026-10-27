@@ -27,7 +27,7 @@ async function openTimer(page, id) {
   await page.evaluate((el) => window.__select(el), id);
   const field = page.locator("#f-timerval");
   await expect(field).toHaveCount(1);
-  if (!(await field.isVisible())) await page.locator(".pgroup-head", { hasText: "Timer" }).first().click();
+  if (!(await field.isVisible())) await page.locator('.pgroup[data-group*="Timer" i] > .pgroup-head').first().click();
   await expect(field).toBeVisible();
 }
 
@@ -114,7 +114,7 @@ test("the panel says how to write an expression and what it must yield", async (
   await openTimer(page, "Catch_lit");
   const panel = page.locator("label.field", { has: page.locator("#f-timerval") }).locator("xpath=following-sibling::p[1]");
   await expect(panel).toContainText("fx");
-  await expect(panel).toContainText("evaluated when the timer is armed");
+  await expect(panel).toContainText("beim Stellen des Timers");
 });
 
 test("a boundary timer and a timer start offer the switch as well", async ({ page }) => {
@@ -129,5 +129,5 @@ test("a boundary timer and a timer start offer the switch as well", async ({ pag
   // A timer start has no instance yet, so its expression may read no variables; the
   // panel says so where the expression is written rather than leaving it to the deploy.
   const note = page.locator("label.field", { has: page.locator("#f-timerval") }).locator("xpath=following-sibling::p[1]");
-  await expect(note).toContainText("no instance");
+  await expect(note).toContainText("keine Instanz");
 });

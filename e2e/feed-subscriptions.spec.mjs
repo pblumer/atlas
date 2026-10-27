@@ -118,6 +118,6 @@ test("the New worker form explains a CloudEvents endpoint and links its runbook"
   await page.selectOption('.worker-form [name="kind"]', "cloudevents");
   const doc = page.locator(".conn-setup .wtdoc");
   await expect(doc.locator(".wtdoc-link")).toHaveAttribute("href", "/handbuch.html#runbook-cloudevents");
-  await expect(doc.locator(".wtdoc-needs")).toContainText("CloudEvents batches over https");
+  await expect(doc.locator(".wtdoc-needs")).toContainText("CloudEvents-Stapel über https");
   expect(page.__errors).toEqual([]);
 });

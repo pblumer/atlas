@@ -18,7 +18,7 @@ test.beforeEach(async ({ page }) => {
 
 async function openMessage(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Message" }).click();
+  await page.locator('.pgroup[data-group*="Message" i] > .pgroup-head').click();
 }
 
 async function taskXML(page, id) {
@@ -52,20 +52,20 @@ test("F2 on a template body opens the template editor with a live preview", asyn
   await expect(page.locator(".dev-modal")).toBeVisible();
   await expect(page.locator(".dev-badge")).toHaveText("Template");
   // The preview is open from the start: reading the result is the point.
-  await expect(page.locator(".dev-test-toggle")).toHaveText("Preview");
+  await expect(page.locator(".dev-test-toggle")).toHaveText("Vorschau");
   await expect(page.locator(".dev-preview")).toBeVisible();
   // The template language's tags lead the reference, FEEL's functions follow.
   await expect(page.locator(".dev-tab[data-tab='fns']")).toBeVisible();
 
   await page.locator(".dev-run-vars").fill('{ "kunde": { "name": "Ada" } }');
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
-  await expect(page.locator(".dev-run-out")).toHaveText("✓ rendered");
+  await expect(page.locator(".dev-run-out")).toHaveText("✓ gerendert");
 
   // Editing the template renders again, and a missing value is pointed out.
   await page.locator(".dev-ta").fill("Hallo {{kunde.name}}, {{kunde.firma}}");
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada, ");
   await expect(page.locator(".dev-preview-problems")).toContainText("kunde.firma");
-  await expect(page.locator(".dev-run-out")).toContainText("1 placeholder rendered as nothing");
+  await expect(page.locator(".dev-run-out")).toContainText("1 Platzhalter blieb leer");
 
   const last = await page.evaluate(() => window.__templateCalls.at(-1));
   expect(last.html).toBe(false);
@@ -104,13 +104,13 @@ test("a template that does not compile says where, and keeps the last rendering"
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
 
   await page.locator(".dev-ta").fill("{{#if kunde.vip}}Sehr geehrte");
-  await expect(page.locator(".dev-run-out")).toHaveText("✗ line 1, column 1");
+  await expect(page.locator(".dev-run-out")).toHaveText("✗ Zeile 1, Spalte 1");
   await expect(page.locator(".dev-run-detail")).toContainText("never closed with {{/if}}");
   await expect(page.locator(".dev-preview-out")).toHaveClass(/stale/);
   await expect(page.locator(".dev-preview-text")).toHaveText("Hallo Ada");
 
   await page.locator(".dev-run-vars").fill("[1, 2]");
-  await expect(page.locator(".dev-run-out")).toHaveText("Sample variables must be a JSON object.");
+  await expect(page.locator(".dev-run-out")).toHaveText("Die Beispielvariablen müssen ein JSON-Objekt sein.");
   expect(page.__errors).toEqual([]);
 });
 
@@ -128,7 +128,7 @@ test("an HTML body without placeholders is its own preview", async ({ page }) =>
 
 test("an operation that sends nothing drops the placeholders switch", async ({ page }) => {
   await openMessage(page, "Activity_tpl");
-  await page.locator(".pgroup-head", { hasText: "Mail worker" }).click();
+  await page.locator('.pgroup[data-group*="Mail worker" i] > .pgroup-head').click();
   await page.locator("#f-st-operation").selectOption("mark-read");
   await expect.poll(async () => /templating=/.test(await taskXML(page, "Activity_tpl"))).toBe(false);
   // A reply writes a text again, and offers the switch again.
@@ -141,16 +141,16 @@ test("an operation that sends nothing drops the placeholders switch", async ({ p
 // panel offers it where it is allowed and takes it back when a get becomes a list.
 test("Read message offers the HTML body, and a list takes it back", async ({ page }) => {
   await openMessage(page, "Activity_mail");
-  await page.locator(".pgroup-head", { hasText: "Mail worker" }).click();
+  await page.locator('.pgroup[data-group*="Mail worker" i] > .pgroup-head').click();
   await page.locator("#f-st-operation").selectOption("get");
-  await page.locator(".pgroup-head", { hasText: "Mailbox" }).click();
+  await page.locator('.pgroup[data-group*="Mailbox" i] > .pgroup-head').click();
   const text = page.locator("#f-st-includeBody");
-  await expect(text.locator("option")).toHaveText(["Envelope only", "Include the text", "Include the text and the HTML"]);
+  await expect(text.locator("option")).toHaveText(["Nur Umschlag", "Mit Text", "Mit Text und HTML"]);
   await text.selectOption("html");
   await expect.poll(async () => /includeBody="html"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
 
   await page.locator("#f-st-operation").selectOption("list");
   await expect.poll(async () => /includeBody="true"/.test(await taskXML(page, "Activity_mail"))).toBe(true);
-  await expect(page.locator("#f-st-includeBody option")).toHaveText(["Envelope only", "Include the text"]);
+  await expect(page.locator("#f-st-includeBody option")).toHaveText(["Nur Umschlag", "Mit Text"]);
   expect(page.__errors).toEqual([]);
 });

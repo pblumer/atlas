@@ -28,6 +28,7 @@
 
 import { renderTraceTable, tablesOf as traceTablesOf, fmtVal as traceValue } from "./dmn-trace.js";
 import { fmtDateTime } from "./datefmt.js";
+import { t } from "./i18n.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -159,7 +160,7 @@ function drgSvg(placed, inner) {
 // annotates.
 export function renderDrgSvg(g) {
   const placed = placeDrg(g);
-  if (!placed.length) return `<p class="muted" style="padding:16px">This model has no decisions to show.</p>`;
+  if (!placed.length) return `<p class="muted" style="padding:16px">${esc(t("drg.plain.empty"))}</p>`;
   const pos = {};
   placed.forEach((p) => { pos[p.n.id] = p; });
   const nodes = placed.map(({ n, x, y, w, h }) => {
@@ -167,7 +168,7 @@ export function renderDrgSvg(g) {
     const bkm = n.type === "businessKnowledgeModel";
     const fill = input ? "#eff6ff" : bkm ? "#f5f3ff" : "#ffffff";
     const stroke = input ? "#3b82f6" : bkm ? "#8b5cf6" : "#111827";
-    const sub = input ? (n.dataType || "input data") : bkm ? "knowledge model" : (n.hasTable ? "decision table" : "decision");
+    const sub = input ? (n.dataType || t("drg.kind.inputData")) : bkm ? t("drg.kind.bkm") : (n.hasTable ? t("drg.kind.table") : t("drg.kind.decision"));
     return `<g>
       ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="1.5"`)}
       <text x="${x + w / 2}" y="${y + h / 2 - 3}" text-anchor="middle" font-size="13" font-weight="600" fill="#111827">${esc(n.name || n.id)}</text>
@@ -221,9 +222,9 @@ const clip = (s, max = 24) => (s.length > max ? s.slice(0, max - 1) + "…" : s)
 // while a decision whose value was given is one the caller supplied rather than the
 // model computing it — the case that makes a decision service's boundary visible.
 const SOURCE_NOTE = {
-  given: "given to the decision — supplied, not computed",
-  derived: "computed on the way, and read by the rule above it",
-  result: "what the decision returned",
+  given: "drg.source.given",
+  derived: "drg.source.derived",
+  result: "drg.source.result",
 };
 
 // renderCaseDrg draws the graph with the case on it: every node that carries a
@@ -234,7 +235,7 @@ const SOURCE_NOTE = {
 function renderCaseDrg(view, vals) {
   const placed = placeDrg(view);
   if (!placed.length) {
-    return `<p class="ops-empty">This decision's model has no graph to draw — the server could not resolve the model this evaluation ran against.</p>`;
+    return `<p class="ops-empty">${esc(t("drg.case.noGraph"))}</p>`;
   }
   const pos = {};
   placed.forEach((p) => { pos[p.n.id] = p; });
@@ -259,10 +260,10 @@ function renderCaseDrg(view, vals) {
     const sub = hit
       ? `<text x="${x + w / 2}" y="${y + h / 2 + 15}" text-anchor="middle" font-size="11.5" font-weight="700"
            font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="${isResult ? "#15803d" : isGiven ? "#1d4ed8" : "#334155"}">${esc(clip(text))}</text>`
-      : `<text x="${x + w / 2}" y="${y + h / 2 + 15}" text-anchor="middle" font-size="10.5" fill="#94a3b8">not part of this case</text>`;
+      : `<text x="${x + w / 2}" y="${y + h / 2 + 15}" text-anchor="middle" font-size="10.5" fill="#94a3b8">${esc(t("drg.node.idle"))}</text>`;
     const title = hit
-      ? `${n.name || n.id} = ${text}\n${SOURCE_NOTE[hit.source] || ""}`
-      : `${n.name || n.id}\nThis evaluation records no value for it.`;
+      ? `${n.name || n.id} = ${text}\n${SOURCE_NOTE[hit.source] ? t(SOURCE_NOTE[hit.source]) : ""}`
+      : `${n.name || n.id}\n${t("drg.node.noValue")}`;
     return `<g class="drg-node${hit ? "" : " is-idle"}${isResult ? " is-result" : ""}">
       <title>${esc(title)}</title>
       ${nodeShape(n.type, x, y, w, h, `fill="${fill}" stroke="${stroke}" stroke-width="${isResult ? 2.5 : 1.5}"`)}
@@ -292,18 +293,12 @@ function renderRules(view) {
     return tables.map((tt, i) => renderTraceTable(tt, tables.length > 1 ? i + 1 : 0)).join("");
   }
   if (view.service) {
-    return `<p class="ops-empty">No rule matrix was recorded for this case. It ran through a decision
-      <b>service</b> — DMN's published interface over part of the graph — and a service reported no rules
-      until the engine learned to trace one. So this is an older record: the values on the graph above are
-      exactly what it carried, and what is missing is only which row of which table matched. A case decided
-      since shows its rules here, and nothing can add them to this one — the record is what happened, not a
-      thing to re-run.</p>`;
+    return `<p class="ops-empty">${t("drg.rules.service")}</p>`;
   }
   if (view.trace === null || view.trace === undefined) {
-    return `<p class="ops-empty">No trace was recorded for this evaluation, so there are no rules to show.</p>`;
+    return `<p class="ops-empty">${esc(t("drg.rules.none"))}</p>`;
   }
-  return `<p class="ops-empty">This decision's logic is not a decision table, so there is no rule matrix to show.
-    The graph above carries what it was given and what it returned.</p>`;
+  return `<p class="ops-empty">${esc(t("drg.rules.noTable"))}</p>`;
 }
 
 // ---------- the modal ----------
@@ -338,7 +333,7 @@ function shell(title, subtitle, body) {
         <h2 id="drg-title">${esc(title)}</h2>
         <p class="drg-sub">${subtitle}</p>
       </div>
-      <button type="button" class="drg-x" data-drg-close aria-label="Close">&times;</button>
+      <button type="button" class="drg-x" data-drg-close aria-label="${esc(t("drg.close"))}">&times;</button>
     </header>
     <div class="drg-body">${body}</div>
   </div>`;
@@ -354,7 +349,7 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
   closeDecisionGraph();
   const el = document.createElement("div");
   el.className = "drg-ov";
-  el.innerHTML = shell(decisionId || "Decision", `<span class="muted">Loading the decision…</span>`, `<p class="ops-empty">Loading…</p>`);
+  el.innerHTML = shell(decisionId || t("drg.title"), `<span class="muted">${esc(t("drg.loading"))}</span>`, `<p class="ops-empty">${esc(t("drg.loadingBody"))}</p>`);
   document.body.appendChild(el);
   openOverlay = { el, restore: restoreFocusTo || document.activeElement };
   document.addEventListener("keydown", onKeydown, true);
@@ -375,8 +370,8 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
     view = await api("GET", `/api/v1/instances/${instanceKey}/decisions/${at}/graph`);
   } catch (err) {
     if (openOverlay && openOverlay.el === el) {
-      el.innerHTML = shell(decisionId || "Decision", `<span class="muted">${esc(taskLabel)}</span>`,
-        `<p class="ops-empty">This decision could not be loaded: ${esc(err.message)}</p>`);
+      el.innerHTML = shell(decisionId || t("drg.title"), `<span class="muted">${esc(taskLabel)}</span>`,
+        `<p class="ops-empty">${esc(t("drg.loadFailed", { error: err.message }))}</p>`);
     }
     return;
   }
@@ -385,9 +380,9 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
   const vals = caseValues(view);
   const when = view.at ? fmtDateTime(view.at / 1e6) : "";
   const sub = [
-    view.modelName ? `model <b>${esc(view.modelName)}</b>` : "",
-    view.service ? `<span class="drg-tag">decision service</span>` : "",
-    taskLabel ? `at <b>${esc(taskLabel)}</b>` : "",
+    view.modelName ? t("drg.sub.model", { name: esc(view.modelName) }) : "",
+    view.service ? `<span class="drg-tag">${esc(t("drg.sub.service"))}</span>` : "",
+    taskLabel ? t("drg.sub.task", { task: esc(taskLabel) }) : "",
     when ? esc(when) : "",
   ].filter(Boolean).join(" · ");
 
@@ -395,30 +390,27 @@ export async function openDecisionGraph({ api, instanceKey, at, decisionId = "",
   const result = outs.length
     ? `<div class="res">${outs.map(([k, v]) =>
         `<div class="res-row"><span class="res-key">${esc(k)}</span><span class="res-val">${esc(traceValue(v))}</span></div>`).join("")}</div>`
-    : `<span class="muted">This evaluation returned nothing.</span>`;
+    : `<span class="muted">${esc(t("drg.result.none"))}</span>`;
 
-  el.innerHTML = shell(view.decisionId || decisionId || "Decision", sub, `
+  el.innerHTML = shell(view.decisionId || decisionId || t("drg.title"), sub, `
     <section class="drg-canvas">${renderCaseDrg(view, vals)}</section>
     <p class="drg-legend">
-      <span class="drg-key"><i class="sw given"></i>given to the decision</span>
-      <span class="drg-key"><i class="sw derived"></i>computed on the way</span>
-      <span class="drg-key"><i class="sw result"></i>the answer</span>
-      <span class="drg-key"><i class="sw idle"></i>not part of this case</span>
+      <span class="drg-key"><i class="sw given"></i>${esc(t("drg.legend.given"))}</span>
+      <span class="drg-key"><i class="sw derived"></i>${esc(t("drg.legend.derived"))}</span>
+      <span class="drg-key"><i class="sw result"></i>${esc(t("drg.legend.result"))}</span>
+      <span class="drg-key"><i class="sw idle"></i>${esc(t("drg.node.idle"))}</span>
     </p>
     <section class="drg-split">
       <div class="drg-rules">
-        <h3>Which rules fired</h3>
+        <h3>${esc(t("drg.rules.title"))}</h3>
         ${renderRules(view)}
       </div>
       <div class="drg-result">
-        <h3>Result</h3>
+        <h3>${esc(t("drg.result.title"))}</h3>
         ${result}
-        <p class="muted drg-foot">Read this with the graph: the green box is the decision that
-        produced the answer, and the matrix beside it is the table it used. A row is
-        green where the case satisfied that condition and red where it did not, and the
-        rule that carried the result is the highlighted one.</p>
+        <p class="muted drg-foot">${esc(t("drg.foot"))}</p>
         <p class="drg-foot"><a href="#/operations/decisions/${encodeURIComponent(view.decisionId || "")}"
-          title="Every evaluation of this decision, across all instances">Every case this decision decided &rarr;</a></p>
+          title="${esc(t("drg.allCasesTitle"))}">${t("drg.allCases")}</a></p>
       </div>
     </section>`);
   const close = el.querySelector(".drg-x");

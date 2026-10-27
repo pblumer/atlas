@@ -8,62 +8,64 @@
 // table field by field by TestModelerKnowsEveryExchangeOperation
 // (api/exchange_modeler_test.go): a row that differed would tell an author a parameter
 // is optional that the deploy then refuses, or hide one the operation takes.
-//
+
+import { t } from "./i18n.js";
+
 // One row per line, in the shape the test reads; keep it that way.
 export const EXCHANGE_OPERATIONS = [
-  { v: "get-mailbox", l: "Read mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "list-mailboxes", l: "List mailboxes", area: "mailbox", req: [], opt: ["Filter", "RecipientTypeDetails", "Anr", "OrganizationalUnit"], sets: [], result: "array", targets: ["online", "onprem"] },
-  { v: "create-shared-mailbox", l: "Create shared mailbox", area: "mailbox", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Shared"], result: "object", targets: ["online", "onprem"] },
-  { v: "create-room-mailbox", l: "Create room mailbox", area: "mailbox", req: ["Name"], opt: ["ResourceCapacity", "DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Room"], result: "object", targets: ["online", "onprem"] },
-  { v: "create-equipment-mailbox", l: "Create equipment mailbox", area: "mailbox", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Equipment"], result: "object", targets: ["online", "onprem"] },
-  { v: "update-mailbox", l: "Update mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
-  { v: "convert-mailbox", l: "Convert mailbox type", area: "mailbox", req: ["Identity", "Type"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "add-email-address", l: "Add e-mail address", area: "mailbox", req: ["Identity", "Address"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "remove-email-address", l: "Remove e-mail address", area: "mailbox", req: ["Identity", "Address"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "remove-mailbox", l: "Remove mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "get-mailbox-statistics", l: "Read mailbox statistics", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "add-full-access", l: "Grant full access", area: "permission", req: ["Identity", "User"], opt: ["AutoMapping"], sets: ["AccessRights", "InheritanceType"], result: "object", targets: ["online", "onprem"] },
-  { v: "remove-full-access", l: "Revoke full access", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "InheritanceType"], result: "", targets: ["online", "onprem"] },
-  { v: "list-mailbox-permissions", l: "List mailbox permissions", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online", "onprem"] },
-  { v: "add-send-as", l: "Grant send as", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "ExtendedRights"], result: "object", targets: ["online", "onprem"] },
-  { v: "remove-send-as", l: "Revoke send as", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "ExtendedRights"], result: "", targets: ["online", "onprem"] },
-  { v: "list-send-as", l: "List send-as permissions (Online)", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online"] },
-  { v: "grant-send-on-behalf", l: "Grant send on behalf", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "revoke-send-on-behalf", l: "Revoke send on behalf", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "add-folder-permission", l: "Grant folder permission", area: "permission", req: ["Identity", "User", "AccessRights"], opt: ["SharingPermissionFlags", "SendNotificationToUser"], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "set-folder-permission", l: "Change folder permission", area: "permission", req: ["Identity", "User", "AccessRights"], opt: ["SharingPermissionFlags", "SendNotificationToUser"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "remove-folder-permission", l: "Revoke folder permission", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "list-folder-permissions", l: "List folder permissions", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online", "onprem"] },
-  { v: "create-distribution-group", l: "Create distribution group", area: "group", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "Type", "ManagedBy", "Members", "Notes", "OrganizationalUnit", "MemberJoinRestriction", "MemberDepartRestriction", "RequireSenderAuthenticationEnabled"], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "get-distribution-group", l: "Read distribution group", area: "group", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "list-distribution-groups", l: "List distribution groups", area: "group", req: [], opt: ["Filter", "Anr", "RecipientTypeDetails", "OrganizationalUnit"], sets: [], result: "array", targets: ["online", "onprem"] },
-  { v: "update-distribution-group", l: "Update distribution group", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
-  { v: "remove-distribution-group", l: "Remove distribution group", area: "group", req: ["Identity"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "add-distribution-group-member", l: "Add group member", area: "group", req: ["Identity", "Member"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "remove-distribution-group-member", l: "Remove group member", area: "group", req: ["Identity", "Member"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "list-distribution-group-members", l: "List group members", area: "group", req: ["Identity"], opt: [], sets: [], result: "array", targets: ["online", "onprem"] },
-  { v: "create-mail-contact", l: "Create mail contact", area: "group", req: ["Name", "ExternalEmailAddress"], opt: ["DisplayName", "Alias", "FirstName", "LastName", "PrimarySmtpAddress", "OrganizationalUnit"], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "get-mail-contact", l: "Read mail contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "update-mail-contact", l: "Update mail contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
-  { v: "remove-mail-contact", l: "Remove mail contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "get-auto-reply", l: "Read automatic reply", area: "settings", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "set-auto-reply", l: "Set automatic reply", area: "settings", req: ["Identity", "AutoReplyState"], opt: ["InternalMessage", "ExternalMessage", "ExternalAudience", "StartTime", "EndTime"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "set-forwarding", l: "Set forwarding", area: "settings", req: ["Identity", "ForwardingSmtpAddress"], opt: ["DeliverToMailboxAndForward"], sets: [], result: "", targets: ["online", "onprem"] },
-  { v: "clear-forwarding", l: "Clear forwarding", area: "settings", req: ["Identity"], opt: [], sets: ["DeliverToMailboxAndForward", "ForwardingAddress", "ForwardingSmtpAddress"], result: "", targets: ["online", "onprem"] },
-  { v: "enable-litigation-hold", l: "Enable litigation hold", area: "settings", req: ["Identity"], opt: ["LitigationHoldDuration", "LitigationHoldOwner", "RetentionComment", "RetentionUrl"], sets: ["LitigationHoldEnabled"], result: "", targets: ["online", "onprem"] },
-  { v: "disable-litigation-hold", l: "Disable litigation hold", area: "settings", req: ["Identity"], opt: [], sets: ["LitigationHoldEnabled"], result: "", targets: ["online", "onprem"] },
-  { v: "get-calendar-processing", l: "Read calendar processing", area: "settings", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
-  { v: "set-calendar-processing", l: "Set calendar processing", area: "settings", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
-  { v: "set-mailbox-quota", l: "Set mailbox quotas", area: "settings", req: ["Identity"], opt: ["IssueWarningQuota", "ProhibitSendQuota", "ProhibitSendReceiveQuota", "UseDatabaseQuotaDefaults", "RecoverableItemsQuota", "RecoverableItemsWarningQuota"], sets: [], result: "", targets: ["online", "onprem"], anyOf: true },
-  { v: "run-get-cmdlet", l: "Run a Get- cmdlet (read only)", area: "generic", req: [], opt: [], sets: [], result: "array", targets: ["online", "onprem"], open: true },
+  { v: "get-mailbox", l: "pnl.ops.exchange.op.get-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "list-mailboxes", l: "pnl.ops.exchange.op.list-mailboxes", area: "mailbox", req: [], opt: ["Filter", "RecipientTypeDetails", "Anr", "OrganizationalUnit"], sets: [], result: "array", targets: ["online", "onprem"] },
+  { v: "create-shared-mailbox", l: "pnl.ops.exchange.op.create-shared-mailbox", area: "mailbox", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Shared"], result: "object", targets: ["online", "onprem"] },
+  { v: "create-room-mailbox", l: "pnl.ops.exchange.op.create-room-mailbox", area: "mailbox", req: ["Name"], opt: ["ResourceCapacity", "DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Room"], result: "object", targets: ["online", "onprem"] },
+  { v: "create-equipment-mailbox", l: "pnl.ops.exchange.op.create-equipment-mailbox", area: "mailbox", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"], sets: ["Equipment"], result: "object", targets: ["online", "onprem"] },
+  { v: "update-mailbox", l: "pnl.ops.exchange.op.update-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
+  { v: "convert-mailbox", l: "pnl.ops.exchange.op.convert-mailbox", area: "mailbox", req: ["Identity", "Type"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "add-email-address", l: "pnl.ops.exchange.op.add-email-address", area: "mailbox", req: ["Identity", "Address"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "remove-email-address", l: "pnl.ops.exchange.op.remove-email-address", area: "mailbox", req: ["Identity", "Address"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "remove-mailbox", l: "pnl.ops.exchange.op.remove-mailbox", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "get-mailbox-statistics", l: "pnl.ops.exchange.op.get-mailbox-statistics", area: "mailbox", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "add-full-access", l: "pnl.ops.exchange.op.add-full-access", area: "permission", req: ["Identity", "User"], opt: ["AutoMapping"], sets: ["AccessRights", "InheritanceType"], result: "object", targets: ["online", "onprem"] },
+  { v: "remove-full-access", l: "pnl.ops.exchange.op.remove-full-access", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "InheritanceType"], result: "", targets: ["online", "onprem"] },
+  { v: "list-mailbox-permissions", l: "pnl.ops.exchange.op.list-mailbox-permissions", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online", "onprem"] },
+  { v: "add-send-as", l: "pnl.ops.exchange.op.add-send-as", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "ExtendedRights"], result: "object", targets: ["online", "onprem"] },
+  { v: "remove-send-as", l: "pnl.ops.exchange.op.remove-send-as", area: "permission", req: ["Identity", "User"], opt: [], sets: ["AccessRights", "ExtendedRights"], result: "", targets: ["online", "onprem"] },
+  { v: "list-send-as", l: "pnl.ops.exchange.op.list-send-as", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online"] },
+  { v: "grant-send-on-behalf", l: "pnl.ops.exchange.op.grant-send-on-behalf", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "revoke-send-on-behalf", l: "pnl.ops.exchange.op.revoke-send-on-behalf", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "add-folder-permission", l: "pnl.ops.exchange.op.add-folder-permission", area: "permission", req: ["Identity", "User", "AccessRights"], opt: ["SharingPermissionFlags", "SendNotificationToUser"], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "set-folder-permission", l: "pnl.ops.exchange.op.set-folder-permission", area: "permission", req: ["Identity", "User", "AccessRights"], opt: ["SharingPermissionFlags", "SendNotificationToUser"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "remove-folder-permission", l: "pnl.ops.exchange.op.remove-folder-permission", area: "permission", req: ["Identity", "User"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "list-folder-permissions", l: "pnl.ops.exchange.op.list-folder-permissions", area: "permission", req: ["Identity"], opt: ["User"], sets: [], result: "array", targets: ["online", "onprem"] },
+  { v: "create-distribution-group", l: "pnl.ops.exchange.op.create-distribution-group", area: "group", req: ["Name"], opt: ["DisplayName", "Alias", "PrimarySmtpAddress", "Type", "ManagedBy", "Members", "Notes", "OrganizationalUnit", "MemberJoinRestriction", "MemberDepartRestriction", "RequireSenderAuthenticationEnabled"], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "get-distribution-group", l: "pnl.ops.exchange.op.get-distribution-group", area: "group", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "list-distribution-groups", l: "pnl.ops.exchange.op.list-distribution-groups", area: "group", req: [], opt: ["Filter", "Anr", "RecipientTypeDetails", "OrganizationalUnit"], sets: [], result: "array", targets: ["online", "onprem"] },
+  { v: "update-distribution-group", l: "pnl.ops.exchange.op.update-distribution-group", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
+  { v: "remove-distribution-group", l: "pnl.ops.exchange.op.remove-distribution-group", area: "group", req: ["Identity"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "add-distribution-group-member", l: "pnl.ops.exchange.op.add-distribution-group-member", area: "group", req: ["Identity", "Member"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "remove-distribution-group-member", l: "pnl.ops.exchange.op.remove-distribution-group-member", area: "group", req: ["Identity", "Member"], opt: ["BypassSecurityGroupManagerCheck"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "list-distribution-group-members", l: "pnl.ops.exchange.op.list-distribution-group-members", area: "group", req: ["Identity"], opt: [], sets: [], result: "array", targets: ["online", "onprem"] },
+  { v: "create-mail-contact", l: "pnl.ops.exchange.op.create-mail-contact", area: "group", req: ["Name", "ExternalEmailAddress"], opt: ["DisplayName", "Alias", "FirstName", "LastName", "PrimarySmtpAddress", "OrganizationalUnit"], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "get-mail-contact", l: "pnl.ops.exchange.op.get-mail-contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "update-mail-contact", l: "pnl.ops.exchange.op.update-mail-contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
+  { v: "remove-mail-contact", l: "pnl.ops.exchange.op.remove-mail-contact", area: "group", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "get-auto-reply", l: "pnl.ops.exchange.op.get-auto-reply", area: "settings", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "set-auto-reply", l: "pnl.ops.exchange.op.set-auto-reply", area: "settings", req: ["Identity", "AutoReplyState"], opt: ["InternalMessage", "ExternalMessage", "ExternalAudience", "StartTime", "EndTime"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "set-forwarding", l: "pnl.ops.exchange.op.set-forwarding", area: "settings", req: ["Identity", "ForwardingSmtpAddress"], opt: ["DeliverToMailboxAndForward"], sets: [], result: "", targets: ["online", "onprem"] },
+  { v: "clear-forwarding", l: "pnl.ops.exchange.op.clear-forwarding", area: "settings", req: ["Identity"], opt: [], sets: ["DeliverToMailboxAndForward", "ForwardingAddress", "ForwardingSmtpAddress"], result: "", targets: ["online", "onprem"] },
+  { v: "enable-litigation-hold", l: "pnl.ops.exchange.op.enable-litigation-hold", area: "settings", req: ["Identity"], opt: ["LitigationHoldDuration", "LitigationHoldOwner", "RetentionComment", "RetentionUrl"], sets: ["LitigationHoldEnabled"], result: "", targets: ["online", "onprem"] },
+  { v: "disable-litigation-hold", l: "pnl.ops.exchange.op.disable-litigation-hold", area: "settings", req: ["Identity"], opt: [], sets: ["LitigationHoldEnabled"], result: "", targets: ["online", "onprem"] },
+  { v: "get-calendar-processing", l: "pnl.ops.exchange.op.get-calendar-processing", area: "settings", req: ["Identity"], opt: [], sets: [], result: "object", targets: ["online", "onprem"] },
+  { v: "set-calendar-processing", l: "pnl.ops.exchange.op.set-calendar-processing", area: "settings", req: ["Identity"], opt: [], sets: [], result: "", targets: ["online", "onprem"], open: true },
+  { v: "set-mailbox-quota", l: "pnl.ops.exchange.op.set-mailbox-quota", area: "settings", req: ["Identity"], opt: ["IssueWarningQuota", "ProhibitSendQuota", "ProhibitSendReceiveQuota", "UseDatabaseQuotaDefaults", "RecoverableItemsQuota", "RecoverableItemsWarningQuota"], sets: [], result: "", targets: ["online", "onprem"], anyOf: true },
+  { v: "run-get-cmdlet", l: "pnl.ops.exchange.op.run-get-cmdlet", area: "generic", req: [], opt: [], sets: [], result: "array", targets: ["online", "onprem"], open: true },
 ];
 
 const AREAS = {
-  mailbox: "Mailbox",
-  permission: "Permission",
-  group: "Distribution group / contact",
-  settings: "Mailbox setting",
-  generic: "Read only",
+  mailbox: "pnl.ops.exchange.area.mailbox",
+  permission: "pnl.ops.exchange.area.permission",
+  group: "pnl.ops.exchange.area.group",
+  settings: "pnl.ops.exchange.area.settings",
+  generic: "pnl.ops.exchange.area.generic",
 };
 
 /** The row for an operation, or undefined. */
@@ -73,7 +75,7 @@ export function exchangeOperation(name) {
 
 /** The operation dropdown's options, the area in front of each label. */
 export function exchangeOperationOptions() {
-  return EXCHANGE_OPERATIONS.map((o) => ({ v: o.v, l: `${AREAS[o.area]}: ${o.l}` }));
+  return EXCHANGE_OPERATIONS.map((o) => ({ v: o.v, get l() { return `${t(AREAS[o.area])}: ${t(o.l)}`; } }));
 }
 
 /** Whether the operation returns a list — the operations a maxResults bounds. */
@@ -104,16 +106,16 @@ export function exchangeParametersPlaceholder(name) {
 /** The parameters field's hint: what the selected operation requires, takes and sets. */
 export function exchangeParametersHint(name) {
   const op = exchangeOperation(name);
-  if (!op) return "Pick an operation first.";
+  if (!op) return t("pnl.ops.exchange.hint.pickOperation");
   const parts = [];
-  parts.push(op.req.length ? `Required: ${op.req.join(", ")}.` : "Nothing is required.");
-  if (op.anyOf) parts.push(`At least one of: ${op.opt.join(", ")}.`);
-  else if (op.opt.length) parts.push(`Optional: ${op.opt.join(", ")}.`);
-  if (op.open) parts.push("Any further parameter of the cmdlet is passed on, under the name Microsoft's cmdlet reference gives it.");
-  else parts.push("Nothing else is accepted, so the encoding the operation adds cannot be overridden.");
-  if (op.sets.length) parts.push(`The operation sets ${op.sets.join(", ")} itself.`);
-  if (op.targets.length === 1) parts.push(op.targets[0] === "online" ? "Exchange Online only." : "Exchange Server only.");
-  parts.push("A string starting with = is a FEEL expression; true, false and numbers stay what they are (a switch needs a boolean). A value that evaluates to null is left out, never sent as a clear.");
+  parts.push(op.req.length ? t("pnl.ops.exchange.hint.required", { params: op.req.join(", ") }) : t("pnl.ops.exchange.hint.nothingRequired"));
+  if (op.anyOf) parts.push(t("pnl.ops.exchange.hint.anyOf", { params: op.opt.join(", ") }));
+  else if (op.opt.length) parts.push(t("pnl.ops.exchange.hint.optional", { params: op.opt.join(", ") }));
+  if (op.open) parts.push(t("pnl.ops.exchange.hint.open"));
+  else parts.push(t("pnl.ops.exchange.hint.closed"));
+  if (op.sets.length) parts.push(t("pnl.ops.exchange.hint.sets", { params: op.sets.join(", ") }));
+  if (op.targets.length === 1) parts.push(op.targets[0] === "online" ? t("pnl.ops.exchange.hint.onlineOnly") : t("pnl.ops.exchange.hint.serverOnly"));
+  parts.push(t("pnl.ops.exchange.hint.values"));
   return parts.join(" ");
 }
 
@@ -121,8 +123,8 @@ export function exchangeParametersHint(name) {
 export function exchangeResultShape(name) {
   const op = exchangeOperation(name);
   if (!op) return "";
-  if (op.result === "array") return "An array of objects (empty when there are none), at most maxResults long — a listing past it fails instead of being cut short.";
-  if (op.result === "object" && op.v.startsWith("get-")) return "One object with the cmdlet's properties, or null when there is none. An identity that matches several objects fails the task.";
-  if (op.result === "object") return "The object the cmdlet created or granted — or every entry, when Exchange answers with several — for a model that keeps it; leave empty to discard.";
-  return "This operation returns nothing, and the compiler refuses a result variable on it.";
+  if (op.result === "array") return t("pnl.ops.exchange.result.list");
+  if (op.result === "object" && op.v.startsWith("get-")) return t("pnl.ops.exchange.result.get");
+  if (op.result === "object") return t("pnl.ops.exchange.result.object");
+  return t("pnl.ops.resultNone");
 }

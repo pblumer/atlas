@@ -35,6 +35,7 @@ import { attachCodeEditor } from "./code-editor.js";
 import { devLang, snippetsFor } from "./dev-lang.js";
 import { sampleFor } from "./instance-samples.js";
 import { fmtDateTime } from "./datefmt.js";
+import { t, plural } from "./i18n.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -42,11 +43,11 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 // the edited element first, widest last. A variable with an unknown scope falls into
 // "Process".
 const SCOPES = [
-  { key: "input", title: "Input", hint: "Read by this element (its input mappings)" },
-  { key: "output", title: "Output", hint: "Written by this element" },
-  { key: "process", title: "Process scope", hint: "Available anywhere in the instance" },
-  { key: "form", title: "Form fields", hint: "Contributed by a linked form" },
-  { key: "data", title: "Data objects", hint: "Per-instance data objects (ADR-0053)" },
+  { key: "input", title: "devView.scope.input", hint: "devView.scope.inputHint" },
+  { key: "output", title: "devView.scope.output", hint: "devView.scope.outputHint" },
+  { key: "process", title: "devView.scope.process", hint: "devView.scope.processHint" },
+  { key: "form", title: "devView.scope.form", hint: "devView.scope.formHint" },
+  { key: "data", title: "devView.scope.data", hint: "devView.scope.dataHint" },
 ];
 
 // Where the modal's layout is remembered between openings: the side panel's
@@ -94,8 +95,8 @@ export function markDevField(field, lang, opts = {}) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "dev-open";
-    btn.title = "Open the developer view (F2)";
-    btn.setAttribute("aria-label", "Open the developer view");
+    btn.title = t("devView.open.title");
+    btn.setAttribute("aria-label", t("devView.open.label"));
     btn.textContent = "</>";
     // mousedown, not click: the field must not lose the caret before we read it.
     btn.addEventListener("mousedown", (e) => {
@@ -157,7 +158,7 @@ function fieldTitle(field) {
   const span = label && label.querySelector("span");
   const text = span && span.textContent.trim();
   if (text) return text;
-  return field.getAttribute("aria-label") || field.placeholder || "Value";
+  return field.getAttribute("aria-label") || field.placeholder || t("devView.value");
 }
 
 // insertText is how every pane writes into the editor: splice at the caret, restore
@@ -189,7 +190,7 @@ function groupVariables(list) {
     const scope = (typeof v === "object" && v.scope) || "process";
     (byScope.get(scope) || byScope.get("process")).push({
       name,
-      detail: (typeof v === "object" && v.detail) || "variable",
+      detail: (typeof v === "object" && v.detail) || t("devView.var.detail"),
     });
   }
   return SCOPES
@@ -271,54 +272,54 @@ export function openDevView(field, opts = {}) {
   const overlay = document.createElement("div");
   overlay.className = "dev-overlay";
   overlay.innerHTML = `
-    <div class="dev-modal" role="dialog" aria-modal="true" aria-label="Developer view">
-      <header class="dev-head" title="Drag to move · double-click to reset the layout">
+    <div class="dev-modal" role="dialog" aria-modal="true" aria-label="${esc(t("devView.label"))}">
+      <header class="dev-head" title="${esc(t("devView.head.title"))}">
         <span class="dev-badge">${esc(lang.label)}</span>
         <strong class="dev-title">${esc(opts.title || fieldTitle(field))}</strong>
-        <span class="dev-dirty" hidden title="Unsaved changes">●</span>
+        <span class="dev-dirty" hidden title="${esc(t("devView.dirty"))}">●</span>
         <span class="dev-head-sp"></span>
         ${canTest ? (canPreview
-          ? `<button type="button" class="btn ghost small dev-test-toggle active" aria-pressed="true" title="Show or hide the rendered text and the sample variables it is rendered with">Preview</button>`
-          : `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false" title="Show a panel to run this expression against sample variables">Test</button>`) : ""}
-        ${lang.format ? `<button type="button" class="btn ghost small dev-fmt" title="Reformat the code">{ } Format</button>` : ""}
-        <button type="button" class="btn ghost small dev-cancel" title="Close without applying">Cancel</button>
-        <button type="button" class="btn small dev-apply" title="Apply the edited code to the field">Apply</button>
+          ? `<button type="button" class="btn ghost small dev-test-toggle active" aria-pressed="true" title="${esc(t("devView.btn.previewTitle"))}">${esc(t("devView.btn.preview"))}</button>`
+          : `<button type="button" class="btn ghost small dev-test-toggle" aria-pressed="false" title="${esc(t("devView.btn.testTitle"))}">${esc(t("devView.btn.test"))}</button>`) : ""}
+        ${lang.format ? `<button type="button" class="btn ghost small dev-fmt" title="${esc(t("devView.btn.formatTitle"))}">${esc(t("devView.btn.format"))}</button>` : ""}
+        <button type="button" class="btn ghost small dev-cancel" title="${esc(t("devView.btn.cancelTitle"))}">${esc(t("devView.btn.cancel"))}</button>
+        <button type="button" class="btn small dev-apply" title="${esc(t("devView.btn.applyTitle"))}">${esc(t("devView.btn.apply"))}</button>
       </header>
       <div class="dev-body">
         <div class="dev-main">
           <div class="dev-editor"><textarea class="dev-ta" spellcheck="false"></textarea></div>
           ${canTest ? `
           <div class="dev-run${canPreview ? " dev-preview" : ""}"${canPreview ? "" : " hidden"}>
-            <label class="dev-run-label" for="dev-run-vars">Sample variables (JSON)</label>
+            <label class="dev-run-label" for="dev-run-vars">${esc(t("devView.run.vars"))}</label>
             <textarea id="dev-run-vars" class="dev-run-vars" rows="${canPreview ? 3 : 4}" spellcheck="false" placeholder='${canPreview ? '{ "kunde": { "name": "Ada" } }' : '{ "amount": 100 }'}'></textarea>
             <div class="dev-run-row">
               ${canPreview
-                ? `<button type="button" class="btn neutral small dev-run-btn" title="Render the template with the sample variables">Render</button>`
-                : `<button type="button" class="btn neutral small dev-run-btn" title="Evaluate the expression against the sample variables">Run</button>`}
-              <button type="button" class="btn ghost small dev-run-fill" hidden title="Fill the sample variables from a live instance">From instance</button>
+                ? `<button type="button" class="btn neutral small dev-run-btn" title="${esc(t("devView.run.renderTitle"))}">${esc(t("devView.run.render"))}</button>`
+                : `<button type="button" class="btn neutral small dev-run-btn" title="${esc(t("devView.run.runTitle"))}">${esc(t("devView.run.run"))}</button>`}
+              <button type="button" class="btn ghost small dev-run-fill" hidden title="${esc(t("devView.run.fillTitle"))}">${esc(t("devView.run.fill"))}</button>
               <span class="dev-run-out" aria-live="polite"></span>
             </div>
             <pre class="dev-run-detail" hidden></pre>
             ${canPreview ? `
             <div class="dev-preview-out">
               ${previewHTML
-                ? `<iframe class="dev-preview-html" sandbox="" title="The HTML body as a mail client renders it, without scripts"></iframe>`
-                : `<pre class="dev-preview-text" aria-label="The rendered text"></pre>`}
+                ? `<iframe class="dev-preview-html" sandbox="" title="${esc(t("devView.preview.htmlTitle"))}"></iframe>`
+                : `<pre class="dev-preview-text" aria-label="${esc(t("devView.preview.textLabel"))}"></pre>`}
             </div>
             <ul class="dev-preview-problems" hidden></ul>` : ""}
           </div>` : ""}
         </div>
         <div class="dev-split" role="separator" aria-orientation="vertical"
-             aria-label="Resize the side panel" tabindex="0" title="Drag to resize · arrow keys also work"></div>
+             aria-label="${esc(t("devView.split.label"))}" tabindex="0" title="${esc(t("devView.split.title"))}"></div>
         <aside class="dev-side">
           <div class="dev-tabs" role="tablist">
-            <button type="button" class="dev-side-toggle" title="Collapse the panel" aria-label="Collapse the panel" aria-expanded="true">›</button>
-            <button type="button" role="tab" class="dev-tab active" data-tab="vars" aria-selected="true" title="Browse the variables you can insert">Variables</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="fns" aria-selected="false"${groups.length ? "" : " hidden"} title="Browse the available functions">Functions</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="help" aria-selected="false" title="Read reference help for this language">Help</button>
-            <button type="button" role="tab" class="dev-tab" data-tab="snips" aria-selected="false"${snippets.length ? "" : " hidden"} title="Browse ready-made example snippets">Examples</button>
+            <button type="button" class="dev-side-toggle" title="${esc(t("devView.side.collapse"))}" aria-label="${esc(t("devView.side.collapse"))}" aria-expanded="true">›</button>
+            <button type="button" role="tab" class="dev-tab active" data-tab="vars" aria-selected="true" title="${esc(t("devView.tab.varsTitle"))}">${esc(t("devView.tab.vars"))}</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="fns" aria-selected="false"${groups.length ? "" : " hidden"} title="${esc(t("devView.tab.fnsTitle"))}">${esc(t("devView.tab.fns"))}</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="help" aria-selected="false" title="${esc(t("devView.tab.helpTitle"))}">${esc(t("devView.tab.help"))}</button>
+            <button type="button" role="tab" class="dev-tab" data-tab="snips" aria-selected="false"${snippets.length ? "" : " hidden"} title="${esc(t("devView.tab.snipsTitle"))}">${esc(t("devView.tab.snips"))}</button>
           </div>
-          <input type="search" class="dev-filter" placeholder="Filter…" aria-label="Filter" />
+          <input type="search" class="dev-filter" placeholder="${esc(t("devView.filter"))}" aria-label="${esc(t("devView.filter.label"))}" />
           <div class="dev-pane dev-pane-vars" role="tabpanel"></div>
           <div class="dev-pane dev-pane-fns" role="tabpanel" hidden></div>
           <div class="dev-pane dev-pane-help" role="tabpanel" hidden></div>
@@ -326,11 +327,11 @@ export function openDevView(field, opts = {}) {
         </aside>
       </div>
       <footer class="dev-foot">
-        <span class="dev-pos">Ln 1, Col 1</span>
+        <span class="dev-pos">${esc(t("devView.pos", { line: 1, col: 1 }))}</span>
         <span class="dev-count"></span>
-        <span class="dev-confirm" hidden>Discard your changes? <button type="button" class="linklike dev-discard" title="Discard your changes and close">Discard</button> · <button type="button" class="linklike dev-keep" title="Return to editing">Keep editing</button></span>
+        <span class="dev-confirm" hidden>${esc(t("devView.discard.ask"))} <button type="button" class="linklike dev-discard" title="${esc(t("devView.discard.title"))}">${esc(t("devView.discard"))}</button> · <button type="button" class="linklike dev-keep" title="${esc(t("devView.keep.title"))}">${esc(t("devView.keep"))}</button></span>
         <span class="dev-foot-sp"></span>
-        <span class="dev-keys"><kbd>Ctrl</kbd>+<kbd>Space</kbd> completions · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> apply · <kbd>Esc</kbd> close</span>
+        <span class="dev-keys">${t("devView.keys")}</span>
       </footer>
     </div>`;
   document.body.appendChild(overlay);
@@ -343,7 +344,7 @@ export function openDevView(field, opts = {}) {
   // long script's error markers and line numbers line up.
   const editor = attachCodeEditor(ta, {
     lang: lang.module,
-    variables: (opts.variables || []).map((v) => (typeof v === "string" ? { name: v, detail: "variable" } : v)),
+    variables: (opts.variables || []).map((v) => (typeof v === "string" ? { name: v, detail: t("devView.var.detail") } : v)),
     validate: opts.validate,
     lockPrefix: opts.lockPrefix,
     wrap: lang.wrap,
@@ -367,9 +368,9 @@ export function openDevView(field, opts = {}) {
       <div class="dev-sample-line"></div>
       <form class="dev-sample-find" hidden>
         <input type="search" class="dev-sample-search" spellcheck="false" autocomplete="off"
-          placeholder="Find an instance: key, name=value or a term"
-          aria-label="Find an instance of this process to read values from"
-          title="Search this process's instances in every version: an instance key, name=value (Test=Versuch 2), or a term with * and ?. Press Enter." />
+          placeholder="${esc(t("devView.sample.find"))}"
+          aria-label="${esc(t("devView.sample.findLabel"))}"
+          title="${esc(t("devView.sample.findTitle"))}" />
       </form>
       <div class="dev-sample-note" aria-live="polite" hidden></div>
     </div>
@@ -408,7 +409,7 @@ export function openDevView(field, opts = {}) {
       // A failed search is not a failed modal: the instance on screen stays, and the
       // note says why the search did not answer.
       samples = query
-        ? { ...before, note: "Search failed: " + ((err && err.message) || String(err)) }
+        ? { ...before, note: t("devView.sample.searchFailed", { error: (err && err.message) || String(err) }) }
         : { state: "error", instance: null, values: {}, instances: [], query: "", truncated: false, note: "" };
       syncFill();
       if (tab === "vars") renderVars();
@@ -418,7 +419,7 @@ export function openDevView(field, opts = {}) {
     if (query && !(got && got.instance)) {
       // Nothing matched. Replacing the instance on screen with nothing would cost
       // the author the sample they were working with, for a typo.
-      samples = { ...before, note: `No instance of this process matches “${query}”.` };
+      samples = { ...before, note: t("devView.sample.noMatch", { query }) };
       syncFill();
       if (tab === "vars") renderVars();
       return;
@@ -461,17 +462,17 @@ export function openDevView(field, opts = {}) {
   // ones and not all of them, or "the instance is not there" is the wrong conclusion.
   function matchNote(got) {
     const n = (got.instances || []).length;
-    const found = n === 1 ? "1 instance matches" : `${n} instances match`;
-    return got.truncated ? `${found} — more do, only the newest are shown. Narrow the search.` : `${found}.`;
+    const found = plural("devView.sample.found", n);
+    return got.truncated ? t("devView.sample.truncated", { found }) : `${found}.`;
   }
 
   // sampleLineHTML is the Variables pane's header line: which instance the values come
   // from, and a way to ask again once the process has run.
   function sampleLineHTML() {
-    const reload = `<button type="button" class="linklike dev-sample-reload" title="Read the latest values from a live instance">Reload</button>`;
-    if (samples.state === "loading") return "Reading a live instance…";
-    if (samples.state === "error") return `Live values unavailable · ${reload}`;
-    if (samples.state === "none") return `No instance to read values from yet — deploy and run the process once · ${reload}`;
+    const reload = `<button type="button" class="linklike dev-sample-reload" title="${esc(t("devView.sample.reloadTitle"))}">${esc(t("devView.sample.reload"))}</button>`;
+    if (samples.state === "loading") return esc(t("devView.sample.loading"));
+    if (samples.state === "error") return t("devView.sample.unavailable", { reload });
+    if (samples.state === "none") return t("devView.sample.none", { reload });
     if (samples.state === "ready") {
       const i = samples.instance;
       const list = samples.instances.length ? samples.instances : [i];
@@ -479,11 +480,11 @@ export function openDevView(field, opts = {}) {
       // sample matters — the one that took the branch being written about is not
       // always the newest one.
       const picker = list.length > 1
-        ? `<select class="dev-sample-pick" aria-label="Instance to read values from">${
+        ? `<select class="dev-sample-pick" aria-label="${esc(t("devView.sample.pick"))}">${
             list.map((r) => `<option value="${esc(String(r.key))}"${r.key === i.key ? " selected" : ""}>${esc(instanceLabel(r))}</option>`).join("")
           }</select>`
         : `<b>${esc(instanceLabel(i))}</b>`;
-      return `Values from instance ${picker} · ${reload}`;
+      return t("devView.sample.from", { picker, reload });
     }
     return "";
   }
@@ -506,18 +507,18 @@ export function openDevView(field, opts = {}) {
     const sections = groupVariables(opts.variables);
     renderSampleStrip();
     if (!sections.length) {
-      varsList.innerHTML = `<p class="dev-empty">No variables are known for this element yet. They appear as the model declares them — start variables, form fields, script and decision results, output mappings.</p>`;
+      varsList.innerHTML = `<p class="dev-empty">${esc(t("devView.vars.none"))}</p>`;
       return;
     }
     let html = "";
     for (const s of sections) {
       const rows = s.items.filter((v) => matches(query, v.name, v.detail));
       if (!rows.length) continue;
-      html += `<div class="dev-group"><h4 title="${esc(s.hint)}">${esc(s.title)}</h4>`;
+      html += `<div class="dev-group"><h4 title="${esc(t(s.hint))}">${esc(t(s.title))}</h4>`;
       for (const v of rows) {
         const sample = sampleFor(samples.values, v.name);
         const shown = sampleText(sample);
-        html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}" title="Insert this variable (or drag it into the code)">
+        html += `<button type="button" class="dev-item${shown ? " stacked" : ""}" draggable="true" data-insert="${esc(varInsert(lang.id, v.name))}" title="${esc(t("devView.var.insert"))}">
           <span class="dev-item-head">
             <span class="dev-item-name">${esc(v.name)}</span>
             <span class="dev-item-detail">${esc(v.detail)}</span>
@@ -525,7 +526,7 @@ export function openDevView(field, opts = {}) {
       }
       html += `</div>`;
     }
-    varsList.innerHTML = html || `<p class="dev-empty">No variable matches the filter.</p>`;
+    varsList.innerHTML = html || `<p class="dev-empty">${esc(t("devView.vars.noMatch"))}</p>`;
   }
 
   function renderFns() {
@@ -539,15 +540,15 @@ export function openDevView(field, opts = {}) {
         // The row reads; the "+" beside it inserts. Two targets, no ambiguity about
         // which click edits the code.
         html += `<div class="dev-row">
-          <button type="button" class="dev-item dev-fn" data-fn="${esc(it.name)}" title="Show this function’s documentation">
+          <button type="button" class="dev-item dev-fn" data-fn="${esc(it.name)}" title="${esc(t("devView.fn.doc"))}">
             <span class="dev-item-name">${esc(it.name)}</span>
             <span class="dev-item-detail">${esc(it.sig || "")}</span></button>
-          <button type="button" class="dev-quick dev-ins-fn" data-fn="${esc(it.name)}" title="Insert ${esc(it.name)}" aria-label="Insert ${esc(it.name)}">+</button>
+          <button type="button" class="dev-quick dev-ins-fn" data-fn="${esc(it.name)}" title="${esc(t("devView.fn.insert", { name: it.name }))}" aria-label="${esc(t("devView.fn.insert", { name: it.name }))}">+</button>
         </div>`;
       }
       html += `</div>`;
     }
-    paneFns.innerHTML = html || `<p class="dev-empty">No function matches the filter.</p>`;
+    paneFns.innerHTML = html || `<p class="dev-empty">${esc(t("devView.fns.noMatch"))}</p>`;
   }
 
   function findItem(name) {
@@ -567,12 +568,12 @@ export function openDevView(field, opts = {}) {
         <pre class="dev-help-sig">${esc(it.sig || it.name)}</pre>
         <p>${esc(it.doc || "")}</p>`;
       if (it.ex) {
-        html += `<h5>Example</h5><pre class="dev-help-ex">${esc(it.ex)}</pre>
-          <button type="button" class="btn ghost small dev-ins-ex" title="Insert this example into the code">Insert example</button>`;
+        html += `<h5>${esc(t("devView.help.example"))}</h5><pre class="dev-help-ex">${esc(it.ex)}</pre>
+          <button type="button" class="btn ghost small dev-ins-ex" title="${esc(t("devView.example.insertTitle"))}">${esc(t("devView.help.insertExample"))}</button>`;
       }
-      html += `<button type="button" class="btn ghost small dev-ins-fn" data-fn="${esc(it.name)}" title="Insert a call to this function">Insert call</button></div>`;
+      html += `<button type="button" class="btn ghost small dev-ins-fn" data-fn="${esc(it.name)}" title="${esc(t("devView.help.insertCallTitle"))}">${esc(t("devView.help.insertCall"))}</button></div>`;
     } else if (groups.length) {
-      html += `<p class="dev-empty">Pick a function to read its page.</p>`;
+      html += `<p class="dev-empty">${esc(t("devView.help.pick"))}</p>`;
     }
     paneHelp.innerHTML = html;
   }
@@ -585,9 +586,9 @@ export function openDevView(field, opts = {}) {
           <h4>${esc(s.title)}</h4>
           <p>${esc(s.doc)}</p>
           <pre>${esc(s.code)}</pre>
-          <button type="button" class="btn ghost small dev-ins-snip" data-i="${i}" title="Insert this example into the code">Insert</button>
+          <button type="button" class="btn ghost small dev-ins-snip" data-i="${i}" title="${esc(t("devView.example.insertTitle"))}">${esc(t("devView.snip.insert"))}</button>
         </div>`).join("")
-      : `<p class="dev-empty">No example matches the filter.</p>`;
+      : `<p class="dev-empty">${esc(t("devView.snips.noMatch"))}</p>`;
   }
 
   const renderers = { vars: renderVars, fns: renderFns, help: renderHelp, snips: renderSnips };
@@ -606,7 +607,7 @@ export function openDevView(field, opts = {}) {
     if (collapsed) side.style.flex = "";
     else applySideWidth();
     sideToggle.textContent = collapsed ? "‹" : "›";
-    sideToggle.title = collapsed ? "Expand the panel" : "Collapse the panel";
+    sideToggle.title = collapsed ? t("devView.side.expand") : t("devView.side.collapse");
     sideToggle.setAttribute("aria-label", sideToggle.title);
     sideToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     if (persist) { try { localStorage.setItem(SIDE_KEY, collapsed ? "collapsed" : "open"); } catch { /* no storage */ } }
@@ -894,9 +895,9 @@ export function openDevView(field, opts = {}) {
     dirtyEl.hidden = !dirty;
     const upto = ta.value.slice(0, ta.selectionStart ?? 0);
     const lines = upto.split("\n");
-    posEl.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
+    posEl.textContent = t("devView.pos", { line: lines.length, col: lines[lines.length - 1].length + 1 });
     const total = ta.value ? ta.value.split("\n").length : 1;
-    countEl.textContent = `${total} line${total === 1 ? "" : "s"} · ${ta.value.length} char${ta.value.length === 1 ? "" : "s"}`;
+    countEl.textContent = `${plural("devView.lines", total)} · ${plural("devView.chars", ta.value.length)}`;
   }
   ta.addEventListener("input", refreshStatus);
   ta.addEventListener("keyup", refreshStatus);
@@ -921,7 +922,7 @@ export function openDevView(field, opts = {}) {
       detail.textContent = text || "";
     };
     const fillBtn = q(".dev-run-fill");
-    fillBtn.title = "Replace the sample with this instance's actual variables";
+    fillBtn.title = t("devView.fill.replaceTitle");
     // The box is prefilled from the instance as soon as the values arrive, so the
     // first click usually finds nothing to change. It says so: a click with no
     // visible effect reads as a broken button.
@@ -932,12 +933,12 @@ export function openDevView(field, opts = {}) {
       const key = samples.instance ? samples.instance.key : "";
       lastFilled = text;
       if (box.value === text) {
-        setOut("", `The sample already holds the values of instance ${key}.`);
+        setOut("", t("devView.fill.same", { key }));
         return;
       }
       box.value = text;
       const n = Object.keys(sample).length;
-      setOut("", `Filled from instance ${key} · ${n} variable${n === 1 ? "" : "s"}.`);
+      setOut("", plural("devView.fill.done", n, { key }));
       // A result shown now would belong to the sample just replaced.
       setDetail("", "");
       if (canPreview) schedulePreview(0);
@@ -958,11 +959,11 @@ export function openDevView(field, opts = {}) {
         if (raw) {
           try { vars = JSON.parse(raw); } catch { vars = null; }
           if (!vars || typeof vars !== "object" || Array.isArray(vars)) {
-            setOut("err", "Sample variables must be a JSON object.");
+            setOut("err", t("devView.preview.notObject"));
             return;
           }
         }
-        setOut("", "Rendering…");
+        setOut("", t("devView.preview.rendering"));
         let r;
         try { r = await opts.preview(ta.value, vars); }
         catch (err) {
@@ -976,8 +977,8 @@ export function openDevView(field, opts = {}) {
           // The last good rendering stays on screen, dimmed: what the template said a
           // keystroke ago is more use than an empty frame while it is being fixed.
           q(".dev-preview-out").classList.add("stale");
-          setOut("err", r && r.line ? `✗ line ${r.line}, column ${r.column}` : "✗ does not render");
-          setDetail("err", (r && r.error) || "the template could not be rendered");
+          setOut("err", r && r.line ? t("devView.preview.at", { line: r.line, column: r.column }) : t("devView.preview.fails"));
+          setDetail("err", (r && r.error) || t("devView.preview.failed"));
           try { editor.setMarkers(r && r.line ? [{ line: r.line, message: r.error }] : []); } catch { /* no markers */ }
           return;
         }
@@ -990,8 +991,8 @@ export function openDevView(field, opts = {}) {
         problemsEl.hidden = !problems.length;
         problemsEl.innerHTML = problems.map((p) => `<li><code>${esc(p.expression)}</code> ${esc(p.message)}</li>`).join("");
         setOut("ok", problems.length
-          ? `✓ rendered · ${problems.length} placeholder${problems.length === 1 ? "" : "s"} rendered as nothing`
-          : "✓ rendered");
+          ? plural("devView.preview.empty", problems.length)
+          : t("devView.preview.ok"));
       };
       schedulePreview = (ms = 400) => {
         clearTimeout(timer);
@@ -1006,9 +1007,9 @@ export function openDevView(field, opts = {}) {
       const raw = (q(".dev-run-vars").value || "").trim();
       if (raw) {
         try { vars = JSON.parse(raw); }
-        catch { setOut("err", "Sample variables must be valid JSON."); setDetail("", ""); return; }
+        catch { setOut("err", t("devView.run.invalid")); setDetail("", ""); return; }
       }
-      setOut("", "Running…"); setDetail("", "");
+      setOut("", t("devView.run.running")); setDetail("", "");
       const t0 = performance.now();
       try {
         const src = ta.value.slice(opts.lockPrefix ? opts.lockPrefix(ta.value) : 0);
@@ -1026,9 +1027,9 @@ export function openDevView(field, opts = {}) {
           // A script that gave its error a code is told which one, since a test run has
           // no process to ask whether a boundary catches it (ADR-0461).
           const coded = r && r.errorCode
-            ? `Error code ${r.errorCode} — in a running instance, an error boundary or error event subprocess catching ${r.errorCode} takes over; without one this fails the task.\n\n`
+            ? t("devView.run.errorCode", { code: r.errorCode }) + "\n\n"
             : "";
-          setDetail("err", coded + ((r && r.error) || "run failed"));
+          setDetail("err", coded + ((r && r.error) || t("devView.run.failed")));
         }
       } catch (err) {
         setOut("err", "✗");

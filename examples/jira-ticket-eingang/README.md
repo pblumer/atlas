@@ -50,7 +50,7 @@ Der **Message name** ist die ganze Kopplung zwischen der Überwachung und dem
 Modell. Ist er hier und im Startereignis auch nur um ein Zeichen verschieden,
 laufen beide Hälften fehlerfrei und treffen sich nie. Der Modeler schreibt deshalb
 unter den Nachrichtennamen, welche Überwachungen ihn veröffentlichen — steht dort
-„No inbound event watch … publishes", ist genau das passiert.
+„Keine Inbound-Watch auf diesem Server veröffentlicht …", ist genau das passiert.
 
 ## Was die Instanz sieht
 

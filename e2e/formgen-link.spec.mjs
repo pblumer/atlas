@@ -28,7 +28,7 @@ test.beforeEach(async ({ page }) => {
 // open selects an element and expands the named property group.
 async function open(page, id, group) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: group }).click();
+  await page.locator(`.pgroup[data-group*="${group}" i] > .pgroup-head`).click();
 }
 
 // formLink is the "＋ New form" door inside the expanded group.

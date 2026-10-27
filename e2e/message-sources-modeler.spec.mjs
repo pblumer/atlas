@@ -31,7 +31,7 @@ async function openMessage(page, id) {
   const picker = page.locator("#f-msgref");
   await expect(picker).toHaveCount(1);
   if (!(await picker.isVisible())) {
-    await page.locator(".pgroup-head .pgroup-title").filter({ hasText: /^Message$/ }).click();
+    await page.locator('.pgroup[data-group="Message"] > .pgroup-head .pgroup-title').click();
   }
   await expect(picker).toBeVisible();
 }
@@ -49,7 +49,7 @@ test("an element that waits for a message is offered the Worker events, then the
   await mount(page, "onboarding");
   await openMessage(page, "Catch_new");
   await expect(group(page, "product-actions")).toHaveCount(1);
-  expect(await groupLabels(page)).toEqual(["Events from Workers", "Product actions"]);
+  expect(await groupLabels(page)).toEqual(["Ereignisse von Workern", "Produktaktionen"]);
 
   // One choice per action's message: the product, the action key and its effect. The one
   // whose message the diagram already declares is not offered a second time.
@@ -71,16 +71,16 @@ test("a row without a sourceKind is an inbound watch, and only watches are Worke
   // jira.ticket.created and employee.created come without a sourceKind; order.placed is a
   // watch too, but the diagram declares it. No product action and no process is here.
   expect(await optionsOf(page, "worker-events")).toEqual([
-    { value: "__source__:employee.created", text: "employee.created — HR (googlesheets) — off", disabled: false },
+    { value: "__source__:employee.created", text: "employee.created — HR (googlesheets) — aus", disabled: false },
     { value: "__source__:jira.ticket.created", text: "jira.ticket.created — ServiceDesk (jira)", disabled: false },
   ]);
 
   // The line under the field counts watches alone.
   await page.locator("#f-msgref").selectOption("__source__:jira.ticket.created");
   await expect(page.locator("#f-msgname")).toHaveValue("jira.ticket.created");
-  await expect(page.locator("#f-msgsources")).toContainText("Published by 1 inbound event watch:");
+  await expect(page.locator("#f-msgsources")).toContainText("Veröffentlicht von 1 Inbound-Watch:");
   await expect(page.locator("#f-msgsources")).toContainText("ServiceDesk");
-  await expect(page.locator("#f-msgsources")).not.toContainText("product action");
+  await expect(page.locator("#f-msgsources")).not.toContainText("Produktaktion");
   expect(page.__errors).toEqual([]);
 });
 
@@ -90,8 +90,8 @@ test("in a process a product binds, every Worker event is marked as not for a pr
   await expect(group(page, "worker-events")).toHaveCount(1);
   const workers = await optionsOf(page, "worker-events");
   expect(workers.map((o) => o.text)).toEqual([
-    "employee.created — HR (googlesheets) — off — not for a product action",
-    "jira.ticket.created — ServiceDesk (jira) — not for a product action",
+    "employee.created — HR (googlesheets) — aus — nicht für eine Produktaktion",
+    "jira.ticket.created — ServiceDesk (jira) — nicht für eine Produktaktion",
   ]);
   // A warning, not a lock: the choice is still there and still declares the message.
   expect(workers.every((o) => !o.disabled)).toBe(true);
@@ -112,7 +112,7 @@ test("an element that throws is offered the processes waiting for it, and no pro
   for (const id of ["Throw_new", "Send_msg"]) {
     await openMessage(page, id);
     await expect(group(page, "waiting-processes")).toHaveCount(1);
-    expect(await groupLabels(page)).toEqual(["Processes waiting for it"]);
+    expect(await groupLabels(page)).toEqual(["Prozesse, die darauf warten"]);
     // invoice.paid is waited for by two processes: one choice, both named, each with where
     // it waits. mailbox.done and mailbox.storage.extend are declared, so not offered again.
     expect(await optionsOf(page, "waiting-processes")).toEqual([
@@ -144,7 +144,7 @@ test("picking a waiting process declares its message on the throw", async ({ pag
   const msg = /<bpmn:message id="([^"]+)" name="invoice\.paid"/.exec(xml);
   expect(msg).not.toBeNull();
   expect(xml).toMatch(new RegExp(`<bpmn:intermediateThrowEvent id="Throw_new"[\\s\\S]*?messageRef="${msg[1]}"`));
-  await expect(page.locator("#f-msgsources")).toContainText("Waited for by deployed processes billing (catch), dunning (start).");
+  await expect(page.locator("#f-msgsources")).toContainText("Darauf warten die deployten Prozesse billing (catch), dunning (start).");
   expect(page.__errors).toEqual([]);
 });
 
@@ -169,7 +169,7 @@ test("picking a product action declares its message, and the field suggests the 
   const msg = /<bpmn:message id="([^"]+)" name="mailbox\.password\.reset"/.exec(xml);
   expect(msg).not.toBeNull();
   expect(xml).toMatch(new RegExp(`<bpmn:intermediateCatchEvent id="Catch_new"[\\s\\S]*?messageRef="${msg[1]}"`));
-  await expect(page.locator("#f-msgsources")).toContainText("Owned by product action password-reset of Mailbox (service)");
+  await expect(page.locator("#f-msgsources")).toContainText("Gehört zur Produktaktion password-reset von Mailbox (service)");
   // Declared now, so it is in the diagram's own list and no longer among the actions.
   await expect(group(page, "product-actions").locator('option[value="__source__:mailbox.password.reset"]')).toHaveCount(0);
   expect(page.__errors).toEqual([]);
@@ -182,22 +182,22 @@ test("the hint names every source of the name: the watches, the product action, 
   // A product's message: the action that owns it and the process waiting for it. No watch
   // publishes it, and none may, so the line does not suggest adding one.
   await openMessage(page, "Receive_extend");
-  await expect(hint).toContainText("Owned by product action storage-extend of Mailbox (change)");
-  await expect(hint).toContainText("Waited for by deployed process mailbox-lifecycle (catch).");
-  await expect(hint).not.toContainText("inbound event watch");
+  await expect(hint).toContainText("Gehört zur Produktaktion storage-extend von Mailbox (change)");
+  await expect(hint).toContainText("Darauf wartet der deployte Prozess mailbox-lifecycle (catch).");
+  await expect(hint).not.toContainText("Inbound-Watch");
 
   // A watch's message: what it said before, and nothing about products.
   await openMessage(page, "Receive_plain");
-  await expect(hint).toContainText("Published by 1 inbound event watch:");
+  await expect(hint).toContainText("Veröffentlicht von 1 Inbound-Watch:");
   await expect(hint).toContainText("Orders");
-  await expect(hint).not.toContainText("product action");
-  await expect(hint).not.toContainText("Waited for");
+  await expect(hint).not.toContainText("Produktaktion");
+  await expect(hint).not.toContainText(/Darauf warte[nt]/);
 
   // A thrown message nothing publishes but a process waits for: the old line, then who
   // waits for it.
   await openMessage(page, "Send_msg");
-  await expect(hint).toContainText("No inbound event watch on this server publishes mailbox.done.");
-  await expect(hint).toContainText("Waited for by deployed process archive (catch).");
+  await expect(hint).toContainText("Keine Inbound-Watch auf diesem Server veröffentlicht mailbox.done.");
+  await expect(hint).toContainText("Darauf wartet der deployte Prozess archive (catch).");
   expect(page.__errors).toEqual([]);
 });
 
@@ -242,7 +242,7 @@ test("a waiting element is offered the names deployed models send, newest versio
   await mountNewer(page, "onboarding");
   await openMessage(page, "Catch_new");
   await expect(group(page, "sending-processes")).toHaveCount(1);
-  expect(await groupLabels(page)).toEqual(["Events from Workers", "Product actions", "Messages deployed models send"]);
+  expect(await groupLabels(page)).toEqual(["Ereignisse von Workern", "Produktaktionen", "Nachrichten, die deployte Modelle senden"]);
   // only.old is sent by an older version alone, so nobody sends it now.
   expect(await optionsOf(page, "sending-processes")).toEqual([
     { value: "__source__:invoice.sent", text: "invoice.sent — billing · throw", disabled: false },
@@ -251,8 +251,8 @@ test("a waiting element is offered the names deployed models send, newest versio
   // A name a deployed model sends no longer reads as unfed.
   await page.locator("#f-msgref").selectOption("__source__:invoice.sent");
   await expect(page.locator("#f-msgname")).toHaveValue("invoice.sent");
-  await expect(page.locator("#f-msgsources")).toContainText("Sent by deployed process billing.");
-  await expect(page.locator("#f-msgsources")).not.toContainText("No inbound event watch");
+  await expect(page.locator("#f-msgsources")).toContainText("Gesendet vom deployten Prozess billing.");
+  await expect(page.locator("#f-msgsources")).not.toContainText("Keine Inbound-Watch");
   expect(page.__errors).toEqual([]);
 });
 
@@ -267,12 +267,12 @@ test("a sending element is told who waits for its message, or that nobody does",
   await mount(page, "mailbox-lifecycle");
   await openMessage(page, "Send_msg");
   const hint = page.locator("#f-msgsources");
-  await expect(hint).toContainText("Waited for by deployed process archive (catch).");
+  await expect(hint).toContainText("Darauf wartet der deployte Prozess archive (catch).");
   await expect(hint.locator('a[href="/#/console/events?name=mailbox.done&channel=message"]')).toHaveCount(1);
 
   await page.locator("#f-msgname").fill("nobody.waits");
   await page.locator("#f-msgname").blur();
-  await expect(hint).toContainText("No deployed process waits for nobody.waits: what this element sends is lost.");
+  await expect(hint).toContainText("Kein deployter Prozess wartet auf nobody.waits: Was dieses Element sendet, geht verloren.");
   await expect(hint.locator('a[href="/#/console/events?name=nobody.waits&channel=message"]')).toHaveCount(1);
   expect(page.__errors).toEqual([]);
 });
