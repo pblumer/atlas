@@ -79,7 +79,7 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 		elements, relationships = applicationGraph(s, m)
 		app = "id-application"
 	}
-	if s.Strategy != nil || s.Business != nil || s.Data != nil {
+	if s.Strategy != nil || s.Business != nil || s.Data != nil || s.Coupling != nil {
 		g := &layerGraph{s: s, elements: elements, relationships: relationships, app: app, processes: map[string]string{}}
 		if s.Strategy != nil {
 			g.strategy()
@@ -89,6 +89,9 @@ func ArchiMate(s Snapshot, m Meta) []byte {
 		}
 		if s.Data != nil {
 			g.data()
+		}
+		if s.Coupling != nil {
+			g.coupling()
 		}
 		elements, relationships = g.elements, g.relationships
 	}
@@ -211,10 +214,14 @@ func applicationGraph(s Snapshot, m Meta) ([]archElement, []archRelationship) {
 			name := "Process " + d.Name
 			props := map[string]string{"atlas.derivedKind": "call", panorama.KeyProcessID: d.Name}
 			doc := "The application holding process " + d.Name + ", which this application calls. Called at " + usesText(d.UsedBy) + "."
-			if d.TargetApplication != "" {
+			switch {
+			case d.TargetWithheld:
+				name = "Another application"
+				doc = "The application holding process " + d.Name + ", which this application calls; this reader may not see it. Called at " + usesText(d.UsedBy) + "."
+			case d.TargetApplication != "":
 				name = d.TargetApplication
 				props[panorama.KeyApplicationID] = d.TargetApplicationID
-			} else {
+			default:
 				doc += " Nothing on the recording installation held that process when the snapshot was taken."
 			}
 			e = archElement{typ: "ApplicationComponent", name: name, doc: doc, props: props}
@@ -713,6 +720,87 @@ func (g *layerGraph) business() {
 				g.relate("Association", id, bp, "")
 				last = b.ProcessID
 			}
+		}
+	}
+}
+
+// coupling adds the cross-application coupling (mapping version 7): each process of
+// another application at the other end of a name as an Application Process assigned
+// from that application's Application Component, triggering the release's processes
+// that receive the name or triggered by those that throw it, and the event feed as an
+// Application Service serving the application. A peer this reader may not see is not
+// written; the documentation counts it.
+func (g *layerGraph) coupling() {
+	c := g.s.Coupling
+	own := func(kind, name, direction string) []string {
+		var uses []Use
+		if kind == NameMessage && direction == DirectionIn {
+			for _, e := range g.s.EntryPoints {
+				if e.Name == name {
+					uses = e.UsedBy
+				}
+			}
+		} else {
+			for _, n := range c.Names {
+				if n.Kind == kind && n.Name == name && n.Direction == direction {
+					uses = n.UsedBy
+				}
+			}
+		}
+		var pids []string
+		for _, u := range uses {
+			if !slices.Contains(pids, u.ProcessID) {
+				pids = append(pids, u.ProcessID)
+			}
+		}
+		return pids
+	}
+	apps, procs := map[string]string{}, map[[2]string]string{}
+	triggers := map[[2]string]bool{}
+	trigger := func(source, target string) {
+		if !triggers[[2]string{source, target}] {
+			triggers[[2]string{source, target}] = true
+			g.relate("Triggering", source, target, "")
+		}
+	}
+	for _, p := range c.Peers {
+		if p.Withheld {
+			continue
+		}
+		comp, ok := apps[p.ApplicationID]
+		if !ok {
+			comp = g.add(archElement{id: fmt.Sprintf("id-peer-application-%d", len(apps)+1), typ: "ApplicationComponent", name: cmp.Or(p.Application, p.label()),
+				doc:   "An application coupled to this one through message and signal names on the recording installation.",
+				props: map[string]string{"atlas.derivedKind": "peerApplication", panorama.KeyApplicationID: p.ApplicationID}})
+			apps[p.ApplicationID] = comp
+		}
+		key := [2]string{p.ApplicationID, p.ProcessID}
+		proc, ok := procs[key]
+		if !ok {
+			proc = g.add(archElement{id: fmt.Sprintf("id-peer-process-%d", len(procs)+1), typ: "ApplicationProcess", name: "Process " + p.ProcessID,
+				doc:   "A process of " + p.label() + " at the other end of a name the release throws or receives.",
+				props: map[string]string{"atlas.derivedKind": "peerProcess", panorama.KeyProcessID: p.ProcessID}})
+			g.relate("Assignment", comp, proc, "")
+			procs[key] = proc
+		}
+		for _, pid := range own(p.Kind, p.Name, p.Direction) {
+			if p.Direction == DirectionIn {
+				trigger(proc, g.process(pid))
+			} else {
+				trigger(g.process(pid), proc)
+			}
+		}
+	}
+	if f := c.Feed; f.Subscriptions > 0 {
+		feed := g.add(archElement{id: "id-event-feed", typ: "ApplicationService", name: "Event feed",
+			doc: "The event feed Atlas pushes (ADR-0433), carrying the release's incidents and its products' action outcomes among every application's events.",
+			props: map[string]string{
+				"atlas.derivedKind":        "eventFeed",
+				"atlas.feed.subscriptions": fmt.Sprint(f.Subscriptions),
+				"atlas.feed.targets":       f.targetsText(),
+			}})
+		if g.app != "" {
+			g.relate("Serving", feed, g.app, "")
 		}
 	}
 }

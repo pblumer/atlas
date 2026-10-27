@@ -263,3 +263,40 @@ func TestALifecycleProductIsRecordedWithItsActions(t *testing.T) {
 		t.Error("a two-process product binding no release process is recorded")
 	}
 }
+
+// TestTheEventFeedIsRecordedWithoutItsSecret: the coupling counts the enabled feed
+// subscriptions and names the Worker and endpoint each pushes to; a disabled one is
+// not counted, and the credential the Worker uses is not recorded at all.
+func TestTheEventFeedIsRecordedWithoutItsSecret(t *testing.T) {
+	srv := newServerWithOptions(t, WithFeedPushInterval(0))
+	var (
+		c   *archsketch.Coupling
+		err error
+	)
+	srv.do(func() {
+		if err = srv.connectors.Save(connector{ID: "wk-siem", Name: "siem", Kind: connectorKindCloudEvents,
+			Endpoint: "https://feed:geheim@siem.example.com/events", CredentialsRef: "siem-key", Enabled: true}); err != nil {
+			return
+		}
+		if err = srv.feedSubs.Save(feedSubscription{ID: "fs-1", WorkerID: "wk-siem", Enabled: true}); err != nil {
+			return
+		}
+		if err = srv.feedSubs.Save(feedSubscription{ID: "fs-2", WorkerID: "wk-siem"}); err != nil {
+			return
+		}
+		c = srv.couplingPart("app", &archsketch.Coupling{}, nil)
+	})
+	if err != nil || c == nil {
+		t.Fatalf("coupling = %v, err = %v", c, err)
+	}
+	if c.Feed.Subscriptions != 1 || len(c.Feed.Targets) != 1 || c.Feed.Targets[0].Worker != "siem" ||
+		c.Feed.Targets[0].Endpoint == nil || c.Feed.Targets[0].Endpoint.Host != "siem.example.com" {
+		t.Errorf("feed = %+v, want one enabled subscription pushing to siem", c.Feed)
+	}
+	raw, _ := json.Marshal(c)
+	for _, leak := range []string{"geheim", "siem-key", "/events"} {
+		if strings.Contains(string(raw), leak) {
+			t.Errorf("the coupling records %q", leak)
+		}
+	}
+}

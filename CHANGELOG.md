@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The architecture sketch shows who else is at the other end of a release's messages and signals.**
+  A release now records the messages and signals its processes throw and the signals they
+  catch, and, for each name, the processes of other applications on the installation at
+  the other end: those that throw a message the release receives or a signal it catches,
+  and those that receive a message or signal it throws, read from the newest active
+  version of every deployed model. A message box says who throws it, and the picture
+  gains a box for each name the release throws — "Sends message …", "Broadcasts signal
+  …" — saying who receives it, drawn with a dashed line because Atlas correlates a name
+  itself and no connection crosses it. The event feed appears as one box when the
+  installation pushes one: how many subscriptions, and that the release's incidents (and,
+  with the business layer, its products' outcomes) travel on it; a feed endpoint is shown
+  only to whoever may see its Worker, and no credential is recorded. In ArchiMate each
+  peer process is an application process of its application, triggering or triggered by
+  the release's processes. Another application's name and processes are shown only to a
+  reader who may see that application — elsewhere the picture says "another application"
+  — and the same now holds for the application a call activity reaches, which every reader
+  of the release saw before. Snapshots are now format and mapping version 7; a release
+  recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **The architecture sketch has business and strategy layers.** A release now records its
   processes as the work they do, with how their user tasks say who does them (for a
   group, for a named person, decided at run time, or nobody); the roles they name — each

@@ -114,10 +114,13 @@ type centerBox struct {
 
 func drawSketch(s Snapshot, m Meta, parts sketchParts) []byte {
 	left, right := parts.left, parts.right
+	// A box grows a third line where some box has one — every box with a physical part,
+	// and the coupling's — and a fourth where some box has that.
+	all := slices.Concat(left, right)
 	bh := boxHeight
-	if s.Physical != nil {
+	if s.Physical != nil || slices.ContainsFunc(all, func(b box) bool { return b.site != "" }) {
 		bh = physicalBoxHeight
-		if slices.ContainsFunc(slices.Concat(left, right), func(b box) bool { return b.extra != "" }) {
+		if slices.ContainsFunc(all, func(b box) bool { return b.extra != "" }) {
 			bh = detailBoxHeight
 		}
 	}
@@ -213,13 +216,18 @@ func drawMain(b *strings.Builder, parts sketchParts, bh, head, top, contentH, no
 	}
 	fmt.Fprintf(b, `<text x="%d" y="%d" font-size="11" text-anchor="end" fill="%s">%s</text></g>`+"\n", appX+appW-10, appTop+contentH-10, colorMuted, esc(parts.center.kind))
 
-	// The ways in, each with a solid arrow into the application.
+	// The ways in, each with a solid arrow into the application; a signal, which no
+	// connection brings, with a dashed one.
 	for i, box := range left {
 		y := top + i*(bh+boxGap)
 		drawBox(b, colLeftX, y, bh, box)
 		mid := y + bh/2
-		fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5" marker-end="url(#arrow)"/>`+"\n",
-			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke)
+		dash := ""
+		if box.arrow == arrowName {
+			dash = ` stroke-dasharray="6 4"`
+		}
+		fmt.Fprintf(b, `<line x1="%d" y1="%d" x2="%d" y2="%d" stroke="%s" stroke-width="1.5"%s marker-end="url(#arrow)"/>`+"\n",
+			colLeftX+colWidth, mid, appX, clampY(mid, appTop, contentH), colorStroke, dash)
 	}
 
 	// The right column: a solid arrow from whichever side opens the connection, or a
@@ -283,6 +291,7 @@ const (
 	arrowNone arrow = iota // dashed: a dependency with no recorded connection
 	arrowIn                // the box's side opens the connection to Atlas
 	arrowOut               // Atlas opens the connection to the box's side
+	arrowName              // dashed: a message or signal name Atlas correlates itself
 )
 
 func drawBox(b *strings.Builder, x, y, height int, bx box) {
@@ -353,7 +362,34 @@ func inboundBoxes(s Snapshot) []box {
 			}
 			bx.tooltip += "; published by the inbound subscriptions of " + strings.Join(sources, ", ")
 		}
+		// Who else throws it, when the coupling is recorded (mapping version 7).
+		if peers := s.Coupling.peersOf(NameMessage, e.Name, DirectionIn); len(peers) > 0 {
+			from := "← thrown by " + peersText(peers)
+			if bx.site == "" {
+				bx.site = from
+			} else {
+				bx.extra = from
+			}
+			bx.tooltip += "; thrown in " + peersDetail(peers)
+		}
 		out = append(out, bx)
+	}
+	// The signals the release catches, and who throws them elsewhere.
+	if c := s.Coupling; c != nil {
+		for _, n := range c.Names {
+			if n.Kind != NameSignal || n.Direction != DirectionIn {
+				continue
+			}
+			peers := c.peersOf(NameSignal, n.Name, DirectionIn)
+			bx := box{fill: colorApplication, kind: "Application event", label: "Signal " + n.Name, arrow: arrowName,
+				detail:  "caught at " + elementCount(len(n.UsedBy)),
+				site:    "← thrown by " + cmp.Or(peersText(peers), "no other application here"),
+				tooltip: "Signal " + n.Name + " — caught at " + usesText(n.UsedBy)}
+			if len(peers) > 0 {
+				bx.tooltip += "; thrown in " + peersDetail(peers)
+			}
+			out = append(out, bx)
+		}
 	}
 	if p := s.Physical; p != nil {
 		for _, l := range p.PublicStartLinks {
@@ -411,15 +447,64 @@ func outboundBoxes(s Snapshot) []box {
 		case DependencyCall:
 			bx.kind = "Application component"
 			bx.label = "Process " + d.Name
-			if d.TargetApplication != "" {
+			switch {
+			case d.TargetWithheld:
+				bx.detail = "in another application · " + elementCount(len(d.UsedBy))
+			case d.TargetApplication != "":
 				bx.detail = "in " + d.TargetApplication + " · " + elementCount(len(d.UsedBy))
-			} else {
+			default:
 				bx.detail = "not deployed here when recorded · " + elementCount(len(d.UsedBy))
 			}
 			bx.tooltip = "Call activity into process " + d.Name + " — called at " + usesText(d.UsedBy)
 		default:
 			continue
 		}
+		out = append(out, bx)
+	}
+	return append(out, couplingBoxes(s)...)
+}
+
+// couplingBoxes are the ways out through names (mapping version 7): each message and
+// signal the release throws, with who in other applications receives it, and the event
+// feed when the installation pushes one. A name is correlated inside Atlas, so its line
+// is drawn dashed: no connection crosses it.
+func couplingBoxes(s Snapshot) []box {
+	c := s.Coupling
+	if c == nil {
+		return nil
+	}
+	var out []box
+	for _, n := range c.Names {
+		if n.Direction != DirectionOut {
+			continue
+		}
+		peers := c.peersOf(n.Kind, n.Name, DirectionOut)
+		bx := box{fill: colorApplication, kind: "Application event", arrow: arrowName, detail: "thrown at " + elementCount(len(n.UsedBy)),
+			site: "→ received by " + cmp.Or(peersText(peers), "no other application here")}
+		if n.Kind == NameSignal {
+			bx.label = "Broadcasts signal " + n.Name
+		} else {
+			bx.label = "Sends message " + n.Name
+		}
+		bx.tooltip = bx.label + " — thrown at " + usesText(n.UsedBy)
+		if len(peers) > 0 {
+			bx.tooltip += "; received in " + peersDetail(peers)
+		}
+		out = append(out, bx)
+	}
+	if f := c.Feed; f.Subscriptions > 0 {
+		carries := "its incidents"
+		if s.Business != nil && len(s.Business.Products) > 0 {
+			carries = "its incidents and product outcomes"
+		}
+		bx := box{fill: colorApplication, kind: "Application service", label: "Event feed",
+			detail:  "pushed by Atlas · " + plural(f.Subscriptions, "subscription", "subscriptions"),
+			site:    "carries " + carries,
+			tooltip: "The event feed Atlas pushes (ADR-0433): " + plural(f.Subscriptions, "enabled subscription", "enabled subscriptions") + "; carries " + carries}
+		if t := f.targetsText(); t != "" {
+			bx.tooltip += "; to " + t
+		}
+		bx.arrow = arrowOut
 		out = append(out, bx)
 	}
 	return out
@@ -501,6 +586,9 @@ func footerLines(s Snapshot, m Meta, key string) []string {
 	}
 	if key != "" {
 		lines = append(lines, key)
+	}
+	if c := s.Coupling; c != nil && len(c.Names) > 0 {
+		lines = append(lines, "Dashed line at a message or signal box: a name Atlas correlates itself; no connection crosses it.")
 	}
 	if s.Data != nil {
 		lines = append(lines,

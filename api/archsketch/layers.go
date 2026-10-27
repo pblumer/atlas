@@ -154,6 +154,7 @@ func (s Snapshot) Select(sel Selection) Snapshot {
 	if !sel.Has(LayerApplication) {
 		out.EntryPoints = nil
 		out.Dependencies = nil
+		out.Coupling = nil
 		if out.Physical != nil {
 			p := *out.Physical
 			p.PublicStartLinks = nil
