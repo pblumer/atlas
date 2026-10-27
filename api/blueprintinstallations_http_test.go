@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-
 )
 
 func pendingBlueprintRequest(s *Server, id, version, match string) *httptest.ResponseRecorder {
