@@ -1,9 +1,41 @@
 # ADR-0493: A diagrams scope for systems that show processes elsewhere
 
-- **Status:** Proposed (amended 2026-10-26: the scope reaches the overlay's counts, not its incident details)
+- **Status:** Proposed (amended 2026-10-26: the scope reaches the overlay's counts, not its incident details; amended 2026-10-27: it reaches a release's architecture sketch as everybody may see it)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** requested 2026-10-26 by the maintainer, who wants wikiwikibangbang (github.com/dbuchs7/wikiwikibangbang) to show Atlas processes in its pages in their newest version, with their live counts when its administrator allows them, and asked for a narrow token on the Atlas side rather than a `full` one; proposed for the maintainers' acceptance. The amendment was asked for by the maintainer on the same day, answering the record's open question.
+
+> **Amendment (2026-10-27) — the scope reaches a release's architecture sketch, as
+> everybody may see it.** The maintainer asked for the sketch of ADR-0471 and ADR-0495 in
+> the same wiki, inserted into a page as its processes and decisions are. The scope
+> gains two reads, both role `any`:
+>
+> - `GET /api/v1/architectures` lists, per application the caller may view, its releases
+>   that carry a snapshot, newest first: version, release id, when it was published and
+>   taken, and the layers it records. Not who published a release, nor its note. It is
+>   what a picker offers, and how a page that follows the newest release finds it.
+> - `GET /api/v1/applications/{id}/releases/{version}/architecture.embed.svg` answers
+>   the sketch read as `archsketch.Snapshot.Minimal` reads it, **whoever asks**: a
+>   Worker keeps its name and Worker Type and loses its endpoints and the rest of its
+>   configuration, instances and catalogue products are counted, another application —
+>   called or coupled — is "another application", a feed endpoint is withheld, and the
+>   owner of a capability or value stream is withheld, name and role. The release's own
+>   application keeps its name. `?layers=` as on the architecture routes.
+>
+> Why a route of its own, and why minimal for everyone: the architecture routes answer by
+> who asks (ADR-0495 §5), and a token carries its minter's roles, so a token an
+> administrator minted would hand the wiki an administrator's view, which the wiki then
+> shows to every person who can open the page. Reading the caller's scope in the handler
+> to narrow it would break the rule this record keeps (the reach of a scope is readable
+> in `api/apitokenscope.go` alone; handlers never read a scope). So the scope names a
+> route whose answer is the same for every caller, and the architecture routes, the
+> release history and the release lens stay out of its reach.
+>
+> **Which applications** a token sees is its reach (ADR-0410): a machine principal is no
+> member of anything, so a `diagrams` token sees the sketches of the applications its
+> reach names, and a token minted without a reach — every token minted for processes
+> before this amendment — lists none. Processes are unaffected: every signed-in caller
+> reads every deployed definition (ADR-0447 §5).
 
 > **Amendment (2026-10-26) — the scope reaches the counts of the overlay, not the
 > overlay.** As first written, the scope reached `GET /api/v1/processes/{key}/runtime`,

@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
+  wikiwikibangbang already holds to draw processes and decisions in its pages, now also
+  lists the releases with a sketch (`GET /api/v1/architectures`) and reads one
+  (`GET /api/v1/applications/{id}/releases/{version}/architecture.embed.svg`). The sketch
+  is read the same way whoever asks, because the wiki shows it to everybody who can open
+  the page: Workers keep their names and lose their endpoints and configuration, products
+  and instances are counted, another application is "another application", and the
+  owners of capabilities and value streams are withheld, even when an administrator
+  minted the token. A token sees the applications its reach names; one minted without a
+  reach lists none.
 - **A release opens in Panorama's starmap, with every layer it records and its live state laid over it.**
   The architecture dialog's "Open in Panorama" draws one release with the starmap: its
   processes; the messages and signals it receives and throws, and who in other

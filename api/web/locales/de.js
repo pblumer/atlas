@@ -1077,7 +1077,7 @@ export default {
   "apitokens.new.submit": "Token erzeugen",
   "apitokens.scope.metrics": "Nur GET /metrics. Der engste Scope, für einen Prometheus-Scraper.",
   "apitokens.scope.status": "Nur GET /api/v1/node, die Selbstauskunft dieses Servers – für ein anderes Atlas, das wissen will, mit wem es spricht.",
-  "apitokens.scope.diagrams": "Nur lesen: die deployten Prozesse, das Modell einer Definition und ihre Laufzeit-Zähler – für ein System, das die Prozesse anderswo zeigt, etwa ein Wiki. Deployen, starten oder Instanzen lesen kann es nicht.",
+  "apitokens.scope.diagrams": "Nur lesen: die deployten Prozesse, das Modell einer Definition und ihre Laufzeit-Zähler sowie die Architektur-Skizze eines Release so, wie alle sie sehen dürfen – für ein System, das sie anderswo zeigt, etwa ein Wiki. Deployen, starten, Instanzen, die Konfiguration eines Workers oder Personen lesen kann es nicht.",
   "apitokens.scope.worker": "Nur was «atlas worker» tut: Aufträge abholen, jeden abschliessen oder als fehlgeschlagen melden und eine Vorschau-Mail in die Outbox legen. Der richtige Scope für einen Worker in einer anderen Netzwerkzone.",
   "apitokens.scope.events": "Nur GET /api/v1/events, den Ereignis-Feed: wie Aktionen endeten und welche Rechte gewährt und entzogen wurden. Für eine CMDB oder eine Verrechnung; das Token trägt nur die Rolle feedreader.",
   "apitokens.scope.landscape": "Nur die abgeleitete Landschaft – das Mesh, seine ArchiMate-Projektion und die Selbstauskunft – für ein anderes Atlas, das nach diesem Bild fragt. Es muss nennen, welche Applikationen es sehen darf.",
