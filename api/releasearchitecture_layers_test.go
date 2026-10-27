@@ -32,8 +32,10 @@ func TestAReadShowsTheLayersItAsksFor(t *testing.T) {
 	if err := json.Unmarshal(mustCall(t, c, http.MethodGet, base, "", "", http.StatusOK), &whole); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(whole.Layers.Recorded, ",") != "application,technology" || strings.Join(whole.Layers.Shown, ",") != "application,technology" {
-		t.Errorf("layers = %+v, want both recorded and both shown by default", whole.Layers)
+	// The release records its data layer too (slice C); the default shows the two
+	// layers every sketch was drawn with before layers existed.
+	if strings.Join(whole.Layers.Recorded, ",") != "application,data,technology" || strings.Join(whole.Layers.Shown, ",") != "application,technology" {
+		t.Errorf("layers = %+v, want three recorded and application and technology shown by default", whole.Layers)
 	}
 
 	var logical struct {
@@ -69,7 +71,7 @@ func TestAReadShowsTheLayersItAsksFor(t *testing.T) {
 		t.Errorf("an unknown layer answers %d %s, want 400 naming it", code, body)
 	}
 	if code, body := call(t, c, http.MethodGet, base+".svg?layers=strategy", "", ""); code != http.StatusNotFound ||
-		!strings.Contains(string(body), "records none of the layers asked for (strategy); it records application,technology") {
+		!strings.Contains(string(body), "records none of the layers asked for (strategy); it records application,data,technology") {
 		t.Errorf("a layer the release does not record answers %d %s, want 404 saying what it records", code, body)
 	}
 }
