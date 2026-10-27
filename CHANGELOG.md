@@ -37,6 +37,26 @@ _Changed_ / _Removed_ for each version.
   is not offered, since a flag can carry a secret. Atlas does not link `net/http/pprof`,
   whose handlers would sit unauthenticated on the default mux, and a test keeps it that
   way ([ADR-draft-admin-profiling](docs/adr/draft-admin-profiling.md)).
+- **The architecture sketch has business and strategy layers.** A release now records its
+  processes as the work they do, with how their user tasks say who does them (for a
+  group, for a named person, decided at run time, or nobody); the roles they name — each
+  candidate group as the model writes it and each lane; the catalogue products a release
+  process provisions, deprovisions or runs the lifecycle of, as each catalogue last
+  published them, with the actions a lifecycle product declares and the event type each
+  outcome publishes; the capabilities a release process or a Worker the release names
+  realises, with their state, last confirmation, owner (name and role only), KPIs and
+  SLAs; and the value streams whose stages use them, with all their stages in order.
+  **Strategy** and **Business** in the architecture dialog draw them as bands above the
+  picture, or alone; the ArchiMate document writes each process as a business process its
+  application process realises, the roles assigned to it, each product associated with
+  the processes that carry it out, and each capability realised by its process or worker
+  and serving the value-stream stages that use it. A product is shown only to whoever
+  may maintain its catalogue — everyone else is told how many were withheld — and a person
+  a task is assigned to by name, an owner's contact and account, and who confirmed a
+  capability are never recorded. `?layers=strategy,business` and
+  `atlas_release_architecture` ask for them. Snapshots are now format and mapping
+  version 6; a release recorded earlier is drawn byte for byte as before
+  ([ADR-0495](docs/adr/0495-layered-release-architecture.md)).
 - **The architecture sketch has a data layer, with the personal data a release declares.**
   A release now records what its processes keep and read: each data object with its
   declared class, the state it starts in, and the elements that write it (with the state

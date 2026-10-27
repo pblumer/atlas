@@ -52,6 +52,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 	shipped := map[string]bool{}
 	placement := map[[2]string]string{}
 	data := &archsketch.Data{}
+	business := &archsketch.Business{}
 	for _, m := range members {
 		if m.Kind == "process" {
 			shipped[m.Ref] = true
@@ -138,6 +139,7 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 		}
 
 		collectData(data, cp, m.Ref)
+		collectBusiness(business, cp, m.Ref, d.Name)
 	}
 	received := map[string]bool{}
 	for _, e := range snap.EntryPoints {
@@ -145,6 +147,8 @@ func (s *Server) architectureSnapshot(appID string, members []releaseMember, tak
 	}
 	snap.Physical = s.physicalPart(shipped, received, snap.Dependencies, placement)
 	snap.Data = s.dataPart(appID, data, snap.Dependencies)
+	snap.Business = s.businessPart(business, shipped)
+	snap.Strategy = s.strategyPart(appID, shipped, snap.Dependencies)
 	snap.Normalize()
 	return snap
 }
@@ -415,18 +419,26 @@ func (s *Server) reportedEndpointsOf(name string) []string {
 }
 
 // redactedArchitecture is the snapshot as this reader may see it: a worker's endpoint
-// only for a reader who may see that worker's configuration, and the worker instances
-// only for a reader who may see the Workers view. Run-loop goroutine only: it reads
-// the worker store.
+// only for a reader who may see that worker's configuration, the worker instances
+// only for a reader who may see the Workers view, and a catalogue product only for a
+// reader who may maintain its catalogue. Run-loop goroutine only: it reads the worker
+// and catalogue stores.
 //
 // A worker that no longer exists is judged as an ownerless one, which only an
 // administrator may see (connectorRole) — its endpoint was somebody's configuration,
 // and that it was deleted since is no reason to show it to everybody.
 func (s *Server) redactedArchitecture(r *http.Request, snap *archsketch.Snapshot) *archsketch.Snapshot {
-	if snap == nil || snap.Physical == nil {
+	if snap == nil {
 		return snap
 	}
 	out := *snap
+	if snap.Business != nil {
+		b := s.withholdProducts(r, *snap.Business)
+		out.Business = &b
+	}
+	if snap.Physical == nil {
+		return &out
+	}
 	mayViewWorker := func(id string) bool {
 		if id == "" {
 			return true

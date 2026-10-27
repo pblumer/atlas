@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/api/archsketch"
+	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
 )
@@ -204,5 +206,60 @@ func TestAnInboundSubscriptionSaysWhatItWatchesInItsWorkersTerms(t *testing.T) {
 		if got := inboundWatched(tc.sub); got != tc.want {
 			t.Errorf("inboundWatched(%+v) = %q, want %q", tc.sub, got, tc.want)
 		}
+	}
+}
+
+// TestALayerAnOlderReleaseDoesNotRecordIsRefusedInWords: a release taken before a layer
+// existed answers a read of that layer alone with a 404 that names the layers it does
+// record, rather than an empty picture.
+func TestALayerAnOlderReleaseDoesNotRecordIsRefusedInWords(t *testing.T) {
+	srv := newServerWithOptions(t)
+	older := &archsketch.Snapshot{FormatVersion: 4, MappingVersion: 4, Processes: []archsketch.Process{},
+		EntryPoints: []archsketch.EntryPoint{}, Dependencies: []archsketch.Dependency{}, Physical: &archsketch.Physical{}}
+	var err error
+	srv.do(func() {
+		if err = srv.projects.Save(project{ID: "alt", Name: "Alt"}); err == nil {
+			err = srv.releases.Save(applicationRelease{ID: "rel-alt", ApplicationID: "alt", Version: 1, Architecture: older})
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/api/v1/applications/alt/releases/1/architecture.svg?layers=strategy,data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusNotFound ||
+		!strings.Contains(string(body), "records none of the layers asked for (strategy,data); it records application,technology") {
+		t.Errorf("a layer the release does not record answers %d %s, want 404 saying what it records", resp.StatusCode, body)
+	}
+}
+
+// TestALifecycleProductIsRecordedWithItsActions: a product whose lifecycle process the
+// release ships is recorded with each action, its message and the event type each
+// outcome publishes; one whose process the release does not ship is not the release's.
+func TestALifecycleProductIsRecordedWithItsActions(t *testing.T) {
+	it := catalog.Item{ID: "laptop", HomeCatalog: "kat", State: "active", LifecycleProcess: "laptop-lifecycle",
+		Actions: []catalog.Action{
+			{Key: "provision", Message: "laptop.provision", Effect: catalog.EffectProvision},
+			{Key: "reset", Message: "laptop.reset", Effect: catalog.EffectService, Triggers: []string{catalog.TriggerOperator},
+				Outcomes: map[string]string{catalog.OutcomeCompleted: "laptop.zurueckgesetzt"}},
+		}}
+	p, ok := releaseProduct(it, map[string]bool{"laptop-lifecycle": true})
+	if !ok || len(p.Bindings) != 1 || p.Bindings[0].Op != "lifecycle" || len(p.Actions) != 2 {
+		t.Fatalf("product = %+v (ok=%v), want the lifecycle binding and both actions", p, ok)
+	}
+	if got := p.Actions[1].Outcomes[0]; got.Outcome != catalog.OutcomeCompleted || got.EventType != "laptop.zurueckgesetzt" {
+		t.Errorf("reset completed = %+v, want the declared event type", got)
+	}
+	if _, ok := releaseProduct(it, map[string]bool{"anders": true}); ok {
+		t.Error("a product whose lifecycle process the release does not ship is recorded")
+	}
+	if _, ok := releaseProduct(catalog.Item{ID: "x", ProvisionProcess: "p"}, map[string]bool{"q": true}); ok {
+		t.Error("a two-process product binding no release process is recorded")
 	}
 }

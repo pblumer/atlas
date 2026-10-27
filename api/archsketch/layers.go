@@ -12,10 +12,10 @@ import (
 // layer is the snapshot's logical part, what the release's content fixes; the
 // technology layer is its physical part, what the recording installation had in place.
 // The data layer, from format version 5, is what the processes keep and read and the
-// personal data they declare. Strategy and business are named here so that a
-// selection can already ask for them and a link written today keeps meaning the same
-// thing; no snapshot records them yet, and a read that asks only for layers a snapshot
-// does not hold is refused in words rather than answered with an empty picture.
+// personal data they declare; the business and strategy layers, from version 6, the
+// work, roles and products and the capabilities and value streams the release serves.
+// A read that asks only for layers a snapshot does not hold is refused in words rather
+// than answered with an empty picture.
 //
 // A public start link is an application interface that only the installation
 // records, so it belongs to both layers and is drawn only when both are shown.
@@ -121,6 +121,12 @@ func (s Snapshot) Recorded() Selection {
 	if s.Data != nil {
 		out |= SelectionOf(LayerData)
 	}
+	if s.Business != nil {
+		out |= SelectionOf(LayerBusiness)
+	}
+	if s.Strategy != nil {
+		out |= SelectionOf(LayerStrategy)
+	}
 	return out
 }
 
@@ -138,6 +144,12 @@ func (s Snapshot) Select(sel Selection) Snapshot {
 	}
 	if !sel.Has(LayerData) {
 		out.Data = nil
+	}
+	if !sel.Has(LayerBusiness) {
+		out.Business = nil
+	}
+	if !sel.Has(LayerStrategy) {
+		out.Strategy = nil
 	}
 	if !sel.Has(LayerApplication) {
 		out.EntryPoints = nil
@@ -176,11 +188,32 @@ func (s Snapshot) technologyOnly() bool {
 	return !sel.Has(LayerApplication) && sel.Has(LayerTechnology) && s.Physical != nil
 }
 
-// dataOnly reports whether this value is drawn as the data layer alone: the data
-// layer without the application layer, and without a technology layer drawn as the
-// installation.
-func (s Snapshot) dataOnly() bool {
-	return s.Data != nil && !s.Shown().Has(LayerApplication) && !s.technologyOnly()
+// bandsOnly reports whether this value is drawn as bands alone: a strategy, business
+// or data layer without the application layer, and without a technology layer drawn
+// as the installation.
+func (s Snapshot) bandsOnly() bool {
+	return (s.Data != nil || s.Business != nil || s.Strategy != nil) && !s.Shown().Has(LayerApplication) && !s.technologyOnly()
+}
+
+// bandsName names the layers a value drawn as bands alone shows, the way a stamp says
+// "Data view".
+func (s Snapshot) bandsName() string {
+	var names []string
+	for _, l := range []struct {
+		on   bool
+		name string
+	}{{s.Strategy != nil, "strategy"}, {s.Business != nil, "business"}, {s.Data != nil, "data"}} {
+		if l.on {
+			names = append(names, l.name)
+		}
+	}
+	switch len(names) {
+	case 1:
+		return names[0]
+	case 2:
+		return names[0] + " and " + names[1]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 }
 
 // layerNote is what a rendering says about its layers when they are not the default:
