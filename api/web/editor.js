@@ -5,6 +5,7 @@
 import { attachFeelEditor } from "./feel.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
+import { DIAGRAM_RENDERER } from "./appearance.js";
 import { copyText } from "./clipboard.js";
 import { createRefResolver, refChipHTML, refPopHTML } from "./varrefs.js";
 import { attachCodeEditor } from "./code-editor.js";
@@ -181,8 +182,13 @@ function patchZeebeModdle(zeebe) {
 // (zeebe + atlas) wired.
 function newModeler(BpmnJS, moddle, container, extraModules) {
   // translateModule puts bpmn-js's own words — the palette, the context pad, the
-  // replace menu — through the console's catalogue (lib-translate.js).
-  const opts = { container, moddleExtensions: moddle, additionalModules: [translateModule, ...(extraModules || [])] };
+  // replace menu — through the console's catalogue (lib-translate.js). The renderer
+  // colours read the appearance's tokens, so a dark console draws a dark diagram and
+  // an export stays light (appearance.js DIAGRAM_RENDERER).
+  const opts = {
+    container, moddleExtensions: moddle, additionalModules: [translateModule, ...(extraModules || [])],
+    bpmnRenderer: DIAGRAM_RENDERER,
+  };
   return new BpmnJS(opts);
 }
 

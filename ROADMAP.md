@@ -1383,7 +1383,17 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   in the side panel. The engine counts sequence flows per definition and keeps when a
   task was claimed or leased; `GET /api/v1/processes/{key}/statistics` folds a window off
   the loop. Closes statusbericht item 803.
-- 🔲 **True light/dark/system appearance for the shipped web UI**\n  ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed): semantic\n  palette, per-browser preference, bpmn-js/DMN/form-js token integration,\n  accessible Operations heatmap and end-to-end screenshot validation. The\n  existing company/catalogue accent theme is not a dark-mode implementation.\n- ✅ **Instance management** view: Operations lists running process instances
+- 🚧 **Light, dark and system appearance for the shipped web UI**
+  ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed):
+  a semantic palette with a dark answer for every colour, a per-person preference,
+  bpmn-js/dmn-js/form-js token bridges, an accessible Operations heatmap and
+  screenshot validation in both appearances. Landed so far, behind a preference no
+  screen offers yet: the first-paint bootstrap, the dark palette, and the BPMN and DMN
+  editors with their palette, menus, properties panel and code editors — exports stay
+  light. Still open: the visible switch, the accent as text on dark surfaces, the canvas
+  overlays and heatmap, form-js, the ArchiMate/UML/Panorama canvases and the remaining
+  fixed colours. The company/catalogue accent theme is not a dark mode.
+- ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
 - ✅ **Multi-token replay & causal token lineage**
   ([ADR-0065](docs/adr/0065-multi-token-process-replay.md)): element-instance

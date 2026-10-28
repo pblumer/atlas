@@ -18,6 +18,20 @@
     }
   } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
 </script>
+<!-- Apply the appearance (light, dark, system) before first paint, independently of
+     the brand colour above. Mirrors resolveAppearance in appearance.js: anything but
+     a stored "dark", or "system" while the system is dark, is today's light console. -->
+<script>
+  (function () {
+    var a = "light";
+    try {
+      var p = localStorage.getItem("atlas.appearance");
+      if (p === "dark" || (p === "system" && window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches)) a = "dark";
+    } catch (e) { /* storage unreadable — stay light */ }
+    document.documentElement.setAttribute("data-appearance", a);
+  })();
+</script>
 </head>
 <body>
   <!-- App-switcher drawer (hidden until the grid button is pressed) -->

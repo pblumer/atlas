@@ -5,6 +5,7 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
+import { watchSystemAppearance } from "./appearance.js";
 import {
   LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
@@ -12075,6 +12076,9 @@ loadPrefs(api).then(() => {
 // updates it once the network responds, and is the first paint of the accent for a
 // browser that has no cache yet.
 syncFromServer();
+// Keep the appearance in step with the system (for a `system` preference) and with a
+// choice made in another tab. index.html applied the stored one before first paint.
+watchSystemAppearance();
 // Paint the brand logo from the cached flag immediately (no flash of the "A" for a
 // branded instance), then reconcile the actual presence with the server.
 applyLogo(hasLogoCached());
