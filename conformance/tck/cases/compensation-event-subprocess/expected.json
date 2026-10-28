@@ -1,0 +1,28 @@
+{
+  "completed": true,
+  "activities": [
+    "bill",
+    "cancellation",
+    "ce",
+    "charge",
+    "cs",
+    "refund",
+    "start",
+    "undo",
+    "wait"
+  ],
+  "path": [
+    "start",
+    "cancellation",
+    "charge",
+    "wait",
+    "cancellation",
+    "cs",
+    "undo",
+    "refund",
+    "bill",
+    "ce"
+  ],
+  "variables": {},
+  "dataObjects": []
+}

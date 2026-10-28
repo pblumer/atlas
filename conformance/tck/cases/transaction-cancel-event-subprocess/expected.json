@@ -1,0 +1,36 @@
+{
+  "completed": true,
+  "activities": [
+    "bill_effort",
+    "cancel_end",
+    "cancellation",
+    "cancelled",
+    "cs",
+    "order",
+    "order_cancelled",
+    "reserve",
+    "start",
+    "ts",
+    "unreserve",
+    "wait"
+  ],
+  "path": [
+    "start",
+    "order",
+    "cancellation",
+    "ts",
+    "order_cancelled",
+    "reserve",
+    "wait",
+    "cancellation",
+    "cs",
+    "cancel_end",
+    "unreserve",
+    "bill_effort",
+    "cancelled"
+  ],
+  "variables": {
+    "outcome": "cancelled"
+  },
+  "dataObjects": []
+}
