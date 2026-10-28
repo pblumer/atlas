@@ -222,8 +222,11 @@ type contentPreview struct {
 	contentsource.Language
 	// Keywords are the page's labels after the source's exclusions.
 	Keywords []string `json:"keywords,omitempty"`
-	// BoundTo names another product already bound to this page.
+	// BoundTo names another product whose own page this is: it cannot be linked.
 	BoundTo string `json:"boundTo,omitempty"`
+	// CarriedBy names the products whose description holds this page as a child
+	// page. It can be linked; each of them leaves it out from its next refresh on.
+	CarriedBy []string `json:"carriedBy,omitempty"`
 }
 
 // HandleContentPreview reads one page for one language as linking would (§ 5):
@@ -251,7 +254,13 @@ func (s *Service) HandleContentPreview(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadGateway, "read the account's standing: "+err.Error())
 		return
 	}
-	l, err := contentsource.Preview(ctx, ad, st, input)
+	var others map[string]string
+	s.loop.Do(func() { others, err = s.ownPages(src.ID, id) })
+	if err != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "read bindings: "+err.Error())
+		return
+	}
+	l, err := contentsource.PreviewExcept(ctx, ad, st, input, others)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadGateway, "read the page: "+err.Error())
 		return
@@ -263,7 +272,11 @@ func (s *Service) HandleContentPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	if l.Page.ID != "" {
 		var err error
-		s.loop.Do(func() { out.BoundTo, err = s.boundElsewhere(src.ID, []string{l.Page.ID}, id) })
+		s.loop.Do(func() {
+			if out.BoundTo, err = s.boundElsewhere(src.ID, []string{l.Page.ID}, id); err == nil {
+				out.CarriedBy, err = s.carriedBy(src.ID, l.Page.ID, id)
+			}
+		})
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, "read bindings: "+err.Error())
 			return
@@ -272,26 +285,76 @@ func (s *Service) HandleContentPreview(w http.ResponseWriter, r *http.Request) {
 	httpapi.JSON(w, http.StatusOK, out)
 }
 
-// boundElsewhere names a product other than self bound to one of these pages of
-// a source, or "". Runs on the loop.
+// boundElsewhere names a product other than self whose own page — a language
+// page of its binding — is one of these pages of a source, or "". One page
+// describes one service. A child page taken into another product's description
+// is not its own: linking it makes it the linked product's, and the other
+// product's next refresh leaves it out (see [Service.ownPages]). Runs on the loop.
 func (s *Service) boundElsewhere(source string, refs []string, self string) (string, error) {
-	all, err := s.store.Items()
+	own, err := s.ownPages(source, self)
 	if err != nil {
 		return "", err
 	}
+	for _, ref := range refs {
+		if other, ok := own[ref]; ok {
+			return other, nil
+		}
+	}
+	return "", nil
+}
+
+// ownPages maps every language page of a source bound to a product other than
+// self to that product: the pages that describe a product of their own, which a
+// fetch leaves out of any other product's description, child pages included.
+// Runs on the loop.
+func (s *Service) ownPages(source, self string) (map[string]string, error) {
+	all, err := s.store.Items()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
 	for _, it := range all {
 		if it.ID == self || it.ContentSource == nil || it.ContentSource.Source != source {
 			continue
 		}
-		// A child page counts as much as a language page: its text is in the
-		// other product's description either way.
-		for _, c := range checksOf(it.ContentSource) {
-			if slices.Contains(refs, c.ID) {
-				return it.ID, nil
-			}
+		for _, pg := range it.ContentSource.Pages {
+			out[pg.Ref] = it.ID
 		}
 	}
-	return "", nil
+	return out, nil
+}
+
+// carriedBy names the products other than self whose description still holds
+// this page as a child page: linking it makes it this product's, and each of them
+// keeps its text until its next refresh, which the publish gate asks for. Runs on
+// the loop.
+func (s *Service) carriedBy(source, ref, self string) ([]string, error) {
+	all, err := s.store.Items()
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, it := range all {
+		if it.ID == self || it.ContentSource == nil || it.ContentSource.Source != source {
+			continue
+		}
+		if slices.ContainsFunc(childRefs(it.ContentSource), func(c string) bool { return c == ref }) {
+			out = append(out, it.ID)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// childRefs are the child pages a binding's description holds, every language.
+func childRefs(b *ContentSource) []string {
+	var out []string
+	for _, lang := range slices.Sorted(maps.Keys(b.Pages)) {
+		for _, ch := range b.Pages[lang].Children {
+			out = append(out, ch.Ref)
+		}
+	}
+	return out
 }
 
 // contentWrite is a link's or a refresh's outcome, for the HTTP answer.
@@ -430,9 +493,15 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 	case err != nil:
 		return contentWrite{status: http.StatusBadGateway, message: err.Error()}
 	}
+	// The pages that describe other products, which this description leaves out.
+	var others map[string]string
+	s.loop.Do(func() { others, err = s.ownPages(src.ID, id) })
+	if err != nil {
+		return contentWrite{status: http.StatusInternalServerError, message: "read bindings: " + err.Error()}
+	}
 	fctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
-	content, err := contentsource.Gather(fctx, ad, src, slots, primary, s.budgets().Asset)
+	content, err := contentsource.GatherExcept(fctx, ad, src, slots, primary, s.budgets().Asset, others)
 	var refused *contentsource.Refused
 	switch {
 	case errors.As(err, &refused):
@@ -445,18 +514,25 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 	at := s.now()
 	binding := &ContentSource{Source: src.ID, Primary: primary, Pages: map[string]PageRef{}}
 	descriptions := map[string]string{}
-	var refs []string
+	rich := map[string][]contentsource.Rich{}
+	var refs, children []string
 	for lang, l := range content.Languages {
 		ref := PageRef{Ref: l.Page.ID, Version: l.Page.Version, FetchedAt: at, URL: l.Page.URL,
 			Title: l.Page.Title, Passages: l.Page.Passages, Labels: contentsource.Keywords(src, l.Labels)}
 		refs = append(refs, l.Page.ID)
 		for _, ch := range l.Children {
 			ref.Children = append(ref.Children, ChildRef{Ref: ch.ID, Version: ch.Version, Title: ch.Title, Passages: ch.Passages})
-			refs = append(refs, ch.ID)
+			children = append(children, ch.ID)
+		}
+		for _, e := range l.Embeds {
+			ref.Embeds = append(ref.Embeds, ChildRef{Ref: e.ID, Version: e.Version, Title: e.Title, Passages: e.Passages})
 		}
 		binding.Pages[lang] = ref
 		if strings.TrimSpace(l.Text) != "" {
 			descriptions[lang] = l.Text
+		}
+		if len(l.Rich) > 0 {
+			rich[lang] = l.Rich
 		}
 	}
 
@@ -478,6 +554,12 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 			return
 		}
 		if other, saveErr = s.boundElsewhere(src.ID, refs, id); saveErr != nil || other != "" {
+			return
+		}
+		// A child page linked to another product while the pages were read
+		// belongs to that product now: read again rather than keep its text.
+		if moved, err := s.boundElsewhere(src.ID, children, id); err != nil || moved != "" {
+			saveErr, stale = err, err == nil
 			return
 		}
 		st, _, e := s.store.ContentState(id)
@@ -502,10 +584,17 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 		if saveErr != nil {
 			return
 		}
+		if saveErr = s.store.SaveContentImages(id, content.Images); saveErr != nil {
+			return
+		}
 		cur.ContentSource = binding
 		cur.Descriptions = nil
 		if len(descriptions) > 0 {
 			cur.Descriptions = descriptions
+		}
+		cur.Rich = nil
+		if len(rich) > 0 {
+			cur.Rich = rich
 		}
 		cur.Keywords = nil
 		if len(content.Keywords) > 0 {
@@ -720,6 +809,7 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				// The language returns to the product manager with the text it had
 				// before the link, if it had one; the rest stays bound.
 				delete(it.Descriptions, in.Lang)
+				delete(it.Rich, in.Lang)
 				if st.Own != nil {
 					if own, ok := st.Own.Descriptions[in.Lang]; ok {
 						if it.Descriptions == nil {
@@ -748,6 +838,9 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			it.ContentSource = nil
+			// The layout is the source's: an unbound product is described by the
+			// text its product manager writes, which has none.
+			it.Rich = nil
 			switch {
 			case st.Own != nil:
 				// What the product carried before the link comes back (§ 6,
@@ -797,6 +890,9 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 		if len(it.Descriptions) == 0 {
 			it.Descriptions = nil
 		}
+		if len(it.Rich) == 0 {
+			it.Rich = nil
+		}
 		it.Revision++
 		it.UpdatedAt = s.now()
 		if err = s.store.SaveItem(it); err != nil {
@@ -838,6 +934,9 @@ func checksOf(b *ContentSource) []contentsource.Check {
 		for _, ch := range pg.Children {
 			out = append(out, contentsource.Check{ID: ch.Ref, Passages: ch.Passages})
 		}
+		for _, e := range pg.Embeds {
+			out = append(out, contentsource.Check{ID: e.Ref, Passages: e.Passages})
+		}
 	}
 	return out
 }
@@ -851,6 +950,12 @@ func checksOf(b *ContentSource) []contentsource.Check {
 //
 // A product nobody bound yet cannot be bound by a save either.
 func boundSave(prev Item, prevOK bool, in Item) (Item, string) {
+	// The rich description is the source's alone: a save keeps what the last
+	// link or refresh wrote, and never writes one of its own.
+	in.Rich = nil
+	if prevOK {
+		in.Rich = prev.Rich
+	}
 	if !prevOK || prev.ContentSource == nil {
 		if in.ContentSource != nil {
 			return in, "a product is bound to a content source by linking its pages, not by a save"

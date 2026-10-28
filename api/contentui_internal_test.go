@@ -111,34 +111,26 @@ func TestAWikiPagesWordsAreNeverMarkup(t *testing.T) {
 	}
 }
 
-// TestAWikiLinkOpensANewTabWithoutOpenerAndOnlyOverHTTPS: on the catalogue screen and
-// in the shop, a page address becomes a link only when it is https, in a new tab, and
-// without handing the wiki a reference to the page that opened it.
+// TestAWikiLinkOpensANewTabWithoutOpenerAndOnlyOverHTTPS: on the catalogue screen a
+// page address becomes a link only when it is https, in a new tab, and without
+// handing the wiki a reference to the page that opened it. The shop links to no wiki
+// page at all: it shows the whole description itself (ADR-0491, amended
+// 2026-10-28).
 func TestAWikiLinkOpensANewTabWithoutOpenerAndOnlyOverHTTPS(t *testing.T) {
 	console := readWeb(t, "catalog-content.js")
 	link := webRegion(t, console, "function wikiLink(", "\n}")
 	href := webRegion(t, console, "export function wikiHref(", "\n}")
-	shop := webRegion(t, readWeb(t, "shop.js"), "function wikiLinkOf(", "\n}")
-	for name, body := range map[string]string{"catalog-content.js": link, "shop.js": shop} {
-		for _, want := range []string{`target`, `_blank`, `noopener`} {
-			if !strings.Contains(body, want) {
-				t.Errorf("%s: a wiki link lacks %s", name, want)
-			}
+	for _, want := range []string{`target`, `_blank`, `noopener`} {
+		if !strings.Contains(link, want) {
+			t.Errorf("catalog-content.js: a wiki link lacks %s", want)
 		}
 	}
-	if !strings.Contains(href, "^https:") || !strings.Contains(shop, "^https:") {
+	if !strings.Contains(href, "^https:") {
 		t.Error("a page address that is not https can become a link")
 	}
-	// The shop asks the server and nothing else: the binding arrives only while the
-	// content may be shown, and the link is drawn only beside a description.
-	if !strings.Contains(shop, "contentSource") || !strings.Contains(shop, "descriptionOf(item)") {
-		t.Error("the shop's wiki link is not read from the release's binding beside the description")
-	}
-	if !strings.Contains(webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}"), "wikiLinkOf(item)") {
-		t.Error("the product panel never draws the wiki link")
-	}
-	if !strings.Contains(readWeb(t, "shop.js"), "'info.wiki':") {
-		t.Error("the shop has no words for the wiki link")
+	shop := readWeb(t, "shop.js")
+	if strings.Contains(shop, "wikiLinkOf") || strings.Contains(shop, "'info.wiki':") {
+		t.Error("the shop links to the wiki again; it shows the description whole instead")
 	}
 }
 

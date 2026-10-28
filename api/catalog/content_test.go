@@ -319,15 +319,86 @@ func TestWhatLinkingRefuses(t *testing.T) {
 	if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), "product vpn") {
 		t.Fatalf("bound elsewhere = %d %s", rec.Code, rec.Body)
 	}
-	// So is a child page another product's description holds.
-	rec = b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-14"}}`)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("child bound elsewhere = %d %s", rec.Code, rec.Body)
-	}
 	// The source unreachable: nothing is written.
 	b.wiki.Set(func(s *wikifake.Server) { s.Down = true })
 	if rec := b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-30"}}`); rec.Code != http.StatusBadGateway {
 		t.Fatalf("down = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestAChildPageCanDescribeAServiceOfItsOwn: a market offering bound to a page
+// and a service bound to one of its child pages. The child page is the service's
+// description from the link on; the offering's copy still holds its text until a
+// refresh, which the publish gate asks for, and the refresh leaves it out with
+// everything below it, naming the service. The service's own page stays its own:
+// the offering cannot bind it as a language page.
+func TestAChildPageCanDescribeAServiceOfItsOwn(t *testing.T) {
+	b := newBoundFixture(t)
+	b.linkVPN(t)
+	if d := b.item(t, "vpn").Descriptions["de"]; !strings.Contains(d, "Für Büro und unterwegs.") {
+		t.Fatalf("the offering does not carry its child page: %q", d)
+	}
+
+	rec := call(t, b.s.HandleContentPreview, b.owner, "GET", "/x?source=wiki&page=SVC-14", "", "id", "mail")
+	var pv contentPreview
+	_ = json.Unmarshal(rec.Body.Bytes(), &pv)
+	if rec.Code != 200 || pv.BoundTo != "" || strings.Join(pv.CarriedBy, ",") != "vpn" {
+		t.Fatalf("preview of a child page = %d %s", rec.Code, rec.Body)
+	}
+	rec = b.link(t, "mail", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("link a child page = %d %s", rec.Code, rec.Body)
+	}
+	if d := b.item(t, "mail").Descriptions["de"]; d != "Für Büro und unterwegs." {
+		t.Fatalf("the service's description = %q", d)
+	}
+
+	// The offering's copy still holds the service's text: publishing waits for
+	// its refresh.
+	rec = b.publish(t)
+	if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), "now describes product mail") {
+		t.Fatalf("publish with the text twice = %d %s", rec.Code, rec.Body)
+	}
+	rec = as(t, b.s.HandleContentRefresh, b.owner, "POST", "", "id", "vpn")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh the offering = %d %s", rec.Code, rec.Body)
+	}
+	vpn := b.item(t, "vpn")
+	if d := vpn.Descriptions["de"]; strings.Contains(d, "Für Büro") || !strings.Contains(d, "Sicherer Zugang") {
+		t.Fatalf("the refreshed offering = %q", d)
+	}
+	if kids := vpn.ContentSource.Pages["de"].Children; len(kids) != 0 {
+		t.Fatalf("the refreshed offering still takes %+v", kids)
+	}
+	rec = call(t, b.s.HandleContentPreview, b.owner, "GET", "/x?source=wiki&page=SVC-12", "", "id", "vpn")
+	if !strings.Contains(rec.Body.String(), "describes product mail") {
+		t.Fatalf("the offering's preview does not name the service: %s", rec.Body)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
+	}
+
+	// The service's page is its own: nobody else binds it as a language page.
+	if rec := b.link(t, "vpn", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`); rec.Code != http.StatusConflict ||
+		!strings.Contains(rec.Body.String(), "product mail") {
+		t.Fatalf("bind the service's page = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestAServiceLinkedFirstIsLeftOutOfItsOffering: the other order. The service is
+// bound to the child page first; linking the offering to the parent page leaves
+// the service's page out from the start, and publishing goes through.
+func TestAServiceLinkedFirstIsLeftOutOfItsOffering(t *testing.T) {
+	b := newBoundFixture(t)
+	if rec := b.link(t, "mail", `{"source":"wiki","primary":"de","pages":{"de":"SVC-14"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("link the service = %d %s", rec.Code, rec.Body)
+	}
+	vpn := b.linkVPN(t)
+	if d := vpn.Descriptions["de"]; strings.Contains(d, "Für Büro") {
+		t.Fatalf("the offering took the service's page: %q", d)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -1079,5 +1150,83 @@ func TestALinkDoesNotOverwriteAChangeMadeWhileItsPagesWereRead(t *testing.T) {
 	}}
 	if rec := b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-30"}}`); rec.Code != http.StatusNotFound {
 		t.Fatalf("link of a product removed meanwhile = %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestARichDescriptionCarriesItsLayoutImagesAndEmbeds: a page with a table, an image
+// and an embedded item is copied as the source lays it out. The image is stored and
+// served by its id; the embedded item is held in the binding and rechecked like the
+// page, so a restriction set on it afterwards quarantines the product, and the
+// quarantine withholds the layout and the image as it withholds the text.
+func TestARichDescriptionCarriesItsLayoutImagesAndEmbeds(t *testing.T) {
+	b := newBoundFixture(t)
+	b.wiki.Put(wikifake.Page{ID: "it_emb", Key: "SVC-41", Space: "SVC", Parent: "it_root", Title: "Service-Level",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Servicezeit 11/5."}}})
+	b.wiki.Edit("it_fr", func(p *wikifake.Page) {
+		p.Body = append(p.Body,
+			wikifake.Block{Kind: "table", Text: "A\tB\n1\t2"},
+			wikifake.Block{Kind: "image", Text: "Bild", Ref: "att_2"},
+			wikifake.Block{Kind: "embed", Ref: "it_emb"})
+	})
+	b.wiki.Attach("it_fr", wikifake.Attachment{ID: "att_2", Name: "bild.png", Type: "image/png", Data: []byte(onePNG)})
+	it := b.linkVPN(t)
+
+	fr := it.Rich["fr"]
+	var table, image, embed *contentsource.Rich
+	for i := range fr {
+		switch fr[i].Kind {
+		case "table":
+			table = &fr[i]
+		case "image":
+			image = &fr[i]
+		case "embed":
+			embed = &fr[i]
+		}
+	}
+	if table == nil || len(table.Rows) != 2 || image == nil || image.Image == "" || embed == nil || embed.Title != "Service-Level" {
+		t.Fatalf("rich = %+v", fr)
+	}
+	if e := it.ContentSource.Pages["fr"].Embeds; len(e) != 1 || e[0].Ref != "it_emb" {
+		t.Fatalf("embeds in the binding = %+v", e)
+	}
+	img := func() int {
+		return call(t, b.s.HandleGetContentImage, b.owner, "GET", "/x", "", "id", "vpn", "image", image.Image).Code
+	}
+	if code := img(); code != http.StatusOK {
+		t.Fatalf("image = %d", code)
+	}
+	if code := call(t, b.s.HandleGetContentImage, b.owner, "GET", "/x", "", "id", "vpn", "image", "../x").Code; code != http.StatusNotFound {
+		t.Fatalf("a path for an image id = %d", code)
+	}
+	// A save keeps the layout the source supplied and cannot write one.
+	raw, _ := json.Marshal(it)
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	m["rich"] = map[string]any{"de": []any{map[string]any{"kind": "paragraph", "text": "eingeschmuggelt"}}}
+	body, _ := json.Marshal(m)
+	if rec := as(t, b.s.HandleSaveItem, b.owner, "POST", string(body)); rec.Code != 200 ||
+		strings.Contains(rec.Body.String(), "eingeschmuggelt") {
+		t.Fatalf("a save wrote a layout: %d %s", rec.Code, rec.Body)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
+	}
+	if shown := itemIn(b.releases(t)[0], "vpn"); len(shown.Rich["fr"]) == 0 {
+		t.Fatalf("the release does not carry the layout: %+v", shown)
+	}
+
+	// The embedded item is restricted afterwards: the recheck covers it.
+	b.sweep(t)
+	b.wiki.Edit("it_emb", func(p *wikifake.Page) { p.ReadRestriction = []string{"u_atlas"} })
+	b.now.Add(minute)
+	b.sweep(t)
+	if st := b.state(t, "vpn"); st.Quarantine == nil || !strings.Contains(st.Quarantine.Reason, "SVC-41") {
+		t.Fatalf("a restricted embed did not quarantine: %+v", st)
+	}
+	if shown := itemIn(b.releases(t)[0], "vpn"); shown.Rich != nil {
+		t.Fatalf("quarantined layout shown: %+v", shown.Rich)
+	}
+	if code := img(); code != http.StatusNotFound {
+		t.Fatalf("a quarantined product's image = %d", code)
 	}
 }

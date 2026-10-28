@@ -36,6 +36,8 @@ var itemFieldsAbsentFromTheSchema = map[string]string{
 	"updatedAt": "the server stamps it on every write; a caller cannot set it",
 	"contentSource": "written by the content tools alone (link, refresh, unlink); a save carries " +
 		"the stored binding whatever it is sent, so leaving it out clears nothing",
+	"rich": "the source's layout, written by link and refresh alone; a save keeps the stored one " +
+		"whatever it is sent, so leaving it out clears nothing",
 }
 
 // TestTheProductSchemaNamesEveryFieldTheRecordCarries.

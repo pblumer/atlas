@@ -197,6 +197,38 @@
   body.dialog-open { overflow:hidden; }
   /* A market offering's fact sheet (factsheet in shop.js): the offering, then
      what is included, then what is optional, each service under its name. */
+  /* A rich description (richBlocks in shop.js): the wiki's layout, drawn from data
+     with the shop's own tokens, so a theme reaches it and a wiki cannot style it. */
+  .product-description.rich > :first-child { margin-top:0; }
+  .rich .rich-h { margin:14px 0 6px; }
+  .rich .rich-p { margin:0 0 8px; }
+  .rich .rich-list { margin:0 0 8px; padding-left:22px; }
+  .rich .rich-done { text-decoration:line-through; color:var(--muted); }
+  .rich .rich-quote { margin:0 0 8px; padding:4px 12px; border-left:3px solid var(--border-strong); color:var(--muted); }
+  .rich .rich-code { margin:0 0 8px; padding:8px 10px; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; overflow-x:auto; font-size:13px; white-space:pre; }
+  .rich .rich-panel { margin:0 0 8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border);
+    background:var(--bg); border-left:4px solid var(--accent); }
+  .rich .rich-panel.tone-warning, .rich .rich-panel.tone-warn { border-left-color:#b26b00; }
+  .rich .rich-panel.tone-error, .rich .rich-panel.tone-danger { border-left-color:#c0392b; }
+  .rich .rich-panel.tone-success, .rich .rich-panel.tone-ok { border-left-color:#1e8449; }
+  .rich .rich-hr { border:0; border-top:1px solid var(--border); margin:12px 0; }
+  .rich .rich-table { overflow-x:auto; margin:0 0 10px; }
+  .rich .rich-table table { border-collapse:collapse; width:100%; font-size:13px; }
+  .rich .rich-table th, .rich .rich-table td { border:1px solid var(--border); padding:5px 8px; text-align:left; vertical-align:top; }
+  .rich .rich-table th { background:var(--bg); font-weight:600; }
+  .rich .rich-figure { margin:0 0 10px; }
+  .rich .rich-figure img { max-width:100%; height:auto; display:block; }
+  .rich .rich-figure.align-center img { margin:0 auto; }
+  .rich .rich-figure.align-right img { margin-left:auto; }
+  .rich .rich-figure figcaption { font-size:12px; color:var(--muted); margin-top:4px; }
+  .rich .rich-page, .rich .rich-embed { margin:10px 0 0; }
+  .rich .rich-embed { padding:8px 12px; border:1px solid var(--border); border-radius:8px; }
+  .rich .rich-title { margin:0 0 6px; }
+  .factsheet-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding-right:36px; }
+  .factsheet-head h3 { margin:0; }
+  .factsheet-logo { max-height:48px; max-width:180px; }
+  .factsheet-version { margin:4px 0 0; font-size:12px; }
   .factsheet-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0 12px; }
   .factsheet-section { margin-top:16px; }
   .factsheet-section h4 { margin:0 0 8px; font-size:15px; }

@@ -3758,6 +3758,53 @@ tr[hidden] { display: none; }
 .modal-foot .btn { white-space: nowrap; }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
+/* The catalogue page (catalog-admin.js pageSection): one <details> per step — products,
+   descriptions, assemble, publish — and then the catalogue's own settings. The summary
+   is the step's number, its heading and a line of what it holds, the look of the
+   Events page's sections. The body puts the controls first and the explanation in a
+   column beside them, where a paragraph is read next to what it explains; stacked
+   below the breakpoint, the explanation comes first, since a narrow screen is read top
+   to bottom. Colours are the console's tokens only, so a theme reaches it. */
+.cat-steps-intro { max-width: 72ch; margin: 0 0 6px; }
+.cat-section { border-top: 1px solid var(--border); padding: 10px 0 4px; }
+.cat-section:last-child { border-bottom: 1px solid var(--border); }
+.cat-section > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 0;
+}
+.cat-section > summary::-webkit-details-marker { display: none; }
+.cat-section > summary::before {
+  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
+}
+.cat-section[open] > summary::before { transform: rotate(90deg); }
+.cat-section > summary h3 { margin: 0; font-size: 15px; }
+.cat-section > summary:hover h3 { color: var(--accent); }
+.cat-section > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.cat-sec-step {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+}
+.cat-sec-sum { font-size: 13px; }
+.cat-section.danger > summary h3 { color: var(--danger); }
+.cat-more-head {
+  margin: 28px 0 0; padding-bottom: 6px; font-size: 13px; letter-spacing: 0.02em;
+  text-transform: uppercase; color: var(--muted);
+}
+.cat-sec-body {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px 28px;
+  grid-template-areas: "about" "main"; padding: 8px 0 14px;
+}
+.cat-sec-main { grid-area: main; min-width: 0; }
+/* A form keeps a measure: a text field a metre wide is harder to read, not easier. */
+.cat-sec-main > .card { max-width: 760px; }
+.cat-sec-about { grid-area: about; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 72ch; }
+.cat-sec-about p { margin: 0 0 8px; }
+@media (min-width: 1100px) {
+  .cat-sec-body { grid-template-columns: minmax(0, 1fr) clamp(260px, 26%, 380px); grid-template-areas: "main about"; }
+  .cat-sec-about { border-left: 1px solid var(--border); padding-left: 16px; }
+}
+
 /* The Events page (events.js): each of its two sections is a <details> that folds away,
    its summary the section's heading with a caret that turns, and beside it a line saying
    what the section holds and warns about — readable while the section is folded. A row's

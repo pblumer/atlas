@@ -84,7 +84,12 @@ func TestAnEmptyDescriptionIsNotADescription(t *testing.T) {
 // one left in its place is a gap that reads as something that failed to load
 // rather than as a product nobody described.
 func TestThePanelActuallyDrawsTheDescriptionAndThePicture(t *testing.T) {
-	body := webRegion(t, readWeb(t, "shop.js"), "function infoPanel(", "\n}")
+	src := readWeb(t, "shop.js")
+	panel := webRegion(t, src, "function infoPanel(", "\n}")
+	if !strings.Contains(panel, "descriptionView(item)") || !strings.Contains(panel, "productPicture(item.id)") {
+		t.Error("the panel no longer draws the product's description and picture")
+	}
+	body := webRegion(t, src, "function descriptionView(", "\n}") + panel
 	if !strings.Contains(body, "descriptionOf(item)") {
 		t.Error("the panel no longer shows what the product is, so a description " +
 			"somebody wrote is stored, frozen into the release and never read")

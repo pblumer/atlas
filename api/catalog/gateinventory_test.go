@@ -111,6 +111,9 @@ var catalogGates = []handlerGate{
 	// gate and not the format check.
 	{name: "HandleGetPicture", kind: gated, want: http.StatusNotFound, method: "GET",
 		id: true, product: true},
+	// An image of a product's rich description, behind the picture's gate.
+	{name: "HandleGetContentImage", kind: gated, want: http.StatusNotFound, method: "GET",
+		id: true, product: true},
 	{name: "HandleSetPicture", kind: gated, want: http.StatusNotFound, method: "PUT",
 		contentType: "image/png", body: "\x89PNG\r\n\x1a\n" + "body", id: true, product: true},
 	{name: "HandleDeletePicture", kind: gated, want: http.StatusNotFound, method: "DELETE",

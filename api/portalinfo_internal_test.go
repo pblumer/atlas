@@ -147,7 +147,8 @@ func TestAMarketOfferingsInfoIsItsFactSheet(t *testing.T) {
 		t.Errorf("the fact sheet's sections are not offering, included, optional in that order (%d, %d, %d)",
 			offering, included, optional)
 	}
-	for _, want := range []string{"copyText(factsheetText(rel, item))", "printFactsheet", "descriptionOf(p)"} {
+	for _, want := range []string{"copyText(factsheetText(rel, item))", "printFactsheet", "descriptionView(p,",
+		"factsheet-logo", "t('factsheet.version')", "class: 'secondary'"} {
 		if !strings.Contains(sheet, want) {
 			t.Errorf("the fact sheet lacks %s", want)
 		}
@@ -157,12 +158,33 @@ func TestAMarketOfferingsInfoIsItsFactSheet(t *testing.T) {
 		t.Error("the copied fact sheet does not list the included services before the optional ones")
 	}
 	for _, key := range []string{"factsheet.offering", "factsheet.included", "factsheet.optional", "factsheet.copy",
-		"factsheet.print", "factsheet.copied", "factsheet.copyFailed", "factsheet.noDescription"} {
+		"factsheet.print", "factsheet.copied", "factsheet.copyFailed", "factsheet.noDescription", "factsheet.version"} {
 		if n := strings.Count(src, "'"+key+"':"); n != 4 {
 			t.Errorf("%s is translated %d times, want once per locale (de, en, fr, it)", key, n)
 		}
 	}
 	if !strings.Contains(readWeb(t, "shop.html"), "body.printing-factsheet .factsheet") {
 		t.Error("shop.html has no print style that puts the fact sheet alone on the paper")
+	}
+}
+
+// TestARichDescriptionIsDrawnAsTextAndNeverAsMarkup: the shop draws the wiki's
+// layout from data — every word a text node through el(), never innerHTML — and an
+// image only from Atlas's own copy, by an id of the shape the server names images
+// with, so neither a wiki author nor a forged release can make the shop load
+// anything else.
+func TestARichDescriptionIsDrawnAsTextAndNeverAsMarkup(t *testing.T) {
+	src := readWeb(t, "shop.js")
+	draw := webRegion(t, src, "function richBlocks(", "\n}\n")
+	for _, never := range []string{"innerHTML", "outerHTML", "insertAdjacentHTML", "DOMParser", "href"} {
+		if strings.Contains(draw, never) {
+			t.Errorf("the rich description is drawn with %s", never)
+		}
+	}
+	if !strings.Contains(draw, "/content-images/") || !strings.Contains(draw, "/^[0-9a-f]{32}$/.test(b.image") {
+		t.Error("an image is drawn from somewhere other than Atlas's own copy, or by an id of any shape")
+	}
+	if !strings.Contains(draw, "RICH_ALIGNS.includes(b.align)") {
+		t.Error("an alignment reaches a style attribute without being one of the known ones")
 	}
 }

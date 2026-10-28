@@ -14,6 +14,27 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
+  description comes from the wiki now carries the page's layout beside its text:
+  headings, lists, tables, panels, quotes, code, dividers, its images and the items
+  embedded in it, each embedded item held to the same security rules as a child page
+  and rechecked with it. Protected passages and mentions are removed from every block
+  before anything is stored, tables included. Images are copied into Atlas and served
+  behind the product picture's gate (`GET /api/v1/catalog-products/{id}/content-images/{image}`),
+  so the shop never asks the wiki for anything. The fact sheet and the info panel draw
+  it, without the "more in the wiki" link; the fact sheet also shows the catalogue's
+  mark and which release it describes, and its buttons wear the shop's own style
+  (ADR-0491, amended 2026-10-28).
+
+- **A service can be described by a child page of its offering's wiki page.** A market
+  offering kept as one wiki page with its services as child pages below it can now be
+  linked as such: the offering to the page, each service to its child page. A child
+  page that is another product's own page is left out of every other description with
+  everything below it, and the preview names the product it describes; previewing a
+  child page another product's description holds names that product (`carriedBy`), and
+  publishing waits until that product is refreshed, so no page's text appears under two
+  products. A page that is another product's own page is still refused (ADR-0491,
+  amended 2026-10-27).
 - **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
 - **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
   wikiwikibangbang already holds to draw processes and decisions in its pages, now also
@@ -212,6 +233,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue page reads in the order a catalogue is filled.** Its sections are now
+  numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
+  catalogue's own settings (what it is, how it looks, who maintains it, export and import,
+  delete for good). Each section folds, folded on a first visit with a line saying what it
+  holds, and the browser remembers which ones a maintainer keeps open. Within a section the
+  controls come first and the explanation sits in a column beside them on a wide screen.
 - **Every topic of a Console page folds away, and the browser remembers it.** A card
   headed by its title — the five on Console › Administration › Security, the mockup cards
   on Console › Workers, and every other one on every page — gets the caret toggle the
