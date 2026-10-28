@@ -10,22 +10,22 @@ See [delivery protocol](../development/program-delivery.md) and
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
-| [Blueprint Marketplace](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review PR #1423 catalogue-aware signed Blueprint preview; then persist trusted installation provenance and recovery (#1422) and publish a separately signed public end-to-end demo registry. |
+| [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 
-## Blueprint Marketplace (BMP)
+## atlas hub (BMP)
 
-Distribute versioned Process Application Blueprints from independently operated registries, safely import/update packages while retaining local edits, and keep commercial entitlements separate from execution.
+Multi-layer trusted discovery and distribution of process applications and related product catalogues, with independently governed standalone catalogues, reusable components and public, internal or commercial offers. No runtime licensing.
 
-**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-27**
+**[Programme plan](../planning/blueprint-marketplace-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](bmp/program.json) · Reviewed: 2026-10-28**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
 | **BMP0** — Registry and trust contract | complete | pblumer | — | [PR #1395](https://github.com/pblumer/atlas/pull/1395), [PR #1402](https://github.com/pblumer/atlas/pull/1402), [PR #1405](https://github.com/pblumer/atlas/pull/1405) | Complete: ADR-0499 Accepted; signed v1 schema, positive/negative fixtures and offline Ed25519/SHA-256 verifier landed in PR #1402 and #1405. Offline verifications only; no registry transport or installs.; [Evidence 1](../../api/blueprintregistry/verify_test.go), [Evidence 2](../../api/blueprintregistry/semver_test.go), [Evidence 3](../contracts/blueprint-registry/v1/registry_schema_test.go) |
-| **BMP1** — Free registry to installed application | active | pblumer | BMP0 | [PR #1411](https://github.com/pblumer/atlas/pull/1411), [PR #1415](https://github.com/pblumer/atlas/pull/1415), [PR #1416](https://github.com/pblumer/atlas/pull/1416), [PR #1420](https://github.com/pblumer/atlas/pull/1420), [PR #1423](https://github.com/pblumer/atlas/pull/1423), [Issue #1422](https://github.com/pblumer/atlas/issues/1422) | PR #1411, #1415 and #1416 delivered secure v1 Console registry browse/import; PR #1420 verified a signed real application+two-catalogue package and all required CI gates. Draft PR #1423 expands the verified preview with signed catalogue/product identities without adding a new importer. Hosted static registry demo, persistent provenance and restart/repeated-import end-to-end acceptance remain open; no auto-safe updates. |
-| **BMP2** — Provenance and managed updates | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
-| **BMP3** — Private and federated registries | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
+| **BMP1** — Signed application bundle to installed solution | active | pblumer | BMP0 | [PR #1411](https://github.com/pblumer/atlas/pull/1411), [PR #1415](https://github.com/pblumer/atlas/pull/1415), [PR #1416](https://github.com/pblumer/atlas/pull/1416), [PR #1420](https://github.com/pblumer/atlas/pull/1420), [PR #1423](https://github.com/pblumer/atlas/pull/1423), [PR #1424](https://github.com/pblumer/atlas/pull/1424), [Issue #1422](https://github.com/pblumer/atlas/issues/1422) | Merged #1411, #1415, #1416, #1420 and #1423 implement signed Blueprint Registry v1 browsing and human-reviewed application-plus-catalogue import. Draft #1424 provides pending-only durable provenance, not complete installation. Server-verified finalization, partial-failure/restart/re-import tests, independently signed public demo and separately approved standalone-catalogue contracts remain open. Product name is atlas hub; BMP and Blueprint v1 wire IDs remain stable. |
+| **BMP2** — Managed updates and provenance | planned | unassigned | BMP1 | — | Pin version and digest, preserve local edits, test conflict/rollback/failure behavior and provenance recovery. |
+| **BMP3** — Federated and private hub sources | planned | unassigned | BMP1 | — | Mock authenticated/private sources and provider-neutral entitlements; no payments or runtime licensing in core. |
 
 ## Capability-driven Automation (CDA)
 

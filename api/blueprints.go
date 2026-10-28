@@ -14,7 +14,8 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// blueprintSource is read-only design-time distribution. The source never
+// blueprintSource is atlas hub's current signed application-Blueprint transport.
+// It is read-only design-time distribution. The source never
 // receives a caller-controlled URL or signing key and never touches the run loop.
 type blueprintSource interface {
 	LoadIndex(context.Context) (blueprintregistry.Index, error)
@@ -23,7 +24,7 @@ type blueprintSource interface {
 
 // configuredBlueprintSource accepts a single static operator-owned HTTPS
 // registry. An incomplete or unsafe config fails startup closed; with neither
-// variable set the optional Marketplace is disabled.
+// variable set the optional atlas hub Blueprint source is disabled.
 func configuredBlueprintSource() (blueprintSource, error) {
 	sourceURL := strings.TrimSpace(os.Getenv("ATLAS_BLUEPRINT_REGISTRY_URL"))
 	publicKey := strings.TrimSpace(os.Getenv("ATLAS_BLUEPRINT_REGISTRY_KEY"))

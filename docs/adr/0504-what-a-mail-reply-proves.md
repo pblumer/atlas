@@ -191,13 +191,13 @@ any level.
   knowledge, native subaddressing. Replies there are routed by the `Message-ID` and the
   subject tag over SMTP and IMAP, and IMAP has to be enabled for the watch.
 
-**An SME using a marketplace model.**
+**An SME using an atlas hub model.**
 
 - Microsoft 365, Google Workspace or a hoster's IMAP, and customers with neither an
   S/MIME certificate nor a portal account. Level 1 plus a comparison of `mail.from` with
   the address written to is the realistic ceiling. The value lies in routing and in no
   reply being lost, not in signatures.
-- The marketplace ships the pattern as a blueprint
+- The hub ships the pattern as a Blueprint
   ([ADR-0499](0499-blueprint-registry-and-distribution.md)): a reply watch, a catch event
   with its minimum already stated, a timer and a reminder. The SME starts from the safe
   default instead of modelling it.

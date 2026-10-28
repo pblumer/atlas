@@ -1,4 +1,4 @@
-// Browser-level contract for the REAL BMP1 Console Marketplace module: only
+// Browser-level contract for the atlas hub Console application-Blueprint module: only
 // operator-verified API releases are shown, never imported on preview/GET, and
 // a matching If-Match digest and explicit confirmation precede ADR-0467 import.
 import { test, expect } from "@playwright/test";
@@ -68,6 +68,7 @@ test("only signed registry metadata is rendered and safe escaped; preview does n
   const requests = await stubRegistry(page);
   await page.evaluate(() => window.__open());
   await expect(page.locator(".modal-ov")).toBeVisible();
+  await expect(page.locator(".modal-ov h2")).toHaveText("atlas hub");
   await expect(page.locator(".modal-ov")).toContainText("Purchase approvals");
   await expect(page.locator(".modal-ov")).toContainText("<img src=x");
   await expect(page.locator(".modal-ov img")).toHaveCount(0);

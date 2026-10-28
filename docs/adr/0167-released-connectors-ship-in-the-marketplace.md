@@ -11,6 +11,11 @@
 > Only the name changed — every decision below still holds. This record is left in
 > its original wording as the dated account of the decision.
 
+> **Separate product name (2026-10-28):** The cross-installation
+> distribution experience is now **atlas hub** (ADR-0499). This historical
+> ADR still refers to the curated local **Repository** (ADR-0081); no
+> replacement of the local gallery has been approved or implemented.
+
 ## Context and problem statement
 
 Atlas now has two catalogs of connectors, and nothing keeps them in step.

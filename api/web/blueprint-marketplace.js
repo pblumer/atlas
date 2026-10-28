@@ -1,4 +1,5 @@
-// Design-time Blueprint browsing (ADR-0499). The registry is configured and
+// atlas hub: design-time browsing of signed application Blueprints (ADR-0499).
+// The registry is configured and
 // verified by the server. We never use a URL or signing key supplied by a
 // catalogue, and never install before the operator confirms the preview.
 //
@@ -20,7 +21,7 @@ async function trustedJSON(url) {
   return data;
 }
 
-// openBlueprintMarketplace presents an operator-pinned registry listing and a
+// This atlas hub view presents an operator-pinned registry listing and a
 // safe inspected package preview, then hands an approved package to the same
 // importer as the ordinary Console file-upload action. No second installer.
 export function openBlueprintMarketplace({ call, reload, notify }) {

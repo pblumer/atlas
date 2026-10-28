@@ -1,4 +1,9 @@
-# ADR-0506: Marketplace catalogue bundles and opt-in updates
+# ADR-0506: atlas hub catalogue bundles and opt-in updates
+
+> **Naming note (2026-10-28):** atlas hub replaces the previous product name.
+> The broader hub vision includes application packages, product catalogues and
+> later extensible offer types. This ADR remains **Proposed**; catalogue-only
+> bundles and `auto-safe` updates are still not authorized.
 
 - **Status:** Proposed
 - **Implementation:** Not started
@@ -7,7 +12,7 @@
 
 ## Context and problem statement
 
-Most Marketplace product catalogues belong to a Process Application.
+Most atlas hub product catalogues belong to a Process Application.
 The offer should install the application **with its catalogues** as one
 reviewable solution. Some catalogues should also be installable independently.
 Availability may be public/free, organizational/internal or commercially
@@ -24,7 +29,7 @@ Existing foundations:
   including bound processes. It does not carry all dependent forms, DMN
   models or Worker configuration.
 - [ADR-0499](0499-blueprint-registry-and-distribution.md) already defines
-  signed, immutable Marketplace releases and explicitly **forbids
+  signed, immutable atlas hub releases and explicitly **forbids
   automatic publish**. This proposed ADR must be approved before changing
   that policy, even for previously authorized updates.
 
@@ -34,11 +39,11 @@ Adding a different kind must not silently weaken its validator.
 ## Drivers
 
 - Bundle first: application and its related catalogues are normally a single
-  Marketplace offer, sharing version, provenance and an explicit import plan.
+  atlas hub offer, sharing version, provenance and an explicit import plan.
 - Catalogues may alternatively stand alone and retain their native format.
 - Reuse existing catalogue and application import, permissions, ownership,
   process binding checks and release semantics; introduce no second importer.
-- Separate the *shop catalogues* distributed as content from the Marketplace
+- Separate the *shop catalogues* distributed as content from the atlas hub
   index itself.
 - Never overwrite a locally modified catalogue/product/process without consent.
 - Keep purchased/installed applications and catalogue releases usable offline.
@@ -51,7 +56,7 @@ Adding a different kind must not silently weaken its validator.
    discovery/trust/verification infrastructure and dispatch to existing APIs.
 2. Distribute every catalogue and application separately; consumers manually
    resolve dependency and publication order.
-3. Introduce a universal Marketplace installer with new write paths.
+3. Introduce a universal atlas hub installer with new write paths.
 4. Wrap every catalogue in an artificial, empty Process Application.
 
 ## Proposed decision
@@ -86,7 +91,7 @@ Choose **option 1**.
   are already resolved. Otherwise pause for explicit choices or refuse.
 - Reuse ADR-0467 import planning and ADR-0436/0451 import/publish; the
   actual user must have each native role, including productmanager/owner
-  and modeler when processes are deployed. A Marketplace download
+  and modeler when processes are deployed. A atlas hub download
   entitlement does not confer target installation roles.
 - An imported catalogue publish changes future customer offerings.
   Running instances and past orders must not be retroactively changed.
@@ -169,7 +174,7 @@ finishes its shared-contract changes.
 
 ## Links
 
-- [Blueprint Marketplace delivery plan](../planning/blueprint-marketplace-program.md)
+- [Blueprint atlas hub delivery plan](../planning/blueprint-hub-program.md)
 - [Catalogue bundle extension plan](../planning/blueprint-catalogue-bundles.md)
 - [ADR-0499](0499-blueprint-registry-and-distribution.md)
 - [ADR-0467](0467-application-package-export.md)

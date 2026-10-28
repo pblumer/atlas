@@ -1,4 +1,11 @@
-# Blueprint Registry v1: contract review fixtures
+# atlas hub — Blueprint Registry v1 contract review fixtures
+
+**Naming:** atlas hub is the user-facing experience. This immutable v1
+wire contract is still **Blueprint Registry v1**, with existing
+`blueprintId`, `/api/v1/blueprints` and
+`ATLAS_BLUEPRINT_REGISTRY_*` identifiers. It distributes application
+packages (optionally including product catalogues); standalone catalogues
+and other offer kinds require separately approved extensions.
 
 **Status: accepted v1 contract; public Console integration landed in PR #1416 (BMP1 remains active).** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). Signed-index verification, bounded HTTPS fetching, archive inspection and authorized Console package import are implemented. A publicly hosted signed sample and persistent installation provenance are still missing.
 
@@ -47,12 +54,11 @@ ATLAS_BLUEPRINT_REGISTRY_KEY=<base64-of-32-raw-Ed25519-public-key-bytes>
 ```
 
 The signing key must be obtained **out of band**, never from the index URL or a
-user request. A missing pair disables the marketplace; an incomplete or invalid
+user request. A missing pair disables the current hub Blueprint source; an incomplete or invalid
 configuration prevents server startup. Only operator-controlled environment
 configuration is accepted; there is no user-facing add-URL form.
 
-In the Console's application overview, use **Create new → Browse Blueprint
-Marketplace…**. The browser calls the existing authenticated atlas API:
+In the Console's application overview, use **Create new → Browse atlas hub…**. The browser calls the existing authenticated atlas API:
 `GET /api/v1/blueprints`, then `GET /api/v1/blueprints/{id}/releases/{version}/preview`.
 A preview downloads and rechecks the signed index, digest, atlas compatibility and
 the bounded tar.gz archive **off the engine run loop**, returning an application
@@ -79,4 +85,4 @@ provenance or a complete BMP1 milestone.
 - [Rejected traversal](examples/reject-path-traversal.json): invalid artifact path.
 - [Rejected digest](examples/reject-digest.json): invalid package digest.
 
-**As built:** BMP0 implements the signed-index verifier and deterministic negative tests. BMP1 implements the pinned HTTPS client with redirect/DNS/IP and size checks (#1411), safe bounded tar.gz inspection (#1415), and the Console/API listing, preview and verified download linked to the existing authorized import workflow (#1416). This is not yet a complete or provenance-backed Marketplace installation: a public signed demo, restart/recovery checks and durable source/catalogue IDs remain open. The v1 schema contains no prices, entitlements, purchase tokens or runtime licences. ADR-0506's catalogue-only and auto-safe extensions are Proposed, not implemented.
+**As built:** BMP0 implements the signed-index verifier and deterministic negative tests. BMP1 implements the pinned HTTPS client with redirect/DNS/IP and size checks (#1411), safe bounded tar.gz inspection (#1415), and the Console/API listing, preview and verified download linked to the existing authorized import workflow (#1416). This is not yet a complete or provenance-backed atlas hub installation: a public signed demo, restart/recovery checks and durable source/catalogue IDs remain open. The v1 schema contains no prices, entitlements, purchase tokens or runtime licences. ADR-0506's catalogue-only and auto-safe extensions are Proposed, not implemented.

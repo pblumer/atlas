@@ -35,7 +35,7 @@ _Changed_ / _Removed_ for each version.
   publishing waits until that product is refreshed, so no page's text appears under two
   products. A page that is another product's own page is still refused (ADR-0491,
   amended 2026-10-27).
-- **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
+- **Import trusted public application Blueprints through atlas hub.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
 - **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
   wikiwikibangbang already holds to draw processes and decisions in its pages, now also
   lists the releases with a sketch (`GET /api/v1/architectures`) and reads one
@@ -233,6 +233,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Blueprint Marketplace is now atlas hub.** The Console's discovery entry and documentation use the broader hub identity for process applications and their product catalogues, with other offer types explicitly planned. Existing signed Blueprint Registry v1 wire identifiers, API routes, environment settings and native import permissions remain unchanged (ADR-0499).
 - **The catalogue page reads in the order a catalogue is filled.** Its sections are now
   numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
   catalogue's own settings (what it is, how it looks, who maintains it, export and import,

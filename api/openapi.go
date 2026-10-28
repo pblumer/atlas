@@ -1679,7 +1679,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
-		// The public Blueprint Marketplace is read-only here. Import remains behind
+		// The current atlas hub Blueprint Registry API is read-only here. Import remains behind
 		// the existing application source/plan/publish routes, not a new write API.
 		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
 			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
