@@ -20,6 +20,65 @@
 // the fully-derived CSS variable map the bootstrap applies verbatim.
 export const THEME_KEY = "atlas.theme";
 
+// ---------- Per-user theme mode (visual skin, ADR-0161) ----------
+//
+// Orthogonal to the org-wide accent above. The *mode* is a full visual skin the
+// user picks for themselves (it is NOT org-wide and never touches the server): a
+// `data-theme` attribute on <html> selects a palette block in app.css. "light" is
+// the stock :root and is represented by the attribute's absence. The choice lives
+// only in this browser; a tiny inline bootstrap in index.html applies it before
+// first paint so there is no theme flash (mirroring the accent and language boot).
+
+// localStorage key holding the chosen mode id ("light" | "dark" | "cockpit").
+export const THEME_MODE_KEY = "atlas.theme.mode";
+
+// The skins on offer. `id` is what we store and set as data-theme; "light" is the
+// default and carries no attribute. Keep this list as the single source of truth
+// for the picker UI.
+export const THEME_MODES = [
+  { id: "light", name: "Light", blurb: "The stock Atlas interface." },
+  { id: "dark", name: "Dark", blurb: "Easy on the eyes in a dim room." },
+  { id: "cockpit", name: "Starship cockpit", blurb: "A gamified HUD skin with subtle motion." },
+];
+
+const DEFAULT_MODE = "light";
+
+// normalizeMode returns a known mode id, or the default for anything unknown.
+export function normalizeMode(id) {
+  return THEME_MODES.some((m) => m.id === id) ? id : DEFAULT_MODE;
+}
+
+// applyMode sets (or clears, for "light") the data-theme attribute on the document
+// root. Logic kept identical to index.html's inline bootstrap on purpose.
+export function applyMode(id) {
+  const mode = normalizeMode(id);
+  const root = document.documentElement;
+  if (mode === DEFAULT_MODE) root.removeAttribute("data-theme");
+  else root.setAttribute("data-theme", mode);
+}
+
+// currentMode reads the stored mode (defaulting to light) for seeding the picker.
+export function currentMode() {
+  try {
+    return normalizeMode(localStorage.getItem(THEME_MODE_KEY));
+  } catch {
+    return DEFAULT_MODE;
+  }
+}
+
+// setMode persists and applies the chosen skin for this browser. "light" removes
+// the stored override rather than storing the default, keeping the key absent for
+// a fresh user.
+export function setMode(id) {
+  const mode = normalizeMode(id);
+  try {
+    if (mode === DEFAULT_MODE) localStorage.removeItem(THEME_MODE_KEY);
+    else localStorage.setItem(THEME_MODE_KEY, mode);
+  } catch { /* quota/denied — apply for the session anyway */ }
+  applyMode(mode);
+  return mode;
+}
+
 // The server endpoint that holds the org-wide accent.
 const THEME_URL = "/api/v1/settings/theme";
 

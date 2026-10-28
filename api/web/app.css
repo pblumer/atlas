@@ -57,6 +57,12 @@ b { font-weight: 600; }
    the image inside the box without distortion. */
 .mark.has-logo { background: transparent; }
 .mark .mark-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Built-in brand mark: the tile-less atlas glyph (a carrying the Swiss cross),
+   inlined from atlas-glyph.svg. It inherits the mark's colour (white on the dark
+   tile) by currentColor — a fixed white, not theme-tinted, as the brand requires;
+   the cockpit's cyan comes only from the glow/sweep layered over it. The glyph's
+   own viewBox margins give it a clean inset inside the tile. */
+.mark .mark-glyph { width: 100%; height: 100%; display: block; }
 .divider { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
 .topnav { display: flex; align-items: center; gap: 2px; height: 100%; }
 .topnav a {
@@ -2606,3 +2612,298 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
   color: var(--accent); font: 600 13px/1 system-ui, sans-serif; cursor: pointer; padding: 4px 0;
 }
 .whats-new .wn-more:hover { text-decoration: underline; }
+
+/* ========================================================================== */
+/* Per-user visual themes (skins) — ADR-0161.                                 */
+/*                                                                            */
+/* theme.js sets data-theme="dark" | "cockpit" on <html> for the user's chosen*/
+/* skin (absent = the stock light :root). Every surface already paints from   */
+/* the custom properties declared on :root, so a skin is just a palette       */
+/* override — we only restate the variables that differ. The org-wide brand   */
+/* accent (ADR-0113), when set, is an inline style on the root and therefore   */
+/* still wins over any --accent* a skin block declares here.                  */
+/* ========================================================================== */
+
+/* ---------- Dark ---------- */
+:root[data-theme="dark"] {
+  --bg: #0f1116;
+  --surface: #171a21;
+  --border: #272b33;
+  --border-strong: #3a414d;
+  --text: #e6e8ec;
+  --muted: #9aa0aa;
+  /* --accent / --accent-hover inherit from :root so the brand tint applies;
+     only the pale "soft" tint and the light status washes need darkening. */
+  --accent-soft: #15233d;
+  --danger: #ff6b5e;
+  --danger-soft: #2a1613;
+  --warn: #e3a94c;
+  --warn-soft: #2a2211;
+  --ok: #41c979;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+/* The handful of hard-coded light washes elsewhere, re-toned for dark so a
+   status pill or a danger hover doesn't flash a bright block. */
+:root[data-theme="dark"] .btn.ghost.danger:hover { background: #2a1613; }
+:root[data-theme="dark"] .pill.ok { background: #13301f; }
+:root[data-theme="dark"] .pill.err { background: #2a1613; }
+:root[data-theme="dark"] .pill.warn { background: #2a2211; color: #e3a94c; }
+:root[data-theme="dark"] .mark { background: #272b33; }
+/* The stock row hover is a near-white wash (#fafbfc) baked for the light theme;
+   on dark it glares under light text. A faint white overlay lifts the row just
+   enough while the text stays fully legible. */
+:root[data-theme="dark"] tbody tr:hover { background: rgba(255, 255, 255, 0.05); }
+/* BPMN sequence-flow lines render in a near-black stroke that vanishes on a dark
+   canvas. Lift the default stroke (and its arrowhead) to a legible light grey.
+   No !important, so the state overlays (active/hit/waiting/selected, all
+   !important and more specific) still win for highlighted flows. */
+/* bpmn-js paints the connection line and its arrowhead with an inline near-black
+   stroke/fill, so a plain rule can't touch them — the override needs !important
+   and must target the <path> itself (the first visual child is a <defs>, not the
+   line). Kept low-specificity so the state overlays (active/hit/waiting/selected)
+   still win on highlighted flows. */
+:root[data-theme="dark"] .djs-connection .djs-visual > path { stroke: #cbd0d9 !important; }
+:root[data-theme="dark"] .djs-connection .djs-visual marker path { fill: #cbd0d9 !important; stroke: #cbd0d9 !important; }
+/* External labels (event, gateway, sequence-flow and annotation names) sit on the
+   bare canvas with bpmn-js's near-black inline fill, so they vanish on a dark
+   ground. Lighten only those — a label whose own .djs-visual carries no background
+   shape — leaving the in-shape task labels (dark on their white box) untouched. */
+:root[data-theme="dark"] .djs-visual:not(:has(rect, circle, ellipse, polygon)) text.djs-label { fill: #cbd0d9 !important; }
+
+/* ---------- Starship cockpit ---------- */
+/* A gamified HUD skin: a dark "space" base, cyan instrument accents, and a few
+   subtle moving elements (a drifting starfield, a soft reactor pulse on the
+   brand mark, faint scanlines). All motion is decorative, pointer-inert and is
+   switched off entirely under prefers-reduced-motion (the static palette stays). */
+:root[data-theme="cockpit"] {
+  --bg: #050912;
+  --surface: #0b1725;
+  --border: #16344a;
+  --border-strong: #24506b;
+  --text: #d7eef3;
+  --muted: #7ba3ac;
+  --accent: #31e1e6;
+  --accent-hover: #17b5bb;
+  --accent-soft: #0b2a33;
+  --danger: #ff5a6a;
+  --danger-soft: #2a1119;
+  --warn: #ffb648;
+  --warn-soft: #2a2110;
+  --ok: #39d98a;
+  --radius: 7px;
+  --shadow:
+    0 0 0 1px rgba(49, 225, 230, 0.08),
+    0 2px 12px rgba(0, 0, 0, 0.55),
+    0 0 26px rgba(49, 225, 230, 0.06);
+  color-scheme: dark;
+}
+
+/* Deep-space backdrop: a radial "nebula" glow over near-black, painted on the
+   body itself so it always sits behind in-flow content. */
+:root[data-theme="cockpit"] body {
+  background:
+    radial-gradient(1200px 680px at 78% -10%, rgba(49, 225, 230, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 12% 108%, rgba(90, 120, 255, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 40%, #0a1424 0%, #050912 70%, #03060d 100%);
+  background-attachment: fixed;
+}
+
+/* Two drifting starfields (fixed, inert, behind everything). Layered dot
+   gradients at different sizes/speeds give a gentle parallax. */
+:root[data-theme="cockpit"] body::before {
+  content: "";
+  position: fixed;
+  inset: -200px 0 0 0; /* extra top room so the upward drift never shows a seam */
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 40px 60px, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1.4px 1.4px at 160px 140px, rgba(185, 245, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 240px 40px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 90px 220px, rgba(255, 255, 255, 0.6), transparent);
+  background-size: 300px 300px, 300px 300px, 180px 180px, 180px 180px;
+  opacity: 0.9;
+  animation: cockpit-stars 140s linear infinite;
+}
+/* Faint CRT scanlines plus a top HUD glow — a thin, static instrument overlay. */
+:root[data-theme="cockpit"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(49, 225, 230, 0.11), transparent 140px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+/* Lift the real content above the two fixed backdrop layers. The topbar (z 20),
+   drawer (31), scrim (30) and toast (50) already establish their own stacking;
+   only the main content column needs a context. */
+:root[data-theme="cockpit"] main { position: relative; z-index: 1; }
+
+/* Cockpit chrome accents: a glass header hairline, glowing accent controls, and a
+   pulsing "reactor" brand mark. */
+:root[data-theme="cockpit"] .topbar {
+  background: linear-gradient(180deg, rgba(11, 23, 37, 0.92), rgba(5, 9, 18, 0.86));
+  border-bottom-color: rgba(49, 225, 230, 0.35);
+  box-shadow: 0 1px 0 rgba(49, 225, 230, 0.15), 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+:root[data-theme="cockpit"] .mark {
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 16px rgba(49, 225, 230, 0.55);
+  animation: cockpit-reactor 3.4s ease-in-out infinite;
+}
+/* A radar sweep scans across the REAL Atlas mark. The icon itself is left exactly
+   as it is — the built-in dark "A" tile, or an uploaded org logo — so the scope's
+   face is the genuine icon, not a redrawn one. The sweep is a low-opacity screen
+   blend over it, taking the mark's own rounded-square shape (border-radius:
+   inherit) so it reads as that tile being scanned. */
+:root[data-theme="cockpit"] .mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(49, 225, 230, 0.5) 0deg, rgba(49, 225, 230, 0.1) 26deg, transparent 72deg 360deg);
+  mix-blend-mode: screen;
+  animation: cockpit-radar 3.6s linear infinite;
+}
+:root[data-theme="cockpit"] .btn:not(.ghost):not(.neutral) {
+  box-shadow: 0 0 16px rgba(49, 225, 230, 0.42);
+}
+:root[data-theme="cockpit"] .btn:not(.ghost):not(.neutral):hover {
+  box-shadow: 0 0 24px rgba(49, 225, 230, 0.62);
+}
+:root[data-theme="cockpit"] .topnav a.active { text-shadow: 0 0 12px rgba(49, 225, 230, 0.75); }
+
+/* Status lights: a pulsing "online" indicator on the account avatar, and a small
+   telemetry dot on each dashboard stat tile — faint, blinking HUD readouts. */
+:root[data-theme="cockpit"] .avatar { position: relative; overflow: visible; }
+:root[data-theme="cockpit"] .avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px; bottom: -1px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--ok);
+  animation: cockpit-blink 2.2s ease-in-out infinite;
+}
+:root[data-theme="cockpit"] .stat { position: relative; padding-left: 14px; }
+:root[data-theme="cockpit"] .stat::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(49, 225, 230, 0.8);
+  animation: cockpit-blink 1.8s ease-in-out infinite;
+}
+
+/* BPMN diagram canvas: swap the stock dotted grid for a faint two-colour star
+   map (deep-space base + one soft star tone). Covers the Modeler and the
+   Operations viewers (#canvas) as well as the live token view (.tp-canvas).
+   Sparse, large tiles keep it a quiet backdrop, never a busy grid. */
+:root[data-theme="cockpit"] #canvas,
+:root[data-theme="cockpit"] .tp-canvas {
+  background-color: #070d18;
+  background-image:
+    radial-gradient(1px 1px at 30px 40px, rgba(170, 214, 228, 0.55), transparent),
+    radial-gradient(1px 1px at 125px 95px, rgba(170, 214, 228, 0.38), transparent),
+    radial-gradient(1.3px 1.3px at 80px 160px, rgba(170, 214, 228, 0.5), transparent),
+    radial-gradient(1px 1px at 200px 50px, rgba(170, 214, 228, 0.32), transparent);
+  background-size: 170px 170px, 170px 170px, 230px 230px, 230px 230px;
+  background-repeat: repeat;
+}
+/* Same near-white row-hover fix as dark, in the cockpit's cyan key. */
+:root[data-theme="cockpit"] tbody tr:hover { background: rgba(49, 225, 230, 0.09); }
+/* Same connector-visibility lift as dark, in a cool cyan-grey that suits space. */
+:root[data-theme="cockpit"] .djs-connection .djs-visual > path { stroke: #cfeef2 !important; }
+:root[data-theme="cockpit"] .djs-connection .djs-visual marker path { fill: #cfeef2 !important; stroke: #cfeef2 !important; }
+:root[data-theme="cockpit"] .djs-visual:not(:has(rect, circle, ellipse, polygon)) text.djs-label { fill: #cfeef2 !important; }
+
+/* Dark mode drops the dotted grid entirely for a flat, single-colour canvas —
+   the light-theme dots were baked for a white ground and only clutter a dark one. */
+:root[data-theme="dark"] #canvas {
+  background: #0d1016;
+}
+
+/* The embedded bpmn-js palette, context pad and popup menus ship a hard white
+   chrome that glares in the dark themes. Re-skin their surfaces to the theme
+   tokens and lift their icons/text so they stay legible. */
+:root[data-theme="dark"] .djs-palette,
+:root[data-theme="cockpit"] .djs-palette {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+:root[data-theme="dark"] .djs-palette .entry,
+:root[data-theme="cockpit"] .djs-palette .entry { color: var(--text); }
+:root[data-theme="dark"] .djs-palette .entry:hover,
+:root[data-theme="cockpit"] .djs-palette .entry:hover { background: var(--bg); }
+:root[data-theme="dark"] .djs-palette .separator,
+:root[data-theme="cockpit"] .djs-palette .separator { border-color: var(--border); }
+:root[data-theme="dark"] .djs-context-pad .entry,
+:root[data-theme="cockpit"] .djs-context-pad .entry {
+  background: var(--surface); color: var(--text);
+  box-shadow: 0 0 2px 1px var(--border);
+}
+:root[data-theme="dark"] .djs-context-pad .entry:hover,
+:root[data-theme="cockpit"] .djs-context-pad .entry:hover { background: var(--bg); }
+:root[data-theme="dark"] .djs-popup,
+:root[data-theme="cockpit"] .djs-popup,
+:root[data-theme="dark"] .djs-popup .djs-popup-header,
+:root[data-theme="cockpit"] .djs-popup .djs-popup-header {
+  background: var(--surface) !important; color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+:root[data-theme="dark"] .djs-popup .entry:hover,
+:root[data-theme="cockpit"] .djs-popup .entry:hover { background: var(--bg) !important; }
+
+/* Leftover light-theme danger washes (#fdecea) on delete-hover controls — retone
+   for the dark themes so they match the pills and ghost-danger buttons. */
+:root[data-theme="dark"] .sv-del:hover, :root[data-theme="cockpit"] .sv-del:hover,
+:root[data-theme="dark"] .io-map-del:hover, :root[data-theme="cockpit"] .io-map-del:hover {
+  background: var(--danger-soft);
+}
+
+/* The account avatar's maroon (#6b2b2b) clashes with the cockpit's cyan; give it
+   a deep-teal chip that sits in the palette. */
+:root[data-theme="cockpit"] .avatar,
+:root[data-theme="cockpit"] .avatar:hover { background: #10343d; color: #bfeef2; }
+:root[data-theme="cockpit"] .card:hover { border-color: rgba(49, 225, 230, 0.3); }
+:root[data-theme="cockpit"] .pill.ok { background: #0c2a1c; }
+:root[data-theme="cockpit"] .pill.err { background: #2a1119; }
+:root[data-theme="cockpit"] .pill.warn { background: #2a2110; color: var(--warn); }
+:root[data-theme="cockpit"] .btn.ghost.danger:hover { background: #2a1119; }
+
+@keyframes cockpit-stars {
+  from { transform: translateY(0); }
+  to { transform: translateY(-300px); }
+}
+@keyframes cockpit-reactor {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 14px rgba(49, 225, 230, 0.5); }
+  50% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.9), 0 0 24px rgba(49, 225, 230, 0.85); }
+}
+@keyframes cockpit-radar {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes cockpit-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* Respect a user's motion preference: keep the cockpit's static palette and glow,
+   drop every animation (drifting stars, reactor pulse, radar sweep, status
+   blink). The radar wedge is hidden when it can no longer rotate, so it does not
+   freeze as a lopsided static glow. */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="cockpit"] body::before,
+  :root[data-theme="cockpit"] .mark,
+  :root[data-theme="cockpit"] .avatar::after,
+  :root[data-theme="cockpit"] .stat::before { animation: none; }
+  :root[data-theme="cockpit"] .mark::after { display: none; }
+}

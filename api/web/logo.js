@@ -14,6 +14,20 @@
 // The endpoint holding the org-wide logo image.
 export const LOGO_URL = "/api/v1/settings/logo";
 
+// BUILTIN_MARK is the tile-less atlas glyph (the lowercase "a" carrying the Swiss
+// cross), inlined from docs/brand/atlas-glyph.svg. It uses currentColor, so it
+// inherits the ".mark" box's colour (white on the dark tile). This is the default
+// mark shown when no org logo is set; the same drawing is inlined into the ".mark"
+// spans in the HTML pages and the favicon data URI — change the source and change
+// all three (see docs/brand/README.md).
+export const BUILTIN_MARK =
+  '<svg class="mark-glyph" viewBox="0 0 256 256" aria-hidden="true" fill="currentColor">' +
+  '<path d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/>' +
+  '<path d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/>' +
+  '<path d="M133 93H162V211H133Z"/>' +
+  '<path d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>' +
+  '</svg>';
+
 // localStorage flag: "1" when a logo is set. Only a boolean is cached — the bytes
 // come from LOGO_URL (and the browser's HTTP cache), never from localStorage.
 const LOGO_FLAG = "atlas.logo";
@@ -67,7 +81,7 @@ export function applyLogo(present, refresh = false) {
       }
     } else if (mark.classList.contains("has-logo")) {
       mark.classList.remove("has-logo");
-      mark.textContent = "A";
+      mark.innerHTML = BUILTIN_MARK;
     }
   }
 }

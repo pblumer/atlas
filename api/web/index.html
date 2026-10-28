@@ -4,18 +4,21 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Atlas</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314161a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='20' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='52' fill='%23000'/%3E%3Cpath fill='%23fff' d='M142.1 201.7A68 68 0 0 1 24 174.5L57.5 152.3A33 33 0 0 0 115.3 179.2Z'/%3E%3Cpath fill='%23fff' d='M22.2 162.7A68 68 0 0 1 106.5 92L119.7 117.1L98 126A33 33 0 0 0 59 146.7Z'/%3E%3Cpath fill='%23fff' d='M126 92H160V226H126Z'/%3E%3Cpath fill='%23fff' d='M189.5 38H210.5V62.5H235V83.5H210.5V108H189.5V83.5H165V62.5H189.5Z'/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="app.css" />
-<!-- Apply the saved company-colour theme before first paint, so the UI never
-     flashes the default accent. Logic-free on purpose: it applies the already
-     derived variable map that theme.js stored; see theme.js for the derivation. -->
+<!-- Apply the saved appearance before first paint, so the UI never flashes the
+     wrong theme. Logic-free on purpose: the accent applies the already derived
+     variable map theme.js stored; the skin sets data-theme, which selects a
+     palette block in app.css. See theme.js (ADR-0113 accent, ADR-0161 skin). -->
 <script>
   try {
+    var r = document.documentElement;
     var t = JSON.parse(localStorage.getItem("atlas.theme"));
     if (t && t.vars) {
-      var r = document.documentElement;
       for (var k in t.vars) if (k.indexOf("--accent") === 0) r.style.setProperty(k, t.vars[k]);
     }
+    var m = localStorage.getItem("atlas.theme.mode");
+    if (m === "dark" || m === "cockpit") r.setAttribute("data-theme", m);
   } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
 </script>
 </head>
@@ -27,7 +30,7 @@
       <button id="drawer-close" class="icon-btn" title="Close" aria-label="Close">
         <svg viewBox="0 0 24 24" width="20" height="20"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/></svg>
       </button>
-      <span class="brand"><span class="mark" aria-hidden="true">A</span> <b>Atlas</b></span>
+      <span class="brand"><span class="mark" aria-hidden="true"><svg class="mark-glyph" viewBox="0 0 256 256" aria-hidden="true" fill="currentColor"><path d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path d="M133 93H162V211H133Z"/><path d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg></span> <b>Atlas</b></span>
     </div>
     <nav id="drawer-apps"></nav>
   </aside>
@@ -42,8 +45,8 @@
       </svg>
     </button>
     <a class="brand topbrand" href="#/console">
-      <span class="mark" aria-hidden="true">A</span>
-      <b id="app-name">Console</b>
+      <span class="mark" aria-hidden="true"><svg class="mark-glyph" viewBox="0 0 256 256" aria-hidden="true" fill="currentColor"><path d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/><path d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/><path d="M133 93H162V211H133Z"/><path d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/></svg></span>
+      <b id="app-name">Cockpit</b>
     </a>
     <span class="divider"></span>
     <nav id="topnav" class="topnav"></nav>

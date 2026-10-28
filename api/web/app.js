@@ -4,9 +4,10 @@
 import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
+  THEME_MODES, currentMode, setMode,
 } from "./theme.js";
 import {
-  LOGO_URL, hasLogoCached, applyLogo, syncLogoFromServer,
+  LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
 } from "./logo.js";
 import { enhanceTable } from "./table.js";
@@ -258,7 +259,9 @@ async function deployDemo() {
 
 // ---------- Apps (Atlas naming; reference product names removed) ----------
 const APPS = [
-  { id: "console", name: "Console", route: "#/console", on: true },
+  // The app's id and route stay "console" (stable paths/links); only the
+  // user-facing name is "Cockpit".
+  { id: "console", name: "Cockpit", route: "#/console", on: true },
   { id: "modeler", name: "Modeler", route: "#/modeler", on: true },
   { id: "tasks", name: "Tasks", route: "#/tasks", on: true },
   { id: "operations", name: "Operations", route: "#/operations", on: true },
@@ -748,7 +751,7 @@ async function viewConsoleDashboard() {
     <div class="card">
       <h1>Welcome to Atlas</h1>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
-      from a single self-contained binary. This Console manages deployments and shows engine health;
+      from a single self-contained binary. This Cockpit manages deployments and shows engine health;
       the Modeler lets you design and deploy BPMN models in the browser.</p>
       <ol class="steps">
         <li><b>Model a process</b> — open the Modeler and draw a BPMN diagram, or import existing XML.</li>
@@ -1271,9 +1274,24 @@ function appearanceCard() {
         title="${esc(p.name)}" aria-pressed="${on}">
         <span class="theme-dot" style="background:${esc(p.color)}"></span>${esc(p.name)}</button>`;
   };
+  // Per-user skin tiles (ADR-0161). A tiny preview dot hints at each skin's base
+  // tone; "active" marks the one in effect for this browser.
+  const modeDot = { light: "#f3f4f6", dark: "#171a21", cockpit: "#31e1e6" };
+  const activeMode = currentMode();
+  const skin = (m) => {
+    const on = m.id === activeMode;
+    return `<button type="button" class="theme-swatch${on ? " active" : ""}" data-mode="${esc(m.id)}"
+        title="${esc(m.blurb)}" aria-pressed="${on}">
+        <span class="theme-dot" style="background:${esc(modeDot[m.id] || "#888")}"></span>${esc(m.name)}</button>`;
+  };
   return `
     <div class="card" style="margin-top:18px">
-      <div class="between"><h2>Appearance</h2>
+      <h2 style="margin-top:0">Theme</h2>
+      <p class="muted" style="margin:6px 0 14px">Choose a visual skin for the interface. This is your
+      personal preference — it is saved in this browser only and doesn't affect anyone else.</p>
+      <div class="theme-swatches" id="theme-skins">${THEME_MODES.map(skin).join("")}</div>
+
+      <div class="between" style="margin-top:22px"><h2 style="margin:0">Brand colour</h2>
         <button type="button" class="btn ghost sm" id="theme-reset">Reset to default</button></div>
       <p class="muted" style="margin:6px 0 14px">Tint the interface with your organisation's brand
       colour. The accent recolours buttons, links, the active navigation and highlights across every
@@ -1300,7 +1318,7 @@ function appearanceCard() {
         a PNG or SVG up to 512&nbsp;KiB, shown in the top bar and on the login screen for everyone on this instance.</p>
         <div class="logo-controls">
           <span class="mark logo-sample${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
-            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : "A"
+            hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
           }</span>
           <label class="btn sm" style="cursor:pointer">
             Upload logo…
@@ -1316,6 +1334,22 @@ function appearanceCard() {
 // persists it org-wide on the server; a failed write (e.g. a non-admin) is surfaced
 // and the preview reverts. Reset clears the org-wide override.
 function wireAppearance() {
+  // Per-user skin picker (ADR-0161): applies + persists locally on click, and
+  // reflects the active tile. Independent of the org accent wired below.
+  const skins = document.getElementById("theme-skins");
+  if (skins) {
+    skins.addEventListener("click", (e) => {
+      const btn = e.target.closest(".theme-swatch");
+      if (!btn) return;
+      const mode = setMode(btn.dataset.mode);
+      skins.querySelectorAll(".theme-swatch").forEach((b) => {
+        const on = b.dataset.mode === mode;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+    });
+  }
+
   const presets = document.getElementById("theme-presets");
   const picker = document.getElementById("theme-color");
   const hex = document.getElementById("theme-hex");
@@ -4843,7 +4877,7 @@ function viewComingSoon(appId) {
     <div class="card empty">
       <h1>${esc(name)}</h1>
       <p class="muted">${esc(name)} is on the Atlas roadmap and isn't part of this build yet.</p>
-      <a class="btn ghost" href="#/console">Back to Console</a>
+      <a class="btn ghost" href="#/console">Back to Cockpit</a>
     </div>`;
 }
 
@@ -5202,11 +5236,11 @@ function routeTitle(path) {
   const opsInst = path.match(/^#\/operations\/i\/(\d+)$/);
   if (opsInst) return `Instance ${opsInst[1]} · Operations`;
   const rules = [
-    [/^#\/(console)?$/, "Console"],
-    [/^#\/console\/engine$/, "Engine · Console"],
-    [/^#\/console\/logs$/, "Logs · Console"],
-    [/^#\/console\/backup$/, "Backup · Console"],
-    [/^#\/console\/org$/, "Organization · Console"],
+    [/^#\/(console)?$/, "Cockpit"],
+    [/^#\/console\/engine$/, "Engine · Cockpit"],
+    [/^#\/console\/logs$/, "Logs · Cockpit"],
+    [/^#\/console\/backup$/, "Backup · Cockpit"],
+    [/^#\/console\/org$/, "Organization · Cockpit"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
     [/^#\/modeler\/form\/new/, "New form · Modeler"],
     [/^#\/modeler\/form\//, "Form · Modeler"],
