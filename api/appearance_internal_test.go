@@ -7,7 +7,7 @@ import (
 )
 
 // The dark appearance answers every colour the light palette names
-// (ADR-draft-ui-appearance-modes).
+// (ADR-0507).
 //
 // app.css's first `:root` block is the palette, and the `:root[data-appearance="dark"]`
 // block redeclares its tokens for a dark surface. A colour token added to the palette

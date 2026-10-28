@@ -1,4 +1,4 @@
-// Atlas appearance — light, dark, or following the system (ADR-draft-ui-appearance-modes).
+// Atlas appearance — light, dark, or following the system (ADR-0507).
 //
 // Appearance is how *this browser* wants the console drawn, and nothing else: it is
 // not the organisation's brand colour (theme.js, ADR-0113), it reaches no server and it

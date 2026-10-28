@@ -125,7 +125,7 @@
   --sim-scope-fill: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-/* ---------- Dark appearance (ADR-draft-ui-appearance-modes) ----------
+/* ---------- Dark appearance (ADR-0507) ----------
 
    The same tokens, answered for a dark surface. index.html's bootstrap writes
    data-appearance before first paint (appearance.js); nothing else switches, so a
@@ -1847,7 +1847,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    #404040 and dmn-js in black, which on the dark canvas is 1.9:1 and less — there,
    but not visible. Recolouring the logo would be changing it, so it is left exactly
    as drawn and given the light canvas behind it instead: the mark a dark diagram
-   carries is the one a light diagram carries (ADR-draft-ui-appearance-modes). */
+   carries is the one a light diagram carries (ADR-0507). */
 :root[data-appearance="dark"] .bjs-powered-by {
   background: #f3f4f6; border-radius: 3px; padding: 2px 4px; line-height: 0;
 }

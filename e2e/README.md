@@ -42,7 +42,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   application's name is typed; a refusal in the preview, or a caller who may not cancel
   instances, keeps it disarmed; Escape cancels.
 - **`appearance.spec.mjs`**
-  ([ADR-draft-ui-appearance-modes](../docs/adr/draft-ui-appearance-modes.md)):
+  ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
   the light, dark and system appearance — nothing stored keeps today's light console
   even on a dark system; a dark choice is on the document before the body is parsed;
   `system` follows the operating system live while an explicit choice ignores it; an

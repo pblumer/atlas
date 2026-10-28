@@ -1384,7 +1384,7 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   task was claimed or leased; `GET /api/v1/processes/{key}/statistics` folds a window off
   the loop. Closes statusbericht item 803.
 - 🚧 **Light, dark and system appearance for the shipped web UI**
-  ([ADR-draft-ui-appearance-modes](docs/adr/draft-ui-appearance-modes.md), proposed):
+  ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed):
   a semantic palette with a dark answer for every colour, a per-person preference,
   bpmn-js/dmn-js/form-js token bridges, an accessible Operations heatmap and
   screenshot validation in both appearances. Landed so far, behind a preference no

@@ -1,6 +1,6 @@
 // End-to-end coverage for the appearance preference — light, dark or following the
 // system — and for what it does to the Modeler (api/web/appearance.js, the bootstrap in
-// api/web/index.html, the dark palette in api/web/app.css; ADR-draft-ui-appearance-modes).
+// api/web/index.html, the dark palette in api/web/app.css; ADR-0507).
 //
 // The preference is a browser setting, so none of it reaches the server: what is worth
 // guarding is what a person sees. Today's installations must look exactly as they did,

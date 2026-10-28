@@ -1,4 +1,4 @@
-# ADR-DRAFT: Appearance mode is a personal preference, not an organisation brand
+# ADR-0507: Appearance mode is a personal preference, not an organisation brand
 
 - **Status:** Proposed
 - **Implementation:** Partial
