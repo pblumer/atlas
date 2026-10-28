@@ -20,6 +20,8 @@
 // mentions one, is a string about an id, and naming it would read as the variable
 // holding a person.
 
+import { t } from "./i18n.js";
+
 // A principal id as the server mints it: a kind prefix and random hex
 // (newUserID, newGroupID). Recognised by shape because the shape is the contract — the
 // prefix exists to make an id self-describing in logs and URLs.
@@ -143,9 +145,9 @@ function newestByProcess(list) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-const KIND_LABEL = { user: "Person", group: "Group", process: "Process", product: "Product" };
+const KIND_LABEL = { user: "pnl.feel.ref.person", group: "pnl.feel.ref.group", process: "pnl.feel.ref.process", product: "pnl.feel.ref.product" };
 
-const missingLabel = (ref) => (ref.kind === "group" ? "no group" : "no account");
+const missingLabel = (ref) => (ref.kind === "group" ? t("pnl.feel.ref.noGroup") : t("pnl.feel.ref.noAccount"));
 
 const ICON = {
   user: '<path d="M8 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M3 14c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/>',
@@ -175,28 +177,28 @@ export function refChipHTML(ref) {
 // while the step it sits in is past.
 export function refPopHTML(ref) {
   if (!ref) return "";
-  const kind = KIND_LABEL[ref.kind] || "Reference";
+  const kind = esc(t(KIND_LABEL[ref.kind] || "pnl.feel.ref.reference"));
   const id = `<div class="ref-pop-id">${esc(ref.id)}</div>`;
   if (ref.missing) {
     const why = ref.kind === "group"
-      ? "No group here has this id: it was deleted, and the instance keeps the id as evidence of who it was."
-      : "No enabled account here has this id. It was deleted — the instance keeps the id as evidence of who it was — or it is disabled, which the directory does not list either.";
-    return `<div class="pop-title">${kind} · ${missingLabel(ref)}</div>${id}
-      <p class="ref-pop-note">${why}</p>`;
+      ? t("pnl.feel.ref.groupGone")
+      : t("pnl.feel.ref.accountGone");
+    return `<div class="pop-title">${kind} · ${esc(missingLabel(ref))}</div>${id}
+      <p class="ref-pop-note">${esc(why)}</p>`;
   }
   let facts = "";
-  if (ref.kind === "process") facts = `Version ${esc(String(ref.version || "—"))}, the newest deployed`;
+  if (ref.kind === "process") facts = esc(t("pnl.feel.ref.version", { version: String(ref.version || "—") }));
   if (ref.kind === "product") {
-    facts = [ref.variant ? `Variant ${esc(ref.variant)}` : "", ref.catalog ? `Catalogue ${esc(ref.catalog)}` : ""]
+    facts = [ref.variant ? esc(t("pnl.feel.ref.variant", { variant: ref.variant })) : "", ref.catalog ? esc(t("pnl.feel.ref.catalogue", { catalog: ref.catalog })) : ""]
       .filter(Boolean).join(" · ");
   }
   const note = ref.kind === "user" || ref.kind === "group"
-    ? "The name as the account reads now — resolved for this screen and never stored in the instance (ADR-0314)."
+    ? t("pnl.feel.ref.noteAccount")
     : ref.kind === "process"
-      ? "The process as deployed now, not necessarily the version this instance started."
-      : "The product as its catalogue reads now.";
-  const go = ref.href ? `<p class="ref-pop-go">Click to open it.</p>` : "";
+      ? t("pnl.feel.ref.noteProcess")
+      : t("pnl.feel.ref.noteProduct");
+  const go = ref.href ? `<p class="ref-pop-go">${esc(t("pnl.feel.ref.open"))}</p>` : "";
   return `<div class="pop-title">${esc(ref.name)}</div>
     <div class="ref-pop-kind">${kind}${facts ? ` · ${facts}` : ""}</div>${id}
-    <p class="ref-pop-note">${note}</p>${go}`;
+    <p class="ref-pop-note">${esc(note)}</p>${go}`;
 }

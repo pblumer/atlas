@@ -354,6 +354,7 @@ func (s *Server) buildMetrics() error {
 		return err
 	}
 	s.proc.SetMetrics(em)
+	s.engineStats = em
 	// The single writer's own latency. Attached here rather than when the loop is built
 	// because the registry does not exist yet at that point — and safely, because
 	// SetMetrics stores atomically: the loop is already running and already being
@@ -363,6 +364,7 @@ func (s *Server) buildMetrics() error {
 		return err
 	}
 	s.runLoop.SetMetrics(rm)
+	s.runLoopStats = rm
 	// What the FEEL assistant's requests came to (feelgeneration.go): design-time
 	// counters, pushed per request, nowhere near the engine.
 	fm := newFeelAssistantMetrics()

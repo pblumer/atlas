@@ -79,7 +79,11 @@ export function formatObserved(seconds) {
 
 // scopeText names which landscape this is, in the reader's terms. "The whole
 // landscape" is a claim, so it is only made when nothing narrowed the picture.
-export function scopeText(scope = {}) {
+//
+// `whole` is what the picture is a picture of: the starmap, or on the release lens
+// (ADR-0495 §4) the release — "the whole starmap" over a release would be the stamp
+// calling a record the live estate.
+export function scopeText(scope = {}, whole = "starmap") {
   // Element types switched off narrow the picture as surely as a term does, and
   // they leave no trace on the canvas — no word in a box, no breadcrumb, just fewer
   // things. So the clause composes with whichever of the three scopes applies
@@ -110,7 +114,7 @@ export function scopeText(scope = {}) {
       ? ` (via ${scope.via.join(" › ")})` : "";
     return `drilled into ${scope.name || "one node"}${via}, within ${hops} hop(s)${without}`;
   }
-  return gone.length ? `the starmap${without}` : "the whole starmap";
+  return gone.length ? `the ${whole}${without}` : `the whole ${whole}`;
 }
 
 // listOf joins names the way a sentence does. Two joined by "and" rather than by a
@@ -122,10 +126,13 @@ function listOf(names) {
 
 // exportName is the file's name. Sortable date first, because the second thing
 // anybody does with these is put two of them side by side.
-export function exportName(extension, at = new Date()) {
+//
+// `stem` says what the picture is of — the starmap, or one release on the lens — so
+// a folder holding both is not a folder of files that all claim to be the estate.
+export function exportName(extension, at = new Date(), stem = "starmap") {
   const stamp = `${at.getFullYear()}${pad2(at.getMonth() + 1)}${pad2(at.getDate())}-` +
     `${pad2(at.getHours())}${pad2(at.getMinutes())}`;
-  return `atlas-starmap-${stamp}.${extension}`;
+  return `atlas-${stem}-${stamp}.${extension}`;
 }
 
 // HEAT_STAMPS is what each heat weighting (ADR-0211 §8) says about itself in a file.
@@ -186,11 +193,25 @@ const HEAT_STAMPS = {
 // taken in. A reader who was not there has no other source for any of it.
 export function stampLines(meta = {}) {
   const notation = meta.notation?.projection ? ` · ${meta.notation.short}` : "";
-  const lines = [{ weight: "bold", text: `Atlas starmap${notation} — ${scopeText(meta.scope)}` }];
+  // A release on the lens (ADR-0495 §4) is named as the release, never as the
+  // starmap, and dated by when it was recorded — with the live state's moment beside
+  // it only when the overlay was on. "Observed" alone would claim the whole picture
+  // was looked at then, when its structure is however old the release is.
+  const release = meta.release;
+  const lines = [{
+    weight: "bold",
+    text: release
+      ? `Release v${release.version} of ${release.application}${notation} — ${scopeText(meta.scope, "release")}`
+      : `Atlas starmap${notation} — ${scopeText(meta.scope)}`,
+  }];
 
   const drawn = meta.drawn || {};
   const facts = [
-    `Observed ${formatObserved(meta.observedAt)}`,
+    release
+      ? (release.live
+        ? `Recorded ${formatObserved(release.takenAt)}, live state ${formatObserved(meta.observedAt)}`
+        : `As recorded ${formatObserved(release.takenAt)}`)
+      : `Observed ${formatObserved(meta.observedAt)}`,
     `Source ${meta.source || "unknown instance"}`,
   ];
   // Counted against the whole only when the whole is a different number: "7 of 7"

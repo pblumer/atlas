@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 // collapsed), so the field is on screen.
 async function openWizard(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Wizard" }).click();
+  await page.locator('.pgroup[data-group*="Wizard" i] > .pgroup-head').click();
   await expect(page.locator("#f-wizard")).toBeVisible();
 }
 
@@ -69,7 +69,7 @@ test("a value atlas does not know is shown and kept", async ({ page }) => {
 
 test("an event subprocess is not offered the mark", async ({ page }) => {
   await page.evaluate(() => window.__select("Sub_event"));
-  await expect(page.locator(".pgroup-head", { hasText: "Wizard" })).toHaveCount(0);
+  await expect(page.locator('.pgroup[data-group*="Wizard" i] > .pgroup-head')).toHaveCount(0);
   await expect(page.locator("#f-wizard")).toHaveCount(0);
   expect(page.__errors).toEqual([]);
 });

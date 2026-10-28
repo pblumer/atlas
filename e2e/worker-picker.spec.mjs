@@ -22,7 +22,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.__mount());
   await page.locator('[data-tab="implement"]').click();
   await page.evaluate(() => window.__select("Activity_rest"));
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
 });
 
 const rows = (page) => page.locator(".stkind-row");
@@ -48,7 +48,7 @@ test("a kind is one line: the description is the row's tooltip", async ({ page }
 
 test("choosing another kind moves the spelled-out description with it", async ({ page }) => {
   await page.locator(".stkind-row[data-kind='mail']").click();
-  await page.locator(".pgroup-head", { hasText: "Worker type" }).click();
+  await page.locator('.pgroup[data-group*="Worker type" i] > .pgroup-head').click();
   await expect(page.locator(".stkind-row-on")).toHaveAttribute("data-kind", "mail");
   await expect(page.locator(".stkind-desc")).toHaveCount(1);
   await expect(page.locator(".stkind-row[data-kind='rest'] .stkind-desc")).toHaveCount(0);
@@ -61,7 +61,7 @@ test("the badge sits beside the name, not inside it", async ({ page }) => {
   // length. Inside the name it would wrap with the text and lose that column.
   const row = page.locator(".stkind-row[data-kind='mail']");
   await expect(row.locator(".stkind-name .stkind-where")).toHaveCount(0);
-  await expect(row.locator("> .stkind-where")).toHaveText("on a worker");
+  await expect(row.locator("> .stkind-where")).toHaveText("auf einem Worker");
   // And it stays on one line: "on a worker" broken in two would cost the row the line it
   // just saved.
   const lines = await row.locator(".stkind-where").evaluate((b) => b.getClientRects().length);

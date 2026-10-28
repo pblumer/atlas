@@ -13,19 +13,21 @@
 // the inline object or propertiesVariable, and "body" is text or blocks. "oneOf" marks
 // the operation that needs at least one of the values it takes.
 //
+import { t } from "./i18n.js";
+
 // One row per line, in the shape the test reads; keep it that way.
 export const WIKI_OPERATIONS = [
-  { v: "create-item", l: "Create item", area: "item", needs: ["space", "itemType", "title"], takes: ["parent", "properties", "matchField", "body"], oneOf: false, result: "object", max: [0, 0] },
-  { v: "get-item", l: "Read item", area: "item", needs: ["item"], takes: [], oneOf: false, result: "object", max: [0, 0] },
-  { v: "update-item", l: "Update item (title, properties, labels)", area: "item", needs: ["item"], takes: ["title", "properties", "labels"], oneOf: true, result: "object", max: [0, 0] },
-  { v: "transition-item", l: "Move through workflow", area: "item", needs: ["item", "transition"], takes: [], oneOf: false, result: "object", max: [0, 0] },
-  { v: "add-comment", l: "Add comment", area: "item", needs: ["item", "comment"], takes: [], oneOf: false, result: "object", max: [0, 0] },
-  { v: "query-items", l: "Query items", area: "item", needs: ["query"], takes: [], oneOf: false, result: "array", max: [100, 1000] },
-  { v: "read-page", l: "Read page as Markdown", area: "page", needs: ["item"], takes: [], oneOf: false, result: "string", max: [0, 0] },
-  { v: "append-to-page", l: "Append to page", area: "page", needs: ["item", "body"], takes: [], oneOf: false, result: "object", max: [0, 0] },
+  { v: "create-item", l: "pnl.ops.wiki.op.create-item", area: "item", needs: ["space", "itemType", "title"], takes: ["parent", "properties", "matchField", "body"], oneOf: false, result: "object", max: [0, 0] },
+  { v: "get-item", l: "pnl.ops.wiki.op.get-item", area: "item", needs: ["item"], takes: [], oneOf: false, result: "object", max: [0, 0] },
+  { v: "update-item", l: "pnl.ops.wiki.op.update-item", area: "item", needs: ["item"], takes: ["title", "properties", "labels"], oneOf: true, result: "object", max: [0, 0] },
+  { v: "transition-item", l: "pnl.ops.wiki.op.transition-item", area: "item", needs: ["item", "transition"], takes: [], oneOf: false, result: "object", max: [0, 0] },
+  { v: "add-comment", l: "pnl.ops.wiki.op.add-comment", area: "item", needs: ["item", "comment"], takes: [], oneOf: false, result: "object", max: [0, 0] },
+  { v: "query-items", l: "pnl.ops.wiki.op.query-items", area: "item", needs: ["query"], takes: [], oneOf: false, result: "array", max: [100, 1000] },
+  { v: "read-page", l: "pnl.ops.wiki.op.read-page", area: "page", needs: ["item"], takes: [], oneOf: false, result: "string", max: [0, 0] },
+  { v: "append-to-page", l: "pnl.ops.wiki.op.append-to-page", area: "page", needs: ["item", "body"], takes: [], oneOf: false, result: "object", max: [0, 0] },
 ];
 
-const AREAS = { item: "Item", page: "Page" };
+const AREAS = { item: "pnl.ops.wiki.area.item", page: "pnl.ops.wiki.area.page" };
 
 /** The row for an operation, or undefined. */
 export function wikiOperation(name) {
@@ -34,7 +36,7 @@ export function wikiOperation(name) {
 
 /** The operation dropdown's options, the area in front of each label. */
 export function wikiOperationOptions() {
-  return WIKI_OPERATIONS.map((o) => ({ v: o.v, l: `${AREAS[o.area]}: ${o.l}` }));
+  return WIKI_OPERATIONS.map((o) => ({ v: o.v, get l() { return `${t(AREAS[o.area])}: ${t(o.l)}`; } }));
 }
 
 /** Whether the operation needs or takes a value — what decides whether its field shows. */
@@ -58,28 +60,29 @@ export function wikiMaxPlaceholder(name) {
 export function wikiMaxHint(name) {
   const op = wikiOperation(name);
   if (!op || !op.max[1]) return "";
-  return `How many items the result may hold, at most ${op.max[1]}. More matches fail the task instead of answering a short list, because a short list is a wrong answer a process would act on. Empty uses ${op.max[0]}.`;
+  return t("pnl.ops.wiki.maxHint", { max: op.max[1], default: op.max[0] });
 }
 
-const ITEM_SHAPE = "id, key, type, space, parent, title, state, properties, labels and version";
+const ITEM_SHAPE = "pnl.ops.wiki.itemShape";
 
 /** What the result variable receives, for its hint. */
 export function wikiResultShape(name) {
+  const shape = t(ITEM_SHAPE);
   switch (name) {
     case "get-item":
-      return `The item as one object: ${ITEM_SHAPE}, and its body as the wiki's blocks. Keep the id to address the item later — a key changes when the item moves to another space, the id never does.`;
+      return t("pnl.ops.wiki.result.get", { shape });
     case "create-item":
-      return `The item as the wiki holds it afterwards: ${ITEM_SHAPE}, without its body. Keep the id to address the item later. With a matching field, an existing item is answered instead of a second one. Leave empty to discard it.`;
+      return t("pnl.ops.wiki.result.create", { shape });
     case "update-item":
     case "transition-item":
     case "append-to-page":
-      return `The item as the wiki holds it afterwards: ${ITEM_SHAPE}, without its body. Leave empty to discard it.`;
+      return t("pnl.ops.wiki.result.saved", { shape });
     case "add-comment":
-      return "The comment: id, author (the Worker's account), created and text. Leave empty to discard it.";
+      return t("pnl.ops.wiki.result.comment");
     case "query-items":
-      return `A list of items, each ${ITEM_SHAPE}, without their bodies; empty when nothing matched. FEEL lists are 1-based, so the first is =aufgaben[1].`;
+      return t("pnl.ops.wiki.result.query", { shape });
     case "read-page":
-      return "The page as Markdown text — title, properties and body, as the wiki exports it — to put into a mail or hand to an agent.";
+      return t("pnl.ops.wiki.result.page");
   }
   return "";
 }

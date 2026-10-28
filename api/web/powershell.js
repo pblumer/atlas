@@ -9,6 +9,8 @@
 // smaller "clike" module — enough colour and keyword/variable completion to feel
 // like code, without pretending to be a full parser.
 
+import { t } from "./i18n.js";
+
 // ---------- shared helpers ----------
 
 // rankByPrefix scores items the way the FEEL editor does: exact match beats a
@@ -54,33 +56,33 @@ export const PS_KEYWORDS = [
 // PS_OPERATORS are the dashed operators, each with a one-line doc for the tooltip
 // and the completion detail. These are what a `-` prefix completes to.
 export const PS_OPERATORS = [
-  { name: "-eq", doc: "Equal to." },
-  { name: "-ne", doc: "Not equal to." },
-  { name: "-gt", doc: "Greater than." },
-  { name: "-ge", doc: "Greater than or equal." },
-  { name: "-lt", doc: "Less than." },
-  { name: "-le", doc: "Less than or equal." },
-  { name: "-like", doc: "Wildcard match." },
-  { name: "-notlike", doc: "Wildcard non-match." },
-  { name: "-match", doc: "Regex match (sets $Matches)." },
-  { name: "-notmatch", doc: "Regex non-match." },
-  { name: "-replace", doc: "Regex replace." },
-  { name: "-split", doc: "Split a string into an array." },
-  { name: "-join", doc: "Join an array into a string." },
-  { name: "-contains", doc: "Collection contains a value." },
-  { name: "-notcontains", doc: "Collection lacks a value." },
-  { name: "-in", doc: "Value is in a collection." },
-  { name: "-notin", doc: "Value is not in a collection." },
-  { name: "-is", doc: "Is of a type." },
-  { name: "-isnot", doc: "Is not of a type." },
-  { name: "-as", doc: "Convert to a type (null on failure)." },
-  { name: "-and", doc: "Logical and." },
-  { name: "-or", doc: "Logical or." },
-  { name: "-not", doc: "Logical not." },
-  { name: "-xor", doc: "Logical exclusive or." },
-  { name: "-band", doc: "Bitwise and." },
-  { name: "-bor", doc: "Bitwise or." },
-  { name: "-f", doc: "Format operator (string format)." },
+  { name: "-eq", doc: "pnl.ops.ps.op.eq" },
+  { name: "-ne", doc: "pnl.ops.ps.op.ne" },
+  { name: "-gt", doc: "pnl.ops.ps.op.gt" },
+  { name: "-ge", doc: "pnl.ops.ps.op.ge" },
+  { name: "-lt", doc: "pnl.ops.ps.op.lt" },
+  { name: "-le", doc: "pnl.ops.ps.op.le" },
+  { name: "-like", doc: "pnl.ops.ps.op.like" },
+  { name: "-notlike", doc: "pnl.ops.ps.op.notlike" },
+  { name: "-match", doc: "pnl.ops.ps.op.match" },
+  { name: "-notmatch", doc: "pnl.ops.ps.op.notmatch" },
+  { name: "-replace", doc: "pnl.ops.ps.op.replace" },
+  { name: "-split", doc: "pnl.ops.ps.op.split" },
+  { name: "-join", doc: "pnl.ops.ps.op.join" },
+  { name: "-contains", doc: "pnl.ops.ps.op.contains" },
+  { name: "-notcontains", doc: "pnl.ops.ps.op.notcontains" },
+  { name: "-in", doc: "pnl.ops.ps.op.in" },
+  { name: "-notin", doc: "pnl.ops.ps.op.notin" },
+  { name: "-is", doc: "pnl.ops.ps.op.is" },
+  { name: "-isnot", doc: "pnl.ops.ps.op.isnot" },
+  { name: "-as", doc: "pnl.ops.ps.op.as" },
+  { name: "-and", doc: "pnl.ops.ps.op.and" },
+  { name: "-or", doc: "pnl.ops.ps.op.or" },
+  { name: "-not", doc: "pnl.ops.ps.op.not" },
+  { name: "-xor", doc: "pnl.ops.ps.op.xor" },
+  { name: "-band", doc: "pnl.ops.ps.op.band" },
+  { name: "-bor", doc: "pnl.ops.ps.op.bor" },
+  { name: "-f", doc: "pnl.ops.ps.op.f" },
 ];
 
 // PS_CMDLETS is a curated slice of common cmdlets, each with a call signature and
@@ -94,91 +96,91 @@ export const PS_OPERATORS = [
 // (7.4). The common parameters every cmdlet takes are in PS_COMMON_PARAMS.
 export const PS_CMDLETS = [
   // Output / streams
-  { name: "Write-Output", sig: "Write-Output <obj>", doc: "Emit to the output stream — this becomes the task result.",
+  { name: "Write-Output", sig: "Write-Output <obj>", doc: "pnl.ops.ps.cmdlet.write-output",
     params: ["InputObject psobject[]", "NoEnumerate"] },
-  { name: "Write-Host", sig: "Write-Host <msg>", doc: "Write to the host (not the output/result stream).",
+  { name: "Write-Host", sig: "Write-Host <msg>", doc: "pnl.ops.ps.cmdlet.write-host",
     params: ["Object object", "NoNewline", "Separator object", "ForegroundColor ConsoleColor", "BackgroundColor ConsoleColor"] },
-  { name: "Write-Error", sig: "Write-Error <msg>", doc: "Write to the error stream (stops when ErrorAction=Stop).",
+  { name: "Write-Error", sig: "Write-Error <msg>", doc: "pnl.ops.ps.cmdlet.write-error",
     params: ["Message string", "Exception Exception", "ErrorRecord ErrorRecord", "Category ErrorCategory", "ErrorId string", "TargetObject object", "RecommendedAction string"] },
-  { name: "Write-Warning", sig: "Write-Warning <msg>", doc: "Write to the warning stream.",
+  { name: "Write-Warning", sig: "Write-Warning <msg>", doc: "pnl.ops.ps.cmdlet.write-warning",
     params: ["Message string"] },
-  { name: "Write-Verbose", sig: "Write-Verbose <msg>", doc: "Write to the verbose stream.",
+  { name: "Write-Verbose", sig: "Write-Verbose <msg>", doc: "pnl.ops.ps.cmdlet.write-verbose",
     params: ["Message string"] },
-  { name: "Out-Null", sig: "... | Out-Null", doc: "Discard pipeline output.",
+  { name: "Out-Null", sig: "... | Out-Null", doc: "pnl.ops.ps.cmdlet.out-null",
     params: ["InputObject psobject"] },
   // JSON / REST
-  { name: "ConvertTo-Json", sig: "ConvertTo-Json <obj> [-Depth n] [-Compress]", doc: "Serialize an object to JSON.",
+  { name: "ConvertTo-Json", sig: "ConvertTo-Json <obj> [-Depth n] [-Compress]", doc: "pnl.ops.ps.cmdlet.convertto-json",
     params: ["InputObject object", "Depth int", "Compress", "AsArray", "EnumsAsStrings", "EscapeHandling StringEscapeHandling"] },
-  { name: "ConvertFrom-Json", sig: "ConvertFrom-Json <string> [-AsHashtable]", doc: "Parse JSON into objects.",
+  { name: "ConvertFrom-Json", sig: "ConvertFrom-Json <string> [-AsHashtable]", doc: "pnl.ops.ps.cmdlet.convertfrom-json",
     params: ["InputObject string", "AsHashtable", "Depth int", "NoEnumerate"] },
-  { name: "Invoke-RestMethod", sig: "Invoke-RestMethod -Uri <url> [-Method] [-Body]", doc: "Call a REST endpoint, parsed result.",
+  { name: "Invoke-RestMethod", sig: "Invoke-RestMethod -Uri <url> [-Method] [-Body]", doc: "pnl.ops.ps.cmdlet.invoke-restmethod",
     params: ["Uri uri", "Method WebRequestMethod", "Body object", "Headers IDictionary", "ContentType string", "Authentication WebAuthenticationType", "Token securestring", "Credential pscredential", "Form IDictionary", "OutFile string", "TimeoutSec int", "MaximumRetryCount int", "RetryIntervalSec int", "StatusCodeVariable string", "ResponseHeadersVariable string", "SkipCertificateCheck", "SkipHttpErrorCheck"] },
-  { name: "Invoke-WebRequest", sig: "Invoke-WebRequest -Uri <url>", doc: "HTTP request, full response object.",
+  { name: "Invoke-WebRequest", sig: "Invoke-WebRequest -Uri <url>", doc: "pnl.ops.ps.cmdlet.invoke-webrequest",
     params: ["Uri uri", "Method WebRequestMethod", "Body object", "Headers IDictionary", "ContentType string", "Authentication WebAuthenticationType", "Token securestring", "Credential pscredential", "Form IDictionary", "OutFile string", "TimeoutSec int", "MaximumRedirection int", "MaximumRetryCount int", "RetryIntervalSec int", "SkipCertificateCheck", "SkipHttpErrorCheck"] },
-  { name: "ConvertTo-SecureString", sig: "ConvertTo-SecureString <s> -AsPlainText -Force", doc: "Wrap a string as a SecureString.",
+  { name: "ConvertTo-SecureString", sig: "ConvertTo-SecureString <s> -AsPlainText -Force", doc: "pnl.ops.ps.cmdlet.convertto-securestring",
     params: ["String string", "AsPlainText", "Force", "Key byte[]", "SecureKey securestring"] },
   // Pipeline shaping
-  { name: "Where-Object", sig: "Where-Object { $_ ... }", doc: "Filter pipeline objects by a predicate.",
+  { name: "Where-Object", sig: "Where-Object { $_ ... }", doc: "pnl.ops.ps.cmdlet.where-object",
     params: ["FilterScript scriptblock", "Property string", "Value object", "EQ", "NE", "GT", "GE", "LT", "LE", "Like", "NotLike", "Match", "NotMatch", "Contains", "NotContains", "In", "NotIn", "Is", "IsNot", "Not", "InputObject psobject"] },
-  { name: "ForEach-Object", sig: "ForEach-Object { $_ ... }", doc: "Run a block for each pipeline object.",
+  { name: "ForEach-Object", sig: "ForEach-Object { $_ ... }", doc: "pnl.ops.ps.cmdlet.foreach-object",
     params: ["Process scriptblock[]", "Begin scriptblock", "End scriptblock", "MemberName string", "ArgumentList object[]", "Parallel scriptblock", "ThrottleLimit int", "TimeoutSeconds int", "InputObject psobject"] },
-  { name: "Select-Object", sig: "Select-Object <props> [-First n]", doc: "Pick properties / first N objects.",
+  { name: "Select-Object", sig: "Select-Object <props> [-First n]", doc: "pnl.ops.ps.cmdlet.select-object",
     params: ["Property object[]", "ExcludeProperty string[]", "ExpandProperty string", "First int", "Last int", "Skip int", "SkipLast int", "Unique", "Index int[]", "InputObject psobject"] },
-  { name: "Sort-Object", sig: "Sort-Object <prop> [-Descending]", doc: "Sort pipeline objects.",
+  { name: "Sort-Object", sig: "Sort-Object <prop> [-Descending]", doc: "pnl.ops.ps.cmdlet.sort-object",
     params: ["Property object[]", "Descending", "Unique", "Top int", "Bottom int", "Stable", "CaseSensitive", "Culture string", "InputObject psobject"] },
-  { name: "Group-Object", sig: "Group-Object <prop>", doc: "Group objects by a property.",
+  { name: "Group-Object", sig: "Group-Object <prop>", doc: "pnl.ops.ps.cmdlet.group-object",
     params: ["Property object[]", "NoElement", "AsHashTable", "AsString", "CaseSensitive", "Culture string", "InputObject psobject"] },
-  { name: "Measure-Object", sig: "Measure-Object <prop> -Sum -Average", doc: "Aggregate numbers/strings.",
+  { name: "Measure-Object", sig: "Measure-Object <prop> -Sum -Average", doc: "pnl.ops.ps.cmdlet.measure-object",
     params: ["Property object[]", "Sum", "Average", "Maximum", "Minimum", "StandardDeviation", "AllStats", "Line", "Word", "Character", "IgnoreWhiteSpace", "InputObject psobject"] },
-  { name: "Select-String", sig: "Select-String -Pattern <re>", doc: "Grep-style regex search.",
+  { name: "Select-String", sig: "Select-String -Pattern <re>", doc: "pnl.ops.ps.cmdlet.select-string",
     params: ["Pattern string[]", "Path string[]", "LiteralPath string[]", "InputObject psobject", "SimpleMatch", "CaseSensitive", "NotMatch", "AllMatches", "Context int[]", "List", "Quiet", "Raw", "Encoding Encoding", "Include string[]", "Exclude string[]"] },
-  { name: "Compare-Object", sig: "Compare-Object <ref> <diff>", doc: "Diff two collections.",
+  { name: "Compare-Object", sig: "Compare-Object <ref> <diff>", doc: "pnl.ops.ps.cmdlet.compare-object",
     params: ["ReferenceObject psobject[]", "DifferenceObject psobject[]", "Property object[]", "IncludeEqual", "ExcludeDifferent", "PassThru", "SyncWindow int", "CaseSensitive", "Culture string"] },
   // Objects / members
-  { name: "New-Object", sig: "New-Object <type> <args>", doc: "Construct a .NET object.",
+  { name: "New-Object", sig: "New-Object <type> <args>", doc: "pnl.ops.ps.cmdlet.new-object",
     params: ["TypeName string", "ArgumentList object[]", "Property IDictionary", "ComObject string", "Strict"] },
-  { name: "Get-Member", sig: "<obj> | Get-Member", doc: "Inspect an object's members.",
+  { name: "Get-Member", sig: "<obj> | Get-Member", doc: "pnl.ops.ps.cmdlet.get-member",
     params: ["Name string[]", "MemberType PSMemberTypes", "View PSMemberViewTypes", "Static", "Force", "InputObject psobject"] },
-  { name: "Add-Member", sig: "Add-Member -NotePropertyName <n> -NotePropertyValue <v>", doc: "Attach a property to an object.",
+  { name: "Add-Member", sig: "Add-Member -NotePropertyName <n> -NotePropertyValue <v>", doc: "pnl.ops.ps.cmdlet.add-member",
     params: ["NotePropertyName string", "NotePropertyValue object", "NotePropertyMembers IDictionary", "MemberType PSMemberTypes", "Name string", "Value object", "SecondValue object", "TypeName string", "Force", "PassThru", "InputObject psobject"] },
-  { name: "Set-Variable", sig: "Set-Variable -Name <n> -Value <v>", doc: "Set a variable by name.",
+  { name: "Set-Variable", sig: "Set-Variable -Name <n> -Value <v>", doc: "pnl.ops.ps.cmdlet.set-variable",
     params: ["Name string[]", "Value object", "Scope string", "Option ScopedItemOptions", "Description string", "Include string[]", "Exclude string[]", "Force", "PassThru", "WhatIf", "Confirm"] },
-  { name: "Get-Variable", sig: "Get-Variable <n>", doc: "Read a variable by name.",
+  { name: "Get-Variable", sig: "Get-Variable <n>", doc: "pnl.ops.ps.cmdlet.get-variable",
     params: ["Name string[]", "ValueOnly", "Scope string", "Include string[]", "Exclude string[]"] },
   // Files / paths
-  { name: "Get-ChildItem", sig: "Get-ChildItem <path>", doc: "List items in a location (alias: ls, dir).",
+  { name: "Get-ChildItem", sig: "Get-ChildItem <path>", doc: "pnl.ops.ps.cmdlet.get-childitem",
     params: ["Path string[]", "LiteralPath string[]", "Filter string", "Include string[]", "Exclude string[]", "Recurse", "Depth uint", "Name", "File", "Directory", "Hidden", "ReadOnly", "System", "Attributes FlagsExpression", "FollowSymlink", "Force"] },
-  { name: "Get-Content", sig: "Get-Content <path>", doc: "Read a file's contents.",
+  { name: "Get-Content", sig: "Get-Content <path>", doc: "pnl.ops.ps.cmdlet.get-content",
     params: ["Path string[]", "LiteralPath string[]", "Raw", "Encoding Encoding", "TotalCount long", "Tail int", "ReadCount long", "Delimiter string", "AsByteStream", "Wait", "Filter string", "Include string[]", "Exclude string[]", "Force"] },
-  { name: "Set-Content", sig: "Set-Content <path> <value>", doc: "Write a file's contents.",
+  { name: "Set-Content", sig: "Set-Content <path> <value>", doc: "pnl.ops.ps.cmdlet.set-content",
     params: ["Path string[]", "LiteralPath string[]", "Value object[]", "Encoding Encoding", "NoNewline", "AsByteStream", "Filter string", "Include string[]", "Exclude string[]", "Force", "PassThru", "WhatIf", "Confirm"] },
-  { name: "Test-Path", sig: "Test-Path <path>", doc: "True if a path exists.",
+  { name: "Test-Path", sig: "Test-Path <path>", doc: "pnl.ops.ps.cmdlet.test-path",
     params: ["Path string[]", "LiteralPath string[]", "PathType TestPathType", "IsValid", "Filter string", "Include string[]", "Exclude string[]"] },
-  { name: "Join-Path", sig: "Join-Path <a> <b>", doc: "Combine path segments.",
+  { name: "Join-Path", sig: "Join-Path <a> <b>", doc: "pnl.ops.ps.cmdlet.join-path",
     params: ["Path string[]", "ChildPath string", "AdditionalChildPath string[]", "Resolve"] },
-  { name: "Split-Path", sig: "Split-Path <path> [-Leaf|-Parent]", doc: "Split a path.",
+  { name: "Split-Path", sig: "Split-Path <path> [-Leaf|-Parent]", doc: "pnl.ops.ps.cmdlet.split-path",
     params: ["Path string[]", "LiteralPath string[]", "Parent", "Leaf", "LeafBase", "Extension", "Qualifier", "NoQualifier", "IsAbsolute", "Resolve"] },
   // Misc
-  { name: "Get-Date", sig: "Get-Date [-Format <f>]", doc: "The current date/time.",
+  { name: "Get-Date", sig: "Get-Date [-Format <f>]", doc: "pnl.ops.ps.cmdlet.get-date",
     params: ["Date datetime", "Format string", "UFormat string", "AsUTC", "UnixTimeSeconds long", "Year int", "Month int", "Day int", "Hour int", "Minute int", "Second int", "Millisecond int", "DisplayHint DisplayHintType"] },
-  { name: "Start-Sleep", sig: "Start-Sleep -Seconds <n>", doc: "Pause execution.",
+  { name: "Start-Sleep", sig: "Start-Sleep -Seconds <n>", doc: "pnl.ops.ps.cmdlet.start-sleep",
     params: ["Seconds double", "Milliseconds int", "Duration timespan"] },
-  { name: "Get-Random", sig: "Get-Random [-Minimum m -Maximum n]", doc: "A random number/element.",
+  { name: "Get-Random", sig: "Get-Random [-Minimum m -Maximum n]", doc: "pnl.ops.ps.cmdlet.get-random",
     params: ["Minimum object", "Maximum object", "Count int", "InputObject object[]", "SetSeed int"] },
-  { name: "Import-Module", sig: "Import-Module <name>", doc: "Load a module.",
+  { name: "Import-Module", sig: "Import-Module <name>", doc: "pnl.ops.ps.cmdlet.import-module",
     params: ["Name string[]", "MinimumVersion version", "RequiredVersion version", "MaximumVersion string", "Prefix string", "Function string[]", "Cmdlet string[]", "ArgumentList object[]", "Scope string", "Global", "Force", "PassThru", "DisableNameChecking"] },
-  { name: "Get-Command", sig: "Get-Command <name>", doc: "Discover commands.",
+  { name: "Get-Command", sig: "Get-Command <name>", doc: "pnl.ops.ps.cmdlet.get-command",
     params: ["Name string[]", "Verb string[]", "Noun string[]", "Module string[]", "CommandType CommandTypes", "ParameterName string[]", "TotalCount int", "ListImported", "Syntax", "All"] },
-  { name: "Get-Help", sig: "Get-Help <name>", doc: "Show help for a command.",
+  { name: "Get-Help", sig: "Get-Help <name>", doc: "pnl.ops.ps.cmdlet.get-help",
     params: ["Name string", "Full", "Detailed", "Examples", "Parameter string[]", "Online", "Category string[]"] },
-  { name: "Read-Host", sig: "Read-Host <prompt>", doc: "Read a line of input.",
+  { name: "Read-Host", sig: "Read-Host <prompt>", doc: "pnl.ops.ps.cmdlet.read-host",
     params: ["Prompt object", "AsSecureString", "MaskInput"] },
   // Microsoft.Graph (common in Atlas identity jobs)
-  { name: "Connect-MgGraph", sig: "Connect-MgGraph -TenantId <id> -ClientSecretCredential <cred>", doc: "Authenticate to Microsoft Graph.",
+  { name: "Connect-MgGraph", sig: "Connect-MgGraph -TenantId <id> -ClientSecretCredential <cred>", doc: "pnl.ops.ps.cmdlet.connect-mggraph",
     params: ["TenantId string", "ClientId string", "ClientSecretCredential pscredential", "CertificateThumbprint string", "CertificateName string", "Certificate X509Certificate2", "AccessToken securestring", "Scopes string[]", "Identity", "Environment string", "ContextScope ContextScope", "NoWelcome"] },
-  { name: "Get-MgUser", sig: "Get-MgUser -Filter <feel> -ConsistencyLevel eventual", doc: "Query users in Microsoft Graph.",
+  { name: "Get-MgUser", sig: "Get-MgUser -Filter <feel> -ConsistencyLevel eventual", doc: "pnl.ops.ps.cmdlet.get-mguser",
     params: ["UserId string", "Filter string", "Search string", "Property string[]", "ExpandProperty string[]", "Sort string[]", "Top int", "All", "PageSize int", "ConsistencyLevel string", "CountVariable string"] },
-  { name: "New-MgUser", sig: "New-MgUser -BodyParameter <hash>", doc: "Create a user in Microsoft Graph.",
+  { name: "New-MgUser", sig: "New-MgUser -BodyParameter <hash>", doc: "pnl.ops.ps.cmdlet.new-mguser",
     params: ["BodyParameter IMicrosoftGraphUser", "DisplayName string", "UserPrincipalName string", "MailNickname string", "AccountEnabled", "PasswordProfile IMicrosoftGraphPasswordProfile", "GivenName string", "Surname string", "Department string", "JobTitle string", "UsageLocation string"] },
 ];
 
@@ -190,6 +192,13 @@ export const PS_COMMON_PARAMS = [
   "ProgressAction ActionPreference", "OutVariable string", "OutBuffer int",
   "PipelineVariable string", "Verbose", "Debug",
 ];
+
+// A doc above is a catalogue key, resolved on every read, so the completion list, the
+// tooltip and the reference (dev-lang.js) follow a language switch.
+for (const entry of [...PS_OPERATORS, ...PS_CMDLETS]) {
+  const key = entry.doc;
+  Object.defineProperty(entry, "doc", { get: () => t(key), enumerable: true });
+}
 
 const PS_KEYWORD_SET = new Set(PS_KEYWORDS);
 const PS_OP_BY_NAME = new Map(PS_OPERATORS.map((o) => [o.name, o]));
@@ -394,7 +403,7 @@ function parameterItems(at, rest) {
   const add = (spec, tier) => {
     const [name, type] = spec.split(" ");
     if (at.used.has(name.toLowerCase())) return;
-    const detail = (type || "switch") + (tier ? " · common" : "");
+    const detail = (type || "switch") + (tier ? " · " + t("pnl.ops.ps.detail.common") : "");
     items.push({ label: "-" + name, kind: "parameter", insert: "-" + name, detail, tier });
   };
   for (const spec of (c && c.params) || []) add(spec, 0);
@@ -429,7 +438,7 @@ export const powershell = {
     if (p.mode === "env") {
       const rest = p.text.slice(5); // after "$env:"
       const items = envNamesIn(ctx.source).map((name) => ({
-        label: "$env:" + name, kind: "env", insert: "$env:" + name, detail: "environment",
+        label: "$env:" + name, kind: "env", insert: "$env:" + name, detail: t("pnl.ops.ps.detail.environment"),
       }));
       return rankByPrefix(items, rest, (it) => it.label.slice(5));
     }
@@ -437,7 +446,7 @@ export const powershell = {
       const rest = p.text.slice(1);
       const items = (ctx.variables || [])
         .filter(varName)
-        .map((v) => ({ label: "$" + varName(v), kind: "variable", insert: "$" + varName(v), detail: varDetail(v, "instance variable"), src: v }));
+        .map((v) => ({ label: "$" + varName(v), kind: "variable", insert: "$" + varName(v), detail: varDetail(v, t("pnl.ops.ps.detail.instanceVariable")), src: v }));
       return rankByPrefix(items, rest, (it) => it.label.slice(1));
     }
     if (p.mode === "op") {
@@ -451,7 +460,7 @@ export const powershell = {
     }
     const items = [
       ...PS_CMDLETS.map((c) => ({ label: c.name, kind: "cmdlet", insert: c.name, detail: c.sig, doc: c.doc })),
-      ...PS_KEYWORDS.map((k) => ({ label: k, kind: "keyword", insert: k, detail: "keyword" })),
+      ...PS_KEYWORDS.map((k) => ({ label: k, kind: "keyword", insert: k, detail: t("pnl.ops.ps.detail.keyword") })),
     ];
     return rankByPrefix(items, p.text, (it) => it.label);
   },
@@ -540,8 +549,8 @@ function clikeModule(kind) {
       const items = [
         ...(ctx.variables || [])
           .filter(varName)
-          .map((v) => ({ label: spell(varName(v)), kind: "variable", insert: spell(varName(v)), detail: varDetail(v, "instance variable"), src: v })),
-        ...keywords.map((k) => ({ label: k, kind: "keyword", insert: k, detail: "keyword" })),
+          .map((v) => ({ label: spell(varName(v)), kind: "variable", insert: spell(varName(v)), detail: varDetail(v, t("pnl.ops.ps.detail.instanceVariable")), src: v })),
+        ...keywords.map((k) => ({ label: k, kind: "keyword", insert: k, detail: t("pnl.ops.ps.detail.keyword") })),
       ];
       return rankByPrefix(items, prefix, (it) => it.label);
     },

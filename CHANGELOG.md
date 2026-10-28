@@ -35,6 +35,57 @@ _Changed_ / _Removed_ for each version.
   publishing waits until that product is refreshed, so no page's text appears under two
   products. A page that is another product's own page is still refused (ADR-0491,
   amended 2026-10-27).
+- **Import trusted public Blueprints from the Console.** An operator-pinned Ed25519 registry can be browsed from the application overview. A verified preview shows the application, catalogue and product identities, requirements, files and SHA-256 digest; explicit confirmation and an unchanged digest hand the package to the existing authorized application import workflow (ADR-0499). Registry provenance recording and a signed end-to-end demo remain BMP1 follow-ups.
+- **A wiki can show a release's architecture sketch.** A token of scope `diagrams`, which
+  wikiwikibangbang already holds to draw processes and decisions in its pages, now also
+  lists the releases with a sketch (`GET /api/v1/architectures`) and reads one
+  (`GET /api/v1/applications/{id}/releases/{version}/architecture.embed.svg`). The sketch
+  is read the same way whoever asks, because the wiki shows it to everybody who can open
+  the page: Workers keep their names and lose their endpoints and configuration, products
+  and instances are counted, another application is "another application", and the
+  owners of capabilities and value streams are withheld, even when an administrator
+  minted the token. A token sees the applications its reach names; one minted without a
+  reach lists none.
+- **A release opens in Panorama's starmap, with every layer it records and its live state laid over it.**
+  The architecture dialog's "Open in Panorama" draws one release with the starmap: its
+  processes; the messages and signals it receives and throws, and who in other
+  applications is at the other end; its workers, job types and the systems they reach;
+  the event feed; the roles, products, capabilities and value streams; and its data
+  objects and classes. Each kind can be shown or hidden by layer, and the starmap's
+  drill, impact paths and saved views work on it, with saved views kept per release. A
+  process opens its version in Operations, a capability or value stream its register. The
+  header says "Release vN of <application>, as recorded <time>", so the picture is never
+  taken for the live landscape. For an operator, the live overlay lays the current state
+  of the release's own process versions and workers over it: incidents, where work is
+  parked, and instance counts. Everyone else sees the release as recorded and is told the
+  overlay is for operators. The ArchiMate button downloads the whole release by layer.
+  Another application, an endpoint or a product the reader may not see stays withheld,
+  as in the sketch. `GET /api/v1/applications/{id}/releases/{version}/mesh` serves the
+  graph, with `?overlay=1` for the live state. Drift against today's registers is not
+  shown yet.
+- **An agent can tell whether, and where, the server is slow.** Two MCP tools for an
+  administrator's agent: `atlas_runtime_health` (`GET /api/v1/debug/runtime`) measures a
+  window of up to 20 seconds and answers with the run loop's wait and hold latencies, the
+  writer's throughput, queue and fsync and commit latencies, the scheduler latency and
+  runnable goroutines, the garbage collector's cycles, pauses and CPU share, the allocation
+  rate and the heap — the figures that were only in `/metrics` — with a note on how to read
+  them. `atlas_runtime_profile` (`GET /api/v1/debug/pprof/{profile}/summary`) takes a CPU,
+  heap, allocation or goroutine profile and answers with the top functions by their own
+  time and with their callees, or the largest groups of goroutines sharing a stack, instead
+  of a binary file; no argument values are included, and a CPU window is at most 20
+  seconds so the call finishes within the MCP client's timeout. Both are admin-only like
+  the profiles they read ([ADR-0502](docs/adr/0502-admin-profiling.md)).
+- **An administrator can profile the running server.** `GET /api/v1/debug/pprof/{profile}`
+  hands out what `go tool pprof` reads, from the server that is slow and without a restart
+  or a second port: `profile` records CPU samples over `?seconds=` (default 30, at most
+  120), `trace` an execution trace for `go tool trace` (default 5, at most 30), and
+  `heap`, `allocs`, `goroutine` and `threadcreate` come at once — as text with `?debug=1`,
+  every stack with `goroutine?debug=2`, the heap after a collection with `heap?gc=1`. One
+  CPU recording and one trace run at a time (409 while one does). The route is admin-only
+  at the boundary, every download is audited as `profile.downloaded`, and the command line
+  is not offered, since a flag can carry a secret. Atlas does not link `net/http/pprof`,
+  whose handlers would sit unauthenticated on the default mux, and a test keeps it that
+  way ([ADR-0502](docs/adr/0502-admin-profiling.md)).
 - **The architecture sketch shows who else is at the other end of a release's messages and signals.**
   A release now records the messages and signals its processes throw and the signals they
   catch, and, for each name, the processes of other applications on the installation at
@@ -188,6 +239,26 @@ _Changed_ / _Removed_ for each version.
   delete for good). Each section folds, folded on a first visit with a line saying what it
   holds, and the browser remembers which ones a maintainer keeps open. Within a section the
   controls come first and the explanation sits in a column beside them on a wide screen.
+- **Every topic of a Console page folds away, and the browser remembers it.** A card
+  headed by its title — the five on Console › Administration › Security, the mockup cards
+  on Console › Workers, and every other one on every page — gets the caret toggle the
+  Workers and Deployments sections already had, without the page asking for it. Folded,
+  a card keeps its heading row, its own buttons included; pressing one of those opens
+  the card first, because what it opens appears below the heading. The state is kept per
+  page and topic in the browser, open until somebody folds it, and a card a page redraws
+  keeps its state ([ADR-0505](docs/adr/0505-every-topic-folds.md)).
+- **The secret vault has a page of its own: Console › Administration › Secrets.** It was
+  the last card of the Workers page, which everybody may open while only an administrator
+  may use the vault, and which no longer holds all of the vault's readers: content
+  sources name vault secrets too. Each secret still says which workers use it and what
+  shape their value has to have. The handbook has linked `#/console/secrets` all along,
+  which used to land on the dashboard and now opens the page; the worker card's word for
+  the vault links to it.
+- **An application's Deployments tab folds its lists away.** The deployed definitions,
+  the deployment targets and the release history each fold under their heading, which
+  still shows how many entries the list holds, and the browser remembers each choice for
+  every application it opens. The summary of the published version and its instances
+  above them stays in view, and each list keeps its filter row and sorting.
 
 - **Console › Workers folds and filters both of its lists.** The Worker catalog and
   the configured workers each fold away under their heading, which still shows how many
@@ -231,7 +302,9 @@ _Changed_ / _Removed_ for each version.
   of every table, the buttons of the pick dialog, the import choices of a catalogue
   import, the Server constants section of Admin → Engine, and the mark on a definition
   whose decisions were frozen at deploy, also in the editors. Messages the server
-  composes stay in its English. `?lang=en` keeps the English pages.
+  composes stay in its English. `?lang=en` keeps the English pages, and there the menu
+  names the same things as in German: "Process diagram (BPMN)", "Decision diagram
+  (DMN)", "Upload decision model (.dmn)".
 - **The decision editor and the form editor speak German, down to the libraries they
   embed.** Their bars, hints, menus, dialogs, toasts, the test panel and its rule trace,
   the decision documentation and its PDF, the XML source dialog, the collaboration
@@ -250,8 +323,22 @@ _Changed_ / _Removed_ for each version.
   the chip that says which record is shown, the marks on the canvas, the Playground tab
   and the process documentation PDF read from the message catalogue. bpmn-js's palette,
   context pad and replace menu take their words from the same catalogue through
-  `lib-translate.js`. The properties panel follows area by area; messages the server
-  composes — the compiler's problems, a verdict's checks — stay in its English.
+  `lib-translate.js`. Messages the server composes — the compiler's problems, a
+  verdict's checks — stay in its English.
+- **The BPMN editor's properties panel speaks German too.** Every group, field, hint,
+  option and button of the details panel reads from the message catalogue: the process,
+  pool and collaboration settings, the events with their messages, timers, signals,
+  errors and escalations, the start variables and constants, the script, decision, form
+  and call activity wiring, the mappings and loops, and the Worker Type picker with each
+  Worker Type's operations, fields and hints. So do the modules the panel draws from: the
+  FEEL fields and variable references, the operation tables of the Exchange, Google
+  Contacts, CardDAV and wikiwikibangbang Worker Types, the Entra attribute mask, the PowerShell editor, the
+  Worker Type setup docs, the Developer View and the decision graph. The Worker Type tables
+  keep their English, because a text there is also data — a field's group is its section's
+  identity — and are translated where they are drawn, by `wt.` messages that a test holds
+  to the texts the tables still carry. A collapsible group keeps its English name as its
+  identity, so what an author folded stays folded in either language. Example values in
+  placeholders, product and protocol names, and what the server sends stay as they are.
 - **Connected accounts no longer tells people to run a command.** Where linking is not
   set up, a person is told so and that an administrator changes it; an administrator is
   sent to the Security page. The account menu offers *Connected accounts* only when the
@@ -278,6 +365,10 @@ _Changed_ / _Removed_ for each version.
   A stub an author names for the task itself still answers it. **Runs of a model with a
   business rule task now carry the decision's result where they carried none**, so a
   saved scenario's baseline shows the difference.
+- **Every declared start variable shows as a start variable in the Modeler.** The
+  process and pool panels handed each row its position in the list as the flag that marks
+  a constant, so from the second declared variable on, a row came with a source picker
+  and without its *required* box, and saving read a box that was not there.
 - **A picture of any size is taken, for a person and for a product.** Console →
   Organization and the catalogue's product editor passed the chosen file on unchanged, so
   a photograph straight off a phone was refused with "the picture exceeds the 524288 byte

@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
 // General start collapsed), so the Retries field is on screen.
 async function openRetries(page, id) {
   await page.evaluate((el) => window.__select(el), id);
-  await page.locator(".pgroup-head", { hasText: "Failure handling" }).click();
+  await page.locator('.pgroup[data-group*="Failure handling" i] > .pgroup-head').click();
 }
 
 // taskXML returns the exported XML of one task element.
@@ -69,7 +69,7 @@ test("a task carries its own retries attribute", async ({ page }) => {
 test("switching the implementation kind keeps the retry budget", async ({ page }) => {
   // The budget is a property of the task, not of the worker it happens to use.
   await page.evaluate((el) => window.__select(el), "Activity_worker");
-  await page.locator(".pgroup-head", { hasText: "Type" }).click(); // the kind picker
+  await page.locator('.pgroup[data-group*="Type" i] > .pgroup-head').click(); // the kind picker
   await page.locator(".stkind-row[data-kind='rest']").click();
   await openRetries(page, "Activity_worker");
 

@@ -1,6 +1,6 @@
 # Blueprint Registry v1: contract review fixtures
 
-**Status: accepted contract, implementation in progress.** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Not started**). Maintainer approval dated 2026-10-27. The material in this folder is a wire-contract draft, **not** an active atlas endpoint or installable package.
+**Status: accepted v1 contract; public Console integration landed in PR #1416 (BMP1 remains active).** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). Signed-index verification, bounded HTTPS fetching, archive inspection and authorized Console package import are implemented. A publicly hosted signed sample and persistent installation provenance are still missing.
 
 ## Publication layout
 
@@ -36,10 +36,47 @@ The signed index records `sha256:<64 lowercase hex>` of **the exact compressed a
 7. Key rotation requires an explicit operator trust update in v1 (out of band). Automatic trust-on-first-use and signer keys embedded in remotely fetched metadata are forbidden.
 8. Authenticated/private delivery and third-party payment settlement remain outside v1 (BMP3), not implied by the static public example.
 
+## Operator-pinned Console integration (BMP1)
+
+The first public Console source is deliberately **single-registry** and disabled
+until the server operator configures both environment variables before startup:
+
+```bash
+ATLAS_BLUEPRINT_REGISTRY_URL=https://your-registry.example/blueprints/index.json
+ATLAS_BLUEPRINT_REGISTRY_KEY=<base64-of-32-raw-Ed25519-public-key-bytes>
+```
+
+The signing key must be obtained **out of band**, never from the index URL or a
+user request. A missing pair disables the marketplace; an incomplete or invalid
+configuration prevents server startup. Only operator-controlled environment
+configuration is accepted; there is no user-facing add-URL form.
+
+In the Console's application overview, use **Create new → Browse Blueprint
+Marketplace…**. The browser calls the existing authenticated atlas API:
+`GET /api/v1/blueprints`, then `GET /api/v1/blueprints/{id}/releases/{version}/preview`.
+A preview downloads and rechecks the signed index, digest, atlas compatibility and
+the bounded tar.gz archive **off the engine run loop**, returning an application
+name, requirements and file names. Explicit approval requests the archive through
+`GET /api/v1/blueprints/{id}/releases/{version}/package` with the reviewed digest
+as an `If-Match` precondition. A changed digest returns HTTP 412.
+
+The browser gives the verified package bytes to **the existing application package
+import workflow** (ADR-0467), with its dry-run conflict decisions, user/team
+authorization and optional publish where catalogues require it. An unsigned or
+unconfigured registry cannot initiate any import. The registry HTTP routes
+require the `modeler` role, and the source/publish routes retain their existing
+authorization. This is design-time work, not a Worker task or an engine command.
+
+**Still open for BMP1 acceptance:** persist registry identity, signer fingerprint,
+Blueprint release/version/digest and application key in sidecar state with a
+restart/reload test; verify a real static signed free Blueprint end to end; and
+document failure/recovery outcomes. Browsing and importing alone are not
+provenance or a complete BMP1 milestone.
+
 ## Contract fixtures
 
 - [Valid index](examples/valid-index.json): structural positive case.
 - [Rejected traversal](examples/reject-path-traversal.json): invalid artifact path.
 - [Rejected digest](examples/reject-digest.json): invalid package digest.
 
-**Before code integration:** add a Go validator and deterministic tests for JSON schema + all cross-field requirements, Ed25519 verification (valid/invalid/wrong key), byte-exact digest, duplicate rejection, bound checks, and compatibility comparisons. A schema alone is not an install-time security boundary. The first network/client slice adds independent SSRF, redirect, archive and authentication tests. The schema does not contain prices, entitlements, purchase tokens or runtime licences.
+**As built:** BMP0 implements the signed-index verifier and deterministic negative tests. BMP1 implements the pinned HTTPS client with redirect/DNS/IP and size checks (#1411), safe bounded tar.gz inspection (#1415), and the Console/API listing, preview and verified download linked to the existing authorized import workflow (#1416). This is not yet a complete or provenance-backed Marketplace installation: a public signed demo, restart/recovery checks and durable source/catalogue IDs remain open. The v1 schema contains no prices, entitlements, purchase tokens or runtime licences. ADR-0506's catalogue-only and auto-safe extensions are Proposed, not implemented.

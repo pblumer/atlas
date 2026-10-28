@@ -237,6 +237,31 @@ func (s *Server) apiRoutes() []apiRoute {
 				"segmentsRemoved": tInteger(), "compactionError": tString(), "note": tString(),
 			}))}},
 
+		// What the server spends its time on and what it holds, as `go tool pprof` reads it
+		// (ADR-0502). Admin-only: a profile shows the server's insides,
+		// and a recording costs the server while it runs.
+		{"GET", "/api/v1/debug/pprof/{profile}", s.handlePprof, apiOp{
+			summary: "A runtime profile of this server for `go tool pprof`: `profile` records CPU samples over `?seconds=` (default 30, at most 120), `trace` an execution trace for `go tool trace` (default 5, at most 30); `heap`, `allocs`, `goroutine` and `threadcreate` are taken at once, `?debug=1` as text (`goroutine?debug=2`: every stack), `heap?gc=1` after a collection. One CPU profile and one trace at a time (409 while one runs); the command line is not offered. Audited as profile.downloaded (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
+			resp: &bodySpec{mediaType: "application/octet-stream", schema: tString(), desc: "A gzip-compressed pprof profile, an execution trace, or text with ?debug="}}},
+		// Whether, and where, the server is slow: the figures to read before a profile
+		// (ADR-0502).
+		{"GET", "/api/v1/debug/runtime", s.handleRuntimeHealth, apiOp{
+			summary: "How this server is doing over a window of `?seconds=` (default 5, at most 20; 0 answers at once, with distributions since the start): the run loop's turns per second and how long callers waited for the single writer and how long each turn held it; the writer's batches, commands and events per second, its queue and its fsync and commit latencies; the scheduler latency, the goroutines (runnable, running, waiting), the garbage collector's cycles, pauses and share of the CPU, the allocation rate and the heap. Latencies are count, mean, p50, p90, p99 and max in milliseconds, the percentiles bucket bounds. runLoop and writer are absent on a server without metrics (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
+			resp: jsonBody("Runtime health", schemaObj(map[string]any{
+				"version": tString(), "go": tString(), "uptimeSeconds": tInteger(), "cpus": tInteger(),
+				"gomaxprocs": tInteger(), "windowSeconds": tInteger(), "goroutines": tObject(),
+				"schedulerLatency": tObject(), "memory": tObject(), "gc": tObject(),
+				"runLoop": tObject(), "writer": tObject(), "note": tString(),
+			}, "go", "windowSeconds", "goroutines", "memory", "gc", "note"))}},
+		// The same profiles, read by the server and answered as a top-N list, for an agent
+		// without a profiler (ADR-0502).
+		{"GET", "/api/v1/debug/pprof/{profile}/summary", s.handlePprofSummary, apiOp{
+			summary: "A runtime profile of this server summarized for reading rather than for `go tool pprof`: `profile` records CPU time over `?seconds=` (default 10, at most 20) and lists the functions by their own time (flat) and with their callees (cum), in milliseconds and percent, with the cores used; `heap` lists live memory and `allocs` allocated memory the same way, in bytes (`gc=1` collects first); `goroutine` counts every goroutine and lists the largest groups with the same stack, leaf frame first. `?top=` bounds each list (default 20, at most 50). No argument values are included. One CPU profile at a time (409 while one runs). Audited as profile.downloaded (admin-only when auth is on) (ADR-0502)", tag: "System", role: RoleAdmin,
+			resp: jsonBody("Profile summary", schemaObj(map[string]any{
+				"profile": tString(), "unit": tString(), "seconds": tInteger(), "samples": tInteger(),
+				"cores": map[string]any{"type": "number"}, "total": map[string]any{"type": "number"}, "objects": tInteger(),
+				"top": tArray(), "cumulative": tArray(), "stacks": tArray(), "note": tString(),
+			}, "profile", "unit", "total", "note"))}},
 		{"GET", "/api/v1/storage", s.storage.HandleGet, apiOp{
 			summary: "The disk under the data directory: each file system the server writes to with its size, use and free space, the reserve below which the server refuses new writes (507) until space is back, the state that follows (ok, warn, frozen, halted after a failed write, unknown), what the WAL and the state store hold, and a forecast of when the reserve is reached, from a consumption rate smoothed over about six hours (admin-only when auth is on) (ADR-0481)", tag: "System", role: RoleAdmin,
 			resp: jsonBody("Storage status", schemaObj(map[string]any{
@@ -1654,6 +1679,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Prune a decision documentation version, taking its public link with it", tag: "Documentation", role: RoleModeler,
 			status: http.StatusNoContent}},
 
+		// The public Blueprint Marketplace is read-only here. Import remains behind
+		// the existing application source/plan/publish routes, not a new write API.
+		{"GET", "/api/v1/blueprints", s.handleListBlueprints, apiOp{
+			summary: "List releases from the operator-pinned, signed public Blueprint registry (ADR-0499); returns 503 if no registry is configured", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Trusted Blueprint index", tObject())}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/preview", s.handleBlueprintPreview, apiOp{
+			summary: "Download and inspect a signed Blueprint package in memory: content digest, application identity, catalogue IDs, offered products and home-catalogue ownership, requirements and paths; does not import or deploy", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Verified Blueprint preview", tObject())}},
+		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
+			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
+			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
+
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
 		// surface is /api/v1/applications; each route binds to the same handler as
@@ -1702,6 +1739,18 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture.xml", s.handleReleaseArchitectureXML, apiOp{
 			summary: "A release's architecture snapshot as an ArchiMate Open Exchange document (ADR-0471), for Archi and other architecture tools: the Atlas node, the release as an artifact realising the application component, the messages as application interfaces, the workers as application services and calls into other applications as their components. Generated, never authored, and it says so in its documentation. ?layers= as on the JSON route", tag: "Applications", role: roleAny,
 			resp: &bodySpec{mediaType: "application/xml", schema: tString(), desc: "The ArchiMate Model Exchange document"}}},
+		{"GET", "/api/v1/applications/{id}/releases/{version}/architecture.embed.svg", s.handleReleaseArchitectureEmbed, apiOp{
+			summary: "A release's architecture sketch for a page outside Atlas (ADR-0493, as amended): the SVG of the route above, read as every reader may see it whoever asks — a worker keeps its name and Worker Type and loses its endpoints and configuration, instances and catalogue products are counted, another application is \"another application\", feed endpoints are withheld, and so are the owners of capabilities and value streams. It is what a wiki that shows the sketch to everybody who can open its page reads, with a token of scope diagrams. ?layers= as on the architecture routes", tag: "Applications", role: roleAny,
+			resp: &bodySpec{mediaType: "image/svg+xml", schema: tString(), desc: "The architecture sketch, minimal for every reader"}}},
+		{"GET", "/api/v1/architectures", s.handleListArchitectures, apiOp{
+			summary: "The releases this caller may read an architecture sketch of, by application (ADR-0493, as amended): each application the caller may view with its releases that carry a snapshot, newest first, with the version, release id, when it was published and taken, and the layers it records — nothing about who published it. What a wiki offers when a sketch is inserted into a page", tag: "Applications", role: roleAny,
+			resp: jsonBody("Applications and their releases with a sketch", schemaObj(map[string]any{"applications": tArray()}, "applications"))}},
+		{"GET", "/api/v1/applications/{id}/releases/{version}/mesh", s.handleReleaseMesh, apiOp{
+			summary: "A release's architecture snapshot as Panorama's starmap graph, the release lens (ADR-0495 §4): the same nodes, edges, restricted count, observation time and status the landscape mesh answers, drawn from what the release recorded rather than from this server's resources now, plus a lens object naming the release, when its snapshot was taken and which layers it records. Besides the landscape's kinds it draws messages, signals, job types, the event feed, the systems workers reach, capabilities, value streams, roles, data objects and business objects, and edges for receiving, throwing, accessing, realising, assignment, serving and reaching. Redacted as the architecture routes are: another application this caller may not see is a restricted placeholder, and an endpoint they may not see is left out. ?overlay=1 lays the live state of the release's own process versions (incidents, parked sites, instance counts) and of its workers over it, for an operator, the latter only where they may see that worker's configuration, and dates the graph now instead of at the snapshot; any other caller is answered the graph as recorded with lens.overlayWithheld set. 404 names a release recorded before snapshots existed", tag: "Applications", role: roleAny,
+			resp: jsonBody("The release as a starmap graph", schemaObj(map[string]any{
+				"nodes": tArray(), "edges": tArray(), "restricted": tInteger(), "observedAt": tInteger(),
+				"status": tObject(), "lens": tObject(),
+			}, "nodes", "edges", "lens"))}},
 		{"GET", "/api/v1/applications/{id}/audit", s.handleListProjectAudit, apiOp{
 			summary: "An application's access-control history — shares, revokes, visibility flips, and ownership transfers, newest first; owner-only (ADR-0071)", tag: "Applications", role: RoleModeler, resp: jsonBody("Grant audit events", tArray())}},
 		{"GET", "/api/v1/applications/{id}/constants", s.handleGetApplicationConstants, apiOp{

@@ -2809,10 +2809,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
-/* Console › Workers: a folding heading with the count beside it, which is what a
-   folded section still says about what it holds. */
-.workers-sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.workers-sec-head h2 { margin: 0; }
+/* A folding heading with the count beside it, which is what a folded section still
+   says about what it holds (sectionHead in app.js): Console › Workers and an
+   application's Deployments tab. */
+.sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+/* Every card headed by an <h2> folds the same way (fold.js): folded, it keeps its
+   heading row, the title and the card's own actions, and nothing else. */
+.card[data-folded] > :not(.fold-head) { display: none !important; }
+.card[data-folded] > .fold-head,
+.card[data-folded] > .fold-head h2 { margin-bottom: 0; }
+.card.fold-flush[data-folded] > .fold-head { padding-bottom: 16px !important; }
+.sec-head h2 { margin: 0; }
+#pd-deployments .sec-head { margin: 22px 0 10px; }
+#pd-deployments .sec-head h2 { font-size: 15px; }
 
 /* ---------- Tasks (Outlook-style inbox, ADR-0028) ---------- */
 .tasks-mode main { max-width: none; }
@@ -3745,6 +3754,8 @@ tr[hidden] { display: none; }
 .modal-head h2 { margin: 0; font-size: 16px; }
 .modal-body { overflow-y: auto; overflow-x: hidden; padding: 4px 16px 14px; }
 .modal-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
+/* A button's label stays on one line; the note beside it is what gives way. */
+.modal-foot .btn { white-space: nowrap; }
 .modal-actions { display: flex; align-items: center; gap: 8px; }
 
 /* The catalogue page (catalog-admin.js pageSection): one <details> per step — products,
@@ -4959,6 +4970,12 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    that the row wraps rather than leaving the empty stub it used to become. */
 .mesh-head { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
 .mesh-head h1 { margin: 0; }
+/* The release lens's header (ADR-0495 §4): which release, and when it was recorded.
+   A line of its own above the controls, because it is a sentence — in the control row
+   it would take the search box's room — and because it is the one thing on the page
+   that must not be read past: a picture of a release mistaken for the live landscape
+   is the mistake it exists to prevent. */
+.mesh-lens-head h1 { margin: 0; }
 /* What is on screen, under the row that changes it. It used to sit in the head as
    the one item with no width of its own: flexbox gave every control the size it
    asked for and squeezed the sentence into a column one word wide. Right-aligned
@@ -4975,6 +4992,9 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
 /* The Live switch is a footnote on a line of footnotes, not a control in the header
    row: it changes nothing about the picture except whether it stays true. */
 .mesh-live { font-size: 13px; color: var(--muted); }
+/* Why a release's overlay switch cannot be turned on: the overlay is the operators'
+   (ADR-0495 §5). Beside the switch it explains, in the same footnote voice. */
+.mesh-overlay-note { font-size: 13px; }
 /* A picture the server would not re-read. Said in the danger ink rather than the
    muted grey the rest of the line is in, because "four minutes old" and "four minutes
    old and no longer being kept up" are different facts and only one of them is a
@@ -5194,6 +5214,26 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
    legend leads each row with its line style and two kinds sharing one would make that
    row stop being the distinction. */
 .mesh-edge-deploys { stroke-dasharray: 10 3 2 3; opacity: 0.85; }
+/* The release lens's seven (ADR-0495 §4), in the three patterns the rest already
+   speak, grouped by what the pattern already means:
+
+     receives, throws — solid. A name received sets a process going and a name thrown
+                        sets another going: the asynchronous halves of a call, so
+                        they take the call's line.
+     accesses, reaches — dashed. A process needing its data and a Worker needing the
+                         system it connects to are dependencies on something that is
+                         not itself work, which is what `uses` already draws.
+     realizes, assigned, serves — fine dots, faded. Structure: what realises a
+                         capability, who works a process, which stream a capability
+                         serves. Nothing fails along any of them as drawn, so they
+                         recede the way containment does.
+
+   No fifth pattern, for the reason above: the pattern says which group a line is in,
+   and the key's row says which line. */
+.mesh-edge-accesses, .mesh-edge-reaches { stroke-dasharray: 6 4; }
+.mesh-edge-realizes, .mesh-edge-assigned, .mesh-edge-serves {
+  stroke-dasharray: 1 3; opacity: 0.7; stroke-linecap: round;
+}
 /* A line a notation has named. The dash is the derived picture's free channel and
    ArchiMate's is spoken for — a dashed line with an open arrowhead is a Flow there,
    and a dotted one a Realization — so an ArchiMate line is solid and its two ends
@@ -5528,6 +5568,16 @@ button.mesh-crumb:focus-visible { outline: 2px solid var(--accent); outline-offs
   overflow-wrap: anywhere;
 }
 .mesh-kind input { margin: 0; flex: 0 0 auto; }
+/* On a release the boxes stand under the layer they belong to (ADR-0495 §4). The
+   layer's own box heads its group in the weight of a heading, and the kinds under it
+   are indented by the width of a box, so the column reads as five groups and each
+   kind's box sits under its band's. */
+.mesh-kind-layer { display: flex; flex-direction: column; gap: 2px; }
+.mesh-kind-layer + .mesh-kind-layer { margin-top: 6px; }
+.mesh-kind-layer-head { font-weight: 600; }
+.mesh-kind-layer > .mesh-kind:not(.mesh-kind-layer-head) { padding-left: 19px; }
+/* The bands a release did not record, under the ones it did. */
+.mesh-kinds-note { margin: 6px 0 0; font-size: 12px; }
 .mesh-depth input[type="number"]:disabled { color: var(--muted); background: var(--bg); }
 .mesh-depth-all {
   display: inline-flex; align-items: center; gap: 5px;

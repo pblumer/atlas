@@ -129,12 +129,14 @@ const (
 	apiScopeEvents = "events"
 
 	// apiScopeDiagrams reaches the deployed processes, a definition's model and the
-	// counts of its runtime overlay, all read-only (ADR-0493). It is what a system
+	// counts of its runtime overlay, all read-only (ADR-0493), and a release's
+	// architecture sketch in the view every reader gets alike. It is what a system
 	// that shows this server's processes elsewhere holds: a wiki that draws the newest
 	// version of a process in a page and, where its administrator allows it, the counts
-	// of where its instances are. A leak of it reads models and counts; it cannot
-	// deploy, start, move or redraw a process, nor read an instance, an incident's
-	// message, a variable or a person.
+	// of where its instances are, and the sketch of a release. A leak of it reads
+	// models, counts and sketches; it cannot deploy, start, move or redraw a process,
+	// nor read an instance, an incident's message, a variable, a Worker's configuration
+	// or a person.
 	//
 	// It carries its minter's roles, as status and landscape do: every route it
 	// reaches asks for none, so the roles cannot widen what the allowlist admits.
@@ -211,6 +213,12 @@ var apiScopeAllowed = map[string][]string{
 		"GET /api/v1/processes",
 		"GET /api/v1/processes/{key}/xml",
 		"GET /api/v1/processes/{key}/runtime/counts",
+		// A release's architecture sketch, in the view every reader gets alike, and
+		// the list to pick one from. Not the architecture routes themselves: they
+		// answer by who asks, and a page outside Atlas shows what it read to
+		// everybody (ADR-0493, as amended).
+		"GET /api/v1/architectures",
+		"GET /api/v1/applications/{id}/releases/{version}/architecture.embed.svg",
 	},
 	// One read. The feed is paged by a cursor its reader keeps, so there is nothing
 	// else a follower of it needs to ask.

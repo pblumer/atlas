@@ -36,65 +36,65 @@ export const FEEL_LITERALS = ["true", "false", "null"];
 // completions are ranked at query time.
 export const FEEL_BUILTINS = [
   // Conversion
-  { name: "string", sig: "string(from)", doc: "Convert a value to a string." },
-  { name: "number", sig: "number(from)", doc: "Parse a string into a number." },
-  { name: "date", sig: "date(from)", doc: "A date, e.g. date(\"2020-04-06\")." },
-  { name: "time", sig: "time(from)", doc: "A time value." },
-  { name: "date and time", sig: "date and time(from)", doc: "A date-time value." },
-  { name: "duration", sig: "duration(from)", doc: "A duration, e.g. duration(\"PT2H\")." },
+  { name: "string", sig: "string(from)", doc: "Convert a value to a string.", key: "pnl.feel.fn.string" },
+  { name: "number", sig: "number(from)", doc: "Parse a string into a number.", key: "pnl.feel.fn.number" },
+  { name: "date", sig: "date(from)", doc: "A date, e.g. date(\"2020-04-06\").", key: "pnl.feel.fn.date" },
+  { name: "time", sig: "time(from)", doc: "A time value.", key: "pnl.feel.fn.time" },
+  { name: "date and time", sig: "date and time(from)", doc: "A date-time value.", key: "pnl.feel.fn.dateAndTime" },
+  { name: "duration", sig: "duration(from)", doc: "A duration, e.g. duration(\"PT2H\").", key: "pnl.feel.fn.duration" },
   // Boolean / null
-  { name: "not", sig: "not(negand)", doc: "Logical negation of a boolean." },
-  { name: "is defined", sig: "is defined(value)", doc: "True unless the value is null / missing." },
-  { name: "get or else", sig: "get or else(value, default)", doc: "The value, or the default when it is null." },
+  { name: "not", sig: "not(negand)", doc: "Logical negation of a boolean.", key: "pnl.feel.fn.not" },
+  { name: "is defined", sig: "is defined(value)", doc: "True unless the value is null / missing.", key: "pnl.feel.fn.isDefined" },
+  { name: "get or else", sig: "get or else(value, default)", doc: "The value, or the default when it is null.", key: "pnl.feel.fn.getOrElse" },
   // String
-  { name: "substring", sig: "substring(string, start, length?)", doc: "Portion of a string (1-based)." },
-  { name: "string length", sig: "string length(string)", doc: "Number of characters." },
-  { name: "upper case", sig: "upper case(string)", doc: "Uppercase the string." },
-  { name: "lower case", sig: "lower case(string)", doc: "Lowercase the string." },
-  { name: "substring before", sig: "substring before(string, match)", doc: "Part before the first match." },
-  { name: "substring after", sig: "substring after(string, match)", doc: "Part after the first match." },
-  { name: "contains", sig: "contains(string, match)", doc: "True if the string contains match." },
-  { name: "starts with", sig: "starts with(string, match)", doc: "True if the string starts with match." },
-  { name: "ends with", sig: "ends with(string, match)", doc: "True if the string ends with match." },
-  { name: "matches", sig: "matches(input, pattern)", doc: "True if input matches the regex pattern." },
-  { name: "replace", sig: "replace(input, pattern, replacement)", doc: "Regex replace." },
-  { name: "split", sig: "split(string, delimiter)", doc: "Split into a list of strings." },
-  { name: "string join", sig: "string join(list, delimiter)", doc: "Join a list of strings." },
-  { name: "trim", sig: "trim(string)", doc: "Remove leading/trailing whitespace." },
+  { name: "substring", sig: "substring(string, start, length?)", doc: "Portion of a string (1-based).", key: "pnl.feel.fn.substring" },
+  { name: "string length", sig: "string length(string)", doc: "Number of characters.", key: "pnl.feel.fn.stringLength" },
+  { name: "upper case", sig: "upper case(string)", doc: "Uppercase the string.", key: "pnl.feel.fn.upperCase" },
+  { name: "lower case", sig: "lower case(string)", doc: "Lowercase the string.", key: "pnl.feel.fn.lowerCase" },
+  { name: "substring before", sig: "substring before(string, match)", doc: "Part before the first match.", key: "pnl.feel.fn.substringBefore" },
+  { name: "substring after", sig: "substring after(string, match)", doc: "Part after the first match.", key: "pnl.feel.fn.substringAfter" },
+  { name: "contains", sig: "contains(string, match)", doc: "True if the string contains match.", key: "pnl.feel.fn.contains" },
+  { name: "starts with", sig: "starts with(string, match)", doc: "True if the string starts with match.", key: "pnl.feel.fn.startsWith" },
+  { name: "ends with", sig: "ends with(string, match)", doc: "True if the string ends with match.", key: "pnl.feel.fn.endsWith" },
+  { name: "matches", sig: "matches(input, pattern)", doc: "True if input matches the regex pattern.", key: "pnl.feel.fn.matches" },
+  { name: "replace", sig: "replace(input, pattern, replacement)", doc: "Regex replace.", key: "pnl.feel.fn.replace" },
+  { name: "split", sig: "split(string, delimiter)", doc: "Split into a list of strings.", key: "pnl.feel.fn.split" },
+  { name: "string join", sig: "string join(list, delimiter)", doc: "Join a list of strings.", key: "pnl.feel.fn.stringJoin" },
+  { name: "trim", sig: "trim(string)", doc: "Remove leading/trailing whitespace.", key: "pnl.feel.fn.trim" },
   // List
-  { name: "list contains", sig: "list contains(list, element)", doc: "True if the list contains the element." },
-  { name: "count", sig: "count(list)", doc: "Number of elements." },
-  { name: "min", sig: "min(list)", doc: "Smallest element." },
-  { name: "max", sig: "max(list)", doc: "Largest element." },
-  { name: "sum", sig: "sum(list)", doc: "Sum of the numbers." },
-  { name: "mean", sig: "mean(list)", doc: "Arithmetic mean." },
-  { name: "median", sig: "median(list)", doc: "Median value." },
-  { name: "all", sig: "all(list)", doc: "True if every element is true." },
-  { name: "any", sig: "any(list)", doc: "True if any element is true." },
-  { name: "sublist", sig: "sublist(list, start, length?)", doc: "Slice of a list (1-based)." },
-  { name: "append", sig: "append(list, items...)", doc: "List with items added at the end." },
-  { name: "concatenate", sig: "concatenate(lists...)", doc: "Join several lists into one." },
-  { name: "distinct values", sig: "distinct values(list)", doc: "Duplicates removed." },
-  { name: "flatten", sig: "flatten(list)", doc: "Flatten nested lists." },
-  { name: "sort", sig: "sort(list, precedes)", doc: "Sort with a comparator function." },
-  { name: "index of", sig: "index of(list, match)", doc: "Positions of match in the list." },
+  { name: "list contains", sig: "list contains(list, element)", doc: "True if the list contains the element.", key: "pnl.feel.fn.listContains" },
+  { name: "count", sig: "count(list)", doc: "Number of elements.", key: "pnl.feel.fn.count" },
+  { name: "min", sig: "min(list)", doc: "Smallest element.", key: "pnl.feel.fn.min" },
+  { name: "max", sig: "max(list)", doc: "Largest element.", key: "pnl.feel.fn.max" },
+  { name: "sum", sig: "sum(list)", doc: "Sum of the numbers.", key: "pnl.feel.fn.sum" },
+  { name: "mean", sig: "mean(list)", doc: "Arithmetic mean.", key: "pnl.feel.fn.mean" },
+  { name: "median", sig: "median(list)", doc: "Median value.", key: "pnl.feel.fn.median" },
+  { name: "all", sig: "all(list)", doc: "True if every element is true.", key: "pnl.feel.fn.all" },
+  { name: "any", sig: "any(list)", doc: "True if any element is true.", key: "pnl.feel.fn.any" },
+  { name: "sublist", sig: "sublist(list, start, length?)", doc: "Slice of a list (1-based).", key: "pnl.feel.fn.sublist" },
+  { name: "append", sig: "append(list, items...)", doc: "List with items added at the end.", key: "pnl.feel.fn.append" },
+  { name: "concatenate", sig: "concatenate(lists...)", doc: "Join several lists into one.", key: "pnl.feel.fn.concatenate" },
+  { name: "distinct values", sig: "distinct values(list)", doc: "Duplicates removed.", key: "pnl.feel.fn.distinctValues" },
+  { name: "flatten", sig: "flatten(list)", doc: "Flatten nested lists.", key: "pnl.feel.fn.flatten" },
+  { name: "sort", sig: "sort(list, precedes)", doc: "Sort with a comparator function.", key: "pnl.feel.fn.sort" },
+  { name: "index of", sig: "index of(list, match)", doc: "Positions of match in the list.", key: "pnl.feel.fn.indexOf" },
   // Numeric
-  { name: "abs", sig: "abs(number)", doc: "Absolute value." },
-  { name: "ceiling", sig: "ceiling(number)", doc: "Round up to an integer." },
-  { name: "floor", sig: "floor(number)", doc: "Round down to an integer." },
-  { name: "round up", sig: "round up(number, scale)", doc: "Round away from zero." },
-  { name: "round down", sig: "round down(number, scale)", doc: "Round toward zero." },
-  { name: "modulo", sig: "modulo(dividend, divisor)", doc: "Remainder of division." },
-  { name: "sqrt", sig: "sqrt(number)", doc: "Square root." },
-  { name: "log", sig: "log(number)", doc: "Natural logarithm." },
-  { name: "exp", sig: "exp(number)", doc: "e raised to the number." },
-  { name: "even", sig: "even(number)", doc: "True if the number is even." },
-  { name: "odd", sig: "odd(number)", doc: "True if the number is odd." },
+  { name: "abs", sig: "abs(number)", doc: "Absolute value.", key: "pnl.feel.fn.abs" },
+  { name: "ceiling", sig: "ceiling(number)", doc: "Round up to an integer.", key: "pnl.feel.fn.ceiling" },
+  { name: "floor", sig: "floor(number)", doc: "Round down to an integer.", key: "pnl.feel.fn.floor" },
+  { name: "round up", sig: "round up(number, scale)", doc: "Round away from zero.", key: "pnl.feel.fn.roundUp" },
+  { name: "round down", sig: "round down(number, scale)", doc: "Round toward zero.", key: "pnl.feel.fn.roundDown" },
+  { name: "modulo", sig: "modulo(dividend, divisor)", doc: "Remainder of division.", key: "pnl.feel.fn.modulo" },
+  { name: "sqrt", sig: "sqrt(number)", doc: "Square root.", key: "pnl.feel.fn.sqrt" },
+  { name: "log", sig: "log(number)", doc: "Natural logarithm.", key: "pnl.feel.fn.log" },
+  { name: "exp", sig: "exp(number)", doc: "e raised to the number.", key: "pnl.feel.fn.exp" },
+  { name: "even", sig: "even(number)", doc: "True if the number is even.", key: "pnl.feel.fn.even" },
+  { name: "odd", sig: "odd(number)", doc: "True if the number is odd.", key: "pnl.feel.fn.odd" },
   // Temporal
-  { name: "now", sig: "now()", doc: "The current date and time." },
-  { name: "today", sig: "today()", doc: "The current date." },
-  { name: "day of week", sig: "day of week(date)", doc: "Weekday name of the date." },
-  { name: "month of year", sig: "month of year(date)", doc: "Month name of the date." },
+  { name: "now", sig: "now()", doc: "The current date and time.", key: "pnl.feel.fn.now" },
+  { name: "today", sig: "today()", doc: "The current date.", key: "pnl.feel.fn.today" },
+  { name: "day of week", sig: "day of week(date)", doc: "Weekday name of the date.", key: "pnl.feel.fn.dayOfWeek" },
+  { name: "month of year", sig: "month of year(date)", doc: "Month name of the date.", key: "pnl.feel.fn.monthOfYear" },
 ];
 
 const KEYWORD_SET = new Set(FEEL_KEYWORDS);
@@ -249,17 +249,17 @@ export function completionsFor(prefix, variables) {
     // A variable is either a bare name or { name, detail } where detail is its
     // origin label (start / script result / output mapping / task-local).
     const name = typeof v === "string" ? v : v.name;
-    const detail = typeof v === "string" ? "variable" : (v.detail || "variable");
+    const detail = typeof v === "string" ? t("pnl.feel.detail.variable") : (v.detail || t("pnl.feel.detail.variable"));
     if (name) items.push({ label: name, kind: "variable", insert: name, detail, src: v });
   }
   for (const b of FEEL_BUILTINS) {
-    items.push({ label: b.name, kind: "function", insert: b.name, detail: b.sig, doc: b.doc });
+    items.push({ label: b.name, kind: "function", insert: b.name, detail: b.sig, doc: t(b.key) });
   }
   for (const k of FEEL_KEYWORDS) {
-    items.push({ label: k, kind: "keyword", insert: k, detail: "keyword" });
+    items.push({ label: k, kind: "keyword", insert: k, detail: t("pnl.feel.detail.keyword") });
   }
   for (const l of FEEL_LITERALS) {
-    items.push({ label: l, kind: "literal", insert: l, detail: "literal" });
+    items.push({ label: l, kind: "literal", insert: l, detail: t("pnl.feel.detail.literal") });
   }
 
   const scored = [];
@@ -336,7 +336,7 @@ export const feel = {
   replaceStart(before, item) { return replaceStart(before, item.label); },
   tooltip(name) {
     const b = BUILTIN_BY_NAME.get(name);
-    return b ? { sig: b.sig, doc: b.doc } : null;
+    return b ? { sig: b.sig, doc: t(b.key) } : null;
   },
 };
 

@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => window.__select("Activity_mail"));
   // Property groups start collapsed (all but General), so open the one the message
   // fields live in before touching them.
-  await page.locator(".pgroup-head", { hasText: "Message" }).click();
+  await page.locator('.pgroup[data-group*="Message" i] > .pgroup-head').click();
 });
 
 // mailXML returns the exported XML of the mail task.
@@ -62,7 +62,7 @@ test("F2 opens the HTML body in the Developer View", async ({ page }) => {
 
   await expect(page.locator(".dev-modal")).toBeVisible();
   await expect(page.locator(".dev-badge")).toHaveText("HTML");
-  await expect(page.locator(".dev-title")).toHaveText("HTML body");
+  await expect(page.locator(".dev-title")).toHaveText("HTML-Text");
   // The markup language brings its own examples, and no FEEL function reference.
   await expect(page.locator(".dev-tab[data-tab='snips']")).toBeVisible();
   await expect(page.locator(".dev-tab[data-tab='fns']")).toBeHidden();

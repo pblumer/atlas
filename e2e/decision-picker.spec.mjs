@@ -23,7 +23,7 @@ test.beforeEach(async ({ page }) => {
 // picker lives in, then waits for the catalog fetch to have filled it.
 async function openPicker(page) {
   await page.evaluate(() => window.__select("Activity_rule"));
-  await page.locator(".pgroup-head", { hasText: "Called decision" }).click();
+  await page.locator('.pgroup[data-group*="Called decision" i] > .pgroup-head').click();
   await expect(page.locator("#f-decision-pick optgroup").first()).toBeAttached();
 }
 
@@ -43,8 +43,8 @@ test("the picker is grouped by decision file, this application's files first", a
   expect(got.map((g) => g.label)).toEqual([
     "Kreditfreigabe",
     "Tarif 2027",
-    "Alter — other application",
-    "freigabe — deployed only",
+    "Alter — andere Anwendung",
+    "freigabe — nur deployt",
   ]);
   expect(page.__errors).toEqual([]);
 });
@@ -57,10 +57,10 @@ test("a file offers its decision service first and its workings last", async ({ 
   // in: the published interface, then the decisions that are somebody's to call, then
   // the ones a service only evaluates on the way to its answer.
   expect(kredit.options).toEqual([
-    "Kreditfreigabe — decision service",
+    "Kreditfreigabe — Entscheidungsservice",
     "Bonität",
-    "Kreditentscheid — published by Kreditfreigabe",
-    "Tragbarkeit — internal to Kreditfreigabe — bypasses it",
+    "Kreditentscheid — veröffentlicht von Kreditfreigabe",
+    "Tragbarkeit — intern in Kreditfreigabe — umgeht den Dienst",
   ]);
 
   // The two halves of "made of" do not read the same, because they are not the same
@@ -69,8 +69,8 @@ test("a file offers its decision service first and its workings last", async ({ 
   // it has reached past the interface into an arrangement the service exists to be
   // free to change, and nothing later will ever mention that — it runs, and it
   // answers correctly.
-  expect(kredit.options[3]).toContain("bypasses it");
-  expect(kredit.options[2]).not.toContain("bypasses");
+  expect(kredit.options[3]).toContain("umgeht den Dienst");
+  expect(kredit.options[2]).not.toContain("umgeht");
 
   // Bonität is the service's *input* decision — the caller's boundary, outside the
   // service — so it carries no marker at all.
@@ -90,17 +90,17 @@ test("a decision that is in the model but not deployed says so", async ({ page }
   const got = await groups(page);
   const tarif = got.find((g) => g.label === "Tarif 2027");
 
-  expect(tarif.options).toEqual([ "praemie — not deployed" ]);
+  expect(tarif.options).toEqual([ "praemie — nicht deployt" ]);
 
   // Only that one. Every other entry here is runnable, and a marker on all of them is
   // a marker nobody reads.
-  const marked = got.flatMap((g) => g.options).filter((o) => o.includes("not deployed"));
-  expect(marked).toEqual([ "praemie — not deployed" ]);
+  const marked = got.flatMap((g) => g.options).filter((o) => o.includes("nicht deployt"));
+  expect(marked).toEqual([ "praemie — nicht deployt" ]);
 
   // The two notes stack rather than replace each other: a decision can belong to a
   // service *and* not be deployed, and an author needs both facts.
   const kredit = got.find((g) => g.label === "Kreditfreigabe");
-  expect(kredit.options).toContain("Kreditentscheid — published by Kreditfreigabe");
+  expect(kredit.options).toContain("Kreditentscheid — veröffentlicht von Kreditfreigabe");
   expect(page.__errors).toEqual([]);
 });
 
@@ -134,8 +134,8 @@ test("the task says where its input mapping and the decision's inputs disagree",
   // shut: a panel re-render keeps whichever groups were open, so an unconditional click
   // after one closes the group it was meant to open.
   const openInputs = async () => {
-    const head = page.locator(".pgroup-head", { hasText: "Decision inputs" });
-    const group = page.locator(".pgroup", { has: head });
+    const group = page.locator('.pgroup[data-group="Decision inputs"]');
+    const head = group.locator("> .pgroup-head");
     if (((await group.getAttribute("class")) || "").includes("collapsed")) await head.click();
   };
 
@@ -161,11 +161,11 @@ test("the task says where its input mapping and the decision's inputs disagree",
   // Both directions, because they are different mistakes: one input arrives empty, and
   // one row feeds a name the decision never reads.
   await expect(note).toBeVisible();
-  await expect(note).toContainText("The decision reads");
+  await expect(note).toContainText("Die Entscheidung liest");
   await expect(note).toContainText("betrag");
-  await expect(note).toContainText("no row feeds it");
+  await expect(note).toContainText("keine Zeile liefert diese Eingabe.");
   await expect(note).toContainText("betraege");
-  await expect(note).toContainText("is ignored");
+  await expect(note).toContainText("Sie wird ignoriert");
 
   // It follows the typing rather than the save: a row corrected and not yet committed
   // is exactly when it is useful.
@@ -176,7 +176,7 @@ test("the task says where its input mapping and the decision's inputs disagree",
   // fed: the two halves are independent.
   await firstTarget.fill("");
   await expect(note).toBeVisible();
-  await expect(note).toContainText("no row feeds it");
-  await expect(note).not.toContainText("is ignored");
+  await expect(note).toContainText("keine Zeile liefert diese Eingabe.");
+  await expect(note).not.toContainText("Sie wird ignoriert");
   expect(page.__errors).toEqual([]);
 });

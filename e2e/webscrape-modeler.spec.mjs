@@ -15,7 +15,7 @@ function taskXml(xml, taskId) {
 }
 
 async function openGroup(page, title) {
-  const group = page.locator(".pgroup", { has: page.locator(".pgroup-title", { hasText: title }) });
+  const group = page.locator(`.pgroup[data-group*="${title}" i]`);
   if (await group.count() === 0) return;
   if (await group.evaluate((el) => el.classList.contains("collapsed"))) {
     await group.locator(".pgroup-head").click();

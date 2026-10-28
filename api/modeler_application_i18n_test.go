@@ -19,7 +19,7 @@ import (
 func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	// A key ends in a letter or digit: a literal ending in a dot is the prefix of a
 	// family of ids the server sends ("share.role."), resolved one id at a time.
-	const key = `((?:create|application|artifact|dmnref|deployments|constants|import|share|appDelete|transfer|pick|table|home|choices|package|frozen)\.[A-Za-z0-9.]*[A-Za-z0-9])`
+	const key = `((?:create|application|artifact|dmnref|deployments|constants|import|share|appDelete|transfer|pick|table|home|choices|package|blueprint|frozen)\.[A-Za-z0-9.]*[A-Za-z0-9])`
 	lookups := regexp.MustCompile(`\b(?:t|tr)\("` + key + `"`)
 	plurals := regexp.MustCompile(`\b(?:plural|trPlural)\("` + key + `"`)
 	literals := regexp.MustCompile(`"` + key + `"`)
@@ -28,7 +28,7 @@ func TestEveryMessageTheApplicationPageAsksForExists(t *testing.T) {
 	for _, file := range []string{
 		"web/app.js", "web/deletedialog.js", "web/dmnref-impact.js",
 		"web/sourceneeds.js", "web/pickmodal.js", "web/table.js",
-		"web/importchoices.js", "web/packageimport.js", "web/frozen-decisions.js",
+		"web/importchoices.js", "web/packageimport.js", "web/blueprint-marketplace.js", "web/frozen-decisions.js",
 	} {
 		src, err := os.ReadFile(file)
 		if err != nil {

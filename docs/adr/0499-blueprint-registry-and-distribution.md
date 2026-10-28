@@ -1,7 +1,7 @@
 # ADR-0499: Open Blueprint registries for process applications
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** pblumer (maintainer; approval to implement on 2026-10-27)
 
@@ -71,9 +71,9 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 - **Negative:** new versioned metadata, trust/bootstrap, source precedence, provenance persistence and update UX; commercial operations have separate infrastructure and support costs.
 - **Follow-ups:** settle registry wire schema, signature/trust roots and key rotation, compatibility rules, provenance lifecycle, reliable rollback, licensing, and a separate ADR for multiple installations/remapping.
 
-## BMP0 registry v1 contract profile (under review)
+## BMP0 registry v1 contract profile (accepted)
 
-The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Not started** describes the runtime integration; the checked-in schema/fixtures are a contract, not a deployed registry, an installer, or authorization to execute untrusted downloaded code.
+The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Partial** reflects the merged offline schema/fixtures and signed-index verifier; it does not mean a registry endpoint, marketplace installer or authorization to execute untrusted downloaded code exists.
 
 **Decision: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
 
@@ -96,7 +96,11 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 ## As built (2026-10-27)
 
-The accepted registry v1 design currently has a JSON Schema, valid/invalid examples and schema-only tests in `docs/contracts/blueprint-registry/v1/`. **No signature verifier, registry client, production package fetch, persistent installation provenance or user-visible installer is implemented by this ADR acceptance.** BMP0 is in progress and must prove the accepted model through code/tests before the implementation status changes.
+**BMP0 complete:** PR #1402 accepted the signed registry v1 contract and PR #1405 implemented offline Ed25519 index and SHA-256 package verification, with negative and compatibility tests.
+
+**BMP1 partial:** PR #1411 merged an operator-pinned HTTPS client with bounded responses, no redirects and DNS/IP/SSRF protections. PR #1415 merged bounded tar.gz package inspection (manifest, paths, entry types, sizes and GZIP integrity). PR #1416 merged operator-controlled registry configuration and authenticated Console browse/preview/digest-conditional download, handing the verified bytes to the existing ADR-0467 authorization, dry-run/conflict and optional publish import flow. The full GitHub CI, including Windows and browser tests, passed for #1416.
+
+**Not yet delivered:** a publicly hosted, independently signed example registry with a real application and product catalogues, durable installed provenance (registry identity and signing key fingerprint, publisher, Blueprint version and package digest, application identity and catalogue IDs), and restart/repeated-import/partial-failure recovery tests. BMP1 remains active, not complete. PR #1420 verified the test-only application-plus-catalogue bundle (it does not replace a hosted registry). Draft PR #1423 extends the signed preview with catalogue/product identities, without changing the native installer. No engine run-loop, WAL or execution changes were required; auto-safe updates and standalone catalogue artifacts remain gated by Proposed ADR-0506.
 
 ## Links
 

@@ -30,7 +30,7 @@ test("F2 opens the focused field in the modal, with its language and title", asy
   await expect(page.locator(".dev-title")).toHaveText("Expression (FEEL)");
   // The modal edits a copy of the field's value.
   expect(await page.evaluate(() => document.querySelector(".dev-ta").value)).toBe("amount");
-  await expect(page.locator(".dev-foot .dev-pos")).toHaveText("Ln 1, Col 7");
+  await expect(page.locator(".dev-foot .dev-pos")).toHaveText("Zeile 1, Spalte 7");
 });
 
 test("F2 does nothing in a field that holds no code", async ({ page }) => {
@@ -47,7 +47,7 @@ test("F2 does nothing in a field that holds no code", async ({ page }) => {
 test("the variables pane groups by scope and inserts at the caret", async ({ page }) => {
   await openFeel(page);
   await expect(page.locator(".dev-pane-vars .dev-group h4")).toHaveText([
-    "Input", "Output", "Process scope", "Form fields", "Data objects",
+    "Eingabe", "Ausgabe", "Prozessebene", "Formularfelder", "Datenobjekte",
   ]);
 
   // Caret to the start, then insert the process variable: it lands there, not at the
@@ -210,7 +210,7 @@ test("variables carry the value they hold in a real instance", async ({ page }) 
   await openFeel(page);
 
   // The strip says where the values came from.
-  await expect(page.locator(".dev-sample-strip")).toContainText("instance 4711");
+  await expect(page.locator(".dev-sample-strip")).toContainText("Instanz 4711");
   await expect(page.locator(".dev-sample-strip")).toContainText("active");
 
   // A number, a string (quoted so an empty one is visible) and a flattened JSON.
@@ -267,7 +267,7 @@ test("the Test panel is prefilled from the instance, and can be refilled", async
   // What the author typed is never overwritten behind their back…
   await page.locator(".dev-run-vars").fill('{ "amount": 1 }');
   await page.locator(".dev-sample-reload").click();
-  await expect(page.locator(".dev-sample-strip")).toContainText("instance 4711");
+  await expect(page.locator(".dev-sample-strip")).toContainText("Instanz 4711");
   expect(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).toBe('{ "amount": 1 }');
   // …until they ask for it.
   await page.locator(".dev-run-fill").click();
@@ -284,7 +284,7 @@ test("From instance says what it did, also when the sample already holds those v
   // changes nothing in it. Silence here reads as a broken button; it must say so.
   await page.locator(".dev-run-fill").click();
   expect(await box()).toBe(prefilled);
-  await expect(page.locator(".dev-run-out")).toHaveText("The sample already holds the values of instance 4711.");
+  await expect(page.locator(".dev-run-out")).toHaveText("Das Beispiel enthält bereits die Werte von Instanz 4711.");
 
   // After an edit and a run, the click replaces the sample, names the instance, and
   // drops the result that belonged to the old sample.
@@ -293,7 +293,7 @@ test("From instance says what it did, also when the sample already holds those v
   await expect(page.locator(".dev-run-detail")).toBeVisible();
   await page.locator(".dev-run-fill").click();
   expect(await box()).toBe(prefilled);
-  await expect(page.locator(".dev-run-out")).toHaveText("Filled from instance 4711 · 3 variables.");
+  await expect(page.locator(".dev-run-out")).toHaveText("Aus Instanz 4711 gefüllt · 3 Variablen.");
   await expect(page.locator(".dev-run-detail")).toBeHidden();
 });
 
@@ -307,7 +307,7 @@ test("From instance is withdrawn once there is no instance to read", async ({ pa
   // replace the author's sample with an empty object.
   await page.evaluate(() => { window.__instances = []; });
   await page.locator(".dev-sample-reload").click();
-  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-sample-strip")).toContainText("Noch keine Instanz, aus der sich Werte lesen lassen");
   await expect(page.locator(".dev-run-fill")).toBeHidden();
   expect(await page.evaluate(() => document.querySelector(".dev-run-vars").value)).toBe('{ "amount": 1 }');
 });
@@ -315,7 +315,7 @@ test("From instance is withdrawn once there is no instance to read", async ({ pa
 test("a process that has never run says so instead of failing", async ({ page }) => {
   await page.evaluate(() => { window.__instances = []; });
   await openFeel(page);
-  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-sample-strip")).toContainText("Noch keine Instanz, aus der sich Werte lesen lassen");
   await expect(page.locator(".dev-pane-vars .dev-item-value")).toHaveCount(0);
   // Reload asks again — and this time an instance exists.
   await page.evaluate(() => {
@@ -360,7 +360,7 @@ test("an instance can be found by a search, and the sample follows it", async ({
   // The same syntax as the Operations search: here name=value.
   await page.locator(".dev-sample-search").fill("orderId=A-2025-0007");
   await page.locator(".dev-sample-search").press("Enter");
-  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches.");
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 Instanz passt.");
   // The picker offers the hits, each naming what it matched.
   await expect(page.locator(".dev-sample-pick option")).toHaveCount(0);
   await expect(page.locator(".dev-sample-strip")).toContainText("4088 · completed · v2 · orderId=A-2025-0007");
@@ -372,7 +372,7 @@ test("an instance can be found by a search, and the sample follows it", async ({
 
   // Reload keeps the search and the hit.
   await page.locator(".dev-sample-reload").click();
-  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches.");
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 Instanz passt.");
   expect(await page.evaluate(() => window.__sampleCalls.at(-1))).toEqual({ force: true, instanceKey: 4088, query: "orderId=A-2025-0007" });
 
   // Emptying the field goes back to the recent instances.
@@ -389,7 +389,7 @@ test("several hits are offered in the picker, and picking one keeps the search",
   await openFeel(page);
   await page.locator(".dev-sample-search").fill("region=EU");
   await page.locator(".dev-sample-search").press("Enter");
-  await expect(page.locator(".dev-sample-note")).toHaveText("2 instances match.");
+  await expect(page.locator(".dev-sample-note")).toHaveText("2 Instanzen passen.");
   await expect(page.locator(".dev-sample-pick option")).toHaveText([
     "4711 · active · v3 · region=EU", "4088 · completed · v2 · region=EU",
   ]);
@@ -405,13 +405,13 @@ test("a search that finds nothing, or fails, keeps the instance on screen", asyn
 
   await page.locator(".dev-sample-search").fill("orderId=nobody");
   await page.locator(".dev-sample-search").press("Enter");
-  await expect(page.locator(".dev-sample-note")).toHaveText("No instance of this process matches “orderId=nobody”.");
+  await expect(page.locator(".dev-sample-note")).toHaveText("Keine Instanz dieses Prozesses passt zu «orderId=nobody».");
   await expect(page.locator(".dev-sample-pick")).toHaveValue("4711");
   await expect(row("amount").locator(".dev-item-value")).toHaveText("= 1250.5");
 
   await page.evaluate(() => { window.__searchFail = "search instances: forbidden"; });
   await page.locator(".dev-sample-search").press("Enter");
-  await expect(page.locator(".dev-sample-note")).toHaveText("Search failed: search instances: forbidden");
+  await expect(page.locator(".dev-sample-note")).toHaveText("Suche fehlgeschlagen: search instances: forbidden");
   await expect(page.locator(".dev-sample-pick")).toHaveValue("4711");
 });
 
@@ -420,7 +420,7 @@ test("a search the server cut short says it shows the newest matches", async ({ 
   await openFeel(page);
   await page.locator(".dev-sample-search").fill("4088");
   await page.locator(".dev-sample-search").press("Enter");
-  await expect(page.locator(".dev-sample-note")).toHaveText("1 instance matches — more do, only the newest are shown. Narrow the search.");
+  await expect(page.locator(".dev-sample-note")).toHaveText("1 Instanz passt — es gibt mehr, gezeigt werden nur die neuesten. Grenze die Suche ein.");
 });
 
 test("the search field survives a re-render, and only shows with an instance to search", async ({ page }) => {
@@ -433,7 +433,7 @@ test("the search field survives a re-render, and only shows with an instance to 
   // A process that never ran has nothing to search.
   await page.evaluate(() => { window.__instances = []; });
   await page.locator(".dev-sample-reload").click();
-  await expect(page.locator(".dev-sample-strip")).toContainText("No instance to read values from yet");
+  await expect(page.locator(".dev-sample-strip")).toContainText("Noch keine Instanz, aus der sich Werte lesen lassen");
   await expect(page.locator(".dev-sample-search")).toBeHidden();
 });
 
@@ -729,7 +729,12 @@ test("the double-click reset restores every part of the layout", async ({ page }
   await page.mouse.up();
   expect((await geo()).w).toBeLessThan(defaults.geo.w - 100);
 
-  await page.locator(".dev-head").dblclick();
+  // On the header's free stretch between the title and the buttons, not its middle: in
+  // a shrunken modal a button can sit there (the German labels are wider), and a
+  // double-click on a button is not a reset.
+  const title = await page.locator(".dev-title").boundingBox();
+  const button = await page.locator(".dev-head button").first().boundingBox();
+  await page.mouse.dblclick((title.x + title.width + button.x) / 2, title.y + title.height / 2);
   expect(await geo()).toEqual(defaults.geo);
   expect(await sideWidth()).toBe(defaults.side);
 

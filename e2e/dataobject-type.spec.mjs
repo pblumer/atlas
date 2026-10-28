@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 // object and reaching its fields means opening "Data object" first.
 async function selectDataObject(page, id) {
   await page.evaluate((ref) => window.__select(ref), id);
-  const head = page.locator(".pgroup-head", { hasText: "Data object" });
+  const head = page.locator('.pgroup[data-group*="Data object" i] > .pgroup-head');
   await head.waitFor();
   if (!(await page.locator("#f-itemtype").isVisible())) await head.click();
   await page.locator("#f-itemtype").waitFor({ state: "visible" });
@@ -44,15 +44,15 @@ test("a type nothing models is marked, and is still allowed to stand", async ({ 
   // document must never quietly rewrite it, and the reason it is off the list rides
   // along, because that is the whole point of showing it.
   await expect(page.locator("#f-itemtype")).toHaveValue("Claim");
-  await expect(page.locator("#f-itemtype option[selected]")).toHaveText("Claim — not modelled yet");
+  await expect(page.locator("#f-itemtype option[selected]")).toHaveText("Claim — noch nicht modelliert");
   // Marked, because it is the gap the information model exists to close — and not
   // refused, because a diagram is routinely drawn before the vocabulary it names.
-  await expect(page.locator("#p-body")).toContainText("No class called");
-  await expect(page.locator("#p-body")).toContainText("a deploy is not refused for it");
+  await expect(page.locator("#p-body")).toContainText("keine Klasse namens");
+  await expect(page.locator("#p-body")).toContainText("ein Deploy wird deswegen nicht abgelehnt");
 
   // A modelled one carries no such note.
   await selectDataObject(page, "Ref_order");
-  await expect(page.locator("#p-body")).not.toContainText("No class called");
+  await expect(page.locator("#p-body")).not.toContainText("keine Klasse namens");
 });
 
 // What the field is for is the link between a data object and the class it is, and
@@ -65,7 +65,7 @@ test("the classes the application models are offered, with what tells them apart
   // The business key rides along, because it is the fact that tells two similarly
   // named classes apart and the thing somebody is trying to recall.
   const labels = await pick.locator("option").evaluateAll((els) => els.map((e) => e.textContent.trim()));
-  expect(labels).toEqual(["— none —", "Customer", "Order · key id", "Another class, not modelled yet…"]);
+  expect(labels).toEqual(["— keine —", "Customer", "Order · Schlüssel id", "Eine andere Klasse, noch nicht modelliert …"]);
   // Grouped by the model they live in, so a name says where it comes from.
   await expect(pick.locator("optgroup")).toHaveAttribute("label", "Sales data");
   // And the fixture's «enumeration» is not among them. An enumeration is machinery of
@@ -108,13 +108,13 @@ test("the class the type points at is shown, so it can be checked without leavin
 
 test("a type nothing models yet can be modelled from here", async ({ page }) => {
   await selectDataObject(page, "Ref_claim");
-  await expect(page.locator("#p-body")).toContainText("No class called");
+  await expect(page.locator("#p-body")).toContainText("keine Klasse namens");
   await expect(page.locator(".im-card")).toHaveCount(0);
 
   // The remedy used to be: leave the diagram, find the model, add the class, come back.
   await page.locator("#f-itemtype-create").click();
   await expect(page.locator(".im-card .im-card-name")).toHaveText("Claim");
-  await expect(page.locator("#p-body")).not.toContainText("No class called");
+  await expect(page.locator("#p-body")).not.toContainText("keine Klasse namens");
 
   // It was written to the model, as a business object with nothing invented for it:
   // the business key is the author's to choose, and guessing one would be worse than
@@ -148,7 +148,7 @@ test("setting the type lands in the exported XML, on the data object itself", as
   // object, and the compiler reads the type off the object.
   expect(xml).not.toMatch(/<bpmn:dataObjectReference[^>]*id="Ref_note"[^>]*itemSubjectRef=/);
   // And the panel re-read it, so the note about an unmodelled class is gone.
-  await expect(page.locator("#p-body")).not.toContainText("No class called");
+  await expect(page.locator("#p-body")).not.toContainText("keine Klasse namens");
   expect(page.__errors).toEqual([]);
 });
 
@@ -223,7 +223,7 @@ test("a hand-written shorthand type survives being opened and saved", async ({ p
 test("a class nothing models yet can still be named, from the list itself", async ({ page }) => {
   await selectDataObject(page, "Ref_note");
   await expect(page.locator("#f-itemtype-other")).toBeHidden();
-  await page.locator("#f-itemtype").selectOption({ label: "Another class, not modelled yet…" });
+  await page.locator("#f-itemtype").selectOption({ label: "Eine andere Klasse, noch nicht modelliert …" });
 
   const other = page.locator("#f-itemtype-other");
   await expect(other).toBeVisible();
@@ -233,7 +233,7 @@ test("a class nothing models yet can still be named, from the list itself", asyn
 
   // It lands where a picked class lands, and is marked the way a typed one always was.
   await expect(page.locator("#f-itemtype")).toHaveValue("Shipment");
-  await expect(page.locator("#p-body")).toContainText("No class called");
+  await expect(page.locator("#p-body")).toContainText("keine Klasse namens");
   const xml = await page.evaluate(() => window.__xml());
   expect(xml).toMatch(/<bpmn:dataObject[^>]*id="DO_note"[^>]*itemSubjectRef="ItemDefinition_Shipment"/);
   expect(page.__errors).toEqual([]);
@@ -241,7 +241,7 @@ test("a class nothing models yet can still be named, from the list itself", asyn
 
 test("reaching for the escape and changing your mind leaves the type alone", async ({ page }) => {
   await selectDataObject(page, "Ref_order");
-  await page.locator("#f-itemtype").selectOption({ label: "Another class, not modelled yet…" });
+  await page.locator("#f-itemtype").selectOption({ label: "Eine andere Klasse, noch nicht modelliert …" });
   await page.locator("#f-itemtype-other").dispatchEvent("change"); // blurred empty
   await expect(page.locator("#f-itemtype")).toHaveValue("Order");
   const xml = await page.evaluate(() => window.__xml());
@@ -260,10 +260,10 @@ test("the states a data object may be in are the ones its class declares", async
   // Where instances start and where they end are marked, because a list of names alone
   // does not say which of them a new object is.
   expect(labels).toEqual([
-    "— none —", "received · start", "approved", "shipped · final", "Another state, not declared yet…",
+    "— keine —", "received · Start", "approved", "shipped · Ende", "Ein anderer Zustand, noch nicht deklariert …",
   ]);
   // And the panel says where the list comes from, with the way to add to it.
-  await expect(page.locator("#p-body")).toContainText("declares in its lifecycle");
+  await expect(page.locator("#p-body")).toContainText("der Lebenszyklus von");
 });
 
 test("choosing a state lands on the reference, which is where BPMN keeps it", async ({ page }) => {
@@ -290,7 +290,7 @@ test("a class that declares no lifecycle leaves the state free text", async ({ p
 
 test("a state the class does not declare can be named, and the list says so", async ({ page }) => {
   await selectDataObject(page, "Ref_order");
-  await page.locator("#f-datastate").selectOption({ label: "Another state, not declared yet…" });
+  await page.locator("#f-datastate").selectOption({ label: "Ein anderer Zustand, noch nicht deklariert …" });
   const other = page.locator("#f-datastate-other");
   await expect(other).toBeVisible();
   await other.fill("archived");
@@ -298,7 +298,7 @@ test("a state the class does not declare can be named, and the list says so", as
 
   await expect(page.locator("#f-datastate")).toHaveValue("archived");
   const labels = await page.locator("#f-datastate option").evaluateAll((els) => els.map((e) => e.textContent.trim()));
-  expect(labels).toContain("archived — not a state of Order");
+  expect(labels).toContain("archived — kein Zustand von Order");
   expect(page.__errors).toEqual([]);
 });
 
@@ -315,10 +315,10 @@ test.describe("with no application behind the diagram", () => {
 
   test("the panel says why there is no class to pick, and what to do", async ({ page }) => {
     await selectDataObject(page, "Ref_note");
-    await expect(page.locator("#p-body")).toContainText("not filed under an application");
+    await expect(page.locator("#p-body")).toContainText("keiner Anwendung zugeordnet");
     // The half that matters most: an empty Problems panel here is a check that never
     // ran, not a clean model, and saying so is the whole point.
-    await expect(page.locator("#p-body")).toContainText("empty rather than clean");
+    await expect(page.locator("#p-body")).toContainText("leer statt sauber");
     // No vocabulary, so the field is what it always was — free text, not a broken picker.
     await expect(page.locator("#f-itemtype")).toHaveJSProperty("tagName", "INPUT");
     expect(page.__errors).toEqual([]);
@@ -329,7 +329,7 @@ test.describe("with no application behind the diagram", () => {
     await page.evaluate(() => window.__mount());
     await page.waitForFunction(() => !!window.__atlasModeler, null, { timeout: 20000 });
     await selectDataObject(page, "Ref_note");
-    await expect(page.locator("#p-body")).not.toContainText("not filed under an application");
+    await expect(page.locator("#p-body")).not.toContainText("keiner Anwendung zugeordnet");
   });
 });
 
