@@ -8,7 +8,7 @@
 // The preference is one of four words. `light` and `dark` are choices; `system`
 // follows prefers-color-scheme and keeps following it while the page is open; `cockpit`
 // is a gamified HUD skin layered on the dark foundation, an explicit opt-in that the
-// system scheme never selects (ADR-0508). Anything else — nothing stored, a value from
+// system scheme never selects (ADR-0509). Anything else — nothing stored, a value from
 // a later version, storage that throws — is today's light console: the default stays
 // light until the dark palette has been verified on every screen, which is the record's
 // condition for changing it.

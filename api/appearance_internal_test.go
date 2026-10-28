@@ -7,7 +7,7 @@ import (
 )
 
 // Every non-light appearance answers every colour the light palette names
-// (ADR-0507 for dark, ADR-0508 for the cockpit skin).
+// (ADR-0507 for dark, ADR-0509 for the cockpit skin).
 //
 // app.css's first `:root` block is the palette, and each
 // `:root[data-appearance="…"]` block redeclares its tokens for its surface. A colour

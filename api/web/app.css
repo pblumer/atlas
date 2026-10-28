@@ -179,7 +179,7 @@
   color-scheme: dark;
 }
 
-/* ===== Starship cockpit — a gamified HUD skin (ADR-0508) ===================== */
+/* ===== Starship cockpit — a gamified HUD skin (ADR-0509) ===================== */
 /* Cockpit rides the same data-appearance mechanism as dark: it answers the same
    palette tokens (so the canvas, the vendored chrome and the code editors theme
    through the very same bridges — those selectors below include "cockpit"), in a

@@ -1061,7 +1061,10 @@ Composition and reuse.
   and runs the handler. Message and timer triggers ([ADR-0082](docs/adr/0082-event-subprocesses.md)),
   plus **signal** ([ADR-0088](docs/adr/0088-signal-events.md)) and **error**
   ([ADR-0089](docs/adr/0089-error-events.md)) triggers; nests in embedded subprocesses
-  and at the process root; recovery-tested; authored in the Modeler.
+  and at the process root; recovery-tested; authored in the Modeler. Concurrent runs of a
+  non-interrupting event subprocess each correlate on their own local key and read the
+  message that started them, and a message right behind a fired trigger is no longer lost
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
   as a child instance in the caller's partition, passes variables in/out (isolated or
   propagate-all), resumes the caller on completion, and tears the child down when the
@@ -1084,7 +1087,10 @@ Composition and reuse.
   cleaned when a scope or instance tears down (no leak), and it survives recovery (the
   index rebuilds from the log — no new recovery path; the throw is a command-path scope
   walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
-  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
+  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)). A throw honours
+  BPMN's `waitForCompletion` (default true), and one directly in an event subprocess
+  compensates the scope it handles
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
   embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
   end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
@@ -1099,7 +1105,10 @@ Composition and reuse.
   scope-drain through a small event-derived canceling marker, so recovery rebuilds it
   with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
   transactions and cancel events; the cancel boundary/end panels are wired)
-  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.** A cancel end
+  may also sit in an event subprocess directly inside the transaction, so a cancellation
+  that arrives at any point is modelled where BPMN puts it
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 
 ## Milestone 4 — Operability 🚧
 

@@ -1,4 +1,4 @@
-# ADR-0508: A gamified cockpit skin as an opt-in appearance
+# ADR-0509: A gamified cockpit skin as an opt-in appearance
 
 - **Status:** Proposed
 - **Implementation:** Partial

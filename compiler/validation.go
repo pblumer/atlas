@@ -761,8 +761,10 @@ func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
 }
 
 // checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
-// sit directly inside a transaction, and a cancel boundary may attach only to a transaction —
-// both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
+// sit directly inside a transaction — or in an event subprocess that sits directly inside one,
+// the place a model handles a cancellation that can arrive at any point of the transaction
+// (ADR-0508) — and a cancel boundary may attach only
+// to a transaction — both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
 // cancel end event but no cancel boundary is a warning: the cancellation runs, but the token
 // leaves the transaction with no recovery route, usually a modeling mistake.
 func checkTransactions(cp *CompiledProcess) []Problem {
@@ -771,9 +773,9 @@ func checkTransactions(cp *CompiledProcess) []Problem {
 		n := &cp.nodes[id]
 		switch {
 		case n.Type == TypeCancelEndEvent:
-			if n.FlowScope < 0 || !cp.IsTransaction(n.FlowScope) {
+			if _, ok := cancelEndTransaction(cp, n); !ok {
 				ps = append(ps, problem(cp, int32(id), SeverityError, RuleCancelEndOutsideTransaction,
-					"cancel end event is not directly inside a transaction — a cancel end event may appear only within a <transaction>"))
+					"cancel end event is not directly inside a transaction — a cancel end event may appear only within a <transaction>, or in an event subprocess directly inside one"))
 			}
 		case n.Type == TypeBoundaryEvent && cp.boundaryEventDets[n.Detail].Kind == BoundaryCancel:
 			if !cp.IsTransaction(cp.boundaryEventDets[n.Detail].HostNode) {
@@ -1070,11 +1072,31 @@ func checkVariableShadowsDataObject(cp *CompiledProcess) []Problem {
 // the transaction node id.
 func scopeHasCancelEnd(cp *CompiledProcess, txID int32) bool {
 	for j := range cp.nodes {
-		if cp.nodes[j].Type == TypeCancelEndEvent && cp.nodes[j].FlowScope == txID {
+		if cp.nodes[j].Type != TypeCancelEndEvent {
+			continue
+		}
+		if tx, ok := cancelEndTransaction(cp, &cp.nodes[j]); ok && tx == txID {
 			return true
 		}
 	}
 	return false
+}
+
+// cancelEndTransaction returns the transaction a cancel end event cancels: its own scope when
+// that is a transaction, or the scope of the event subprocess it sits in when that event
+// subprocess sits directly in a transaction. ok is false for a cancel end with neither.
+func cancelEndTransaction(cp *CompiledProcess, n *CompiledNode) (tx int32, ok bool) {
+	scope := n.FlowScope
+	if scope < 0 {
+		return -1, false
+	}
+	if cp.IsTransaction(scope) {
+		return scope, true
+	}
+	if parent := cp.nodes[scope].FlowScope; cp.IsEventSubProcess(scope) && parent >= 0 && cp.IsTransaction(parent) {
+		return parent, true
+	}
+	return -1, false
 }
 
 // errorCodeMatches reports whether a catch with catchCode catches a thrown throwCode: an

@@ -37,6 +37,9 @@ Generated from the register in `scenario.go` by `go test ./conformance -update`.
 | Field-level data-object writes (accrue members) | — | data-object-fields | ✅ |
 | Collection data object (isCollection list) | — | collection-data-object | ✅ |
 | Transaction subprocess with cancel end and cancel boundary | — | transaction-cancel | ✅ |
+| Concurrent runs of a non-interrupting event subprocess, each correlating on its own local key | — | event-subprocess-concurrent-runs | ✅ |
+| Cancel end in an event subprocess inside a transaction (cancellation at any point) | — | transaction-cancel-event-subprocess | ✅ |
+| Compensation thrown from an event subprocess, waiting for its handlers | — | compensation-event-subprocess | ✅ |
 
 ## Control-flow patterns
 
