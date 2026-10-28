@@ -104,6 +104,7 @@ func contentShown(b *ContentSource, st ContentState, found bool, now int64) bool
 // order and an approval stay readable.
 func withheld(it Item) Item {
 	it.Descriptions = nil
+	it.Rich = nil
 	it.Keywords = nil
 	it.ContentSource = nil
 	return it

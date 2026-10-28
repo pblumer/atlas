@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
+  description comes from the wiki now carries the page's layout beside its text:
+  headings, lists, tables, panels, quotes, code, dividers, its images and the items
+  embedded in it, each embedded item held to the same security rules as a child page
+  and rechecked with it. Protected passages and mentions are removed from every block
+  before anything is stored, tables included. Images are copied into Atlas and served
+  behind the product picture's gate (`GET /api/v1/catalog-products/{id}/content-images/{image}`),
+  so the shop never asks the wiki for anything. The fact sheet and the info panel draw
+  it, without the "more in the wiki" link; the fact sheet also shows the catalogue's
+  mark and which release it describes, and its buttons wear the shop's own style
+  (ADR-0491, amended 2026-10-28).
+
 - **A service can be described by a child page of its offering's wiki page.** A market
   offering kept as one wiki page with its services as child pages below it can now be
   linked as such: the offering to the page, each service to its child page. A child

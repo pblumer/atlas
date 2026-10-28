@@ -2,8 +2,12 @@ package contentsource
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -61,6 +65,12 @@ type Language struct {
 	Children []Taken `json:"children,omitempty"`
 	// Text is the description: the page's body followed by its children's.
 	Text string `json:"text"`
+	// Rich is the description as the source lays it out: the page's blocks,
+	// then each child page with its own, depth first, every embedded item in
+	// place (amendment of 2026-10-28).
+	Rich []Rich `json:"rich,omitempty"`
+	// Embeds are the items embedded anywhere in the description and taken.
+	Embeds []Taken `json:"embeds,omitempty"`
 	// Dropped is everything the rules or the conversion left out.
 	Dropped []Dropped `json:"dropped,omitempty"`
 	// Refusals refuse the page. Empty is the only pass.
@@ -83,6 +93,9 @@ type Content struct {
 	Languages map[string]Language
 	Keywords  []string
 	Picture   *Picture
+	// Images are the images the rich descriptions show, by the id their blocks
+	// name: copied out of the source, so the shop never asks it for anything.
+	Images map[string]*Picture
 }
 
 // Refused is a fetch that may not be written, with every reason at once: a
@@ -211,17 +224,22 @@ func preview(ctx context.Context, c *pages, st Standing, input string, others ma
 	}
 	l.Refusals = append(l.Refusals, CheckPage(p, anc, st)...)
 	conv := Convert(p)
-	l.Refusals = append(l.Refusals, conv.Problems...)
+	rc := convertRich(p)
+	// The rich conversion reads every block the plain one reads and more, with
+	// the same marks, so what refuses one refuses the other.
+	l.Refusals = append(l.Refusals, rc.Problems...)
 	if len(l.Refusals) > 0 {
 		return l, nil
 	}
-	l.Page.Passages = conv.Passages
-	l.Dropped = append(l.Dropped, droppedOf(p, conv)...)
+	l.Page.Passages = rc.Passages
+	l.Dropped = append(l.Dropped, droppedOfRich(p, rc)...)
+	l.Rich = rc.Blocks
+	var richTail []Rich
 
 	parts := []string{conv.Text}
 	below := 0
-	var walk func(parent Page, chain []Page) error
-	walk = func(parent Page, chain []Page) error {
+	var walk func(parent Page, chain []Page, into *[]Rich) error
+	walk = func(parent Page, chain []Page, into *[]Rich) error {
 		ids, err := c.ad.Children(ctx, parent)
 		if err != nil {
 			return err
@@ -259,7 +277,8 @@ func preview(ctx context.Context, c *pages, st Standing, input string, others ma
 			}
 			why := CheckPage(child, childChain, st)
 			cc := Convert(child)
-			why = append(why, cc.Problems...)
+			crc := convertRich(child)
+			why = append(why, crc.Problems...)
 			if strings.ContainsRune(child.Title, Placeholder) {
 				why = append(why, "the title holds the placeholder "+string(Placeholder))
 			}
@@ -271,22 +290,28 @@ func preview(ctx context.Context, c *pages, st Standing, input string, others ma
 				continue
 			}
 			l.Children = append(l.Children, Taken{ID: child.ID, Key: child.Key, Title: child.Title,
-				URL: child.URL, Version: child.Version, Passages: cc.Passages})
-			l.Dropped = append(l.Dropped, droppedOf(child, cc)...)
+				URL: child.URL, Version: child.Version, Passages: crc.Passages})
+			l.Dropped = append(l.Dropped, droppedOfRich(child, crc)...)
 			if text := strings.TrimSpace(child.Title + "\n\n" + cc.Text); text != "" {
 				parts = append(parts, text)
 			}
-			if err := walk(child, childChain); err != nil {
+			section := Rich{Kind: "page", Title: child.Title, Blocks: crc.Blocks}
+			if err := walk(child, childChain, &section.Blocks); err != nil {
 				return err
 			}
+			*into = append(*into, section)
 		}
 		return nil
 	}
-	if err := walk(p, anc); err != nil {
+	if err := walk(p, anc, &richTail); err != nil {
 		if errors.Is(err, errTooMany) {
 			l.Refusals = append(l.Refusals, fmt.Sprintf("more than %d pages lie below the page", maxBelow))
 			return l, nil
 		}
+		return l, err
+	}
+	l.Rich = append(l.Rich, richTail...)
+	if err := c.embeds(ctx, st, &l, p.ID); err != nil {
 		return l, err
 	}
 	var kept []string
@@ -311,8 +336,8 @@ func unestablished(err error) bool {
 	return errors.Is(err, ErrUnreadable) || errors.Is(err, errChain)
 }
 
-// droppedOf is what the conversion of one page left out, for the preview.
-func droppedOf(p Page, c Converted) []Dropped {
+// droppedOfRich is what the rich conversion of one page left out, for the preview.
+func droppedOfRich(p Page, c richConverted) []Dropped {
 	var out []Dropped
 	for range c.Passages {
 		out = append(out, Dropped{Page: name(p), What: "passage"})
@@ -321,6 +346,90 @@ func droppedOf(p Page, c Converted) []Dropped {
 		out = append(out, Dropped{Page: name(p), What: kind})
 	}
 	return out
+}
+
+// maxEmbedDepth bounds how deep an embedded item's own embeds are followed. An
+// item embedding an item embedding an item is a description; past that it is a
+// site.
+const maxEmbedDepth = 3
+
+// embeds resolves every embedded item of a description in place: each is read,
+// held to the rules of § 8 as a child page is — a read restriction on it or an
+// ancestor, a hold, not live, a space not released — and converted with the same
+// marks. One that fails is left out, named in what was dropped; one that embeds an
+// item already on its way down is left out too, so an item cannot embed itself.
+// top is the language page's id, which an embed may not show either.
+func (c *pages) embeds(ctx context.Context, st Standing, l *Language, top string) error {
+	taken := map[string]bool{}
+	var resolve func(blocks []Rich, path []string, depth int) ([]Rich, error)
+	resolve = func(blocks []Rich, path []string, depth int) ([]Rich, error) {
+		var out []Rich
+		for _, b := range blocks {
+			if b.Kind != "embed" {
+				var err error
+				if b.Blocks, err = resolve(b.Blocks, path, depth); err != nil {
+					return nil, err
+				}
+				out = append(out, b)
+				continue
+			}
+			drop := func(what string, why ...string) {
+				l.Dropped = append(l.Dropped, Dropped{Page: what, What: "embed", Reasons: why})
+			}
+			if depth >= maxEmbedDepth {
+				drop(b.ref, fmt.Sprintf("it is embedded more than %d levels deep", maxEmbedDepth))
+				continue
+			}
+			if slices.Contains(path, b.ref) {
+				drop(b.ref, "it embeds itself")
+				continue
+			}
+			e, err := c.page(ctx, b.ref)
+			if errors.Is(err, ErrUnreadable) {
+				drop(b.ref, "the item cannot be read")
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			anc, err := c.chain(ctx, e)
+			if err != nil {
+				if !unestablished(err) {
+					return nil, err
+				}
+				drop(name(e), "its parent chain cannot be established")
+				continue
+			}
+			why := CheckPage(e, anc, st)
+			erc := convertRich(e)
+			why = append(why, erc.Problems...)
+			if strings.ContainsRune(e.Title, Placeholder) {
+				why = append(why, "the title holds the placeholder "+string(Placeholder))
+			}
+			if len(why) > 0 {
+				drop(name(e), why...)
+				continue
+			}
+			inner, err := resolve(erc.Blocks, append(slices.Clone(path), e.ID), depth+1)
+			if err != nil {
+				return nil, err
+			}
+			if !taken[e.ID] {
+				taken[e.ID] = true
+				l.Embeds = append(l.Embeds, Taken{ID: e.ID, Key: e.Key, Title: e.Title, URL: e.URL,
+					Version: e.Version, Passages: erc.Passages})
+			}
+			l.Dropped = append(l.Dropped, droppedOfRich(e, erc)...)
+			out = append(out, Rich{Kind: "embed", Title: e.Title, Blocks: inner})
+		}
+		return out, nil
+	}
+	blocks, err := resolve(l.Rich, []string{top}, 0)
+	if err != nil {
+		return err
+	}
+	l.Rich = blocks
+	return nil
 }
 
 // Gather reads every language page of a binding, and the picture of the primary
@@ -400,8 +509,82 @@ func GatherExcept(ctx context.Context, ad Adapter, src Source, slots map[string]
 		}
 		out.Picture = pic
 	}
+	if err := gatherImages(ctx, ad, &out, maxPicture); err != nil {
+		return Content{}, err
+	}
 	return out, nil
 }
+
+// maxImages bounds the images one binding copies, every language together.
+const maxImages = 60
+
+// gatherImages copies every image the rich descriptions show and names each by the
+// hash of its bytes, so the same image shown in two languages is stored once. An
+// image that cannot be read, is too large or is not a picture the store accepts is
+// left out and named in what was dropped; it does not refuse the page, since
+// leaving a picture out hides nothing.
+func gatherImages(ctx context.Context, ad Adapter, out *Content, max int64) error {
+	type got struct {
+		id  string
+		why string
+	}
+	seen := map[string]got{}
+	out.Images = map[string]*Picture{}
+	for _, lang := range slices.Sorted(maps.Keys(out.Languages)) {
+		l := out.Languages[lang]
+		var dropped []Dropped
+		var failed error
+		l.Rich = dropRich(l.Rich, func(b *Rich) bool {
+			if b.Kind != "image" || failed != nil {
+				return true
+			}
+			key := b.owner + "/" + b.ref
+			g, ok := seen[key]
+			if !ok {
+				switch {
+				case len(out.Images) >= maxImages:
+					g.why = fmt.Sprintf("more than %d images", maxImages)
+				default:
+					data, ct, err := ad.Attachment(ctx, b.owner, b.ref, max)
+					switch {
+					case errors.Is(err, ErrUnreadable):
+						g.why = "the image cannot be read"
+					case errors.Is(err, errTooLarge):
+						g.why = fmt.Sprintf("the image exceeds the %d byte limit", max)
+					case err != nil:
+						failed = err
+						return true
+					default:
+						ct = brandimage.NormalizeType(ct)
+						if _, ok := brandimage.Picture.ExtFor(ct); !ok || !brandimage.Valid(ct, data) {
+							g.why = "the image is not a PNG, JPEG or SVG image"
+							break
+						}
+						sum := sha256.Sum256(data)
+						g.id = hex.EncodeToString(sum[:16])
+						out.Images[g.id] = &Picture{Name: b.ref, Type: ct, Data: data}
+					}
+				}
+				seen[key] = g
+			}
+			if g.id == "" {
+				dropped = append(dropped, Dropped{Page: b.ref, What: "image", Reasons: []string{g.why}})
+				return false
+			}
+			b.Image = g.id
+			return true
+		})
+		if failed != nil {
+			return failed
+		}
+		l.Dropped = append(l.Dropped, dropped...)
+		out.Languages[lang] = l
+	}
+	return nil
+}
+
+// ImageID is the shape of an image's id in Atlas's store.
+var ImageID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 // picture copies one named attachment and holds it to what the picture store
 // accepts, so a file the shop would refuse to serve is refused here, where the

@@ -165,7 +165,7 @@ const STRINGS = {
     'factsheet.copyFailed': 'Kopieren hat nicht geklappt; bitte den Text markieren und kopieren.',
     'factsheet.print': 'Drucken',
     'info.id': 'Kennung',
-    'info.wiki': 'Mehr im Wiki',
+    'factsheet.version': 'Stand',
     'info.approval': 'Genehmigung',
     'info.none': 'keine',
     'info.repeatable': 'Mehrfach beziehbar',
@@ -348,7 +348,7 @@ const STRINGS = {
     'factsheet.copyFailed': 'Copying did not work; please select the text and copy it.',
     'factsheet.print': 'Print',
     'info.id': 'Identifier',
-    'info.wiki': 'More in the wiki',
+    'factsheet.version': 'Version',
     'info.approval': 'Approval',
     'info.none': 'none',
     'info.repeatable': 'May be held more than once',
@@ -531,7 +531,7 @@ const STRINGS = {
     'factsheet.copyFailed': 'La copie a échoué ; veuillez sélectionner le texte et le copier.',
     'factsheet.print': 'Imprimer',
     'info.id': 'Identifiant',
-    'info.wiki': 'En savoir plus dans le wiki',
+    'factsheet.version': 'Version',
     'info.approval': 'Approbation',
     'info.none': 'aucune',
     'info.repeatable': 'Peut être détenu plusieurs fois',
@@ -713,7 +713,7 @@ const STRINGS = {
     'factsheet.copyFailed': 'La copia non è riuscita; selezionare il testo e copiarlo.',
     'factsheet.print': 'Stampa',
     'info.id': 'Identificativo',
-    'info.wiki': 'Altro nel wiki',
+    'factsheet.version': 'Versione',
     'info.approval': 'Approvazione',
     'info.none': 'nessuna',
     'info.repeatable': 'Può essere detenuto più volte',
@@ -911,28 +911,139 @@ function descriptionOf(item) {
   return '';
 }
 
-// wikiLinkOf is "more in the wiki" under a description that came from one
-// (ADR-0491 § 3).
+// richOf is a product's description as its content source lays it out —
+// headings, lists, tables, panels, images, embedded items (ADR-0491, amended
+// 2026-10-28) — in the reader's language, falling back as descriptionOf does; or
+// null where the release carries none, and the plain description is shown instead.
 //
-// It reads the binding the release listing hands the shop, and the server decides
-// everything about it: the binding is there only where the source lets the shop link
-// to a page, and only while the content may be shown — a quarantined product, a copy
-// older than a lifted quarantine and a stale recheck all arrive with no binding at
-// all, exactly as they arrive with no description. So there is nothing to decide
-// here, and nothing here to get wrong about the quarantine. The page is chosen in the
-// order the description is, and only an https address becomes a link.
-function wikiLinkOf(item) {
-  const pages = ((item || {}).contentSource || {}).pages;
-  if (!pages || !descriptionOf(item)) return null;
-  const urls = {};
-  for (const [lang, p] of Object.entries(pages)) {
-    if (p && typeof p.url === 'string' && /^https:\/\/\S+$/i.test(p.url)) urls[lang] = p.url;
+// It reads what the release listing hands the shop and the server decides the
+// rest: a quarantined product, a copy older than a lifted quarantine and a stale
+// recheck arrive with no layout at all, exactly as they arrive with no
+// description. Protected passages never reach the shop either way — the server
+// removed them before it stored anything.
+function richOf(item) {
+  const r = (item || {}).rich;
+  if (!r) return null;
+  for (const blocks of [pickText(r, locale), pickText(r, 'de'), pickText(r, 'en'), ...Object.values(r)]) {
+    if (Array.isArray(blocks) && blocks.length) return blocks;
   }
-  const href = pickText(urls, locale) || pickText(urls, 'de') || pickText(urls, 'en')
-    || Object.values(urls)[0];
-  if (!href) return null;
-  return el('p', { class: 'product-wiki' },
-    el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, t('info.wiki')));
+  return null;
+}
+
+const RICH_ALIGNS = ['left', 'center', 'right', 'justify'];
+
+// richBlocks draws a rich description. Every block is data and every word a text
+// node: nothing a wiki author writes becomes markup, script or style here. An image
+// is the copy Atlas holds, served behind the product's own gate — the shop never
+// asks the wiki for anything.
+function richBlocks(itemId, blocks, depth = 0) {
+  const out = [];
+  let list = null;
+  const heading = (level, text) =>
+    el(['h4', 'h5', 'h6'][Math.min(Math.max(level || 1, 1), 3) - 1], { class: 'rich-h' }, text);
+  for (const b of blocks || []) {
+    if (b.kind === 'bullet' || b.kind === 'ordered') {
+      const tag = b.kind === 'ordered' ? 'ol' : 'ul';
+      if (!list || list.tagName.toLowerCase() !== tag) {
+        list = el(tag, { class: 'rich-list' });
+        out.push(list);
+      }
+      list.append(el('li', { class: b.checked ? 'rich-done' : null }, b.text || ''));
+      continue;
+    }
+    list = null;
+    const align = RICH_ALIGNS.includes(b.align) ? `text-align:${b.align}` : null;
+    switch (b.kind) {
+      case 'heading':
+        out.push(heading(b.level, b.text));
+        break;
+      case 'paragraph':
+        out.push(el('p', { class: 'rich-p', style: align }, b.text || ''));
+        break;
+      case 'quote':
+        out.push(el('blockquote', { class: 'rich-quote', style: align }, b.text || ''));
+        break;
+      case 'code':
+        out.push(el('pre', { class: 'rich-code' }, el('code', {}, b.text || '')));
+        break;
+      case 'panel':
+        out.push(el('div', { class: `rich-panel tone-${/^[a-z]{1,20}$/.test(b.tone || '') ? b.tone : 'info'}` },
+          b.text || ''));
+        break;
+      case 'divider':
+        out.push(el('hr', { class: 'rich-hr' }));
+        break;
+      case 'table': {
+        const rows = b.rows || [];
+        if (!rows.length) break;
+        out.push(el('div', { class: 'rich-table' }, el('table', {},
+          el('thead', {}, el('tr', {}, rows[0].map((c) => el('th', {}, c)))),
+          el('tbody', {}, rows.slice(1).map((r) => el('tr', {}, r.map((c) => el('td', {}, c))))))));
+        break;
+      }
+      case 'image': {
+        if (!/^[0-9a-f]{32}$/.test(b.image || '')) break;
+        const width = Number.isInteger(b.width) && b.width >= 10 && b.width <= 100 ? `width:${b.width}%` : null;
+        const img = el('img', {
+          src: `/api/v1/catalog-products/${encodeURIComponent(itemId)}/content-images/${b.image}`,
+          alt: b.text || '', loading: 'lazy', style: width,
+        });
+        img.addEventListener('error', () => { fig.remove(); });
+        const fig = el('figure', { class: `rich-figure${RICH_ALIGNS.includes(b.align) ? ` align-${b.align}` : ''}` },
+          img, b.text ? el('figcaption', {}, b.text) : null);
+        out.push(fig);
+        break;
+      }
+      case 'page':
+      case 'embed':
+        out.push(el('section', { class: `rich-${b.kind}` },
+          b.title ? el(depth ? 'h6' : 'h5', { class: 'rich-title' }, b.title) : null,
+          richBlocks(itemId, b.blocks, depth + 1)));
+        break;
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+// richText is a rich description as plain text, for the clipboard: the server's
+// RichText, line for line.
+function richText(blocks) {
+  const parts = [];
+  let n = 0;
+  let prev = '';
+  for (const b of blocks || []) {
+    let text = '';
+    if (b.kind === 'bullet') text = `- ${b.text || ''}`;
+    else if (b.kind === 'ordered') { n = prev === 'ordered' ? n + 1 : 1; text = `${n}. ${b.text || ''}`; }
+    else if (b.kind === 'table') text = (b.rows || []).map((r) => r.join(' | ')).join('\n');
+    else if (b.kind === 'page' || b.kind === 'embed') text = `${b.title || ''}\n\n${richText(b.blocks)}`.trim();
+    else if (b.kind !== 'divider') text = b.text || '';
+    const listed = b.kind === 'bullet' || b.kind === 'ordered';
+    if (text) {
+      if (parts.length && listed && (prev === 'bullet' || prev === 'ordered')) parts[parts.length - 1] += `\n${text}`;
+      else parts.push(text);
+    }
+    prev = b.kind;
+  }
+  return parts.join('\n\n');
+}
+
+// descriptionView is what a product says about itself: its rich description where
+// the release carries one, its plain description otherwise, and nothing at all
+// where it has neither — or, given a fallback, that sentence.
+function descriptionView(item, fallback) {
+  const rich = richOf(item);
+  if (rich) return el('div', { class: 'product-description rich' }, richBlocks(item.id, rich));
+  if (descriptionOf(item)) return el('p', { class: 'product-description' }, descriptionOf(item));
+  return fallback ? el('p', { class: 'muted' }, fallback) : null;
+}
+
+// descriptionText is descriptionView as text, for the clipboard.
+function descriptionText(item) {
+  const rich = richOf(item);
+  return rich ? richText(rich) : descriptionOf(item);
 }
 
 // The typeface stacks the server ships, mirrored here because the page paints
@@ -2057,8 +2168,7 @@ function infoPanel(rel, item) {
     // card written for the person deciding rather than about the transaction.
     // Absent entirely where there is none — an empty paragraph would leave a gap
     // that reads as something that failed to load.
-    descriptionOf(item) ? el('p', { class: 'product-description' }, descriptionOf(item)) : null,
-    wikiLinkOf(item),
+    descriptionView(item),
     el('p', { class: 'muted' }, `${t('info.id')}: ${item.id}`),
     // As the catalogue wrote it, never reformatted. A price here is a sentence
     // somebody chose — "CHF 1'200.–", "im Grundpaket enthalten" — and a page that
@@ -2119,28 +2229,39 @@ function factsheet(rel, item) {
     ? item.approval.kind : t('info.none');
   const part = (p) => el('div', { class: 'factsheet-part' },
     el('h5', {}, textOf(p.texts, p.id)),
-    descriptionOf(p)
-      ? el('p', { class: 'product-description' }, descriptionOf(p))
-      : el('p', { class: 'muted' }, t('factsheet.noDescription')));
+    descriptionView(p, t('factsheet.noDescription')));
   const section = (title, body) => el('section', { class: 'factsheet-section' }, el('h4', {}, title), body);
   const copied = el('span', { class: 'muted factsheet-copied', role: 'status' });
+  // The catalogue's own mark, as the page header carries it, so a printed sheet
+  // says whose it is; it removes itself where the catalogue has none.
+  const logo = state.catalog ? el('img', {
+    class: 'factsheet-logo', alt: '', 'aria-hidden': 'true',
+    src: `/api/v1/catalogs/${encodeURIComponent(state.catalog.id)}/logo`,
+  }) : null;
+  if (logo) logo.addEventListener('error', () => logo.remove());
+  // Which release the sheet describes: a printed sheet outlives the screen it was
+  // printed from, and the catalogue goes on changing.
+  const version = rel && rel.id
+    ? `${t('factsheet.version')}: ${rel.createdAt ? new Date(rel.createdAt / 1e6).toLocaleDateString(locale) : ''}${
+      rel.createdAt ? ' \u00b7 ' : ''}${rel.id}`
+    : '';
   return el('div', { class: 'card factsheet' },
-    el('h3', {}, textOf(item.texts, item.id)),
+    el('div', { class: 'factsheet-head' },
+      el('h3', {}, textOf(item.texts, item.id)),
+      logo),
+    version ? el('p', { class: 'muted factsheet-version' }, version) : null,
     el('div', { class: 'factsheet-actions' },
       el('button', {
         type: 'button',
+        class: 'secondary',
         onclick: async () => {
           copied.textContent = (await copyText(factsheetText(rel, item))) ? t('factsheet.copied') : t('factsheet.copyFailed');
         },
       }, t('factsheet.copy')),
-      el('button', { type: 'button', onclick: printFactsheet }, t('factsheet.print')),
+      el('button', { type: 'button', class: 'secondary', onclick: printFactsheet }, t('factsheet.print')),
       copied),
     productPicture(item.id),
-    section(t('factsheet.offering'), [
-      descriptionOf(item)
-        ? el('p', { class: 'product-description' }, descriptionOf(item))
-        : el('p', { class: 'muted' }, t('factsheet.noDescription')),
-      wikiLinkOf(item)]),
+    section(t('factsheet.offering'), [descriptionView(item, t('factsheet.noDescription'))]),
     included.length ? section(t('factsheet.included'), included.map(part)) : null,
     optional.length ? section(t('factsheet.optional'), optional.map(part)) : null,
     el('section', { class: 'factsheet-facts' },
@@ -2157,14 +2278,17 @@ function factsheet(rel, item) {
 // sections in the same order, a service's name above its description.
 function factsheetText(rel, item) {
   const lines = [textOf(item.texts, item.id), ''];
+  if (rel && rel.id) {
+    lines.push(`${t('factsheet.version')}: ${rel.createdAt ? `${new Date(rel.createdAt / 1e6).toLocaleDateString(locale)} \u00b7 ` : ''}${rel.id}`, '');
+  }
   const block = (title, parts) => {
     if (!parts.length) return;
     lines.push(title, '');
     for (const p of parts) {
-      lines.push(textOf(p.texts, p.id), descriptionOf(p) || t('factsheet.noDescription'), '');
+      lines.push(textOf(p.texts, p.id), descriptionText(p) || t('factsheet.noDescription'), '');
     }
   };
-  lines.push(t('factsheet.offering'), '', descriptionOf(item) || t('factsheet.noDescription'), '');
+  lines.push(t('factsheet.offering'), '', descriptionText(item) || t('factsheet.noDescription'), '');
   block(t('factsheet.included'), offeringParts(rel, item, 'includes'));
   block(t('factsheet.optional'), offeringParts(rel, item, 'options'));
   lines.push(`${t('info.price')}: ${item.price ? item.price : t('price.none')}`);

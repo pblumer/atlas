@@ -166,7 +166,7 @@ export default {
   "contentSources.field.pictureHint": "The property of the primary page that names the attachments to use as pictures. Empty means the source supplies none.",
   "contentSources.field.excludedLabels": "Excluded labels",
   "contentSources.field.excludedHint": "Comma separated: labels that organise the wiki and are not keywords, such as withdrawn.",
-  "contentSources.field.linkInShop": "Show \"More in the wiki\" in the shop",
+  "contentSources.field.linkInShop": "Hand the page addresses to the shop's release listing",
   "contentSources.field.linkHint": "Off by default: a page's address is itself something the product owner may not want every orderer to see. The link appears only while the content is shown.",
   "contentSources.saved": "Content source saved",
   "contentSources.saveFailed": "Not saved:",

@@ -514,6 +514,7 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 	at := s.now()
 	binding := &ContentSource{Source: src.ID, Primary: primary, Pages: map[string]PageRef{}}
 	descriptions := map[string]string{}
+	rich := map[string][]contentsource.Rich{}
 	var refs, children []string
 	for lang, l := range content.Languages {
 		ref := PageRef{Ref: l.Page.ID, Version: l.Page.Version, FetchedAt: at, URL: l.Page.URL,
@@ -523,9 +524,15 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 			ref.Children = append(ref.Children, ChildRef{Ref: ch.ID, Version: ch.Version, Title: ch.Title, Passages: ch.Passages})
 			children = append(children, ch.ID)
 		}
+		for _, e := range l.Embeds {
+			ref.Embeds = append(ref.Embeds, ChildRef{Ref: e.ID, Version: e.Version, Title: e.Title, Passages: e.Passages})
+		}
 		binding.Pages[lang] = ref
 		if strings.TrimSpace(l.Text) != "" {
 			descriptions[lang] = l.Text
+		}
+		if len(l.Rich) > 0 {
+			rich[lang] = l.Rich
 		}
 	}
 
@@ -577,10 +584,17 @@ func (s *Service) writeContent(ctx context.Context, p *httpapi.Principal, id, so
 		if saveErr != nil {
 			return
 		}
+		if saveErr = s.store.SaveContentImages(id, content.Images); saveErr != nil {
+			return
+		}
 		cur.ContentSource = binding
 		cur.Descriptions = nil
 		if len(descriptions) > 0 {
 			cur.Descriptions = descriptions
+		}
+		cur.Rich = nil
+		if len(rich) > 0 {
+			cur.Rich = rich
 		}
 		cur.Keywords = nil
 		if len(content.Keywords) > 0 {
@@ -795,6 +809,7 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				// The language returns to the product manager with the text it had
 				// before the link, if it had one; the rest stays bound.
 				delete(it.Descriptions, in.Lang)
+				delete(it.Rich, in.Lang)
 				if st.Own != nil {
 					if own, ok := st.Own.Descriptions[in.Lang]; ok {
 						if it.Descriptions == nil {
@@ -823,6 +838,9 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			it.ContentSource = nil
+			// The layout is the source's: an unbound product is described by the
+			// text its product manager writes, which has none.
+			it.Rich = nil
 			switch {
 			case st.Own != nil:
 				// What the product carried before the link comes back (§ 6,
@@ -872,6 +890,9 @@ func (s *Service) HandleContentUnlink(w http.ResponseWriter, r *http.Request) {
 		if len(it.Descriptions) == 0 {
 			it.Descriptions = nil
 		}
+		if len(it.Rich) == 0 {
+			it.Rich = nil
+		}
 		it.Revision++
 		it.UpdatedAt = s.now()
 		if err = s.store.SaveItem(it); err != nil {
@@ -913,6 +934,9 @@ func checksOf(b *ContentSource) []contentsource.Check {
 		for _, ch := range pg.Children {
 			out = append(out, contentsource.Check{ID: ch.Ref, Passages: ch.Passages})
 		}
+		for _, e := range pg.Embeds {
+			out = append(out, contentsource.Check{ID: e.Ref, Passages: e.Passages})
+		}
 	}
 	return out
 }
@@ -926,6 +950,12 @@ func checksOf(b *ContentSource) []contentsource.Check {
 //
 // A product nobody bound yet cannot be bound by a save either.
 func boundSave(prev Item, prevOK bool, in Item) (Item, string) {
+	// The rich description is the source's alone: a save keeps what the last
+	// link or refresh wrote, and never writes one of its own.
+	in.Rich = nil
+	if prevOK {
+		in.Rich = prev.Rich
+	}
 	if !prevOK || prev.ContentSource == nil {
 		if in.ContentSource != nil {
 			return in, "a product is bound to a content source by linking its pages, not by a save"

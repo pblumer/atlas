@@ -1152,3 +1152,81 @@ func TestALinkDoesNotOverwriteAChangeMadeWhileItsPagesWereRead(t *testing.T) {
 		t.Fatalf("link of a product removed meanwhile = %d %s", rec.Code, rec.Body)
 	}
 }
+
+// TestARichDescriptionCarriesItsLayoutImagesAndEmbeds: a page with a table, an image
+// and an embedded item is copied as the source lays it out. The image is stored and
+// served by its id; the embedded item is held in the binding and rechecked like the
+// page, so a restriction set on it afterwards quarantines the product, and the
+// quarantine withholds the layout and the image as it withholds the text.
+func TestARichDescriptionCarriesItsLayoutImagesAndEmbeds(t *testing.T) {
+	b := newBoundFixture(t)
+	b.wiki.Put(wikifake.Page{ID: "it_emb", Key: "SVC-41", Space: "SVC", Parent: "it_root", Title: "Service-Level",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Servicezeit 11/5."}}})
+	b.wiki.Edit("it_fr", func(p *wikifake.Page) {
+		p.Body = append(p.Body,
+			wikifake.Block{Kind: "table", Text: "A\tB\n1\t2"},
+			wikifake.Block{Kind: "image", Text: "Bild", Ref: "att_2"},
+			wikifake.Block{Kind: "embed", Ref: "it_emb"})
+	})
+	b.wiki.Attach("it_fr", wikifake.Attachment{ID: "att_2", Name: "bild.png", Type: "image/png", Data: []byte(onePNG)})
+	it := b.linkVPN(t)
+
+	fr := it.Rich["fr"]
+	var table, image, embed *contentsource.Rich
+	for i := range fr {
+		switch fr[i].Kind {
+		case "table":
+			table = &fr[i]
+		case "image":
+			image = &fr[i]
+		case "embed":
+			embed = &fr[i]
+		}
+	}
+	if table == nil || len(table.Rows) != 2 || image == nil || image.Image == "" || embed == nil || embed.Title != "Service-Level" {
+		t.Fatalf("rich = %+v", fr)
+	}
+	if e := it.ContentSource.Pages["fr"].Embeds; len(e) != 1 || e[0].Ref != "it_emb" {
+		t.Fatalf("embeds in the binding = %+v", e)
+	}
+	img := func() int {
+		return call(t, b.s.HandleGetContentImage, b.owner, "GET", "/x", "", "id", "vpn", "image", image.Image).Code
+	}
+	if code := img(); code != http.StatusOK {
+		t.Fatalf("image = %d", code)
+	}
+	if code := call(t, b.s.HandleGetContentImage, b.owner, "GET", "/x", "", "id", "vpn", "image", "../x").Code; code != http.StatusNotFound {
+		t.Fatalf("a path for an image id = %d", code)
+	}
+	// A save keeps the layout the source supplied and cannot write one.
+	raw, _ := json.Marshal(it)
+	var m map[string]any
+	_ = json.Unmarshal(raw, &m)
+	m["rich"] = map[string]any{"de": []any{map[string]any{"kind": "paragraph", "text": "eingeschmuggelt"}}}
+	body, _ := json.Marshal(m)
+	if rec := as(t, b.s.HandleSaveItem, b.owner, "POST", string(body)); rec.Code != 200 ||
+		strings.Contains(rec.Body.String(), "eingeschmuggelt") {
+		t.Fatalf("a save wrote a layout: %d %s", rec.Code, rec.Body)
+	}
+	if rec := b.publish(t); rec.Code != http.StatusCreated {
+		t.Fatalf("publish = %d %s", rec.Code, rec.Body)
+	}
+	if shown := itemIn(b.releases(t)[0], "vpn"); len(shown.Rich["fr"]) == 0 {
+		t.Fatalf("the release does not carry the layout: %+v", shown)
+	}
+
+	// The embedded item is restricted afterwards: the recheck covers it.
+	b.sweep(t)
+	b.wiki.Edit("it_emb", func(p *wikifake.Page) { p.ReadRestriction = []string{"u_atlas"} })
+	b.now.Add(minute)
+	b.sweep(t)
+	if st := b.state(t, "vpn"); st.Quarantine == nil || !strings.Contains(st.Quarantine.Reason, "SVC-41") {
+		t.Fatalf("a restricted embed did not quarantine: %+v", st)
+	}
+	if shown := itemIn(b.releases(t)[0], "vpn"); shown.Rich != nil {
+		t.Fatalf("quarantined layout shown: %+v", shown.Rich)
+	}
+	if code := img(); code != http.StatusNotFound {
+		t.Fatalf("a quarantined product's image = %d", code)
+	}
+}

@@ -9,6 +9,8 @@
 // ordering never interprets a graph (see [Publish]).
 package catalog
 
+import "github.com/pblumer/atlas/api/contentsource"
+
 // Lifecycle is the window in which an item may be ordered, in the server's own
 // Unix time (nanoseconds, as every other timestamp in this tree).
 //
@@ -165,9 +167,14 @@ type Item struct {
 	// an empty panel — the half-translated catalogue the name check already
 	// refuses, in the field a reader turns to second.
 	Descriptions map[string]string `json:"descriptions,omitempty"`
-	Lifecycle    Lifecycle         `json:"lifecycle,omitempty"`
-	Variants     []Variant         `json:"variants,omitempty"`
-	Approval     Approval          `json:"approval"`
+	// Rich is the description as its content source lays it out, per language
+	// tag — headings, lists, tables, panels, images, embedded items — beside the
+	// plain Descriptions a search and a reader without it use (ADR-0491, amendment
+	// of 2026-10-28). Only a link or a refresh writes it; a save never does.
+	Rich      map[string][]contentsource.Rich `json:"rich,omitempty"`
+	Lifecycle Lifecycle                       `json:"lifecycle,omitempty"`
+	Variants  []Variant                       `json:"variants,omitempty"`
+	Approval  Approval                        `json:"approval"`
 	// ProvisionProcess and DeprovisionProcess are the BPMN process ids bound to this
 	// item. Both are required to publish: a catalogue that can only grant is not a
 	// lifecycle, and the day somebody must revoke at scale is the wrong day to find
@@ -645,6 +652,9 @@ type PageRef struct {
 	// Children are the child pages whose text the description holds, depth
 	// first in sibling order; they are rechecked like the page.
 	Children []ChildRef `json:"children,omitempty"`
+	// Embeds are the items embedded anywhere in the description and taken;
+	// they are rechecked like the page.
+	Embeds []ChildRef `json:"embeds,omitempty"`
 }
 
 // ChildRef is one child page whose text a description holds.
@@ -673,6 +683,14 @@ func (c *ContentSource) Copy() *ContentSource {
 					kids[i] = ch
 				}
 				p.Children = kids
+			}
+			if len(p.Embeds) > 0 {
+				embeds := make([]ChildRef, len(p.Embeds))
+				for i, e := range p.Embeds {
+					e.Passages = append([]string(nil), e.Passages...)
+					embeds[i] = e
+				}
+				p.Embeds = embeds
 			}
 			out.Pages[lang] = p
 		}

@@ -214,9 +214,15 @@ type itemJSON struct {
 	Properties map[string]any `json:"properties"`
 	State      string         `json:"state"`
 	Body       []struct {
-		Kind  string `json:"kind"`
-		Text  string `json:"text"`
-		Marks []struct {
+		Kind    string `json:"kind"`
+		Text    string `json:"text"`
+		Ref     string `json:"ref"`
+		Level   int    `json:"level"`
+		Tone    string `json:"tone"`
+		Checked bool   `json:"checked"`
+		Align   string `json:"align"`
+		Width   int    `json:"width"`
+		Marks   []struct {
 			Type  string `json:"type"`
 			Start int    `json:"start"`
 			End   int    `json:"end"`
@@ -255,7 +261,8 @@ func (w *WikiWikiBangBang) page(it itemJSON) Page {
 		p.Withdrawn = Present
 	}
 	for _, b := range it.Body {
-		blk := Block{Kind: blockKind(b.Kind), Source: b.Kind, Text: b.Text}
+		blk := Block{Kind: blockKind(b.Kind), Source: b.Kind, Text: b.Text, Ref: b.Ref, Level: b.Level,
+			Tone: b.Tone, Checked: b.Checked, Align: b.Align, Width: b.Width}
 		for _, m := range b.Marks {
 			kind := MarkOther
 			switch m.Type {
@@ -272,10 +279,25 @@ func (w *WikiWikiBangBang) page(it itemJSON) Page {
 }
 
 // blockKind maps the source's block kinds. Only the ones § 7 takes are text;
-// a quote, a panel, a table, code, an embed, a picture and every computed list
-// are not, and neither is a kind added to the source after this was written.
+// a quote, a panel, a table, code, a divider, an image and an embed are taken by
+// the rich description (amendment of 2026-10-28); a video, a model, every computed
+// list and a kind added to the source after this was written are not.
 func blockKind(k string) BlockKind {
 	switch k {
+	case "quote":
+		return BlockQuote
+	case "code":
+		return BlockCode
+	case "panel":
+		return BlockPanel
+	case "table":
+		return BlockTable
+	case "divider":
+		return BlockDivider
+	case "image":
+		return BlockImage
+	case "embed":
+		return BlockEmbed
 	case "paragraph":
 		return BlockParagraph
 	case "heading":
@@ -424,7 +446,7 @@ func (w *WikiWikiBangBang) Attachment(ctx context.Context, pageID, file string, 
 	// The listing is in the order the files were added, so the last one of a name
 	// is its newest version.
 	for _, a := range list.Attachments {
-		if a.Name == file {
+		if a.Name == file || a.ID == file {
 			id, typ = a.ID, a.Type
 		}
 	}

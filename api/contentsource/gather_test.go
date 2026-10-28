@@ -2,10 +2,12 @@ package contentsource
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -623,5 +625,167 @@ func TestAChildPageDescribingAnotherProductIsLeftOut(t *testing.T) {
 	}
 	if got := c.Languages["de"].Text; strings.Contains(got, "Für alle Mitarbeitenden.") {
 		t.Fatalf("gathered text = %q", got)
+	}
+}
+
+// richWiki is the fake with a page laid out the way a product owner writes one: a
+// heading, a table with a protected cell, a panel, a quote, code, a divider, an
+// image, and embeds — one readable, one restricted, one in a space not released for
+// the shop, one embedding the page itself.
+func richWiki(t *testing.T) *wikifake.Server {
+	t.Helper()
+	f := wiki(t)
+	table := "Merkmal\tWert\nProzessor\tIntel Core i5\nPIN\t4711"
+	pin := len([]rune("Merkmal\tWert\nProzessor\tIntel Core i5\nPIN\t"))
+	f.Put(wikifake.Page{ID: "it_rich", Key: "SVC-40", Space: "SVC", Parent: "it_root", Title: "Notebook",
+		Body: []wikifake.Block{
+			{Kind: "heading", Text: "Leistungsmerkmale", Level: 2},
+			{Kind: "table", Text: table, Marks: []wikifake.Mark{{Type: "secret", Start: pin, End: pin + 4, Ref: "sec_pin"}}},
+			{Kind: "panel", Text: "Nur für mobile Mitarbeitende.", Tone: "info"},
+			{Kind: "quote", Text: "Leicht und ausdauernd."},
+			{Kind: "code", Text: "manage-bde -status"},
+			{Kind: "divider"},
+			{Kind: "image", Text: "Das Gerät", Ref: "att_img"},
+			{Kind: "embed", Ref: "it_emb"},
+			{Kind: "embed", Ref: "it_emb_secret"},
+			{Kind: "embed", Ref: "it_emb_ops"},
+			{Kind: "embed", Ref: "it_rich"},
+			{Kind: "video", Ref: "att_vid"},
+		}})
+	f.Attach("it_rich", wikifake.Attachment{ID: "att_img", Name: "geraet.png", Type: "image/png", Data: onePNG})
+	f.Put(wikifake.Page{ID: "it_emb", Key: "SVC-41", Space: "SVC", Parent: "it_root", Title: "Service-Level",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Servicezeit 11/5."}, {Kind: "embed", Ref: "it_rich"}}})
+	f.Put(wikifake.Page{ID: "it_emb_secret", Key: "SVC-42", Space: "SVC", Parent: "it_root", Title: "Kosten",
+		ReadRestriction: []string{"u_atlas"}, Body: []wikifake.Block{{Kind: "paragraph", Text: "Interne Kosten."}}})
+	f.Put(wikifake.Page{ID: "it_emb_ops", Key: "OPS-9", Space: "OPS", Parent: "it_root", Title: "Runbook",
+		Body: []wikifake.Block{{Kind: "paragraph", Text: "Betriebsinterna."}}})
+	return f
+}
+
+func findRich(blocks []Rich, kind string) []Rich {
+	var out []Rich
+	walkRich(blocks, func(b *Rich) {
+		if b.Kind == kind {
+			out = append(out, *b)
+		}
+	})
+	return out
+}
+
+// TestARichDescriptionTakesTheLayoutAndNeverAProtectedWord: every block a page holds
+// is taken as data, a protected cell is removed before the table is split, the
+// embedded item that passes the rules is taken in place, and the restricted one, the
+// one in a space not released for the shop and the page embedding itself are left
+// out, named in what was dropped. Nothing of a protected passage or a dropped item
+// reaches the description, in either form.
+func TestARichDescriptionTakesTheLayoutAndNeverAProtectedWord(t *testing.T) {
+	f := richWiki(t)
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-40")
+	if err != nil || len(l.Refusals) != 0 {
+		t.Fatalf("preview: %v %v", err, l.Refusals)
+	}
+	if h := findRich(l.Rich, "heading"); len(h) != 1 || h[0].Level != 2 || h[0].Text != "Leistungsmerkmale" {
+		t.Fatalf("heading = %+v", h)
+	}
+	tbl := findRich(l.Rich, "table")
+	if len(tbl) != 1 || len(tbl[0].Rows) != 3 || tbl[0].Rows[1][1] != "Intel Core i5" || tbl[0].Rows[2][1] != "" {
+		t.Fatalf("table = %+v", tbl)
+	}
+	if p := findRich(l.Rich, "panel"); len(p) != 1 || p[0].Tone != "info" {
+		t.Fatalf("panel = %+v", p)
+	}
+	for _, k := range []string{"quote", "code", "divider", "image"} {
+		if len(findRich(l.Rich, k)) != 1 {
+			t.Errorf("no %s block in %+v", k, l.Rich)
+		}
+	}
+	emb := findRich(l.Rich, "embed")
+	if len(emb) != 1 || emb[0].Title != "Service-Level" || RichText(emb[0].Blocks) != "Servicezeit 11/5." {
+		t.Fatalf("embeds = %+v", emb)
+	}
+	if len(l.Embeds) != 1 || l.Embeds[0].ID != "it_emb" {
+		t.Fatalf("embeds taken = %+v", l.Embeds)
+	}
+	all, _ := json.Marshal(l)
+	for _, never := range []string{"4711", "Interne Kosten", "Betriebsinterna"} {
+		if strings.Contains(string(all), never) {
+			t.Errorf("%q reached the preview: %s", never, all)
+		}
+	}
+	reasons := map[string]string{}
+	for _, d := range l.Dropped {
+		if d.What == "embed" {
+			reasons[d.Page] = strings.Join(d.Reasons, "; ")
+		}
+	}
+	if !strings.Contains(reasons["SVC-42"], "read restriction") || !strings.Contains(reasons["OPS-9"], "not released") ||
+		!strings.Contains(reasons["it_rich"], "embeds itself") {
+		t.Fatalf("dropped embeds = %+v", reasons)
+	}
+	if !slices.Contains(l.Page.Passages, "sec_pin") {
+		t.Fatalf("passages = %v", l.Page.Passages)
+	}
+}
+
+// TestAPlaceholderInATableRefusesThePage: the guard of § 8 covers every block that
+// holds text, not only the paragraphs the plain description takes.
+func TestAPlaceholderInATableRefusesThePage(t *testing.T) {
+	f := wiki(t)
+	f.Put(wikifake.Page{ID: "it_t", Key: "SVC-50", Space: "SVC", Parent: "it_root", Title: "T",
+		Body: []wikifake.Block{{Kind: "table", Text: "A\tB\nx\t" + wikifake.Placeholder}}})
+	ad := adapter(t, f)
+	st, _ := ad.Standing(ctx(t))
+	l, err := Preview(ctx(t), ad, st, "SVC-50")
+	if err != nil || len(l.Refusals) == 0 || !strings.Contains(l.Refusals[0], "placeholder") {
+		t.Fatalf("refusals = %v %v", l.Refusals, err)
+	}
+}
+
+// TestAFetchCopiesTheImagesAndNamesThemByTheirBytes: an image the description shows
+// is copied, named by its hash, and the block names that id; one that cannot be read
+// is left out, named in what was dropped, and refuses nothing.
+func TestAFetchCopiesTheImagesAndNamesThemByTheirBytes(t *testing.T) {
+	f := richWiki(t)
+	f.Put(wikifake.Page{ID: "it_img2", Key: "SVC-43", Space: "SVC", Parent: "it_root", Title: "Bild fehlt",
+		Body: []wikifake.Block{{Kind: "image", Ref: "att_missing"}, {Kind: "image", Ref: "att_img"}}})
+	ad := adapter(t, f)
+	c, err := Gather(ctx(t), ad, testSource(f), map[string]string{"de": "SVC-40", "fr": "SVC-43"}, "de", 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := findRich(c.Languages["de"].Rich, "image")
+	if len(img) != 1 || !ImageID.MatchString(img[0].Image) || c.Images[img[0].Image] == nil ||
+		c.Images[img[0].Image].Type != "image/png" {
+		t.Fatalf("image = %+v %v", img, c.Images)
+	}
+	fr := findRich(c.Languages["fr"].Rich, "image")
+	if len(fr) != 0 {
+		t.Fatalf("the fr page's images = %+v: an image of another page is not this page's", fr)
+	}
+	dropped := 0
+	for _, d := range c.Languages["fr"].Dropped {
+		if d.What == "image" {
+			dropped++
+		}
+	}
+	if dropped != 2 {
+		t.Fatalf("dropped images = %+v", c.Languages["fr"].Dropped)
+	}
+}
+
+// TestRichTextReadsLikeTheDescription: the rich description as plain text, for the
+// clipboard and for search.
+func TestRichTextReadsLikeTheDescription(t *testing.T) {
+	got := RichText([]Rich{
+		{Kind: "heading", Text: "H"}, {Kind: "bullet", Text: "a"}, {Kind: "bullet", Text: "b"},
+		{Kind: "ordered", Text: "x"}, {Kind: "ordered", Text: "y"},
+		{Kind: "table", Rows: [][]string{{"A", "B"}, {"1", "2"}}}, {Kind: "divider"},
+		{Kind: "embed", Title: "E", Blocks: []Rich{{Kind: "paragraph", Text: "p"}}},
+	})
+	want := "H\n\n- a\n- b\n1. x\n2. y\n\nA | B\n1 | 2\n\nE\n\np"
+	if got != want {
+		t.Fatalf("got %q\nwant %q", got, want)
 	}
 }

@@ -142,7 +142,7 @@ export default {
   "contentSources.field.pictureHint": "Die Eigenschaft der Hauptseite, die die Anhänge als Bilder nennt. Leer heisst: Die Quelle liefert kein Bild.",
   "contentSources.field.excludedLabels": "Ausgeschlossene Labels",
   "contentSources.field.excludedHint": "Durch Kommas getrennt: Labels, die das Wiki ordnen und keine Suchwörter sind, etwa withdrawn.",
-  "contentSources.field.linkInShop": "Im Shop «Mehr im Wiki» anzeigen",
+  "contentSources.field.linkInShop": "Seitenadressen an die Release-Liste des Shops weitergeben",
   "contentSources.field.linkHint": "Standardmässig aus: Die Adresse einer Seite ist selbst etwas, das die Person, die den Service im Wiki beschreibt, vielleicht nicht jeder bestellenden Person zeigen will. Der Link erscheint nur, solange der Inhalt gezeigt wird.",
   "contentSources.saved": "Inhaltsquelle gespeichert",
   "contentSources.saveFailed": "Nicht gespeichert:",
