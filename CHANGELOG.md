@@ -233,6 +233,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The shop offers again what a held bundle lacks.** An option that was not taken
+  when a bundle was ordered can be added later, and a position given back out of a
+  bundle can be ordered again. In the catalogue, a part that is always included gets
+  an enabled "+" once its bundle is held and the part is not; in *My services*, a held
+  product lists under *Not held* its options never taken and its parts given back, with
+  the way on to the basket. Neither is offered while a bundle in the basket carries it
+  or an order of the person still has it on its way. The server accepted both orders
+  before; only the shop did not offer them
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28).
 - **Blueprint Marketplace is now atlas hub.** The Console's discovery entry and documentation use the broader hub identity for process applications and their product catalogues, with other offer types explicitly planned. Existing signed Blueprint Registry v1 wire identifiers, API routes, environment settings and native import permissions remain unchanged (ADR-0499).
 - **The catalogue page reads in the order a catalogue is filled.** Its sections are now
   numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
