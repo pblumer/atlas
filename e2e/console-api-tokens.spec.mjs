@@ -214,6 +214,9 @@ test("the roles and the reach follow the scope", async ({ page }) => {
   await form(page).locator('button[type="submit"]').click();
   await expect.poll(async () => (await posts(page)).map((r) => r.body))
     .toEqual([{ name: "Peer-Atlas", scope: "landscape", expiresInDays: 365, reach: ["app_hr"] }]);
+  // The form resets once the answer is in; a scope chosen before that would be reset
+  // with it.
+  await expect(scope).toHaveValue("");
 
   // A diagrams token may name applications: it reads every process either way, and
   // lists the architecture sketches of the applications it names and of no other. The
@@ -227,6 +230,7 @@ test("the roles and the reach follow the scope", async ({ page }) => {
   await form(page).locator('input[name="name"]').fill("Wiki-Prozesse");
   await form(page).locator('button[type="submit"]').click();
   await expect.poll(async () => (await posts(page)).length).toBe(2);
+  await expect(scope).toHaveValue("");
   await scope.selectOption("diagrams");
   await form(page).locator('input[name="name"]').fill("Wiki");
   await page.locator('input[name="reach"][value="app_hr"]').check();
@@ -235,6 +239,7 @@ test("the roles and the reach follow the scope", async ({ page }) => {
     { name: "Wiki-Prozesse", scope: "diagrams", expiresInDays: 365 },
     { name: "Wiki", scope: "diagrams", expiresInDays: 365, reach: ["app_hr"] },
   ]);
+  await expect(scope).toHaveValue("");
 
   // Any other scope asks for no reach at all.
   await scope.selectOption("metrics");
