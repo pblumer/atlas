@@ -118,7 +118,7 @@ func TestEverySystemProcessEventIsCatalogued(t *testing.T) {
 // fullFeedRows are one row of every kind the feed writes, every optional field set,
 // so the envelope shows every field it can carry.
 func fullFeedRows() []state.FeedEntry {
-	return []state.FeedEntry{
+	rows := []state.FeedEntry{
 		{Partition: 1, Position: 1, At: 1, Outcome: &model.ActionOutcomeValue{
 			OrderID: "o", Position: "p", CommandID: "c", Action: "sperren", Effect: "change", Outcome: "completed",
 			Source: "shop-task", Principal: "u", ItemID: "i", VariantID: "v", InstanceKey: 7, Result: `{"ok":true}`, At: 1,
@@ -138,6 +138,35 @@ func fullFeedRows() []state.FeedEntry {
 			Message: "worker said: user anna@example.org has password hunter2",
 		}},
 	}
+	// One row of each turn in a user task's life, the job holding an assignee whose
+	// name must not leave: the feed says whether somebody holds a task, not who.
+	for i, kind := range []state.FeedKind{state.FeedTaskCreated, state.FeedTaskAssigned, state.FeedTaskUnassigned,
+		state.FeedTaskCompleted, state.FeedTaskCancelled} {
+		rows = append(rows, state.FeedEntry{Partition: 1, Position: uint64(6 + i), At: int64(6 + i), Kind: kind,
+			Definition: feedTestDefinition, TaskKey: 50, TaskElement: feedTestTaskElement(),
+			Task: &model.JobValue{ProcessInstanceKey: 40, ElementInstanceKey: 51, JobType: compiler.UserTaskJobTypeIndex,
+				Assignee: "hunter2", CandidateGroups: "hr,finance", Deadline: 9_000_000_000, CreatedAt: 6_000_000_000}})
+	}
+	return rows
+}
+
+// feedTestBPMN is the deployment the feed rows above name: a start event, at element
+// 0 as the incident rows say, and a user task the task rows wait on.
+const feedTestBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+  <process id="p" isExecutable="true"><startEvent id="s"/><userTask id="review" name="Review"/>
+  <sequenceFlow id="f" sourceRef="s" targetRef="review"/></process></definitions>`
+
+// feedTestTaskElement is the user task's index in feedTestBPMN's compiled process.
+func feedTestTaskElement() int32 {
+	cp, err := compiler.Parse(feedTestDefinition, 2, strings.NewReader(feedTestBPMN))
+	if err != nil {
+		panic(err)
+	}
+	idx, ok := cp.ElementIndexOf("review")
+	if !ok {
+		panic("feedTestBPMN has no element review")
+	}
+	return idx
 }
 
 // feedTestDefinition is the definition the incident rows above name, and
@@ -147,8 +176,7 @@ const feedTestDefinition = 77
 
 func feedTestDefs(t *testing.T) defIndex {
 	t.Helper()
-	cp, err := compiler.Parse(feedTestDefinition, 2, strings.NewReader(`<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
-  <process id="p" isExecutable="true"><startEvent id="s"/></process></definitions>`))
+	cp, err := compiler.Parse(feedTestDefinition, 2, strings.NewReader(feedTestBPMN))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

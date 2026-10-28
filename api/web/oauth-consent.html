@@ -133,9 +133,15 @@ function signIn(ctx) {
 }
 
 function consent(ctx) {
-  const mcpOnly = String(ctx.resource || "").endsWith("/mcp");
-  const reach = mcpOnly
+  const resource = String(ctx.resource || "");
+  // What each resource reaches, in the order isCanonicalResource names them: the
+  // transport, a person's tasks (ADR-draft-tasks-for-a-connected-system §3), and
+  // the whole server.
+  const reach = resource.endsWith("/mcp")
     ? ["Drive atlas through its Model Context Protocol tools, as you.",
+       "Nothing else: this approval does not reach the rest of the API."]
+    : resource.endsWith("/tasks")
+    ? ["See your tasks in atlas, take them on, give them back and complete them with their forms, as you.",
        "Nothing else: this approval does not reach the rest of the API."]
     : ["Use the atlas API as you — everything your account can do."];
   // Who vouched for this application. Where self-registration is open, the name

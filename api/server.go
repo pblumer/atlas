@@ -3686,6 +3686,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// could never be read by anyone who needed it. It names no secret: the origin, a
 	// product name, and that a bearer goes in a header.
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath, s.handleProtectedResourceMetadata)
+	// A person's tasks as a resource of their own, for a client that works them and
+	// nothing else (ADR-draft-tasks-for-a-connected-system §3).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is

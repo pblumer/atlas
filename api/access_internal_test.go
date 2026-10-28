@@ -55,6 +55,9 @@ var wantPublicRoutes = []string{
 	// They carry the origin, a product name, and that a bearer goes in a header.
 	"GET /.well-known/oauth-protected-resource",
 	"GET /.well-known/oauth-protected-resource/mcp",
+	// A person's tasks as a resource of their own, the same document for the resource
+	// a client asks a tasks grant for (ADR-draft-tasks-for-a-connected-system §3).
+	"GET /.well-known/oauth-protected-resource/tasks",
 
 	// The authorization server (ADR-0200). Its metadata is read before a client
 	// holds anything at all, and its two endpoints have their own reasons:

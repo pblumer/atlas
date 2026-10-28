@@ -258,6 +258,17 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if h.Intent == model.IntentJobCreated {
 				v.job.CreatedAt = h.Timestamp
 			}
+			// A user task's turn leaves on the feed
+			// (ADR-draft-tasks-for-a-connected-system §1). Whether a creation opens a
+			// task is read before the put: a job re-created after an incident was open
+			// all along, and is no new task.
+			if kind, ok, err := userTaskFeedKind(tx, h, &v.job); err != nil {
+				return err
+			} else if ok {
+				if err := putTaskFeedRow(tx, h, kind, &v.job); err != nil {
+					return err
+				}
+			}
 			if err := tx.PutJob(h.Key, &v.job); err != nil {
 				return err
 			}
@@ -278,6 +289,15 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			}
 			return nil
 		case model.IntentJobCompleted, model.IntentJobCanceled:
+			// The row first: it reads the element the task waited on, which the job's
+			// end leaves in place until the element itself completes or terminates.
+			if kind, ok, err := userTaskFeedKind(tx, h, &v.job); err != nil {
+				return err
+			} else if ok {
+				if err := putTaskFeedRow(tx, h, kind, &v.job); err != nil {
+					return err
+				}
+			}
 			if err := tx.DeleteJob(h.Key, &v.job); err != nil {
 				return err
 			}
@@ -668,6 +688,59 @@ func putIncidentFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind,
 		definition = ei.ProcessDefKey
 	}
 	return tx.PutFeedIncident(h.PartitionId, h.Position, h.Timestamp, kind, definition, inc)
+}
+
+// userTaskFeedKind says which turn in a user task's life a job record is, and whether
+// it is one at all (ADR-draft-tasks-for-a-connected-system §1): only the user-task
+// type is a task; a creation is one only when no job of that key was open, which it
+// reads through the same batch, live and on replay alike (I4); an assignment is a
+// task taken on or given back by whether it names somebody. A failure, a lease or a
+// timeout is no turn of a person's task.
+func userTaskFeedKind(tx *stateTx, h model.RecordHeader, job *model.JobValue) (state.FeedKind, bool, error) {
+	if job.JobType != compiler.UserTaskJobTypeIndex {
+		return 0, false, nil
+	}
+	switch h.Intent {
+	case model.IntentJobCreated:
+		var open model.JobValue
+		found, err := tx.GetJobInto(h.Key, &open)
+		if err != nil || found {
+			return 0, false, err
+		}
+		return state.FeedTaskCreated, true, nil
+	case model.IntentJobAssigned:
+		if job.Assignee != "" {
+			return state.FeedTaskAssigned, true, nil
+		}
+		return state.FeedTaskUnassigned, true, nil
+	case model.IntentJobCompleted:
+		return state.FeedTaskCompleted, true, nil
+	case model.IntentJobCanceled:
+		return state.FeedTaskCancelled, true, nil
+	}
+	return 0, false, nil
+}
+
+// putTaskFeedRow puts a turn in a user task's life on the feed, keyed by where its
+// record sits on the log, with the job as the record carries it, the job's key, and
+// the element and definition read from the element instance the job waits on —
+// through the same indexed batch, live and on replay alike (I4). An element the batch
+// no longer holds leaves both zero rather than failing the fold. The row carries the
+// job whole, and the feed decides what of it leaves: never the assignee's name.
+func putTaskFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind, job *model.JobValue) error {
+	var (
+		definition uint64
+		element    int32
+		ei         model.ElementInstanceValue
+	)
+	found, err := tx.GetElementInstanceInto(job.ElementInstanceKey, &ei)
+	if err != nil {
+		return err
+	}
+	if found {
+		definition, element = ei.ProcessDefKey, ei.ElementId
+	}
+	return tx.PutFeedTask(h.PartitionId, h.Position, h.Timestamp, kind, definition, h.Key, element, job)
 }
 
 // jobTakeKind says whether a job event took the task up — a claim by a person, a lease

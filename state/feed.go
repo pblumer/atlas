@@ -12,9 +12,9 @@ import (
 
 // The event feed (ADR-0429 §5): what leaves Atlas, as state.
 //
-// applyToState folds every action outcome, every grant, every revocation and every
-// incident raised or resolved into one row keyed by the partition and the log position
-// of the record that carried it —
+// applyToState folds every action outcome, every grant, every revocation, every
+// incident raised or resolved and every turn in a user task's life into one row keyed
+// by the partition and the log position of the record that carried it —
 // both fixed by the log, so replay writes the same rows under the same keys (I4). A
 // reader pages through the rows in position order from a cursor. The rows are
 // dropped by an explicit prune fact through a position, never by a delete nobody
@@ -37,6 +37,15 @@ const (
 	FeedIncidentRaised FeedKind = 4
 	// FeedIncidentResolved is an incident resolved.
 	FeedIncidentResolved FeedKind = 5
+	// FeedTaskCreated is a user task opened; FeedTaskAssigned one taken on or handed
+	// to somebody, FeedTaskUnassigned one given back; FeedTaskCompleted one
+	// completed and FeedTaskCancelled one whose element was interrupted
+	// (ADR-draft-tasks-for-a-connected-system §1). Facts of the engine, like incidents.
+	FeedTaskCreated    FeedKind = 6
+	FeedTaskAssigned   FeedKind = 7
+	FeedTaskUnassigned FeedKind = 8
+	FeedTaskCompleted  FeedKind = 9
+	FeedTaskCancelled  FeedKind = 10
 )
 
 const (
@@ -72,6 +81,13 @@ type FeedEntry struct {
 	// receiver reads the row. Zero when the fold could not find it.
 	Incident   *model.IncidentValue
 	Definition uint64
+	// Task is the job a task row is about, as the fold saw it, TaskKey its key and
+	// TaskElement the element it waits on in Definition's compiled process. The job
+	// carries neither its key nor its element, and the element instance it names is
+	// gone by the time a receiver reads a completed task, so the fold keeps both.
+	Task        *model.JobValue
+	TaskKey     uint64
+	TaskElement int32
 }
 
 // IsCatalogue reports whether the row is a fact of the service catalogue — an
@@ -91,6 +107,8 @@ func feedValueType(k FeedKind) (model.ValueType, bool) {
 		return model.VTEntitlementHistory, true
 	case FeedIncidentRaised, FeedIncidentResolved:
 		return model.VTIncident, true
+	case FeedTaskCreated, FeedTaskAssigned, FeedTaskUnassigned, FeedTaskCompleted, FeedTaskCancelled:
+		return model.VTJob, true
 	}
 	return 0, false
 }
@@ -98,7 +116,13 @@ func feedValueType(k FeedKind) (model.ValueType, bool) {
 // feedCarriesDefinition reports whether a kind's row holds a definition key between
 // the time and the value.
 func feedCarriesDefinition(k FeedKind) bool {
-	return k == FeedIncidentRaised || k == FeedIncidentResolved
+	return k == FeedIncidentRaised || k == FeedIncidentResolved || feedIsTask(k)
+}
+
+// feedIsTask reports whether a kind is a turn in a user task's life, whose row holds
+// the job's key and element after the definition.
+func feedIsTask(k FeedKind) bool {
+	return k >= FeedTaskCreated && k <= FeedTaskCancelled
 }
 
 // PutFeedEntry writes the row for the fact at position on partition, recorded at at.
@@ -116,13 +140,30 @@ func (t *Tx) PutFeedEntry(partition uint16, position uint64, at int64, kind Feed
 // PutFeedIncident writes the row for an incident raised or resolved at position on
 // partition, recorded at at, with the definition its instance ran.
 func (t *Tx) PutFeedIncident(partition uint16, position uint64, at int64, kind FeedKind, definition uint64, v *model.IncidentValue) error {
-	if !feedCarriesDefinition(kind) {
+	if !feedCarriesDefinition(kind) || feedIsTask(kind) {
 		return fmt.Errorf("state: a feed row of kind %d is not an incident", kind)
 	}
 	row := make([]byte, 0, 80)
 	row = append(row, byte(kind))
 	row = binary.BigEndian.AppendUint64(row, uint64(at))
 	row = binary.BigEndian.AppendUint64(row, definition)
+	row = model.AppendValue(row, v)
+	return t.b.Set(keyFeedRow(partition, position), row, nil)
+}
+
+// PutFeedTask writes the row for a turn in a user task's life at position on
+// partition, recorded at at: the job as the fold saw it, its key, the element it waits
+// on and the definition its instance ran.
+func (t *Tx) PutFeedTask(partition uint16, position uint64, at int64, kind FeedKind, definition, jobKey uint64, element int32, v *model.JobValue) error {
+	if !feedIsTask(kind) {
+		return fmt.Errorf("state: a feed row of kind %d is not a task", kind)
+	}
+	row := make([]byte, 0, 96)
+	row = append(row, byte(kind))
+	row = binary.BigEndian.AppendUint64(row, uint64(at))
+	row = binary.BigEndian.AppendUint64(row, definition)
+	row = binary.BigEndian.AppendUint64(row, jobKey)
+	row = binary.BigEndian.AppendUint32(row, uint32(element))
 	row = model.AppendValue(row, v)
 	return t.b.Set(keyFeedRow(partition, position), row, nil)
 }
@@ -173,6 +214,14 @@ func decodeFeedRow(partition uint16, key, raw []byte) (FeedEntry, error) {
 		e.Definition = binary.BigEndian.Uint64(body[:8])
 		body = body[8:]
 	}
+	if feedIsTask(e.Kind) {
+		if len(body) < 12 {
+			return FeedEntry{}, fmt.Errorf("state: a task feed row of %d bytes is cut short", len(raw))
+		}
+		e.TaskKey = binary.BigEndian.Uint64(body[:8])
+		e.TaskElement = int32(binary.BigEndian.Uint32(body[8:12]))
+		body = body[12:]
+	}
 	v, err := model.DecodeValue(vt, body)
 	if err != nil {
 		return FeedEntry{}, err
@@ -186,6 +235,8 @@ func decodeFeedRow(partition uint16, key, raw []byte) (FeedEntry, error) {
 		e.Revoked = val
 	case *model.IncidentValue:
 		e.Incident = val
+	case *model.JobValue:
+		e.Task = val
 	}
 	return e, nil
 }

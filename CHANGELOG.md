@@ -14,6 +14,26 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A user task's life leaves on the event feed.** A task opened, taken on, given back,
+  completed or cancelled is `atlas.task.created`, `.assigned`, `.unassigned`,
+  `.completed` or `.cancelled` on `GET /api/v1/events` and on push subscriptions, from
+  the engine's source under `tasks/{key}`: the task, its instance, element and process,
+  the groups it is offered to and when it is due, and whether somebody holds it — never
+  who, nor its form or variables. A reader narrowed to catalogues does not receive them
+  (ADR-draft-tasks-for-a-connected-system).
+- **A token that lists the open tasks and nothing else.** The new scope `tasklist`
+  reaches `GET /api/v1/tasks` and `GET /api/v1/tasks/{key}` only, for a system that keeps
+  a copy of the open tasks, such as a wiki that shows them as its own tasks; it cannot
+  take a task on, complete it or read a form, an instance or a variable
+  (ADR-draft-tasks-for-a-connected-system).
+- **A person can approve an application for their tasks alone.** An OAuth grant for the
+  resource `…/tasks` reaches who the person is, their tasks, taking them on, giving them
+  back and completing them with their forms, as the person, and nothing else; the
+  consent page and *AI access* say so (ADR-draft-tasks-for-a-connected-system).
+- **Who am I names one's own groups.** `GET /api/v1/auth/me` answers the groups the
+  caller is a member of, by id and name, so an application acting for a person can tell
+  which tasks offered to groups are theirs (ADR-draft-tasks-for-a-connected-system).
+
 - **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
   description comes from the wiki now carries the page's layout beside its text:
   headings, lists, tables, panels, quotes, code, dividers, its images and the items
