@@ -289,6 +289,8 @@ var productFieldsWithNoControl = map[string]string{
 	"contentSource": "written by the content routes alone — link, refresh, unlink " +
 		"(ADR-0491); a save carries the stored binding " +
 		"whatever the body says, so the form must not send one",
+	"rich": "the source's layout, written by link and refresh alone (ADR-0491, amended " +
+		"2026-10-28); a save keeps the stored one whatever the body says",
 }
 
 // TestTheFormMaintainsEveryFieldAProductCarries.
