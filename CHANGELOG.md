@@ -349,6 +349,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A diagrams token can be given its applications on the API-token page.** The
+  architecture list shows a `diagrams` token only the applications its reach names, but
+  the page asked a `diagrams` token for no reach, so every token minted there listed no
+  sketch, and a wiki that held one offered no application to insert. The page now offers
+  the applications as an optional reach for a `diagrams` token, says that without one the
+  token reads every process but no sketch, and still requires one for `landscape`
+  (ADR-0493, as amended).
+
 - **The Playground evaluates decisions.** A business rule task in a Playground sandbox
   was answered like any other job: by the default stub, which completed it without a
   result, or not at all. The decision it calls was never evaluated, although the

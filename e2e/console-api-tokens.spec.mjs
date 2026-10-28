@@ -215,6 +215,27 @@ test("the roles and the reach follow the scope", async ({ page }) => {
   await expect.poll(async () => (await posts(page)).map((r) => r.body))
     .toEqual([{ name: "Peer-Atlas", scope: "landscape", expiresInDays: 365, reach: ["app_hr"] }]);
 
+  // A diagrams token may name applications: it reads every process either way, and
+  // lists the architecture sketches of the applications it names and of no other. The
+  // same applications as for landscape, under the diagrams token's own words.
+  await scope.selectOption("landscape");
+  await expect(page.locator(".tok-reach")).toContainText("(Pflicht)");
+  await scope.selectOption("diagrams");
+  await expect(page.locator(".tok-reach")).toContainText("(optional)");
+  await expect(page.locator(".tok-reach")).toContainText("Architektur-Skizzen");
+  await expect(page.locator('.tok-reach[data-reach="projects"] input[name="reach"]')).toHaveCount(2);
+  await form(page).locator('input[name="name"]').fill("Wiki-Prozesse");
+  await form(page).locator('button[type="submit"]').click();
+  await expect.poll(async () => (await posts(page)).length).toBe(2);
+  await scope.selectOption("diagrams");
+  await form(page).locator('input[name="name"]').fill("Wiki");
+  await page.locator('input[name="reach"][value="app_hr"]').check();
+  await form(page).locator('button[type="submit"]').click();
+  await expect.poll(async () => (await posts(page)).map((r) => r.body).slice(1)).toEqual([
+    { name: "Wiki-Prozesse", scope: "diagrams", expiresInDays: 365 },
+    { name: "Wiki", scope: "diagrams", expiresInDays: 365, reach: ["app_hr"] },
+  ]);
+
   // Any other scope asks for no reach at all.
   await scope.selectOption("metrics");
   await expect(page.locator(".tok-reach")).toHaveCount(0);

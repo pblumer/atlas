@@ -770,8 +770,9 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   `shop-config-answers.spec.mjs`; the stub keeps the tokens as the server would.
   - **Minting:** the form shows the scope's sentence and the roles the token will carry before
     it is sent — feedreader alone for `events`, modeler, operator and user otherwise. A
-    `landscape` token is not sent without an application, an `events` token may name catalogues,
-    and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
+    `landscape` token is not sent without an application, a `diagrams` token may name
+    applications under its own words and is sent without one too, an `events` token may name
+    catalogues, and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
     confirmation beside its warning.
   - **The secret:** shown once, in the document once, and copied from the panel. It never
     reaches storage, the URL or the console. Done removes it, and leaving the view empties the
