@@ -48,6 +48,7 @@ func TestValidate(t *testing.T) {
 		{"light", Prefs{Appearance: "light"}, ""},
 		{"dark", Prefs{Appearance: "dark"}, ""},
 		{"following the system", Prefs{Appearance: "system"}, ""},
+		{"the cockpit skin", Prefs{Appearance: "cockpit"}, ""},
 		{"an appearance nobody draws", Prefs{Appearance: "sepia"}, "appearance"},
 		{"appearance case matters", Prefs{Appearance: "Dark"}, "appearance"},
 	}

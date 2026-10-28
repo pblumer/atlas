@@ -167,8 +167,11 @@ engine behaviour, in which case it stops for review.
   first screen, which also settles ADR-0459's number format and zone at that moment
   rather than on the next reload.
 - **The switches**: `#appearance-toggle` in the top bar beside the favourites (shown
-  signed in or not; `aria-pressed` is the state, the title says what a press does) and
-  the Display screen's fourth setting, whose dark option reads "Dunkel (Vorschau)".
+  signed in or not, left out under 390px where the bar needs the room; `aria-pressed`
+  is the state, the title says what a press does) and the Display screen's fourth
+  setting, whose dark option reads "Dunkel (Vorschau)". The Display screen also offers
+  ADR-0509's cockpit skin, which rides the same preference and every rule below that
+  names the dark appearance.
 - **The accent as text** is solved as described above, and the prototype's lighter
   stock accent in dark is withdrawn: the stock `#0b5cff` keeps white ink at 5.3:1 as a
   fill and reads as `#6095ff` (5.6:1) as text. `api/appearance_internal_test.go`

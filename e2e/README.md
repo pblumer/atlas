@@ -61,6 +61,8 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   drawn; a switch re-colours an open diagram without importing it again; the exported
   picture stays light and the model carries no colour; the code-editor and JSON tokens are
   readable in both palettes; and the DMN requirements graph is drawn from the same palette.
+  The cockpit skin (ADR-0509) is drawn from the record before the body is parsed, and the
+  switch takes it back to light; the Display screen offers it (`display-settings.spec.mjs`).
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed

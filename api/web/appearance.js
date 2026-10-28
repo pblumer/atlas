@@ -7,12 +7,13 @@
 // prefs.js owns the record and its browser mirror, and this module only draws what
 // the record says.
 //
-// The preference is one of three words. `light` and `dark` are choices; `system`
-// follows prefers-color-scheme and keeps following it while the page is open. Anything
-// else — nothing chosen, a value from a later version, storage that throws — is today's
-// light console: the default stays light until the dark palette has been verified on
-// every screen, which is the record's condition for changing it, and until then the
-// dark choice is offered as a preview.
+// The preference is one of four words. `light` and `dark` are choices; `system`
+// follows prefers-color-scheme and keeps following it while the page is open; `cockpit`
+// is a gamified HUD skin on the dark foundation, an explicit opt-in that the system
+// scheme never selects (ADR-0509). Anything else — nothing chosen, a value from a later
+// version, storage that throws — is today's light console: the default stays light
+// until the dark palette has been verified on every screen, which is the record's
+// condition for changing it, and until then the dark choice is offered as a preview.
 //
 // The resolved appearance is written as data-appearance on the document root, and the
 // stylesheet does the rest (app.css, `:root[data-appearance="dark"]`). The tiny inline
@@ -25,8 +26,9 @@
 // same reason the bootstrap reads it: the first paint must already be right.
 export const PREFS_MIRROR = "atlas.prefs";
 
-// The words a preference may be. The first is the default.
-export const APPEARANCES = ["light", "dark", "system"];
+// The words a preference may be. The first is the default. `cockpit` is a skin, not
+// an accessibility appearance, but it rides the same data-appearance mechanism.
+export const APPEARANCES = ["light", "dark", "system", "cockpit"];
 
 // APPEARANCE_EVENT is dispatched on the document whenever the drawn appearance is
 // (re)applied, with { preference, resolved } as its detail, so a control that shows
@@ -66,9 +68,11 @@ export function readAppearance() {
   }
 }
 
-// resolveAppearance turns a preference into what is drawn: "dark" for a dark choice,
-// or for `system` while the system is dark; "light" otherwise.
+// resolveAppearance turns a preference into what is drawn: "cockpit" for the skin
+// (an explicit choice the system scheme never selects); "dark" for a dark choice, or
+// for `system` while the system is dark; "light" otherwise.
 export function resolveAppearance(preference, systemDark) {
+  if (preference === "cockpit") return "cockpit";
   return preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
 }
 
@@ -86,9 +90,11 @@ export function applyAppearance(preference = readAppearance()) {
   return resolved;
 }
 
-// currentAppearance is what the document is drawn in right now: "light" or "dark".
+// currentAppearance is what the document is drawn in right now: "light", "dark" or
+// "cockpit" — the last two both on a dark surface.
 export function currentAppearance() {
-  return document.documentElement.getAttribute("data-appearance") === "dark" ? "dark" : "light";
+  const drawn = document.documentElement.getAttribute("data-appearance");
+  return drawn === "dark" || drawn === "cockpit" ? drawn : "light";
 }
 
 // watchSystemAppearance keeps the document in step with two things that change under

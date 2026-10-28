@@ -1125,10 +1125,11 @@ async function openSearchPalette() {
 }
 
 // installAppearanceToggle wires the top bar's light/dark switch (ADR-0507). It flips
-// between the two drawn appearances — somebody following the system who presses it
-// has made a choice, and gets the one they asked for — and saves it with the rest of
-// the display preferences, so it follows them to the next browser; `system` stays a
-// choice on the Display screen. The label is the state (aria-pressed says whether
+// between light and a dark surface — somebody following the system who presses it
+// has made a choice, and gets the one they asked for; from the cockpit skin
+// (ADR-0509), which is dark-surfaced, a press goes to light — and saves it with the
+// rest of the display preferences, so it follows them to the next browser; `system`
+// and the cockpit stay choices on the Display screen. The label is the state (aria-pressed says whether
 // the console is dark) and the title says what a press does; both follow a change
 // made anywhere else — the Display screen, another device's record arriving, the
 // system turning dark.
@@ -1136,7 +1137,7 @@ function installAppearanceToggle() {
   const btn = document.getElementById("appearance-toggle");
   if (!btn) return;
   const paint = () => {
-    const dark = currentAppearance() === "dark";
+    const dark = currentAppearance() !== "light";
     btn.setAttribute("aria-pressed", dark ? "true" : "false");
     btn.setAttribute("aria-label", tr("appearance.toggle.label"));
     btn.title = tr(dark ? "appearance.toggle.toLight" : "appearance.toggle.toDark");
@@ -1144,7 +1145,7 @@ function installAppearanceToggle() {
   paint();
   document.addEventListener(APPEARANCE_EVENT, paint);
   btn.addEventListener("click", async () => {
-    const next = currentAppearance() === "dark" ? "light" : "dark";
+    const next = currentAppearance() !== "light" ? "light" : "dark";
     try {
       // savePrefs applies and mirrors first, so the console turns at once; the
       // request only decides whether the account keeps it.

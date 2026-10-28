@@ -341,6 +341,22 @@ test("pressing the switch while following the system makes a choice", async ({ p
   expect(await appearance(page)).toBe("light");
 });
 
+// The cockpit skin (ADR-0509) rides the same preference: drawn before the body is
+// parsed, never chosen by the system scheme, dark-surfaced for the switch — whose
+// press from the cockpit goes to light, not to the plain dark appearance.
+test("the cockpit is drawn from the record, and the switch takes it back to light", async ({ page }) => {
+  await prefer(page, "cockpit");
+  await page.emulateMedia({ colorScheme: "light" });
+  await bootApp(page);
+  expect(await page.evaluate(() => window.__appearanceAtBody)).toBe("cockpit");
+  const bg = await bodyBackground(page);
+  expect(await page.evaluate((bg) => window.__lum(bg), bg)).toBeLessThan(0.02);
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  await toggle(page).click();
+  expect(await appearance(page)).toBe("light");
+  expect(await mirrored(page)).toBe("light");
+});
+
 test("the sign-in screen is drawn in the appearance this browser remembers", async ({ page }) => {
   await prefer(page, "dark");
   await page.addInitScript(COLOR_HELPERS);

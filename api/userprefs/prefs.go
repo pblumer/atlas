@@ -49,11 +49,12 @@ var Regions = []string{"international", "ch", "de", "us"}
 // package's own tests and a console-less build see.
 var Languages = []string{"de", "en"}
 
-// Appearances are how the console may be drawn (ADR-0507): light, dark, or
-// following the operating system's scheme. "" is the unset value and draws today's
+// Appearances are how the console may be drawn (ADR-0507): light, dark, following
+// the operating system's scheme, or the cockpit skin (ADR-0509), a playful dark
+// variant nobody gets without choosing it. "" is the unset value and draws today's
 // light console; "light" is the same picture chosen on purpose, which matters once
 // the default changes. The list is the stylesheet's — app.css answers exactly these.
-var Appearances = []string{"light", "dark", "system"}
+var Appearances = []string{"light", "dark", "system", "cockpit"}
 
 // Prefs is one person's answer to the four questions. Each field's zero value is
 // "not chosen", which is why none of them is a pointer and why "international"

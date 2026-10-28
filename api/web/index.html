@@ -18,16 +18,18 @@
     }
   } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
 </script>
-<!-- Apply the appearance (light, dark, system) before first paint, independently of
-     the brand colour above. It is read from the display preferences prefs.js mirrors
-     (atlas.prefs, ADR-0459/ADR-0507), and mirrors resolveAppearance in appearance.js:
-     anything but "dark", or "system" while the system is dark, is the light console. -->
+<!-- Apply the appearance (light, dark, system, cockpit) before first paint,
+     independently of the brand colour above. It is read from the display preferences
+     prefs.js mirrors (atlas.prefs, ADR-0459/ADR-0507), and mirrors resolveAppearance in
+     appearance.js: "cockpit" is the skin (ADR-0509); anything but that, "dark", or
+     "system" while the system is dark, is the light console. -->
 <script>
   (function () {
     var a = "light";
     try {
       var p = (JSON.parse(localStorage.getItem("atlas.prefs") || "{}") || {}).appearance;
-      if (p === "dark" || (p === "system" && window.matchMedia &&
+      if (p === "cockpit") a = "cockpit";
+      else if (p === "dark" || (p === "system" && window.matchMedia &&
           window.matchMedia("(prefers-color-scheme: dark)").matches)) a = "dark";
     } catch (e) { /* storage unreadable or not JSON — stay light */ }
     document.documentElement.setAttribute("data-appearance", a);

@@ -197,13 +197,168 @@
   color-scheme: dark;
 }
 
+/* ===== Starship cockpit — a gamified HUD skin (ADR-0509) ===================== */
+/* Cockpit rides the same data-appearance mechanism as dark: it answers the same
+   palette tokens (so the canvas, the vendored chrome and the code editors theme
+   through the very same bridges — those selectors below include "cockpit"), in a
+   deep-space, cyan-HUD key, and layers purely decorative motion over it. It is an
+   explicit opt-in, never selected by the system scheme. color-scheme stays dark so
+   native controls and scrollbars follow. All motion is switched off under
+   prefers-reduced-motion, leaving the static palette and glow intact. */
+:root[data-appearance="cockpit"] {
+  --bg: #060a12;
+  --surface: #0c1622;
+  --diagram-bg: #070d18;
+  --diagram-dot: #15303b;
+  --diagram-shape-fill: #0e1c2b;
+  --diagram-shape-stroke: #9fc4ca;
+  --diagram-label: #d7eef3;
+  --border: #16344a;
+  --border-strong: #24506b;
+  --text: #d7eef3;
+  --muted: #7ba3ac;
+  --accent: #31e1e6;
+  --accent-ink: #052226;
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, var(--surface)) !important;
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, #ffffff) !important;
+  --danger: #ff6b6b;
+  --danger-soft: #2a1317;
+  --warn: #ffb648;
+  --warn-soft: #2a2110;
+  --mesh-attention: #ffb648;
+  --mesh-ink: #7ba3ac;
+  --mesh-line: #43707b;
+  --ok: #39d98a;
+  --shadow:
+    0 0 0 1px rgba(49, 225, 230, 0.08),
+    0 2px 12px rgba(0, 0, 0, 0.55),
+    0 0 26px rgba(49, 225, 230, 0.06);
+  /* The tokens ADR-0507's S1 added, answered for the cockpit: the green wash behind a
+     passing state, the ink on a status fill (6:1 or more on each of the cockpit's
+     status colours), and the accent as text — the cockpit's own cyan reads as it is,
+     an organisation's accent through the tone theme.js derives for dark surfaces. */
+  --ok-soft: color-mix(in srgb, var(--ok) 14%, var(--surface));
+  --status-ink: #052226;
+  --accent-text: var(--accent-on-dark, var(--accent));
+  color-scheme: dark;
+}
+
+/* Deep-space backdrop: a radial nebula over near-black, painted on the body so it
+   sits behind in-flow content. */
+:root[data-appearance="cockpit"] body {
+  background:
+    radial-gradient(1200px 680px at 78% -10%, rgba(49, 225, 230, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 12% 108%, rgba(90, 120, 255, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 40%, #0a1424 0%, #060a12 70%, #03060d 100%);
+  background-attachment: fixed;
+}
+/* Two drifting starfields (fixed, inert, behind everything). */
+:root[data-appearance="cockpit"] body::before {
+  content: "";
+  position: fixed;
+  inset: -200px 0 0 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 40px 60px, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1.4px 1.4px at 160px 140px, rgba(185, 245, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 240px 40px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 90px 220px, rgba(255, 255, 255, 0.6), transparent);
+  background-size: 300px 300px, 300px 300px, 180px 180px, 180px 180px;
+  opacity: 0.9;
+  animation: cockpit-stars 140s linear infinite;
+}
+/* Faint CRT scanlines plus a top HUD glow — a thin, static instrument overlay. */
+:root[data-appearance="cockpit"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(49, 225, 230, 0.11), transparent 140px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+/* Lift the content column above the two fixed backdrop layers (the topbar, drawer,
+   scrim and toast establish their own stacking already). */
+:root[data-appearance="cockpit"] main { position: relative; z-index: 1; }
+
+/* Cockpit chrome: a glass header hairline, a radar-swept reactor mark, glowing
+   accents, a teal account chip with an online light, and telemetry dots on stats. */
+:root[data-appearance="cockpit"] .topbar {
+  background: linear-gradient(180deg, rgba(12, 22, 34, 0.92), rgba(6, 10, 18, 0.86));
+  border-bottom-color: rgba(49, 225, 230, 0.35);
+  box-shadow: 0 1px 0 rgba(49, 225, 230, 0.15), 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+:root[data-appearance="cockpit"] .mark {
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 16px rgba(49, 225, 230, 0.55);
+  animation: cockpit-reactor 3.4s ease-in-out infinite;
+}
+/* A radar sweep scans across the real atlas mark (the a+ glyph stays the face). */
+:root[data-appearance="cockpit"] .mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(49, 225, 230, 0.5) 0deg, rgba(49, 225, 230, 0.1) 26deg, transparent 72deg 360deg);
+  mix-blend-mode: screen;
+  animation: cockpit-radar 3.6s linear infinite;
+}
+:root[data-appearance="cockpit"] .btn:not(.ghost):not(.neutral) { box-shadow: 0 0 16px rgba(49, 225, 230, 0.42); }
+:root[data-appearance="cockpit"] .btn:not(.ghost):not(.neutral):hover { box-shadow: 0 0 24px rgba(49, 225, 230, 0.62); }
+:root[data-appearance="cockpit"] .topnav a.active { text-shadow: 0 0 12px rgba(49, 225, 230, 0.75); }
+:root[data-appearance="cockpit"] .card:hover { border-color: rgba(49, 225, 230, 0.3); }
+:root[data-appearance="cockpit"] .avatar,
+:root[data-appearance="cockpit"] .avatar:hover { background: #10343d; color: #bfeef2; position: relative; overflow: visible; }
+:root[data-appearance="cockpit"] .avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px; bottom: -1px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--ok);
+  animation: cockpit-blink 2.2s ease-in-out infinite;
+}
+:root[data-appearance="cockpit"] .stat { position: relative; padding-left: 14px; }
+:root[data-appearance="cockpit"] .stat::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(49, 225, 230, 0.8);
+  animation: cockpit-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes cockpit-stars { from { transform: translateY(0); } to { transform: translateY(-300px); } }
+@keyframes cockpit-reactor {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 14px rgba(49, 225, 230, 0.5); }
+  50% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.9), 0 0 24px rgba(49, 225, 230, 0.85); }
+}
+@keyframes cockpit-radar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes cockpit-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-appearance="cockpit"] body::before,
+  :root[data-appearance="cockpit"] .mark,
+  :root[data-appearance="cockpit"] .avatar::after,
+  :root[data-appearance="cockpit"] .stat::before { animation: none; }
+  :root[data-appearance="cockpit"] .mark::after { display: none; }
+}
+/* ===== end cockpit skin ====================================================== */
+
 /* diagram-js — the palette, the context pad, the replace and search popups, the
    drop and snap feedback — paints from custom properties it declares on .djs-parent
    (each vendored diagram-js.css). Naming them after the console's tokens is the whole
    bridge: the vendored files stay pristine, and this selector outranks theirs on
    specificity, not on load order. The BPMN, DMN and ArchiMate/UML canvases share
    the names, so one block reaches all three. */
-:root[data-appearance="dark"] .djs-parent {
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .djs-parent {
   --canvas-fill-color: var(--diagram-bg);
   --context-pad-entry-background-color: var(--surface);
   --context-pad-entry-hover-background-color: var(--border);
@@ -247,7 +402,7 @@
    that is the price of leaving the vendored sheets untouched. Blues and reds keep
    their hue; the pale washes behind a selection or an error become dark ones, and
    the dark blue and red that are read as text become light ones. */
-:root[data-appearance="dark"] :is(.dmn-js-parent, .bio-properties-panel, .djs-parent) {
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.dmn-js-parent, .bio-properties-panel, .djs-parent) {
   --color-white: var(--surface);
   --color-grey-225-10-97: #23262c;
   --color-grey-225-10-95: #272a31;
@@ -283,34 +438,34 @@
    mail (.dev-preview-html, .ob-html) stay white, because they show a message the way
    its reader's mail client will; the decision graph's legend swatches follow the
    graph itself, which is drawn by decision-graph.js. */
-:root[data-appearance="dark"] .var-results mark { background: color-mix(in srgb, var(--warn) 32%, var(--surface)); color: var(--text); }
-:root[data-appearance="dark"] .pill.warn { background: var(--warn-soft); color: var(--warn); }
-:root[data-appearance="dark"] tbody tr:hover { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
-:root[data-appearance="dark"] .ps-run-detail.err { background: var(--danger-soft); }
-:root[data-appearance="dark"] .res-rule { background: var(--ok-soft); color: var(--ok); }
-:root[data-appearance="dark"] .mrule.is-hit { background: var(--ok-soft); }
-:root[data-appearance="dark"] .mrule.is-hit td { border-color: color-mix(in srgb, var(--ok) 45%, var(--surface)); }
-:root[data-appearance="dark"] .mrule.is-hit .mcol-idx,
-:root[data-appearance="dark"] .mrule.is-hit .mout,
-:root[data-appearance="dark"] .mcell.is-ok { color: var(--ok); }
-:root[data-appearance="dark"] .mcell.is-no { color: var(--danger); }
-:root[data-appearance="dark"] :is(.var-panel, .ops-tab-body, .var-modal) .vcopy.copied,
-:root[data-appearance="dark"] .tasks-publish .chip.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 45%, var(--surface)); }
-:root[data-appearance="dark"] .tasks-folder.active .tasks-count { background: var(--surface); }
-:root[data-appearance="dark"] .due-badge.overdue,
-:root[data-appearance="dark"] .dev-run-detail.err { border-color: color-mix(in srgb, var(--danger) 45%, var(--surface)); }
-:root[data-appearance="dark"] .ca-child-link { color: var(--accent-text); }
-:root[data-appearance="dark"] :is(.vars .vv.num, .vt .c-val.num, .dev-item-value, .im-resolved,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .var-results mark { background: color-mix(in srgb, var(--warn) 32%, var(--surface)); color: var(--text); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .pill.warn { background: var(--warn-soft); color: var(--warn); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) tbody tr:hover { background: color-mix(in srgb, var(--text) 5%, var(--surface)); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .ps-run-detail.err { background: var(--danger-soft); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .res-rule { background: var(--ok-soft); color: var(--ok); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mrule.is-hit { background: var(--ok-soft); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mrule.is-hit td { border-color: color-mix(in srgb, var(--ok) 45%, var(--surface)); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mrule.is-hit .mcol-idx,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mrule.is-hit .mout,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mcell.is-ok { color: var(--ok); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .mcell.is-no { color: var(--danger); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.var-panel, .ops-tab-body, .var-modal) .vcopy.copied,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .tasks-publish .chip.ok { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 45%, var(--surface)); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .tasks-folder.active .tasks-count { background: var(--surface); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .due-badge.overdue,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .dev-run-detail.err { border-color: color-mix(in srgb, var(--danger) 45%, var(--surface)); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .ca-child-link { color: var(--accent-text); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.vars .vv.num, .vt .c-val.num, .dev-item-value, .im-resolved,
         .vars .j-str, .var-modal .j-str) { color: #7ee787; }
-:root[data-appearance="dark"] .im-resolved { border-color: #7ee787; }
-:root[data-appearance="dark"] :is(.vars .vv.bool, .vt .c-val.bool, .vars .j-bool, .var-modal .j-bool) { color: #ffa657; }
-:root[data-appearance="dark"] :is(.vars .j-key, .var-modal .j-key) { color: #d2a8ff; }
-:root[data-appearance="dark"] :is(.vars .j-num, .var-modal .j-num) { color: #79c0ff; }
-:root[data-appearance="dark"] :is(.sqlmock-failed .sqlmock-stmt, .sqlmock-detail, .im-filter-count.none) { color: var(--danger); }
-:root[data-appearance="dark"] :is(.wk-stale-at, .stkind-where-engine, .im-nomatch) { color: var(--warn); }
-:root[data-appearance="dark"] .wkjob-completed { border-color: var(--ok); }
-:root[data-appearance="dark"] .wkjob-in-flight { border-color: var(--warn); }
-:root[data-appearance="dark"] .drg-tag { background: color-mix(in srgb, #8b5cf6 22%, var(--surface)); color: #d2a8ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .im-resolved { border-color: #7ee787; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.vars .vv.bool, .vt .c-val.bool, .vars .j-bool, .var-modal .j-bool) { color: #ffa657; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.vars .j-key, .var-modal .j-key) { color: #d2a8ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.vars .j-num, .var-modal .j-num) { color: #79c0ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.sqlmock-failed .sqlmock-stmt, .sqlmock-detail, .im-filter-count.none) { color: var(--danger); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.wk-stale-at, .stkind-where-engine, .im-nomatch) { color: var(--warn); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .wkjob-completed { border-color: var(--ok); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .wkjob-in-flight { border-color: var(--warn); }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .drg-tag { background: color-mix(in srgb, #8b5cf6 22%, var(--surface)); color: #d2a8ff; }
 
 * { box-sizing: border-box; }
 /* An id/class `display` rule outranks the UA [hidden] rule; restore it explicitly. */
@@ -412,8 +567,8 @@ b { font-weight: 600; }
 /* The light/dark switch shows what a press turns on: the moon while the console is
    light, the sun while it is dark (ADR-0507). */
 .appearance-toggle .ico-sun,
-:root[data-appearance="dark"] .appearance-toggle .ico-moon { display: none; }
-:root[data-appearance="dark"] .appearance-toggle .ico-sun { display: block; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .appearance-toggle .ico-moon { display: none; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .appearance-toggle .ico-sun { display: block; }
 /* Under 390px the bar of view names keeps room of its own only without one more
    button (e2e/console-menu.spec.mjs), and which of the existing ones a phone loses is
    a decision of its own. So the newest one steps aside there; the Display screen
@@ -833,7 +988,7 @@ ol.steps li { margin: 6px 0; }
 .btn.danger:not(.ghost):hover { background: #a5322a; border-color: #a5322a; }
 /* In dark the fill is the lighter danger tone under dark ink, so the hover moves
    towards white rather than towards black. */
-:root[data-appearance="dark"] .btn.danger:not(.ghost):hover {
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .btn.danger:not(.ghost):hover {
   background: color-mix(in srgb, var(--danger) 82%, #ffffff); border-color: color-mix(in srgb, var(--danger) 82%, #ffffff);
 }
 .btn.sm { padding: 4px 10px; font-size: 12px; border-radius: 5px; }
@@ -1738,15 +1893,15 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    Every one stands at least 5.3:1 on the editor's --surface (e2e/appearance.spec.mjs
    holds both palettes to 4.5). The JSON editor's own classes (.jtok-*) take the same
    roles' colours. Classes that paint from a token need nothing here. */
-:root[data-appearance="dark"] :is(.tok-comment, .tok-md-quote, .tok-md-rule) { color: #8b949e; }
-:root[data-appearance="dark"] :is(.tok-string, .jtok-string) { color: #a5d6ff; }
-:root[data-appearance="dark"] :is(.tok-number, .tok-literal, .tok-parameter, .tok-md-head, .tok-tpl-tag,
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-comment, .tok-md-quote, .tok-md-rule) { color: #8b949e; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-string, .jtok-string) { color: #a5d6ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-number, .tok-literal, .tok-parameter, .tok-md-head, .tok-tpl-tag,
   .jtok-number, .jtok-literal) { color: #79c0ff; }
-:root[data-appearance="dark"] :is(.tok-keyword, .tok-operator, .tok-md-list) { color: #ff7b72; }
-:root[data-appearance="dark"] :is(.tok-builtin, .tok-cmdlet, .tok-html-attr) { color: #d2a8ff; }
-:root[data-appearance="dark"] :is(.tok-variable, .tok-html-entity, .jtok-key) { color: #ffa657; }
-:root[data-appearance="dark"] :is(.tok-punct, .jtok-punct) { color: #9da5ae; }
-:root[data-appearance="dark"] :is(.tok-type, .tok-md-code, .tok-html-tag) { color: #7ee787; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-keyword, .tok-operator, .tok-md-list) { color: #ff7b72; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-builtin, .tok-cmdlet, .tok-html-attr) { color: #d2a8ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-variable, .tok-html-entity, .jtok-key) { color: #ffa657; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-punct, .jtok-punct) { color: #9da5ae; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-type, .tok-md-code, .tok-html-tag) { color: #7ee787; }
 
 /* Completion popup. */
 .feel-pop {
@@ -1766,7 +1921,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* The unlabelled kind's grey is --muted, which the dark appearance lightens; the
    white label needs the darker grey the env kind uses. :where keeps this at the
    base rule's weight, so every coloured kind below still wins. */
-:where(:root[data-appearance="dark"]) .feel-opt-kind { background: #6e7781; }
+:where(:root:is([data-appearance="dark"], [data-appearance="cockpit"])) .feel-opt-kind { background: #6e7781; }
 .feel-opt-kind.k-function { background: #8250df; }
 .feel-opt-kind.k-cmdlet   { background: #8250df; }
 .feel-opt-kind.k-variable { background: #953800; }
@@ -1926,7 +2081,7 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    but not visible. Recolouring the logo would be changing it, so it is left exactly
    as drawn and given the light canvas behind it instead: the mark a dark diagram
    carries is the one a light diagram carries (ADR-0507). */
-:root[data-appearance="dark"] .bjs-powered-by {
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .bjs-powered-by {
   background: #f3f4f6; border-radius: 3px; padding: 2px 4px; line-height: 0;
 }
 

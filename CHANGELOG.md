@@ -24,7 +24,8 @@ _Changed_ / _Removed_ for each version.
   and the architecture views are not fully adapted yet, so the dark option is labelled a
   preview and the default stays light. The brand colour is unchanged — where it is read
   as text, a tone derived from it keeps it at 4.5:1 on the dark surface — and exports
-  stay light (ADR-0507).
+  stay light (ADR-0507). The Display screen also offers the cockpit, a playful dark
+  skin with glowing instruments whose motion stops under reduced motion (ADR-0509).
 
 - **A cancellation can be handled by an event subprocess inside its transaction.** A
   cancel end event may now sit in an event subprocess directly inside a `<transaction>`:

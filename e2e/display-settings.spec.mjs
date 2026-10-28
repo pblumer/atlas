@@ -131,6 +131,17 @@ test("the appearance is chosen here and applied on save, not on a click", async 
   expect(page.__errors).toEqual([]);
 });
 
+test("the cockpit skin is offered beside the three appearances, labelled as a bit of fun", async ({ page }) => {
+  await open(page);
+  await expect(page.locator('.ds-option:has(input[value="cockpit"]) .ds-option-name')).toHaveText("Cockpit (Spielerei)");
+  await page.locator('input[name="ds-appearance"][value="cockpit"]').check();
+  await page.locator("#ds-save").click();
+  await expect(page.locator("#ds-status")).toHaveText("Gespeichert.");
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-appearance"))).toBe("cockpit");
+  expect(await page.evaluate(() => window.__stored)).toMatchObject({ appearance: "cockpit" });
+  expect(page.__errors).toEqual([]);
+});
+
 test("saving another field leaves an unchosen appearance unchosen", async ({ page }) => {
   await open(page);
   await page.locator('input[name="ds-region"][value="ch"]').check();
