@@ -23,7 +23,7 @@ import (
 // product opens, and where an edited product's panel goes back to when it closes.
 func TestTheProductPanelsLiveUnderTheList(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	page := webRegion(t, src, `<div class="product-list">`, "How the products relate")
+	page := webRegion(t, src, `<div class="product-list">`, `pageSection("content"`)
 
 	for _, want := range []struct{ frag, what string }{
 		{`<div class="product-panels">`, "the place the panels live"},

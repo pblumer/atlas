@@ -1191,45 +1191,43 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   const formList = (forms || []).map((f) => ({ id: f.id, name: f.name || f.id }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // One line per section that says what it holds, readable while it is folded: a
+  // folded page is only quicker to read than an open one if the headings still
+  // answer "is there anything to do here?".
+  const drafts = offered.filter((iid) => byID[iid] && byID[iid].state !== "active").length;
+  const missing = offered.filter((iid) => !byID[iid]).length;
+  const bound = offered.filter((iid) => byID[iid] && byID[iid].contentSource).length;
+  const edges = cat.edges || [];
+  const pending = unpublished && unpublished.released
+    ? (unpublished.added || []).length + (unpublished.removed || []).length + (unpublished.changed || []).length
+    : 0;
+  const lastRelease = releases.reduce((a, r) => (!a || r.createdAt > a.createdAt ? r : a), null);
+  const appearance = appearanceCard(cat, me, enforced);
+  const sharing = sharingCard(cat, me, enforced, dir);
+  const transfer = transferCard(cat);
+  const purge = mayTheme(me, enforced) ? purgeCard(cat, items, langs) : null;
+
   view.innerHTML = `
     <div class="row">
       <h2 style="margin:0">${esc(textOf(cat.texts, langs, cat.id))}</h2>
       <span class="muted">${esc(cat.id)}</span>
     </div>
     <p><a href="#/catalog">← All catalogues</a></p>
+    <p class="muted cat-steps-intro">Four steps, in the order a catalogue is filled: put
+      products in, describe them, assemble them, publish. Each section folds away; this
+      browser remembers which ones you keep open.</p>
 
-    <!-- What a catalogue is, and what it looks like: two questions about the catalogue
-         itself rather than about anything in it, so they are read side by side at the
-         top of the page instead of one under the other down the left edge. .grid2 is
-         the console's own two-column pair, so this follows its breakpoint rather than
-         inventing a third. -->
-    <div class="grid2" style="margin:0 0 18px">
-      <section>
-      <h3 style="margin:0 0 10px">What this catalogue is</h3>
-      <p class="muted" style="max-width:62ch">Its name, the languages it is offered in,
-        its rank against the other catalogues, and who reaches it.</p>
-      <div class="card">
-      <form class="cat-meta">
-        ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
-          value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
-        <label class="field">Languages<input name="languages" value="${esc(langs.join(", "))}" autocomplete="off"></label>
-        <label class="field">Rank<input name="rank" type="number" value="${cat.rank}"></label>
-        ${audienceField(dir, cat.groups)}
-        <p class="muted" style="margin:0 0 10px">${(cat.groups || []).length
-    ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
-    : "<b>No group named, so nobody reaches this catalogue</b> — the shop will tell them no catalogue is assigned to them."}</p>
-        <button class="btn" type="submit">Save</button>
-      </form>
-      </div>
-      </section>
-      <section>${appearanceCard(cat, me, enforced)}</section>
-    </div>
-
-    <h3>Products</h3>
-    <p class="muted" style="max-width:62ch">A product is edited through its home catalogue.
-      Everything offered here is orderable once this catalogue is published — a product in
-      <b>draft</b> or <b>withdrawn</b> state is not.</p>
-    <div class="product-list">
+    ${pageSection("products", "1", "Products", [
+    `${offered.length} offered`,
+    drafts ? `${drafts} not active` : "",
+    missing ? `${missing} not defined` : "",
+  ], `<p>Create a product, or offer one that another catalogue already maintains. A
+      product is edited through its <b>home catalogue</b>; every catalogue that offers it
+      shows the same record.</p>
+    <p>Everything offered here is orderable once this catalogue is published — a product
+      in <b>draft</b> or <b>withdrawn</b> state is not.</p>
+    <p>Tick products in the first column to export only those (section
+      <i>Export and import</i>).</p>`, `<div class="product-list">
       ${offered.length ? `<div class="product-table"><table class="table">
         <thead><tr><th aria-label="Export"></th><th>Product</th><th>State</th><th>Approval</th><th>Provisioned by</th><th></th></tr></thead>
         <tbody>${offered.map((iid) => productRow(byID[iid], iid, langs, offered.length > 1)).join("")}</tbody></table></div>`
@@ -1247,43 +1245,85 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         <div class="product-editor"></div>
         <div class="assemble-editor"></div>
       </div>
-    </div>
+    </div>`)}
 
-    <div class="content-catalog"></div>
+    ${pageSection("content", "2", "Descriptions", [
+    bound ? `${bound} from the wiki` : "written here",
+  ], `<p>A product's name, description, keywords and picture are written in its editor
+      (section <i>Products</i>, <b>Edit</b>).</p>
+    <p>Where a content source is configured, a product can take them from a wiki page
+      instead: one page per language, its child pages appended. While it is linked those
+      fields are read-only here, and the product owner maintains them in the wiki.</p>
+    <p>${esc(t("content.catalog.intro"))}</p>`, `<div class="content-catalog"></div>
+      ${bound ? "" : `<p class="muted cat-content-none">${esc(t("content.catalog.none"))}
+        Link a product to a wiki page in its editor.</p>`}`)}
 
-    ${transferCard(cat)}
-
-    <h3 style="margin-top:26px">How the products relate</h3>
-    <p class="muted" style="max-width:62ch">Three different questions, kept apart.
-      <b>Structure</b> says what belongs to what, and is assembled per product.
-      <b>Precedence</b> says what has to exist first, and it is what the fulfilment order
-      is computed from; structure and precedence must both be free of cycles, and
-      publishing proves it. <b>Incompatibility</b> says what one person may never hold
-      together — the clerk who may create a supplier must not also approve payments to
-      it. Neither right is wrong there; the combination is, and an order that would
-      produce it is refused rather than reported afterwards.</p>
-    <div class="cat-cols">
-      <div class="cat-main">${edgeTable(cat.edges || [], byID, langs)}</div>
+    ${pageSection("relations", "3", "Assemble", [
+    edges.length ? `${edges.length} relation${edges.length === 1 ? "" : "s"}` : "no relations",
+  ], `<p>Three different questions, kept apart. <b>Structure</b> says what belongs to
+      what — assemble it per product with <b>Assemble</b> in its row (section
+      <i>Products</i>). <b>Precedence</b> says what has to exist first, and it is what the
+      fulfilment order is computed from; structure and precedence must both be free of
+      cycles, and publishing proves it.</p>
+    <p><b>Incompatibility</b> says what one person may never hold together — the clerk
+      who may create a supplier must not also approve payments to it. Neither right is
+      wrong there; the combination is, and an order that would produce it is refused
+      rather than reported afterwards.</p>`, `<div class="cat-cols">
+      <div class="cat-main">${edgeTable(edges, byID, langs)}</div>
       ${offered.length > 1 ? `<aside class="cat-side">${edgeForm(offered, byID, langs)}</aside>`
     : `<p class="muted">Two products are needed before one can relate to another.</p>`}
-    </div>
+    </div>`)}
 
-    ${sharingCard(cat, me, enforced, dir)}
-
-    <h3 style="margin-top:26px">Releases</h3>
-    <p class="muted" style="max-width:62ch">Publishing freezes everything above into a release.
-      An order names one release and is immune to every edit made afterwards, which is why a
-      catalogue can be reworked while approvals are still pending.</p>
-    ${unpublishedCard(unpublished, langs)}
+    ${pageSection("publish", "4", "Publish", [
+    !releases.length ? "never published"
+      : pending ? `${pending} unpublished change${pending === 1 ? "" : "s"}`
+        : unpublished && unpublished.released ? "up to date" : "",
+    lastRelease ? `last ${fmtTime(lastRelease.createdAt)}` : "",
+  ], `<p>Publishing freezes everything above into a release. An order names one release
+      and is immune to every edit made afterwards, which is why a catalogue can be
+      reworked while approvals are still pending.</p>
+    <p>Publishing checks the whole catalogue at once — a text for every language, every
+      process binding, both graphs free of cycles — and lists every problem it finds.</p>`,
+  `${unpublishedCard(unpublished, langs)}
     <div class="row"><button class="btn" data-act="publish">Publish</button></div>
     <div class="publish-report"></div>
     ${releases.length ? `<table class="table" style="margin-top:12px">
       <thead><tr><th>Release</th><th>Published</th><th>Products</th></tr></thead>
       <tbody>${releases.map((r) => `<tr><td>${esc(r.id)}</td><td>${fmtTime(r.createdAt)}</td>
         <td>${(r.items || []).length}</td></tr>`).join("")}</tbody></table>`
-    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}
+    : `<p class="muted">Never published. Until it is, the shop shows this catalogue to nobody.</p>`}`)}
 
-    ${mayTheme(me, enforced) ? purgeCard(cat, items, langs) : ""}`;
+    <h3 class="cat-more-head">Settings and maintenance</h3>
+
+    ${pageSection("settings", "", "What this catalogue is", [
+    langs.join(", "),
+    `rank ${cat.rank}`,
+    (cat.groups || []).length ? `${cat.groups.length} audience group${cat.groups.length === 1 ? "" : "s"}` : "reaches nobody",
+  ], `<p>Its name, the languages it is offered in, its rank against the other catalogues,
+      and who reaches it.</p>
+    <p>${(cat.groups || []).length
+    ? "Everybody in these groups reaches this catalogue, unless a higher-ranked one reaches them first."
+    : "<b>No group named, so nobody reaches this catalogue</b> — the shop will tell them no catalogue is assigned to them."}</p>
+    <p>Adding a language is a commitment every product has to meet before the next
+      publish.</p>`, `<div class="card">
+      <form class="cat-meta">
+        ${langs.map((l) => `<label class="field">Name (${esc(l)})<input name="t-${esc(l)}"
+          value="${esc((cat.texts || {})[l] || "")}" autocomplete="off"></label>`).join("")}
+        <label class="field">Languages<input name="languages" value="${esc(langs.join(", "))}" autocomplete="off"></label>
+        <label class="field">Rank<input name="rank" type="number" value="${cat.rank}"></label>
+        ${audienceField(dir, cat.groups)}
+        <button class="btn" type="submit">Save</button>
+      </form>
+      </div>`)}
+
+    ${pageSection("appearance", "", "How this catalogue looks", [appearance.summary], appearance.about, appearance.body)}
+
+    ${pageSection("sharing", "", "Who maintains this catalogue", [sharing.summary], sharing.about, sharing.body)}
+
+    ${pageSection("transfer", "", "Export and import", [], transfer.about, transfer.body)}
+
+    ${purge ? pageSection("purge", "", "Delete for good", [], purge.about, purge.body, "danger") : ""}`;
+  wirePageSections(view);
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
@@ -1315,12 +1355,13 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 // products whose home it is, for good.
 function purgeCard(cat, items, langs) {
   const own = items.filter((it) => it.homeCatalog === cat.id);
-  return `<h3 style="margin-top:26px">Delete for good</h3>
-    <p class="muted" style="max-width:62ch">For a development or test installation only.
-      Deletes the catalogue, or one of its own products, with every order placed from it,
-      the process instances still working those orders and the rights they granted — with
-      no undo. On a production installation withdraw a product instead.</p>
-    <div class="card cat-purge" style="max-width:62ch; border-color:var(--danger)">
+  return {
+    about: `<p>For a development or test installation only.</p>
+      <p>Deletes the catalogue, or one of its own products, with every order placed from
+      it, the process instances still working those orders and the rights they granted —
+      with no undo.</p>
+      <p>On a production installation withdraw a product instead.</p>`,
+    body: `<div class="card cat-purge" style="max-width:62ch; border-color:var(--danger)">
       <div class="row">
         <button class="btn danger" type="button" data-act="purge-catalog">Delete this catalogue…</button>
       </div>
@@ -1329,7 +1370,8 @@ function purgeCard(cat, items, langs) {
     esc(textOf(it.texts, langs, it.id))} (${esc(it.id)})</option>`).join("")}</select></label>
       <div class="row"><button class="btn ghost danger" type="button" data-act="purge-product">Delete this product…</button></div>` : ""}
       <div class="purge-report"></div>
-    </div>`;
+    </div>`,
+  };
 }
 
 // purgeList renders one list of the plan, or nothing when it is empty.
@@ -1425,12 +1467,13 @@ function wirePurge({ api, toast, view }, cat) {
 
 // transferCard is the export and import panel of one catalogue.
 function transferCard(cat) {
-  return `<h3 style="margin-top:26px">Export and import</h3>
-    <p class="muted" style="max-width:62ch">Export this catalogue, or the products ticked
-      above, as a file another installation imports. A theme, the logo and pictures stay
-      here. Importing products here offers every one of them in this catalogue; one this
-      server does not have yet is maintained here.</p>
-    <div class="card cat-transfer" style="max-width:62ch">
+  return {
+    about: `<p>Export this catalogue, or the products ticked in section <i>Products</i>, as a
+      file another installation imports — the catalogue's backup.</p>
+      <p>A theme, the logo and pictures stay here.</p>
+      <p>Importing products here offers every one of them in this catalogue; one this
+      server does not have yet is maintained here.</p>`,
+    body: `<div class="card cat-transfer" style="max-width:62ch">
       <label class="field inline"><input type="checkbox" name="withProcesses">
         Include the processes the products are bound to</label>
       <div class="row">
@@ -1441,7 +1484,8 @@ function transferCard(cat) {
         <input type="file" name="productsFile" accept="application/json,.json"></label>
       <div class="row"><button class="btn neutral" type="button" data-act="import-products">Import</button></div>
       <div class="transfer-report"></div>
-    </div>`;
+    </div>`,
+  };
 }
 
 // importCard is the list page's panel for importing a whole catalogue document.
@@ -1881,22 +1925,31 @@ function appearanceCard(cat, me, enforced) {
   const theme = cat.theme || {};
   const accent = theme.accent || "";
   const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
+  const summary = accent || theme.typeface
+    ? [accent, theme.typeface].filter(Boolean).join(", ")
+    : "the instance's";
 
   if (!mayTheme(me, enforced)) {
-    return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
-      <p class="muted" style="max-width:62ch">${accent || theme.typeface
+    return {
+      summary,
+      about: `<p>${accent || theme.typeface
     ? `Its own appearance: ${esc(accent || "the instance colour")}, ${
       esc(theme.typeface || "the instance typeface")}.`
-    : "The instance's own appearance."} Changing it is an administrator's.</p>`;
+    : "The instance's own appearance."}</p><p>Changing it is an administrator's.</p>`,
+      body: "",
+    };
   }
 
-  return `<h3 style="margin:0 0 10px">How this catalogue looks</h3>
-    <p class="muted" style="max-width:62ch">The shop and the approval page paint
-      themselves from this, so a customer sees their own brand rather than yours. Leave
-      both empty and the catalogue wears the instance's appearance. Setting it is an
-      administrator's; an editor may change what the catalogue offers and not whose it
-      looks like.</p>
-    <div class="card">
+  return {
+    summary,
+    about: `<p>The shop and the approval page paint themselves from this, so a customer sees
+      their own brand rather than yours. Leave both empty and the catalogue wears the
+      instance's appearance.</p>
+      <p>Setting it is an administrator's; an editor may change what the catalogue offers
+      and not whose it looks like.</p>
+      <p>The brand mark is shown at the top of the shop for whoever reaches this
+      catalogue. Without one it falls back to the instance's. PNG or SVG.</p>`,
+    body: `<div class="card">
       <form class="cat-theme">
         <label class="field">Accent colour
           <span class="row" style="gap:8px; align-items:center">
@@ -1918,10 +1971,8 @@ function appearanceCard(cat, me, enforced) {
       </form>
     </div>
 
-    <div class="card" style="margin:0 0 18px; max-width:640px">
+    <div class="card" style="margin:18px 0 0; max-width:640px">
       <h4 style="margin:0 0 10px">Brand mark</h4>
-      <p class="muted">Shown at the top of the shop for whoever reaches this catalogue.
-        Without one it falls back to the instance's. PNG or SVG.</p>
       <p><img class="cat-logo" src="${esc(logoURL)}" alt=""
         style="max-height:64px; max-width:240px" hidden></p>
       <p class="muted cat-logo-none" hidden>No mark of its own.</p>
@@ -1931,7 +1982,8 @@ function appearanceCard(cat, me, enforced) {
         <button class="btn neutral" type="button" data-act="logo-upload">Upload</button>
         <button class="btn ghost danger" type="button" data-act="logo-remove">Remove</button>
       </div>
-    </div>`;
+    </div>`,
+  };
 }
 
 // With enforcement off there is nobody to be, so everybody is.
@@ -1964,15 +2016,16 @@ function sharingCard(cat, me, enforced, dir) {
         data-ref="${esc(ref.type || "user")}|${esc(ref.id || "")}">remove</button>` : ""}</td></tr>`;
   }).join("");
 
-  return `<h3 style="margin-top:26px">Who maintains this catalogue</h3>
-    <p class="muted" style="max-width:62ch">The role says somebody may maintain catalogues at
-      all; this says which ones. Sharing is the owner's: an editor may change this catalogue
-      and publish it, and may not change this list.</p>
-    <p class="muted">Owner: ${cat.ownerId
+  return {
+    summary: `${members.length ? `${members.length} besides the owner` : "the owner only"}`,
+    about: `<p>The role says somebody may maintain catalogues at all; this says which ones.</p>
+      <p>Sharing is the owner's: an editor may change this catalogue and publish it, and
+      may not change this list.</p>
+      <p>Owner: ${cat.ownerId
     ? `${esc(nameOfPrincipal(dir, cat.ownerId))} <code>${esc(cat.ownerId)}</code>`
     : "<code>—</code>"}${
-      cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>
-    <div class="cat-cols">
+      cat.ownerId ? "" : " <span>(created before ownership, or with authentication off)</span>"}</p>`,
+    body: `<div class="cat-cols">
       <div class="cat-main">${members.length ? `<table class="table">
         <thead><tr><th>Kind</th><th>Id</th><th>May</th><th></th></tr></thead>
         <tbody>${rows}</tbody></table>`
@@ -1988,7 +2041,8 @@ function sharingCard(cat, me, enforced, dir) {
     </form></aside>`
     : `<p class="muted">You maintain this catalogue but do not own it, so who else may is
       the owner's to change.</p>`}
-    </div>`;
+    </div>`,
+  };
 }
 
 // productForm renders the editor for one product, or for a new one.
@@ -2140,6 +2194,51 @@ function publishNeedsHTML(needs) {
     <p class="publish-needs-note">Publishing also checks the catalogue as a whole &mdash; its
       languages, the structure between products &mdash; so it can still refuse for a reason
       outside this product, and says which.</p>`;
+}
+
+// The catalogue page in sections, in the order a catalogue is filled — products in,
+// described, assembled, published — and then what is done to the catalogue as a
+// whole. Each section is a <details>: its summary is the heading and one line of
+// what it holds, readable while it is folded, and its body puts the controls on the
+// left and what they do on the right, where a paragraph is read beside the field it
+// explains rather than above it. Folded by default — the page is read for one step
+// at a time — and the sections a maintainer opens stay open in this browser, for the
+// reason the product form's do (see foldedSections below). A storage that cannot be
+// read opens nothing and folds nothing differently: the page still works, it only
+// forgets.
+const PAGE_SECTIONS_KEY = "atlas.catalog.pageSections";
+function openPageSections() {
+  try { return JSON.parse(localStorage.getItem(PAGE_SECTIONS_KEY) || "{}") || {}; } catch { return {}; }
+}
+function rememberPageSection(key, open) {
+  try {
+    const opened = openPageSections();
+    if (open) opened[key] = true; else delete opened[key];
+    localStorage.setItem(PAGE_SECTIONS_KEY, JSON.stringify(opened));
+  } catch { /* the fold still works; it is only not remembered */ }
+}
+
+// pageSection draws one section. step is its number in the sequence, or "" for one
+// that belongs to no step; summary is the parts of its one-line status, empty ones
+// left out; about is the explanation for the right-hand column.
+export function pageSection(key, step, title, summary, about, body, tone) {
+  const open = openPageSections()[key] === true;
+  const line = (summary || []).filter(Boolean).map(esc).join(" · ");
+  return `<details class="cat-section${tone ? ` ${tone}` : ""}" data-section="${esc(key)}"${open ? " open" : ""}>
+    <summary>${step ? `<span class="cat-sec-step" aria-hidden="true">${esc(step)}</span>` : ""}<h3>${esc(title)}</h3>${
+  line ? `<span class="muted cat-sec-sum">${line}</span>` : ""}</summary>
+    <div class="cat-sec-body">
+      <div class="cat-sec-main">${body || ""}</div>
+      ${about ? `<aside class="cat-sec-about">${about}</aside>` : ""}
+    </div>
+  </details>`;
+}
+
+// wirePageSections remembers each section's fold as it changes.
+function wirePageSections(view) {
+  view.querySelectorAll("details.cat-section").forEach((d) => {
+    d.addEventListener("toggle", () => rememberPageSection(d.dataset.section, d.open));
+  });
 }
 
 // Which sections of the product form a maintainer has folded away, per browser. The

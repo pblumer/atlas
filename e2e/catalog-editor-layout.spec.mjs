@@ -324,13 +324,16 @@ test("below the breakpoint every pair stacks, form under list", async ({ page })
   for (const s of stacked) expect(s).toBe(true);
 });
 
-test("the catalogue's own two cards are read side by side, not down the left edge", async ({ page }) => {
+test("a section reads its controls and their explanation side by side, using the page", async ({ page }) => {
   await open(page);
   // The first screenful used to be two 640px cards under one another with the whole
   // right half of a widened page empty — the page was wide and did not read as wide.
+  // Each section now puts its controls and what they do side by side
+  // (catalog-admin.js pageSection).
   const b = await page.evaluate(() => {
-    const [left, right] = [...document.querySelectorAll(".grid2 > section")]
-      .map((s) => s.getBoundingClientRect());
+    const sec = document.querySelector('details.cat-section[data-section="settings"]');
+    const left = sec && sec.querySelector(".cat-sec-main").getBoundingClientRect();
+    const right = sec && sec.querySelector(".cat-sec-about").getBoundingClientRect();
     const main = document.querySelector("main") || document.body;
     return left && right
       ? { beside: right.left >= left.right - 1, level: Math.abs(right.top - left.top) <= 1,

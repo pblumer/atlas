@@ -471,9 +471,10 @@ export function mountCatalogRefresh(host, ctx, catalogID, boundCount) {
       go.textContent = t("content.catalog.refresh");
     }
   });
+  // The section around it carries the explanation (content.catalog.intro), in the
+  // column beside the controls; here is only what the button acts on.
   host.replaceChildren(
-    el("h3", { style: "margin-top:26px" }, t("content.catalog.title")),
-    el("p", { class: "muted", style: "max-width:62ch" }, t("content.catalog.intro")),
+    el("h4", { style: "margin:0 0 8px" }, t("content.catalog.title")),
     el("div", { class: "row" }, go),
     result);
 }

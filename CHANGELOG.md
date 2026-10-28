@@ -170,6 +170,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The catalogue page reads in the order a catalogue is filled.** Its sections are now
+  numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
+  catalogue's own settings (what it is, how it looks, who maintains it, export and import,
+  delete for good). Each section folds, folded on a first visit with a line saying what it
+  holds, and the browser remembers which ones a maintainer keeps open. Within a section the
+  controls come first and the explanation sits in a column beside them on a wide screen.
+
 - **Console › Workers folds and filters both of its lists.** The Worker catalog and
   the configured workers each fold away under their heading, which still shows how many
   entries the section holds, and the browser remembers each choice; **New worker**

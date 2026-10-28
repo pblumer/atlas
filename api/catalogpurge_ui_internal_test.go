@@ -13,7 +13,8 @@ import (
 
 func TestThePurgeCardIsDrawnForAnAdministratorOnly(t *testing.T) {
 	src := readWeb(t, "catalog-admin.js")
-	if !strings.Contains(src, "${mayTheme(me, enforced) ? purgeCard(cat, items, langs) : \"\"}") {
+	if !strings.Contains(src, "const purge = mayTheme(me, enforced) ? purgeCard(cat, items, langs) : null;") ||
+		!strings.Contains(src, `${purge ? pageSection("purge"`) {
 		t.Error("the purge card is no longer drawn behind the administrator check")
 	}
 }
