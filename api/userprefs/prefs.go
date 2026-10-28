@@ -1,6 +1,6 @@
 // Package userprefs stores how one person reads the console: how a number is
-// written, which instant a timestamp means, and which words the translated
-// screens use (ADR-0459).
+// written, which instant a timestamp means, which words the translated screens
+// use (ADR-0459), and whether the console is drawn light or dark (ADR-0507).
 //
 // It is per user rather than per browser because of the time zone. A language is
 // how somebody reads at one desk, and ADR-0267 kept it in the browser for that
@@ -49,7 +49,14 @@ var Regions = []string{"international", "ch", "de", "us"}
 // package's own tests and a console-less build see.
 var Languages = []string{"de", "en"}
 
-// Prefs is one person's answer to the three questions. Each field's zero value is
+// Appearances are how the console may be drawn (ADR-0507): light, dark, following
+// the operating system's scheme, or the cockpit skin (ADR-0509), a playful dark
+// variant nobody gets without choosing it. "" is the unset value and draws today's
+// light console; "light" is the same picture chosen on purpose, which matters once
+// the default changes. The list is the stylesheet's — app.css answers exactly these.
+var Appearances = []string{"light", "dark", "system", "cockpit"}
+
+// Prefs is one person's answer to the four questions. Each field's zero value is
 // "not chosen", which is why none of them is a pointer and why "international"
 // and "" both mean the default: a person who clears the screen gets the console
 // they had before it existed.
@@ -64,6 +71,11 @@ type Prefs struct {
 	TimeZone string `json:"timeZone"`
 	// Language is which words the translated screens use. One of Languages, or "".
 	Language string `json:"language"`
+	// Appearance is whether the console is drawn light or dark. One of
+	// Appearances, or "". It is here rather than in the browser for the reason
+	// the time zone is: it belongs to the person, and `system` already covers a
+	// person who wants each device to follow its own scheme.
+	Appearance string `json:"appearance"`
 	// UpdatedAt is when this record was last written, in unix nanos. It is here so
 	// a support question ("since when has this been set?") has an answer.
 	UpdatedAt int64 `json:"updatedAt,omitempty"`
@@ -72,7 +84,7 @@ type Prefs struct {
 // Validate reports why a record may not be stored, or nil.
 //
 // Every refusal names the field, because this validates a form somebody filled in
-// and "invalid request" would send them looking at all three.
+// and "invalid request" would send them looking at all four.
 func (p Prefs) Validate() error {
 	if p.Region != "" && !in(Regions, p.Region) {
 		return fmt.Errorf("unknown region %q — one of %s, or empty for the default",
@@ -81,6 +93,10 @@ func (p Prefs) Validate() error {
 	if p.Language != "" && !in(Languages, p.Language) {
 		return fmt.Errorf("unknown language %q — one of %s, or empty for the default",
 			p.Language, strings.Join(Languages, ", "))
+	}
+	if p.Appearance != "" && !in(Appearances, p.Appearance) {
+		return fmt.Errorf("unknown appearance %q — one of %s, or empty for the default",
+			p.Appearance, strings.Join(Appearances, ", "))
 	}
 	if p.TimeZone != "" {
 		// LoadLocation is the check rather than a pattern: the question is not

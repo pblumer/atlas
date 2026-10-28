@@ -1,5 +1,5 @@
 // How this person reads the console: number format, time zone, interface
-// language (ADR-0459).
+// language (ADR-0459), and whether it is drawn light or dark (ADR-0507).
 //
 // One module owns the answer, because three different screens ask it and a
 // formatter that kept its own copy would print one fact two ways. The store is
@@ -22,19 +22,22 @@
 // server and this module never grows a second copy of a format table.
 
 import { setLocale } from "./i18n.js";
+import { applyAppearance } from "./appearance.js";
 
-// KEY is the browser copy. It is one record rather than three keys: the three
+// KEY is the browser copy. It is one record rather than a key per field: the
 // fields are saved together by one screen, and a half-applied set — a new time
-// zone with yesterday's number format — is a state nobody chose.
+// zone with yesterday's number format — is a state nobody chose. index.html's
+// bootstrap and appearance.js read the appearance from it before this module has
+// loaded, so the name is written there too.
 const KEY = "atlas.prefs";
 
 // DEFAULTS is what the console did before this screen existed, spelled out so
 // "unset" has a name: the locale-neutral separator, the device's own time zone,
 // and whatever language the catalogue defaults to. An instance where nobody opens
 // the settings screen keeps exactly this.
-const DEFAULTS = { region: "international", timeZone: "", language: "" };
+const DEFAULTS = { region: "international", timeZone: "", language: "", appearance: "" };
 
-// clean keeps only the three fields, as strings. Anything else in the stored
+// clean keeps only the four fields, as strings. Anything else in the stored
 // record — a field from a newer version, a hand-edited value — is dropped rather
 // than carried into a formatter.
 function clean(raw) {
@@ -43,6 +46,7 @@ function clean(raw) {
     region: typeof r.region === "string" ? r.region : "",
     timeZone: typeof r.timeZone === "string" ? r.timeZone : "",
     language: typeof r.language === "string" ? r.language : "",
+    appearance: typeof r.appearance === "string" ? r.appearance : "",
   };
 }
 
@@ -60,12 +64,15 @@ function write(next) {
 
 let current = read();
 
-// apply makes a loaded record the active one, including the language — which is
-// the one field another module owns (i18n.js resolves it at import time, before
-// the server has answered).
+// apply makes a loaded record the active one, including the two fields other
+// modules own: the language (i18n.js resolves it at import time, before the server
+// has answered) and the appearance, which the stylesheet draws from the document
+// root — so a choice made on another device takes effect as soon as the server's
+// record arrives.
 function apply(next) {
   current = clean(next);
   if (current.language) setLocale(current.language);
+  applyAppearance(current.appearance);
   return current;
 }
 
@@ -86,6 +93,10 @@ export function timeZone() { return current.timeZone; }
 
 // language is the chosen catalogue, or "" when the catalogue's default stands.
 export function language() { return current.language; }
+
+// appearance is the chosen appearance — "light", "dark" or "system" — or "" when
+// nothing was chosen, which draws the light console.
+export function appearance() { return current.appearance; }
 
 // loadPrefs reads this person's record from the server and makes it active.
 //

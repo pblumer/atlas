@@ -47,7 +47,9 @@ Chosen option: **1 — a fourth `data-appearance` value**.
 - **Mechanism:** `cockpit` joins `APPEARANCES` in `appearance.js`; `resolveAppearance`
   returns `"cockpit"` for it (an explicit choice the system scheme never selects), and
   the inline first-paint bootstrap in `index.html` mirrors that. The preference lives
-  only in `localStorage["atlas.appearance"]`, exactly like the others.
+  where the others do: since ADR-0507's S1 that is the person's display preferences
+  (`appearance` in `/api/v1/me/preferences`, which accepts `cockpit`), mirrored in
+  the browser's `atlas.prefs` for the first paint.
 - **Palette:** a `:root[data-appearance="cockpit"]` block answers **every** palette
   colour token the dark block answers (held honest by
   `TestDarkSurfacedAppearancesAnswerEveryPaletteColour`), in a deep-space, cyan-HUD
@@ -60,9 +62,9 @@ Chosen option: **1 — a fourth `data-appearance` value**.
   over the brand mark, faint scanlines and status lights — all pure CSS, decorative
   only (`pointer-events: none`, behind the content), and **fully disabled under
   `prefers-reduced-motion`**, which leaves the static cockpit palette and glow intact.
-- **Selection:** like `dark` today, cockpit is reachable through the preference but not
-  yet offered by a visible control; ADR-0507's S1 switch is where all four appearances
-  become selectable in the UI. The brand accent (ADR-0113) stays inline and still
+- **Selection:** the Display screen offers it beside the three appearances, labelled
+  "Cockpit (Spielerei)" (ADR-0507 S1). The top bar's light/dark switch treats it as
+  dark-surfaced: a press from the cockpit goes to light. The brand accent (ADR-0113) stays inline and still
   applies; cockpit ships its own accent that a set org accent overrides.
 - **Honesty:** cockpit is a labelled skin, not a core feature claim; it inherits
   ADR-0507's marketing guard.
@@ -73,12 +75,14 @@ Chosen option: **1 — a fourth `data-appearance` value**.
   block, a handful of shared selectors widened, and decoration; it tracks ADR-0507's
   dark coverage automatically as that work lands.
 - **Negative / trade-offs accepted:** `cockpit` stretches the appearance axis beyond
-  the accessibility `light|dark|system` ADR-0507 framed; it is a per-browser opt-in
-  with no cross-device sync; the decoration is bespoke CSS to maintain.
+  the accessibility `light|dark|system` ADR-0507 framed; the decoration is bespoke CSS
+  to maintain. (It was a per-browser opt-in until S1 made it a per-person
+  preference.)
 - **Follow-ups / risks to watch:** the visible switch (shared with ADR-0507 S1) must
   offer cockpit; the Atlas-specific canvas overlays, form-js and other canvases
-  ADR-0507 lists as not-yet-dark are equally not cockpit-verified; an `e2e`
-  cockpit case should join `e2e/appearance.spec.mjs` once the switch exists.
+  ADR-0507 lists as not-yet-dark are equally not cockpit-verified. The `e2e` cockpit
+  cases joined with the switch: `appearance.spec.mjs` (first paint, the switch back
+  to light) and `display-settings.spec.mjs` (offered, saved, drawn).
 
 ## Pros and cons of the options
 
