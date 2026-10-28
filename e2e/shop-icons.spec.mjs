@@ -134,3 +134,39 @@ test("the icons take the shop's main colour, and follow a catalogue's accent", a
   await page.evaluate(() => document.documentElement.style.setProperty("--accent", "rgb(200, 0, 100)"));
   expect(new Set(await colours())).toEqual(new Set(["rgb(200, 0, 100)"]));
 });
+
+// The "−" that took a chosen product out of the basket again, and the disabled one an
+// always-included part carried, are a crossed-out cart: the same drawing in the
+// same colour, and named for what it does — one position out, not the order gone.
+test("a chosen product and an included part carry a crossed-out cart", async ({ page }) => {
+  await open(page);
+  const row = product(page, "Apple iPhone");
+  await row.locator('button.sq[data-icon="cart"]').click();
+  const off = row.locator('button.sq[data-icon="cart-off"]');
+  await expect(off.locator("svg")).toHaveCount(1);
+  await expect(off).toHaveText("");
+  await expect(off).toHaveAttribute("aria-pressed", "true");
+  await expect(off).toHaveAttribute("aria-label", "Take out of the basket");
+
+  // Its hardware is always included: the same sign, disabled, saying why.
+  await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().click();
+  const part = page.locator(".cascade > .col:nth-child(4) .cell", { hasText: "Apple iPhone hardware" })
+    .locator('button.sq[data-icon="cart-off"]');
+  await expect(part).toBeDisabled();
+  await expect(part).toHaveAttribute("title", "Always included — cannot be deselected.");
+  await expect(part.locator("svg")).toHaveCount(1);
+
+  // In the basket, the included part is the same sign, and each chosen row's "X"
+  // takes that one position out rather than discarding the order.
+  await page.getByRole("button", { name: /Add to basket/ }).click();
+  const basketPart = page.locator(".cell", { hasText: "Apple iPhone hardware" }).locator('button.sq[data-icon="cart-off"]');
+  await expect(basketPart).toBeDisabled();
+  await expect(page.locator(".cell").filter({ has: page.locator(".label", { hasText: /^Apple iPhone$/ }) })
+    .getByRole("button", { name: "Take out of the basket" }))
+    .toHaveCount(1);
+
+  // Back in the catalogue, pressing it takes the product out again.
+  await page.getByRole("button", { name: "Catalogue", exact: true }).click();
+  await product(page, "Apple iPhone").locator('button.sq[data-icon="cart-off"]').click();
+  await expect(product(page, "Apple iPhone").locator('button.sq[data-icon="cart"]')).toHaveCount(1);
+});

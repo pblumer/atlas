@@ -411,8 +411,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   back name and id together.
 
 - **`shop-icons.spec.mjs`**: the shop's **icon buttons** — a heart for a favourite,
-  filled once marked, a shopping cart for the basket and an info sign for a product's
-  information, each an inline SVG with no glyph beside it and a name for screen
+  filled once marked, a shopping cart for the basket, a struck-through cart to take a
+  chosen product out again and on an always-included part, and an info sign for a
+  product's information, each an inline SVG with no glyph beside it and a name for screen
   readers; their stroke is the shop's accent and follows a catalogue theme's.
 
 - **`shop-reorder-parts.spec.mjs`** ([ADR-0312](../docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28):

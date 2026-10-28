@@ -176,6 +176,7 @@ const STRINGS = {
     'services.notHeld': 'Nicht bezogen',
     'fav.mark': 'Als Favorit merken',
     'act.add': 'In den Warenkorb legen',
+    'act.remove': 'Aus dem Warenkorb nehmen',
     'fav.clear': 'Favorit entfernen',
     'fav.only': 'Nur Favoriten',
     'fav.none': 'Sie haben nichts als Favorit gemerkt.',
@@ -362,6 +363,7 @@ const STRINGS = {
     'services.notHeld': 'Not held',
     'fav.mark': 'Mark as favourite',
     'act.add': 'Put in the basket',
+    'act.remove': 'Take out of the basket',
     'fav.clear': 'Remove favourite',
     'fav.only': 'Favourites only',
     'fav.none': 'You have marked nothing as a favourite.',
@@ -548,6 +550,7 @@ const STRINGS = {
     'services.notHeld': 'Non détenu',
     'fav.mark': 'Ajouter aux favoris',
     'act.add': 'Mettre dans le panier',
+    'act.remove': 'Retirer du panier',
     'fav.clear': 'Retirer des favoris',
     'fav.only': 'Favoris uniquement',
     'fav.none': 'Vous n’avez rien mis en favori.',
@@ -733,6 +736,7 @@ const STRINGS = {
     'services.notHeld': 'Non detenuto',
     'fav.mark': 'Aggiungere ai preferiti',
     'act.add': 'Mettere nel carrello',
+    'act.remove': 'Togliere dal carrello',
     'fav.clear': 'Rimuovere dai preferiti',
     'fav.only': 'Solo preferiti',
     'fav.none': 'Non ha contrassegnato nulla come preferito.',
@@ -2142,8 +2146,8 @@ function toggle(release, id, integral) {
   if (integral && !missing) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('note.included'),
-      'aria-label': t('note.included'),
-    }, '\u2212');
+      'aria-label': t('note.included'), 'data-icon': 'cart-off',
+    }, svgIcon('cart-off'));
   }
   // Outside its window. The title carries the date rather than a bare "no",
   // because the date is the whole of what somebody does next: come back, or stop
@@ -2159,19 +2163,20 @@ function toggle(release, id, integral) {
   return el('button', {
     class: 'sq',
     'aria-pressed': inIt ? 'true' : 'false',
-    // The cart adds; once chosen, the "−" takes it out again.
-    title: inIt ? null : (missing ? t('note.missingPart') : t('act.add')),
-    'aria-label': inIt ? t('act.discard') : (missing ? t('note.missingPart') : t('act.add')),
-    'data-icon': inIt ? null : 'cart',
+    // The cart adds; once chosen, the struck-through cart takes it out again.
+    title: inIt ? t('act.remove') : (missing ? t('note.missingPart') : t('act.add')),
+    'aria-label': inIt ? t('act.remove') : (missing ? t('note.missingPart') : t('act.add')),
+    'data-icon': inIt ? 'cart-off' : 'cart',
     onclick: () => {
       if (state.basket.has(id)) state.basket.delete(id); else state.basket.add(id);
       render();
     },
-  }, inIt ? '\u2212' : svgIcon('cart'));
+  }, svgIcon(inIt ? 'cart-off' : 'cart'));
 }
 
-// ICONS are the shop's three drawn signs — the heart that marks a favourite, the
-// cart that puts something in the basket, the "i" that opens what a product is —
+// ICONS are the shop's drawn signs — the heart that marks a favourite, the cart
+// that puts something in the basket and the struck-through one that takes it out,
+// the "i" that opens what a product is —
 // as SVG on a 24-unit grid, drawn after the shop's icon set. They are stroked in
 // currentColor, so they are the shop's main colour (--accent, which a catalogue
 // theme sets) without a colour of their own; the heart of a favourite is filled.
@@ -2182,6 +2187,18 @@ const ICONS = {
     ['path', { d: 'M5.5 4.8H23.2L21.2 14H7.3' }],
     ['circle', { cx: '9.2', cy: '20', r: '1.7' }],
     ['circle', { cx: '19.6', cy: '20', r: '1.7' }],
+  ],
+  // The cart struck through: what is in the basket comes out again, or — disabled —
+  // cannot, because something chosen always carries it.
+  'cart-off': [
+    ['path', { d: 'M0.8 2.4H4.9L8 18H20.7' }],
+    ['path', { d: 'M5.5 4.8H23.2L21.2 14H7.3' }],
+    ['circle', { cx: '9.2', cy: '20', r: '1.7' }],
+    ['circle', { cx: '19.6', cy: '20', r: '1.7' }],
+    // A wider stroke in the button's own colour under the slash cuts the cart's
+    // lines where it crosses them, so the strike reads at fifteen pixels.
+    ['path', { d: 'M2.5 0.8L22.5 23.2', class: 'cut' }],
+    ['path', { d: 'M2.5 0.8L22.5 23.2' }],
   ],
   info: [
     ['circle', { cx: '12', cy: '12', r: '11.1' }],
@@ -2882,10 +2899,13 @@ function renderBasket() {
   const row = (x) => cell({
     text: textOf((by[x.id] || {}).texts, x.id),
     lead: x.integral
-      ? el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212')
+      ? el('button', {
+        class: 'sq', disabled: 'disabled', title: t('note.included'),
+        'aria-label': t('note.included'), 'data-icon': 'cart-off',
+      }, svgIcon('cart-off'))
       : el('button', {
         class: 'sq',
-        'aria-label': t('act.discard'),
+        'aria-label': t('act.remove'),
         onclick: () => { state.basket.delete(x.id); render(); },
       }, 'X'),
     trail: infoButton(x.id),
