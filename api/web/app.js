@@ -3531,7 +3531,7 @@ async function viewModelerHome() {
         { label: tr("create.importFile"), icon: "📥", act: "import" },
         { label: tr("create.importMim"), icon: "🔁", act: "import-mim" },
         { label: tr("create.importApplication"), icon: "🗂", act: "import-source" },
-        { label: tr("blueprint.browse"), icon: "📦", act: "browse-blueprints" },
+        { label: tr("blueprint.browse"), icon: "📦", act: "browse-atlas-hub" },
       ])}
     </div>
     <div class="card" style="padding:0; margin-top:14px">
@@ -3606,7 +3606,7 @@ async function viewModelerHome() {
     if (act === "import") importArtifact("", renderProjects);
     if (act === "import-mim") importMIM("", renderProjects);
     if (act === "import-source") importApplicationSource(renderProjects);
-    if (act === "browse-blueprints") openBlueprintMarketplace({ call: packageCall, reload: renderProjects, notify: toast });
+    if (act === "browse-atlas-hub") openBlueprintMarketplace({ call: packageCall, reload: renderProjects, notify: toast });
   });
 
   // One deployed process = one row. A process may have several deployed versions;

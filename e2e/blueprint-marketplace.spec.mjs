@@ -1,4 +1,4 @@
-// Browser-level contract for the REAL BMP1 Console Marketplace module: only
+// Browser-level contract for the atlas hub Console application-Blueprint module: only
 // operator-verified API releases are shown, never imported on preview/GET, and
 // a matching If-Match digest and explicit confirmation precede ADR-0467 import.
 import { test, expect } from "@playwright/test";
