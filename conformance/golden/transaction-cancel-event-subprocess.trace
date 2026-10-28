@@ -1,0 +1,4 @@
+state: completed
+path: start -> order -> cancellation -> ts -> order_cancelled -> reserve -> wait -> cancellation -> cs -> cancel_end -> unreserve -> bill_effort -> cancelled
+vars:
+  outcome=cancelled

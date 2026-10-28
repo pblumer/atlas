@@ -1061,7 +1061,10 @@ Composition and reuse.
   and runs the handler. Message and timer triggers ([ADR-0082](docs/adr/0082-event-subprocesses.md)),
   plus **signal** ([ADR-0088](docs/adr/0088-signal-events.md)) and **error**
   ([ADR-0089](docs/adr/0089-error-events.md)) triggers; nests in embedded subprocesses
-  and at the process root; recovery-tested; authored in the Modeler.
+  and at the process root; recovery-tested; authored in the Modeler. Concurrent runs of a
+  non-interrupting event subprocess each correlate on their own local key and read the
+  message that started them, and a message right behind a fired trigger is no longer lost
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
   as a child instance in the caller's partition, passes variables in/out (isolated or
   propagate-all), resumes the caller on completion, and tears the child down when the
@@ -1084,7 +1087,10 @@ Composition and reuse.
   cleaned when a scope or instance tears down (no leak), and it survives recovery (the
   index rebuilds from the log — no new recovery path; the throw is a command-path scope
   walk, the twin of error propagation). bpmn-js already authors it, so no Modeler change
-  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)).
+  was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)). A throw honours
+  BPMN's `waitForCompletion` (default true), and one directly in an event subprocess
+  compensates the scope it handles
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
   embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
   end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
@@ -1099,7 +1105,10 @@ Composition and reuse.
   scope-drain through a small event-derived canceling marker, so recovery rebuilds it
   with no new recovery path. Recovery-tested; authored in the Modeler (bpmn-js draws
   transactions and cancel events; the cancel boundary/end panels are wired)
-  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.**
+  ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.** A cancel end
+  may also sit in an event subprocess directly inside the transaction, so a cancellation
+  that arrives at any point is modelled where BPMN puts it
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 
 ## Milestone 4 — Operability 🚧
 
@@ -1383,7 +1392,19 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   in the side panel. The engine counts sequence flows per definition and keeps when a
   task was claimed or leased; `GET /api/v1/processes/{key}/statistics` folds a window off
   the loop. Closes statusbericht item 803.
-- 🔲 **True light/dark/system appearance for the shipped web UI**\n  ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed): semantic\n  palette, per-browser preference, bpmn-js/DMN/form-js token integration,\n  accessible Operations heatmap and end-to-end screenshot validation. The\n  existing company/catalogue accent theme is not a dark-mode implementation.\n- ✅ **Instance management** view: Operations lists running process instances
+- 🚧 **Light, dark and system appearance for the shipped web UI**
+  ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed):
+  a semantic palette with a dark answer for every colour, a per-person preference,
+  bpmn-js/dmn-js/form-js token bridges, an accessible Operations heatmap and
+  screenshot validation in both appearances. Landed: the switch in the top bar beside
+  the favourites and the Display screen's fourth setting (dark as a preview), stored
+  with the account like the other display preferences; the first-paint bootstrap; the
+  dark palette with the accent as text and the status inks; the Console, Operations and
+  Tasks shell; the BPMN and DMN editors with their palette, menus, properties panel and
+  code editors — exports stay light. Still open: the canvas overlays and heatmap,
+  form-js, the ArchiMate/UML/Panorama canvases and the screenshot contract. The
+  company/catalogue accent theme is not a dark mode.
+- ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
 - ✅ **Multi-token replay & causal token lineage**
   ([ADR-0065](docs/adr/0065-multi-token-process-replay.md)): element-instance

@@ -3234,10 +3234,11 @@ func (b *Builder) AddBoundaryConditionalEvent(host int32, condition *expr.Compil
 // AddCompensationThrowEvent adds an intermediate throw event that, on activation, triggers
 // compensation — running the handlers of completed compensable activities in its scope (or
 // of the single activity later set via SetCompensationActivityRef) — then flows on (ADR-0103).
-// ActivityRef defaults to -1 (compensate the whole scope). Returns its element id.
+// ActivityRef defaults to -1 (compensate the whole scope) and WaitForCompletion to true,
+// BPMN's default. Returns its element id.
 func (b *Builder) AddCompensationThrowEvent() int32 {
 	detail := int32(len(b.compensationThrows))
-	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1, WaitForCompletion: true})
 	return b.addNode(TypeCompensationThrowEvent, detail)
 }
 
@@ -3246,7 +3247,7 @@ func (b *Builder) AddCompensationThrowEvent() int32 {
 // like a signal end event (ADR-0103). Returns its element id.
 func (b *Builder) AddCompensationEndEvent() int32 {
 	detail := int32(len(b.compensationThrows))
-	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1})
+	b.compensationThrows = append(b.compensationThrows, CompensationDetail{ActivityRef: -1, WaitForCompletion: true})
 	return b.addNode(TypeCompensationEndEvent, detail)
 }
 
@@ -3347,6 +3348,9 @@ func (b *Builder) SetCompensationHandler(boundaryNodeID, handlerNodeID int32) {
 		return
 	}
 	d.CompensationHandler = handlerNodeID
+	if b.validNode(handlerNodeID) {
+		b.nodes[handlerNodeID].CompensationHandler = true
+	}
 }
 
 // SetCompensationActivityRef narrows a compensation throw/end event to compensate a single
@@ -3361,6 +3365,20 @@ func (b *Builder) SetCompensationActivityRef(throwNodeID, activityRef int32) {
 		return
 	}
 	b.compensationThrows[n.Detail].ActivityRef = activityRef
+}
+
+// SetCompensationWaitForCompletion sets whether a compensation throw/end event waits for the
+// handlers it starts before it goes on (BPMN waitForCompletion, default true). The node must
+// be a compensation throw or end event.
+func (b *Builder) SetCompensationWaitForCompletion(throwNodeID int32, wait bool) {
+	if !b.validNode(throwNodeID) {
+		return
+	}
+	n := &b.nodes[throwNodeID]
+	if n.Type != TypeCompensationThrowEvent && n.Type != TypeCompensationEndEvent {
+		return
+	}
+	b.compensationThrows[n.Detail].WaitForCompletion = wait
 }
 
 // Connect adds a sequence flow from source to target and returns its flow id, so

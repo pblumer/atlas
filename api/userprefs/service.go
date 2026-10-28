@@ -86,9 +86,10 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 
 // HandleSave rewrites this person's preferences and answers the stored record.
 //
-// The whole record is written rather than patched: the screen edits three fields
-// together and sends all three, so a field left out is a field cleared — which is
-// how "back to the defaults" works without a second endpoint.
+// The whole record is written rather than patched: the screen edits its fields
+// together and sends all of them, so a field left out is a field cleared — which
+// is how "back to the defaults" works without a second endpoint. The top bar's
+// light/dark switch sends the whole record too, with only the appearance changed.
 func (s *Service) HandleSave(w http.ResponseWriter, r *http.Request) {
 	id := who(r)
 	if id == "" {
@@ -96,9 +97,10 @@ func (s *Service) HandleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Region   string `json:"region"`
-		TimeZone string `json:"timeZone"`
-		Language string `json:"language"`
+		Region     string `json:"region"`
+		TimeZone   string `json:"timeZone"`
+		Language   string `json:"language"`
+		Appearance string `json:"appearance"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "malformed body: "+err.Error())
@@ -106,7 +108,7 @@ func (s *Service) HandleSave(w http.ResponseWriter, r *http.Request) {
 	}
 	// The id comes from the principal and from nowhere else; a userId in the body
 	// is not read, so a request cannot write under somebody else's name.
-	rec := Prefs{UserID: id, Region: body.Region, TimeZone: body.TimeZone, Language: body.Language}
+	rec := Prefs{UserID: id, Region: body.Region, TimeZone: body.TimeZone, Language: body.Language, Appearance: body.Appearance}
 	if err := rec.Validate(); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

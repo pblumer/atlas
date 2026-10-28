@@ -41,6 +41,16 @@ func TestValidate(t *testing.T) {
 		// which would break every timestamp on the screen rather than this field.
 		{"a zone nobody has", Prefs{TimeZone: "Europe/Zürich"}, "time zone"},
 		{"not a zone at all", Prefs{TimeZone: "../../etc/passwd"}, "time zone"},
+
+		// Appearance is the stylesheet's to draw (ADR-0507): the three words it
+		// answers, and nothing a later client might invent — stored, an unknown word
+		// would read back as a choice the console cannot honour.
+		{"light", Prefs{Appearance: "light"}, ""},
+		{"dark", Prefs{Appearance: "dark"}, ""},
+		{"following the system", Prefs{Appearance: "system"}, ""},
+		{"the cockpit skin", Prefs{Appearance: "cockpit"}, ""},
+		{"an appearance nobody draws", Prefs{Appearance: "sepia"}, "appearance"},
+		{"appearance case matters", Prefs{Appearance: "Dark"}, "appearance"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

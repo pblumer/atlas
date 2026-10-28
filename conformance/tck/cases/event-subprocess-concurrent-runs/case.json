@@ -1,0 +1,48 @@
+{
+  "name": "event-subprocess-concurrent-runs",
+  "model": "event-subprocess-concurrent-runs.bpmn",
+  "features": [
+    "event-subprocess-concurrent-runs"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "publish",
+      "correlation": "O1",
+      "message": "finding",
+      "vars": {
+        "findingId": "F1"
+      }
+    },
+    {
+      "action": "publish",
+      "correlation": "O1",
+      "message": "finding",
+      "vars": {
+        "findingId": "F2"
+      }
+    },
+    {
+      "action": "publish",
+      "correlation": "F2",
+      "message": "answer",
+      "vars": {
+        "approved": "yes"
+      }
+    },
+    {
+      "action": "publish",
+      "correlation": "F1",
+      "message": "answer",
+      "vars": {
+        "approved": "no"
+      }
+    },
+    {
+      "action": "complete",
+      "element": "work"
+    }
+  ]
+}

@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas appearance e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js mountEditor and the *real* appearance.js
+         against a mock `api`, with a diagram that carries one of most things bpmn-js
+         draws — a pool, events of four kinds, three task types, both gateway kinds, a
+         boundary event, an expanded sub-process, a data object, a text annotation and a
+         default flow — so a shape the renderer paints without the configured colours
+         shows up as the one light box on a dark canvas
+         (ADR-0507). Mounted in deployment mode (key set, draftId
+         null) so no live collaboration SSE is attached. The code sample below the
+         canvas carries one span per token class the script, FEEL, JSON and Markdown
+         editors colour with. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; }
+      :root { --topbar-h: 0px; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <div class="code-editor" id="code-sample">
+      <pre class="ce-highlight"><span class="tok-comment"># c</span> <span class="tok-string">"s"</span> <span class="tok-number">1</span> <span class="tok-keyword">if</span> <span class="tok-literal">null</span> <span class="tok-builtin">sum</span> <span class="tok-cmdlet">Get-Item</span> <span class="tok-variable">$v</span> <span class="tok-punct">(</span> <span class="tok-operator">-eq</span> <span class="tok-parameter">-Path</span> <span class="tok-type">[int]</span> <span class="tok-member">.m</span> <span class="tok-text">t</span> <span class="tok-error">e</span> <span class="tok-md-head"># h</span> <span class="tok-md-bold">b</span> <span class="tok-md-em">e</span> <span class="tok-md-code">`c`</span> <span class="tok-md-link">l</span> <span class="tok-md-list">-</span> <span class="tok-md-quote">&gt;</span> <span class="tok-md-rule">---</span> <span class="tok-html-tag">&lt;p&gt;</span> <span class="tok-html-attr">a</span> <span class="tok-html-entity">&amp;amp;</span> <span class="tok-tpl-tag">{{#if}}</span> <span class="jtok-punct">{</span><span class="jtok-key">"k"</span><span class="jtok-string">"v"</span> <span class="jtok-number">1</span> <span class="jtok-literal">true</span></pre>
+    </div>
+    <script type="module">
+      import { mountEditor } from "/editor.js";
+      import { applyAppearance, watchSystemAppearance } from "/appearance.js";
+
+      // The same two calls the console makes: index.html's bootstrap applies the
+      // stored preference before paint, app.js keeps `system` following the OS.
+      applyAppearance();
+      watchSystemAppearance();
+      window.__applyAppearance = applyAppearance;
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_appearance" targetNamespace="http://atlas/bpmn">
+  <bpmn:collaboration id="Collab_1">
+    <bpmn:participant id="Pool_1" name="Antragsstelle" processRef="appearance-proc" />
+  </bpmn:collaboration>
+  <bpmn:process id="appearance-proc" name="Appearance Demo" isExecutable="true">
+    <bpmn:startEvent id="Start_1" name="Eingang">
+      <bpmn:timerEventDefinition id="TimerDef_1" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_1" name="Antrag pruefen">
+      <bpmn:dataOutputAssociation id="DOA_1">
+        <bpmn:targetRef>DataRef_1</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_1" name="Vollstaendig?" default="Flow_4" />
+    <bpmn:serviceTask id="Task_2" name="Daten abgleichen" />
+    <bpmn:boundaryEvent id="Bnd_1" attachedToRef="Task_2">
+      <bpmn:errorEventDefinition id="ErrDef_1" />
+    </bpmn:boundaryEvent>
+    <bpmn:subProcess id="Sub_1" name="Freigabe">
+      <bpmn:startEvent id="SubStart_1" />
+      <bpmn:userTask id="SubTask_1" name="Freigeben" />
+      <bpmn:endEvent id="SubEnd_1" />
+      <bpmn:sequenceFlow id="SubFlow_1" sourceRef="SubStart_1" targetRef="SubTask_1" />
+      <bpmn:sequenceFlow id="SubFlow_2" sourceRef="SubTask_1" targetRef="SubEnd_1" />
+    </bpmn:subProcess>
+    <bpmn:intermediateCatchEvent id="Catch_1" name="Bestaetigung">
+      <bpmn:messageEventDefinition id="MsgDef_1" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:parallelGateway id="Par_1" />
+    <bpmn:endEvent id="End_1" name="Erledigt">
+      <bpmn:terminateEventDefinition id="TermDef_1" />
+    </bpmn:endEvent>
+    <bpmn:sendTask id="Task_3" name="Nachfordern" />
+    <bpmn:endEvent id="End_2" name="Offen" />
+    <bpmn:dataObjectReference id="DataRef_1" name="Antrag" dataObjectRef="Data_1" />
+    <bpmn:dataObject id="Data_1" />
+    <bpmn:textAnnotation id="Note_1"><bpmn:text>Eingang per Portal</bpmn:text></bpmn:textAnnotation>
+    <bpmn:association id="Assoc_1" sourceRef="Start_1" targetRef="Note_1" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Gw_1" />
+    <bpmn:sequenceFlow id="Flow_3" name="ja" sourceRef="Gw_1" targetRef="Task_2">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">=vollstaendig</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Gw_1" targetRef="Task_3" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_2" targetRef="Sub_1" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Sub_1" targetRef="Catch_1" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Catch_1" targetRef="Par_1" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Par_1" targetRef="End_1" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Bnd_1" targetRef="Task_3" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_3" targetRef="End_2" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collab_1">
+      <bpmndi:BPMNShape id="Pool_1_di" bpmnElement="Pool_1" isHorizontal="true">
+        <dc:Bounds x="120" y="60" width="1180" height="400" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_1_di" bpmnElement="Note_1">
+        <dc:Bounds x="170" y="80" width="130" height="40" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="170" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="250" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataRef_1_di" bpmnElement="DataRef_1">
+        <dc:Bounds x="282" y="300" width="36" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_1_di" bpmnElement="Gw_1" isMarkerVisible="true">
+        <dc:Bounds x="400" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_2_di" bpmnElement="Task_2">
+        <dc:Bounds x="500" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_1_di" bpmnElement="Bnd_1">
+        <dc:Bounds x="532" y="222" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_1_di" bpmnElement="Sub_1" isExpanded="true">
+        <dc:Bounds x="650" y="110" width="330" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubStart_1_di" bpmnElement="SubStart_1">
+        <dc:Bounds x="680" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubTask_1_di" bpmnElement="SubTask_1">
+        <dc:Bounds x="760" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubEnd_1_di" bpmnElement="SubEnd_1">
+        <dc:Bounds x="910" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_1_di" bpmnElement="Catch_1">
+        <dc:Bounds x="1020" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Par_1_di" bpmnElement="Par_1">
+        <dc:Bounds x="1100" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="1200" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_3_di" bpmnElement="Task_3">
+        <dc:Bounds x="500" y="330" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_2_di" bpmnElement="End_2">
+        <dc:Bounds x="652" y="352" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Assoc_1_di" bpmnElement="Assoc_1">
+        <di:waypoint x="188" y="182" /><di:waypoint x="200" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_1_di" bpmnElement="DOA_1">
+        <di:waypoint x="300" y="240" /><di:waypoint x="300" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="206" y="200" /><di:waypoint x="250" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="350" y="200" /><di:waypoint x="400" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="450" y="200" /><di:waypoint x="500" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="425" y="225" /><di:waypoint x="425" y="370" /><di:waypoint x="500" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="600" y="200" /><di:waypoint x="650" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
+        <di:waypoint x="716" y="200" /><di:waypoint x="760" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_2_di" bpmnElement="SubFlow_2">
+        <di:waypoint x="860" y="200" /><di:waypoint x="910" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="980" y="200" /><di:waypoint x="1020" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="1056" y="200" /><di:waypoint x="1100" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
+        <di:waypoint x="1150" y="200" /><di:waypoint x="1200" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_di" bpmnElement="Flow_9">
+        <di:waypoint x="550" y="258" /><di:waypoint x="550" y="330" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <di:waypoint x="600" y="370" /><di:waypoint x="652" y="370" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      const api = async (method, url) => {
+        if (method === "GET" && /\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (method === "GET" && /\/forms$/.test(url)) return [];
+        if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };
+        return {};
+      };
+
+      window.__mount = () => mountEditor(view, { api, toast: noop, key: 42 });
+      window.__ready = true;
+    </script>
+  </body>
+</html>
