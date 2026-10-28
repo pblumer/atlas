@@ -150,7 +150,9 @@ that exists.
   - making `StartedBy` available to assignment expressions, so a step can be addressed to whoever
     started the instance;
   - another system starting for a person, such as a wiki page with a start form: it needs atlas to
-    accept that person's credential on these routes, which is a record of its own.
+    accept that person's credential on these routes, which
+    [ADR-draft-provider-access-tokens-for-a-person](draft-provider-access-tokens-for-a-person.md)
+    proposes.
 
 ## Pros and cons of the options
 
