@@ -51,6 +51,7 @@ That's the whole setup. No SQL schema to migrate, no broker to provision, no sid
 - <img src="docs/brand/icons/tokens.svg" width="18" height="18" align="absmiddle" alt=""> **See every token.** A live view of all running instances on the diagram, plus a step-by-step replay of any single instance with per-step variable snapshots.
 - <img src="docs/brand/icons/human.svg" width="18" height="18" align="absmiddle" alt=""> **Human work included.** User tasks with real forms, claim/assign, candidate groups, and public start links — a Tasks app, not just an API.
 - <img src="docs/brand/icons/decisions.svg" width="18" height="18" align="absmiddle" alt=""> **Decisions as tables.** DMN business rule tasks with an embedded decision-table editor, and every evaluation recorded with its inputs, outputs and rule trace.
+- **atlas hub (preview).** Find and review signed Process Application Blueprints and their included product catalogues from an operator-trusted registry in the Console. Standalone catalogues, private offers and managed updates are roadmap work, not shipped hub capabilities. See the [hub programme](docs/planning/blueprint-marketplace-program.md).
 - <img src="docs/brand/icons/agents.svg" width="18" height="18" align="absmiddle" alt=""> **Made for AI agents.** `atlas mcp` exposes 167 Model Context Protocol tools, so an agent can author, deploy, run and inspect processes over the same API you do.
 
 ## Take the tour

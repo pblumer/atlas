@@ -10,6 +10,11 @@
 > the routes under `/api/v1/repository/`, and the `<data>/repository` directory.
 > Only the name changed — every decision below still holds. This record is left in
 > its original wording as the dated account of the decision.
+>
+> **Separate product name (2026-10-28):** **atlas hub** is the new name for
+> the signed cross-installation distribution experience (ADR-0499). It is
+> separate from this ADR's local **Repository** and does not change the
+> Repository's existing paths, package schema or implementation status.
 
 ## Context and problem statement
 
