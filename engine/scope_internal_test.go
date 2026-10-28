@@ -136,3 +136,43 @@ func TestResolveVariableChain(t *testing.T) {
 		}
 	}
 }
+
+// TestDefiningScopeInChain exercises the pure walk payload propagation rests on: the nearest
+// scope that already declares the name wins, a name no scope declares is reported as
+// undeclared (the caller then writes the root), a self-parented scope ends the walk, and
+// the cycle guard holds (ADR-0508).
+func TestDefiningScopeInChain(t *testing.T) {
+	// Scopes: 1 (root) → child 2 → grandchild 3.
+	parents := map[uint64]uint64{3: 2, 2: 1}
+	parentOf := func(s uint64) (uint64, bool) { p, ok := parents[s]; return p, ok }
+	declared := map[uint64]map[string]bool{1: {"root": true, "both": true}, 2: {"both": true, "mid": true}}
+	has := func(s uint64, name string) bool { return declared[s][name] }
+
+	cases := []struct {
+		start  uint64
+		name   string
+		want   uint64
+		wantOK bool
+	}{
+		{3, "both", 2, true},  // nearest declaring scope wins over the root
+		{3, "mid", 2, true},   // declared in a parent
+		{3, "root", 1, true},  // declared only on the root
+		{2, "mid", 2, true},   // declared at the start scope
+		{3, "nope", 0, false}, // undeclared everywhere
+	}
+	for _, tc := range cases {
+		got, ok := definingScopeInChain(tc.start, tc.name, has, parentOf)
+		if got != tc.want || ok != tc.wantOK {
+			t.Errorf("definingScopeInChain(%d, %q) = %d, %v; want %d, %v", tc.start, tc.name, got, ok, tc.want, tc.wantOK)
+		}
+	}
+
+	selfParent := func(s uint64) (uint64, bool) { return s, true }
+	if _, ok := definingScopeInChain(5, "x", has, selfParent); ok {
+		t.Error("a self-parented scope must end the walk undeclared")
+	}
+	cyclic := func(s uint64) (uint64, bool) { return s + 1, true }
+	if _, ok := definingScopeInChain(1, "x", func(uint64, string) bool { return false }, cyclic); ok {
+		t.Error("an endless chain must be guarded and end undeclared")
+	}
+}

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: concurrent runs of one non-interrupting event subprocess,
+  each correlating on its own local key (ADR-0508).
+
+  Start -> userTask "work" -> End, with a non-interrupting message event subprocess
+  "finding" whose every run maps the finding's id into its own scope, waits at a receive
+  task for the answer to that finding (correlation key "=findingId", evaluated in the run's
+  scope), and does the extra work only when the answer, declared locally as null, says yes.
+
+  Driver: two findings back to back (both runs must start, each with its own id), the
+  answer "yes" to the second, "no" to the first, then the main work. The trace shows the
+  second run doing the extra work and the first one declined — the outcome a key read on
+  the instance root, or an answer written behind the local null, gets wrong.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_es_concurrent_runs" targetNamespace="http://atlas/conformance">
+  <message id="Msg_finding" name="finding">
+    <extensionElements><zeebe:subscription correlationKey="= &quot;O1&quot;"/></extensionElements>
+  </message>
+  <message id="Msg_answer" name="answer">
+    <extensionElements><zeebe:subscription correlationKey="=findingId"/></extensionElements>
+  </message>
+  <process id="event-subprocess-concurrent-runs" name="Event subprocess (concurrent runs)" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <userTask id="work" name="Main work">
+      <extensionElements><zeebe:assignmentDefinition candidateGroups="workshop"/></extensionElements>
+    </userTask>
+    <endEvent id="end" name="Done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="work"/>
+    <sequenceFlow id="f2" sourceRef="work" targetRef="end"/>
+    <subProcess id="finding" name="Finding" triggeredByEvent="true">
+      <extensionElements><zeebe:ioMapping>
+        <zeebe:input source="=findingId" target="findingId"/>
+        <zeebe:input source="=null" target="approved"/>
+      </zeebe:ioMapping></extensionElements>
+      <startEvent id="found" name="Finding reported" isInterrupting="false">
+        <messageEventDefinition messageRef="Msg_finding"/>
+      </startEvent>
+      <receiveTask id="await_answer" name="Await answer" messageRef="Msg_answer"/>
+      <exclusiveGateway id="approved_q" name="Approved?" default="declined_flow"/>
+      <scriptTask id="extra" name="Extra work">
+        <extensionElements><zeebe:script expression="=findingId" resultVariable="extraDone"/></extensionElements>
+      </scriptTask>
+      <endEvent id="extra_done" name="Extra done"/>
+      <endEvent id="declined" name="Declined"/>
+      <sequenceFlow id="e1" sourceRef="found" targetRef="await_answer"/>
+      <sequenceFlow id="e2" sourceRef="await_answer" targetRef="approved_q"/>
+      <sequenceFlow id="approved_flow" sourceRef="approved_q" targetRef="extra">
+        <conditionExpression>=approved = "yes"</conditionExpression>
+      </sequenceFlow>
+      <sequenceFlow id="declined_flow" sourceRef="approved_q" targetRef="declined"/>
+      <sequenceFlow id="e3" sourceRef="extra" targetRef="extra_done"/>
+    </subProcess>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="event-subprocess-concurrent-runs">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="82" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_work" bpmnElement="work"><dc:Bounds x="180" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_end" bpmnElement="end"><dc:Bounds x="362" y="102" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_finding" bpmnElement="finding" isExpanded="true"><dc:Bounds x="60" y="220" width="640" height="210"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_found" bpmnElement="found"><dc:Bounds x="92" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_await_answer" bpmnElement="await_answer"><dc:Bounds x="180" y="280" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_approved_q" bpmnElement="approved_q" isMarkerVisible="true"><dc:Bounds x="335" y="295" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_extra" bpmnElement="extra"><dc:Bounds x="430" y="280" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_extra_done" bpmnElement="extra_done"><dc:Bounds x="602" y="302" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_declined" bpmnElement="declined"><dc:Bounds x="462" y="374" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="118" y="120"/><di:waypoint x="180" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="280" y="120"/><di:waypoint x="362" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e1" bpmnElement="e1"><di:waypoint x="128" y="320"/><di:waypoint x="180" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e2" bpmnElement="e2"><di:waypoint x="280" y="320"/><di:waypoint x="335" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_approved_flow" bpmnElement="approved_flow"><di:waypoint x="385" y="320"/><di:waypoint x="430" y="320"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_declined_flow" bpmnElement="declined_flow"><di:waypoint x="360" y="345"/><di:waypoint x="360" y="392"/><di:waypoint x="462" y="392"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_e3" bpmnElement="e3"><di:waypoint x="530" y="320"/><di:waypoint x="602" y="320"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

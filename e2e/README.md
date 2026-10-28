@@ -41,6 +41,19 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   included) and what outside the application stops working, and is armed only once the
   application's name is typed; a refusal in the preview, or a caller who may not cancel
   instances, keeps it disarmed; Escape cancels.
+- **`appearance.spec.mjs`**
+  ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
+  the light, dark and system appearance — nothing stored keeps today's light console
+  even on a dark system; a dark choice is on the document before the body is parsed;
+  `system` follows the operating system live while an explicit choice ignores it; an
+  invalid value or unreadable storage stays light without an error; a cached brand colour
+  stays the brand, with a soft tint derived for the dark surface. In the Modeler, against
+  `appearance-harness.html`: light draws exactly bpmn-js's own colours; dark draws every
+  shape of a diagram carrying most of what bpmn-js draws dark, with label, outline and
+  arrow above WCAG's 4.5:1 and 3:1; the bpmn.io watermark stays visible as drawn; a switch
+  re-colours an open diagram without importing it again; the exported picture stays
+  light and the model carries no colour; the code-editor tokens are readable in both
+  palettes; and the DMN requirements graph is drawn from the same palette.
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed

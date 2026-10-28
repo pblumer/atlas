@@ -33,6 +33,7 @@
 
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { panelGroupsModule, translateModule } from "./lib-translate.js";
+import { DIAGRAM_RENDERER } from "./appearance.js";
 import { renderTrace, fmtVal as traceValue } from "./dmn-trace.js";
 import { collectDecisionDocumentation, exportDecisionDocumentation } from "./decision-doc.js";
 import { attachCollab } from "./collab.js";
@@ -1280,6 +1281,8 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
       // from its own options and does not carry `common.additionalModules` over.
       drd: {
         propertiesPanel: { parent: propsPanel },
+        // The same appearance-aware colours the BPMN canvas is drawn with.
+        drdRenderer: DIAGRAM_RENDERER,
         additionalModules: [
           AtlasDmn.DmnPropertiesPanelModule,
           AtlasDmn.DmnPropertiesProviderModule,

@@ -496,7 +496,9 @@ func registerScope(
 			// A compensation throw triggers compensation of completed activities in its
 			// scope (or of the one named by activityRef, resolved in a post-pass since the
 			// target may be registered later) — ADR-0103.
-			reg.node(ev.Id, b.AddCompensationThrowEvent())
+			node := b.AddCompensationThrowEvent()
+			b.SetCompensationWaitForCompletion(node, ev.Compensation.waits())
+			reg.node(ev.Id, node)
 			continue
 		}
 		if ev.Escalation != nil {
@@ -607,7 +609,9 @@ func registerScope(
 		// A compensation end event triggers compensation, then ends its scope (ADR-0103);
 		// its optional activityRef is resolved in the post-pass, like a compensation throw.
 		if e.Compensation != nil {
-			reg.node(e.Id, b.AddCompensationEndEvent())
+			node := b.AddCompensationEndEvent()
+			b.SetCompensationWaitForCompletion(node, e.Compensation.waits())
+			reg.node(e.Id, node)
 			continue
 		}
 		// A cancel end event cancels its enclosing transaction (ADR-0108); validation

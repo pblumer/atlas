@@ -1,0 +1,25 @@
+{
+  "name": "compensation-event-subprocess",
+  "model": "compensation-event-subprocess.bpmn",
+  "features": [
+    "compensation-event-subprocess"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "charge"
+    },
+    {
+      "action": "publish",
+      "correlation": "O1",
+      "message": "cancellation"
+    },
+    {
+      "action": "complete",
+      "element": "refund"
+    }
+  ]
+}

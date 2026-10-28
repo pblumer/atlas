@@ -214,7 +214,12 @@ type CompiledNode struct {
 	// Wizard is atlas:wizard on an embedded subprocess, WizardNone on every other node
 	// (ADR-0449). It sits in the padding after Transaction, so the node does not grow.
 	Wizard WizardKind
-	Lane   int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
+	// CompensationHandler marks an isForCompensation activity some compensation boundary
+	// links to (ADR-0103). The engine reads it when such a handler finishes, to release a
+	// compensation throw waiting for it (ADR-0508).
+	// It too sits in the padding after Transaction, so the node does not grow.
+	CompensationHandler bool
+	Lane                int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
 }
 
 // WizardKind says whether, and for whom, an embedded subprocess is a wizard: one
@@ -1395,6 +1400,11 @@ type BoundaryEventDetail struct {
 // every completed compensable activity in the throw's scope (reverse completion order).
 type CompensationDetail struct {
 	ActivityRef int32
+	// WaitForCompletion is BPMN's waitForCompletion: the throw (or end event) goes on only
+	// once every handler it started has finished. True unless the model says
+	// waitForCompletion="false", which keeps the fire-and-continue behaviour
+	// (ADR-0508).
+	WaitForCompletion bool
 }
 
 // ErrorEndDetail is the per-error-end-event data the runtime needs: the code it throws

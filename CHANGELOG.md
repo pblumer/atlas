@@ -14,6 +14,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A cancellation can be handled by an event subprocess inside its transaction.** A
+  cancel end event may now sit in an event subprocess directly inside a `<transaction>`:
+  a customer's cancellation, arriving at any point of the work, interrupts it, the
+  transaction compensates what was done, and its cancel boundary takes over once the
+  rollback is finished. A compensation throw or end event directly in an event subprocess
+  compensates the scope that event subprocess handles, instead of its own run, which
+  holds nothing to compensate (ADR-0508).
+
 - **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
   description comes from the wiki now carries the page's layout beside its text:
   headings, lists, tables, panels, quotes, code, dividers, its images and the items
@@ -233,6 +241,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Compensation waits for its handlers.** A compensation throw or end event now honours
+  BPMN's `waitForCompletion`, which defaults to true: the step after it runs once the
+  handlers it started have finished, not beside them. `waitForCompletion="false"` keeps
+  the old behaviour (ADR-0103, ADR-0508).
+- **A receive task with output mappings keeps its message to itself.** As with a
+  worker's result, the payload lands in the task's own scope and its output mappings
+  decide what reaches the instance; the raw payload no longer appears on the root beside
+  the mapped values (ADR-0508).
+
 - **Blueprint Marketplace is now atlas hub.** The Console's discovery entry and documentation use the broader hub identity for process applications and their product catalogues, with other offer types explicitly planned. Existing signed Blueprint Registry v1 wire identifiers, API routes, environment settings and native import permissions remain unchanged (ADR-0499).
 - **The catalogue page reads in the order a catalogue is filled.** Its sections are now
   numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
@@ -348,6 +365,22 @@ _Changed_ / _Removed_ for each version.
   removed.
 
 ### Fixed
+
+- **A correlation key sees the variables of the scope that waits.** A key was evaluated
+  on the instance root only, so it could not use a variable local to a subprocess, an
+  event-subprocess run or the element's own input mappings; two runs of one event
+  subprocess waiting at once subscribed with whatever the root last held. Keys now
+  resolve up the scope chain like every other expression in a model
+  (ADR-0508).
+- **A message updates the variable the model declared.** A message's or signal's payload
+  was always written to the instance root, hidden behind a local variable of the same
+  name; it now updates the nearest scope that declares the variable, and lands on the
+  root as before when none does (ADR-0508).
+- **Back-to-back messages each start a run.** A non-interrupting message or signal event
+  subprocess re-armed two batches after it fired, so a second message in that window was
+  lost unless it carried a time to live. It now re-arms in the step that fires it, and
+  each run reads the payload of the message that started it
+  (ADR-0508).
 
 - **A diagrams token can be given its applications on the API-token page.** The
   architecture list shows a `diagrams` token only the applications its reach names, but

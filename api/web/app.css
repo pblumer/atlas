@@ -8,6 +8,13 @@
      bpmn.io watermark, which stays fully visible per its licence (see ~L748). */
   --diagram-bg: #f3f4f6;
   --diagram-dot: #d7dae0;
+  /* What bpmn-js and dmn-js draw a shape with: its fill, its outline and the text of
+     its label. These are the renderers' own defaults, so a light diagram is drawn
+     exactly as it was before the renderers were pointed at them; appearance.js
+     (DIAGRAM_RENDERER) explains why the renderers read tokens at all. */
+  --diagram-shape-fill: #ffffff;
+  --diagram-shape-stroke: hsl(225, 10%, 15%);
+  --diagram-label: hsl(225, 10%, 15%);
   --border: #e2e4e9;
   --border-strong: #cdd0d6;
   --text: #14161a;
@@ -116,6 +123,284 @@
   --im-store-fill: color-mix(in srgb, #b26a00 10%, var(--bg));
   --object-fill: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
   --sim-scope-fill: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* ---------- Dark appearance (ADR-0507) ----------
+
+   The same tokens, answered for a dark surface. index.html's bootstrap writes
+   data-appearance before first paint (appearance.js); nothing else switches, so a
+   rule that paints from the tokens is dark for free and a rule that writes a colour
+   out is the work that is left. The default stays light.
+
+   Measured, not chosen by eye, against WCAG 2.1 on --surface: --text 13.1:1, --muted
+   6.3:1, --danger 5.7:1, --warn 7.3:1, --ok 6.1:1. The mesh pair keeps the light
+   palette's order — outlines ahead of edges, both above the 3:1 a graphical object
+   needs against the canvas (6.0 and 3.9) — and the diagram stroke stands 9.0:1 on a
+   shape's fill and 10.7:1 on the canvas, the label 12.2:1 on the fill. */
+:root[data-appearance="dark"] {
+  --bg: #15171b;
+  --surface: #1d2025;
+  --diagram-bg: #15171b;
+  --diagram-dot: #2b2f36;
+  /* A shape is a step lighter than the canvas it stands on, the way a white box
+     stands on the light grey one. */
+  --diagram-shape-fill: #22262d;
+  --diagram-shape-stroke: #c3c8d0;
+  --diagram-label: #e4e6ea;
+  --border: #2c3038;
+  --border-strong: #444a54;
+  --text: #e4e6ea;
+  --muted: #9ba1aa;
+  /* The stock accent only. #0b5cff as text on --surface is 3.1:1, under the 4.5 a
+     link needs, so the default install gets the same hue a step lighter (5.1:1), and
+     the ink theme.js's accentInk would pick for it: white on it is 3.2:1, the dark
+     ink 5.7:1. An organisation's brand colour is applied inline by theme.js and
+     outranks both — the brand is not the appearance's to change. */
+  --accent: #4c8dff;
+  --accent-ink: #14161a;
+  /* The two shades derived *from* the accent are a different matter. theme.js
+     derives them for a light surface — the soft tint is the accent mixed 90% into
+     white — and the bootstrap applies that derived map inline, which no ordinary rule
+     outranks. A pale tint behind a pill on a dark card is the light console showing
+     through, so in dark they are derived here, from whichever accent is in force,
+     and `!important` is what lets a stylesheet rule beat the inline value. The brand
+     colour itself stays inline and untouched. */
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, var(--surface)) !important;
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, #ffffff) !important;
+  --danger: #f47067;
+  --danger-soft: #3b2120;
+  --warn: #d9a441;
+  --warn-soft: #33291a;
+  --mesh-attention: #e8891c;
+  --mesh-ink: #8f96a0;
+  --mesh-line: #6f7680;
+  --ok: #3fb26a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+/* ===== Starship cockpit — a gamified HUD skin (ADR-0509) ===================== */
+/* Cockpit rides the same data-appearance mechanism as dark: it answers the same
+   palette tokens (so the canvas, the vendored chrome and the code editors theme
+   through the very same bridges — those selectors below include "cockpit"), in a
+   deep-space, cyan-HUD key, and layers purely decorative motion over it. It is an
+   explicit opt-in, never selected by the system scheme. color-scheme stays dark so
+   native controls and scrollbars follow. All motion is switched off under
+   prefers-reduced-motion, leaving the static palette and glow intact. */
+:root[data-appearance="cockpit"] {
+  --bg: #060a12;
+  --surface: #0c1622;
+  --diagram-bg: #070d18;
+  --diagram-dot: #15303b;
+  --diagram-shape-fill: #0e1c2b;
+  --diagram-shape-stroke: #9fc4ca;
+  --diagram-label: #d7eef3;
+  --border: #16344a;
+  --border-strong: #24506b;
+  --text: #d7eef3;
+  --muted: #7ba3ac;
+  --accent: #31e1e6;
+  --accent-ink: #052226;
+  --accent-soft: color-mix(in srgb, var(--accent) 20%, var(--surface)) !important;
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, #ffffff) !important;
+  --danger: #ff6b6b;
+  --danger-soft: #2a1317;
+  --warn: #ffb648;
+  --warn-soft: #2a2110;
+  --mesh-attention: #ffb648;
+  --mesh-ink: #7ba3ac;
+  --mesh-line: #43707b;
+  --ok: #39d98a;
+  --shadow:
+    0 0 0 1px rgba(49, 225, 230, 0.08),
+    0 2px 12px rgba(0, 0, 0, 0.55),
+    0 0 26px rgba(49, 225, 230, 0.06);
+  color-scheme: dark;
+}
+
+/* Deep-space backdrop: a radial nebula over near-black, painted on the body so it
+   sits behind in-flow content. */
+:root[data-appearance="cockpit"] body {
+  background:
+    radial-gradient(1200px 680px at 78% -10%, rgba(49, 225, 230, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 12% 108%, rgba(90, 120, 255, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 40%, #0a1424 0%, #060a12 70%, #03060d 100%);
+  background-attachment: fixed;
+}
+/* Two drifting starfields (fixed, inert, behind everything). */
+:root[data-appearance="cockpit"] body::before {
+  content: "";
+  position: fixed;
+  inset: -200px 0 0 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 40px 60px, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1.4px 1.4px at 160px 140px, rgba(185, 245, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 240px 40px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 90px 220px, rgba(255, 255, 255, 0.6), transparent);
+  background-size: 300px 300px, 300px 300px, 180px 180px, 180px 180px;
+  opacity: 0.9;
+  animation: cockpit-stars 140s linear infinite;
+}
+/* Faint CRT scanlines plus a top HUD glow — a thin, static instrument overlay. */
+:root[data-appearance="cockpit"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(49, 225, 230, 0.11), transparent 140px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+/* Lift the content column above the two fixed backdrop layers (the topbar, drawer,
+   scrim and toast establish their own stacking already). */
+:root[data-appearance="cockpit"] main { position: relative; z-index: 1; }
+
+/* Cockpit chrome: a glass header hairline, a radar-swept reactor mark, glowing
+   accents, a teal account chip with an online light, and telemetry dots on stats. */
+:root[data-appearance="cockpit"] .topbar {
+  background: linear-gradient(180deg, rgba(12, 22, 34, 0.92), rgba(6, 10, 18, 0.86));
+  border-bottom-color: rgba(49, 225, 230, 0.35);
+  box-shadow: 0 1px 0 rgba(49, 225, 230, 0.15), 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+:root[data-appearance="cockpit"] .mark {
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 16px rgba(49, 225, 230, 0.55);
+  animation: cockpit-reactor 3.4s ease-in-out infinite;
+}
+/* A radar sweep scans across the real atlas mark (the a+ glyph stays the face). */
+:root[data-appearance="cockpit"] .mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(49, 225, 230, 0.5) 0deg, rgba(49, 225, 230, 0.1) 26deg, transparent 72deg 360deg);
+  mix-blend-mode: screen;
+  animation: cockpit-radar 3.6s linear infinite;
+}
+:root[data-appearance="cockpit"] .btn:not(.ghost):not(.neutral) { box-shadow: 0 0 16px rgba(49, 225, 230, 0.42); }
+:root[data-appearance="cockpit"] .btn:not(.ghost):not(.neutral):hover { box-shadow: 0 0 24px rgba(49, 225, 230, 0.62); }
+:root[data-appearance="cockpit"] .topnav a.active { text-shadow: 0 0 12px rgba(49, 225, 230, 0.75); }
+:root[data-appearance="cockpit"] .card:hover { border-color: rgba(49, 225, 230, 0.3); }
+:root[data-appearance="cockpit"] .avatar,
+:root[data-appearance="cockpit"] .avatar:hover { background: #10343d; color: #bfeef2; position: relative; overflow: visible; }
+:root[data-appearance="cockpit"] .avatar::after {
+  content: "";
+  position: absolute;
+  right: -1px; bottom: -1px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--ok);
+  animation: cockpit-blink 2.2s ease-in-out infinite;
+}
+:root[data-appearance="cockpit"] .stat { position: relative; padding-left: 14px; }
+:root[data-appearance="cockpit"] .stat::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(49, 225, 230, 0.8);
+  animation: cockpit-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes cockpit-stars { from { transform: translateY(0); } to { transform: translateY(-300px); } }
+@keyframes cockpit-reactor {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.55), 0 0 14px rgba(49, 225, 230, 0.5); }
+  50% { box-shadow: 0 0 0 1px rgba(49, 225, 230, 0.9), 0 0 24px rgba(49, 225, 230, 0.85); }
+}
+@keyframes cockpit-radar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes cockpit-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-appearance="cockpit"] body::before,
+  :root[data-appearance="cockpit"] .mark,
+  :root[data-appearance="cockpit"] .avatar::after,
+  :root[data-appearance="cockpit"] .stat::before { animation: none; }
+  :root[data-appearance="cockpit"] .mark::after { display: none; }
+}
+/* ===== end cockpit skin ====================================================== */
+
+/* diagram-js — the palette, the context pad, the replace and search popups, the
+   drop and snap feedback — paints from custom properties it declares on .djs-parent
+   (each vendored diagram-js.css). Naming them after the console's tokens is the whole
+   bridge: the vendored files stay pristine, and this selector outranks theirs on
+   specificity, not on load order. The BPMN, DMN and ArchiMate/UML canvases share
+   the names, so one block reaches all three. */
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .djs-parent {
+  --canvas-fill-color: var(--diagram-bg);
+  --context-pad-entry-background-color: var(--surface);
+  --context-pad-entry-hover-background-color: var(--border);
+  --palette-entry-color: var(--text);
+  --palette-separator-color: var(--border-strong);
+  --palette-toggle-hover-background-color: var(--muted);
+  --palette-background-color: var(--surface);
+  --palette-border-color: var(--border-strong);
+  --popup-background-color: var(--surface);
+  --popup-border-color: var(--border-strong);
+  --popup-shadow-color: rgba(0, 0, 0, 0.6);
+  --popup-disabled-color: var(--muted);
+  --popup-description-color: var(--muted);
+  --popup-no-results-color: var(--muted);
+  --popup-entry-title-color: var(--muted);
+  --popup-entry-hover-color: var(--border);
+  --popup-search-border-color: var(--border-strong);
+  --popup-search-focus-background-color: var(--accent-soft);
+  --search-container-background-color: var(--surface);
+  --search-shadow-color: rgba(0, 0, 0, 0.6);
+  --search-input-border-color: var(--border-strong);
+  --search-input-focus-background-color: var(--accent-soft);
+  --search-result-hover-background-color: var(--border);
+  --search-result-secondary-color: var(--muted);
+  --shape-connect-allowed-fill-color: var(--surface);
+  --shape-drop-allowed-fill-color: var(--surface);
+  --shape-drop-not-allowed-fill-color: var(--danger-soft);
+  --space-tool-crosshair-stroke-color: var(--text);
+  --tooltip-error-background-color: var(--danger-soft);
+  --breadcrumbs-arrow-color: var(--text);
+}
+
+/* dmn-js (the decision table, the literal and boxed expressions, the DRD's
+   definitions box) and the properties panel it carries have far more custom
+   properties than diagram-js — some two hundred — but they all resolve to one small
+   primitive palette of neutral greys, white and black that each sheet declares on its
+   own root. So instead of renaming two hundred roles, the ramp is turned over: what
+   was the lightest grey becomes the darkest surface, what was the darkest becomes
+   the text, and every pairing the vendor chose keeps its contrast in the other
+   direction. The primitive names then describe the light palette, not the value —
+   that is the price of leaving the vendored sheets untouched. Blues and reds keep
+   their hue; the pale washes behind a selection or an error become dark ones, and
+   the dark blue and red that are read as text become light ones. */
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.dmn-js-parent, .bio-properties-panel, .djs-parent) {
+  --color-white: var(--surface);
+  --color-grey-225-10-97: #23262c;
+  --color-grey-225-10-95: #272a31;
+  --color-grey-225-10-90: var(--border);
+  --color-grey-225-10-85: #353a42;
+  --color-grey-225-10-80: #3d424b;
+  --color-grey-225-10-75: var(--border-strong);
+  --color-grey-225-10-55: #7d838d;
+  --color-grey-225-10-35: #a3a9b2;
+  --color-grey-225-10-15: var(--text);
+  --color-grey-0-0-22: #d0d3d8;
+  --color-black: #f3f4f6;
+  --color-black-opacity-10: rgba(255, 255, 255, 0.08);
+  --color-black-opacity-20: rgba(255, 255, 255, 0.14);
+  --color-blue-205-100-95: #16304a;
+  --color-blue-205-100-85: #1d3f61;
+  --color-blue-205-100-80: #1f4a73;
+  --color-blue-205-100-35: #5cb8ff;
+  --color-blue-205-100-40: #4fb0ff;
+  --color-red-360-100-97: #3b2120;
+  --color-red-360-100-92: #4a2523;
+  --color-red-360-100-35: #ff7b72;
+  --color-red-360-100-40: #ff7b72;
 }
 
 * { box-sizing: border-box; }
@@ -1524,6 +1809,19 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 /* Template tags — {{ }}, {{#if }}, {{/loop}} — around the FEEL they hold (dev-lang.js). */
 .tok-tpl-tag     { color: #0550ae; font-weight: 700; }
 
+/* The same roles in the dark appearance: GitHub's dark palette, the one the light one
+   above is taken from, so a token keeps its hue and only its lightness turns over.
+   Every one stands at least 5.3:1 on the editor's --surface (e2e/appearance.spec.mjs
+   holds both palettes to 4.5). Classes that paint from a token need nothing here. */
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-comment, .tok-md-quote, .tok-md-rule) { color: #8b949e; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .tok-string { color: #a5d6ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-number, .tok-literal, .tok-parameter, .tok-md-head, .tok-tpl-tag) { color: #79c0ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-keyword, .tok-operator, .tok-md-list) { color: #ff7b72; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-builtin, .tok-cmdlet, .tok-html-attr) { color: #d2a8ff; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-variable, .tok-html-entity) { color: #ffa657; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .tok-punct { color: #9da5ae; }
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) :is(.tok-type, .tok-md-code, .tok-html-tag) { color: #7ee787; }
+
 /* Completion popup. */
 .feel-pop {
   position: absolute; z-index: 30; min-width: 200px; max-width: 340px; max-height: 220px;
@@ -1693,6 +1991,14 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 
 /* bpmn-js watermark must remain visible (license). Just ensure it isn't clipped. */
 .bjs-powered-by { z-index: 5; }
+/* The same licence asks that the watermark "stay fully visible". bpmn-js draws it in
+   #404040 and dmn-js in black, which on the dark canvas is 1.9:1 and less — there,
+   but not visible. Recolouring the logo would be changing it, so it is left exactly
+   as drawn and given the light canvas behind it instead: the mark a dark diagram
+   carries is the one a light diagram carries (ADR-0507). */
+:root:is([data-appearance="dark"], [data-appearance="cockpit"]) .bjs-powered-by {
+  background: #f3f4f6; border-radius: 3px; padding: 2px 4px; line-height: 0;
+}
 
 /* ---------- Live overlay ---------- */
 /* In the live view the diagram is read-only: hide editing affordances. */

@@ -123,7 +123,7 @@ func handleDelivering(c *ProcessingContext) {
 		return
 	}
 	// An API delivery has no sending instance, so the recorded flow's sender is 0.
-	reached := deliverToSubscriptions(c, matches, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0)
+	reached := deliverToSubscriptions(c, matches, pub.MessageName, pub.CorrelationKey, c.cmd.StartVars, 0, true)
 	c.appendDirectedDispatch(pub.MessageName, pub.CorrelationKey, piKey, targetDef, reached)
 	// In the same batch as the correlation, so the delivery and the receipt naming
 	// it commit with one fsync (I2): a retry after a crash either replays or

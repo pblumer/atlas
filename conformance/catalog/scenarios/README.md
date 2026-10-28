@@ -4,7 +4,7 @@ Auto-generated index of the conformance scenarios. Each page carries the model's
 description, its diagram, how the instance is driven, and the outcome Atlas must
 produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 
-## Positive scenarios (31)
+## Positive scenarios (34)
 
 | Scenario | Features | Patterns |
 |---|---|---|
@@ -39,6 +39,9 @@ produce. Regenerate with `go test ./conformance -update`; do not edit by hand.
 | [data-object-fields](data-object-fields.md) | `field-level-data-object` | — |
 | [collection-data-object](collection-data-object.md) | `collection-data-object` | — |
 | [transaction-cancel](transaction-cancel.md) | `transaction-cancel` | — |
+| [event-subprocess-concurrent-runs](event-subprocess-concurrent-runs.md) | `event-subprocess-concurrent-runs` | — |
+| [transaction-cancel-event-subprocess](transaction-cancel-event-subprocess.md) | `transaction-cancel-event-subprocess` | — |
+| [compensation-event-subprocess](compensation-event-subprocess.md) | `compensation-event-subprocess` | — |
 
 ## Negative models (4)
 
