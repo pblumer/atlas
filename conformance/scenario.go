@@ -74,6 +74,9 @@ var Features = []Feature{
 	{"field-level-data-object", "Field-level data-object writes (accrue members)", nil},
 	{"collection-data-object", "Collection data object (isCollection list)", nil},
 	{"transaction-cancel", "Transaction subprocess with cancel end and cancel boundary", nil},
+	{"event-subprocess-concurrent-runs", "Concurrent runs of a non-interrupting event subprocess, each correlating on its own local key", nil},
+	{"transaction-cancel-event-subprocess", "Cancel end in an event subprocess inside a transaction (cancellation at any point)", nil},
+	{"compensation-event-subprocess", "Compensation thrown from an event subprocess, waiting for its handlers", nil},
 }
 
 // Scenario binds a BPMN model to the features it exercises, how its instance is
@@ -177,6 +180,27 @@ var Scenarios = []Scenario{
 	// Transaction with cancel: cancel end rolls back (compensates), cancel boundary routes.
 	{Name: "transaction-cancel", Model: "transaction-cancel.bpmn", Features: []string{"transaction-cancel"},
 		Driver: []Step{Complete("reserve"), Complete("unreserve")}},
+
+	// Concurrent event-subprocess runs: two findings back to back, answered in reverse order;
+	// each answer reaches its own run, which reads it from its own scope.
+	{Name: "event-subprocess-concurrent-runs", Model: "event-subprocess-concurrent-runs.bpmn", Features: []string{"event-subprocess-concurrent-runs"},
+		Driver: []Step{
+			Publish("finding", "O1", Str("findingId", "F1")),
+			Publish("finding", "O1", Str("findingId", "F2")),
+			Publish("answer", "F2", Str("approved", "yes")),
+			Publish("answer", "F1", Str("approved", "no")),
+			Complete("work"),
+		}},
+
+	// Cancellation from an event subprocess inside a transaction: the cancel end rolls the
+	// transaction back and the cancel boundary takes over once the handler is done.
+	{Name: "transaction-cancel-event-subprocess", Model: "transaction-cancel-event-subprocess.bpmn", Features: []string{"transaction-cancel-event-subprocess"},
+		Driver: []Step{Complete("reserve"), Publish("cancellation", "O1"), Complete("unreserve")}},
+
+	// Compensation from an event subprocess: the throw compensates the enclosing scope and
+	// bills only after the refund.
+	{Name: "compensation-event-subprocess", Model: "compensation-event-subprocess.bpmn", Features: []string{"compensation-event-subprocess"},
+		Driver: []Step{Complete("charge"), Publish("cancellation", "O1"), Complete("refund")}},
 }
 
 // NegativeModel is a well-formed BPMN model that is nonetheless invalid and must be

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Conformance micro-fixture: a cancellation that can arrive at any point of a transaction,
+  handled by an event subprocess inside it whose cancel end rolls the transaction back
+  (ADR-draft-scope-aware-messaging-and-compensation, building on ADR-0108).
+
+  Start -> transaction "order" { ts -> serviceTask "reserve" (compensable, handler
+  "unreserve") -> userTask "wait" -> End }, with an interrupting message event subprocess
+  "cancellation" inside the transaction { message start -> cancel end }. The transaction's
+  cancel boundary routes to a script task "bill_effort"; a normal finish to "invoice".
+
+  Driver: complete reserve, publish the cancellation while "wait" is parked, complete the
+  compensation handler. The trace shows wait torn down, unreserve run, and the instance
+  leaving through the cancel boundary — not through "invoice".
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             id="defs_tx_cancel_es" targetNamespace="http://atlas/conformance">
+  <message id="Msg_cancel" name="cancellation">
+    <extensionElements><zeebe:subscription correlationKey="= &quot;O1&quot;"/></extensionElements>
+  </message>
+  <process id="transaction-cancel-event-subprocess" name="Transaction (cancel from event subprocess)" isExecutable="true">
+    <startEvent id="start" name="Start"/>
+    <transaction id="order" name="Order">
+      <startEvent id="ts" name="Enter"/>
+      <serviceTask id="reserve" name="Reserve parts">
+        <extensionElements><zeebe:taskDefinition type="reserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <boundaryEvent id="reserve_comp" attachedToRef="reserve"><compensateEventDefinition/></boundaryEvent>
+      <serviceTask id="unreserve" name="Unreserve parts" isForCompensation="true">
+        <extensionElements><zeebe:taskDefinition type="unreserve" retries="3"/></extensionElements>
+      </serviceTask>
+      <association id="ca1" sourceRef="reserve_comp" targetRef="unreserve"/>
+      <userTask id="wait" name="Repair">
+        <extensionElements><zeebe:assignmentDefinition candidateGroups="workshop"/></extensionElements>
+      </userTask>
+      <endEvent id="te" name="Repaired"/>
+      <sequenceFlow id="t1" sourceRef="ts" targetRef="reserve"/>
+      <sequenceFlow id="t2" sourceRef="reserve" targetRef="wait"/>
+      <sequenceFlow id="t3" sourceRef="wait" targetRef="te"/>
+      <subProcess id="cancellation" name="Cancellation" triggeredByEvent="true">
+        <startEvent id="cs" name="Cancellation received" isInterrupting="true">
+          <messageEventDefinition messageRef="Msg_cancel"/>
+        </startEvent>
+        <endEvent id="cancel_end" name="Cancel order"><cancelEventDefinition/></endEvent>
+        <sequenceFlow id="c1" sourceRef="cs" targetRef="cancel_end"/>
+      </subProcess>
+    </transaction>
+    <boundaryEvent id="order_cancelled" name="Cancelled" attachedToRef="order"><cancelEventDefinition/></boundaryEvent>
+    <scriptTask id="invoice" name="Invoice">
+      <extensionElements><zeebe:script expression="=&quot;invoiced&quot;" resultVariable="outcome"/></extensionElements>
+    </scriptTask>
+    <scriptTask id="bill_effort" name="Bill effort">
+      <extensionElements><zeebe:script expression="=&quot;cancelled&quot;" resultVariable="outcome"/></extensionElements>
+    </scriptTask>
+    <endEvent id="done" name="Done"/>
+    <endEvent id="cancelled" name="Cancelled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="order"/>
+    <sequenceFlow id="f2" sourceRef="order" targetRef="invoice"/>
+    <sequenceFlow id="f3" sourceRef="invoice" targetRef="done"/>
+    <sequenceFlow id="f4" sourceRef="order_cancelled" targetRef="bill_effort"/>
+    <sequenceFlow id="f5" sourceRef="bill_effort" targetRef="cancelled"/>
+  </process>
+  <bpmndi:BPMNDiagram id="diagram">
+    <bpmndi:BPMNPlane id="plane" bpmnElement="transaction-cancel-event-subprocess">
+      <bpmndi:BPMNShape id="di_start" bpmnElement="start"><dc:Bounds x="82" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_order" bpmnElement="order" isExpanded="true"><dc:Bounds x="160" y="60" width="560" height="460"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cancellation" bpmnElement="cancellation" isExpanded="true"><dc:Bounds x="190" y="390" width="300" height="110"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_ts" bpmnElement="ts"><dc:Bounds x="192" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reserve" bpmnElement="reserve"><dc:Bounds x="270" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_reserve_comp" bpmnElement="reserve_comp"><dc:Bounds x="302" y="222" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_unreserve" bpmnElement="unreserve"><dc:Bounds x="270" y="280" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_wait" bpmnElement="wait"><dc:Bounds x="420" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_te" bpmnElement="te"><dc:Bounds x="602" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cs" bpmnElement="cs"><dc:Bounds x="222" y="427" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cancel_end" bpmnElement="cancel_end"><dc:Bounds x="422" y="427" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_order_cancelled" bpmnElement="order_cancelled"><dc:Bounds x="582" y="502" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_invoice" bpmnElement="invoice"><dc:Bounds x="750" y="160" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_done" bpmnElement="done"><dc:Bounds x="932" y="182" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_bill_effort" bpmnElement="bill_effort"><dc:Bounds x="550" y="580" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="di_cancelled" bpmnElement="cancelled"><dc:Bounds x="732" y="602" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="di_f1" bpmnElement="f1"><di:waypoint x="118" y="200"/><di:waypoint x="160" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_t1" bpmnElement="t1"><di:waypoint x="228" y="200"/><di:waypoint x="270" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_t2" bpmnElement="t2"><di:waypoint x="370" y="200"/><di:waypoint x="420" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_t3" bpmnElement="t3"><di:waypoint x="520" y="200"/><di:waypoint x="602" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_ca1" bpmnElement="ca1"><di:waypoint x="320" y="258"/><di:waypoint x="320" y="280"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_c1" bpmnElement="c1"><di:waypoint x="258" y="445"/><di:waypoint x="422" y="445"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f2" bpmnElement="f2"><di:waypoint x="720" y="200"/><di:waypoint x="750" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f3" bpmnElement="f3"><di:waypoint x="850" y="200"/><di:waypoint x="932" y="200"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f4" bpmnElement="f4"><di:waypoint x="600" y="538"/><di:waypoint x="600" y="580"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="di_f5" bpmnElement="f5"><di:waypoint x="650" y="620"/><di:waypoint x="732" y="620"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

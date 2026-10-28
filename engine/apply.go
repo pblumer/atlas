@@ -230,6 +230,24 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// scope key — so they never leak past the scope (ADR-0103). A transaction is a
 			// TypeSubProcess, so its cancelling marker is dropped on the same teardown (ADR-0108).
 			if v.element.BpmnElementType == uint8(compiler.TypeSubProcess) {
+				// The one subprocess that completes while marked cancelling is an event
+				// subprocess whose cancel end fired: the compiler admits a cancel end only
+				// directly in a transaction or in an event subprocess directly in one. Its
+				// mark belongs to the transaction it ran in, which is its flow scope, so it
+				// is handed on before it is dropped below — and the transaction, once
+				// drained, routes out its cancel boundary
+				// (ADR-draft-scope-aware-messaging-and-compensation).
+				if h.Intent == model.IntentCompleted {
+					cancelling, err := tx.IsCanceling(h.Key)
+					if err != nil {
+						return err
+					}
+					if cancelling {
+						if err := tx.SetCanceling(v.element.FlowScopeKey); err != nil {
+							return err
+						}
+					}
+				}
 				if err := tx.DeleteCompensablesOfScope(h.Key); err != nil {
 					return err
 				}

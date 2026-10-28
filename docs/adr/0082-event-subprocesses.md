@@ -22,6 +22,12 @@
 > ([ADR-0089](0089-error-events.md)), escalation ([ADR-0125](0125-escalation-events.md)) or
 > condition ([ADR-0137](0137-conditional-events.md)) — `compiler/scope_compile.go`.
 >
+> **As built (2026-10-28).** A fired non-interrupting message or signal trigger is re-armed in
+> the step that fires it, not two batches later, so a message right behind it is not lost;
+> each run reads the payload of the message that started it; and correlation keys resolve up
+> the scope chain of the waiting element
+> ([ADR-draft-scope-aware-messaging-and-compensation](draft-scope-aware-messaging-and-compensation.md)).
+>
 > **Delivered (Phase 1, compiler):** `triggeredByEvent` (on `<subProcess>`) and
 > `isInterrupting` (on the start event) are parsed; an event subprocess compiles to an
 > ordinary `TypeSubProcess` node carrying a new `CompiledNode.EventSub` index into an

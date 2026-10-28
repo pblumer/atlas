@@ -1841,7 +1841,7 @@ func openMessageSubscription(c *ProcessingContext, key uint64, ei *model.Element
 	}
 	c.AppendMessageEvent(msgKey, model.IntentMessageConsumed, msg.WithoutPayload())
 	// A buffered message has no sending instance to name, as an API publish has none.
-	deliverToSubscriptions(c, []subscriptionMatch{{elKey: key, sub: sub}}, sub.MessageName, sub.CorrelationKey, msg.Variables, 0)
+	deliverToSubscriptions(c, []subscriptionMatch{{elKey: key, sub: sub}}, sub.MessageName, sub.CorrelationKey, msg.Variables, 0, false)
 	if gateway != 0 {
 		if c.p.gatewayRaceTaken == nil {
 			c.p.gatewayRaceTaken = map[uint64]struct{}{}
@@ -1878,7 +1878,11 @@ func completeAndTakeFlows(c *ProcessingContext, key uint64, ei *model.ElementIns
 		// A node that completes with no outgoing flow is a dead end — the token has left
 		// the scope like an implicit end, so check the scope for completion. Today this is
 		// only a compensation handler (ADR-0103): an off-flow activity a compensation throw
-		// activates, which must let its scope finish once it and its siblings drain.
+		// activates, which must let its scope finish once it and its siblings drain. A throw
+		// waiting for the handlers it started goes on once the last of them is done.
+		if ei.MultiInstance != miInner && cp.Node(ei.ElementId).CompensationHandler {
+			releaseCompensationWaiters(c, ei.ProcessInstanceKey, ei.FlowScopeKey)
+		}
 		completeScope(c, ei.FlowScopeKey)
 		return
 	}
@@ -2070,9 +2074,16 @@ func terminateScope(c *ProcessingContext, procKey, scopeKey uint64) {
 // activities are not live instances, so their compensable records are untouched here; they are
 // dropped only when the transaction element itself tears down (apply.go).
 func terminateScopeExcept(c *ProcessingContext, procKey, scopeKey, exceptKey uint64) {
+	terminateScopeSparing(c, procKey, scopeKey, exceptKey, 0)
+}
+
+// terminateScopeSparing is terminateScopeExcept sparing a second element instance too:
+// a cancel end inside an event subprocess spares itself and the handler run it sits in
+// (ADR-draft-scope-aware-messaging-and-compensation). A zero key spares nothing.
+func terminateScopeSparing(c *ProcessingContext, procKey, scopeKey, exceptKey, alsoExceptKey uint64) {
 	var victims []uint64
 	c.ForEachElementInstance(procKey, func(elKey uint64) {
-		if elKey != exceptKey && scopeContains(c, scopeKey, elKey) {
+		if elKey != exceptKey && (alsoExceptKey == 0 || elKey != alsoExceptKey) && scopeContains(c, scopeKey, elKey) {
 			victims = append(victims, elKey)
 		}
 	})
@@ -2751,7 +2762,7 @@ func (messageCatchEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
-		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, key),
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          ei.ElementId,
 	})
@@ -2779,7 +2790,7 @@ func (receiveTaskBehavior) OnActivated(c *ProcessingContext, key uint64, ei *mod
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        detail.MessageName,
-		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey),
+		CorrelationKey:     evalCorrelationKey(c, detail.CorrelationKey, key),
 		ProcessDefKey:      ei.ProcessDefKey,
 		ElementId:          ei.ElementId,
 	})
@@ -2806,7 +2817,7 @@ func (messageThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, e
 	// seeded with them (ADR-0035). Reading the payload here (command processing)
 	// keeps applyToState pure (I4).
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, fromElement(ei))
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, key), payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2826,7 +2837,7 @@ func (messageEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei 
 	cp := c.process(ei.ProcessDefKey)
 	detail := cp.MessageThrow(cp.Node(ei.ElementId).Detail)
 	payload := instanceVariables(c, ei.ProcessInstanceKey)
-	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, ei.ProcessInstanceKey), payload, fromElement(ei))
+	correlateMessage(c, detail.MessageName, evalCorrelationKey(c, detail.CorrelationKey, key), payload, fromElement(ei))
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -2835,15 +2846,22 @@ func (messageEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei
 	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
 }
 
-// evalCorrelationKey evaluates a compiled correlation-key expression over a
-// scope's variables and returns its FEEL canonical string form — the value a
+// evalCorrelationKey evaluates a compiled correlation-key expression over the
+// variables visible from startScope — the waiting or sending element's own instance,
+// resolving up its scope chain — and returns its FEEL canonical string form — the value a
 // subscription is keyed by and a publish matches against. A nil expression (an
 // empty correlationKey) or an evaluation error yields "".
-func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, scope uint64) string {
+func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, startScope uint64) string {
 	if e == nil {
 		return ""
 	}
-	v, err := e.Eval(bindInputs(c, e.Inputs(), scope))
+	// Resolved up the scope chain from the element that waits or sends, like every other
+	// FEEL expression a model evaluates (ADR-0068). Evaluated on the instance root alone, a
+	// key could not see a variable local to the element's subprocess, event-subprocess run
+	// or its own input mappings, and two runs of one event subprocess waiting at once
+	// subscribed with whichever value the root last held
+	// (ADR-draft-scope-aware-messaging-and-compensation).
+	v, err := e.Eval(bindInputsChain(c, e.Inputs(), startScope))
 	if err != nil {
 		return ""
 	}
@@ -2888,7 +2906,14 @@ type subscriptionMatch struct {
 // name-correlated publish and the directed delivery to one instance, so a message
 // arrives the same way whichever of the two sent it. reached is how many of the
 // subscriptions still had a waiting element: the others are only cleared.
-func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64) (reached int) {
+//
+// rearmNow re-arms a non-interrupting event-subprocess trigger in the same step that fires
+// it, so a second message for it — published right behind the first — finds a subscription
+// waiting instead of the gap until the re-armed trigger subscribes (rearmFiredTrigger). A
+// delivery from the message buffer passes false: it runs inside a trigger's own
+// subscribing, and re-arming from there would take the next buffered message recursively;
+// the buffer keeps those messages, so the ordinary re-arm takes them one by one.
+func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, name, correlationKey string, vars []model.VariableValue, senderPIKey uint64, rearmNow bool) (reached int) {
 	// A payload is attributed to the catch event that received it (below); the command
 	// driving this may itself be an element's — a throw event publishing the message — so
 	// the producer is put back rather than zeroed (ADR-0219).
@@ -2921,14 +2946,7 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 		// attributed to the element that received it and not to whatever published the
 		// message.
 		c.producer = m.elKey
-		fits := true
-		for j := range vars {
-			vv := vars[j]
-			vv.ScopeKey = m.sub.ProcessInstanceKey
-			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
-				fits = false
-			}
-		}
+		fits := writePayload(c, m.elKey, m.sub.ProcessInstanceKey, vars)
 		c.producer = prevProducer
 		// A payload past the budget was refused with an incident on this catch event.
 		// Completing it anyway would clear that incident with the element and let the
@@ -2937,9 +2955,76 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 		// (ADR-0294).
 		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
+			if rearmNow {
+				rearmFiredTrigger(c, ei)
+			}
 		}
 	}
 	return reached
+}
+
+// writePayload writes the payload of a message or signal into the instance of the element
+// that received it, and reports whether every variable fitted the budget (ADR-0294). A
+// receiver with zeebe:ioMapping outputs gets the payload in its own local scope — it is
+// that element's result, as a worker's result is a service task's (ioResultScope), and its
+// output mappings decide what reaches the instance when it completes. Otherwise each
+// variable updates the nearest scope from the receiver's flow scope up that already
+// declares it, and a variable no scope declares lands on the root, where every payload
+// landed before (ADR-draft-scope-aware-messaging-and-compensation). The scopes are decided
+// here, on the command path, and frozen into the VariableCreated events, so replay writes
+// the same places without deciding again (I4/I6).
+//
+// A receiver that is an event-subprocess trigger also keeps a copy in its own scope, which
+// the run it starts takes over (bindTriggerPayload). The run must read the message that
+// started it: through the root alone it read whichever message was delivered last, and two
+// messages delivered before the first run activated gave both runs the second one's values.
+func writePayload(c *ProcessingContext, receiverKey, piKey uint64, vars []model.VariableValue) bool {
+	start, local, trigger := piKey, uint64(0), false
+	if r := c.GetElementInstance(receiverKey); r != nil {
+		if r.FlowScopeKey != 0 {
+			start = r.FlowScopeKey
+		}
+		trigger = isEventSubTrigger(r)
+		if !trigger && c.process(r.ProcessDefKey).Node(r.ElementId).IOOutCount > 0 {
+			local = receiverKey
+		}
+	}
+	fits := true
+	for j := range vars {
+		vv := vars[j]
+		if local != 0 {
+			vv.ScopeKey = local
+		} else {
+			vv.ScopeKey = c.propagationScope(start, piKey, vv.Name)
+		}
+		if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+			fits = false
+		}
+		if trigger {
+			vv.ScopeKey = receiverKey
+			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
+				fits = false
+			}
+		}
+	}
+	return fits
+}
+
+// bindTriggerPayload moves the payload a fired event-subprocess trigger kept in its own
+// scope (writePayload) into the scope of the handler run it started, so the run — its
+// input mappings first — reads the message that started it, shadowing whatever a later
+// message wrote to the root. The run drops the copy with the rest of its locals when it
+// completes. Collected before writing, as dropLocalScope's iteration must not see its own
+// writes.
+func bindTriggerPayload(c *ProcessingContext, triggerKey, handlerKey uint64) {
+	var vars []model.VariableValue
+	c.VariablesOfScope(triggerKey, func(v model.VariableValue) { vars = append(vars, v) })
+	for i := range vars {
+		moved := vars[i]
+		moved.ScopeKey = handlerKey
+		c.AppendVariableEvent(model.IntentVariableCreated, moved)
+		c.AppendVariableEvent(model.IntentVariableDeleted, vars[i])
+	}
 }
 
 // correlateMessage delivers a message with the given name and correlation key to
@@ -2958,7 +3043,7 @@ func correlateMessage(c *ProcessingContext, name, correlationKey string, vars []
 		matches = append(matches, subscriptionMatch{elKey: elKey, sub: *v})
 		return nil
 	}))
-	reached := deliverToSubscriptions(c, matches, name, correlationKey, vars, from.piKey)
+	reached := deliverToSubscriptions(c, matches, name, correlationKey, vars, from.piKey, true)
 	started := 0
 	delivered = reached > 0
 	// A message also instantiates every deployed process with a matching message
@@ -3115,14 +3200,7 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// production, not the broadcaster's, and the producer of the command that got
 		// here is put back afterwards (ADR-0219).
 		c.producer = m.elKey
-		fits := true
-		for j := range vars {
-			vv := vars[j]
-			vv.ScopeKey = m.sub.ProcessInstanceKey
-			if !c.AppendVariableEvent(model.IntentVariableCreated, vv) {
-				fits = false
-			}
-		}
+		fits := writePayload(c, m.elKey, m.sub.ProcessInstanceKey, vars)
 		c.producer = prevProducer
 		// A payload past the budget was refused with an incident on this catch event.
 		// Completing it anyway would clear that incident with the element and let the
@@ -3131,6 +3209,7 @@ func broadcastSignal(c *ProcessingContext, name string, vars []model.VariableVal
 		// (ADR-0294).
 		if ei := c.GetElementInstance(m.elKey); ei != nil && fits {
 			c.AppendElementCommand(m.elKey, model.IntentCompleting, *ei)
+			rearmFiredTrigger(c, ei)
 		}
 	}
 	// A broadcast also instantiates every deployed process with a matching signal
@@ -3561,9 +3640,7 @@ func findEscalationEventSub(c *ProcessingContext, piKey, scopeKey uint64, code s
 type compensationThrowEventBehavior struct{}
 
 func (compensationThrowEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	cp := c.process(ei.ProcessDefKey)
-	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
-	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+	triggerCompensation(c, key, ei)
 }
 
 func (compensationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3576,9 +3653,70 @@ func (compensationThrowEventBehavior) OnCompleting(c *ProcessingContext, key uin
 type compensationEndEventBehavior struct{}
 
 func (compensationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
+	triggerCompensation(c, key, ei)
+}
+
+// triggerCompensation is what a compensation throw or end event does on activation: it
+// compensates its compensation scope (compensationScope) and goes on — at once when it
+// started no handler or does not wait, otherwise when the handlers it started have
+// finished (BPMN waitForCompletion, default true): it stays Activated, and
+// releaseCompensationWaiters drives it on (ADR-draft-scope-aware-messaging-and-compensation).
+func triggerCompensation(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
-	compensate(c, ei, cp.CompensationThrow(cp.Node(ei.ElementId).Detail).ActivityRef)
+	d := cp.CompensationThrow(cp.Node(ei.ElementId).Detail)
+	if started := compensate(c, compensationScope(c, ei), d.ActivityRef); started > 0 && d.WaitForCompletion {
+		return
+	}
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
+}
+
+// compensationScope is the scope a compensation throw or end event compensates: its own
+// flow scope, except when it sits directly in an event subprocess — then the scope that
+// event subprocess handles. That is where the work a cancellation or failure has to undo
+// was done; the event subprocess's own run holds nothing to compensate
+// (ADR-draft-scope-aware-messaging-and-compensation).
+func compensationScope(c *ProcessingContext, ei *model.ElementInstanceValue) uint64 {
+	scope := ei.FlowScopeKey
+	if s := c.GetElementInstance(scope); s != nil && s.BpmnElementType == uint8(compiler.TypeSubProcess) &&
+		c.process(s.ProcessDefKey).IsEventSubProcess(s.ElementId) {
+		return s.FlowScopeKey
+	}
+	return scope
+}
+
+// releaseCompensationWaiters drives on the compensation throw and end events waiting for
+// handlers in scope, once none is left running there — called when a compensation handler
+// in scope finishes. A waiting event is recognised from state alone: a compensation throw
+// or end event that is still live, compensates scope, and carries no incident (one parked
+// before its behaviour ran has compensated nothing and must not be passed). Several
+// events compensating one scope at once are released together, when the last of all
+// their handlers is done.
+func releaseCompensationWaiters(c *ProcessingContext, piKey, scope uint64) {
+	running := false
+	var waiting []uint64
+	c.ForEachElementInstance(piKey, func(k uint64) {
+		el := c.GetElementInstance(k)
+		if el == nil || running {
+			return
+		}
+		cp := c.process(el.ProcessDefKey)
+		switch {
+		case el.FlowScopeKey == scope && el.MultiInstance != miInner && cp.Node(el.ElementId).CompensationHandler:
+			running = true
+		case el.BpmnElementType == uint8(compiler.TypeCompensationThrowEvent) || el.BpmnElementType == uint8(compiler.TypeCompensationEndEvent):
+			if compensationScope(c, el) == scope && c.GetIncident(k) == nil {
+				waiting = append(waiting, k)
+			}
+		}
+	})
+	if running {
+		return
+	}
+	for _, k := range waiting {
+		if el := c.GetElementInstance(k); el != nil {
+			c.AppendElementCommand(k, model.IntentCompleting, *el)
+		}
+	}
 }
 
 func (compensationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
@@ -3586,21 +3724,22 @@ func (compensationEndEventBehavior) OnCompleting(c *ProcessingContext, key uint6
 	completeScope(c, ei.FlowScopeKey)                     // completes the scope owner if it drained
 }
 
-// compensate runs the compensation handlers of the completed compensable activities in the
-// throwing element's scope, newest first (reverse completion order). When activityRef >= 0
-// it compensates only that activity's completed instances; otherwise the whole scope. For
+// compensate runs the compensation handlers of the completed compensable activities in
+// scope, newest first (reverse completion order), and returns how many it started. When
+// activityRef >= 0 it compensates only that activity's completed instances; otherwise the
+// whole scope. For
 // each matching record it activates the handler in the scope and consumes the record so it
 // is compensated at most once. Records and handler links are read from committed state and
 // the compiled graph — a pure function of committed state (I6) — and this runs only on the
 // command path (a throw is a command). It collects matches before activating so consuming
 // one cannot disturb the scan.
-func compensate(c *ProcessingContext, ei *model.ElementInstanceValue, activityRef int32) {
+func compensate(c *ProcessingContext, scope uint64, activityRef int32) (started int) {
 	type match struct {
 		seq uint64
 		v   model.CompensableValue
 	}
 	var matches []match
-	c.p.fail(c.tx.CompensablesOfScopeDesc(ei.FlowScopeKey, func(seq uint64, v *model.CompensableValue) error {
+	c.p.fail(c.tx.CompensablesOfScopeDesc(scope, func(seq uint64, v *model.CompensableValue) error {
 		if activityRef < 0 || v.ElementId == activityRef {
 			matches = append(matches, match{seq: seq, v: *v})
 		}
@@ -3613,6 +3752,7 @@ func compensate(c *ProcessingContext, ei *model.ElementInstanceValue, activityRe
 		consumed.Seq = m.seq
 		c.AppendCompensableEvent(model.IntentCompensableConsumed, consumed)
 	}
+	return len(matches)
 }
 
 // activateCompensationHandler activates a compensation handler activity in the scope of the
@@ -3677,8 +3817,18 @@ func compensationHandlerOf(cp *compiler.CompiledProcess, elementId int32) int32 
 type cancelEndEventBehavior struct{}
 
 func (cancelEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
-	terminateScopeExcept(c, ei.ProcessInstanceKey, ei.FlowScopeKey, key)
-	compensate(c, ei, -1) // compensate the whole transaction scope, reverse completion order
+	// A cancel end may also sit in an event subprocess directly inside the transaction — the
+	// handler of a cancellation that can arrive at any point of it. Then the transaction is
+	// the handler's scope, and the handler run is spared with the cancel end: the handler
+	// completes when the cancel end does, and hands the transaction its cancelling mark
+	// (applyToState) (ADR-draft-scope-aware-messaging-and-compensation).
+	txKey, handlerKey := ei.FlowScopeKey, uint64(0)
+	if h := c.GetElementInstance(ei.FlowScopeKey); h != nil && h.BpmnElementType == uint8(compiler.TypeSubProcess) &&
+		c.process(h.ProcessDefKey).IsEventSubProcess(h.ElementId) {
+		txKey, handlerKey = h.FlowScopeKey, ei.FlowScopeKey
+	}
+	terminateScopeSparing(c, ei.ProcessInstanceKey, txKey, key, handlerKey)
+	compensate(c, txKey, -1) // compensate the whole transaction scope, reverse completion order
 	c.AppendElementCommand(key, model.IntentCompleting, *ei)
 }
 
@@ -4400,8 +4550,19 @@ func openBoundarySubscription(c *ProcessingContext, key uint64, ei *model.Elemen
 		ProcessInstanceKey: ei.ProcessInstanceKey,
 		ElementInstanceKey: key,
 		MessageName:        d.MessageName,
-		CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+		CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, boundaryCorrelationScope(key, ei)),
 	})
+}
+
+// boundaryCorrelationScope is where a boundary event's correlation key is evaluated: the
+// host activity it is attached to, so the key sees the host's input-mapped locals — the
+// boundary waits on the host's behalf. An unattached boundary falls back to its own
+// instance, whose chain is the host's enclosing scope.
+func boundaryCorrelationScope(key uint64, ei *model.ElementInstanceValue) uint64 {
+	if ei.AttachedToKey != 0 {
+		return ei.AttachedToKey
+	}
+	return key
 }
 
 // endEventBehavior: a none end event completes and, if it was the last active
@@ -4502,7 +4663,7 @@ func armEventSubTrigger(c *ProcessingContext, piKey, defKey, scopeKey uint64, ha
 // trigger, in the parent scope (ADR-0082). The handler seeds its inner start (which
 // flows straight on) and runs to its end; having no outgoing flow, its completion
 // drains the parent scope (subProcessBehavior.OnCompleting).
-func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValue, parentScope uint64) {
+func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValue, parentScope uint64) uint64 {
 	k := c.NewKey()
 	c.AppendElementCommand(k, model.IntentActivating, model.ElementInstanceValue{
 		ProcessInstanceKey: ei.ProcessInstanceKey,
@@ -4513,6 +4674,7 @@ func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValu
 		TokenID:            k,
 		SourceFlowId:       -1,
 	})
+	return k
 }
 
 // disarmEventSubprocesses terminates every still-armed event-subprocess trigger in a
@@ -4555,7 +4717,7 @@ func (eventSubProcessStartBehavior) OnActivated(c *ProcessingContext, key uint64
 			ProcessInstanceKey: ei.ProcessInstanceKey,
 			ElementInstanceKey: key,
 			MessageName:        d.MessageName,
-			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, ei.ProcessInstanceKey),
+			CorrelationKey:     evalCorrelationKey(c, d.CorrelationKey, key),
 		})
 	case compiler.BoundarySignal:
 		// A name-only subscription (no correlation key). A broadcast of the name drives
@@ -4606,14 +4768,64 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 		// triggers live in the same scope, the sibling triggers — before the handler runs.
 		terminateScope(c, ei.ProcessInstanceKey, parentScope)
 	}
-	activateEventSubHandler(c, ei, parentScope)
+	bindTriggerPayload(c, key, activateEventSubHandler(c, ei, parentScope))
 	// A non-interrupting message or signal trigger re-arms a fresh subscription so a
-	// subsequent message/broadcast fires it again (ADR-0082/ADR-0088). A one-shot timer
-	// fires once (no re-arm); a recurring timer re-arms through the timer path
-	// (fireRecurringEventSub), not here.
-	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) {
+	// subsequent message/broadcast fires it again (ADR-0082/ADR-0088). A live delivery has
+	// re-armed it already, in the step that fired it (rearmFiredTrigger); this re-arm is
+	// for a trigger fired from the message buffer, and it must not arm a second trigger
+	// beside the first. A one-shot timer fires once (no re-arm); a recurring timer re-arms
+	// through the timer path (fireRecurringEventSub), not here.
+	if !d.Interrupting && (d.Kind == compiler.BoundaryMessage || d.Kind == compiler.BoundarySignal) &&
+		!triggerArmed(c, ei.ProcessInstanceKey, parentScope, handlerNode, key) {
 		armEventSubTrigger(c, ei.ProcessInstanceKey, ei.ProcessDefKey, parentScope, handlerNode)
 	}
+}
+
+// rearmFiredTrigger re-arms a non-interrupting message or signal event-subprocess trigger
+// in the step a delivery fires it, rather than when the fired trigger completes two batches
+// later. The trigger's subscription is retired by the delivery; until a new one exists, a
+// message for it reaches nobody and, without a time to live, is lost — so two findings
+// reported back to back ran one handler, not two
+// (ADR-draft-scope-aware-messaging-and-compensation). The new trigger is activated here,
+// by its Activated event and its behaviour, exactly as an Activating command would — so
+// its subscription is in state before the next command — and is recovered from those
+// events like any other. A no-op for every element that is not such a trigger.
+func rearmFiredTrigger(c *ProcessingContext, ei *model.ElementInstanceValue) {
+	if !isEventSubTrigger(ei) {
+		return
+	}
+	cp := c.process(ei.ProcessDefKey)
+	d := cp.EventSubProcess(cp.Node(ei.ElementId).EventSub)
+	if d.Interrupting || (d.Kind != compiler.BoundaryMessage && d.Kind != compiler.BoundarySignal) {
+		return
+	}
+	k := c.NewKey()
+	v := model.ElementInstanceValue{
+		ProcessInstanceKey: ei.ProcessInstanceKey,
+		ProcessDefKey:      ei.ProcessDefKey,
+		ElementId:          ei.ElementId,
+		FlowScopeKey:       ei.FlowScopeKey,
+		BpmnElementType:    uint8(compiler.TypeEventSubProcessStart),
+		SourceFlowId:       -1,
+	}
+	c.AppendElementEvent(k, model.IntentActivated, v)
+	runElementBehavior(c, k, &v)
+}
+
+// triggerArmed reports whether scope holds an armed trigger of handlerNode other than
+// except — a trigger a live delivery re-armed already (rearmFiredTrigger).
+func triggerArmed(c *ProcessingContext, piKey, scope uint64, handlerNode int32, except uint64) bool {
+	armed := false
+	c.ForEachElementInstance(piKey, func(k uint64) {
+		if armed || k == except {
+			return
+		}
+		if t := c.GetElementInstance(k); t != nil && t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) &&
+			t.FlowScopeKey == scope && t.ElementId == handlerNode {
+			armed = true
+		}
+	})
+	return armed
 }
 
 // LoopCounterVariable is the standard multi-instance per-iteration counter variable
