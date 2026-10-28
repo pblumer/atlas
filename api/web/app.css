@@ -414,6 +414,11 @@ b { font-weight: 600; }
 .appearance-toggle .ico-sun,
 :root[data-appearance="dark"] .appearance-toggle .ico-moon { display: none; }
 :root[data-appearance="dark"] .appearance-toggle .ico-sun { display: block; }
+/* Under 390px the bar of view names keeps room of its own only without one more
+   button (e2e/console-menu.spec.mjs), and which of the existing ones a phone loses is
+   a decision of its own. So the newest one steps aside there; the Display screen
+   still offers the choice. */
+@media (max-width: 389px) { .appearance-toggle { display: none; } }
 .avatar {
   background: #6b2b2b; color: #fff; font-size: 11px; font-weight: 700;
   border-radius: 50%; width: 28px; height: 28px;
