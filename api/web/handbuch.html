@@ -11543,16 +11543,16 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
     <!-- ==================== DARSTELLUNG ==================== -->
     <section id="darstellung">
-      <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache</h2><h2 data-l="en">Display: numbers, time zone, language</h2>
-      <p class="lead" data-l="de">Wie <b>du</b> die Console liest. Drei Einstellungen unter
+      <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache, hell oder dunkel</h2><h2 data-l="en">Display: numbers, time zone, language, light or dark</h2>
+      <p class="lead" data-l="de">Wie <b>du</b> die Console liest. Vier Einstellungen unter
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (oder im Kontomenü oben
-        rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht und in welcher Sprache die
-        übersetzten Screens erscheinen. Sie gelten für dich und für niemanden sonst, und sie ändern nichts an den
+        rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht, in welcher Sprache die
+        übersetzten Screens erscheinen und ob die Console hell oder dunkel ist. Sie gelten für dich und für niemanden sonst, und sie ändern nichts an den
         gespeicherten Daten – nur daran, wie sie dir gezeigt werden.</p>
-      <p class="lead" data-l="en">How <b>you</b> read the Console. Three settings under
+      <p class="lead" data-l="en">How <b>you</b> read the Console. Four settings under
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (or in the account menu at
-        the top right): how a number is written, which clock a timestamp is on, and which language the translated
-        screens use. They apply to you and to nobody else, and they change nothing about the stored data – only
+        the top right): how a number is written, which clock a timestamp is on, which language the translated
+        screens use, and whether the Console is light or dark. They apply to you and to nobody else, and they change nothing about the stored data – only
         how it is shown to you.</p>
       <p data-l="de">Jede Option trägt ihr eigenes Muster, denn das ist es, was du tatsächlich wählst: «Schweiz»
         sagt niemandem, was ein Badge druckt, <code>25'864.5</code> sagt es genau. Die Vorschau oben auf dem
@@ -11633,6 +11633,37 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         screen by screen, and a half-translated screen would be worse than an untranslated one. After saving, the
         Console reloads once so the language takes effect everywhere at the same moment.</p>
 
+      <h3 data-l="de">Hell oder dunkel</h3><h3 data-l="en">Light or dark</h3>
+      <p data-l="de">Die Console lässt sich hell, dunkel oder so zeigen, wie es dein Betriebssystem gerade
+        tut. Am schnellsten geht es mit dem Schalter oben rechts neben dem Stern für die Favoriten: Ein Klick
+        wechselt zwischen hell und dunkel und speichert die Wahl sofort. «Wie das Betriebssystem» wählst du auf
+        dem Display-Screen; dann folgt die Console dem System, auch während sie offen ist. Drückst du danach den
+        Schalter, gilt wieder deine ausdrückliche Wahl.</p>
+      <p data-l="en">The Console can be shown light, dark, or the way your operating system is showing things
+        right now. The quickest way is the switch at the top right, beside the star for the favourites: a click
+        flips between light and dark and saves the choice at once. "Match the operating system" is chosen on the
+        Display screen; the Console then follows the system, even while it is open. Pressing the switch after
+        that makes your explicit choice count again.</p>
+      <ul>
+        <li data-l="de"><b>Die dunkle Darstellung ist eine Vorschau.</b> Console, Modeler,
+          Entscheidungstabellen, Operations und Tasks sind angepasst; einzelne Ansichten – etwa die Heatmap,
+          Formulare und die Architektur-Ansichten – sind noch nicht vollständig angepasst. Die Voreinstellung
+          bleibt hell.</li>
+        <li data-l="en"><b>The dark appearance is a preview.</b> The Console, the modeler, decision tables,
+          Operations and Tasks follow it; some views – the heatmap, forms and the architecture views among them –
+          are not fully adapted yet. The default stays light.</li>
+        <li data-l="de"><b>Die Firmenfarbe bleibt die Firmenfarbe.</b> Buttons zeigen in beiden Darstellungen
+          dieselbe Farbe. Nur wo die Farbe als Text steht – ein Link, ein aktiver Reiter –, wird sie im Dunkeln so
+          weit aufgehellt, dass sie lesbar bleibt.</li>
+        <li data-l="en"><b>The brand colour stays the brand colour.</b> Buttons are the same colour in both
+          appearances. Only where the colour is used as text – a link, an active tab – is it lightened in the
+          dark until it stays readable.</li>
+        <li data-l="de"><b>Exporte bleiben hell.</b> Die Prozess- und Entscheidungsdokumentation zeigt das
+          Diagramm so, wie es gedruckt wird, und ein exportiertes BPMN enthält keine Farben der Darstellung.</li>
+        <li data-l="en"><b>Exports stay light.</b> The process and decision documentation shows the diagram the
+          way it is printed, and an exported BPMN file carries no colour of the appearance.</li>
+      </ul>
+
       <h3 data-l="de">Wo die Einstellung liegt</h3><h3 data-l="en">Where the setting is kept</h3>
       <p data-l="de">Bei deinem Konto, auf dem Server – sie folgt dir also in jeden Browser, in dem du dich
         anmeldest. Das ist der Zeitzone geschuldet: Die Sprache betrifft, wie jemand an einem bestimmten
@@ -11650,9 +11681,10 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <b>without sign-in</b> there is no account to keep anything with – there the setting stays in that
         browser, and the screen says so.</p>
       <p class="muted" data-l="de">Wer nichts einstellt, bekommt genau das Verhalten von vorher: das neutrale
-        Leerzeichen, die Uhr des Geräts, die voreingestellte Sprache. Ein Update ändert kein Pixel.</p>
+        Leerzeichen, die Uhr des Geräts, die voreingestellte Sprache, die helle Console. Ein Update ändert kein
+        Pixel.</p>
       <p class="muted" data-l="en">Anybody who sets nothing gets exactly the behaviour from before: the neutral
-        space, the device's clock, the default language. An upgrade changes no pixel.</p>
+        space, the device's clock, the default language, the light Console. An upgrade changes no pixel.</p>
     </section>
 
     <!-- ==================== PANORAMA ==================== -->

@@ -64,7 +64,7 @@ func TestReadingBeforeAnythingIsSavedAnswersTheDefaults(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	got := decode(t, rec)
-	for _, field := range []string{"region", "timeZone", "language"} {
+	for _, field := range []string{"region", "timeZone", "language", "appearance"} {
 		if got[field] != "" {
 			t.Errorf("%s = %v, want the unset default", field, got[field])
 		}
@@ -74,7 +74,7 @@ func TestReadingBeforeAnythingIsSavedAnswersTheDefaults(t *testing.T) {
 func TestASavedPreferenceIsReadBack(t *testing.T) {
 	s := newService(t)
 	rec := httptest.NewRecorder()
-	s.HandleSave(rec, as("usr_1", "PUT", `{"region":"ch","timeZone":"Europe/Zurich","language":"de"}`))
+	s.HandleSave(rec, as("usr_1", "PUT", `{"region":"ch","timeZone":"Europe/Zurich","language":"de","appearance":"dark"}`))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("save status = %d (%s), want 200", rec.Code, rec.Body)
 	}
@@ -82,7 +82,7 @@ func TestASavedPreferenceIsReadBack(t *testing.T) {
 	rec = httptest.NewRecorder()
 	s.HandleGet(rec, as("usr_1", "GET", ""))
 	got := decode(t, rec)
-	if got["region"] != "ch" || got["timeZone"] != "Europe/Zurich" || got["language"] != "de" {
+	if got["region"] != "ch" || got["timeZone"] != "Europe/Zurich" || got["language"] != "de" || got["appearance"] != "dark" {
 		t.Fatalf("read back %v, want the saved record", got)
 	}
 }
@@ -153,9 +153,9 @@ func TestAMalformedBodyIsAClientError(t *testing.T) {
 // request with empty fields rather than a second endpoint.
 func TestSavingEmptyFieldsClearsTheChoice(t *testing.T) {
 	s := newService(t)
-	s.HandleSave(httptest.NewRecorder(), as("usr_1", "PUT", `{"region":"us","timeZone":"UTC"}`))
+	s.HandleSave(httptest.NewRecorder(), as("usr_1", "PUT", `{"region":"us","timeZone":"UTC","appearance":"system"}`))
 	rec := httptest.NewRecorder()
-	s.HandleSave(rec, as("usr_1", "PUT", `{"region":"","timeZone":"","language":""}`))
+	s.HandleSave(rec, as("usr_1", "PUT", `{"region":"","timeZone":"","language":"","appearance":""}`))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d (%s), want 200", rec.Code, rec.Body)
 	}
@@ -163,7 +163,7 @@ func TestSavingEmptyFieldsClearsTheChoice(t *testing.T) {
 	rec = httptest.NewRecorder()
 	s.HandleGet(rec, as("usr_1", "GET", ""))
 	got := decode(t, rec)
-	if got["region"] != "" || got["timeZone"] != "" {
+	if got["region"] != "" || got["timeZone"] != "" || got["appearance"] != "" {
 		t.Fatalf("read back %v, want the cleared record", got)
 	}
 }

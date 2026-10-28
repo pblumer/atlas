@@ -784,11 +784,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		// identity and on no other — there is no listing and no path parameter, so
 		// one person's settings are not addressable by anybody else.
 		{"GET", "/api/v1/me/preferences", s.userPrefs.HandleGet, apiOp{
-			summary: "The signed-in person's display preferences: region (number and date format), time zone and interface language. Unset fields are the defaults — nothing stored answers 200 with all three empty. On an instance without authentication there is no such resource and the answer is 404, which the console reads as \"keep these in the browser\"", tag: "Preferences", role: RoleUser,
-			resp: jsonBody("Display preferences", schemaObj(map[string]any{"userId": tString(), "region": tString(), "timeZone": tString(), "language": tString(), "updatedAt": tInteger()}))}},
+			summary: "The signed-in person's display preferences: region (number and date format), time zone, interface language and appearance (light, dark or system). Unset fields are the defaults — nothing stored answers 200 with all four empty. On an instance without authentication there is no such resource and the answer is 404, which the console reads as \"keep these in the browser\"", tag: "Preferences", role: RoleUser,
+			resp: jsonBody("Display preferences", schemaObj(map[string]any{"userId": tString(), "region": tString(), "timeZone": tString(), "language": tString(), "appearance": tString(), "updatedAt": tInteger()}))}},
 		{"PUT", "/api/v1/me/preferences", s.userPrefs.HandleSave, apiOp{
-			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, or a time zone the IANA database does not know is refused rather than stored, because the browser is what formats with it", tag: "Preferences", role: RoleUser,
-			req:  jsonBody("Region, time zone and language", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString()})),
+			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, a time zone the IANA database does not know, or an appearance other than light, dark or system is refused rather than stored, because the browser is what formats and draws with it", tag: "Preferences", role: RoleUser,
+			req:  jsonBody("Region, time zone, language and appearance", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString(), "appearance": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
 		// The processes the signed-in person starred on the Tasks app's Start view
 		// (ADR-0466). Keyed on the principal like the

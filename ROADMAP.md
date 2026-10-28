@@ -1396,12 +1396,14 @@ self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-a
   ([ADR-0507](docs/adr/0507-ui-appearance-modes.md), proposed):
   a semantic palette with a dark answer for every colour, a per-person preference,
   bpmn-js/dmn-js/form-js token bridges, an accessible Operations heatmap and
-  screenshot validation in both appearances. Landed so far, behind a preference no
-  screen offers yet: the first-paint bootstrap, the dark palette, and the BPMN and DMN
-  editors with their palette, menus, properties panel and code editors — exports stay
-  light. Still open: the visible switch, the accent as text on dark surfaces, the canvas
-  overlays and heatmap, form-js, the ArchiMate/UML/Panorama canvases and the remaining
-  fixed colours. The company/catalogue accent theme is not a dark mode.
+  screenshot validation in both appearances. Landed: the switch in the top bar beside
+  the favourites and the Display screen's fourth setting (dark as a preview), stored
+  with the account like the other display preferences; the first-paint bootstrap; the
+  dark palette with the accent as text and the status inks; the Console, Operations and
+  Tasks shell; the BPMN and DMN editors with their palette, menus, properties panel and
+  code editors — exports stay light. Still open: the canvas overlays and heatmap,
+  form-js, the ArchiMate/UML/Panorama canvases and the screenshot contract. The
+  company/catalogue accent theme is not a dark mode.
 - ✅ **Instance management** view: Operations lists running process instances
   (process, version, tokens, status) and links each to its live diagram.
 - ✅ **Multi-token replay & causal token lineage**

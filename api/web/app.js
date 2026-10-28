@@ -5,7 +5,7 @@ import {
   PRESETS, normalizeHex, currentAccent, applyAccent, applyCurrent,
   setServerAccent, resetServerAccent, syncFromServer,
 } from "./theme.js";
-import { watchSystemAppearance } from "./appearance.js";
+import { watchSystemAppearance, currentAppearance, APPEARANCE_EVENT } from "./appearance.js";
 import {
   LOGO_URL, BUILTIN_MARK, hasLogoCached, applyLogo, syncLogoFromServer,
   setServerLogo, deleteServerLogo,
@@ -66,7 +66,7 @@ import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOp
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 import { fmtDate, fmtDateTime } from "./datefmt.js";
 import { mockupsHTML } from "./mockups.js";
-import { prefs, loadPrefs } from "./prefs.js";
+import { prefs, loadPrefs, savePrefs } from "./prefs.js";
 import { renderDisplaySettings } from "./displaysettings.js";
 
 const view = document.getElementById("view");
@@ -447,6 +447,10 @@ function viewLogin() {
         username: fd.get("username"), password: fd.get("password"),
       });
       await loadAuth();
+      // The display preferences belong to the person who just signed in, not to
+      // whoever this browser last remembered: their appearance, number format and
+      // zone apply before the first screen is drawn (ADR-0459, ADR-0507).
+      await loadPrefs(api);
       location.hash = "#/console";
       route();
     } catch (ex) {
@@ -1120,6 +1124,37 @@ async function openSearchPalette() {
   document.addEventListener("keydown", onKey, true);
 }
 
+// installAppearanceToggle wires the top bar's light/dark switch (ADR-0507). It flips
+// between the two drawn appearances — somebody following the system who presses it
+// has made a choice, and gets the one they asked for — and saves it with the rest of
+// the display preferences, so it follows them to the next browser; `system` stays a
+// choice on the Display screen. The label is the state (aria-pressed says whether
+// the console is dark) and the title says what a press does; both follow a change
+// made anywhere else — the Display screen, another device's record arriving, the
+// system turning dark.
+function installAppearanceToggle() {
+  const btn = document.getElementById("appearance-toggle");
+  if (!btn) return;
+  const paint = () => {
+    const dark = currentAppearance() === "dark";
+    btn.setAttribute("aria-pressed", dark ? "true" : "false");
+    btn.setAttribute("aria-label", tr("appearance.toggle.label"));
+    btn.title = tr(dark ? "appearance.toggle.toLight" : "appearance.toggle.toDark");
+  };
+  paint();
+  document.addEventListener(APPEARANCE_EVENT, paint);
+  btn.addEventListener("click", async () => {
+    const next = currentAppearance() === "dark" ? "light" : "dark";
+    try {
+      // savePrefs applies and mirrors first, so the console turns at once; the
+      // request only decides whether the account keeps it.
+      await savePrefs(api, { ...prefs(), appearance: next });
+    } catch (err) {
+      toast(tr("appearance.toggle.notSaved", { reason: err.message }), "err");
+    }
+  });
+}
+
 function initShell() {
   const drawer = document.getElementById("drawer");
   const scrim = document.getElementById("scrim");
@@ -1153,6 +1188,8 @@ function initShell() {
     allowed: () => mayUse("modeler"),
     button: document.getElementById("feel-assistant-btn"),
   });
+
+  installAppearanceToggle();
 
   const nav = document.getElementById("drawer-apps");
   paintApps();
@@ -12077,7 +12114,8 @@ loadPrefs(api).then(() => {
 // browser that has no cache yet.
 syncFromServer();
 // Keep the appearance in step with the system (for a `system` preference) and with a
-// choice made in another tab. index.html applied the stored one before first paint.
+// choice made in another tab. index.html applied the mirrored one before first paint,
+// and loadPrefs above applies the account's as soon as the server answers.
 watchSystemAppearance();
 // Paint the brand logo from the cached flag immediately (no flash of the "A" for a
 // branded instance), then reconcile the actual presence with the server.

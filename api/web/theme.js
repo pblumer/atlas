@@ -28,7 +28,7 @@ const THEME_URL = "/api/v1/settings/theme";
 
 // The variables a theme overrides. Kept as a list so applyAccent can cleanly
 // clear *all* of them when resetting to the built-in default.
-export const THEME_VARS = ["--accent", "--accent-hover", "--accent-soft", "--accent-ink"];
+export const THEME_VARS = ["--accent", "--accent-hover", "--accent-soft", "--accent-ink", "--accent-on-dark"];
 
 // The stock Atlas accent — shown as the "default" swatch and the value we reset
 // to. Mirrors :root in app.css; if that changes, change this too.
@@ -124,11 +124,36 @@ export function accentInk(color) {
     : INK_DARK;
 }
 
+// DARK_SURFACE is the dark appearance's --surface (app.css, ADR-0507), the lightest
+// ground text is set on there, and DARK_SOFT_SHARE how much of the accent its soft
+// tint carries (`--accent-soft` in the dark block). Mirrors app.css; if those
+// change, change these too.
+export const DARK_SURFACE = "#1d2025";
+const DARK_SOFT_SHARE = 0.22;
+
+// accentOnDark is the brand colour as *text* in the dark appearance (ADR-0507). A
+// colour chosen for a white page is usually too dark to read on a dark one — the
+// federal red stands 3.3:1 on the dark surface, a navy under 2 — and a link nobody
+// can read is not a brand colour shown, it is a link lost. So the colour is lightened
+// towards white, a step at a time, until it reaches WCAG's 4.5:1 for text on both
+// grounds it is set on: the surface, and the accent's own soft tint behind a pill or
+// an active row. It keeps its hue; a colour that already reads stays as it is.
+export function accentOnDark(color) {
+  const accent = normalizeHex(color) || DEFAULT_ACCENT;
+  const soft = mix(DARK_SURFACE, accent, DARK_SOFT_SHARE);
+  for (let step = 0; step <= 20; step++) {
+    const tone = mix(accent, "#ffffff", step * 0.05);
+    if (contrastRatio(tone, DARK_SURFACE) >= 4.5 && contrastRatio(tone, soft) >= 4.5) return tone;
+  }
+  return "#ffffff";
+}
+
 // derivePalette turns one brand colour into the full accent variable map. The
 // hover shade is the colour darkened ~18% (matching the stock #0b5cff→#0a4ad1
 // step); the soft shade is a ~90% white tint, the pale background used behind
 // pills, focus rings and the active drawer item; the ink is the label colour that
-// stays readable on the accent itself.
+// stays readable on the accent itself; the on-dark tone is the accent as text in the
+// dark appearance, which app.css reads only there.
 export function derivePalette(color) {
   const accent = normalizeHex(color) || DEFAULT_ACCENT;
   return {
@@ -136,6 +161,7 @@ export function derivePalette(color) {
     "--accent-hover": mix(accent, "#000000", 0.18),
     "--accent-soft": mix(accent, "#ffffff", 0.9),
     "--accent-ink": accentInk(accent),
+    "--accent-on-dark": accentOnDark(accent),
   };
 }
 

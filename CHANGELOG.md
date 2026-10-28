@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Light, dark, or following the system, as a preview.** A switch at the top right,
+  beside the favourites, flips the Console between light and dark, and the Display
+  screen adds a third choice that follows the operating system. The choice is kept with
+  the account like the other display preferences (`appearance` in
+  `/api/v1/me/preferences`), in the browser where there is no sign-in, and it is on the
+  page before the first paint and again right after signing in. The dark appearance
+  covers the Console, the BPMN and DMN modelers, Operations and Tasks; the heatmap, forms
+  and the architecture views are not fully adapted yet, so the dark option is labelled a
+  preview and the default stays light. The brand colour is unchanged — where it is read
+  as text, a tone derived from it keeps it at 4.5:1 on the dark surface — and exports
+  stay light (ADR-0507).
+
 - **A cancellation can be handled by an event subprocess inside its transaction.** A
   cancel end event may now sit in an event subprocess directly inside a `<transaction>`:
   a customer's cancellation, arriving at any point of the work, interrupts it, the

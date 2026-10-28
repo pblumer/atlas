@@ -1,19 +1,23 @@
 // The Console screen where a person says how they read (ADR-0459).
 //
-// Three settings, three different questions — how a number is written, which
-// instant a timestamp means, which words the translated screens use — and one
-// sample block that answers all three at once. The sample is the point of the
+// Four settings, four different questions — how a number is written, which
+// instant a timestamp means, which words the translated screens use, and whether
+// the console is drawn light or dark (ADR-0507) — and one sample block that
+// answers the first three at once. The sample is the point of the
 // screen: a region named "Switzerland" tells nobody what a badge will print, and
 // `25'864.50` tells them exactly.
 //
 // The preview renders the *pending* choice without applying it. Both formatters
 // take an explicit region and zone for that reason: a preview that reformatted
 // the console around it would be a setting applied, not a setting shown, and
-// there would be no way to look at an option and then decline it.
+// there would be no way to look at an option and then decline it. The appearance
+// follows the same rule: it changes the console on Save, not on a click — the top
+// bar's switch is the place for trying it out.
 
 import { REGIONS, fmtCount } from "./numfmt.js";
 import { fmtDateTime, zoneName } from "./datefmt.js";
 import { prefs, loadPrefs, savePrefs } from "./prefs.js";
+import { APPEARANCES } from "./appearance.js";
 import { localeName, locales, t } from "./i18n.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
@@ -88,7 +92,13 @@ export async function renderDisplaySettings(root, { api, toast }) {
   // the server, which matters on a browser that has never seen this account.
   const loaded = await loadPrefs(api);
   let scope = loaded.scope;
-  const pending = { region: prefs().region || "international", timeZone: prefs().timeZone, language: prefs().language };
+  // The appearance stays "" when nothing was chosen, rather than becoming "light" on
+  // the first save of an unrelated field: "nothing chosen" is the record's word for
+  // "the default", and the default is what may change once dark is no preview.
+  const pending = {
+    region: prefs().region || "international", timeZone: prefs().timeZone, language: prefs().language,
+    appearance: prefs().appearance,
+  };
   const languageAtOpen = pending.language;
 
   const regionRows = Object.keys(REGIONS).map((id) => `
@@ -101,6 +111,13 @@ export async function renderDisplaySettings(root, { api, toast }) {
   const languageRows = ["", ...locales()].map((id) => `
       <option value="${esc(id)}"${id === pending.language ? " selected" : ""}>${
         esc(id ? localeName(id) : t("display.language.default"))}</option>`).join("");
+
+  const appearanceRows = APPEARANCES.map((id) => `
+    <label class="ds-option">
+      <input type="radio" name="ds-appearance" value="${esc(id)}"${
+        id === (pending.appearance || APPEARANCES[0]) ? " checked" : ""}>
+      <span class="ds-option-name">${esc(t(`display.appearance.${id}`))}</span>
+    </label>`).join("");
 
   const zoneRows = ["", ...zoneOptions(pending.timeZone)].map((id) => `
       <option value="${esc(id)}"${id === pending.timeZone ? " selected" : ""}>${
@@ -131,6 +148,10 @@ export async function renderDisplaySettings(root, { api, toast }) {
       <label class="field"><span>${esc(t("display.language.label"))}</span>
         <select id="ds-language">${languageRows}</select></label>
 
+      <h2 style="margin-top:18px">${esc(t("display.appearance.title"))}</h2>
+      <p class="muted">${t("display.appearance.hint")}</p>
+      <div class="ds-options" id="ds-appearance">${appearanceRows}</div>
+
       <div class="row" style="margin-top:18px; gap:10px; align-items:center">
         <button class="btn" id="ds-save">${esc(t("display.save"))}</button>
         <button class="btn neutral" id="ds-reset" title="${esc(t("display.resetTitle"))}">${esc(t("display.reset"))}</button>
@@ -144,9 +165,9 @@ export async function renderDisplaySettings(root, { api, toast }) {
     sample.innerHTML = sampleHTML(pending);
     // The per-region samples carry the pending zone too, so changing the zone moves
     // every row rather than only the preview at the top.
-    for (const label of root.querySelectorAll(".ds-option")) {
-      const id = label.querySelector("input").value;
-      label.querySelector(".ds-option-sample").textContent =
+    for (const input of root.querySelectorAll('input[name="ds-region"]')) {
+      const id = input.value;
+      input.closest(".ds-option").querySelector(".ds-option-sample").textContent =
         `${fmtCount(25864.5, { region: id })} · ${fmtDateTime(SAMPLE, { region: id, timeZone: pending.timeZone })}`;
     }
     status.textContent = "";
@@ -161,15 +182,21 @@ export async function renderDisplaySettings(root, { api, toast }) {
   root.querySelector("#ds-language").addEventListener("change", (e) => {
     pending.language = e.target.value; status.textContent = "";
   });
+  for (const input of root.querySelectorAll('input[name="ds-appearance"]')) {
+    input.addEventListener("change", () => { pending.appearance = input.value; status.textContent = ""; });
+  }
 
   root.querySelector("#ds-reset").addEventListener("click", () => {
     pending.region = "international";
     pending.timeZone = "";
     pending.language = "";
+    pending.appearance = "";
     root.querySelector("#ds-zone").value = "";
     root.querySelector("#ds-language").value = "";
     const first = root.querySelector('input[name="ds-region"][value="international"]');
     if (first) first.checked = true;
+    const light = root.querySelector(`input[name="ds-appearance"][value="${APPEARANCES[0]}"]`);
+    if (light) light.checked = true;
     repaint();
   });
 
