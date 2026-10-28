@@ -34,7 +34,7 @@
 > **As built (2026-10-28).** `waitForCompletion` is honoured, default true: a throw or end event
 > that started handlers waits for them before going on (`releaseCompensationWaiters`), and a
 > throw directly in an event subprocess compensates the scope that event subprocess handles
-> ([ADR-draft-scope-aware-messaging-and-compensation](draft-scope-aware-messaging-and-compensation.md)).
+> ([ADR-0508](0508-scope-aware-messaging-and-compensation.md)).
 > Compensation data and compensation across a call activity are still open.
 
 ## Context and problem statement

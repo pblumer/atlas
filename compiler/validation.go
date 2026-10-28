@@ -763,7 +763,7 @@ func errorCaught(cp *CompiledProcess, scope int32, code string) bool {
 // checkTransactions validates the transaction constructs (ADR-0108). A cancel end event must
 // sit directly inside a transaction — or in an event subprocess that sits directly inside one,
 // the place a model handles a cancellation that can arrive at any point of the transaction
-// (ADR-draft-scope-aware-messaging-and-compensation) — and a cancel boundary may attach only
+// (ADR-0508) — and a cancel boundary may attach only
 // to a transaction — both errors (BPMN restricts them so, and the runtime relies on it). A transaction that has a
 // cancel end event but no cancel boundary is a warning: the cancellation runs, but the token
 // leaves the transaction with no recovery route, usually a modeling mistake.

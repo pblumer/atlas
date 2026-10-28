@@ -216,7 +216,7 @@ type CompiledNode struct {
 	Wizard WizardKind
 	// CompensationHandler marks an isForCompensation activity some compensation boundary
 	// links to (ADR-0103). The engine reads it when such a handler finishes, to release a
-	// compensation throw waiting for it (ADR-draft-scope-aware-messaging-and-compensation).
+	// compensation throw waiting for it (ADR-0508).
 	// It too sits in the padding after Transaction, so the node does not grow.
 	CompensationHandler bool
 	Lane                int32 // index into lanes, -1 if this node is in no lane; organizational metadata with no execution effect (ADR-0121)
@@ -1403,7 +1403,7 @@ type CompensationDetail struct {
 	// WaitForCompletion is BPMN's waitForCompletion: the throw (or end event) goes on only
 	// once every handler it started has finished. True unless the model says
 	// waitForCompletion="false", which keeps the fire-and-continue behaviour
-	// (ADR-draft-scope-aware-messaging-and-compensation).
+	// (ADR-0508).
 	WaitForCompletion bool
 }
 

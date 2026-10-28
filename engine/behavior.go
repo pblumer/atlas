@@ -2079,7 +2079,7 @@ func terminateScopeExcept(c *ProcessingContext, procKey, scopeKey, exceptKey uin
 
 // terminateScopeSparing is terminateScopeExcept sparing a second element instance too:
 // a cancel end inside an event subprocess spares itself and the handler run it sits in
-// (ADR-draft-scope-aware-messaging-and-compensation). A zero key spares nothing.
+// (ADR-0508). A zero key spares nothing.
 func terminateScopeSparing(c *ProcessingContext, procKey, scopeKey, exceptKey, alsoExceptKey uint64) {
 	var victims []uint64
 	c.ForEachElementInstance(procKey, func(elKey uint64) {
@@ -2860,7 +2860,7 @@ func evalCorrelationKey(c *ProcessingContext, e *expr.Compiled, startScope uint6
 	// key could not see a variable local to the element's subprocess, event-subprocess run
 	// or its own input mappings, and two runs of one event subprocess waiting at once
 	// subscribed with whichever value the root last held
-	// (ADR-draft-scope-aware-messaging-and-compensation).
+	// (ADR-0508).
 	v, err := e.Eval(bindInputsChain(c, e.Inputs(), startScope))
 	if err != nil {
 		return ""
@@ -2970,7 +2970,7 @@ func deliverToSubscriptions(c *ProcessingContext, matches []subscriptionMatch, n
 // output mappings decide what reaches the instance when it completes. Otherwise each
 // variable updates the nearest scope from the receiver's flow scope up that already
 // declares it, and a variable no scope declares lands on the root, where every payload
-// landed before (ADR-draft-scope-aware-messaging-and-compensation). The scopes are decided
+// landed before (ADR-0508). The scopes are decided
 // here, on the command path, and frozen into the VariableCreated events, so replay writes
 // the same places without deciding again (I4/I6).
 //
@@ -3660,7 +3660,7 @@ func (compensationEndEventBehavior) OnActivated(c *ProcessingContext, key uint64
 // compensates its compensation scope (compensationScope) and goes on — at once when it
 // started no handler or does not wait, otherwise when the handlers it started have
 // finished (BPMN waitForCompletion, default true): it stays Activated, and
-// releaseCompensationWaiters drives it on (ADR-draft-scope-aware-messaging-and-compensation).
+// releaseCompensationWaiters drives it on (ADR-0508).
 func triggerCompensation(c *ProcessingContext, key uint64, ei *model.ElementInstanceValue) {
 	cp := c.process(ei.ProcessDefKey)
 	d := cp.CompensationThrow(cp.Node(ei.ElementId).Detail)
@@ -3674,7 +3674,7 @@ func triggerCompensation(c *ProcessingContext, key uint64, ei *model.ElementInst
 // flow scope, except when it sits directly in an event subprocess — then the scope that
 // event subprocess handles. That is where the work a cancellation or failure has to undo
 // was done; the event subprocess's own run holds nothing to compensate
-// (ADR-draft-scope-aware-messaging-and-compensation).
+// (ADR-0508).
 func compensationScope(c *ProcessingContext, ei *model.ElementInstanceValue) uint64 {
 	scope := ei.FlowScopeKey
 	if s := c.GetElementInstance(scope); s != nil && s.BpmnElementType == uint8(compiler.TypeSubProcess) &&
@@ -3821,7 +3821,7 @@ func (cancelEndEventBehavior) OnActivated(c *ProcessingContext, key uint64, ei *
 	// handler of a cancellation that can arrive at any point of it. Then the transaction is
 	// the handler's scope, and the handler run is spared with the cancel end: the handler
 	// completes when the cancel end does, and hands the transaction its cancelling mark
-	// (applyToState) (ADR-draft-scope-aware-messaging-and-compensation).
+	// (applyToState) (ADR-0508).
 	txKey, handlerKey := ei.FlowScopeKey, uint64(0)
 	if h := c.GetElementInstance(ei.FlowScopeKey); h != nil && h.BpmnElementType == uint8(compiler.TypeSubProcess) &&
 		c.process(h.ProcessDefKey).IsEventSubProcess(h.ElementId) {
@@ -4786,7 +4786,7 @@ func (eventSubProcessStartBehavior) OnCompleting(c *ProcessingContext, key uint6
 // later. The trigger's subscription is retired by the delivery; until a new one exists, a
 // message for it reaches nobody and, without a time to live, is lost — so two findings
 // reported back to back ran one handler, not two
-// (ADR-draft-scope-aware-messaging-and-compensation). The new trigger is activated here,
+// (ADR-0508). The new trigger is activated here,
 // by its Activated event and its behaviour, exactly as an Activating command would — so
 // its subscription is in state before the next command — and is recovered from those
 // events like any other. A no-op for every element that is not such a trigger.

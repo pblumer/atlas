@@ -2158,7 +2158,7 @@ type xmlLinkEventDefinition struct {
 // (ADR-0103). On a boundary event it has no attributes (the boundary just marks its host
 // compensable and links to a handler via a BPMN <association>). waitForCompletion defaults
 // to true, as BPMN has it: the throw goes on once its handlers have finished
-// (ADR-draft-scope-aware-messaging-and-compensation).
+// (ADR-0508).
 type xmlCompensateEventDefinition struct {
 	ActivityRef       string `xml:"activityRef,attr"`
 	WaitForCompletion string `xml:"waitForCompletion,attr"`

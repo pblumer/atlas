@@ -9,7 +9,7 @@ import (
 // inside a <transaction>, and an interrupting message event subprocess *inside* that
 // transaction ends in a cancel end event. A customer's cancellation can arrive at any point
 // of the work; the event subprocess is where a model says so, and the cancel end hands the
-// rollback to the transaction (ADR-draft-scope-aware-messaging-and-compensation).
+// rollback to the transaction (ADR-0508).
 const stornoTransactionBPMN = `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
                     xmlns:zeebe="http://camunda.org/schema/zeebe/1.0">
   <message id="mStorno" name="storno"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>

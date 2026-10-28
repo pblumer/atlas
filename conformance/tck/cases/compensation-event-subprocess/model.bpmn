@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Conformance micro-fixture: compensation thrown from an event subprocess, waiting for its
-  handlers (ADR-draft-scope-aware-messaging-and-compensation, building on ADR-0103).
+  handlers (ADR-0508, building on ADR-0103).
 
   Start -> serviceTask "charge" (compensable, handler "refund") -> userTask "wait" -> End,
   with an interrupting message event subprocess "cancellation" { message start ->

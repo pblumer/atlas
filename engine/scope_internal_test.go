@@ -140,7 +140,7 @@ func TestResolveVariableChain(t *testing.T) {
 // TestDefiningScopeInChain exercises the pure walk payload propagation rests on: the nearest
 // scope that already declares the name wins, a name no scope declares is reported as
 // undeclared (the caller then writes the root), a self-parented scope ends the walk, and
-// the cycle guard holds (ADR-draft-scope-aware-messaging-and-compensation).
+// the cycle guard holds (ADR-0508).
 func TestDefiningScopeInChain(t *testing.T) {
 	// Scopes: 1 (root) → child 2 → grandchild 3.
 	parents := map[uint64]uint64{3: 2, 2: 1}

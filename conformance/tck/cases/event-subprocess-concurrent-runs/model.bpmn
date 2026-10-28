@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Conformance micro-fixture: concurrent runs of one non-interrupting event subprocess,
-  each correlating on its own local key (ADR-draft-scope-aware-messaging-and-compensation).
+  each correlating on its own local key (ADR-0508).
 
   Start -> userTask "work" -> End, with a non-interrupting message event subprocess
   "finding" whose every run maps the finding's id into its own scope, waits at a receive

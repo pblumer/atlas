@@ -1,6 +1,6 @@
 # transaction-cancel-event-subprocess
 
-Conformance micro-fixture: a cancellation that can arrive at any point of a transaction, handled by an event subprocess inside it whose cancel end rolls the transaction back (ADR-draft-scope-aware-messaging-and-compensation, building on ADR-0108).
+Conformance micro-fixture: a cancellation that can arrive at any point of a transaction, handled by an event subprocess inside it whose cancel end rolls the transaction back (ADR-0508, building on ADR-0108).
 
 Start -&gt; transaction "order" { ts -&gt; serviceTask "reserve" (compensable, handler "unreserve") -&gt; userTask "wait" -&gt; End }, with an interrupting message event subprocess "cancellation" inside the transaction { message start -&gt; cancel end }. The transaction's cancel boundary routes to a script task "bill_effort"; a normal finish to "invoice".
 

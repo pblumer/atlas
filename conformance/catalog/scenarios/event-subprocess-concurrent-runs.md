@@ -1,6 +1,6 @@
 # event-subprocess-concurrent-runs
 
-Conformance micro-fixture: concurrent runs of one non-interrupting event subprocess, each correlating on its own local key (ADR-draft-scope-aware-messaging-and-compensation).
+Conformance micro-fixture: concurrent runs of one non-interrupting event subprocess, each correlating on its own local key (ADR-0508).
 
 Start -&gt; userTask "work" -&gt; End, with a non-interrupting message event subprocess "finding" whose every run maps the finding's id into its own scope, waits at a receive task for the answer to that finding (correlation key "=findingId", evaluated in the run's scope), and does the extra work only when the answer, declared locally as null, says yes.
 

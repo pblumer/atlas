@@ -15,7 +15,7 @@ import (
 // payload landed on the root under a local variable of the same name, a compensation throw
 // in an event subprocess compensated nothing, and a cancel end event could not sit in the
 // event subprocess that handles a cancellation. Each test is the smallest model that shows
-// one of them (ADR-draft-scope-aware-messaging-and-compensation).
+// one of them (ADR-0508).
 
 func str(name, text string) model.VariableValue {
 	return model.VariableValue{Name: name, Kind: model.VarString, Text: text}

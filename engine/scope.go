@@ -56,7 +56,7 @@ func (c *ProcessingContext) ResolveVariable(startScope uint64, name string) *mod
 //
 // It is the pure core of payload propagation so the walk is unit-testable without an
 // engine; [ProcessingContext.propagationScope] wires it to live state
-// (ADR-draft-scope-aware-messaging-and-compensation).
+// (ADR-0508).
 func definingScopeInChain(startScope uint64, name string,
 	has func(scope uint64, name string) bool,
 	parentOf func(scope uint64) (uint64, bool)) (scope uint64, ok bool) {
@@ -79,7 +79,7 @@ func definingScopeInChain(startScope uint64, name string,
 // already declares it, otherwise root (the process instance). A subprocess or
 // event-subprocess run that declared a variable locally — an input mapping to null, say —
 // so receives the value it waits for, instead of having it written to the root behind its
-// own local (ADR-draft-scope-aware-messaging-and-compensation).
+// own local (ADR-0508).
 func (c *ProcessingContext) propagationScope(startScope, root uint64, name string) uint64 {
 	s, ok := definingScopeInChain(startScope, name,
 		func(scope uint64, n string) bool { return c.GetVariable(scope, n) != nil },

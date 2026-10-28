@@ -26,7 +26,7 @@
 > the step that fires it, not two batches later, so a message right behind it is not lost;
 > each run reads the payload of the message that started it; and correlation keys resolve up
 > the scope chain of the waiting element
-> ([ADR-draft-scope-aware-messaging-and-compensation](draft-scope-aware-messaging-and-compensation.md)).
+> ([ADR-0508](0508-scope-aware-messaging-and-compensation.md)).
 >
 > **Delivered (Phase 1, compiler):** `triggeredByEvent` (on `<subProcess>`) and
 > `isInterrupting` (on the start event) are parsed; an event subprocess compiles to an

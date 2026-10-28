@@ -1,6 +1,6 @@
 # compensation-event-subprocess
 
-Conformance micro-fixture: compensation thrown from an event subprocess, waiting for its handlers (ADR-draft-scope-aware-messaging-and-compensation, building on ADR-0103).
+Conformance micro-fixture: compensation thrown from an event subprocess, waiting for its handlers (ADR-0508, building on ADR-0103).
 
 Start -&gt; serviceTask "charge" (compensable, handler "refund") -&gt; userTask "wait" -&gt; End, with an interrupting message event subprocess "cancellation" { message start -&gt; compensation throw (no activityRef, waitForCompletion by default) -&gt; script "bill" -&gt; End }. The throw sits in the event subprocess; the charge it compensates in the scope around it.
 

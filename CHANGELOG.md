@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   transaction compensates what was done, and its cancel boundary takes over once the
   rollback is finished. A compensation throw or end event directly in an event subprocess
   compensates the scope that event subprocess handles, instead of its own run, which
-  holds nothing to compensate (ADR-draft-scope-aware-messaging-and-compensation).
+  holds nothing to compensate (ADR-0508).
 
 - **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
   description comes from the wiki now carries the page's layout beside its text:
@@ -244,11 +244,11 @@ _Changed_ / _Removed_ for each version.
 - **Compensation waits for its handlers.** A compensation throw or end event now honours
   BPMN's `waitForCompletion`, which defaults to true: the step after it runs once the
   handlers it started have finished, not beside them. `waitForCompletion="false"` keeps
-  the old behaviour (ADR-0103, ADR-draft-scope-aware-messaging-and-compensation).
+  the old behaviour (ADR-0103, ADR-0508).
 - **A receive task with output mappings keeps its message to itself.** As with a
   worker's result, the payload lands in the task's own scope and its output mappings
   decide what reaches the instance; the raw payload no longer appears on the root beside
-  the mapped values (ADR-draft-scope-aware-messaging-and-compensation).
+  the mapped values (ADR-0508).
 
 - **Blueprint Marketplace is now atlas hub.** The Console's discovery entry and documentation use the broader hub identity for process applications and their product catalogues, with other offer types explicitly planned. Existing signed Blueprint Registry v1 wire identifiers, API routes, environment settings and native import permissions remain unchanged (ADR-0499).
 - **The catalogue page reads in the order a catalogue is filled.** Its sections are now
@@ -371,16 +371,16 @@ _Changed_ / _Removed_ for each version.
   event-subprocess run or the element's own input mappings; two runs of one event
   subprocess waiting at once subscribed with whatever the root last held. Keys now
   resolve up the scope chain like every other expression in a model
-  (ADR-draft-scope-aware-messaging-and-compensation).
+  (ADR-0508).
 - **A message updates the variable the model declared.** A message's or signal's payload
   was always written to the instance root, hidden behind a local variable of the same
   name; it now updates the nearest scope that declares the variable, and lands on the
-  root as before when none does (ADR-draft-scope-aware-messaging-and-compensation).
+  root as before when none does (ADR-0508).
 - **Back-to-back messages each start a run.** A non-interrupting message or signal event
   subprocess re-armed two batches after it fired, so a second message in that window was
   lost unless it carried a time to live. It now re-arms in the step that fires it, and
   each run reads the payload of the message that started it
-  (ADR-draft-scope-aware-messaging-and-compensation).
+  (ADR-0508).
 
 - **The Playground evaluates decisions.** A business rule task in a Playground sandbox
   was answered like any other job: by the default stub, which completed it without a

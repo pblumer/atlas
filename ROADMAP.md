@@ -1064,7 +1064,7 @@ Composition and reuse.
   and at the process root; recovery-tested; authored in the Modeler. Concurrent runs of a
   non-interrupting event subprocess each correlate on their own local key and read the
   message that started them, and a message right behind a fired trigger is no longer lost
-  ([ADR-draft-scope-aware-messaging-and-compensation](docs/adr/draft-scope-aware-messaging-and-compensation.md)).
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **Call activities** (single-partition): a `<callActivity>` starts a separate process
   as a child instance in the caller's partition, passes variables in/out (isolated or
   propagate-all), resumes the caller on completion, and tears the child down when the
@@ -1090,7 +1090,7 @@ Composition and reuse.
   was needed. Recovery-tested ([ADR-0103](docs/adr/0103-compensation.md)). A throw honours
   BPMN's `waitForCompletion` (default true), and one directly in an event subprocess
   compensates the scope it handles
-  ([ADR-draft-scope-aware-messaging-and-compensation](docs/adr/draft-scope-aware-messaging-and-compensation.md)).
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 - ✅ **BPMN transactions** (with cancel/compensation): a `<transaction>` is an
   embedded subprocess with one added outcome — it can be **cancelled**. A **cancel
   end event** (`<endEvent><cancelEventDefinition/>`) inside it rolls the transaction
@@ -1108,7 +1108,7 @@ Composition and reuse.
   ([ADR-0108](docs/adr/0108-bpmn-transactions.md)). **Closes Milestone 3.** A cancel end
   may also sit in an event subprocess directly inside the transaction, so a cancellation
   that arrives at any point is modelled where BPMN puts it
-  ([ADR-draft-scope-aware-messaging-and-compensation](docs/adr/draft-scope-aware-messaging-and-compensation.md)).
+  ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)).
 
 ## Milestone 4 — Operability 🚧
 

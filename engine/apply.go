@@ -236,7 +236,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				// mark belongs to the transaction it ran in, which is its flow scope, so it
 				// is handed on before it is dropped below — and the transaction, once
 				// drained, routes out its cancel boundary
-				// (ADR-draft-scope-aware-messaging-and-compensation).
+				// (ADR-0508).
 				if h.Intent == model.IntentCompleted {
 					cancelling, err := tx.IsCanceling(h.Key)
 					if err != nil {

@@ -1,4 +1,4 @@
-# ADR-DRAFT: Scope-aware messaging, event-subprocess runs and compensation from an event subprocess
+# ADR-0508: Scope-aware messaging, event-subprocess runs and compensation from an event subprocess
 
 - **Status:** Accepted
 - **Implementation:** Landed
