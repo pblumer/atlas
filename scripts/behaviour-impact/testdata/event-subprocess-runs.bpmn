@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_update" name="update"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>
+  <!-- info event-subprocess.runs: a non-interrupting handler at the root; each run now
+       reads its own message, and one right behind another starts its own run. -->
+  <process id="event_subprocess_runs" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="work"/>
+    <endEvent id="done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="work"/>
+    <sequenceFlow id="f2" sourceRef="work" targetRef="done"/>
+    <subProcess id="on_update" name="Address update" triggeredByEvent="true">
+      <startEvent id="update_start" isInterrupting="false"><messageEventDefinition messageRef="m_update"/></startEvent>
+      <scriptTask id="apply"><extensionElements><zeebe:script expression="=address" resultVariable="newAddress"/></extensionElements></scriptTask>
+      <endEvent id="update_end"/>
+      <sequenceFlow id="u1" sourceRef="update_start" targetRef="apply"/>
+      <sequenceFlow id="u2" sourceRef="apply" targetRef="update_end"/>
+    </subProcess>
+  </process>
+</definitions>

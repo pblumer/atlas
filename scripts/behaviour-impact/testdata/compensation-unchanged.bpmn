@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <!-- No finding: the first throw says waitForCompletion="false", and the one in the
+       subprocess has nothing compensable in its scope. -->
+  <process id="compensation_unchanged" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge"><extensionElements><zeebe:taskDefinition type="charge"/></extensionElements></serviceTask>
+    <boundaryEvent id="charge_comp" attachedToRef="charge"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="refund" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="refund"/></extensionElements></serviceTask>
+    <intermediateThrowEvent id="cancel_now"><compensateEventDefinition waitForCompletion="false"/></intermediateThrowEvent>
+    <subProcess id="sub">
+      <startEvent id="sub_start"/>
+      <intermediateThrowEvent id="sub_cancel"><compensateEventDefinition/></intermediateThrowEvent>
+      <endEvent id="sub_end"/>
+      <sequenceFlow id="s1" sourceRef="sub_start" targetRef="sub_cancel"/>
+      <sequenceFlow id="s2" sourceRef="sub_cancel" targetRef="sub_end"/>
+    </subProcess>
+    <endEvent id="done"/>
+    <association id="a1" sourceRef="charge_comp" targetRef="refund"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="cancel_now"/>
+    <sequenceFlow id="f3" sourceRef="cancel_now" targetRef="sub"/>
+    <sequenceFlow id="f4" sourceRef="sub" targetRef="done"/>
+  </process>
+</definitions>

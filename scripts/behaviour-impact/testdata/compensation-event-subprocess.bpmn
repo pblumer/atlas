@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_storno" name="storno"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>
+  <!-- changed compensation.event-subprocess: the throw in the cancellation handler now
+       compensates the process root (charge) and waits for it before billing. The handler is
+       interrupting and at the root, so its trigger and its key are unchanged. -->
+  <process id="compensation_event_subprocess" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge"><extensionElements><zeebe:taskDefinition type="charge"/></extensionElements></serviceTask>
+    <boundaryEvent id="charge_comp" attachedToRef="charge"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="refund" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="refund"/></extensionElements></serviceTask>
+    <userTask id="work"/>
+    <endEvent id="done"/>
+    <association id="a1" sourceRef="charge_comp" targetRef="refund"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="work"/>
+    <sequenceFlow id="f3" sourceRef="work" targetRef="done"/>
+    <subProcess id="on_storno" triggeredByEvent="true">
+      <startEvent id="storno_start"><messageEventDefinition messageRef="m_storno"/></startEvent>
+      <intermediateThrowEvent id="rollback" name="Roll back"><compensateEventDefinition/></intermediateThrowEvent>
+      <serviceTask id="bill"><extensionElements><zeebe:taskDefinition type="bill"/></extensionElements></serviceTask>
+      <endEvent id="storno_end"/>
+      <sequenceFlow id="e1" sourceRef="storno_start" targetRef="rollback"/>
+      <sequenceFlow id="e2" sourceRef="rollback" targetRef="bill"/>
+      <sequenceFlow id="e3" sourceRef="bill" targetRef="storno_end"/>
+    </subProcess>
+  </process>
+</definitions>

@@ -139,6 +139,23 @@ Chosen option: **1**.
 - Bad: every modeller rediscovers six traps; a message without a time to live is still
   silently lost; the model no longer reads as the process.
 
+## As built
+
+- **Which deployed models the behaviour changes touch** is a check:
+  [`scripts/behaviour-impact/impact.py`](../../scripts/behaviour-impact/README.md) reads
+  the newest and the running versions from a server (or exported models) and reports each
+  element per rule — waiting compensation, compensation from an event subprocess, receive
+  task output mappings, correlation keys and payloads in inner scopes, event-subprocess
+  runs — as changed, to review or info. Its reading of a model is held to the compiler's,
+  and its reading of FEEL to the FEEL compiler's, over every model in the repository.
+- **Output mappings on a catch event** (named among the behaviour changes above) do not
+  arise: the compiler wires `zeebe:ioMapping` on tasks and subprocesses only, so of the
+  receivers only a receive task can carry them.
+- **A key reading a worker's result inside a subprocess** is the shadowing case most
+  likely to be met: a task without output mappings writes its result into its subprocess
+  (ADR-0074), so a receive task after it in the same subprocess, keyed on that result,
+  subscribed with the root's value — usually none — and never correlated. It does now.
+
 ## Links
 
 - relates to ADR-0068 (I/O mappings and scope resolution), ADR-0074 (subprocess scopes),

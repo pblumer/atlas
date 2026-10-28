@@ -14,6 +14,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Which deployed models a behaviour change touches.** `scripts/behaviour-impact/impact.py`
+  reads the newest and the still running versions from a server — or exported models — and
+  lists each element whose behaviour the scope-aware messaging and compensation changes
+  alter: a compensation throw that now waits, compensation from an event subprocess, a
+  receive task's output mappings, a correlation key or payload in an inner scope. Each
+  finding says whether the element now behaves differently, may (depending on names the
+  model does not state) or only looks different, and `--fail-on changed` makes it a gate
+  before an upgrade (ADR-0508).
+
 - **Light, dark, or following the system, as a preview.** A switch at the top right,
   beside the favourites, flips the Console between light and dark, and the Display
   screen adds a third choice that follows the operating system. The choice is kept with

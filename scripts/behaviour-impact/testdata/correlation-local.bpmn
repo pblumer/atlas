@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_finding" name="finding"><extensionElements><zeebe:subscription correlationKey="=findingId"/></extensionElements></message>
+  <!-- changed correlation.scope: the key reads the subprocess's own findingId (an input
+       mapping), no longer the root's. review payload.scope: "approved" is declared there
+       too, so the answer updates the subprocess, not the root. -->
+  <process id="correlation_local" isExecutable="true">
+    <startEvent id="start"/>
+    <subProcess id="round">
+      <extensionElements><zeebe:ioMapping>
+        <zeebe:input source="=currentFinding" target="findingId"/>
+        <zeebe:input source="=null" target="approved"/>
+      </zeebe:ioMapping></extensionElements>
+      <startEvent id="round_start"/>
+      <intermediateCatchEvent id="wait_approval"><messageEventDefinition messageRef="m_finding"/></intermediateCatchEvent>
+      <endEvent id="round_end"/>
+      <sequenceFlow id="r1" sourceRef="round_start" targetRef="wait_approval"/>
+      <sequenceFlow id="r2" sourceRef="wait_approval" targetRef="round_end"/>
+    </subProcess>
+    <endEvent id="done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="round"/>
+    <sequenceFlow id="f2" sourceRef="round" targetRef="done"/>
+  </process>
+</definitions>
