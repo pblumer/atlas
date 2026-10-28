@@ -303,7 +303,7 @@ publish, deterministically, from the processor — and it gets its own record.
     receiving de-duplicator would not recognise it as the same mail.
 - **Follow-ups / risks to watch:**
   - The fallback message on expiry (own record).
-  - A marketplace blueprint ([ADR-0499](0499-blueprint-registry-and-distribution.md))
+  - An atlas hub Blueprint ([ADR-0499](0499-blueprint-registry-and-distribution.md))
     carrying the pattern pre-wired — reply watch, catch event, timer, reminder — so an
     installation without modelling experience starts from it.
   - Bounces: a VERP return path carrying the token would route a non-delivery report to
