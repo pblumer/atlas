@@ -175,6 +175,7 @@ const STRINGS = {
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
     'services.notHeld': 'Nicht bezogen',
     'fav.mark': 'Als Favorit merken',
+    'act.add': 'In den Warenkorb legen',
     'fav.clear': 'Favorit entfernen',
     'fav.only': 'Nur Favoriten',
     'fav.none': 'Sie haben nichts als Favorit gemerkt.',
@@ -360,6 +361,7 @@ const STRINGS = {
     'services.none': 'You currently hold no services.',
     'services.notHeld': 'Not held',
     'fav.mark': 'Mark as favourite',
+    'act.add': 'Put in the basket',
     'fav.clear': 'Remove favourite',
     'fav.only': 'Favourites only',
     'fav.none': 'You have marked nothing as a favourite.',
@@ -545,6 +547,7 @@ const STRINGS = {
     'services.none': 'Vous ne détenez actuellement aucune prestation.',
     'services.notHeld': 'Non détenu',
     'fav.mark': 'Ajouter aux favoris',
+    'act.add': 'Mettre dans le panier',
     'fav.clear': 'Retirer des favoris',
     'fav.only': 'Favoris uniquement',
     'fav.none': 'Vous n’avez rien mis en favori.',
@@ -729,6 +732,7 @@ const STRINGS = {
     'services.none': 'Al momento non detiene alcuna prestazione.',
     'services.notHeld': 'Non detenuto',
     'fav.mark': 'Aggiungere ai preferiti',
+    'act.add': 'Mettere nel carrello',
     'fav.clear': 'Rimuovere dai preferiti',
     'fav.only': 'Solo preferiti',
     'fav.none': 'Non ha contrassegnato nulla come preferito.',
@@ -2129,8 +2133,8 @@ function toggle(release, id, integral) {
   if (!state.canOrder) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('noid.title'),
-      'aria-label': t('noid.title'),
-    }, '+');
+      'aria-label': t('noid.title'), 'data-icon': 'cart',
+    }, svgIcon('cart'));
   }
   // An integral part missing from a bundle this person holds is the exception: it
   // is offered on its own — unless a bundle in the basket brings it anyway.
@@ -2148,19 +2152,59 @@ function toggle(release, id, integral) {
   const shut = windowNote(item);
   if (!orderableNow(item)) {
     return el('button', {
-      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || '',
-    }, '+');
+      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || t('act.add'),
+      'data-icon': 'cart',
+    }, svgIcon('cart'));
   }
   return el('button', {
     class: 'sq',
     'aria-pressed': inIt ? 'true' : 'false',
-    title: missing ? t('note.missingPart') : null,
-    'aria-label': missing ? t('note.missingPart') : null,
+    // The cart adds; once chosen, the "−" takes it out again.
+    title: inIt ? null : (missing ? t('note.missingPart') : t('act.add')),
+    'aria-label': inIt ? t('act.discard') : (missing ? t('note.missingPart') : t('act.add')),
+    'data-icon': inIt ? null : 'cart',
     onclick: () => {
       if (state.basket.has(id)) state.basket.delete(id); else state.basket.add(id);
       render();
     },
-  }, inIt ? '\u2212' : '+');
+  }, inIt ? '\u2212' : svgIcon('cart'));
+}
+
+// ICONS are the shop's three drawn signs — the heart that marks a favourite, the
+// cart that puts something in the basket, the "i" that opens what a product is —
+// as SVG on a 24-unit grid, drawn after the shop's icon set. They are stroked in
+// currentColor, so they are the shop's main colour (--accent, which a catalogue
+// theme sets) without a colour of their own; the heart of a favourite is filled.
+const ICONS = {
+  heart: [['path', { d: 'M12 20.6C6.2 17 2.6 13.4 2.6 8.7C2.6 5.3 4.9 2.9 7.8 2.9C9.9 2.9 11.5 4.5 12 7.5C12.5 4.5 14.1 2.9 16.2 2.9C19.1 2.9 21.4 5.3 21.4 8.7C21.4 13.4 17.8 17 12 20.6Z' }]],
+  cart: [
+    ['path', { d: 'M0.8 2.4H4.9L8 18H20.7' }],
+    ['path', { d: 'M5.5 4.8H23.2L21.2 14H7.3' }],
+    ['circle', { cx: '9.2', cy: '20', r: '1.7' }],
+    ['circle', { cx: '19.6', cy: '20', r: '1.7' }],
+  ],
+  info: [
+    ['circle', { cx: '12', cy: '12', r: '11.1' }],
+    ['circle', { cx: '12', cy: '5.7', r: '2.1' }],
+    ['rect', { x: '10.3', y: '9.3', width: '3.4', height: '11.1', rx: '0.3' }],
+  ],
+};
+
+// svgIcon draws one of ICONS. It is hidden from assistive technology: the button it
+// sits in carries the name.
+function svgIcon(kind, filled) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  if (filled) svg.setAttribute('class', 'filled');
+  for (const [tag, attrs] of ICONS[kind]) {
+    const part = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) part.setAttribute(k, v);
+    svg.append(part);
+  }
+  return svg;
 }
 
 // infoButton is the "i" the mockups put at the right edge of the service column,
@@ -2175,13 +2219,14 @@ function toggle(release, id, integral) {
 function infoButton(id) {
   return el('button', {
     class: 'sq info',
+    'data-icon': 'info',
     'aria-label': t('info.title'),
     onclick: () => {
       state.info = state.info === id ? '' : id;
       render();
       focusInfoDialog();
     },
-  }, 'i');
+  }, svgIcon('info'));
 }
 
 // focusInfoDialog moves the focus into an open dialog, so a keyboard user lands
@@ -2443,8 +2488,9 @@ function starButton(id) {
     'aria-pressed': on ? 'true' : 'false',
     'aria-label': t(on ? 'fav.clear' : 'fav.mark'),
     title: t(on ? 'fav.clear' : 'fav.mark'),
+    'data-icon': 'heart',
     onclick: () => star(id),
-  }, on ? '\u2605' : '\u2606');
+  }, svgIcon('heart', on));
 }
 
 // keepFavourites narrows a column when the favourites filter is on.

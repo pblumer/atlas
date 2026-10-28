@@ -233,6 +233,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The shop's favourite, basket and information buttons are drawn icons.** The star
+  that marks a favourite is a heart, filled once marked; the "+" that puts a product
+  in the basket is a shopping cart; the "i" that opens a product's information is an
+  info sign. They are inline SVG in the shop's main colour, so a catalogue theme that
+  sets another accent recolours them, and every button carries a name a screen reader
+  says, since the icons carry none.
 - **The shop offers again what a held bundle lacks.** An option that was not taken
   when a bundle was ordered can be added later, and a position given back out of a
   bundle can be ordered again. In the catalogue, a part that is always included gets

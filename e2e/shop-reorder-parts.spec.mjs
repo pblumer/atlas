@@ -117,7 +117,7 @@ test("a part of a bundle that is held whole, or that a chosen bundle carries, st
   // second, separate choice.
   await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().click();
   await page.locator(".cascade > .col:nth-child(3) .cell", { hasText: "Apple iPhone" })
-    .locator("button.sq", { hasText: "+" }).click();
+    .locator('button.sq[data-icon="cart"]').click();
   const hw = serviceRow(page, "Apple iPhone hardware").locator("button.sq").first();
   await expect(hw).toBeDisabled();
   await expect(hw).toHaveAttribute("title", "Always included — cannot be deselected.");
