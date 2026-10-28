@@ -5,6 +5,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/pblumer/atlas/api/contentsource"
 )
 
 // Publishing a catalogue is where the work happens.
@@ -845,6 +847,18 @@ func preconditions(in Input) map[string][]string {
 	return req
 }
 
+// copyRich is a rich description sharing no memory with this one.
+func copyRich(r map[string][]contentsource.Rich) map[string][]contentsource.Rich {
+	if r == nil {
+		return nil
+	}
+	out := make(map[string][]contentsource.Rich, len(r))
+	for lang, blocks := range r {
+		out[lang] = contentsource.CopyRich(blocks)
+	}
+	return out
+}
+
 // freeze copies the items into the release, sorted by id, deep enough that a later
 // edit to the catalogue cannot reach into a published release through a shared map
 // or slice.
@@ -859,6 +873,7 @@ func freeze(items []Item) []Item {
 		// placed against this release must keep saying what was promised, whatever
 		// the catalogue says next week.
 		it.Descriptions = copyTexts(it.Descriptions)
+		it.Rich = copyRich(it.Rich)
 		// The headings travel for the reason the name does: the shop reads the
 		// release and nothing else, so a translation left behind is a column head
 		// no reader of that language ever sees.

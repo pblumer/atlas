@@ -54,8 +54,20 @@ const (
 	BlockHeading   BlockKind = "heading"
 	BlockBullet    BlockKind = "bullet"
 	BlockOrdered   BlockKind = "ordered"
-	// BlockOther is everything else — embeds, images, tables, code, panels,
-	// computed lists. Dropped and reported, never converted.
+	// The blocks the rich description takes besides the text (amendment of
+	// 2026-10-28): a quote, code, a panel with its tone, a table whose text holds
+	// its rows (one per line) and cells (separated by tabs), a divider, an image
+	// attachment of the page (Ref names it) and another item embedded (Ref names
+	// it). The plain description still takes only the text kinds above.
+	BlockQuote   BlockKind = "quote"
+	BlockCode    BlockKind = "code"
+	BlockPanel   BlockKind = "panel"
+	BlockTable   BlockKind = "table"
+	BlockDivider BlockKind = "divider"
+	BlockImage   BlockKind = "image"
+	BlockEmbed   BlockKind = "embed"
+	// BlockOther is everything else — videos, models, computed lists, a kind
+	// added to the source later. Dropped and reported, never converted.
 	BlockOther BlockKind = "other"
 )
 
@@ -93,6 +105,16 @@ type Block struct {
 	Source string
 	Text   string
 	Marks  []Mark
+	// Ref names what an image (an attachment of the page) or an embed (another
+	// item) shows.
+	Ref string
+	// Level is a heading's level, 1 to 3; Tone a panel's tone; Checked whether a
+	// task is done; Align and Width how an image or a paragraph is laid out.
+	Level   int
+	Tone    string
+	Checked bool
+	Align   string
+	Width   int
 }
 
 // Page is one page as its adapter read it, with the security facts of § 8.
@@ -196,8 +218,9 @@ type Adapter interface {
 	Ancestors(ctx context.Context, p Page) ([]Page, error)
 	// Children lists a page's readable child pages, by id, in sibling order.
 	Children(ctx context.Context, p Page) ([]string, error)
-	// Attachment reads the file of a page named name, at most max bytes, with
-	// the media type the source gives it.
+	// Attachment reads the file of a page named name — or whose id is name, as
+	// an image block names it — at most max bytes, with the media type the
+	// source gives it.
 	Attachment(ctx context.Context, pageID, name string, max int64) ([]byte, string, error)
 	// Watch asks the source to report changes to a page in its feed.
 	Watch(ctx context.Context, id string) error

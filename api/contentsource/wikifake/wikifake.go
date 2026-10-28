@@ -40,6 +40,11 @@ type Block struct {
 	Kind  string `json:"kind"`
 	Text  string `json:"text,omitempty"`
 	Marks []Mark `json:"marks,omitempty"`
+	// Ref names an image's attachment or an embed's item; Level a heading's
+	// level and Tone a panel's tone.
+	Ref   string `json:"ref,omitempty"`
+	Level int    `json:"level,omitempty"`
+	Tone  string `json:"tone,omitempty"`
 }
 
 // Page is one item of the fake.
@@ -296,6 +301,15 @@ func (s *Server) itemJSON(p *Page) map[string]any {
 		blk := map[string]any{"kind": b.Kind, "text": b.Text}
 		if len(b.Marks) > 0 {
 			blk["marks"] = b.Marks
+		}
+		if b.Ref != "" {
+			blk["ref"] = b.Ref
+		}
+		if b.Level != 0 {
+			blk["level"] = b.Level
+		}
+		if b.Tone != "" {
+			blk["tone"] = b.Tone
 		}
 		body = append(body, blk)
 	}

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"github.com/pblumer/atlas/api/contentsource"
 	"reflect"
 	"testing"
 )
@@ -37,7 +38,12 @@ func everything(id string) Item {
 	it.ProductGroupTexts = map[string]string{"de": "Netzzugang"}
 	it.ContentSource = &ContentSource{Source: "wiki", Primary: "de", Pages: map[string]PageRef{
 		"de": {Ref: "it_1", Version: 3, FetchedAt: 1, Passages: []string{"sec_1"}, Labels: []string{"vpn"},
-			Children: []ChildRef{{Ref: "it_2", Version: 1, Passages: []string{"sec_2"}}}}}}
+			Children: []ChildRef{{Ref: "it_2", Version: 1, Passages: []string{"sec_2"}}},
+			Embeds:   []ChildRef{{Ref: "it_3", Version: 2, Passages: []string{"sec_3"}}}}}}
+	it.Rich = map[string][]contentsource.Rich{"de": {
+		{Kind: "table", Rows: [][]string{{"A", "B"}}},
+		{Kind: "embed", Title: "E", Blocks: []contentsource.Rich{{Kind: "paragraph", Text: "p"}}},
+	}}
 	// The lifecycle form, because that is the one with a list of maps: the two
 	// process ids give way to one process and its actions (ADR-0425, ADR-0429). The
 	// legacy operation map cannot sit beside them — publishing refuses the pair —

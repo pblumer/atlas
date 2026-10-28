@@ -305,7 +305,7 @@ function installShop(withBinding) {
 }
 
 for (const withBinding of [true, false]) {
-  test(`the shop links to the wiki only when the release carries the binding (${withBinding})`, async ({ page }) => {
+  test(`the shop shows the description itself and links to no wiki page (${withBinding})`, async ({ page }) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -315,15 +315,7 @@ for (const withBinding of [true, false]) {
     await expect(info).toBeVisible({ timeout: 10000 });
     await info.click();
     await expect(page.locator(".product-description")).toHaveText("Secure access.");
-    const link = page.locator(".product-wiki a");
-    if (withBinding) {
-      await expect(link).toHaveText("More in the wiki");
-      await expect(link).toHaveAttribute("href", "https://wiki.example.org/#/item/SVC-2");
-      await expect(link).toHaveAttribute("target", "_blank");
-      await expect(link).toHaveAttribute("rel", /noopener/);
-    } else {
-      await expect(link).toHaveCount(0);
-    }
+    await expect(page.getByRole("dialog").locator("a")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 }
@@ -439,4 +431,68 @@ test("a service that is no market offering keeps its plain info panel", async ({
   await page.locator(".cascade").getByText("Monitor", { exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("A display.");
   await expect(page.getByRole("dialog").locator(".factsheet")).toHaveCount(0);
+});
+
+// A 1x1 PNG, served for the catalogue's mark and a description's image.
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+
+test("a fact sheet shows the wiki's layout, its images and embeds, the catalogue's mark and the release", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.route("**/api/v1/catalogs/cat_b/logo", (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
+  await page.route("**/content-images/**", (r) => r.fulfill({ status: 200, contentType: "image/png", body: PNG }));
+  await page.addInitScript(() => {
+    window.__rich = {
+      en: [
+        { kind: "heading", level: 2, text: "Features" },
+        { kind: "table", rows: [["Feature", "Value"], ["CPU", "Intel Core i5"]] },
+        { kind: "panel", tone: "info", text: "For mobile staff." },
+        { kind: "bullet", text: "Light" }, { kind: "bullet", text: "Long battery" },
+        { kind: "image", image: "0123456789abcdef0123456789abcdef", text: "The device" },
+        { kind: "image", image: "../../evil", text: "nope" },
+        { kind: "embed", title: "Service level", blocks: [{ kind: "paragraph", text: "Service hours 11/5." }] },
+        { kind: "paragraph", text: "<img src=x onerror=alert(1)>" },
+      ],
+    };
+  });
+  await page.addInitScript(installBundleShop);
+  await page.addInitScript(() => {
+    const realFetch = window.fetch;
+    window.fetch = async (input, init) => {
+      const res = await realFetch(input, init);
+      if (String(input).includes("/catalogs/cat_b/releases")) {
+        const rels = await res.json();
+        rels[0].createdAt = Date.UTC(2026, 9, 28) * 1e6;
+        rels[0].items.find((i) => i.id === "bundle").rich = window.__rich;
+        return new Response(JSON.stringify(rels), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return res;
+    };
+  });
+  await page.goto("/shop.html?lang=en");
+  await page.locator("#find").fill("Laptop bundle");
+  await page.locator(".cascade").getByText("Laptop bundle", { exact: true }).click();
+  const sheet = page.getByRole("dialog").locator(".factsheet");
+  await expect(sheet).toBeVisible();
+  const about = sheet.locator(".factsheet-section").nth(0);
+  await expect(about.locator(".rich-h")).toHaveText("Features");
+  await expect(about.locator(".rich-table td")).toHaveText(["CPU", "Intel Core i5"]);
+  await expect(about.locator(".rich-panel")).toHaveText("For mobile staff.");
+  await expect(about.locator(".rich-list li")).toHaveText(["Light", "Long battery"]);
+  await expect(about.locator(".rich-embed")).toContainText("Service level");
+  await expect(about.locator(".rich-embed")).toContainText("Service hours 11/5.");
+  // Only the image with an id of the server's shape is drawn, from Atlas's copy.
+  await expect(about.locator(".rich-figure img")).toHaveCount(1);
+  await expect(about.locator(".rich-figure img")).toHaveAttribute("src", /\/api\/v1\/catalog-products\/bundle\/content-images\/0123456789abcdef0123456789abcdef$/);
+  // Text stays text.
+  await expect(about.locator("> .rich > .rich-p")).toHaveText("<img src=x onerror=alert(1)>");
+  await expect(about.locator(".rich-p img")).toHaveCount(0);
+  // The catalogue's mark and the release the sheet describes.
+  await expect(sheet.locator(".factsheet-logo")).toBeVisible();
+  await expect(sheet.locator(".factsheet-version")).toContainText("rel_b");
+  // The buttons wear the shop's own style.
+  await expect(sheet.getByRole("button", { name: "Copy" })).toHaveClass(/secondary/);
+  await expect(sheet.getByRole("button", { name: "Print" })).toHaveClass(/secondary/);
+  expect(errors).toEqual([]);
 });

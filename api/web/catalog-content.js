@@ -157,6 +157,9 @@ export function previewBox(pv) {
       : null,
     pv.boundTo ? el("p", { class: "content-refusals", role: "alert" }, t("content.boundTo", { item: pv.boundTo })) : null,
     !refusals.length && !pv.boundTo ? el("p", { class: "content-passes" }, t("content.passes")) : null,
+    !pv.boundTo && (pv.carriedBy || []).length
+      ? el("p", { class: "content-carried muted" }, t("content.carriedBy", { items: pv.carriedBy.join(", ") }))
+      : null,
     dropped.length
       ? el("div", { class: "content-dropped" },
         el("b", {}, t("content.dropped")),
@@ -468,9 +471,10 @@ export function mountCatalogRefresh(host, ctx, catalogID, boundCount) {
       go.textContent = t("content.catalog.refresh");
     }
   });
+  // The section around it carries the explanation (content.catalog.intro), in the
+  // column beside the controls; here is only what the button acts on.
   host.replaceChildren(
-    el("h3", { style: "margin-top:26px" }, t("content.catalog.title")),
-    el("p", { class: "muted", style: "max-width:62ch" }, t("content.catalog.intro")),
+    el("h4", { style: "margin:0 0 8px" }, t("content.catalog.title")),
     el("div", { class: "row" }, go),
     result);
 }

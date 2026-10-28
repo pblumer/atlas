@@ -1,6 +1,6 @@
 # ADR-0491: A service's content may come from an external source, copied into the draft and frozen with the release
 
-- **Status:** Accepted (amended 2026-10-26 — an unlink restores the product's own content; see the amendment below)
+- **Status:** Accepted (amended 2026-10-26 — an unlink restores the product's own content; amended 2026-10-27 — a child page may describe a service of its own; amended 2026-10-28 — the description keeps the wiki's layout, images and embedded items; see the amendments below)
 - **Implementation:** Partial
 - **Date:** 2026-10-26
 - **Deciders:** Atlas maintainers
@@ -224,7 +224,8 @@ shows one slot per language the catalogue declares, and the primary slot is mark
   in one draft save.
 - **What linking refuses:** a page the account cannot read; a page in a space not
   released for the shop; any page that fails a security rule (§ 8); the same page in
-  two slots, or bound to another item, naming that item.
+  two slots, or another item's own page, naming that item. A child page another
+  item's description holds may be linked — see the amendment of 2026-10-27.
 
 ### 6. Unlinking is allowed and recorded
 
@@ -353,6 +354,18 @@ The backend and its screens are built; the finance-system cost (§ 2), more than
 picture, an administrator's purge of quarantined content, and telling the product owner
 about an unlink (the open question) are not.
 
+- **The rich description** (amendment of 2026-10-28). `contentsource/rich.go`
+  converts a body into `Rich` blocks; `preview` builds them for the page, its child
+  pages and, through `pages.embeds`, its embedded items; `gatherImages` copies the
+  images. `Item.Rich` carries them per language and a release freezes them;
+  `PageRef.Embeds` puts the embedded items into the recheck; `contentimage.go`
+  stores and serves the images. The shop draws them in `richBlocks`.
+- **A child page describing a service of its own** (amendment of 2026-10-27).
+  `contentsource.PreviewExcept` and `GatherExcept` take the pages that are other
+  items' own pages and drop them, with everything below, from the walk;
+  `catalog.Service.ownPages` supplies them, `boundElsewhere` refuses only another
+  item's own page, the preview answers `carriedBy`, and `contentProblems` holds back a
+  publish while a copy still holds such a page.
 - **Where it lives.** `api/contentsource` holds the source configuration and its store
   (`contentsources`, an instance store), the adapter contract (`Adapter`, with every
   security fact a three-valued `Fact` whose zero value is *unknown*, so a fact an adapter
@@ -458,6 +471,70 @@ it back**, quarantined or not, since the own content was never in question; a pr
 that had no picture is left with none. **Unlinking one language** puts that language's
 own description back and leaves the rest bound. A binding made before this amendment
 has nothing set aside, and its unlink behaves as § 6 first said.
+
+## Amendment (2026-10-27): a child page may describe a service of its own
+
+§ 5 first refused any page another item's description held, child pages included.
+In use that blocked the shape a product owner reaches for first: a market offering
+kept as one page, its services kept as child pages below it — "Notebook Hardware"
+with "Tastatur", "Maus" and "Dockingstation" beneath. The offering could be linked
+to the page, or a service to its child page, never both.
+
+What stays exclusive is a page that describes an item: an item's **own page** — a
+language page of its binding — describes that item and no other, and linking it to a
+second item is refused, naming the first. A **child page** is part of a description,
+not the subject of one, so it may become an item's own page:
+
+- **A fetch leaves out every other item's own page.** A child page that is another
+  item's own page is that item's description; the fetch drops it with everything
+  below it, as it drops a restricted page, and the preview names the item it
+  describes. The rest of the walk is taken as before.
+- **Linking a child page another item holds is allowed.** The preview names the items
+  whose description holds it (`carriedBy`). Each of them keeps the copied text until
+  its next refresh, which leaves the page out.
+- **The publish gate waits for that refresh.** A bound item whose copy still holds a
+  child page that is now another item's own page refuses to publish, naming that item,
+  so the shop never shows one page's text under two products.
+- A child page linked to another item while a fetch reads the pages makes that
+  fetch's write stale: it is refused, and repeated, rather than written with text that
+  is now another item's.
+
+The security rules of § 8 are unchanged: every page, own or child, passes them where
+it is taken.
+
+## Amendment (2026-10-28): the description keeps the wiki's layout, its images and embedded items
+
+§ 7 converted a page to plain text and dropped everything else: tables, panels,
+quotes, code, embedded items and images. In use the shop's fact sheet then showed a
+product owner's carefully laid-out page as a run of paragraphs, without its tables
+of technical data, without the pictures of the device and without the service-level
+article embedded in it — and pointed to the wiki for the rest, which a reader in the
+shop without an account there cannot follow.
+
+So a fetch now also takes the **rich description**: the page as the source lays it
+out, kept beside the plain text a search and the clipboard use.
+
+- **Data, never markup.** Each block is a kind — heading, paragraph, list item,
+  quote, code, panel, table, divider, image, child page, embedded item — with plain
+  text in fields of its own. The shop draws it with text nodes; nothing a wiki
+  author writes becomes script or style. The plain description is unchanged.
+- **The security rules apply to every block that holds text**, as they applied to
+  paragraphs: every protected passage and every mention is removed by its mark before
+  the text is used, a table's text included before it is split into cells; a mark
+  outside its text refuses the page; a placeholder left anywhere refuses it.
+- **An embedded item passes § 8 on its own**, as a child page does — a read
+  restriction on it or an ancestor, a hold, not live, a space not released for the
+  shop — and is left out, named in the preview, when it does not. Embeds are followed
+  three levels deep, and an item embedding itself is left out. The items taken are
+  held in the binding and rechecked like the page, so a restriction set on one later
+  quarantines the product.
+- **Images are copied**, as the picture is, named by the hash of their bytes, and
+  served behind the picture's gate and withheld under a quarantine like it — the shop
+  never asks the source for anything. An image that cannot be read or is not a PNG,
+  JPEG or SVG is left out; it refuses nothing. A refresh removes no image: an older
+  copy may still be what the newest release shows.
+- **The shop's link to the wiki is gone.** The fact sheet shows the description
+  whole, the catalogue's mark, and the release it describes.
 
 ## Pros and cons of the options
 

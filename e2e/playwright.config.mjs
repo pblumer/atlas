@@ -17,6 +17,21 @@ export default defineConfig({
     browserName: "chromium",
     viewport: { width: 900, height: 520 },
     trace: "retain-on-failure",
+    // The catalogue page folds every section until a browser opens it, and remembers
+    // which ones it did (catalog-admin.js pageSection). Every spec but the one about
+    // that fold drives controls inside the sections, so each starts as a maintainer
+    // who keeps them all open; catalog-sections.spec.mjs starts from nothing.
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: baseURL,
+        localStorage: [{
+          name: "atlas.catalog.pageSections",
+          value: JSON.stringify(Object.fromEntries(["products", "content", "relations", "publish",
+            "settings", "appearance", "sharing", "transfer", "purge"].map((k) => [k, true]))),
+        }],
+      }],
+    },
   },
   // Serve the repo's real web assets + the test-only harness; Playwright waits for it.
   webServer: {

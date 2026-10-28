@@ -161,9 +161,11 @@ func TestTheStandingTakesSystemRolesFromTheFlagsAndFailsOnABrokenRolesRoute(t *t
 	}
 }
 
-func TestOnlyParagraphsHeadingsAndListsAreTextBlocks(t *testing.T) {
+func TestTheSourcesBlockKindsAreMappedAndAnUnknownOneIsOther(t *testing.T) {
 	for kind, want := range map[string]BlockKind{"paragraph": BlockParagraph, "heading": BlockHeading,
-		"bullet": BlockBullet, "task": BlockBullet, "ordered": BlockOrdered, "quote": BlockOther, "invented": BlockOther} {
+		"bullet": BlockBullet, "task": BlockBullet, "ordered": BlockOrdered, "quote": BlockQuote,
+		"code": BlockCode, "panel": BlockPanel, "table": BlockTable, "divider": BlockDivider,
+		"image": BlockImage, "embed": BlockEmbed, "video": BlockOther, "toc": BlockOther, "invented": BlockOther} {
 		if got := blockKind(kind); got != want {
 			t.Errorf("%s = %v, want %v", kind, got, want)
 		}
