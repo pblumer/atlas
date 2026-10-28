@@ -30,6 +30,12 @@
 > **As built (2026-10-11).** BPMN transactions have landed ([ADR-0108](0108-bpmn-transactions.md)). Compensation
 > data, compensation across a call activity and `waitForCompletion` (parsed but not honoured,
 > `compiler/parse.go`) are still open.
+>
+> **As built (2026-10-28).** `waitForCompletion` is honoured, default true: a throw or end event
+> that started handlers waits for them before going on (`releaseCompensationWaiters`), and a
+> throw directly in an event subprocess compensates the scope that event subprocess handles
+> ([ADR-draft-scope-aware-messaging-and-compensation](draft-scope-aware-messaging-and-compensation.md)).
+> Compensation data and compensation across a call activity are still open.
 
 ## Context and problem statement
 

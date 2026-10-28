@@ -20,6 +20,11 @@
 > **canceling marker** that links the asynchronous compensation drain to the boundary
 > firing, and (d) `cancelEndEventBehavior` + a cancel branch in the subprocess completion.
 > Closes Milestone 3's final item, "BPMN transactions (with cancel/compensation)."
+>
+> **As built (2026-10-28).** A cancel end event may also sit in an event subprocess directly
+> inside the transaction — the handler of a cancellation that can arrive at any point. It
+> cancels that transaction; the handler run hands the canceling marker to it on completion
+> ([ADR-draft-scope-aware-messaging-and-compensation](draft-scope-aware-messaging-and-compensation.md)).
 
 ## Context and problem statement
 
