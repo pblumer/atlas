@@ -1,4 +1,12 @@
-# ADR-0499: Open Blueprint registries for process applications
+# ADR-0499: atlas hub — open Blueprint registries for process applications
+
+> **Product naming note (2026-10-28):** The distribution experience previously
+> called "Blueprint Marketplace" is now named **atlas hub**. The hub is intended
+> to cover applications, their product catalogues and future separately governed
+> offer types. Signed Blueprint Registry v1 and all its existing identifiers,
+> signing keys, URLs and import protections stay unchanged. This is a naming
+> decision, **not** an approval of new schemas, catalogue-only offers,
+> commercial entitlements or unattended updates. This ADR remains Accepted/Partial.
 
 - **Status:** Accepted
 - **Implementation:** Partial
@@ -30,7 +38,7 @@ We want a reusable, immutable Blueprint of a process application from an indepen
 
 ## Decision outcome
 
-Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper around the **existing application package**. The marketplace can also list element-template and Worker Type packages, but it does not replace their native package formats.
+Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper around the **existing application package**. The hub may eventually list element-template and Worker Type packages, but it does not replace their native package formats.
 
 ### Identities and boundaries
 
@@ -46,7 +54,7 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 - The initial public registry may be served as static GitHub-hosted files. Consumers need no GitHub account to browse free releases; publishers may use Git.
 - Authenticated sources use the same registry discovery and package contract. Paid content must not be exposed through reusable public download URLs, shared tokens or direct customer access to a private source repository.
 - Multiple registries have explicit origin/trust and namespace collision rules: never silently resolve colliding publisher identities.
-- A commercial service may separately provide purchase, entitlements and authorized download. Purchased applications continue to run offline and no process-instance execution checks the marketplace licence server.
+- A commercial service may separately provide purchase, entitlements and authorized download. Purchased applications continue to run offline and no process-instance execution checks the hub licence server.
 
 ### Trust, installation and update
 
@@ -73,7 +81,7 @@ Choose **option 2**. A Blueprint is an immutable, versioned distribution wrapper
 
 ## BMP0 registry v1 contract profile (accepted)
 
-The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Partial** reflects the merged offline schema/fixtures and signed-index verifier; it does not mean a registry endpoint, marketplace installer or authorization to execute untrusted downloaded code exists.
+The maintainer accepted option 2 and this signed-registry v1 trust profile on 2026-10-27. **Implementation: Partial** reflects the merged offline schema/fixtures and signed-index verifier; it does not mean a registry endpoint, hub installer or authorization to execute untrusted downloaded code exists.
 
 **Decision: signed, source-independent static metadata.** A registry may be hosted on GitHub Pages or any independent HTTPS server. Operators explicitly configure and pin an **Ed25519** registry public key alongside the registry URL. The registry signs the **exact index JSON bytes** with detached signature `index.json.sig`, base64 encoding of the 64-byte Ed25519 signature. This avoids ambiguous canonical-JSON semantics and self-declared publisher identity. An unsigned or wrongly signed remote index is rejected, not treated as merely unverified. Registry key rotation is a separate, explicit operator action; never bootstrap a trusted key from downloaded content.
 

@@ -1,16 +1,26 @@
-# Blueprint Marketplace extension: applications and product catalogues
+# atlas hub extension: applications and product catalogues
 
-**Programme:** BMP (Blueprint Marketplace)
+**Programme:** atlas hub (legacy technical ID: BMP)
 **Milestone:** [6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-)
 **Status:** planning proposal, **not implementation**
 **Programme owner:** pblumer
-**Architecture gate:** [ADR-0506](../adr/0506-marketplace-catalogue-bundles-and-updates.md).
+**Architecture gate:** [ADR-0506](../adr/0506-hub-catalogue-bundles-and-updates.md).
 Existing [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md)
 remains binding until an extension is accepted.
 
+## Hub offer types
+
+The hub is a distribution surface, not the installed Shop. Solutions
+(application-plus-catalogue bundles) are the current v1 starting point.
+Standalone catalogues, reusable components and other artifact types are
+separate future extensions, not an implication that the signed v1 schema
+already accepts them. Free, internal and paid are access models independent
+of the offer's content type; premium entitlement checks never enter workflow
+execution.
+
 ## Outcome
 
-An organization finds a business solution in the Marketplace, clicks
+An organization finds a business solution in the atlas hub, clicks
 **Install**, reviews what it will add, and receives a Process Application
 **with its product catalogue(s)** on its own atlas instance. It may also
 install a reusable standalone catalogue. Each installed item can be
@@ -21,11 +31,11 @@ organization, without any licence dependency in the workflow run loop.
 
 **Product catalogue** here means the *catalog.Document* containing
 actual products, approvals, lifecycle bindings and catalogue releases.
-It is not the Marketplace's own offer listings.
+It is not the atlas hub's own offer listings.
 
 ## Recommended user experience
 
-### Marketplace browsing
+### Browsing atlas hub
 
 Two consumer-visible ways of presenting the **same offer registry**:
 
@@ -67,7 +77,7 @@ mandatory. Do **not** equate "one click" with permission bypass.
 No undocumented auto-publish during a read/preview.
 
 A combined `application-bundle` reuses the existing `tar.gz` with
-`katalog.json`. This should be the first testable free Marketplace
+`katalog.json`. This should be the first testable free atlas hub
 example, **without waiting for a new package serializer or registry v2**.
 A standalone `catalogue` item uses native `catalog.Document`, with
 signed v2 kind dispatch only after the ADR gate.
@@ -90,7 +100,7 @@ removes/withdraws a product, changes eligibility, approval rules,
 process bindings or grants new privileges is a human-review event,
 not a silent update.
 
-A Marketplace entitlement authorizes obtaining new bytes. It must
+A atlas hub entitlement authorizes obtaining new bytes. It must
 **not** be checked when a running process executes or a previously
 published catalogue serves a product. A paid provider may control
 upgrade rights without retracting already installed releases.
@@ -105,7 +115,7 @@ upgrade rights without retracting already installed releases.
 | Per-artifact import conflict baselines | Landed, ADR-0467 | Safe update diff for apps/catalogues |
 | Catalogue authorization and publish | Landed, ADR-0436 | Same imported records, no new write API |
 | Console registry browsing/preview/merge | In review, PR #1416 | Finish before extension touches shared UI |
-| Durable Marketplace provenance | Not yet delivered | Required before reporting install success |
+| Durable atlas hub provenance | Not yet delivered | Required before reporting install success |
 | Fully recoverable multi-stage automatic updates | Not yet delivered | Blocks Auto-safe |
 | Authenticated/private and paid delivery | Planned BMP3 | External entitlement provider and mock |
 
@@ -131,7 +141,7 @@ persistent sidecar provenance and assert restart/reload equality.
 with a real free package; no duplicate app, products or releases on
 repeat; local edits preserved and all source/deployment effects shown.
 
-### C2 — Native standalone catalogue in the Marketplace
+### C2 — Native standalone catalogue in the atlas hub
 
 Accept proposed ADR and introduce a signed **registry v2** contract
 with `artifactKind`, media type, verified component identity and
@@ -187,7 +197,7 @@ modifications while a Proposed ADR is unresolved.
 
 ## Explicit non-goals
 
-A general-purpose marketplace payment processor in atlas, one-click
+A general-purpose hub payment processor in atlas, one-click
 bypass of catalogue authorizations, multiple re-keyed installations of
 the same Blueprint, implicit process-instance migration, and
 automatic removal of products or application resources.
@@ -198,4 +208,4 @@ automatic removal of products or application resources.
 - [ADR-0467](../adr/0467-application-package-export.md)
 - [ADR-0436](../adr/0436-a-catalogue-is-imported-as-one-document.md)
 - [ADR-0451](../adr/0451-catalogue-export.md)
-- [Blueprint Marketplace programme](blueprint-marketplace-program.md)
+- [Blueprint atlas hub programme](blueprint-hub-program.md)

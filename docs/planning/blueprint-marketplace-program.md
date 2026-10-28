@@ -1,10 +1,31 @@
-# Blueprint Marketplace (BMP): delivery programme
+# atlas hub: delivery programme (legacy ID BMP)
 
-**Programme:** BMP (Blueprint Marketplace)  
+**Programme:** atlas hub (technical delivery ID: BMP)  
 **Baseline:** Public atlas repository checked on 2026-10-26.  
 **Milestone:** [Milestone 6 — Ecosystem](../../ROADMAP.md#milestone-6--ecosystem-).  
 **Architecture authority:** [ADR-0499](../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**).  
 **Programme owner:** pblumer (accepted 2026-10-27). **BMP0:** complete (owner pblumer, PR #1402 and #1405). **BMP1:** active (owner pblumer). BMP2/BMP3 remain planned with no implementation owner.
+
+## Product positioning and compatibility
+
+**atlas hub** is the multi-layer discovery, distribution and lifecycle entry point
+for reusable atlas assets. An offer may be a complete Process Application, an
+application with its product catalogues, or — with separate contract approval —
+a standalone product catalogue, a reusable component or a private/paid offer.
+Offer listings in the hub are distinct from an installed organization's shop
+catalogues and from the local Repository (ADR-0081).
+
+**Implemented today:** the signed, operator-pinned Blueprint Registry v1 supports
+versioned Process Application packages, optionally bundling product catalogues.
+**Planned or gated:** independent catalogue artifacts, reusable content types,
+federated/private entitlement providers, managed updates and automatic publication
+(ADR-0506 remains Proposed). A name change does not authorize any of these.
+
+The stable `BMP` programme/slice identifiers, `blueprintId` schema property,
+`/api/v1/blueprints` endpoints and `ATLAS_BLUEPRINT_REGISTRY_*` settings remain
+technical compatibility identifiers. They do not define the product name.
+Renaming or expanding their versioned contract needs a separately reviewed
+migration; the existing public importer and engine invariants remain authoritative.
 
 ## User outcome
 
@@ -71,7 +92,7 @@ Support multiple trusted public/private sources and external authenticated downl
 
 ## First next action
 
-BMP1: PR #1411 (pinned HTTPS transport), PR #1415 (bounded archive inspection) and PR #1416 (authorized Console browse, signed preview and digest-conditional import) are merged and CI-verified. PR #1420 verified a real application and its two product catalogues through signed v1 package verification; draft PR #1423 adds catalogue and offered-product details to the signed preview. Next publish a static public registry with a separately protected signer key, then persist registry identity, signer fingerprint, publisher, version, digest, application key and installed catalogue IDs in restart-safe design-time sidecar state. Test the full Console import, repeat import, partial failures and recovery before declaring BMP1 complete. The existing importer remains authoritative; no automatic installation, runtime licence checks or direct Worker code execution. ADR-0506 remains Proposed and does not authorize standalone catalogue artifacts or auto-safe updates.
+BMP1: PR #1411 (pinned HTTPS transport), PR #1415 (bounded archive inspection) and PR #1416 (authorized Console browse, signed preview and digest-conditional import) are merged and CI-verified. PR #1420 verified a real application and its two product catalogues through signed v1 package verification; merged PR #1423 adds catalogue and offered-product details to the signed preview; draft PR #1424 introduces a pending-only journal before native writes. Next verify installation finalization and recovery server-side (#1422), then publish a signed public atlas hub demonstration registry with a separately protected signer key. Test the full Console import, repeat import, partial failures and recovery before declaring BMP1 complete. The existing importer remains authoritative; no automatic installation, runtime licence checks or direct Worker code execution. ADR-0506 remains Proposed and does not authorize standalone catalogue artifacts or auto-safe updates.
 
 ## References
 
