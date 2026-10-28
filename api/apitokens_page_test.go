@@ -62,10 +62,13 @@ func TestTheAPITokenPageAgreesWithTheServer(t *testing.T) {
 
 	// The scopes: the same set as apiMintableScopes, each once. The page orders them
 	// narrowest first, so the order is the page's and only the set is compared.
-	type pageScope struct{ id, reach string }
+	type pageScope struct {
+		id, reach string
+		required  bool
+	}
 	var scopes []pageScope
-	for _, m := range regexp.MustCompile(`\{ id: "([a-z]+)", reach: "([a-z]*)" \}`).FindAllStringSubmatch(pageConst(t, src, "SCOPES"), -1) {
-		scopes = append(scopes, pageScope{m[1], m[2]})
+	for _, m := range regexp.MustCompile(`\{ id: "([a-z]+)", reach: "([a-z]*)"(, required: true)? \}`).FindAllStringSubmatch(pageConst(t, src, "SCOPES"), -1) {
+		scopes = append(scopes, pageScope{m[1], m[2], m[3] != ""})
 	}
 	var got []string
 	for _, s := range scopes {
@@ -77,18 +80,22 @@ func TestTheAPITokenPageAgreesWithTheServer(t *testing.T) {
 	}
 
 	// The reach each scope asks for: a landscape token must name projects (reachFor
-	// refuses it otherwise), an events token may name catalogues, and the page asks
-	// nothing of any other scope.
+	// refuses it otherwise), a diagrams token may name projects, because the
+	// architecture list shows it only the applications its reach names (ADR-0493, as
+	// amended), an events token may name catalogues, and the page asks nothing of any
+	// other scope.
 	for _, s := range scopes {
-		want := ""
+		want, required := "", false
 		switch s.id {
 		case apiScopeLandscape:
+			want, required = "projects", true
+		case apiScopeDiagrams:
 			want = "projects"
 		case apiScopeEvents:
 			want = "catalogues"
 		}
-		if s.reach != want {
-			t.Errorf("the page asks a %s token for reach %q, want %q", s.id, s.reach, want)
+		if s.reach != want || s.required != required {
+			t.Errorf("the page asks a %s token for reach %q (required %t), want %q (required %t)", s.id, s.reach, s.required, want, required)
 		}
 	}
 
