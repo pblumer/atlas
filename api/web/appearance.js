@@ -5,11 +5,13 @@
 // changes no workflow state. So it lives in localStorage and nowhere else, and a reset
 // of the brand cannot touch it.
 //
-// The preference is one of three words. `light` and `dark` are choices; `system`
-// follows prefers-color-scheme and keeps following it while the page is open. Anything
-// else — nothing stored, a value from a later version, storage that throws — is today's
-// light console: the default stays light until the dark palette has been verified on
-// every screen, which is the record's condition for changing it.
+// The preference is one of four words. `light` and `dark` are choices; `system`
+// follows prefers-color-scheme and keeps following it while the page is open; `cockpit`
+// is a gamified HUD skin layered on the dark foundation, an explicit opt-in that the
+// system scheme never selects (ADR-0508). Anything else — nothing stored, a value from
+// a later version, storage that throws — is today's light console: the default stays
+// light until the dark palette has been verified on every screen, which is the record's
+// condition for changing it.
 //
 // The resolved appearance is written as data-appearance on the document root, and the
 // stylesheet does the rest (app.css, `:root[data-appearance="dark"]`). The tiny inline
@@ -20,8 +22,9 @@
 // localStorage key. The value is the bare word, not JSON.
 export const APPEARANCE_KEY = "atlas.appearance";
 
-// The words a preference may be. The first is the default.
-export const APPEARANCES = ["light", "dark", "system"];
+// The words a preference may be. The first is the default. `cockpit` is a skin, not
+// an accessibility appearance, but it rides the same data-appearance mechanism.
+export const APPEARANCES = ["light", "dark", "system", "cockpit"];
 
 // DIAGRAM_RENDERER is the colour configuration every bpmn-js and dmn-js canvas is
 // built with (editor.js newModeler, dmn-editor.js). The renderers write a shape's fill
@@ -54,9 +57,11 @@ export function readAppearance() {
   }
 }
 
-// resolveAppearance turns a preference into what is drawn: "dark" for a dark choice,
-// or for `system` while the system is dark; "light" otherwise.
+// resolveAppearance turns a preference into what is drawn: "cockpit" for the skin
+// (an explicit choice the system scheme never selects); "dark" for a dark choice, or
+// for `system` while the system is dark; "light" otherwise.
 export function resolveAppearance(preference, systemDark) {
+  if (preference === "cockpit") return "cockpit";
   return preference === "dark" || (preference === "system" && systemDark) ? "dark" : "light";
 }
 

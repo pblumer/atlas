@@ -593,6 +593,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted | Landed |
 | [0506](0506-marketplace-catalogue-bundles-and-updates.md) | atlas hub catalogue bundles and opt-in updates | Proposed | Not started |
 | [0507](0507-ui-appearance-modes.md) | Appearance mode is a personal preference, not an organisation brand | Proposed | Partial |
+| [0508](0508-cockpit-appearance-skin.md) | A gamified cockpit skin as an opt-in appearance | Proposed | Partial |
 
 ## The two states of a record
 
