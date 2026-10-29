@@ -10,7 +10,7 @@
 // ignores the count, something window.prompt had nowhere to put.
 
 import { editWorkerFlow, createWorkerFlow } from "./workerdialog.js";
-import { loadFormViewer, formFieldKeys } from "./formviewer.js";
+import { decisionOptions, loadFormViewer, formFieldKeys } from "./formviewer.js";
 import { fmtDateTime } from "./datefmt.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -607,7 +607,7 @@ function askRepairForm({ Form, incident, schema, name, current }) {
 
     (async () => {
       try {
-        form = new Form({ container: host });
+        form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: incident.repairForm }) });
         await form.importSchema(schema, current);
       } catch (e) {
         host.innerHTML = `<p class="repair-err">This form could not be rendered: ${esc(e && e.message ? e.message : String(e))}</p>`;

@@ -72,6 +72,9 @@ type Decision struct {
 	// Literal is the FEEL expression of a decision whose logic is a literal
 	// expression rather than a table — for those, this is the whole of the logic.
 	Literal string `json:"literal,omitempty"`
+	// List holds the entries of a decision whose logic is a boxed list, one FEEL
+	// expression each, in order (ADR-draft-form-options-from-a-decision).
+	List []string `json:"list,omitempty"`
 }
 
 // Doc is one published documentation version of a decision: immutable metadata

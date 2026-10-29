@@ -519,6 +519,31 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   preview search made-up people and ask no directory, while the canvas shows the field without
   searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+- **`form-decision-options.spec.mjs`**
+  ([ADR-draft-form-options-from-a-decision](../docs/adr/draft-form-options-from-a-decision.md)):
+  a field whose options come from a deployed decision. In the form editor, Decision (DMN) is an
+  Options source ▸ Type of the select, radio group, checklist and tag list; choosing it names the
+  first decision the server offers, the panel picks another and shows what it answers now, the
+  canvas shows the list, and Save sends the block instead of options; a stored decision the
+  server does not offer is named as such with the reason it cannot answer; back to static
+  options drops the block. Rendered through the console's own loader, each field shows its
+  decision's list — each decision asked once per form — and submits the value chosen; a
+  prefilled value stays while the list offers it and goes when it does not; a decision that
+  cannot answer says the choices could not be loaded, in the form's language; and the field
+  says it is loading while the list is on its way. A decision's input is bound to the field
+  of the same name or fixed in the panel, which says what a bound field waits for; rendered,
+  a choice in one field decides what the next one offers, a change clears what no longer
+  fits, and the request names only the bound field's value. The options routes are answered
+  by `page.route`.
+- **`dmn-list-editor.spec.mjs`**
+  ([ADR-draft-form-options-from-a-decision](../docs/adr/draft-form-options-from-a-decision.md)):
+  the decision editor's boxed list (`vendor/dmn/src/atlas/`) against the real DMN bundle — a list
+  decision opens in its own tab as its entries, under a hint that says what a list is and a
+  header without the fork's "Expression type"; entries are added, moved and removed, Ctrl+Z and
+  Ctrl+Y take a removal back and forth, and the model saved holds the list as shown; the replace
+  menu turns a decision table into a list, keeping its id and its requirements and the overlay
+  that opens it, and does not offer List to a list; and a decision's tab opens it as it now is
+  after the replace menu changed its kind.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the

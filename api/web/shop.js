@@ -3166,11 +3166,12 @@ async function mountConfigForms() {
   mounted.clear();
   if (!hosts.length) return;
 
-  let Form;
+  let Form, decisionOptions;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
+    ({ decisionOptions } = mod);
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3186,7 +3187,7 @@ async function mountConfigForms() {
       }
       const schema = schemas.get(formID);
       if (!schema) throw new Error('no schema');
-      const form = new Form({ container: host });
+      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: formID }) });
       // Handed back what was typed before the last redraw, which is what makes the
       // basket survivable: adding a second product must not empty the first's form.
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;

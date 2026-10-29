@@ -116,7 +116,9 @@ test("the remote data source is offered on a select only", async ({ page }) => {
   await expect(typeSelect(page).locator('option[value="remote"]')).toHaveText("Remote data source");
   await selectField(page, "Field_dringlichkeit");
   await openGroup(page, "valuesSource");
-  await expect(typeSelect(page).locator("option")).toHaveText(["Static", "Input data", "Expression"]);
+  // A radio group gets every other source, the decision included
+  // (ADR-draft-form-options-from-a-decision), and not the remote one.
+  await expect(typeSelect(page).locator("option")).toHaveText(["Static", "Input data", "Expression", "Decision (DMN)"]);
 });
 
 test("a Worker that does not let forms search it is named as such", async ({ page }) => {

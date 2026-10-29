@@ -42,12 +42,18 @@ var wantPublicRoutes = []string{
 	"POST /public/forms/{token}/start",
 	"OPTIONS /public/forms/{token}/schema",
 	"OPTIONS /public/forms/{token}/start",
+	// The options of a field of that form whose decision depends on what the visitor
+	// chose in another one (ADR-draft-form-options-from-a-decision).
+	"POST /public/forms/{token}/fields/{field}/options",
+	"OPTIONS /public/forms/{token}/fields/{field}/options",
 	// A public wizard's later screens, where the pass in the Authorization header is
 	// the whole authorization (ADR-0449). Rate-limited in their handlers.
 	"GET /public/wizard/step",
 	"POST /public/wizard/steps/{taskKey}/complete",
 	"OPTIONS /public/wizard/step",
 	"OPTIONS /public/wizard/steps/{taskKey}/complete",
+	"POST /public/wizard/steps/{taskKey}/fields/{field}/options",
+	"OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options",
 
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// These are read *after* a refusal, to find out what did the refusing — behind

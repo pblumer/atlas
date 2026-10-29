@@ -21,7 +21,7 @@ import { t as tr, plural as trPlural } from "./i18n.js";
 import { installDevShortcut } from "./dev-view.js";
 import { makeIdCheck } from "./idcheck.js";
 import { generationWorkers, openFormGenerator } from "./formgen-dialog.js";
-import { ensureFormStyles } from "./formviewer.js";
+import { decisionOptions, ensureFormStyles } from "./formviewer.js";
 import { fromTail, noteFormSaved } from "./form-return.js";
 import { attachRemoteSelects, previewTransport, remoteAdapter } from "./remote-select.js";
 
@@ -220,12 +220,19 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   // lists, so it is asked for beside the bundle rather than after it. Not being allowed
   // to ask, or the server not answering, leaves the editor as form-js ships it.
   const sourcesReady = api("GET", "/api/v1/form-data/sources").catch(() => null);
+  // The decisions a field's options can come from (ADR-draft-form-options-from-a-decision),
+  // asked for beside it for the same reason. The canvas, both previews and the panel ask
+  // each decision's list through one service, which asks afresh after a few seconds: a
+  // list is maintained in the decision editor, maybe in the next tab.
+  const decisionsReady = api("GET", "/api/v1/form-data/decisions").catch(() => null);
+  const decisionService = decisionOptions({ ttlMs: 10000 });
 
   // The Playground is the Design pane; build it now (it is the default tab).
   let Playground;
   let dataSources = null;
+  let decisionList = null;
   try {
-    [{ Playground }, dataSources] = await Promise.all([loadPlayground(), sourcesReady]);
+    [{ Playground }, dataSources, decisionList] = await Promise.all([loadPlayground(), sourcesReady, decisionsReady]);
   } catch (e) {
     if (gen !== generation) return;
     container.innerHTML = `<p class="muted err" style="padding:20px">Failed to load the form editor: ${esc(e.message)}</p>`;
@@ -241,7 +248,12 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     // reach a production Worker.
     playground = new Playground({
       container, schema, data: {},
-      atlas: { sources: dataSources, remote: remoteAdapter({ transport: previewTransport(), preview: true }) },
+      atlas: {
+        sources: dataSources,
+        remote: remoteAdapter({ transport: previewTransport(), preview: true }),
+        decisions: decisionList,
+        decisionOptions: decisionService,
+      },
       editorAdditionalModules: [paletteNamesModule],
     });
   } catch (e) {
@@ -526,7 +538,11 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
     catch (e) { host.innerHTML = `<p class="muted err">${esc(tr("formEd.viewerFailed", { error: e.message }))}</p>`; return; }
     try {
       if (!p.viewer) {
-        p.viewer = new Form({ container: host, atlasRemote: remoteAdapter({ transport: previewTransport(), preview: true }) });
+        p.viewer = new Form({
+          container: host,
+          atlasRemote: remoteAdapter({ transport: previewTransport(), preview: true }),
+          atlasDecisions: decisionService,
+        });
         p.viewer.on("changed", (ev) => renderOutput(ev.data, ev.errors));
       }
       if (p.lookups) { p.lookups.destroy(); p.lookups = null; }

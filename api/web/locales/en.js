@@ -1835,6 +1835,17 @@ export default {
   "lib.Open decision table": "Open decision table",
   "lib.Open literal expression": "Open literal expression",
   "lib.Remove item": "Remove item",
+  // The boxed list editor (vendor/dmn/src/atlas/, ADR-draft-form-options-from-a-decision).
+  "lib.List": "List",
+  "lib.Open list": "Open list",
+  "lib.Add entry": "Add entry",
+  "lib.Move entry up": "Move entry up",
+  "lib.Move entry down": "Move entry down",
+  "lib.Remove entry": "Remove entry",
+  "lib.Move entry {index} up": "Move entry {index} up",
+  "lib.Move entry {index} down": "Move entry {index} down",
+  "lib.Remove entry {index}": "Remove entry {index}",
+  "lib.This list has no entries yet.": "This list has no entries yet.",
 
   // The decision editor (dmn-editor.js).
   "dmn.view.overview": "Overview (DRG)",
@@ -1843,6 +1854,7 @@ export default {
   "dmn.hint.drd": "Draw the decision requirements graph. An <b>Input Data</b> node is something this model is given, a <b>Decision</b> holds logic, and a <b>Knowledge Model</b> is a reusable function a decision can invoke. Open a decision's own tab to model its logic.",
   "dmn.hint.literal": "This decision's logic is one FEEL expression: what it evaluates to is the decision's result, under the variable named below it. Its inputs are whatever the requirements graph gives it — both are adopted into a business rule task that calls this decision.",
   "dmn.hint.boxed": "A <b>knowledge model</b> is a reusable FEEL function, not a decision: nothing calls it from a process. <b>F</b> is the expression language, the list beside it is the parameters a caller passes, the body is evaluated with them, and <b>Result</b> names the variable a decision binds when it invokes this model.",
+  "dmn.hint.list": "This decision's logic is a <b>list</b>: each entry is a FEEL expression, and the decision's result is the list of their values, in this order. An entry such as <code>{value: \"CC100\", label: \"Purchasing\"}</code> is an option with a label. A list can give a form's choice field its options, its inputs taken from other fields — the form shows what the newest deployed version answers for the choice made there.",
   "dmn.hint.table": "Model the decision table. <b>Input Data</b> nodes become the decision's inputs and the output column becomes its result variable — both are adopted into a business rule task that calls this decision.",
   "dmn.column.added": "“{input}” added as an input column of “{decision}”.",
   "dmn.column.removeAsk.one": "Remove the input column as well?",
@@ -2001,6 +2013,7 @@ export default {
   "decisionDoc.rule": "Rule {n}: {text}",
   "decisionDoc.writes": "Writes: {outputs}",
   "decisionDoc.literal": "Literal expression",
+  "decisionDoc.list": "List (one entry per line)",
   "decisionDoc.noLogic": "This decision declares no logic yet.",
   "decisionDoc.subtitle": "Decision documentation",
   "decisionDoc.model": "Model",

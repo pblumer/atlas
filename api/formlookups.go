@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/workerquery"
@@ -178,15 +179,21 @@ func lookupKinds() []string {
 }
 
 // checkTaskSubmission holds a completion's variables to the task form's directory
-// fields before the processor is told anything. A form without one is not looked at.
-// It answers true when it wrote a refusal.
+// fields, and to the lists of its fields whose options come from a decision
+// (formdecisions.go), before the processor is told anything. A form without either is
+// not looked at. It answers true when it wrote a refusal.
 func (s *Server) checkTaskSubmission(w http.ResponseWriter, r *http.Request, key uint64, body []byte) bool {
 	schema, found, err := s.taskFormSchema(key)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read task form: "+err.Error())
 		return true
 	}
-	if !found || !strings.Contains(string(schema), formlookup.DataSourceMember) {
+	if !found {
+		return false
+	}
+	lookups := strings.Contains(string(schema), formlookup.DataSourceMember)
+	decisions := strings.Contains(string(schema), formdecision.Member)
+	if !lookups && !decisions {
 		return false
 	}
 	vars, err := submittedVariables(body)
@@ -194,9 +201,18 @@ func (s *Server) checkTaskSubmission(w http.ResponseWriter, r *http.Request, key
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return true
 	}
-	if refusal := s.formLookup.CheckSubmission(r.Context(), schema, vars); refusal != nil {
-		refusal.Write(w)
-		return true
+	if lookups {
+		if refusal := s.formLookup.CheckSubmission(r.Context(), schema, vars); refusal != nil {
+			refusal.Write(w)
+			return true
+		}
+	}
+	if decisions {
+		known := func() map[string]any { return s.taskVariables(key) }
+		if refusal := s.formDecision.CheckSubmission(r.Context(), schema, vars, known); refusal != nil {
+			refusal.Write(w)
+			return true
+		}
 	}
 	return false
 }

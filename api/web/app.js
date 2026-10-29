@@ -50,7 +50,7 @@ import { runImport } from "./infomodel-import.js";
 import { uploadPicture, PERSON } from "./picturescale.js";
 // The form-js viewer is shared with the incident's repair form (ADR-0169), so its lazy
 // import and one-time stylesheet injection live in one module rather than here.
-import { formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
+import { decisionOptions, formRefusalNames, loadFormViewer, scrollToFirstInvalidField } from "./formviewer.js";
 import { attachRemoteSelects, remoteAdapter, taskTransport } from "./remote-select.js";
 // A start form does not replace the start variables declared on the process: the ones
 // it does not ask for are asked beneath it, with the Modeler's typed fields.
@@ -9649,7 +9649,7 @@ async function viewTasks(preselectKey) {
       const lookups = { transport: taskTransport(t.key), data: data || {} };
       // atlasLocale: the e-mail view speaks the language the Tasks app does
       // (ADR-0489).
-      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasLocale: trLocale() });
+      const form = new Form({ container: host, atlasRemote: remoteAdapter(lookups), atlasDecisions: decisionOptions({ formId: t.formId }), atlasLocale: trLocale() });
       await form.importSchema(def.schema, withPeopleNamed(data || {}, state.approvals.get(t.key), names));
       if (state.selected !== t.key) { try { form.destroy(); } catch { /* noop */ } return; }
       state.mountedForm = form;
@@ -10447,7 +10447,7 @@ async function viewStartProcess() {
       ]);
       if (state.selected !== p.key) return;
       host.innerHTML = "";
-      const form = new Form({ container: host });
+      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: p.startFormId }), atlasLocale: trLocale() });
       await form.importSchema(def.schema, {});
       state.form = form;
       // The declared start variables this form does not ask for, beneath it. Which ones

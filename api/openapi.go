@@ -927,6 +927,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
 			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-0473)", tag: "Forms", role: RoleModeler,
 			resp: jsonBody("Sources and Workers", tObject())}},
+		{"GET", "/api/v1/form-data/decisions", s.formDecision.HandleList, apiOp{
+			summary: "The decisions a select, radio group, checklist or tag list can take its options from: every decision with a decision deployment that takes no inputs, for the form editor's picker (ADR-draft-form-options-from-a-decision)", tag: "Forms", role: RoleModeler,
+			resp: jsonBody("Decisions", tObject())}},
+		// RoleModeler, like POST /api/v1/decisions/evaluate: an author asks a decision
+		// about inputs of their own choosing, for a form that may not be saved yet.
+		{"POST", "/api/v1/form-data/decisions/{decisionId}/options", s.formDecision.HandleEvaluate, apiOp{
+			summary: "The options a decision answers for the inputs the form editor gives: the newest decision deployment evaluated, its list normalized as form-js normalizes a field's options ({label, value}), and how many entries are no option. 404 not_deployed, 422 unbound_input, evaluation_failed or not_a_list (ADR-draft-form-options-from-a-decision)", tag: "Forms", role: RoleModeler,
+			req:  jsonBody("The decision's inputs", schemaObj(map[string]any{"inputs": tObject()})),
+			resp: jsonBody("Options", tObject())}},
+		// roleAny, like GET /api/v1/forms/{id}: whoever may read the form may ask what one
+		// of its fields offers. Which decision and which inputs is the stored form's; the
+		// request carries only the values of the fields it binds.
+		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{
+			summary: "The options one field of a stored form takes from a decision, for the values chosen in the fields its inputs are bound to — a group, then its members. The request names only those fields' values; a value from a field with fixed choices must be one of them. 404 not_found, 400 invalid_query, 422 as the decision cannot answer (ADR-draft-form-options-from-a-decision)", tag: "Forms", role: roleAny,
+			req:  jsonBody("The values of the bound fields", schemaObj(map[string]any{"values": tObject()})),
+			resp: jsonBody("Options", tObject())}},
 		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
 			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{

@@ -68,6 +68,9 @@ function ensureCss(id, href) {
 // loadFormViewer lazily imports the vendored form-js viewer and injects its stylesheets
 // once, the first time anything renders a form — so a user who never opens one never
 // pays for the 86 KB of CSS or the bundle.
+//
+// A page rendering a stored form passes `atlasDecisions: decisionOptions({ formId })`, so
+// a field whose options come from a decision can ask for them (below).
 export function loadFormViewer() {
   if (!_formViewer) {
     ensureFormStyles();
@@ -79,6 +82,61 @@ export function loadFormViewer() {
       .catch((e) => { _formViewer = null; throw e; });
   }
   return _formViewer;
+}
+
+// decisionOptions is what a form asks for the options of a field that takes them from a
+// deployed decision (ADR-draft-form-options-from-a-decision).
+//
+// With formId — a stored form being filled in — it asks
+// POST /api/v1/forms/{formId}/fields/{field}/options with the values chosen in the fields
+// the field is bound to; which decision and which inputs is the stored form's. With url,
+// it asks that route the same way (a public link's or a wizard step's, see
+// public-form.html), sending headers with it. Without either — the form editor, whose
+// form may not be saved — it asks POST /api/v1/form-data/decisions/{id}/options with the
+// inputs themselves, which only a modeler may.
+//
+// options({decisionId, field, inputs, values}) resolves to the options; answer() to the
+// whole reply ({options, skipped}), for the form editor's panel. The same question asked
+// twice is asked once; a refusal rejects with the server's reason and is not remembered.
+// With ttlMs, an answer is reused for that long and then asked afresh, which is what an
+// editor wants of a list somebody may be publishing a new version of meanwhile.
+export function decisionOptions({ formId = "", url = null, headers = {}, ttlMs = 0 } = {}) {
+  const asked = new Map();
+  const answer = ({ decisionId, field, inputs = {}, values = {} }) => {
+    let path, body;
+    if (url) {
+      path = url(field);
+      body = { values };
+    } else if (formId) {
+      path = `/api/v1/forms/${encodeURIComponent(formId)}/fields/${encodeURIComponent(field)}/options`;
+      body = { values };
+    } else {
+      path = `/api/v1/form-data/decisions/${encodeURIComponent(decisionId)}/options`;
+      body = { inputs };
+    }
+    const key = path + "\u0000" + JSON.stringify(body);
+    let pending = asked.get(key);
+    if (!pending) {
+      pending = fetch(path, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+      }).then(async (res) => {
+        const reply = await res.json().catch(() => null);
+        if (!res.ok) throw new Error((reply && reply.error) || `HTTP ${res.status}`);
+        return reply || {};
+      });
+      asked.set(key, pending);
+      pending.catch(() => { if (asked.get(key) === pending) asked.delete(key); });
+      if (ttlMs > 0) setTimeout(() => { if (asked.get(key) === pending) asked.delete(key); }, ttlMs);
+    }
+    return pending;
+  };
+  return {
+    answer,
+    options: (q) => answer(q).then((reply) => (Array.isArray(reply.options) ? reply.options : [])),
+  };
 }
 
 // ---------- Answering a form that refused to submit --------------------------

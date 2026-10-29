@@ -112,6 +112,9 @@ export function collectDecisionDocumentation(xml) {
         outputs: kids(rule, "outputEntry").map((c) => textOf(kid(c, "text"))),
         description: textOf(kid(rule, "description")),
       }));
+    } else if (kid(el, "list")) {
+      // A boxed list (ADR-draft-form-options-from-a-decision): its entries, in order.
+      entry.list = kids(kid(el, "list"), "literalExpression").map((e) => textOf(kid(e, "text")));
     } else {
       entry.literal = textOf(kid(kid(el, "literalExpression"), "text"));
     }
@@ -191,6 +194,9 @@ export function renderDecisionBody(doc, dec) {
   } else if (dec.literal) {
     // A decision whose logic is a literal expression is shown as what it is.
     doc.codeBlock(dec.literal, { label: t("decisionDoc.literal"), language: "feel" });
+  } else if (dec.list && dec.list.length) {
+    // So is a list: one entry to a line, in the order the decision answers them.
+    doc.codeBlock(dec.list.join("\n"), { label: t("decisionDoc.list"), language: "feel" });
   } else {
     doc.paragraph(t("decisionDoc.noLogic"), { size: 9.5, color: GREY, after: 6 });
   }

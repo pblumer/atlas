@@ -505,26 +505,74 @@ func (r *Registry) DeployedDecisions() []DeployedDecision {
 	defer r.mu.RUnlock()
 	out := make([]DeployedDecision, 0, len(r.latest))
 	for id, reg := range r.latest {
-		// A decision service is offered beside the decisions, because a business rule
-		// task calls either the same way (services.go).
-		described := append(describeDecisions(reg.defs), reg.services...)
-		for _, di := range described {
-			if di.ID != id {
-				continue // describe the one decision this model is latest for
-			}
-			out = append(out, DeployedDecision{
-				ID:      di.ID,
-				Name:    di.Name,
-				Model:   reg.defs.ModelName(),
-				Inputs:  di.Inputs,
-				Output:  di.Output,
-				Service: di.Service,
-			})
-			break
+		if d, ok := describeIn(reg, id); ok {
+			out = append(out, d)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+// LatestDeployedDecision describes the newest decision *deployment* providing the
+// decision (ADR-0319) and returns the key it is evaluated under. A model bundled with
+// a process is not a decision in its own right, so it is never the answer here, even
+// where the legacy latest pointer [Registry.DeployedDecisions] reads names it.
+//
+// A form whose options come from a decision reads it (ADR-draft-form-options-from-a-decision):
+// what a form offers is a decision somebody published as one, versioned and deleted
+// with the impact check a decision deployment gets, not whatever copy a process
+// happened to bundle last.
+func (r *Registry) LatestDeployedDecision(decisionId string) (DeployedDecision, uint64, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	key, ok := r.latestDecision[decisionId]
+	if !ok {
+		return DeployedDecision{}, 0, false
+	}
+	reg := regProviding(r.definitions[key], decisionId)
+	if reg == nil {
+		return DeployedDecision{}, 0, false
+	}
+	d, ok := describeIn(*reg, decisionId)
+	return d, key, ok
+}
+
+// LatestDeployedDecisions describes every decision that has a decision deployment, from
+// its newest one, sorted by id — [Registry.LatestDeployedDecision] for all of them.
+func (r *Registry) LatestDeployedDecisions() []DeployedDecision {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]DeployedDecision, 0, len(r.latestDecision))
+	for id, key := range r.latestDecision {
+		if reg := regProviding(r.definitions[key], id); reg != nil {
+			if d, ok := describeIn(*reg, id); ok {
+				out = append(out, d)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// describeIn describes the one decision or decision service id of a registered model.
+func describeIn(reg registered, id string) (DeployedDecision, bool) {
+	// A decision service is offered beside the decisions, because a business rule
+	// task calls either the same way (services.go).
+	described := append(describeDecisions(reg.defs), reg.services...)
+	for _, di := range described {
+		if di.ID != id {
+			continue
+		}
+		return DeployedDecision{
+			ID:      di.ID,
+			Name:    di.Name,
+			Model:   reg.defs.ModelName(),
+			Inputs:  di.Inputs,
+			Output:  di.Output,
+			Service: di.Service,
+		}, true
+	}
+	return DeployedDecision{}, false
 }
 
 // evalDecision evaluates one decision from an already-compiled model, requesting

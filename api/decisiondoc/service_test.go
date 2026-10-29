@@ -434,3 +434,37 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// A decision whose logic is a boxed list is documented as its entries
+// (ADR-draft-form-options-from-a-decision): the version keeps them, in order, as it
+// keeps a table's rules and a literal expression's text.
+func TestAListDecisionKeepsItsEntries(t *testing.T) {
+	svc, _ := newService(t)
+	body, err := json.Marshal(map[string]any{
+		"title": "Kostenstellen", "modelName": "Stammdaten", "xml": "<definitions/>",
+		"pdfBase64": base64.StdEncoding.EncodeToString(samplePDF),
+		"decisions": []map[string]any{{
+			"id": "Kostenstellen", "name": "Kostenstellen",
+			"list": []string{`{value: "CC100", label: "Einkauf"}`, `"CC200"`},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := call(t, svc.HandleCreate, http.MethodPost, string(body), map[string]string{"decisionId": "Kostenstellen"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create = %d, body %s", rec.Code, rec.Body)
+	}
+	var created docResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = call(t, svc.HandleGet, http.MethodGet, "", map[string]string{"id": created.ID})
+	var full docResp
+	if err := json.Unmarshal(rec.Body.Bytes(), &full); err != nil {
+		t.Fatalf("decode get: %v (%s)", err, rec.Body)
+	}
+	if len(full.Decisions) != 1 || len(full.Decisions[0].List) != 2 || full.Decisions[0].List[1] != `"CC200"` {
+		t.Fatalf("detail = %+v, want the list's two entries in order", full.Decisions)
+	}
+}

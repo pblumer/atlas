@@ -100,6 +100,44 @@
         return mountFormEditor(view, { api, toast: noop, formId: "form-dir" });
       };
       window.__saved = null;
+      // __mountDecisions opens a form with a static select, a radio group, a checklist
+      // and a tag list, against a server whose picker offers two decisions without inputs
+      // (ADR-draft-form-options-from-a-decision). What each decision answers is the
+      // spec's to say, through page.route on the options route — the editor fetches it
+      // there, as the runtime does. With `named` (a decision id, or true for
+      // Kostenstellen), the select already takes its options from that decision.
+      window.__mountDecisions = ({ named } = {}) => {
+        const decisions = { decisions: [
+          { id: "Kostenstellen", name: "Kostenstellen", model: "Stammdaten", inputs: [] },
+          { id: "Länder", name: "Länder", model: "Stammdaten", inputs: [] },
+          { id: "Regionen", name: "Regionen", model: "Geo", inputs: [{ name: "land", type: "string" }] },
+        ] };
+        const api = async (method, url, body) => {
+          window.__calls.push({ method, url });
+          if (url.endsWith("/api/v1/form-data/decisions")) return decisions;
+          if (url.endsWith("/api/v1/form-data/sources")) return { providers: [], workers: [] };
+          if (/\/forms\/[^/]+\/availability$/.test(url)) return { id: "form-dmn", available: true };
+          if (method === "GET" && /\/forms\/[^/]+$/.test(url)) {
+            return { id: "form-dmn", name: "Bestellung", projectId: "", schema: { type: "default", id: "form-dmn", components: [
+              { type: "select", id: "Field_ks", key: "kostenstelle", label: "Kostenstelle",
+                ...(named ? { atlasDecision: { version: 1, decisionId: named === true ? "Kostenstellen" : named } } : { values: [{ label: "Value", value: "value" }] }) },
+              { type: "radio", id: "Field_land", key: "land", label: "Land",
+                values: [{ label: "Value", value: "value" }] },
+              { type: "checklist", id: "Field_tags", key: "tags", label: "Tags",
+                values: [{ label: "Value", value: "value" }] },
+              { type: "taglist", id: "Field_more", key: "more", label: "Mehr",
+                values: [{ label: "Value", value: "value" }] },
+            ] } };
+          }
+          if (method === "POST" && url.endsWith("/forms")) {
+            window.__saved = JSON.parse(JSON.stringify(body));
+            return { id: body.id, name: body.name, renamedFrom: "" };
+          }
+          if (url.endsWith("/projects") || url.endsWith("/applications")) return [];
+          return {};
+        };
+        return mountFormEditor(view, { api, toast: noop, formId: "form-dmn" });
+      };
       // __mountMailView opens a form with an e-mail view (ADR-0489) and a
       // text field; saves are captured.
       window.__mountMailView = () => {

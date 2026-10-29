@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A form field takes its options from a decision.** A select, radio group, checklist or
+  tag list can name a deployed decision — typically a list its owners keep in the decision
+  editor — under Options source ▸ Type ▸ Decision (DMN), and shows what the newest version
+  answers: no copy of the list in the form, no modelled step that writes it into the
+  instance, and a new version reaches the next form without touching it. Each of the
+  decision's inputs is bound to another field of the form or fixed, so a choice decides
+  what the next field offers — a group, then its members; the field asks again as the
+  choice changes, also in each row of a dynamic list. A bound value must be one the field
+  it comes from offers, so a form cannot be used to ask the decision about anything else.
+  Public start links and wizard steps get the options written in, or ask through the link
+  or the pass. Task completion, a public start and a wizard step refuse a value the list
+  does not offer for the choices submitted with it (400 `invalid_value`) and a value whose
+  list cannot be read (422). New routes `GET /api/v1/form-data/decisions`,
+  `POST /api/v1/form-data/decisions/{decisionId}/options`,
+  `POST /api/v1/forms/{id}/fields/{field}/options`,
+  `POST /public/forms/{token}/fields/{field}/options` and
+  `POST /public/wizard/steps/{taskKey}/fields/{field}/options`
+  (ADR-draft-form-options-from-a-decision).
+- **The decision editor edits a list.** A decision whose logic is a DMN boxed list opens in
+  its own tab like a table or a literal expression: entries are added, moved up or down and
+  removed, and Ctrl+Z takes each step back. A decision's replace menu in the requirements
+  graph offers List beside Decision table and Literal expression and keeps the decision's
+  id and requirements; a list decision carries the overlay that opens it, and its published
+  documentation lists its entries instead of saying it has no logic
+  (ADR-draft-form-options-from-a-decision).
 - **An application can give its grant back.** `POST /oauth/revoke` (RFC 7009) takes
   either token of a grant, with the client's id and secret as the token endpoint takes
   them, and withdraws the whole grant when it belongs to that client — the same
@@ -37,6 +62,10 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
+  decision table into a literal expression in the requirements graph's replace menu left
+  its tab opening the old table — over a decision no longer in the model, so what was typed
+  there went nowhere. The tab looks the decision up again when it is pressed.
 - **Somebody who signs in only through single sign-on can approve an application.** The
   OAuth consent page offered a password form and nothing else, and a federated sign-in
   could only come back to the Console or the portal. The page now offers the identity
