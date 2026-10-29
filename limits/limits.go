@@ -20,6 +20,9 @@
 //
 // A budget here bounds *externally supplied* input against memory: how much a
 // caller, a called service, or a running process may make this server hold at once.
+// A few are rates rather than sizes — how much of the single writer's time a token
+// or a client address may take (TokenSteps, TokenEndpointBurst/Rate) — and belong
+// here for the same reason: they are ceilings an operator may have to move.
 // Ceilings that express a domain rule — how many search results a page returns, how
 // long an API token may live, how many rows a preview shows — are not budgets and
 // do not belong here; they are answers about the product, and moving them into an
@@ -330,6 +333,33 @@ type Limits struct {
 	// reminder listing two hundred lines is one nobody reads to the end. The counts
 	// are over everything, so a message can say "and 190 more" truthfully.
 	PendingWorkItems int32
+
+	// TokenEndpointBurst and TokenEndpointRate size the throttle in front of the
+	// OAuth token and revocation endpoints (`POST /oauth/token`, `POST /oauth/revoke`):
+	// how many requests one client address may make at once, and how many per second
+	// it earns back (ADR-0510). Rate budgets, like TokenSteps: what they protect is
+	// the single writer, because every renewal that succeeds is a grant record
+	// written and synced inside a run-loop turn.
+	//
+	// The bucket is its own, apart from the one the public forms and share links
+	// draw from, because its caller is a different kind of caller. A person filling
+	// in a public form makes a request every few seconds; a confidential server-side
+	// client — a wiki whose every user connected their Atlas account — renews all of
+	// its people's tokens from one address, and after its own restart it renews all
+	// of them at once. On the forms' twenty-and-then-one-a-second that client would
+	// be refused for most of its people, and a burst of public-form traffic from the
+	// same proxy would refuse it the rest.
+	//
+	// Three hundred at once covers the restart of a client with three hundred
+	// connected people in one go; ten a second thereafter renews another six hundred
+	// a minute, so a client with a thousand people is through in seventy seconds.
+	// Sustained, that is thirty-six thousand renewals an hour, which keeps the
+	// two-hour access tokens of seventy thousand people fresh from one address. What
+	// it still bounds is a stranger: at ten a second guessing a 256-bit client
+	// secret or refresh token gains nothing, and ten small durable writes a second is
+	// a share of the writer nobody else notices.
+	TokenEndpointBurst int32
+	TokenEndpointRate  int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -400,6 +430,10 @@ func Default() Limits {
 		DiagramFavourites:     100,
 		StartFavourites:       100,
 		OrderLineAnswers:      50,
+		// New rather than gathered: the token endpoint shared the public forms'
+		// twenty-and-one-a-second until ADR-0510. See the fields for the sizing.
+		TokenEndpointBurst: 300,
+		TokenEndpointRate:  10,
 	}
 }
 

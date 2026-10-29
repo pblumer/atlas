@@ -40,6 +40,12 @@
   button.approve { color:var(--accent-ink); background:var(--accent); border:1px solid var(--accent); }
   button.approve:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
   button.deny { color:var(--text); background:var(--surface); border:1px solid var(--border); }
+  /* A provider's sign-in, drawn like the primary button: it is the way in for
+     somebody who has no password here. */
+  a.sso { display:block; text-align:center; font-weight:600; text-decoration:none; border-radius:7px;
+    padding:10px 18px; margin-top:12px; color:var(--accent-ink); background:var(--accent); border:1px solid var(--accent); }
+  a.sso:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+  .or { text-align:center; margin:12px 0 0; font-size:14px; }
   label { display:block; margin-top:12px; font-size:14px; font-weight:600; }
   input { width:100%; font:inherit; padding:9px 11px; border:1px solid var(--border); border-radius:7px; margin-top:4px; }
   code { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg); padding:1px 5px; border-radius:4px; }
@@ -105,16 +111,59 @@ function signInFailure(e) {
   }
 }
 
+// consentReturn is this very request, for a federated sign-in to come back to: the
+// path and the query the application built, without the server's own failure
+// marker, so a second attempt that works does not come back saying the first one
+// failed. The server takes it only as /oauth/authorize with its query re-encoded,
+// and the page re-checks every parameter when it loads again (oidcConsentReturn in
+// oidclogin.go, ADR-0510) — so this names the request rather than choosing a
+// destination.
+function consentReturn() {
+  const back = new URLSearchParams(location.search);
+  back.delete("sso");
+  const qs = back.toString();
+  return location.pathname + (qs ? "?" + qs : "");
+}
+
+// offerProviders adds a button per identity provider, the way the Console's sign-in
+// does (app.js, viewLogin): the endpoint is public and answers an empty list where
+// none is configured, which is the ordinary case — so nothing appears unless there
+// is somewhere to go, and a server that cannot answer leaves the password form
+// exactly as it is. Somebody who signs in only through their provider has no
+// password to type here, and without this could never reach the question below.
+async function offerProviders() {
+  let providers = [];
+  try {
+    providers = await api("GET", "/api/v1/auth/providers");
+  } catch { return; /* the password form stands */ }
+  if (!Array.isArray(providers) || providers.length === 0) return;
+  const host = document.getElementById("sso-providers");
+  if (!host) return; // the person moved on before the answer came
+  const back = encodeURIComponent(consentReturn());
+  host.innerHTML = providers.map((p) =>
+    `<a class="sso" href="${esc(p.start)}${String(p.start).includes("?") ? "&amp;" : "?"}returnTo=${back}"` +
+    ` title="Sign in with ${esc(p.name)}">Sign in with ${esc(p.name)}</a>`).join("") +
+    `<p class="muted or">or sign in with a password</p>`;
+  host.hidden = false;
+}
+
 function signIn(ctx) {
   card.innerHTML = `<h1>Sign in to continue</h1>
     <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to atlas.
     Sign in to decide.</p>
+    <p class="err" id="sso-error" hidden>Signing in with your identity provider did not
+    work. Try again, or ask an administrator to check the server log.</p>
+    <div id="sso-providers" hidden></div>
     <form id="login">
       <label>Username<input name="username" autocomplete="username" required autofocus /></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
       <p class="err" id="login-error" hidden></p>
       <div class="actions"><button class="approve" type="submit">Sign in</button></div>
     </form>`;
+  // The callback sends a failed federated attempt back here with sso=failed and no
+  // reason; the reason is in the server's audit log, as on the Console's sign-in.
+  if (q.get("sso") === "failed") document.getElementById("sso-error").hidden = false;
+  offerProviders();
   document.getElementById("login").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);

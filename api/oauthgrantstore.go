@@ -228,6 +228,31 @@ func (i *oauthGrantIndex) matchAccess(secret string, now int64) (oauthGrant, boo
 	return g, true
 }
 
+// grantTokenHash is the hash a presented token would be stored under, for either
+// of the two kinds a grant holds, and false for anything that is neither — which
+// the prefix alone decides, so nothing else needs a hint to tell them apart.
+func grantTokenHash(secret string) (string, bool) {
+	if !strings.HasPrefix(secret, oauthAccessPrefix) && !strings.HasPrefix(secret, oauthRefreshPrefix) {
+		return "", false
+	}
+	return hashAPIToken(secret), true
+}
+
+// holdsTokenHash reports whether either of the grant's current tokens is the one
+// hashed to h, compared in constant time for the reason find walks that way.
+//
+// The access token's expiry is deliberately not consulted. This answers "which grant
+// is this client giving back" (RFC 7009), not "may this request proceed": an access
+// token that ran out still names its grant, whose refresh token still works, and the
+// client presenting it is the one the grant was issued to. Ending the grant is the
+// direction to err in. A token rotated away is no longer either hash, and names
+// nothing.
+func (g oauthGrant) holdsTokenHash(h string) bool {
+	access := subtle.ConstantTimeCompare([]byte(g.AccessHash), []byte(h))
+	refresh := subtle.ConstantTimeCompare([]byte(g.RefreshHash), []byte(h))
+	return access|refresh == 1
+}
+
 // matchRefresh resolves a presented refresh token. It has no expiry to check: a
 // grant ends by revocation, which is an act an operator performs and can see.
 func (i *oauthGrantIndex) matchRefresh(secret string) (oauthGrant, bool) {

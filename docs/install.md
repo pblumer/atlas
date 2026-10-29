@@ -669,7 +669,15 @@ renews itself silently. Anyone can see their own approvals at
 `GET /api/v1/oauth-grants` and withdraw one with `DELETE`; an administrator sees
 and can withdraw everyone's, and deleting the client withdraws all of them at
 once — all of it on the same **AI access** page, for people who do not use the API.
-Disabling an account revokes its approvals with it.
+Disabling an account revokes its approvals with it. The application can give its own
+approval back too: `POST /oauth/revoke` ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009.html),
+advertised as `revocation_endpoint`) takes either of its tokens with the client's id and
+secret, and ends the whole grant — which is what a connected system should call when its
+user disconnects.
+
+Somebody who signs in only through your identity provider (see
+[Single sign-on](#single-sign-on-with-an-identity-provider)) is offered it on the consent
+page as on the Console's sign-in, and comes back to the same request to approve it.
 
 Registering a client is not the same as being able to use it: an application may
 *ask*, and only a person can say yes.
@@ -897,7 +905,7 @@ history.
 | `ATLAS_AGENT_CONNECTORS` | Comma-separated agent model names, each configured by `ATLAS_AGENT_<NAME>_API_KEY` and, optionally, `_ENDPOINT`, `_MODEL`, `_PROTOCOL` (`messages`, the default, or `chat-completions`), `_AUTH` (`x-api-key` or `bearer`), `_THINKING` (`off`), `_MAX_TOKENS` and `_ANSWER_VARIABLE`. A name is what `<atlas:agentConnector connector="…">` refers to, so a container reaches the provider it was modelled against, and `_MODEL` is the **default** a step that names none asks — a task or a container may name its own with `model="…"`, so one name serves a cheap classification and a strong piece of advice ([ADR-0256](adr/0256-the-model-is-authored-the-provider-is-configured.md)). The key is required unless `_ENDPOINT` is set, because a self-hosted endpoint may need none. **Normally you do not set these**: add the model under Console → Workers instead and atlas supervises a worker for it, picking the model up with no restart ([ADR-0255](adr/0255-agent-models-are-console-workers.md)) — these variables remain the way to configure a worker you start yourself. The same names serve both of the kind's job types: an agent container's round (`io.atlas.ai.agent`) and an ai service task's single call (`io.atlas.ai.task`). Both run **only** on a worker ([ADR-0164](adr/0164-no-in-process-service-tasks.md)/[ADR-0254](adr/0254-agent-rounds-on-a-worker.md)) |
 | `ATLAS_CONNECTOR_<REF>_TOKEN` | Bearer token for the credential reference `<REF>` a REST task names. The variable keeps the pre-ADR-0203 spelling |
 | `ATLAS_AD_MOCK`, `ATLAS_AD_MOCK_SEED` | Serve Active Directory tasks against a mock directory in the worker's memory, optionally seeded from an LDIF or DSML file ([ADR-0181](adr/0181-ad-connector-mock-mode.md)). For a worker atlas supervises, prefer the switch in Console → Workers → Active Directory: it needs no restart. These variables remain the way to configure a worker you start yourself, and the way a server decides before anyone has used that switch |
-| `ATLAS_LIMIT_*` | The installation's resource budgets — how much a caller, a called service, or a running process may make this server hold at once. One variable per budget, in bytes (or in steps for the two engine ones): see [Resource budgets](#resource-budgets) below. Normally you do not set these |
+| `ATLAS_LIMIT_*` | The installation's resource budgets — how much a caller, a called service, or a running process may make this server hold at once. One variable per budget, in bytes (or in steps for the two engine ones, and in requests for the token endpoint's throttle): see [Resource budgets](#resource-budgets) below. Normally you do not set these |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Default for `--trace-endpoint`; the standard OpenTelemetry variable, honored so a deployment that already sets it needs no atlas-specific flag |
 | `OTEL_SERVICE_NAME` | Name this process reports on exported traces (default `atlas`) |
 
@@ -934,10 +942,17 @@ away.
 | `ATLAS_LIMIT_ITERATIONS` | 100000 | How many iterations one multi-instance activity may ask for before the engine refuses it |
 | `ATLAS_LIMIT_VARIABLE` | 1 MiB | How large one process variable's value may be. A variable is a business record; past this it is a document |
 | `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
+| `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` | 300 | How many requests one address may make at once to the OAuth token and revocation endpoints — enough for a server-side client, such as a wiki, to renew all its people's tokens after its own restart |
+| `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` | 10 | How many of those requests per second the address earns back |
 
 `TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
 hundred thousand iterations are a hundred thousand tokens taking one step each, which
 the step budget is deliberately built not to stop.
+
+`TOKEN_ENDPOINT_BURST` and `TOKEN_ENDPOINT_RATE` are a throttle per client address, apart
+from the one the public forms use, so form traffic through the same proxy does not refuse
+a client's renewals. A client past it is answered `429` with the OAuth error
+`temporarily_unavailable` and tries again.
 
 A value past `VARIABLE` or `COLLECTION` is not written and not silently dropped: the
 element that produced it is parked with an incident naming the variable and both

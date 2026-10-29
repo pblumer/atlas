@@ -40,11 +40,13 @@ import (
 // covers, and PKCE is required here regardless.
 
 const (
-	// oauthAuthorizePath is where the person's browser lands, and
-	// oauthTokenPath where the client exchanges. Both are published in the
-	// authorization-server metadata; nothing should hard-code them elsewhere.
+	// oauthAuthorizePath is where the person's browser lands, oauthTokenPath where
+	// the client exchanges, and oauthRevokePath where it gives a grant back (RFC
+	// 7009). All three are published in the authorization-server metadata; nothing
+	// should hard-code them elsewhere.
 	oauthAuthorizePath = "/oauth/authorize"
 	oauthTokenPath     = "/oauth/token"
+	oauthRevokePath    = "/oauth/revoke"
 
 	// oauthMetadataPath is RFC 8414's well-known location.
 	oauthMetadataPath = "/.well-known/oauth-authorization-server"
@@ -71,6 +73,10 @@ func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"token_endpoint_auth_methods_supported": []string{"client_secret_post"},
+		// RFC 7009, with the token endpoint's own client authentication: a client
+		// that can renew a grant can give it back, and nobody else can (handleRevoke).
+		"revocation_endpoint":                        base + oauthRevokePath,
+		"revocation_endpoint_auth_methods_supported": []string{"client_secret_post"},
 	}
 	// Advertised only when it is served. A registration_endpoint in this document is
 	// a promise, and a client that takes it and gets a 404 has been told a lie about
@@ -324,9 +330,11 @@ func errorRedirect(redirectURI, code, state string) string {
 // Public as a route, because the caller is a client authenticating with its own
 // credentials rather than a person with a session. Rate-limited on the client
 // address like the login is, because it takes a secret and is therefore somewhere
-// to guess one (ADR-0197).
+// to guess one (ADR-0197) — on a bucket of its own rather than the public forms',
+// because its caller is a server renewing many people's tokens from one address
+// (limits.TokenEndpointBurst, ADR-0510).
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
-	if !s.publicRate.allow(httpapi.ClientIP(r)) {
+	if !s.tokenRate.allow(httpapi.ClientIP(r)) {
 		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
 		return
 	}
@@ -452,6 +460,62 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauth
 		"expires_in":    int(oauthAccessLifetime.Seconds()),
 		"refresh_token": refresh,
 	})
+}
+
+// handleRevoke is the revocation endpoint (RFC 7009): a client gives back a grant it
+// holds, by presenting either of its tokens.
+//
+// A connected system that lets its people disconnect — a wiki whose user removes the
+// link to their Atlas account — otherwise destroys its copy of the refresh token and
+// leaves the grant standing here, where only the person or an administrator could
+// still end it on the AI access page. That is the shape of a credential nobody knows
+// exists, which is what ADR-0200 says a grant must not become.
+//
+// What it withdraws is the whole grant, through the same run-loop turn and the same
+// audit event as DELETE /api/v1/oauth-grants/{id} (withdrawGrant): an access token
+// and a refresh token are two halves of one approval, and giving back either is
+// giving back the approval. A token of another client's grant is left alone, so a
+// client can end only what it was given.
+//
+// The answers are the specification's, and their silence is the point (§2.2): 200
+// for a token that was withdrawn, and 200 alike for one that is unknown, already
+// withdrawn, rotated away or another client's — the caller learns nothing about a
+// token by presenting it. Only the client's own credentials are judged out loud,
+// 401 invalid_client as at the token endpoint, and a request with no token at all
+// is 400 invalid_request. token_type_hint is read as the hint it is: the token's
+// own prefix says which kind it is, so a wrong hint changes nothing.
+func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
+	if !s.tokenRate.allow(httpapi.ClientIP(r)) {
+		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "malformed form body")
+		return
+	}
+	client, ok := s.oauthClients.authenticate(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
+	if !ok {
+		oauthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+		return
+	}
+	token := r.PostFormValue("token")
+	if token == "" {
+		oauthError(w, http.StatusBadRequest, "invalid_request", "token is required")
+		return
+	}
+	if hash, ok := grantTokenHash(token); ok {
+		_, err := s.withdrawGrant(r, "revoke", func(g oauthGrant) bool {
+			return g.ClientID == client.ID && g.holdsTokenHash(hash)
+		})
+		if err != nil {
+			// The grant may still stand, and RFC 7009 §2.2.1 tells a client that reads
+			// 503 to assume exactly that and try again later — which is the truth here.
+			oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "the grant could not be withdrawn")
+			return
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
 }
 
 // oauthError writes the error shape RFC 6749 §5.2 defines, which is not the API's

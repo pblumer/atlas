@@ -57,14 +57,15 @@ const (
 	// oidcFailedQuery is what the login screen is told when a federated login did
 	// not work. It carries no detail: the reason is in the audit log, where an
 	// operator can read it, and not in a URL the person could be sent by anybody.
-	oidcFailedQuery = "?sso=failed"
+	oidcFailedQuery = "?" + oidcFailedParam + "=failed"
+	oidcFailedParam = "sso"
 
 	// portalPage is the service portal, the second surface that can start a
 	// federated login (ADR-0399). Named here
 	// because this file decides where a login may end, and that is the same list.
 	portalPage = "/shop.html"
 
-	// oidcReturnCookie carries which of those two pages started this login, so the
+	// oidcReturnCookie carries which of those pages started this login, so the
 	// callback lands back on it.
 	//
 	// A cookie rather than a field on the pending state, because a login can fail
@@ -75,6 +76,14 @@ const (
 	// cookie beside it: a return page outliving its login is a value nothing will
 	// spend.
 	oidcReturnCookie = "atlas_oidc_return"
+
+	// oidcReturnMax bounds the one return target that carries a query, before and
+	// after it is re-encoded. A real authorization request is a few hundred bytes —
+	// a client id, a redirect URI, a PKCE challenge, a resource, a state — and the
+	// value rides in a cookie, which a browser stops keeping at about four kilobytes.
+	// Past this the login lands on the Console rather than on a page it cannot
+	// carry whole.
+	oidcReturnMax = 2048
 )
 
 // oidcReturnPage is where a federated login should land, given what the browser
@@ -83,15 +92,96 @@ const (
 // An allowlist, and deliberately not a validated path. The value travels through
 // the browser both ways, so anything that could express an arbitrary destination
 // would be an open redirect carrying a login's authority — a link that signs
-// somebody in and drops them, session and all, wherever its author chose. Exactly
-// two pages in Atlas are served before anybody is signed in and can therefore
-// start one of these, so naming them is both sufficient and the whole of the
-// surface. Everything else, including nothing at all, is the Console.
+// somebody in and drops them, session and all, wherever its author chose. Three
+// pages in Atlas are served before anybody is signed in and can therefore start one
+// of these: the Console, the service portal, and the OAuth consent page. Naming
+// them is both sufficient and the whole of the surface. Everything else, including
+// nothing at all, is the Console.
+//
+// The consent page is the one that cannot be named by its path alone, because what
+// it shows is its query: which client asks, for which resource, with which PKCE
+// challenge and state (ADR-0200). A person who signs in only through their identity
+// provider has to come back to that very request, or there is nothing left for
+// them to approve (ADR-0510). So it is admitted with its query, under three
+// rules that keep it a page of this server and nothing else — see
+// oidcConsentReturn.
 func oidcReturnPage(raw string) string {
 	if raw == portalPage {
 		return portalPage
 	}
+	if page, ok := oidcConsentReturn(raw); ok {
+		return page
+	}
 	return "/"
+}
+
+// oidcConsentReturn admits `/oauth/authorize?<query>` as a return target.
+//
+// What keeps it from becoming an open redirect:
+//
+//   - **The path is exactly oauthAuthorizePath**, compared as a string, before any
+//     parsing that could normalise it. `//host/…`, `https://…`, `/oauth/authorize/..`,
+//     a backslash (which some browsers read as a slash), a fragment and any control
+//     character are refused outright, so nothing that leaves this origin, or this
+//     path, gets as far as the query.
+//   - **The query is re-encoded**, not passed through: parsed with url.ParseQuery and
+//     written back with url.Values.Encode, so every value that comes out is
+//     percent-escaped and can only ever be a value of this path's query. Whatever
+//     the browser sent, the result is this path, a "?", and key=value pairs.
+//   - **Its length is bounded** (oidcReturnMax), before and after.
+//
+// What makes the remaining freedom harmless is that the query names nothing this
+// login decides. The page re-validates every parameter through parseAuthorizeRequest
+// as it always has — an unknown client or an unregistered redirect URI is shown on
+// the page and never followed — and nothing is granted until the person presses
+// Allow on a screen that names the client. A link that sends somebody through a
+// federated login to the consent page for a client of its author's choosing reaches
+// exactly the page the author could have linked to directly.
+//
+// The server's own failure marker (`sso`, see oidcFailedReturn) is dropped, so a
+// second attempt that works does not come back reporting that the first one failed.
+func oidcConsentReturn(raw string) (string, bool) {
+	if len(raw) > oidcReturnMax || strings.ContainsAny(raw, "\\#") || hasControl(raw) {
+		return "", false
+	}
+	path, query, _ := strings.Cut(raw, "?")
+	if path != oauthAuthorizePath {
+		return "", false
+	}
+	q, err := url.ParseQuery(query)
+	if err != nil {
+		return "", false
+	}
+	q.Del(oidcFailedParam)
+	page := oauthAuthorizePath
+	if enc := q.Encode(); enc != "" {
+		page += "?" + enc
+	}
+	if len(page) > oidcReturnMax {
+		return "", false
+	}
+	return page, true
+}
+
+// hasControl reports whether s holds an ASCII control character, which no page
+// address this server builds contains and a header-splitting attempt does.
+func hasControl(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < 0x20 || s[i] == 0x7f {
+			return true
+		}
+	}
+	return false
+}
+
+// oidcFailedReturn is where a failed federated login lands: the page it started on,
+// told that it did not work. The consent page already carries a query, so the
+// marker joins it rather than starting a second one.
+func oidcFailedReturn(page string) string {
+	if strings.Contains(page, "?") {
+		return page + "&" + strings.TrimPrefix(oidcFailedQuery, "?")
+	}
+	return page + oidcFailedQuery
 }
 
 // oidcReturnFrom reads the page this login started on. It goes through the
@@ -333,7 +423,7 @@ func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
 		auditRefusal(r, logging.AuthLoginFailed, "failed login",
 			slog.String("username", u.Username), slog.String("source", SourceOIDC),
 			slog.String("reason", "account disabled"))
-		http.Redirect(w, r, oidcReturnFrom(r)+oidcFailedQuery, http.StatusFound)
+		http.Redirect(w, r, oidcFailedReturn(oidcReturnFrom(r)), http.StatusFound)
 		return
 	}
 
@@ -618,7 +708,7 @@ func (s *Server) oidcRefuse(w http.ResponseWriter, r *http.Request, what string,
 		attrs = append(attrs, slog.String("error", err.Error()))
 	}
 	auditRefusal(r, logging.AuthLoginFailed, "federated login refused", attrs...)
-	http.Redirect(w, r, oidcReturnFrom(r)+oidcFailedQuery, http.StatusFound)
+	http.Redirect(w, r, oidcFailedReturn(oidcReturnFrom(r)), http.StatusFound)
 }
 
 // clearOIDCStateCookie expires the state cookie: the login it belonged to is over,

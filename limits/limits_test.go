@@ -47,6 +47,11 @@ func TestDefaultsAreTheNumbersTheCodeAlreadyHad(t *testing.T) {
 		// than to a measurement: Exchange Online's default message size and the Gmail
 		// API's largest send.
 		{"Document", l.Document, 35 << 20},
+		// The token endpoint's own throttle is new too, and pinned to the sizing its
+		// field argues for (ADR-0510): a restart of a client with three hundred
+		// connected people in one burst, then ten renewals a second.
+		{"TokenEndpointBurst", int64(l.TokenEndpointBurst), 300},
+		{"TokenEndpointRate", int64(l.TokenEndpointRate), 10},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)

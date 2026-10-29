@@ -12,6 +12,38 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **An application can give its grant back.** `POST /oauth/revoke` (RFC 7009) takes
+  either token of a grant, with the client's id and secret as the token endpoint takes
+  them, and withdraws the whole grant when it belongs to that client — the same
+  withdrawal, recorded the same way, as on the AI access page; an access token that has
+  run out still names its grant. A connected system whose user disconnects ends the
+  grant instead of leaving it standing. Every other token — unknown, rotated away,
+  already withdrawn or another client's — is answered 200 alike, so presenting one
+  teaches nothing about it; a wrong secret is 401 `invalid_client`. The
+  authorization-server metadata advertises it as `revocation_endpoint`
+  (ADR-0510).
+
+### Changed
+
+- **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
+  `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and
+  then one a second per address: they allow 300 at once and 10 a second, so a server-side
+  client such as a wiki can renew all its people's tokens from one address after its own
+  restart, and traffic on the public forms no longer throttles it. A spent budget still
+  answers 429 `temporarily_unavailable`; `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` and
+  `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
+
+### Fixed
+
+- **Somebody who signs in only through single sign-on can approve an application.** The
+  OAuth consent page offered a password form and nothing else, and a federated sign-in
+  could only come back to the Console or the portal. The page now offers the identity
+  provider as the Console's sign-in does, and the sign-in comes back to the same
+  authorization request, which is checked again and still waits for Allow
+  (ADR-0510).
+
 ## [0.21.0] — 2026-10-29
 
 **A product's description can come from the wiki, and a release's architecture is drawn
