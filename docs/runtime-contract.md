@@ -83,11 +83,11 @@ field and with personal data marked, is in the handbook's chapter *Events* and a
 | `<message>.<outcome>` | An action asked of a held position ended. Its type is the product author's: the action's declared event type, by default its message and the outcome; atlas.action.<outcome> where the action names neither. | 0.9.0 | stable |
 | `atlas.incident.raised` | A token parked on an element and waits for somebody to fix the cause: an incident was raised. | 0.9.0 | experimental |
 | `atlas.incident.resolved` | An incident was resolved: the token that had parked runs again. | 0.9.0 | experimental |
-| `atlas.task.created` | A user task opened: a process waits on a person or a group. | Unreleased | experimental |
-| `atlas.task.assigned` | A user task was taken on, or handed to somebody. | Unreleased | experimental |
-| `atlas.task.unassigned` | A user task was given back and waits for somebody to take it on. | Unreleased | experimental |
-| `atlas.task.completed` | A user task was completed, and its process moved on. | Unreleased | experimental |
-| `atlas.task.cancelled` | A user task ended without being completed: its element was interrupted. | Unreleased | experimental |
+| `atlas.task.created` | A user task opened: a process waits on a person or a group. | 0.21.0 | experimental |
+| `atlas.task.assigned` | A user task was taken on, or handed to somebody. | 0.21.0 | experimental |
+| `atlas.task.unassigned` | A user task was given back and waits for somebody to take it on. | 0.21.0 | experimental |
+| `atlas.task.completed` | A user task was completed, and its process moved on. | 0.21.0 | experimental |
+| `atlas.task.cancelled` | A user task ended without being completed: its element was interrupted. | 0.21.0 | experimental |
 <!-- eventcatalog:feed:end -->
 
 People are named by id only. A page answers `{events, next, more}`: `next` is the cursor to

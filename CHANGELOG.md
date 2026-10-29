@@ -26,7 +26,11 @@ of its messages and signals, draws the layers you tick, and opens in Panorama's 
 with the live state laid over it
 ([ADR-0495](docs/adr/0495-layered-release-architecture.md)). A `diagrams` token lets a
 wiki draw a process with its live counts and a release's sketch without a `full` token
-([ADR-0493](docs/adr/0493-diagrams-scope.md)).
+([ADR-0493](docs/adr/0493-diagrams-scope.md), proposed), and a connected system — such as
+a wiki that shows each person's tasks as its own — follows every user task on the event
+feed, lists the open tasks with a `tasklist` token and completes a person's tasks under an
+OAuth grant for them alone
+([ADR-0510](docs/adr/0510-tasks-for-a-connected-system.md), proposed).
 
 **Messages, event subprocesses and compensation behave as drawn.** A correlation key and a
 message's payload see the scope that waits, back-to-back messages each start a run of a
@@ -47,9 +51,9 @@ application Blueprints from an operator-pinned registry
 decision and form editors and the BPMN properties panel read from the message catalogue;
 the Console offers a dark appearance as a preview, and a cockpit skin
 ([ADR-0507](docs/adr/0507-ui-appearance-modes.md),
-[ADR-0509](docs/adr/0509-cockpit-appearance-skin.md)); every topic of a Console page folds
-([ADR-0505](docs/adr/0505-every-topic-folds.md)); and the Playground evaluates the
-decisions a model calls.
+[ADR-0509](docs/adr/0509-cockpit-appearance-skin.md), both proposed); every topic of a
+Console page folds ([ADR-0505](docs/adr/0505-every-topic-folds.md)); and the Playground
+evaluates the decisions a model calls.
 
 **Read this before upgrading from 0.20.0.** These act on an existing installation as soon
 as it runs 0.21.0:
@@ -74,6 +78,13 @@ as it runs 0.21.0:
 - The first start reads the lifecycle trail once, before the server serves, to rebuild the
   heatmap's counters for the sequence flows; on a store with a long history that start
   takes longer than usual.
+- A reader of the event feed that names no catalogue reach — an `events` token or a push
+  subscription without `reach` — receives five new types from the upgrade on:
+  `atlas.task.created`, `.assigned`, `.unassigned`, `.completed` and `.cancelled`, for
+  every user task, of instances already running too, so a task opened before the upgrade
+  first appears with the step after it. They name no person and carry no variable, and
+  they are experimental. A consumer that does not skip a type it does not know has to
+  before the upgrade ([ADR-0510](docs/adr/0510-tasks-for-a-connected-system.md)).
 - A reader who may not see the application a call activity reaches now sees "another
   application" in a release's sketch, where 0.20.0 named it.
 - A Playground run of a model with a business rule task now carries the decision's
@@ -89,11 +100,11 @@ What changes on disk, and going back:
   `contentsources`, classified in the backup's store registry as this installation's, so
   it travels with a snapshot and not with a portable export; the catalogue store keeps
   each bound product's content state and the images copied from the wiki beside its
-  pictures. The state store gains the sequence-flow counters and when each task was taken
-  up and handed back. The log gains no record type and no intent, and no record it had
-  changed. Architecture snapshots are now format and mapping version 7; a release
-  recorded earlier is drawn byte for byte as before. No system process changed, so the
-  first start deploys nothing new.
+  pictures. The state store gains the sequence-flow counters, when each task was taken
+  up and handed back, and five kinds of event feed row, one per task event. The log gains
+  no record type and no intent, and no record it had changed. Architecture snapshots are
+  now format and mapping version 7; a release recorded earlier is drawn byte for byte as
+  before. No system process changed, so the first start deploys nothing new.
 - New settings, all optional: `ATLAS_BLUEPRINT_REGISTRY_URL` with
   `ATLAS_BLUEPRINT_REGISTRY_KEY` (the registry's Ed25519 public key, base64) turn on atlas
   hub's registry — both or neither: one alone, or a key that is not one, stops the server
@@ -116,7 +127,11 @@ What changes on disk, and going back:
   subprocess inside a transaction is restored by 0.20.0 with a warning, but not run as
   0.21.0 runs it: take such a process out as well. Both were checked against the 0.20.0
   compiler's reload. An instance waiting at a compensation throw for its handlers is not
-  driven on by 0.20.0: let it finish first.
+  driven on by 0.20.0: let it finish first. 0.20.0 stops at the first task row of the
+  event feed, so `GET /api/v1/events` and every push delivery fail from there on. And it
+  reads an OAuth grant for `<origin>/tasks` as a grant for the whole server, which lets
+  the application act with every right of the person who approved it: revoke every such
+  grant before going back.
 
 ### Added
 
