@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <!-- changed compensation.waits: the throw has a next step and a completed compensable
+       activity in its scope, so "done" now waits for "refund". -->
+  <process id="compensation_waits" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge"><extensionElements><zeebe:taskDefinition type="charge"/></extensionElements></serviceTask>
+    <boundaryEvent id="charge_comp" attachedToRef="charge"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="refund" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="refund"/></extensionElements></serviceTask>
+    <intermediateThrowEvent id="cancel" name="Cancel order"><compensateEventDefinition/></intermediateThrowEvent>
+    <endEvent id="done"/>
+    <association id="a1" sourceRef="charge_comp" targetRef="refund"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="cancel"/>
+    <sequenceFlow id="f3" sourceRef="cancel" targetRef="done"/>
+  </process>
+</definitions>

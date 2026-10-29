@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <!-- info compensation.waits: an end event waits too, but its scope ended after the
+       handlers before as well. -->
+  <process id="compensation_end" isExecutable="true">
+    <startEvent id="start"/>
+    <serviceTask id="charge"><extensionElements><zeebe:taskDefinition type="charge"/></extensionElements></serviceTask>
+    <boundaryEvent id="charge_comp" attachedToRef="charge"><compensateEventDefinition/></boundaryEvent>
+    <serviceTask id="refund" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="refund"/></extensionElements></serviceTask>
+    <endEvent id="undo"><compensateEventDefinition/></endEvent>
+    <association id="a1" sourceRef="charge_comp" targetRef="refund"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="charge"/>
+    <sequenceFlow id="f2" sourceRef="charge" targetRef="undo"/>
+  </process>
+</definitions>

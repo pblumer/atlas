@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_answer" name="answer"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>
+  <!-- changed receive.output-mappings: the gateway reads "answer" from the payload, but
+       only "status" leaves the receive task now. -->
+  <process id="receive_outputs_read" isExecutable="true">
+    <startEvent id="start"/>
+    <receiveTask id="wait_answer" name="Wait for the answer" messageRef="m_answer">
+      <extensionElements><zeebe:ioMapping><zeebe:output source="=answer.status" target="status"/></zeebe:ioMapping></extensionElements>
+    </receiveTask>
+    <exclusiveGateway id="gw" default="f_no"/>
+    <endEvent id="yes"/>
+    <endEvent id="no"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="wait_answer"/>
+    <sequenceFlow id="f2" sourceRef="wait_answer" targetRef="gw"/>
+    <sequenceFlow id="f_yes" sourceRef="gw" targetRef="yes"><conditionExpression>=answer.approved = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_no" sourceRef="gw" targetRef="no"/>
+  </process>
+</definitions>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_in" name="in"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>
+  <message id="m_out" name="out"><extensionElements><zeebe:subscription correlationKey="=orderId + &quot;/&quot; + string(position)"/></extensionElements></message>
+  <signal id="s_stop" name="stop"/>
+  <!-- No finding: every receiver and sender sits at the root without mappings of its
+       own, where the scope chain is the root alone, as before. -->
+  <process id="root_unchanged" isExecutable="true">
+    <startEvent id="start"/>
+    <intermediateCatchEvent id="wait_in"><messageEventDefinition messageRef="m_in"/></intermediateCatchEvent>
+    <receiveTask id="wait_in_again" messageRef="m_in"/>
+    <serviceTask id="work"><extensionElements><zeebe:taskDefinition type="work"/></extensionElements></serviceTask>
+    <boundaryEvent id="on_stop" attachedToRef="work"><signalEventDefinition signalRef="s_stop"/></boundaryEvent>
+    <intermediateThrowEvent id="send_out"><messageEventDefinition messageRef="m_out"/></intermediateThrowEvent>
+    <endEvent id="done"/>
+    <endEvent id="stopped"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="wait_in"/>
+    <sequenceFlow id="f2" sourceRef="wait_in" targetRef="wait_in_again"/>
+    <sequenceFlow id="f3" sourceRef="wait_in_again" targetRef="work"/>
+    <sequenceFlow id="f4" sourceRef="work" targetRef="send_out"/>
+    <sequenceFlow id="f5" sourceRef="send_out" targetRef="done"/>
+    <sequenceFlow id="f6" sourceRef="on_stop" targetRef="stopped"/>
+  </process>
+</definitions>
