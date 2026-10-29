@@ -265,27 +265,9 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 		mine = p.UserID
 	}
 	id := r.PathValue("id")
-	var (
-		err   error
-		found bool
-	)
-	s.do(func() {
-		var recs []oauthGrant
-		if recs, err = s.oauthGrantStore.LoadAll(); err != nil {
-			return
-		}
-		for _, rec := range recs {
-			if rec.ID != id {
-				continue
-			}
-			if !anyone && rec.UserID != mine {
-				return // not theirs: indistinguishable from absent
-			}
-			found = true
-			err = s.oauthGrantStore.Delete(id)
-			s.oauthGrants.remove(id)
-			return
-		}
+	found, err := s.withdrawGrant(r, "oauth-grants", func(g oauthGrant) bool {
+		// Somebody else's is not theirs to withdraw, and indistinguishable from absent.
+		return g.ID == id && (anyone || g.UserID == mine)
 	})
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "revoke oauth grant: "+err.Error())
@@ -295,8 +277,51 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "no such grant")
 		return
 	}
-	audit(r, logging.AuthOAuthGrantRevoked, "oauth grant revoked", slog.String("grant_id", id))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// withdrawGrant ends the first grant `which` selects, and reports whether there was
+// one.
+//
+// It is the one way a single grant is withdrawn on request — by the person or an
+// administrator on the grants page, and by the client itself at the revocation
+// endpoint (RFC 7009, handleRevoke) — so both are the same state change, recorded the
+// same way. The selection runs inside the same run-loop turn as the delete, against
+// the durable records rather than the index: what is withdrawn is what the store
+// holds, and a retry after a failed delete still finds the grant it is meant to end.
+// The index entry goes in that turn too, so the grant's tokens stop resolving on the
+// next request (ADR-0200).
+//
+// `via` names which door it came through, for the audit line: "oauth-grants" for
+// the listing's DELETE, "revoke" for the client's own request.
+func (s *Server) withdrawGrant(r *http.Request, via string, which func(oauthGrant) bool) (bool, error) {
+	var (
+		err   error
+		found bool
+		gone  oauthGrant
+	)
+	s.do(func() {
+		var recs []oauthGrant
+		if recs, err = s.oauthGrantStore.LoadAll(); err != nil {
+			return
+		}
+		for _, rec := range recs {
+			if !which(rec) {
+				continue
+			}
+			found, gone = true, rec
+			err = s.oauthGrantStore.Delete(rec.ID)
+			s.oauthGrants.remove(rec.ID)
+			return
+		}
+	})
+	if err != nil || !found {
+		return found, err
+	}
+	audit(r, logging.AuthOAuthGrantRevoked, "oauth grant revoked",
+		slog.String("grant_id", gone.ID), slog.String("client_id", gone.ClientID),
+		slog.String("subject", gone.Username), slog.String("via", via))
+	return true, nil
 }
 
 // revokeUserGrants withdraws every grant belonging to a user, and refreshUserGrants

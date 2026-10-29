@@ -1119,18 +1119,20 @@ func TestApproveAndTokenRefuseMalformedInput(t *testing.T) {
 		}
 	})
 
-	t.Run("token with a body that is not a form", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/oauth/token", strings.NewReader("%zz"))
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("token: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Errorf("= %d, want 400", resp.StatusCode)
-		}
-	})
+	for _, path := range []string{"/oauth/token", "/oauth/revoke"} {
+		t.Run(path+" with a body that is not a form", func(t *testing.T) {
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+path, strings.NewReader("%zz"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("%s: %v", path, err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("= %d, want 400", resp.StatusCode)
+			}
+		})
+	}
 
 	t.Run("deleting a client is admin-only", func(t *testing.T) {
 		createUser(t, admin, ts.URL, "notadmin")
@@ -1302,6 +1304,23 @@ func TestOAuthSurvivesABrokenDataDirectory(t *testing.T) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusInternalServerError {
 			t.Errorf("= %d, want 500", resp.StatusCode)
+		}
+	})
+	t.Run("giving a grant back", func(t *testing.T) {
+		// Not the 200 a token that names nothing gets: the grant may still stand, and
+		// a 503 tells the client to assume so and try again (RFC 7009 §2.2.1).
+		resp, err := http.PostForm(ts.URL+"/oauth/revoke", url.Values{
+			"token":     {"atlasor_00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"},
+			"client_id": {clientID}, "client_secret": {clientSecret},
+		})
+		if err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if resp.StatusCode != http.StatusServiceUnavailable || out["error"] != "temporarily_unavailable" {
+			t.Errorf("= %d %v, want 503 temporarily_unavailable", resp.StatusCode, out)
 		}
 	})
 	t.Run("refreshing a token", func(t *testing.T) {

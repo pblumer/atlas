@@ -316,6 +316,7 @@ type Server struct {
 	publicLinks         *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate          *rateLimiter      // throttles the unauthenticated public endpoints
 	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
+	tokenRate           *rateLimiter      // throttles the OAuth token and revocation endpoints, on their own budget
 	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
@@ -2096,6 +2097,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
+	// The OAuth token and revocation endpoints draw on a bucket of their own, sized
+	// for a confidential server-side client renewing many people's tokens from one
+	// address rather than for a person at a public form (limits.TokenEndpointBurst,
+	// ADR-0510). Built after the options, so the budgets an installation configured
+	// are the ones it holds.
+	s.tokenRate = newRateLimiter(float64(s.budgets().TokenEndpointBurst), float64(s.budgets().TokenEndpointRate))
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
@@ -3694,9 +3701,12 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
 	// not an answer a person can act on — and the page it serves shows nothing until
 	// it asks, while /oauth/token authenticates the client from its own body.
+	// /oauth/revoke does too (RFC 7009): the client gives back a grant it holds, so a
+	// session would be the wrong question here as well (ADR-0510).
 	mountFunc(accessPublic, roleAny, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
 	mountFunc(accessPublic, roleAny, "GET "+oauthAuthorizePath, s.handleAuthorize)
 	mountFunc(accessPublic, roleAny, "POST "+oauthTokenPath, s.handleToken)
+	mountFunc(accessPublic, roleAny, "POST "+oauthRevokePath, s.handleRevoke)
 	if s.dynamicRegistration {
 		// RFC 7591 self-registration, when an operator opened it. Public because a
 		// client that has nothing yet is the entire caller — and mounted only when it

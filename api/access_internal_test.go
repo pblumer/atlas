@@ -65,11 +65,13 @@ var wantPublicRoutes = []string{
 	// person with 401 is answering them with nothing they can act on — the page it
 	// serves shows only what the context endpoint gives it, and asks them to sign in
 	// first. /oauth/token authenticates the client out of its own request body, so a
-	// session would be the wrong question to ask of it. The context endpoint backs
-	// that page for someone not yet signed in.
+	// session would be the wrong question to ask of it, and /oauth/revoke (RFC 7009)
+	// authenticates it the same way to give a grant back (ADR-0510). The context
+	// endpoint backs that page for someone not yet signed in.
 	"GET /.well-known/oauth-authorization-server",
 	"GET /oauth/authorize",
 	"POST /oauth/token",
+	"POST /oauth/revoke",
 	"GET /api/v1/oauth/authorize-context",
 
 	// The shop's former address, answered with a redirect to /shop.html and
