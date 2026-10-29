@@ -5849,6 +5849,38 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p data-l="en"><b>A mail that was read, in a form.</b> The component <b>E-mail view</b> shows a mail a mail task
         read – envelope, text and HTML version, remote images only on request. It only shows and submits nothing.
         How to read the HTML version is under <a href="#runbook-mail">Mail</a>.</p>
+      <p data-l="de" id="antwort-per-link"><b>Eine Task per Link aus einer Mail beantworten.</b> Wer kein Konto hat
+        &ndash; eine Kundin, ein Lieferant, ein Bewerber &ndash;, kann eine einzelne Task trotzdem beantworten. Stelle am
+        User-Task unter <i>Wer antworten darf</i> <b>Auch wer den Link aus einer Mail hat</b> ein und verknüpfe ein
+        Formular. Am Mail-Task, der die Anfrage verschickt, trägst du unter <i>Link to answer</i> die ID dieser Task ein
+        und setzt den Link in den Text: als Ausdruck <code>="Bitte hier antworten: " + answerLink</code> oder mit
+        Platzhaltern <code>{{answerLink}}</code>. Der Mail-Task darf vor der Task stehen (erst senden, dann warten) oder
+        auf einem parallelen Zweig daneben; eine Erinnerung ist ein weiterer Mail-Task am nicht unterbrechenden
+        Timer der Task und schickt denselben Link. Wer den Link öffnet, sieht Namen, Dokumentation und Formular der
+        Task, vorausgefüllt mit dem, was die Instanz unter den Feldern des Formulars hält, und schliesst die Task mit
+        <b>Antwort senden</b> ab. Das Öffnen allein beantwortet nichts, ein Link-Scanner im Mailsystem also auch
+        nicht. Der Link öffnet nur diese Task und nur, solange sie offen ist &ndash; in einem Event-Subprozess, der mehrmals
+        nebeneinander läuft, die Task des Laufs, aus dem die Mail kam; ist sie zusätzlich jemandem zugewiesen,
+        zählt die erste Antwort &ndash; aus dem Link oder aus der Tasks-App. Wie lange eine Antwort angenommen wird,
+        bestimmt ein unterbrechender Timer an der Task. Der Link wird auf der externen Adresse des Servers gebaut
+        (<code>--external-url</code>); ohne sie schlägt der Mail-Task fehl und sagt das. Er ist mit einem Schlüssel
+        signiert, den der Vault ableitet, und steht im Fragment hinter dem <code>#</code>, das kein Browser an einen
+        Server schickt. Wer die Mail hat, kann antworten: Eine weitergeleitete Mail gibt dieses Recht mit.</p>
+      <p data-l="en" id="answer-by-link"><b>Answering a task from a link in a mail.</b> Somebody without an account
+        &ndash; a customer, a supplier, an applicant &ndash; can still answer a single task. On the user task, set
+        <i>Who may answer</i> to <b>Also whoever holds the link a mail sends</b> and link a form. On the mail task that
+        sends the request, enter that task's id under <i>Link to answer</i> and put the link in the text: as an
+        expression <code>="Please answer here: " + answerLink</code> or with placeholders <code>{{answerLink}}</code>.
+        The mail task may come before the task (send, then wait) or sit beside it on a parallel branch; a reminder is
+        one more mail task on the task's non-interrupting timer and sends the same link. Whoever opens the link sees
+        the task's name, documentation and form, prefilled with what the instance holds under the form's fields, and
+        completes the task with <b>Send answer</b>. Opening it alone answers nothing, so a link scanner in the mail
+        system does not either. The link opens only that task, and only while it is open &ndash; in an event subprocess that runs
+        several times side by side, the task of the run the mail came from; if the task is also assigned to somebody, the first answer counts &ndash; from the link or from the Tasks app. How long an answer
+        is accepted is said by an interrupting timer on the task. The link is built on the server's external address
+        (<code>--external-url</code>); without one the mail task fails and says so. It is signed with a key the vault
+        derives, and it sits in the fragment after the <code>#</code>, which no browser sends to a server. Whoever holds
+        the mail can answer: a forwarded mail passes that on.</p>
       <p data-l="de"><b>Vom Schritt ins Formular und zurück.</b> Unter der Auswahl <i>Verknüpftes Formular</i> am
         Start-Ereignis, am User-Task und beim <i>Reparaturformular</i> eines Service-Tasks stehen zwei Knöpfe:
         <b>Open form</b> öffnet das verknüpfte Formular im Formular-Editor, <b>＋ New form</b> legt ein neues an;

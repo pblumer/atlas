@@ -694,6 +694,8 @@ type Builder struct {
 	conditionalStarts  []int32                     // process-level start nodes that carried a conditional event definition (RuleConditionalStart)
 	eventGatewayKinds  []eventGatewayKind          // event-based gateways of a kind atlas does not run (RuleEventGatewayKind)
 	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
+	invalidAnsweredBy  []int32                     // user task nodes whose atlas:answeredBy named no way (RuleAnswerValue)
+	answerTasks        map[int32]int32             // mail task node → interned BPMN id of the task it carries the link of
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1904,6 +1906,10 @@ type MailConfig struct {
 	Store        string
 	Bucket       RestExpr
 	Key          RestExpr
+	// AnswerTask is the BPMN id of the user task whose link the message carries as
+	// answerLink (ADR-draft-user-task-answered-by-link); "" for none. It is judged in
+	// stage 5, not here, so it may name a task added after this one.
+	AnswerTask string
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1955,7 +1961,11 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 		MailBucket:       cfg.Bucket,
 		MailKey:          cfg.Key,
 	})
-	return b.addNode(TypeConnectorTask, detail)
+	id := b.addNode(TypeConnectorTask, detail)
+	if cfg.AnswerTask != "" {
+		b.setAnswerTask(id, cfg.AnswerTask)
+	}
+	return id
 }
 
 // UserConnectorConfig is the deploy-time configuration of a user-provisioning
@@ -3301,6 +3311,35 @@ func (b *Builder) markInvalidWizard(id int32) {
 	b.invalidWizards = append(b.invalidWizards, id)
 }
 
+// answeredByLink is atlas:answeredBy's one value (ADR-draft-user-task-answered-by-link).
+const answeredByLink = "link"
+
+// SetAnsweredByLink marks an already-added user task node as answered by link: whoever
+// holds the link a mail task carries for it may complete it through its form
+// (ADR-draft-user-task-answered-by-link). Any other node is left alone.
+func (b *Builder) SetAnsweredByLink(nodeID int32) {
+	if b.validNode(nodeID) && b.nodes[nodeID].Type == TypeUserTask {
+		b.userTasks[b.nodes[nodeID].Detail].AnsweredByLink = true
+	}
+}
+
+// markInvalidAnsweredBy records that the user task node id carried an atlas:answeredBy
+// value naming no way of answering. The task stays an ordinary one; the mark lets stage 5
+// refuse it at deploy while a reload brings a stored definition back (RuleAnswerValue).
+func (b *Builder) markInvalidAnsweredBy(id int32) {
+	b.invalidAnsweredBy = append(b.invalidAnsweredBy, id)
+}
+
+// setAnswerTask records that the mail task node id carries the link of the user task
+// with BPMN id ref. Kept by id and resolved in stage 5 and at send time, so the task may
+// come after the mail in the document.
+func (b *Builder) setAnswerTask(id int32, ref string) {
+	if b.answerTasks == nil {
+		b.answerTasks = map[int32]int32{}
+	}
+	b.answerTasks[id] = b.intern(ref)
+}
+
 // AddLane adds an organizational lane and returns its index (ADR-0121). parent is the index of
 // the enclosing lane in a nested laneSet, or -1 for a top-level lane. A lane is pure metadata — it
 // affects no token flow.
@@ -3707,6 +3746,8 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		conditionalStarts:  b.conditionalStarts,
 		eventGatewayKinds:  b.eventGatewayKinds,
 		invalidWizards:     b.invalidWizards,
+		invalidAnsweredBy:  b.invalidAnsweredBy,
+		answerTasks:        b.answerTasks,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,

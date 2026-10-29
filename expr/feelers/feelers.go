@@ -34,6 +34,7 @@ package feelers
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -70,6 +71,32 @@ type Template struct {
 
 // Source returns the template as it was written.
 func (t *Template) Source() string { return t.src }
+
+// Inputs returns the variable names the template's FEEL reads, sorted and unique — what
+// [expr.Compiled.Inputs] answers for one expression, over every placeholder and section.
+// A name read only inside a loop may be a field of the loop's item rather than a
+// variable; a caller asking whether a variable is read gets a yes for it either way.
+func (t *Template) Inputs() []string {
+	seen := map[string]bool{}
+	var walk func(ns []node)
+	walk = func(ns []node) {
+		for i := range ns {
+			if ns[i].expr != nil {
+				for _, n := range ns[i].expr.Inputs() {
+					seen[n] = true
+				}
+			}
+			walk(ns[i].body)
+		}
+	}
+	walk(t.nodes)
+	out := make([]string, 0, len(seen))
+	for n := range seen {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // CompileFunc compiles one FEEL block. The compiler hands in its deploy gate, so the
 // FEEL in a template is held to the rules every other FEEL in a model is (ADR-0388).

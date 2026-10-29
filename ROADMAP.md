@@ -1927,6 +1927,11 @@ the hand-written Details panel one vertical slice at a time:
   `POST /public/forms/{token}/start` bound to one process + start form, reusing the
   single-writer start path, rate-limited, checked against its form, and embeddable
   cross-origin ([ADR-0186](docs/adr/0186-embed-public-forms-cross-origin.md)).
+- ✅ A user task answered through the link a mail carries: `atlas:answeredBy="link"` on
+  the task, `answerTask` on the mail task that sends `answerLink`; a static page at
+  `/public/answer` shows the task's form and completes it, a signed token in the
+  fragment opens that one open task, and opening the link answers nothing
+  ([ADR-draft-user-task-answered-by-link](docs/adr/draft-user-task-answered-by-link.md)).
 
 **Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
 - ✅ An ephemeral engine sandbox: the real compiler + processor over an in-memory,

@@ -48,6 +48,13 @@ var wantPublicRoutes = []string{
 	"POST /public/wizard/steps/{taskKey}/complete",
 	"OPTIONS /public/wizard/step",
 	"OPTIONS /public/wizard/steps/{taskKey}/complete",
+	// A user task answered through the link a mail carries: a static page, and the two
+	// calls it makes, where the signed token in the Authorization header is the whole
+	// authorization and opens one open task (ADR-draft-user-task-answered-by-link).
+	// Rate-limited in their handlers.
+	"GET /public/answer",
+	"GET /public/answer/task",
+	"POST /public/answer/task/{taskKey}/complete",
 
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// These are read *after* a refusal, to find out what did the refusing — behind
