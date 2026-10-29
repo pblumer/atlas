@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
+
+	"github.com/pblumer/atlas/expr/feelers"
 )
 
 // This file is compiler stage 5 (compiler.md): graph-wide validation. Stages 1–4
@@ -171,6 +174,34 @@ const (
 	// the publication of a start link refuses it (UntimedPublicWizard), because there
 	// every abandoned attempt of an anonymous visitor would stay a live instance.
 	RuleWizardNoTimeout = "wizard.no-timeout"
+
+	// The answer rules (ADR-draft-user-task-answered-by-link). A user task marked
+	// atlas:answeredBy="link" may be answered by whoever holds the link a mail task
+	// naming it with answerTask carries.
+	//
+	// RuleAnswerValue marks an atlas:answeredBy value that names no way of answering. An
+	// error: the author meant something by it, and whatever it was would not happen.
+	RuleAnswerValue = "answer.value"
+	// RuleAnswerForm marks a task answered by link with no form. An error: the page the
+	// link opens has nothing to show and nothing to submit.
+	RuleAnswerForm = "answer.form"
+	// RuleAnswerMultiInstance marks a multi-instance task answered by link. An error: one
+	// link names the task, and cannot say which of its iterations it answers.
+	RuleAnswerMultiInstance = "answer.multi-instance"
+	// RuleAnswerTask marks a mail task whose answerTask names no user task answered by
+	// link. An error: either the link would open nothing, or it would open a task that
+	// never agreed to be answered by whoever holds a mail.
+	RuleAnswerTask = "answer.task"
+	// RuleAnswerOperation marks answerTask on a mailbox operation other than send. An
+	// error: only a message this task sends can carry a link.
+	RuleAnswerOperation = "answer.operation"
+	// RuleAnswerUnshown marks a mail task that names a task to answer and whose subject,
+	// body and HTML body never read answerLink. An error: the mail would go out without
+	// the one thing it is for.
+	RuleAnswerUnshown = "answer.unshown"
+	// RuleAnswerUnsent marks a task answered by link that no mail task names. A warning:
+	// it runs, and can be answered in the Tasks app, but nobody is sent its link.
+	RuleAnswerUnsent = "answer.unsent"
 )
 
 // eventGatewayKind is one event-based gateway marked as a kind atlas does not run,
@@ -259,7 +290,114 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkAgentTools(cp)...)
 	ps = append(ps, checkDecisionBindings(cp)...)
 	ps = append(ps, checkWizards(cp)...)
+	ps = append(ps, checkAnswerLinks(cp)...)
 	return ps
+}
+
+// answerLinkVariable is the variable a mail task's subject and bodies read the link of
+// its answer task under (ADR-draft-user-task-answered-by-link).
+const answerLinkVariable = "answerLink"
+
+// AnswerLinkVariable is [answerLinkVariable] for the packages that resolve a mail task.
+const AnswerLinkVariable = answerLinkVariable
+
+// checkAnswerLinks holds tasks answered by link and the mail tasks that carry their links
+// to the shape ADR-draft-user-task-answered-by-link gives them.
+func checkAnswerLinks(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	for _, id := range cp.invalidAnsweredBy {
+		ps = append(ps, problem(cp, id, SeverityError, RuleAnswerValue,
+			fmt.Sprintf(`%s has an atlas:answeredBy value atlas does not know: "link" lets whoever holds the link a mail task carries answer it`,
+				describeNode(cp, id))))
+	}
+	// The mail tasks in node order, so the problems come out in a stable order.
+	mails := make([]int32, 0, len(cp.answerTasks))
+	for id := range cp.answerTasks {
+		mails = append(mails, id)
+	}
+	slices.Sort(mails)
+	sent := map[int32]bool{}
+	for _, id := range mails {
+		ref, _ := cp.AnswerTask(id)
+		d := cp.ConnectorTask(cp.nodes[id].Detail)
+		target, ok := cp.ElementIndexOf(ref)
+		switch {
+		case !ok || cp.nodes[target].Type != TypeUserTask:
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerTask,
+				fmt.Sprintf("%s names %q as the task its link answers, which is not a user task of this process", describeNode(cp, id), ref)))
+		case !cp.UserTask(cp.nodes[target].Detail).AnsweredByLink:
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerTask,
+				fmt.Sprintf(`%s names the user task %q as the task its link answers, but that task does not say atlas:answeredBy="link"; mark it, so the task itself states that whoever holds the mail may answer it`, describeNode(cp, id), ref)))
+		case !scopeEncloses(cp, cp.nodes[id].FlowScope, target):
+			// The link is bound to the scope the mail is sent from, so it opens only a task
+			// in that scope or below it.
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerTask,
+				fmt.Sprintf("%s names the user task %q, which lies outside the scope the mail is sent from; a link opens only a task in that scope or within it, so send the mail from the task's own scope", describeNode(cp, id), ref)))
+		default:
+			sent[target] = true
+		}
+		if d.MailOp != "" {
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerOperation,
+				fmt.Sprintf("%s performs the mailbox operation %q and names a task to answer; only a message the task sends can carry a link", describeNode(cp, id), d.MailOp)))
+			continue
+		}
+		if !mailReads(d, answerLinkVariable) {
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerUnshown,
+				fmt.Sprintf("%s names %q as the task its link answers, but neither its subject nor its bodies show %s; put it in the body, as an expression (= ... + %s) or a template ({{%s}})",
+					describeNode(cp, id), ref, answerLinkVariable, answerLinkVariable, answerLinkVariable)))
+		}
+	}
+	for i := range cp.nodes {
+		id := int32(i)
+		n := &cp.nodes[i]
+		if n.Type != TypeUserTask || !cp.UserTask(n.Detail).AnsweredByLink {
+			continue
+		}
+		if cp.UserTask(n.Detail).FormId < 0 {
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerForm,
+				fmt.Sprintf("%s is answered by link and has no form, so the page its link opens has nothing to ask; bind a form to it", describeNode(cp, id))))
+		}
+		if n.MultiInstance >= 0 {
+			ps = append(ps, problem(cp, id, SeverityError, RuleAnswerMultiInstance,
+				fmt.Sprintf("%s is answered by link and is multi-instance; its link names the task and cannot say which iteration it answers", describeNode(cp, id))))
+		}
+		if !sent[id] {
+			ps = append(ps, problem(cp, id, SeverityWarning, RuleAnswerUnsent,
+				fmt.Sprintf("%s is answered by link, but no mail task of this process names it with answerTask, so nobody is sent its link", describeNode(cp, id))))
+		}
+	}
+	return ps
+}
+
+// scopeEncloses reports whether scope (a node id, -1 for the process) is node's flow
+// scope or encloses it.
+func scopeEncloses(cp *CompiledProcess, scope, node int32) bool {
+	for s, depth := cp.nodes[node].FlowScope, 0; depth < len(cp.nodes); depth++ {
+		if s == scope {
+			return true
+		}
+		if s < 0 {
+			return false
+		}
+		s = cp.nodes[s].FlowScope
+	}
+	return false
+}
+
+// mailReads reports whether a mail task's subject, body or HTML body reads the variable
+// name, as an expression or through a template's placeholders.
+func mailReads(d *ConnectorTaskDetail, name string) bool {
+	for _, e := range []RestExpr{d.MailSubject, d.Body, d.BodyHTML} {
+		if e.Expr != nil && slices.Contains(e.Expr.Inputs(), name) {
+			return true
+		}
+	}
+	for _, t := range []*feelers.Template{d.MailSubjectTmpl, d.BodyTmpl, d.BodyHTMLTmpl} {
+		if t != nil && slices.Contains(t.Inputs(), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // checkWizards holds a wizard subprocess to the shape ADR-0449 gives it: a known kind,

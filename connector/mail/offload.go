@@ -93,6 +93,21 @@ type Job struct {
 	// them, and fails the job otherwise (ADR-0461). They travel with the job because a
 	// worker has no compiled process to ask.
 	ErrorCodes []string `json:"errorCodes,omitempty"`
+	// ResolveError is why the engine could not finish resolving the task — today, the
+	// link of the task the mail is for (ADR-draft-user-task-answered-by-link). Whoever
+	// runs the job fails it with this message, before any worker is looked up, so the
+	// incident says what is wrong wherever the job ran.
+	ResolveError string `json:"resolveError,omitempty"`
+}
+
+// AnswerLinker mints the link of a user task answered by link: the task with BPMN id
+// task, in the instance piKey, inside the scope instance scopeKey the mail is sent from
+// (ADR-draft-user-task-answered-by-link). The scope is what tells two runs of one event
+// subprocess apart, each mailing the link of its own task. A [Directory] that can
+// implements it: both are the installation's answers to a question a model cannot carry
+// — an address, and a link signed with the installation's key.
+type AnswerLinker interface {
+	AnswerLink(piKey, scopeKey uint64, task string) (string, error)
 }
 
 // DocumentStore puts a document into an object store a named Worker reaches. It is how
@@ -200,6 +215,22 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 	if err != nil {
 		return Job{}, err
 	}
+	// A message that carries the link of a task answered by link reads it as answerLink.
+	// The link is added to this resolution's variables and to nothing else: it is never
+	// written to the instance, where every operator could read it.
+	if task, ok := cp.AnswerTask(ei.ElementId); ok {
+		linker, ok := dir.(AnswerLinker)
+		if !ok {
+			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
+				ResolveError: fmt.Sprintf("mail: this task carries the answer link of %q, and nothing here mints answer links", task)}, nil
+		}
+		link, err := linker.AnswerLink(piKey, ei.FlowScopeKey, task)
+		if err != nil {
+			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
+				ResolveError: fmt.Sprintf("mail: the answer link of %q: %v", task, err)}, nil
+		}
+		scopeVars[compiler.AnswerLinkVariable] = model.VariableValue{Name: compiler.AnswerLinkVariable, Kind: model.VarString, Text: link}
+	}
 	return Job{
 		Connector: cp.Intern(detail.Connector),
 		From:      resolveValue(detail.From, piKey, scopeVars),
@@ -240,6 +271,9 @@ func RunWith(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any
 }
 
 func run(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any, error) {
+	if j.ResolveError != "" {
+		return nil, errors.New(j.ResolveError)
+	}
 	client, ok := reg.Client(j.Connector)
 	if !ok {
 		return nil, reg.Unresolved("mail", j.Connector)

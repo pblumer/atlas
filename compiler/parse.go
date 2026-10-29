@@ -2304,6 +2304,9 @@ type xmlUserTask struct {
 	StandardLoop  *xmlStandardLoop           `xml:"standardLoopCharacteristics"`
 	DataOut       []xmlDataOutputAssociation `xml:"dataOutputAssociation"`
 	DataIn        []xmlDataInputAssociation  `xml:"dataInputAssociation"`
+	// AnsweredBy is atlas:answeredBy (ADR-draft-user-task-answered-by-link): "link" lets
+	// whoever holds the link a mail task carries answer the task through its form.
+	AnsweredBy string `xml:"answeredBy,attr"`
 }
 
 // xmlPriorityDefinition carries zeebe:priorityDefinition's static task priority
@@ -2909,6 +2912,9 @@ type xmlMailConnector struct {
 	Store        string `xml:"store,attr"`
 	Bucket       string `xml:"bucket,attr"`
 	Key          string `xml:"key,attr"`
+	// AnswerTask names a user task answered by link (ADR-draft-user-task-answered-by-link):
+	// the mail's subject and bodies are handed that task's link as answerLink.
+	AnswerTask string `xml:"answerTask,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning

@@ -3807,6 +3807,12 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/complete", s.handlePublicWizardComplete)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/step", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
+	// A user task answered through the link a mail carries
+	// (ADR-draft-user-task-answered-by-link). The page is static; the signed token in an
+	// Authorization header is the whole authorization, and it opens one open task.
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)
+	mountFunc(accessPublic, roleAny, "POST "+answerPagePath+"/task/{taskKey}/complete", s.handlePublicAnswerComplete)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a

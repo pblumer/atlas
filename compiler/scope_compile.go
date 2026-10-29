@@ -408,7 +408,18 @@ func registerScope(
 		if err != nil {
 			return err
 		}
-		reg.node(ut.Id, b.AddUserTask(ut.Name, assignee, groups, ut.Form.FormId, priority, dueDateNanos, retries))
+		utID := b.AddUserTask(ut.Name, assignee, groups, ut.Form.FormId, priority, dueDateNanos, retries)
+		// The opt-in to being answered by link is read here and judged in stage 5, so a
+		// value this build does not know is reported rather than refused at boot
+		// (ADR-draft-user-task-answered-by-link, ADR-0177).
+		switch v := strings.TrimSpace(ut.AnsweredBy); v {
+		case "":
+		case answeredByLink:
+			b.SetAnsweredByLink(utID)
+		default:
+			b.markInvalidAnsweredBy(utID)
+		}
+		reg.node(ut.Id, utID)
 	}
 	for _, ca := range c.CallActivities {
 		ce := ca.CalledElement

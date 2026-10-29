@@ -1820,6 +1820,23 @@ function wizardHTML(bo) {
     <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; the visitor of a public start link is carried the same way on the public page.</p>`;
 }
 
+// answeredByHTML is a user task's choice of who may answer it
+// (ADR-draft-user-task-answered-by-link): the people it is assigned to, or also whoever
+// holds the link a mail task carries for it. A value the panel does not know is shown as
+// it stands; the Problems panel says why it is refused.
+function answeredByHTML(bo) {
+  const v = bo.answeredBy || "";
+  const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
+  const unknown = v && v !== "link" ? `<option value="${esc(v)}" selected>${esc(v)}</option>` : "";
+  return `<label class="field"><span>${esc(tr("pnl.main.ut.answeredBy"))}</span>
+      <select id="f-answeredby">
+        ${opt("", esc(tr("pnl.main.ut.answeredBy.people")))}
+        ${opt("link", esc(tr("pnl.main.ut.answeredBy.link")))}
+        ${unknown}
+      </select></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.main.ut.answeredByHint")}</p>`;
+}
+
 // shopOwners holds, per diagram instance, which message names product actions own: a Map
 // from name to [{ product, action }], set when the listing arrives. Present but null means
 // it was asked for and has not answered — or failed, which leaves it so: no receive task is
@@ -4550,6 +4567,7 @@ const SERVICE_TASK_KINDS = [
           ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
           : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
       },
+      { key: "answerTask", label: "Link to answer", placeholder: "the id of a user task answered by link", showIf: (v) => !v.operation || v.operation === "send", hint: "Optional. A user task of this process whose \"Answered by\" is \"also whoever holds the link\": the message is handed that task's link as answerLink — put it in the body, as =\"…\" + answerLink or {{answerLink}}. Whoever opens it sees the task's form and answers it without an account; opening the link alone answers nothing. The server's external URL must be configured." },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
@@ -9409,6 +9427,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>${esc(tr("pnl.main.ut.candidateGroups"))}</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
+            ${answeredByHTML(bo)}
             <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.ut.priority"))}</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
@@ -11480,6 +11499,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         const cexpr = moddle.create("bpmn:FormalExpression", { body: raw.startsWith("=") ? raw : "= " + raw });
         cexpr.$parent = element.businessObject;
         try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
+      }));
+    }
+    const fansweredby = body.querySelector("#f-answeredby");
+    if (fansweredby) {
+      fansweredby.addEventListener("change", () => savePreservingPanel(() => {
+        // Only "link" is written, so a task answered in the Tasks app alone stays attribute-free.
+        try { modeling.updateProperties(element, { answeredBy: fansweredby.value || undefined }); } catch { /* stale */ }
       }));
     }
     const fwizard = body.querySelector("#f-wizard");

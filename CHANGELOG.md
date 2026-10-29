@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A person without an account answers a task from a mail.** A user task marked
+  `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
+  that names it with `answerTask` is handed that link as `answerLink` for its subject and
+  bodies — before the task or beside it, and again from a reminder. The link opens a page
+  with the task's name, its documentation and its form, prefilled with what the instance
+  holds under the form's fields; submitting completes the task as the Tasks app would.
+  Opening the link answers nothing, so a link scanner cannot; the signed token is in the
+  link's fragment and so in no server log; it opens only that task while it is open — in
+  an event subprocess running several times, the task of the run that sent it — and the
+  task may still be answered in the Tasks app by whoever it is assigned to. The link
+  is built on the configured external URL (`--external-url`) and signed with a key the
+  vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
+  multi-instance task, a mail that never shows the link and a link to a task that did not
+  opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
+
 ## [0.21.0] — 2026-10-29
 
 **A product's description can come from the wiki, and a release's architecture is drawn
