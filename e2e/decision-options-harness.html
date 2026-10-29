@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas decision options e2e harness</title>
+    <!-- Renders a form whose fields take their options from decisions through the
+         console's own loader (api/web/formviewer.js loadFormViewer), as the Tasks app,
+         the start form, the repair form and the shop do
+         (ADR-draft-form-options-from-a-decision). What each decision answers is the
+         spec's to say, through page.route on GET /api/v1/form-data/decisions/{id}/options. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="form"></div>
+    <script type="module">
+      import { loadFormViewer } from "/formviewer.js";
+
+      window.__form = null;
+      window.__render = async (schema, data = {}, options = {}) => {
+        const { Form } = await loadFormViewer();
+        if (window.__form) window.__form.destroy();
+        window.__form = new Form({ container: document.getElementById("form"), ...options });
+        await window.__form.importSchema(schema, data);
+        return true;
+      };
+      window.__submit = () => {
+        const { data, errors } = window.__form.submit();
+        return { data, errors };
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

@@ -5,7 +5,8 @@ form-viewer.js and form-playground.js are pre-built ESM bundles of:
   - @bpmn-io/form-js-playground@1.24.0   (form-playground.js only)
   - preact@10.29.8                       (the one Preact all of the above resolve to)
   - feelers@3.1.0                        (pinned by an override, see below)
-  - Atlas's own form-js modules in src/atlas/ (ADR-0473, ADR-draft-mail-html-view)
+  - Atlas's own form-js modules in src/atlas/ (ADR-0473, ADR-draft-mail-html-view,
+    ADR-draft-form-options-from-a-decision)
   - esbuild@0.28.2                       (bundler only; not shipped)
 
 with every transitive dependency fixed by src/package-lock.json.
@@ -16,6 +17,10 @@ is patched or copied:
   - remote-source.js adds a fourth options source, "Remote data source", to the
     tables form-js describes its options sources in (Static, Input data, Expression).
     Everything in form-js that deals with options sources reads those tables.
+  - decision-source.js adds a fifth options source, "Decision (DMN)", to the same
+    tables (ADR-draft-form-options-from-a-decision): a select, radio group, checklist
+    or tag list takes its options from the list a deployed decision without inputs
+    answers with, asked of the page's `atlasDecisions` service when the form is shown.
   - mailview.jsx is the e-mail view (ADR-draft-mail-html-view), a component of its
     own type, "mailview": it shows the mail a mail task read into a variable — the
     envelope, the text, and the cleaned HTML body in a sandboxed frame that loads no
@@ -24,11 +29,15 @@ is patched or copied:
   - viewer.jsx registers the component every select renders through. It renders
     form-js's own Select for the three sources form-js knows, and for the remote one a
     field that mounts the search the page provides as the `atlasRemote` service
-    (api/web/remote-select.js).
+    (api/web/remote-select.js). It registers the radio group, the checklist and the tag
+    list too: each is form-js's own, given the decision's list as its static values
+    once the page has fetched it.
   - editor.jsx extends the editor's properties panel: Options source ▸ Type offers the
     remote source on a select, and the source, the Worker, what is searched, filtered
     and shown are edited there. It adds the "Directory picker" palette preset and the
-    "Convert to select" entry for a directory field saved as a textfield.
+    "Convert to select" entry for a directory field saved as a textfield. It offers
+    the decision source on all four option fields, with the decision to pick and what
+    it answers now.
   - viewer.js and playground.js are the entries. Their Form and Playground are
     form-js's, constructed with the Atlas modules added.
 
@@ -72,7 +81,7 @@ properties-panel.css and form-js-playground's dist/assets/form-js-playground.css
 verbatim (README.md). License: see LICENSE.
 
 SHA-256 form-viewer.js:
-fea3df381936e23f7ea80c0ab7ac9a6527094dc2ab116d3c5ee745a49640b7bb
+6aac5e883aa0c273718e01e19eb8c3956267fdae828a93b54c7ed187599cea07
 
 SHA-256 form-playground.js:
-85d5f9790b3f92fbed35d16166b2931eafef8eda7ba0d73b02790fe9fc9dbc60
+90d6473bb95d3cbb484803c82511d5975aa29b6749d191fe0e794cb4e7ddf57b

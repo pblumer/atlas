@@ -927,6 +927,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/form-data/sources", s.formLookup.HandleSources, apiOp{
 			summary: "The remote data sources a form's directory field can name, what each lets a field search, filter and show, and the Workers of those types with whether each allows forms to search through it (ADR-0473)", tag: "Forms", role: RoleModeler,
 			resp: jsonBody("Sources and Workers", tObject())}},
+		{"GET", "/api/v1/form-data/decisions", s.formDecision.HandleList, apiOp{
+			summary: "The decisions a select, radio group, checklist or tag list can take its options from: every decision with a decision deployment that takes no inputs, for the form editor's picker (ADR-draft-form-options-from-a-decision)", tag: "Forms", role: RoleModeler,
+			resp: jsonBody("Decisions", tObject())}},
+		// roleAny, like GET /api/v1/decision-deployments/{key}/xml: whoever may read a
+		// decision's whole model may read the list it answers with. A decision that takes
+		// inputs is refused, so nothing is evaluated against values the caller chose.
+		{"GET", "/api/v1/form-data/decisions/{decisionId}/options", s.formDecision.HandleOptions, apiOp{
+			summary: "The options a form field naming this decision shows now: the newest decision deployment evaluated without inputs, its list normalized as form-js normalizes a field's options ({label, value}), and how many entries are no option. 404 not_deployed, 422 takes_inputs, evaluation_failed or not_a_list (ADR-draft-form-options-from-a-decision)", tag: "Forms", role: roleAny,
+			resp: jsonBody("Options", tObject())}},
 		{"GET", "/api/v1/forms/{id}/availability", s.handleFormIDAvailability, apiOp{
 			summary: "Report whether a form id is free — the live check behind the form editor's ID field, so a collision shows while the id is typed rather than at Save", tag: "Forms", role: RoleModeler, resp: jsonBody("Availability", tObject())}},
 		{"GET", "/api/v1/forms/{id}", s.handleGetForm, apiOp{

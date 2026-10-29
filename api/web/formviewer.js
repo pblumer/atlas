@@ -68,6 +68,9 @@ function ensureCss(id, href) {
 // loadFormViewer lazily imports the vendored form-js viewer and injects its stylesheets
 // once, the first time anything renders a form — so a user who never opens one never
 // pays for the 86 KB of CSS or the bundle.
+//
+// Its Form asks the server for the options of a field whose options come from a
+// decision (decisionOptions, below), unless the caller passes atlasDecisions itself.
 export function loadFormViewer() {
   if (!_formViewer) {
     ensureFormStyles();
@@ -75,10 +78,55 @@ export function loadFormViewer() {
     // remembered failure would fail every later form in the tab, leaving a page reload
     // as the only way back. So a load that fails — or that runs out its deadline — is
     // forgotten, and the next open imports again.
-    _formViewer = withLoadDeadline(import("./vendor/form-js/form-viewer.js"), "The form viewer")
+    _formViewer = withLoadDeadline(
+      import("./vendor/form-js/form-viewer.js").then((mod) => ({ ...mod, Form: askingDecisions(mod.Form) })),
+      "The form viewer")
       .catch((e) => { _formViewer = null; throw e; });
   }
   return _formViewer;
+}
+
+// askingDecisions gives every form a decisionOptions service of its own, so each form
+// that is opened shows the list its decisions answer then.
+function askingDecisions(Form) {
+  return class extends Form {
+    constructor(options = {}) {
+      super({ atlasDecisions: decisionOptions(), ...options });
+    }
+  };
+}
+
+// decisionOptions is what a form asks for the options of a field that takes them from a
+// deployed decision (ADR-draft-form-options-from-a-decision): GET
+// /api/v1/form-data/decisions/{id}/options, which evaluates the newest deployment of
+// the decision on the server. Every field naming the same decision shares one request.
+//
+// answer(id) resolves to the whole reply — {decisionId, options, skipped} — for the
+// form editor's panel; options(id) to the options alone, for the field. A refusal
+// rejects with the server's reason, and is not remembered, so the next ask tries again.
+// With ttlMs, an answer is reused for that long and then asked afresh, which is what an
+// editor wants of a list somebody may be publishing a new version of meanwhile.
+export function decisionOptions({ ttlMs = 0 } = {}) {
+  const asked = new Map();
+  const answer = (id) => {
+    let pending = asked.get(id);
+    if (!pending) {
+      pending = fetch(`/api/v1/form-data/decisions/${encodeURIComponent(id)}/options`, { credentials: "same-origin" })
+        .then(async (res) => {
+          const body = await res.json().catch(() => null);
+          if (!res.ok) throw new Error((body && body.error) || `HTTP ${res.status}`);
+          return body || {};
+        });
+      asked.set(id, pending);
+      pending.catch(() => { if (asked.get(id) === pending) asked.delete(id); });
+      if (ttlMs > 0) setTimeout(() => { if (asked.get(id) === pending) asked.delete(id); }, ttlMs);
+    }
+    return pending;
+  };
+  return {
+    answer,
+    options: (id) => answer(id).then((body) => (Array.isArray(body.options) ? body.options : [])),
+  };
 }
 
 // ---------- Answering a form that refused to submit --------------------------

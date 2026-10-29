@@ -942,6 +942,30 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <code>examples/reisebuchung/reisepflichten.dmn</code> (Reisepflichten).</p>
       <p data-l="en">Examples in the repository: <code>examples/pruefung/notenschluessel.dmn</code> (grading scale),
         <code>examples/reisebuchung/reisepflichten.dmn</code> (travel requirements).</p>
+
+      <div id="dmn-liste" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Eine Entscheidung als Liste</h3><h3 data-l="en">A decision as a list</h3>
+      <p data-l="de">Nicht jede Entscheidung ist eine Tabelle. Eine <b>Liste</b> (in DMN die «Boxed List») besteht aus
+        Einträgen, und jeder Eintrag ist ein FEEL-Ausdruck. Das Ergebnis der Entscheidung ist die Liste ihrer Werte, in
+        der Reihenfolge der Einträge. So pflegst du Stammdaten wie Kostenstellen, Länder oder Abwesenheitsarten an
+        einer Stelle, versioniert und deployt wie jede andere Entscheidung. Ein Eintrag wie
+        <code>{value: "CC100", label: "Einkauf"}</code> ist eine Option mit Wert und Bezeichnung, ein Eintrag wie
+        <code>"CH"</code> ist beides zugleich.</p>
+      <p data-l="en">Not every decision is a table. A <b>list</b> (in DMN, the boxed list) is made of entries, and each
+        entry is a FEEL expression. The decision's result is the list of their values, in the order of the entries.
+        This is where reference data such as cost centres, countries or kinds of leave is kept in one place, versioned
+        and deployed like any other decision. An entry such as <code>{value: "CC100", label: "Purchasing"}</code> is an
+        option with a value and a label; an entry such as <code>"CH"</code> is both at once.</p>
+      <p data-l="de">Im DRG wählst du an der Entscheidung das Schraubenschlüssel-Symbol und dann <b>Liste</b>. Die
+        Entscheidung behält dabei ihre ID und ihre Anforderungen. Ihr Reiter zeigt die Einträge untereinander:
+        <b>Eintrag hinzufügen</b> hängt einen an, die Pfeile verschieben ihn, das Kreuz entfernt ihn, und
+        <kbd>Ctrl</kbd>+<kbd>Z</kbd> nimmt jeden Schritt zurück. Eine Liste ohne Eingaben kann einem Auswahlfeld eines
+        Formulars seine Optionen geben – siehe <a href="#optionen-aus-entscheidung">Optionen aus einer
+        Entscheidung</a>.</p>
+      <p data-l="en">In the DRG, choose the wrench on the decision and then <b>List</b>. The decision keeps its id and its
+        requirements. Its tab shows the entries one below the other: <b>Add entry</b> appends one, the arrows move it,
+        the cross removes it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes each step back. A list without inputs can give a
+        form's choice field its options – see <a href="#optionen-aus-entscheidung">Options from a decision</a>.</p>
     </section>
 
     <!-- ==================== FEEL ==================== -->
@@ -6054,6 +6078,42 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         a form. Departments are fixed choices, because Microsoft Graph has no query for every department in use. In the
         editor and its preview the field searches made-up example data, never the real directory. An example is
         <a href="#bsp-entra-benutzerauswahl">Pick a person</a>.</p>
+
+      <div id="optionen-aus-entscheidung" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Optionen aus einer Entscheidung</h4><h4 data-l="en">Options from a decision</h4>
+      <p data-l="de">Eine Auswahlliste, eine Optionsgruppe, eine Checkbox-Gruppe oder eine Tag-Liste kann ihre Optionen
+        aus einer <b>deployten Entscheidung ohne Eingaben</b> beziehen – meist einer <a href="#dmn-liste">Liste</a>, die
+        die zuständige Stelle im Entscheidungseditor pflegt. Im Formular-Editor wählst du beim Feld unter
+        <b>Options source ▸ Type</b> die Quelle <b>Decision (DMN)</b> und darunter die Entscheidung. <b>Options now</b>
+        zeigt, was sie im Moment ergibt. Das Formular enthält keine Kopie der Liste: Jedes Mal, wenn jemand das Formular
+        öffnet, wertet der Server die neueste deployte Version aus. Eine neue Version erreicht damit das nächste Formular,
+        ohne dass du das Formular anfasst.</p>
+      <p data-l="en">A select, a radio group, a checkbox group or a tag list can take its options from a <b>deployed
+        decision without inputs</b> – usually a <a href="#dmn-liste">list</a> the people responsible for it keep in the
+        decision editor. In the form editor, choose <b>Decision (DMN)</b> under the field's <b>Options source ▸ Type</b>
+        and the decision below it. <b>Options now</b> shows what it answers at the moment. The form holds no copy of the
+        list: each time somebody opens the form, the server evaluates the newest deployed version. A new version
+        reaches the next form without your touching the form.</p>
+      <p data-l="de"><b>Was geprüft wird.</b> Bevor eine Aufgabe abgeschlossen wird, und bevor ein öffentlicher Link
+        oder ein öffentlicher Wizard-Schritt weiterläuft, prüft der Server, ob der gewählte Wert in der Liste steht, die
+        die Entscheidung jetzt ergibt. Ist er nicht mehr darin, wird nichts abgeschlossen; die Person öffnet das Formular
+        neu und sieht die aktuelle Liste. Öffentliche Seiten bekommen die Optionen direkt ins Formular geschrieben, weil
+        dort niemand angemeldet ist.</p>
+      <p data-l="en"><b>What is checked.</b> Before a task is completed, and before a public link or a public wizard step
+        continues, the server checks that the chosen value is in the list the decision answers now. If it no longer is,
+        nothing is completed; the person opens the form again and sees the current list. Public pages receive the
+        options written into the form, because nobody is signed in there.</p>
+      <p data-l="de"><b>Grenzen.</b> Die Entscheidung muss ohne Eingaben auskommen und als eigene Entscheidung deployt
+        sein; eine nur mit einem Prozess mitgelieferte Entscheidung wird nicht angeboten. Was eine Person gesehen hat,
+        wird nicht gespeichert, nur der gewählte Wert. Muss ein Prozess festhalten, welche Optionen angeboten wurden,
+        oder hängt die Liste vom Fall ab, setzt du eine Business-Rule-Task vor die Aufgabe und liest die Optionen mit
+        <b>Input data</b> aus ihrer Variable. Wird die Entscheidung gelöscht, meldet das Feld, dass seine Auswahl nicht
+        geladen werden konnte.</p>
+      <p data-l="en"><b>Limits.</b> The decision must take no inputs and be deployed as a decision of its own; a decision
+        only bundled with a process is not offered. What a person saw is not stored, only the value chosen. If a process
+        must record which options were offered, or the list depends on the case, put a business rule task before the
+        task and read the options from its variable with <b>Input data</b>. If the decision is deleted, the field says
+        its choices could not be loaded.</p>
 
       <div id="wizards" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>

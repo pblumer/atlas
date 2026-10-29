@@ -1,5 +1,6 @@
 // The form editor's half of a select whose options come from a remote data source
-// (ADR-0473).
+// (ADR-0473), and of a field whose options come from a decision
+// (ADR-draft-form-options-from-a-decision).
 //
 // form-js's properties panel already has a place for where a select's options come
 // from: Options source ▸ Type. The remote source is a fourth type there (remote-source.js),
@@ -17,6 +18,12 @@
 // answer of GET /api/v1/form-data/sources as the `atlasRemoteSources` value. Nothing here
 // is trusted. The block is checked again when the form is saved, against the same
 // registry, and refused with the reason if it does not hold.
+//
+// A decision is the fifth source (decision-source.js), offered on every field form-js
+// gives options to. The panel picks it from GET /api/v1/form-data/decisions, passed as
+// the `atlasDecisionList` value, and shows what it answers now through the
+// `atlasDecisions` service. The save checks the block's shape; whether the decision is
+// deployed is the server's state at the time the form is shown.
 
 import { useEffect, useRef, useState } from 'preact/hooks';
 import {
@@ -34,6 +41,14 @@ import {
   isLegacyDirectoryField,
   isRemoteSelect
 } from './remote-source.js';
+import {
+  DECISION,
+  DECISION_FIELD_TYPES,
+  DECISION_MEMBER,
+  DECISION_VERSION,
+  decisionIdOf,
+  isDecisionField
+} from './decision-source.js';
 import { MAIL_VIEW_TYPE } from './mailview.jsx';
 
 // The palette entry that adds a select searching the first remote source. It is a preset,
@@ -135,6 +150,7 @@ const isEditedSource = (node) => !!(node && node.value && node.value !== OPTIONS
 // What the Options source group's tooltip adds for a select: form-js's own explains the
 // three sources it knows.
 const REMOTE_TOOLTIP = '"Remote data source" defines options a person searches for in a directory, through a Worker this server configures; the form submits the id of the entry chosen.';
+const DECISION_TOOLTIP = '"Decision (DMN)" takes the options from a deployed decision without inputs — typically a List its owners maintain in the decision editor. The field shows what the newest version answers when the form is opened.';
 
 function Entry(props) {
   const { id, error, description, extraClass, children } = props;
@@ -278,6 +294,7 @@ function OptionsSourceType(props) {
 
   const options = Object.values(OPTIONS_SOURCES)
     .filter((source) => source !== REMOTE || (field.type === 'select' && (providersOf(ctx.sources).length > 0 || value === REMOTE)))
+    .filter((source) => source !== DECISION || DECISION_FIELD_TYPES.includes(field.type))
     .map((source) => ({ label: OPTIONS_SOURCES_LABELS[source], value: source }));
 
   return (
@@ -295,6 +312,7 @@ function autoFocusEntry(source) {
   if (source === OPTIONS_SOURCES.EXPRESSION) return 'optionsExpression-expression';
   if (source === OPTIONS_SOURCES.INPUT) return 'dynamicOptions-key';
   if (source === OPTIONS_SOURCES.STATIC) return 'staticOptions-0-label';
+  if (source === DECISION) return 'atlasDecision-decision';
   return null;
 }
 
@@ -588,6 +606,85 @@ function VerifyEntry(props) {
   );
 }
 
+// ---------- options from a decision (ADR-draft-form-options-from-a-decision) ------------------
+
+const decisionsOf = (list) => (list && Array.isArray(list.decisions) ? list.decisions : []);
+
+// decisionLabel names a decision as the picker shows it: its name, and the model it is in
+// where that says more.
+function decisionLabel(d) {
+  return d.model && d.model !== d.name ? `${d.name} — ${d.model}` : d.name;
+}
+
+function DecisionEntry(props) {
+  const { id, field, editField, list } = props;
+  const current = decisionIdOf(field);
+  const offered = decisionsOf(list);
+  const known = offered.some((d) => d.id === current);
+  const options = [
+    ...(current ? [] : [ { value: '', label: offered.length ? 'Choose a decision…' : 'No decision without inputs is deployed' } ]),
+    ...(current && !known ? [ { value: current, label: current + ' (not deployed, or takes inputs)' } ] : []),
+    ...offered.map((d) => ({ value: d.id, label: decisionLabel(d) }))
+  ];
+  const error = !current
+    ? 'Choose the decision whose list the options are.'
+    : known ? null : 'This server has no deployed decision of that name that takes no inputs. Until it has, the field says its options could not be loaded.';
+  return (
+    <PanelSelect
+      id={ id }
+      label="Decision"
+      value={ current }
+      options={ options }
+      error={ error }
+      description="Offered are the decisions deployed on their own that take no inputs. The field shows the list the newest version answers when the form is opened; the form submits the value of the entry chosen."
+      onChange={ (v) => editField(field, DECISION_MEMBER, { version: DECISION_VERSION, decisionId: v }) } />
+  );
+}
+
+const PREVIEW_LABELS = 8;
+
+// DecisionPreviewEntry shows what the decision answers now: how many options, the first
+// few labels, and how many of its entries are no option a form can show — or why it
+// cannot answer.
+function DecisionPreviewEntry(props) {
+  const { id, field, service } = props;
+  const decisionId = decisionIdOf(field);
+  const [ state, setState ] = useState({ status: 'idle' });
+
+  useEffect(() => {
+    let live = true;
+    if (!decisionId || !service || typeof service.answer !== 'function') {
+      setState({ status: 'idle' });
+      return undefined;
+    }
+    setState({ status: 'loading' });
+    Promise.resolve()
+      .then(() => service.answer(decisionId))
+      .then(
+        (answer) => { if (live) setState({ status: 'loaded', answer: answer || {} }); },
+        (err) => { if (live) setState({ status: 'failed', reason: (err && err.message) || 'The decision did not answer.' }); });
+    return () => { live = false; };
+  }, [ decisionId, service ]);
+
+  if (state.status === 'idle') return null;
+  let text = 'Asking the decision…';
+  if (state.status === 'failed') {
+    text = state.reason;
+  } else if (state.status === 'loaded') {
+    const options = Array.isArray(state.answer.options) ? state.answer.options : [];
+    const labels = options.slice(0, PREVIEW_LABELS).map((o) => o.label).join(', ');
+    text = `${options.length} option${options.length === 1 ? '' : 's'}` +
+      (labels ? `: ${labels}${options.length > PREVIEW_LABELS ? ', …' : ''}` : '') +
+      (state.answer.skipped ? `. ${state.answer.skipped} entr${state.answer.skipped === 1 ? 'y is' : 'ies are'} no option (null, a list, or no usable value) and not shown.` : '');
+  }
+  return (
+    <Entry id={ id } extraClass={ `atlas-decision-preview atlas-decision-${state.status}` } error={ state.status === 'failed' ? text : null }>
+      <span class="bio-properties-panel-label">Options now</span>
+      { state.status === 'failed' ? null : <div class="bio-properties-panel-description">{ text }</div> }
+    </Entry>
+  );
+}
+
 // ---------- a directory field saved as a text field ----------------------------------------
 
 // convertToSelect turns a text field that searches a remote data source — the shape such
@@ -662,6 +759,8 @@ class AtlasRemotePropertiesProvider {
     const get = (name) => this._injector.get(name, false);
     return {
       sources: get('atlasRemoteSources'),
+      decisions: get('atlasDecisionList'),
+      decisionService: get('atlasDecisions'),
       registry: get('formFieldRegistry'),
       eventBus: get('eventBus')
     };
@@ -670,7 +769,8 @@ class AtlasRemotePropertiesProvider {
   getGroups(field, editField) {
     return (groups) => {
       if (!field || Array.isArray(field)) return groups;
-      const ctx = contextFor(field, editField, this._services());
+      const services = this._services();
+      const ctx = contextFor(field, editField, services);
 
       const source = groups.find((g) => g.id === 'valuesSource');
       if (source && Array.isArray(source.entries)) {
@@ -680,10 +780,14 @@ class AtlasRemotePropertiesProvider {
         if (field.type === 'select' && typeof source.tooltip === 'string') {
           source.tooltip = source.tooltip + '\n\n' + REMOTE_TOOLTIP;
         }
+        if (DECISION_FIELD_TYPES.includes(field.type) && typeof source.tooltip === 'string') {
+          source.tooltip = source.tooltip + '\n\n' + DECISION_TOOLTIP;
+        }
       }
 
       if (field.type === MAIL_VIEW_TYPE) return this._mailView(groups, field, editField);
       if (isRemoteSelect(field)) return this._remote(groups, ctx);
+      if (isDecisionField(field)) return this._decision(groups, field, editField, services);
       if (isLegacyDirectoryField(field)) return this._legacy(groups, ctx);
       return groups;
     };
@@ -753,6 +857,19 @@ class AtlasRemotePropertiesProvider {
     return [ ...out, { id: 'validation', label: 'Validation', entries: [ verify ] } ];
   }
 
+  _decision(groups, field, editField, services) {
+    const source = groups.find((g) => g.id === 'valuesSource');
+    const entries = [
+      { id: 'atlasDecision-decision', component: DecisionEntry, field, editField, list: services.decisions, isEdited: isEditedValue },
+      { id: 'atlasDecision-preview', component: DecisionPreviewEntry, field, service: services.decisionService }
+    ];
+    if (source && Array.isArray(source.entries)) {
+      source.entries = [ ...source.entries, ...entries ];
+      return groups;
+    }
+    return [ ...groups, { id: 'valuesSource', label: 'Options source', entries } ];
+  }
+
   _legacy(groups, ctx) {
     const group = {
       id: 'atlasRemoteLegacy',
@@ -793,6 +910,30 @@ class AtlasRemoteBehavior {
 }
 
 AtlasRemoteBehavior.$inject = [ 'eventBus', 'injector' ];
+
+// AtlasDecisionBehavior names a decision the moment the decision source is chosen, as
+// AtlasRemoteBehavior fills in a remote one: form-js's default for it names none, because
+// only this server knows which are deployed. The first decision offered is a start; the
+// panel lets the author pick another.
+class AtlasDecisionBehavior {
+  constructor(eventBus, injector) {
+    eventBus.on('commandStack.formField.edit.preExecute', (event) => {
+      const context = event && event.context;
+      if (!context || !context.properties || !context.formField) return;
+      const block = context.properties[DECISION_MEMBER];
+      if (!block || typeof block !== 'object' || block.decisionId) return;
+      if (!DECISION_FIELD_TYPES.includes(context.formField.type)) return;
+      const first = decisionsOf(injector.get('atlasDecisionList', false))[0];
+      if (!first) return;
+      context.properties = {
+        ...context.properties,
+        [DECISION_MEMBER]: { version: DECISION_VERSION, decisionId: first.id }
+      };
+    });
+  }
+}
+
+AtlasDecisionBehavior.$inject = [ 'eventBus', 'injector' ];
 
 // ---------- the palette ---------------------------------------------------------------------
 
@@ -849,8 +990,9 @@ AtlasRemotePalette.$inject = [ 'formFields', 'injector' ];
 // AtlasEditorModule is the editor's part. The form editor loads it with the viewer's part
 // (playground.js), whose select the canvas renders.
 export const AtlasEditorModule = {
-  __init__: [ 'atlasRemotePalette', 'atlasRemoteBehavior', 'atlasRemotePropertiesProvider' ],
+  __init__: [ 'atlasRemotePalette', 'atlasRemoteBehavior', 'atlasDecisionBehavior', 'atlasRemotePropertiesProvider' ],
   atlasRemotePalette: [ 'type', AtlasRemotePalette ],
   atlasRemoteBehavior: [ 'type', AtlasRemoteBehavior ],
+  atlasDecisionBehavior: [ 'type', AtlasDecisionBehavior ],
   atlasRemotePropertiesProvider: [ 'type', AtlasRemotePropertiesProvider ]
 };

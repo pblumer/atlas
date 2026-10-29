@@ -3792,6 +3792,29 @@ tr[hidden] { display: none; }
   display: block;
   background: none;
 }
+/* A decision whose logic is a list (ADR-draft-form-options-from-a-decision, the list
+   editor in vendor/dmn/src/atlas/list-editor.jsx): one row per entry — its number, its
+   FEEL expression, and the controls that move or remove it — and the button that adds
+   one beneath them. dmn-js gives every literal expression in the boxed-expression view
+   the 250px textarea a knowledge model's body has; an entry is a line. */
+.dmn-canvas .atlas-list-editor { display: flex; flex-direction: column; align-items: stretch; }
+.dmn-canvas .atlas-list-entry {
+  display: grid; grid-template-columns: 2.6em minmax(0, 1fr) auto; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.dmn-canvas .atlas-list-index {
+  text-align: right; padding-right: 8px; color: var(--muted); font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.dmn-canvas .atlas-list-entry .textarea { min-height: 0; }
+.dmn-canvas .atlas-list-actions { display: flex; gap: 2px; padding: 0 8px; }
+.dmn-canvas .atlas-list-actions .btn { min-width: 28px; padding: 2px 6px; font-size: 14px; line-height: 1.2; }
+.dmn-canvas .atlas-list-add { align-self: flex-start; margin: 10px 0 4px 2.6em; }
+.dmn-canvas .atlas-list-empty { margin: 12px 0 0 2.6em; color: var(--muted); }
+/* Its mark in the requirements graph — the overlay that opens it, and its entry in a
+   decision's replace menu. dmn-font has no glyph for a list. */
+.atlas-icon-list::before { content: "\2261"; font-weight: 700; font-size: 1.15em; line-height: 1; }
+
 /* The Camunda-style properties panel column (DRG view). dmn-js-properties-panel
    ships its own internal styling; we only size the column and separate it. */
 .dmn-props { width: 320px; flex: none; overflow: auto; border-left: 1px solid var(--border); background: var(--bg); }

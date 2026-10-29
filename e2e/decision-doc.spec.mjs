@@ -71,6 +71,34 @@ test("a decision whose logic is a literal expression carries the expression", as
   expect(fee.hitPolicy).toBe("");
 });
 
+test("a decision whose logic is a list carries its entries, and the document sets them", async ({ page }) => {
+  // ADR-draft-form-options-from-a-decision: a boxed list is logic, not its absence.
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="d" name="Stammdaten" namespace="http://x">
+  <decision id="farben" name="Farben">
+    <list id="l1">
+      <literalExpression id="a"><text>"rot"</text></literalExpression>
+      <literalExpression id="b"><text>{value: "gr", label: "blau-gruen"}</text></literalExpression>
+    </list>
+  </decision>
+</definitions>`;
+  const { c, text } = await page.evaluate((x) => {
+    const c = window.__dmndoc.collectDecisionDocumentation(x);
+    const bytes = window.__dmndoc.buildDecisionDocumentationPdf({
+      collection: c, diagram: null, title: "Farben", note: "", version: 1,
+      createdAt: "2026-10-29", createdBy: "pat", modelRef: "stammdaten",
+    });
+    return { c, text: window.__asLatin1(bytes) };
+  }, xml);
+  expect(c.decisions[0].list).toEqual(['"rot"', '{value: "gr", label: "blau-gruen"}']);
+  expect(c.decisions[0].literal).toBe("");
+  // Parentheses are escaped inside a PDF string; the parts around them are not.
+  expect(text).toContain("Liste ");
+  expect(text).toContain("ein Eintrag pro Zeile");
+  expect(text).toContain("blau-gruen");
+  expect(text).not.toContain("keine Logik");
+});
+
 test("a model with nothing to document collects nothing rather than throwing", async ({ page }) => {
   const empty = await page.evaluate(() => window.__dmndoc.collectDecisionDocumentation(window.__emptyXml));
   expect(empty.decisionId).toBe("");

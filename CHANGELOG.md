@@ -14,6 +14,25 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A form field takes its options from a decision.** A select, radio group, checklist or
+  tag list can name a deployed decision without inputs — typically a list its owners keep
+  in the decision editor — under Options source ▸ Type ▸ Decision (DMN), and shows what
+  the newest version of the decision answers each time the form is opened: no copy of the
+  list in the form, no modelled step that writes it into the instance, and a new version
+  reaches the next form without touching it. The panel shows what the decision answers
+  now; the field says it is loading, or that its choices could not be loaded and why. A
+  public start link and a public wizard step are served the form with the options written
+  in. Task completion, a public start and a wizard step refuse a value the list does not
+  offer (400 `invalid_value`) and a value whose list cannot be read (422). New routes
+  `GET /api/v1/form-data/decisions` and `GET /api/v1/form-data/decisions/{decisionId}/options`
+  (ADR-draft-form-options-from-a-decision).
+- **The decision editor edits a list.** A decision whose logic is a DMN boxed list opens in
+  its own tab like a table or a literal expression: entries are added, moved up or down and
+  removed, and Ctrl+Z takes each step back. A decision's replace menu in the requirements
+  graph offers List beside Decision table and Literal expression and keeps the decision's
+  id and requirements; a list decision carries the overlay that opens it, and its published
+  documentation lists its entries instead of saying it has no logic
+  (ADR-draft-form-options-from-a-decision).
 - **An application can give its grant back.** `POST /oauth/revoke` (RFC 7009) takes
   either token of a grant, with the client's id and secret as the token endpoint takes
   them, and withdraws the whole grant when it belongs to that client — the same
@@ -37,6 +56,10 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
+  decision table into a literal expression in the requirements graph's replace menu left
+  its tab opening the old table — over a decision no longer in the model, so what was typed
+  there went nowhere. The tab looks the decision up again when it is pressed.
 - **Somebody who signs in only through single sign-on can approve an application.** The
   OAuth consent page offered a password form and nothing else, and a federated sign-in
   could only come back to the Console or the portal. The page now offers the identity

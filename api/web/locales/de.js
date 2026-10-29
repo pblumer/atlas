@@ -1895,6 +1895,17 @@ export default {
   "lib.Open decision table": "Entscheidungstabelle öffnen",
   "lib.Open literal expression": "Literal Expression öffnen",
   "lib.Remove item": "Eintrag entfernen",
+  // The boxed list editor (vendor/dmn/src/atlas/, ADR-draft-form-options-from-a-decision).
+  "lib.List": "Liste",
+  "lib.Open list": "Liste öffnen",
+  "lib.Add entry": "Eintrag hinzufügen",
+  "lib.Move entry up": "Eintrag nach oben",
+  "lib.Move entry down": "Eintrag nach unten",
+  "lib.Remove entry": "Eintrag entfernen",
+  "lib.Move entry {index} up": "Eintrag {index} nach oben verschieben",
+  "lib.Move entry {index} down": "Eintrag {index} nach unten verschieben",
+  "lib.Remove entry {index}": "Eintrag {index} entfernen",
+  "lib.This list has no entries yet.": "Diese Liste hat noch keine Einträge.",
 
   // The decision editor (dmn-editor.js).
   "dmn.view.overview": "Übersicht (DRG)",
@@ -1903,6 +1914,7 @@ export default {
   "dmn.hint.drd": "Zeichne den Entscheidungsanforderungsgraphen. Ein Knoten <b>Eingabedaten</b> ist etwas, das dieses Modell bekommt, eine <b>Entscheidung</b> enthält Logik, und ein <b>Wissensmodell</b> ist eine wiederverwendbare Funktion, die eine Entscheidung aufrufen kann. Öffne den Reiter einer Entscheidung, um ihre Logik zu modellieren.",
   "dmn.hint.literal": "Die Logik dieser Entscheidung ist ein einziger FEEL-Ausdruck: Was er ergibt, ist das Ergebnis der Entscheidung, unter der darunter genannten Variable. Ihre Eingaben sind, was der Anforderungsgraph ihr gibt — beides wird in eine Business Rule Task übernommen, die diese Entscheidung aufruft.",
   "dmn.hint.boxed": "Ein <b>Wissensmodell</b> ist eine wiederverwendbare FEEL-Funktion, keine Entscheidung: Kein Prozess ruft es auf. <b>F</b> ist die Ausdruckssprache, die Liste daneben sind die Parameter, die ein Aufrufer übergibt, der Rumpf wird mit ihnen ausgewertet, und <b>Result</b> nennt die Variable, an die eine Entscheidung das Ergebnis bindet, wenn sie dieses Modell aufruft.",
+  "dmn.hint.list": "Die Logik dieser Entscheidung ist eine <b>Liste</b>: Jeder Eintrag ist ein FEEL-Ausdruck, und das Ergebnis der Entscheidung ist die Liste ihrer Werte, in dieser Reihenfolge. Ein Eintrag wie <code>{value: \"CC100\", label: \"Einkauf\"}</code> ist eine Option mit Bezeichnung. Eine Entscheidung ohne Eingaben kann einem Auswahlfeld eines Formulars seine Optionen geben — das Formular zeigt, was die neueste deployte Version ergibt.",
   "dmn.hint.table": "Modelliere die Entscheidungstabelle. Knoten <b>Eingabedaten</b> werden zu den Eingaben der Entscheidung, und die Ausgabespalte wird zu ihrer Ergebnisvariable — beides wird in eine Business Rule Task übernommen, die diese Entscheidung aufruft.",
   "dmn.column.added": "«{input}» als Eingabespalte von «{decision}» hinzugefügt.",
   "dmn.column.removeAsk.one": "Die Eingabespalte auch entfernen?",
@@ -2061,6 +2073,7 @@ export default {
   "decisionDoc.rule": "Regel {n}: {text}",
   "decisionDoc.writes": "Schreibt: {outputs}",
   "decisionDoc.literal": "Literal Expression",
+  "decisionDoc.list": "Liste (ein Eintrag pro Zeile)",
   "decisionDoc.noLogic": "Diese Entscheidung deklariert noch keine Logik.",
   "decisionDoc.subtitle": "Entscheidungsdokumentation",
   "decisionDoc.model": "Modell",

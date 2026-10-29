@@ -99,6 +99,7 @@ import (
 	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
+	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/order"
@@ -416,6 +417,10 @@ type Server struct {
 	workerQueries *workerquery.Service
 	queryBroker   *workerquery.Broker
 	lookupRate    *rateLimiter
+	// formDecision gives a form field its options from a deployed DMN decision
+	// (ADR-draft-form-options-from-a-decision). It owns no state and holds no run
+	// loop: formdecisions.go is its whole reach into this server.
+	formDecision *formdecision.Service
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -2097,6 +2102,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
+	s.newFormDecisions()
 	// The OAuth token and revocation endpoints draw on a bucket of their own, sized
 	// for a confidential server-side client renewing many people's tokens from one
 	// address rather than for a person at a public form (limits.TokenEndpointBurst,

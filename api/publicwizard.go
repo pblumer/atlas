@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -187,6 +188,11 @@ func (s *Server) publicStepOf(tr taskResp) (*publicStep, error) {
 			step.Data = data
 		}
 	})
+	if err == nil && step.Schema != nil {
+		// As at the start link: nobody here can ask for a decision field's options, so
+		// they come written into the form (ADR-draft-form-options-from-a-decision).
+		step.Schema = s.formDecision.Resolve(context.Background(), step.Schema)
+	}
 	return step, err
 }
 
@@ -303,6 +309,9 @@ func (s *Server) handlePublicWizardComplete(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if refuseDirectoryFieldInPublic(w, schema) {
+		return
+	}
+	if s.refuseDecisionValues(w, r, schema, body) {
 		return
 	}
 	if err := s.encipherJobVars(taskKey, vars); err != nil {
