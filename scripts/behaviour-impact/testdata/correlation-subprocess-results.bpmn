@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_goods" name="goods"><extensionElements><zeebe:subscription correlationKey="=orderNo"/></extensionElements></message>
+  <!-- review correlation.scope and payload.scope: "order" has no output mapping, so its
+       result (orderNo, by the worker's choice) lands in the subprocess, which the key now
+       reads first. The model cannot say which names a worker returns. -->
+  <process id="correlation_subprocess_results" isExecutable="true">
+    <startEvent id="start"/>
+    <subProcess id="parts">
+      <startEvent id="parts_start"/>
+      <serviceTask id="order"><extensionElements><zeebe:taskDefinition type="order"/></extensionElements></serviceTask>
+      <receiveTask id="wait_goods" messageRef="m_goods"/>
+      <endEvent id="parts_end"/>
+      <sequenceFlow id="p1" sourceRef="parts_start" targetRef="order"/>
+      <sequenceFlow id="p2" sourceRef="order" targetRef="wait_goods"/>
+      <sequenceFlow id="p3" sourceRef="wait_goods" targetRef="parts_end"/>
+    </subProcess>
+    <endEvent id="done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="parts"/>
+    <sequenceFlow id="f2" sourceRef="parts" targetRef="done"/>
+  </process>
+</definitions>

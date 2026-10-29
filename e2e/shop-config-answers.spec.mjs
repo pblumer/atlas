@@ -126,7 +126,7 @@ const HELD = {
 // controls and presses "order".
 const order = async (page) => {
   await page.locator(".cell").filter({ has: page.getByText("Meeting room", { exact: true }) })
-    .first().locator("button.sq", { hasText: "+" }).click();
+    .first().locator('button.sq[data-icon="cart"]').click();
   await page.getByRole("button", { name: /Add to basket/ }).click();
   await page.getByLabel("Standort").fill("Ei1 - 1. Stock 152");
   await page.getByLabel("Plätze").fill("5");

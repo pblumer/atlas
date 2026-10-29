@@ -109,7 +109,7 @@ const top = async (page, name) => {
 // opens it.
 const fill = async (page) => {
   for (const name of ["Monitor 24-inch", "Apple MacBook Pro"]) {
-    await cell(page, name).first().locator("button.sq", { hasText: "+" }).click();
+    await cell(page, name).first().locator('button.sq[data-icon="cart"]').click();
   }
   await page.getByRole("button", { name: /Add to basket/ }).click();
   await expect(cell(page, "MacBook hardware")).toHaveCount(1);

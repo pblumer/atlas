@@ -94,7 +94,7 @@ Chosen option: **1**.
 
 - `apiScopeDiagrams = "diagrams"` is mintable. Its allowlist is `GET /api/v1/processes`, `GET /api/v1/processes/{key}/xml` and `GET /api/v1/processes/{key}/runtime`; every other request, the writes on the same paths included, is refused with 403. (Amended: `GET /api/v1/processes/{key}/runtime/counts` instead of `/runtime`.)
 - It carries its minter's roles, as `status` and `landscape` do: every route it reaches asks for the role `any`, so roles cannot widen what the allowlist admits. It is not added to `scopeRoles`, because an empty role set is read as a legacy token's.
-- The Console offers it on the API token page between `status` and `events`; the handbook's table of scopes names it, in both languages, with the runtime answer's incident messages said plainly. (Amended: the handbook now says the scope reads counts and never an incident's message.)
+- The Console offers it on the API token page between `status` and `events`; the handbook's table of scopes names it, in both languages, with the runtime answer's incident messages said plainly. (Amended: the handbook now says the scope reads counts and never an incident's message.) (As built 2026-10-28: the page also offers the applications as an optional reach for a `diagrams` token, which the architecture list of the 2026-10-27 amendment needs; a token minted without one reads every process and lists no sketch.)
 
 ### Consequences
 

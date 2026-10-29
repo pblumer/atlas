@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_change" name="change"><extensionElements><zeebe:subscription correlationKey="=orderId"/></extensionElements></message>
+  <!-- changed compensation.event-subprocess: the compensation end in the handler used to
+       compensate "reserve" in its own run; it now compensates the root, which has nothing. -->
+  <process id="compensation_own_run" isExecutable="true">
+    <startEvent id="start"/>
+    <userTask id="work"/>
+    <endEvent id="done"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="work"/>
+    <sequenceFlow id="f2" sourceRef="work" targetRef="done"/>
+    <subProcess id="on_change" triggeredByEvent="true">
+      <startEvent id="change_start"><messageEventDefinition messageRef="m_change"/></startEvent>
+      <serviceTask id="reserve"><extensionElements><zeebe:taskDefinition type="reserve"/></extensionElements></serviceTask>
+      <boundaryEvent id="reserve_comp" attachedToRef="reserve"><compensateEventDefinition/></boundaryEvent>
+      <serviceTask id="release" isForCompensation="true"><extensionElements><zeebe:taskDefinition type="release"/></extensionElements></serviceTask>
+      <endEvent id="undo_change"><compensateEventDefinition/></endEvent>
+      <association id="a1" sourceRef="reserve_comp" targetRef="release"/>
+      <sequenceFlow id="e1" sourceRef="change_start" targetRef="reserve"/>
+      <sequenceFlow id="e2" sourceRef="reserve" targetRef="undo_change"/>
+    </subProcess>
+  </process>
+</definitions>

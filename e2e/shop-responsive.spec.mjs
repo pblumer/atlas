@@ -202,7 +202,7 @@ test("the basket stacks each offering over its own services on a phone", async (
   await page.getByRole("button", { name: "Workplace", exact: true }).click();
   await page.getByRole("button", { name: "All groups", exact: true }).click();
   for (const name of ["Monitor 24-inch", "Apple MacBook Pro"]) {
-    await cell(page, name).first().locator("button.sq", { hasText: "+" }).click();
+    await cell(page, name).first().locator('button.sq[data-icon="cart"]').click();
   }
   await page.getByRole("button", { name: /Add to basket/ }).click();
   await expect(cell(page, "MacBook hardware")).toHaveCount(1);

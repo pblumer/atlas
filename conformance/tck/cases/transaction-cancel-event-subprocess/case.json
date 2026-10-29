@@ -1,0 +1,25 @@
+{
+  "name": "transaction-cancel-event-subprocess",
+  "model": "transaction-cancel-event-subprocess.bpmn",
+  "features": [
+    "transaction-cancel-event-subprocess"
+  ],
+  "start": {
+    "kind": "explicit"
+  },
+  "driver": [
+    {
+      "action": "complete",
+      "element": "reserve"
+    },
+    {
+      "action": "publish",
+      "correlation": "O1",
+      "message": "cancellation"
+    },
+    {
+      "action": "complete",
+      "element": "unreserve"
+    }
+  ]
+}

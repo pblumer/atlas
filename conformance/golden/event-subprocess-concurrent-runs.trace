@@ -1,0 +1,4 @@
+state: completed
+path: start -> finding -> work -> finding -> finding -> found -> await_answer -> finding -> finding -> found -> await_answer -> approved_q -> extra -> extra_done -> approved_q -> declined -> end
+vars:
+  findingId=F2

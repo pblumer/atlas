@@ -397,7 +397,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0309](0309-measuring-a-capability.md) | Measuring a capability | Accepted | Landed |
 | [0310](0310-read-the-difference-between-what-is-built-and-what-is-planned.md) | Read the difference between what is built and what is planned | Accepted | Landed |
 | [0311](0311-portal-approval-page.md) | The approver decides on a page of their own, in the customer's colours | Accepted | Landed |
-| [0312](0312-portal-catalogue-order-inventory.md) | Catalogue, order, inventory — three models, not one | Accepted | Partial |
+| [0312](0312-portal-catalogue-order-inventory.md) | Catalogue, order, inventory — three models, not one | Accepted (amended) | Partial |
 | [0313](0313-portal-language-follows-the-browser.md) | The portal follows the browser's language; the console still does not | Accepted | Partial |
 | [0314](0314-portal-personal-data.md) | Personal data in the portal — a reference by default, a destroyable key for the rest | Accepted (amended) | Partial |
 | [0315](0315-portal-roles-and-responsibilities.md) | Who runs the portal — a role for the operation, a catalogue for the object | Accepted | Partial |
@@ -593,6 +593,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted | Landed |
 | [0506](0506-marketplace-catalogue-bundles-and-updates.md) | atlas hub catalogue bundles and opt-in updates | Proposed | Not started |
 | [0507](0507-ui-appearance-modes.md) | Appearance mode is a personal preference, not an organisation brand | Proposed | Partial |
+| [0508](0508-scope-aware-messaging-and-compensation.md) | Scope-aware messaging, event-subprocess runs and compensation from an event subprocess | Accepted | Landed |
+| [0509](0509-cockpit-appearance-skin.md) | A gamified cockpit skin as an opt-in appearance | Proposed | Partial |
 
 ## The two states of a record
 

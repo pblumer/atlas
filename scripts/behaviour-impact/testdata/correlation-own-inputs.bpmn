@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://atlas/behaviour-impact">
+  <message id="m_reply" name="reply"><extensionElements><zeebe:subscription correlationKey="=ticket"/></extensionElements></message>
+  <message id="m_cancel" name="cancel"><extensionElements><zeebe:subscription correlationKey="=ticket"/></extensionElements></message>
+  <!-- changed correlation.scope, twice: the receive task's own input mapping and the
+       boundary host's input mapping both declare "ticket", which the keys now read. -->
+  <process id="correlation_own_inputs" isExecutable="true">
+    <startEvent id="start"/>
+    <receiveTask id="wait_reply" messageRef="m_reply">
+      <extensionElements><zeebe:ioMapping><zeebe:input source="=request.ticket" target="ticket"/></zeebe:ioMapping></extensionElements>
+    </receiveTask>
+    <serviceTask id="handle">
+      <extensionElements>
+        <zeebe:taskDefinition type="handle"/>
+        <zeebe:ioMapping><zeebe:input source="=request.ticket" target="ticket"/></zeebe:ioMapping>
+      </extensionElements>
+    </serviceTask>
+    <boundaryEvent id="on_cancel" attachedToRef="handle"><messageEventDefinition messageRef="m_cancel"/></boundaryEvent>
+    <endEvent id="done"/>
+    <endEvent id="cancelled"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="wait_reply"/>
+    <sequenceFlow id="f2" sourceRef="wait_reply" targetRef="handle"/>
+    <sequenceFlow id="f3" sourceRef="handle" targetRef="done"/>
+    <sequenceFlow id="f4" sourceRef="on_cancel" targetRef="cancelled"/>
+  </process>
+</definitions>

@@ -59,23 +59,27 @@ func TestDisplayPreferencesBelongToThePersonSignedIn(t *testing.T) {
 	}
 
 	code, body := cReq(t, anna, ts, "PUT", "/api/v1/me/preferences",
-		`{"region":"ch","timeZone":"Europe/Zurich","language":"de"}`)
+		`{"region":"ch","timeZone":"Europe/Zurich","language":"de","appearance":"dark"}`)
 	if code != http.StatusOK {
 		t.Fatalf("PUT preferences = %d: %s", code, body)
 	}
 
 	got := prefsOf(t, anna, ts)
-	if got["region"] != "ch" || got["timeZone"] != "Europe/Zurich" || got["language"] != "de" {
+	if got["region"] != "ch" || got["timeZone"] != "Europe/Zurich" || got["language"] != "de" || got["appearance"] != "dark" {
 		t.Fatalf("anna reads %v, want what she saved", got)
 	}
-	if got := prefsOf(t, admin, ts)["region"]; got != "" {
-		t.Fatalf("root reads region %v, want anna's choice to be hers alone", got)
+	if got := prefsOf(t, admin, ts); got["region"] != "" || got["appearance"] != "" {
+		t.Fatalf("root reads %v, want anna's choices to be hers alone", got)
 	}
 
 	// A region nobody offers is refused at the boundary, because the browser is
 	// what formats with it: stored, it would come back as a broken screen.
 	if code, _ := cReq(t, anna, ts, "PUT", "/api/v1/me/preferences", `{"region":"fr"}`); code != http.StatusBadRequest {
 		t.Fatalf("PUT an unknown region = %d, want 400", code)
+	}
+	// So is an appearance the stylesheet does not draw (ADR-0507).
+	if code, _ := cReq(t, anna, ts, "PUT", "/api/v1/me/preferences", `{"appearance":"sepia"}`); code != http.StatusBadRequest {
+		t.Fatalf("PUT an unknown appearance = %d, want 400", code)
 	}
 }
 

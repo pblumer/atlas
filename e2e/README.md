@@ -43,17 +43,26 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   instances, keeps it disarmed; Escape cancels.
 - **`appearance.spec.mjs`**
   ([ADR-0507](../docs/adr/0507-ui-appearance-modes.md)):
-  the light, dark and system appearance — nothing stored keeps today's light console
-  even on a dark system; a dark choice is on the document before the body is parsed;
-  `system` follows the operating system live while an explicit choice ignores it; an
-  invalid value or unreadable storage stays light without an error; a cached brand colour
-  stays the brand, with a soft tint derived for the dark surface. In the Modeler, against
-  `appearance-harness.html`: light draws exactly bpmn-js's own colours; dark draws every
-  shape of a diagram carrying most of what bpmn-js draws dark, with label, outline and
-  arrow above WCAG's 4.5:1 and 3:1; the bpmn.io watermark stays visible as drawn; a switch
-  re-colours an open diagram without importing it again; the exported picture stays
-  light and the model carries no colour; the code-editor tokens are readable in both
-  palettes; and the DMN requirements graph is drawn from the same palette.
+  the light, dark and system appearance, a display preference kept with the account and
+  mirrored in the browser — nothing stored keeps today's light console even on a dark
+  system; a dark choice is on the document before the body is parsed; `system` follows the
+  operating system live while an explicit choice ignores it; an invalid value, a mirror that
+  is not a record, or unreadable storage stays light without an error; a cached brand colour
+  stays the brand, with a soft tint derived for the dark surface; five brand colours read
+  as text at 4.5:1 on the dark surface and on their soft tint, and as the brand itself in
+  light. The switch beside the favourites is there signed in or not, turns the console at
+  once, sends the whole record back with only the appearance changed, keeps the choice in
+  the browser without an account, and makes an explicit choice out of `system`; a choice
+  from another device arrives with the account's record; the sign-in screen is drawn from
+  the mirror, and signing in applies the account's appearance before the first screen. In
+  the Modeler, against `appearance-harness.html`: light draws exactly bpmn-js's own colours;
+  dark draws every shape of a diagram carrying most of what bpmn-js draws dark, with label,
+  outline and arrow above WCAG's 4.5:1 and 3:1; the bpmn.io watermark stays visible as
+  drawn; a switch re-colours an open diagram without importing it again; the exported
+  picture stays light and the model carries no colour; the code-editor and JSON tokens are
+  readable in both palettes; and the DMN requirements graph is drawn from the same palette.
+  The cockpit skin (ADR-0509) is drawn from the record before the body is parsed, and the
+  switch takes it back to light; the Display screen offers it (`display-settings.spec.mjs`).
 - **`capabilities.spec.mjs`** ([ADR-0305](../docs/adr/0305-business-capabilities-and-value-streams.md),
   roadmap B8): the business-architecture screens against a stubbed API — the landing view
   is the gap report, one card per finding kind in the server's order, each sentence composed
@@ -423,6 +432,20 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   id a deployed version carries and the process's own id are kept; and one undo takes
   back name and id together.
 
+- **`shop-icons.spec.mjs`**: the shop's **icon buttons** — a heart for a favourite,
+  filled once marked, a shopping cart for the basket, a struck-through cart to take a
+  chosen product out again and on an always-included part, and an info sign for a
+  product's information, each an inline SVG with no glyph beside it and a name for screen
+  readers; their stroke is the shop's accent and follows a catalogue theme's.
+
+- **`shop-reorder-parts.spec.mjs`** ([ADR-0312](../docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28):
+  **what a held bundle lacks is offered again**, against a stubbed API in which the
+  iPhone is held, its hardware given back and its case never taken. In the catalogue the
+  hardware gets an enabled "+" and is ordered alone; a part held whole, or carried by a
+  bundle in the basket, stays included and disabled; *My services* lists the hardware
+  and the case under *Not held* and the basket takes both; a bundle held whole offers
+  nothing extra; and a part an open order is already bringing is offered nowhere.
+
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start
@@ -783,8 +806,9 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   `shop-config-answers.spec.mjs`; the stub keeps the tokens as the server would.
   - **Minting:** the form shows the scope's sentence and the roles the token will carry before
     it is sent — feedreader alone for `events`, modeler, operator and user otherwise. A
-    `landscape` token is not sent without an application, an `events` token may name catalogues,
-    and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
+    `landscape` token is not sent without an application, a `diagrams` token may name
+    applications under its own words and is sent without one too, an `events` token may name
+    catalogues, and no other scope asks for a reach. More than 1825 days is refused, and 0 needs a
     confirmation beside its warning.
   - **The secret:** shown once, in the document once, and copied from the panel. It never
     reaches storage, the URL or the console. Done removes it, and leaving the view empties the

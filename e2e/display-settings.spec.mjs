@@ -105,6 +105,55 @@ test("back to defaults is the console nobody configured", async ({ page }) => {
   expect(await page.evaluate(() => window.__stored)).toMatchObject({ region: "international", timeZone: "" });
 });
 
+// The appearance is the fourth choice (ADR-0507), and it obeys the screen's rule: a
+// click shows a choice, Save applies it. The dark option says it is a preview.
+test("the appearance is chosen here and applied on save, not on a click", async ({ page }) => {
+  await open(page);
+  const appearance = () => page.evaluate(() => document.documentElement.getAttribute("data-appearance"));
+  await expect(page.locator('.ds-option:has(input[value="dark"]) .ds-option-name')).toHaveText("Dunkel (Vorschau)");
+  // Nothing chosen reads as the light option, which is what it draws.
+  await expect(page.locator('input[name="ds-appearance"][value="light"]')).toBeChecked();
+
+  await page.locator('input[name="ds-appearance"][value="dark"]').check();
+  expect(await appearance()).toBe("light");
+  await page.locator("#ds-save").click();
+  await expect(page.locator("#ds-status")).toHaveText("Gespeichert.");
+  expect(await appearance()).toBe("dark");
+  expect(await page.evaluate(() => window.__stored)).toMatchObject({ appearance: "dark" });
+
+  // Back to the defaults clears it — the record says "nothing chosen", not "light".
+  await page.locator("#ds-reset").click();
+  await expect(page.locator('input[name="ds-appearance"][value="light"]')).toBeChecked();
+  await page.locator("#ds-save").click();
+  await expect(page.locator("#ds-status")).toHaveText("Gespeichert.");
+  expect(await page.evaluate(() => window.__stored)).toMatchObject({ appearance: "" });
+  expect(await appearance()).toBe("light");
+  expect(page.__errors).toEqual([]);
+});
+
+test("the cockpit skin is offered beside the three appearances, labelled as a bit of fun", async ({ page }) => {
+  await open(page);
+  await expect(page.locator('.ds-option:has(input[value="cockpit"]) .ds-option-name')).toHaveText("Cockpit (Spielerei)");
+  await page.locator('input[name="ds-appearance"][value="cockpit"]').check();
+  await page.locator("#ds-save").click();
+  await expect(page.locator("#ds-status")).toHaveText("Gespeichert.");
+  expect(await page.evaluate(() => document.documentElement.getAttribute("data-appearance"))).toBe("cockpit");
+  expect(await page.evaluate(() => window.__stored)).toMatchObject({ appearance: "cockpit" });
+  expect(page.__errors).toEqual([]);
+});
+
+test("saving another field leaves an unchosen appearance unchosen", async ({ page }) => {
+  await open(page);
+  await page.locator('input[name="ds-region"][value="ch"]').check();
+  await page.locator("#ds-save").click();
+  await expect(page.locator("#ds-status")).toHaveText("Gespeichert.");
+  // "" is the default, and the default may change once dark is no longer a preview:
+  // a save of the number format must not pin this person to light.
+  expect(await page.evaluate(() => window.__stored)).toMatchObject({ region: "ch", appearance: "" });
+  // The region rows repaint their samples on a change; the appearance rows have none.
+  expect(page.__errors).toEqual([]);
+});
+
 test("with no sign-in the setting is this browser's, and says so", async ({ page }) => {
   await open(page, "anonymous");
 

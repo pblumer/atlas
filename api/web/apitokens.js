@@ -42,16 +42,18 @@ const th = (key, params) => {
 // SCOPES are the scopes a token may be minted with, narrowest first, so the form
 // reads from least to most privilege and full is the last thing offered rather
 // than the first. `reach` says what a token of the scope may be confined to:
-// "projects" a landscape token must name, "catalogues" an events token may name,
-// "" for every other scope, whose reach this form does not ask for.
+// "projects" a landscape token must name (`required`) and a diagrams token may name,
+// because it lists the architecture sketches of those applications and of no other
+// (ADR-0493, as amended), "catalogues" an events token may name, "" for every other
+// scope, whose reach this form does not ask for.
 export const SCOPES = [
   { id: "metrics", reach: "" },
   { id: "status", reach: "" },
-  { id: "diagrams", reach: "" },
+  { id: "diagrams", reach: "projects" },
   { id: "tasklist", reach: "" },
   { id: "worker", reach: "" },
   { id: "events", reach: "catalogues" },
-  { id: "landscape", reach: "projects" },
+  { id: "landscape", reach: "projects", required: true },
   { id: "directory", reach: "" },
   { id: "inventory", reach: "" },
   { id: "full", reach: "" },
@@ -352,7 +354,10 @@ function wireForm({ api, toast, root, secrets, ctx, reachLists, tokens }) {
   const rolesBody = root.querySelector("#tok-roles-body");
   const vaultBox = root.querySelector("#tok-vault");
   const vaultNotes = root.querySelector("#tok-vault-notes");
-  let reachFor = ""; // the scope the reach box was last drawn for
+  // The scope the reach box was last drawn for: by scope rather than by what the
+  // reach names, because a landscape and a diagrams token name the same applications
+  // under different rules.
+  let reachFor = "";
 
   // paint brings every dependent part of the form in line with what is chosen.
   const paint = async () => {
@@ -384,14 +389,14 @@ function wireForm({ api, toast, root, secrets, ctx, reachLists, tokens }) {
       vaultNotes.innerHTML = notes.map((n) => `<div class="warn-note">${n}</div>`).join("");
     }
 
-    const want = sc ? sc.reach : "";
+    const want = sc && sc.reach ? scope : "";
     if (want !== reachFor) {
       reachFor = want;
       reachBox.innerHTML = want ? `<div class="muted">${esc(t("apitokens.reach.loading"))}</div>` : "";
       if (want) {
-        const list = await loadReach(api, want, reachLists, ctx.names);
+        const list = await loadReach(api, sc.reach, reachLists, ctx.names);
         if (reachFor !== want) return; // the scope changed while the list loaded
-        reachBox.innerHTML = reachPicker(want, list);
+        reachBox.innerHTML = reachPicker(sc, list);
       }
     }
   };
@@ -419,7 +424,7 @@ function wireForm({ api, toast, root, secrets, ctx, reachLists, tokens }) {
     const body = { name, scope, expiresInDays: days };
     if (sc.reach) {
       const reach = [...form.querySelectorAll("input[name=reach]:checked")].map((i) => i.value);
-      if (sc.reach === "projects" && !reach.length) { toast(t("apitokens.reach.required"), "warn"); return; }
+      if (sc.required && !reach.length) { toast(t("apitokens.reach.required"), "warn"); return; }
       if (reach.length) body.reach = reach;
     }
     if (vaultBox && form.elements.toVault.checked) {
@@ -457,10 +462,20 @@ function wireForm({ api, toast, root, secrets, ctx, reachLists, tokens }) {
   });
 }
 
-// reachPicker is the list of applications or catalogues a token may be confined to.
-function reachPicker(kind, list) {
-  const label = kind === "projects" ? "apitokens.reach.projects" : "apitokens.reach.catalogues";
-  const hint = kind === "projects" ? "apitokens.reach.projectsHint" : "apitokens.reach.cataloguesHint";
+// reachPicker is the list of applications or catalogues a token of the scope sc may
+// be confined to, under the scope's own label and hint: what choosing does differs
+// by scope even where the list is the same.
+function reachPicker(sc, list) {
+  const kind = sc.reach;
+  let label = t("apitokens.reach.catalogues");
+  let hint = t("apitokens.reach.cataloguesHint");
+  if (sc.id === "landscape") {
+    label = t("apitokens.reach.projects");
+    hint = t("apitokens.reach.projectsHint");
+  } else if (sc.id === "diagrams") {
+    label = t("apitokens.reach.diagrams");
+    hint = t("apitokens.reach.diagramsHint");
+  }
   let body;
   if (list && list.error) body = `<div class="warn-note">${esc(t("apitokens.reach.loadFailed", { error: list.error }))}</div>`;
   else if (!list || !list.length) body = `<div class="muted">${esc(t("apitokens.reach.none"))}</div>`;
@@ -470,8 +485,8 @@ function reachPicker(kind, list) {
       <span>${esc(it.label)} <span class="muted" style="font-size:12px">${esc(it.id)}</span></span></label>`).join("");
   }
   return `<div class="tok-reach" data-reach="${esc(kind)}">
-    <div class="field" style="margin-bottom:4px">${esc(t(label))}</div>
-    <p class="muted" style="margin:0 0 6px">${esc(t(hint))}</p>
+    <div class="field" style="margin-bottom:4px">${esc(label)}</div>
+    <p class="muted" style="margin:0 0 6px">${esc(hint)}</p>
     ${body}
   </div>`;
 }

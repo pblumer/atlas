@@ -2144,7 +2144,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), atlas runs the handler for the work already done. The undo task sits on no normal flow.</span></p>
+        <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss. Der Wurf wartet, bis alle Handler fertig sind, die er gestartet hat; erst dann geht der Fluss weiter (BPMN <code>waitForCompletion</code>, Standard <code>true</code>). Mit <code>waitForCompletion="false"</code> läuft der nächste Schritt sofort, neben der Rückabwicklung. Steht der Wurf direkt in einem Event-Subprozess, etwa in dem, der ein Storno behandelt, kompensiert er den Bereich, in dem dieser Event-Subprozess liegt.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), atlas runs the handler for the work already done. The undo task sits on no normal flow. The throw waits until every handler it started has finished, and only then does the flow go on (BPMN <code>waitForCompletion</code>, default <code>true</code>). With <code>waitForCompletion="false"</code> the next step runs at once, beside the rollback. A throw directly in an event subprocess — the one handling a cancellation, say — compensates the scope that event subprocess sits in.</span></p>
       </div>
       <div class="recipe" id="rz-transaction" data-proc="recipe-transaction">
         <h4><span class="rz-emoji" aria-hidden="true">⚛️</span>
@@ -2202,7 +2202,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein <code>&lt;transaction&gt;</code> ist ein Subprozess mit „alles oder nichts“-Semantik. Erreicht der Fluss ein End-Event mit <code>cancelEventDefinition</code>, wird die Transaktion <b>abgebrochen</b>: Atlas führt die Compensation-Handler für alle bereits erledigten Schritte darin aus und leitet über das <code>cancelEventDefinition</code>-<b>Boundary-Event</b> am Rand auf den Abbruch-Pfad. Ein normales End-Event committet. Unterschied zur reinen <a href="#rz-compensation">Compensation</a>: hier ist der Abbruch in eine atomare Einheit gekapselt.</span><span data-l="en">A <code>&lt;transaction&gt;</code> is a subprocess with all-or-nothing semantics. When the flow reaches an end event with a <code>cancelEventDefinition</code>, the transaction is <b>cancelled</b>: Atlas runs the compensation handlers for every completed step inside it and routes out through the <code>cancelEventDefinition</code> <b>boundary event</b> to the cancel path. A normal end event commits. Unlike plain <a href="#rz-compensation">compensation</a>, the rollback here is wrapped in one atomic unit.</span></p>
+        <p class="rz-how"><span data-l="de">Ein <code>&lt;transaction&gt;</code> ist ein Subprozess mit „alles oder nichts“-Semantik. Erreicht der Fluss ein End-Event mit <code>cancelEventDefinition</code>, wird die Transaktion <b>abgebrochen</b>: Atlas führt die Compensation-Handler für alle bereits erledigten Schritte darin aus und leitet über das <code>cancelEventDefinition</code>-<b>Boundary-Event</b> am Rand auf den Abbruch-Pfad. Ein normales End-Event committet. Unterschied zur reinen <a href="#rz-compensation">Compensation</a>: hier ist der Abbruch in eine atomare Einheit gekapselt. Kann der Abbruch jederzeit eintreffen, etwa als Storno des Kunden, setzt du das Cancel-End-Event in einen Event-Subprozess direkt in der Transaktion: Die Nachricht startet ihn, er unterbricht die laufende Arbeit, und die Transaktion wird wie beschrieben zurückgerollt.</span><span data-l="en">A <code>&lt;transaction&gt;</code> is a subprocess with all-or-nothing semantics. When the flow reaches an end event with a <code>cancelEventDefinition</code>, the transaction is <b>cancelled</b>: Atlas runs the compensation handlers for every completed step inside it and routes out through the <code>cancelEventDefinition</code> <b>boundary event</b> to the cancel path. A normal end event commits. Unlike plain <a href="#rz-compensation">compensation</a>, the rollback here is wrapped in one atomic unit. When the cancellation can arrive at any point — a customer cancelling an order, say — put the cancel end event in an event subprocess directly inside the transaction: the message starts it, it interrupts the work in progress, and the transaction rolls back as described.</span></p>
       </div>
       <div class="note tip">
         <span class="lbl" data-l="de">Kombinieren</span><span class="lbl" data-l="en">Combine</span>
@@ -11396,13 +11396,15 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
               Es sieht, wie viele Incidents offen sind, aber nie ihre Meldungen. Ausserdem liest es die
               Architektur-Skizzen der Applikationen, die seine Reichweite (<code>reach</code>) nennt, so wie alle sie
               sehen dürfen: ohne Endpunkte und Konfiguration der Worker, ohne Produkte, andere Applikationen und
-              Verantwortliche – auch wenn ein Administrator den Token ausgestellt hat.</td>
+              Verantwortliche – auch wenn ein Administrator den Token ausgestellt hat. Die Applikationen wählst du
+              beim Erzeugen auf der Seite; ohne Auswahl liest es keine Skizze.</td>
             <td data-l="en">A system that shows this server's processes elsewhere, such as a wiki that always draws a
               process's newest version in a page. It reads the list of deployed processes, a definition's model and
               its runtime counts; it cannot deploy, start or read instances. It sees how many incidents are open,
               never their messages. It also reads the architecture sketches of the applications its
               <code>reach</code> names, as everybody may see them: without Workers' endpoints and configuration,
-              products, other applications and owners – even when an administrator minted the token.</td></tr>
+              products, other applications and owners – even when an administrator minted the token. You choose the
+              applications on the page when you create it; with none chosen it reads no sketch.</td></tr>
           <tr><td><code>events</code></td>
             <td data-l="de">Eine CMDB oder eine Verrechnung, die dem Ereignis-Feed folgt. Du kannst es auf
               Kataloge beschränken, die du pflegst.</td>
@@ -11543,16 +11545,16 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
 
     <!-- ==================== DARSTELLUNG ==================== -->
     <section id="darstellung">
-      <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache</h2><h2 data-l="en">Display: numbers, time zone, language</h2>
-      <p class="lead" data-l="de">Wie <b>du</b> die Console liest. Drei Einstellungen unter
+      <h2 data-l="de">Darstellung: Zahlen, Zeitzone, Sprache, hell oder dunkel</h2><h2 data-l="en">Display: numbers, time zone, language, light or dark</h2>
+      <p class="lead" data-l="de">Wie <b>du</b> die Console liest. Vier Einstellungen unter
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (oder im Kontomenü oben
-        rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht und in welcher Sprache die
-        übersetzten Screens erscheinen. Sie gelten für dich und für niemanden sonst, und sie ändern nichts an den
+        rechts): wie eine Zahl geschrieben wird, auf welcher Uhr ein Zeitstempel steht, in welcher Sprache die
+        übersetzten Screens erscheinen und ob die Console hell oder dunkel ist. Sie gelten für dich und für niemanden sonst, und sie ändern nichts an den
         gespeicherten Daten – nur daran, wie sie dir gezeigt werden.</p>
-      <p class="lead" data-l="en">How <b>you</b> read the Console. Three settings under
+      <p class="lead" data-l="en">How <b>you</b> read the Console. Four settings under
         <a class="applink" href="/#/console/settings">Console&nbsp;→&nbsp;Display</a> (or in the account menu at
-        the top right): how a number is written, which clock a timestamp is on, and which language the translated
-        screens use. They apply to you and to nobody else, and they change nothing about the stored data – only
+        the top right): how a number is written, which clock a timestamp is on, which language the translated
+        screens use, and whether the Console is light or dark. They apply to you and to nobody else, and they change nothing about the stored data – only
         how it is shown to you.</p>
       <p data-l="de">Jede Option trägt ihr eigenes Muster, denn das ist es, was du tatsächlich wählst: «Schweiz»
         sagt niemandem, was ein Badge druckt, <code>25'864.5</code> sagt es genau. Die Vorschau oben auf dem
@@ -11633,6 +11635,43 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         screen by screen, and a half-translated screen would be worse than an untranslated one. After saving, the
         Console reloads once so the language takes effect everywhere at the same moment.</p>
 
+      <h3 data-l="de">Hell oder dunkel</h3><h3 data-l="en">Light or dark</h3>
+      <p data-l="de">Die Console lässt sich hell, dunkel oder so zeigen, wie es dein Betriebssystem gerade
+        tut. Am schnellsten geht es mit dem Schalter oben rechts neben dem Stern für die Favoriten: Ein Klick
+        wechselt zwischen hell und dunkel und speichert die Wahl sofort. «Wie das Betriebssystem» wählst du auf
+        dem Display-Screen; dann folgt die Console dem System, auch während sie offen ist. Drückst du danach den
+        Schalter, gilt wieder deine ausdrückliche Wahl. Auf sehr schmalen Bildschirmen fehlt der Schalter, weil
+        die Kopfleiste sonst keinen Platz mehr für die Navigation hat; dort wählst du auf dem Display-Screen. Dort
+        gibt es ausserdem «Cockpit», eine verspielte dunkle Variante mit leuchtenden Instrumenten; ihre Bewegung
+        entfällt, wenn dein System reduzierte Bewegung verlangt.</p>
+      <p data-l="en">The Console can be shown light, dark, or the way your operating system is showing things
+        right now. The quickest way is the switch at the top right, beside the star for the favourites: a click
+        flips between light and dark and saves the choice at once. "Match the operating system" is chosen on the
+        Display screen; the Console then follows the system, even while it is open. Pressing the switch after
+        that makes your explicit choice count again. On very narrow screens the switch is left out, because the
+        top bar would otherwise have no room left for the navigation; there the choice is made on the Display
+        screen. That screen also offers "Cockpit", a playful dark variant with glowing instruments; its motion
+        stops when your system asks for reduced motion.</p>
+      <ul>
+        <li data-l="de"><b>Die dunkle Darstellung ist eine Vorschau.</b> Console, Modeler,
+          Entscheidungstabellen, Operations und Tasks sind angepasst; einzelne Ansichten – etwa die Heatmap,
+          Formulare und die Architektur-Ansichten – sind noch nicht vollständig angepasst. Die Voreinstellung
+          bleibt hell.</li>
+        <li data-l="en"><b>The dark appearance is a preview.</b> The Console, the modeler, decision tables,
+          Operations and Tasks follow it; some views – the heatmap, forms and the architecture views among them –
+          are not fully adapted yet. The default stays light.</li>
+        <li data-l="de"><b>Die Firmenfarbe bleibt die Firmenfarbe.</b> Buttons zeigen in beiden Darstellungen
+          dieselbe Farbe. Nur wo die Farbe als Text steht – ein Link, ein aktiver Reiter –, wird sie im Dunkeln so
+          weit aufgehellt, dass sie lesbar bleibt.</li>
+        <li data-l="en"><b>The brand colour stays the brand colour.</b> Buttons are the same colour in both
+          appearances. Only where the colour is used as text – a link, an active tab – is it lightened in the
+          dark until it stays readable.</li>
+        <li data-l="de"><b>Exporte bleiben hell.</b> Die Prozess- und Entscheidungsdokumentation zeigt das
+          Diagramm so, wie es gedruckt wird, und ein exportiertes BPMN enthält keine Farben der Darstellung.</li>
+        <li data-l="en"><b>Exports stay light.</b> The process and decision documentation shows the diagram the
+          way it is printed, and an exported BPMN file carries no colour of the appearance.</li>
+      </ul>
+
       <h3 data-l="de">Wo die Einstellung liegt</h3><h3 data-l="en">Where the setting is kept</h3>
       <p data-l="de">Bei deinem Konto, auf dem Server – sie folgt dir also in jeden Browser, in dem du dich
         anmeldest. Das ist der Zeitzone geschuldet: Die Sprache betrifft, wie jemand an einem bestimmten
@@ -11650,9 +11689,10 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
         <b>without sign-in</b> there is no account to keep anything with – there the setting stays in that
         browser, and the screen says so.</p>
       <p class="muted" data-l="de">Wer nichts einstellt, bekommt genau das Verhalten von vorher: das neutrale
-        Leerzeichen, die Uhr des Geräts, die voreingestellte Sprache. Ein Update ändert kein Pixel.</p>
+        Leerzeichen, die Uhr des Geräts, die voreingestellte Sprache, die helle Console. Ein Update ändert kein
+        Pixel.</p>
       <p class="muted" data-l="en">Anybody who sets nothing gets exactly the behaviour from before: the neutral
-        space, the device's clock, the default language. An upgrade changes no pixel.</p>
+        space, the device's clock, the default language, the light Console. An upgrade changes no pixel.</p>
     </section>
 
     <!-- ==================== PANORAMA ==================== -->

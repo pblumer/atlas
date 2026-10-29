@@ -81,21 +81,36 @@ Chosen option: **3**, subject to acceptance and to the remaining slices.
 - **Brand accent** stays operator- or catalogue-scoped, from the existing endpoints
   and the derivation in `theme.js`. There is no second palette resolver.
 - **Appearance** is `light | dark | system`, with `system` following
-  `prefers-color-scheme` and an explicit choice never overridden by it. It changes no
-  server or workflow state.
+  `prefers-color-scheme` and an explicit choice never overridden by it. It is the
+  fourth of ADR-0459's display preferences (decided in S1, 2026-10-28): stored with
+  the account in `/api/v1/me/preferences` as `appearance`, mirrored in the browser
+  (`atlas.prefs`) for the first paint, and the whole store on an instance without
+  sign-in. One person uses several browsers; `system` covers the person who wants each
+  device to follow its own scheme. It changes no workflow state.
 - **Default**: today's light mode until dark coverage is verified on every screen in
-  scope. The switch belongs in the account menu or on the Display screen and must
-  apply to the login screen and across navigation.
+  scope; until then the dark choice is offered as a **preview** and says so. The
+  switch sits in the top bar beside the favourites and flips between light and dark;
+  the Display screen offers all three. It applies to the sign-in screen (from the
+  mirror), right after signing in (the account's record is loaded before the first
+  screen), and across navigation.
 - **First paint**: the bootstrap in `api/web/index.html` writes `data-appearance`
-  before the body is parsed, independently of the accent cache, and falls back to
-  light when storage is disabled or the value is invalid.
+  before the body is parsed, from the preferences mirror and independently of the
+  accent cache, and falls back to light when storage is disabled or the value is
+  invalid.
 - **CSS**: light and dark values for the semantic tokens (`--bg`, `--surface`,
   `--diagram-bg`, `--diagram-dot`, `--border`, `--border-strong`, `--text`, `--muted`,
   `--danger`, `--warn` and the rest), and hard-coded light literals replaced in the
   components that carry them, not hidden behind an inversion.
 - **Accent shades on dark surfaces**: the brand colour itself stays inline and
-  untouched; the shades derived from it for a light surface are derived for the dark
-  one in CSS from whichever accent is in force.
+  untouched, in both appearances — a filled button is the same colour with the same
+  ink. The shades derived from it for a light surface are derived for the dark one in
+  CSS from whichever accent is in force. Where the accent is read as *text*, rules say
+  `color: var(--accent-text)`: the accent itself in light, and in dark the tone
+  theme.js derives for it (`accentOnDark`, `--accent-on-dark`), lightened towards white
+  until it stands 4.5:1 on the dark surface and on its own soft tint.
+- **Status fills**: text on a danger, ok, warning or muted fill reads `--status-ink`,
+  white in light and near-black in dark, where the status colours are lightened to
+  read as text.
 - **Embedded widgets**: vendor tokens only — no forked editor and no invented
   renderer. The vendor controls (palette, overlays, minimap, properties panel, menus,
   form elements) and untouched BPMN semantics are tested in both modes.
@@ -141,11 +156,39 @@ engine behaviour, in which case it stops for review.
   is labelled a conceptual illustration until atlas ships the feature, and never
   implies that an animated mockup proves a runnable model or an operational heatmap.
 
-## As built so far: the editor prototype (2026-10-28)
+## As built so far
 
-A first cut of S1's mechanism and of S2's editor half landed behind a preference
-nobody is offered yet: `localStorage["atlas.appearance"] = "dark"` (or `"system"`)
-switches a browser, nothing in the UI does. What it established:
+### S1 — shell and preference (2026-10-28)
+
+- **The preference** is `appearance` in `api/userprefs` (validated against
+  `light`, `dark`, `system` or empty), carried by `prefs.js` with the other three and
+  applied by it on every load and save; `appearance.js` draws it and keeps `system` and
+  another tab's choice live. Signing in now loads the account's preferences before the
+  first screen, which also settles ADR-0459's number format and zone at that moment
+  rather than on the next reload.
+- **The switches**: `#appearance-toggle` in the top bar beside the favourites (shown
+  signed in or not, left out under 390px where the bar needs the room; `aria-pressed`
+  is the state, the title says what a press does) and the Display screen's fourth
+  setting, whose dark option reads "Dunkel (Vorschau)". The Display screen also offers
+  ADR-0509's cockpit skin, which rides the same preference and every rule below that
+  names the dark appearance.
+- **The accent as text** is solved as described above, and the prototype's lighter
+  stock accent in dark is withdrawn: the stock `#0b5cff` keeps white ink at 5.3:1 as a
+  fill and reads as `#6095ff` (5.6:1) as text. `api/appearance_internal_test.go`
+  refuses a rule that sets `color: var(--accent)`.
+- **The shell audit** ran the console in dark against a real server with the
+  examples deployed and instances, tasks and incidents present, scanning every screen
+  for light surfaces and for text under 4.5:1 against what is actually behind it. What
+  it found was fixed at the source: status fills now take `--status-ink`, the pale
+  status washes read `--ok-soft`, `--danger-soft` and `--warn-soft`, the JSON editor's
+  tokens joined the dark code palette, and the components that write a colour out got
+  their dark answer in one block of `app.css`. Left on purpose: the mail HTML previews
+  stay white, as the reader's mail client shows them.
+
+### The editor prototype (2026-10-28)
+
+The prototype landed first, behind a browser-only preference, to establish what the
+editors cost. What it established:
 
 - **The BPMN and DMN canvases need no fork and almost no code.** bpmn-js and dmn-js
   accept `defaultFillColor`, `defaultStrokeColor` and `defaultLabelColor`, and write
@@ -166,13 +209,12 @@ switches a browser, nothing in the UI does. What it established:
   over in dark keeps every pairing's contrast.
 - **The code editors** (script, FEEL, JSON, Markdown, templates) share 21 token
   classes; GitHub's dark palette keeps each hue at 5.3:1 or more on `--surface`.
-- **The accent needs care in S1.** The bootstrap applies theme.js's derived shades
+- **The accent needed care.** The bootstrap applies theme.js's derived shades
   inline, which no ordinary rule outranks, so in dark `--accent-soft` and
   `--accent-hover` are derived in CSS with `!important`, leaving the brand colour
-  itself inline. The stock accent `#0b5cff` as text on the dark surface is 3.1:1, so
-  the default install gets `#4c8dff` and dark ink in dark. A brand colour as text is
-  the open part: the federal red is 3.26:1 on the dark surface, and `app.css` has 103
-  rules that set `color: var(--accent)`; they need an appearance-aware text tone.
+  itself inline. A brand colour as text was the open part — the federal red is 3.3:1
+  on the dark surface, and `app.css` had 103 rules setting `color: var(--accent)` —
+  and S1 solved it with `--accent-text` (above).
 - **The watermark.** bpmn-js draws it in `#404040` and dmn-js in black — 1.73:1 and
   1.17:1 on the dark canvas. The logo is left as drawn and given a light ground
   instead (see the open question).
@@ -183,22 +225,16 @@ switches a browser, nothing in the UI does. What it established:
   `api/appearance_internal_test.go` refuses a palette colour the dark block does not
   answer.
 
-Not done, and the bulk of what remains: Atlas's own canvas overlays (problem, live
-and replay state, token simulation, collaboration, heatmap — 55 rules with 67 fixed
+### Still open
+
+The bulk of what remains is S2's and S3's: Atlas's own canvas overlays (problem, live
+and replay state, token simulation, collaboration, heatmap — some 55 rules with fixed
 colours, most of them `!important`), the form-js editor and runtime (the "inverse"
 grey family ADR-0263 names), the ArchiMate, UML, decision-graph and Panorama canvases,
-some three hundred fixed colours elsewhere in `app.css`, the visible switch, and the
-pages that load their own palette (the handbook pages follow `prefers-color-scheme`
-on their own and ignore an explicit choice).
-
-### Follow-ups S1 must decide
-
-- **Where the preference lives.** This record proposes a browser preference with no
-  endpoint. ADR-0459 already stores how a person reads the console on the server, with
-  a browser mirror for first paint, because one person uses several browsers. Either
-  appearance joins those preferences (`prefs.js`), or this record says why reading
-  conditions belong to the device; `system` already covers the device-dependent case.
-- **The accent as text** on dark surfaces, for every brand colour (above).
+and the pages that load their own palette (the handbook pages follow
+`prefers-color-scheme` on their own and ignore an explicit choice). The preview label
+comes off, and the default can be reconsidered, when those are done and S4's
+screenshots are reviewed.
 
 ## Pros and cons of the options
 

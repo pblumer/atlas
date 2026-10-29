@@ -18,17 +18,20 @@
     }
   } catch (e) { /* no/!invalid theme — fall back to the CSS default */ }
 </script>
-<!-- Apply the appearance (light, dark, system) before first paint, independently of
-     the brand colour above. Mirrors resolveAppearance in appearance.js: anything but
-     a stored "dark", or "system" while the system is dark, is today's light console. -->
+<!-- Apply the appearance (light, dark, system, cockpit) before first paint,
+     independently of the brand colour above. It is read from the display preferences
+     prefs.js mirrors (atlas.prefs, ADR-0459/ADR-0507), and mirrors resolveAppearance in
+     appearance.js: "cockpit" is the skin (ADR-0509); anything but that, "dark", or
+     "system" while the system is dark, is the light console. -->
 <script>
   (function () {
     var a = "light";
     try {
-      var p = localStorage.getItem("atlas.appearance");
-      if (p === "dark" || (p === "system" && window.matchMedia &&
+      var p = (JSON.parse(localStorage.getItem("atlas.prefs") || "{}") || {}).appearance;
+      if (p === "cockpit") a = "cockpit";
+      else if (p === "dark" || (p === "system" && window.matchMedia &&
           window.matchMedia("(prefers-color-scheme: dark)").matches)) a = "dark";
-    } catch (e) { /* storage unreadable — stay light */ }
+    } catch (e) { /* storage unreadable or not JSON — stay light */ }
     document.documentElement.setAttribute("data-appearance", a);
   })();
 </script>
@@ -74,6 +77,11 @@
       <button id="shortcuts-btn" class="icon-btn dropdown-toggle" aria-haspopup="menu"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z"/></svg></button>
       <div id="shortcuts-menu" class="dropdown-menu dg-menu" role="menu" hidden></div>
     </div>
+    <!-- Light or dark (ADR-0507): flips between the two and saves it with this person's
+         display preferences. Its title and label come from the message catalogue when
+         the console installs it (app.js). Shown signed in or not — without an account
+         the choice is kept in this browser. The icon shows what a press turns on. -->
+    <button id="appearance-toggle" class="icon-btn appearance-toggle" aria-pressed="false"><svg class="ico-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 019.8 3.5a8.5 8.5 0 1010.7 10.7z"/></svg><svg class="ico-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
     <button id="global-search" class="icon-btn" title="Search processes (Ctrl/⌘ K)" aria-label="Search processes"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     <button class="icon-btn" title="Notifications" aria-label="Notifications"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></button>
     <div class="dropdown">

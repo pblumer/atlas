@@ -2156,11 +2156,17 @@ type xmlLinkEventDefinition struct {
 // boundary event. On a throw/end event, ActivityRef optionally names the single activity
 // to compensate — empty compensates every completed compensable activity in the scope
 // (ADR-0103). On a boundary event it has no attributes (the boundary just marks its host
-// compensable and links to a handler via a BPMN <association>). waitForCompletion is
-// accepted but not yet honored (compensation is synchronous).
+// compensable and links to a handler via a BPMN <association>). waitForCompletion defaults
+// to true, as BPMN has it: the throw goes on once its handlers have finished
+// (ADR-0508).
 type xmlCompensateEventDefinition struct {
 	ActivityRef       string `xml:"activityRef,attr"`
 	WaitForCompletion string `xml:"waitForCompletion,attr"`
+}
+
+// waits reports the event's waitForCompletion: anything but an explicit "false" waits.
+func (d *xmlCompensateEventDefinition) waits() bool {
+	return strings.TrimSpace(d.WaitForCompletion) != "false"
 }
 
 // xmlAssociation is a BPMN <association>: an undirected artifact link. Atlas parses it

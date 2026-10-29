@@ -1,0 +1,38 @@
+{
+  "completed": true,
+  "activities": [
+    "approved_q",
+    "await_answer",
+    "declined",
+    "end",
+    "extra",
+    "extra_done",
+    "finding",
+    "found",
+    "start",
+    "work"
+  ],
+  "path": [
+    "start",
+    "finding",
+    "work",
+    "finding",
+    "finding",
+    "found",
+    "await_answer",
+    "finding",
+    "finding",
+    "found",
+    "await_answer",
+    "approved_q",
+    "extra",
+    "extra_done",
+    "approved_q",
+    "declined",
+    "end"
+  ],
+  "variables": {
+    "findingId": "F2"
+  },
+  "dataObjects": []
+}

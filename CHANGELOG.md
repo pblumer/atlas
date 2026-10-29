@@ -34,6 +34,36 @@ _Changed_ / _Removed_ for each version.
   caller is a member of, by id and name, so an application acting for a person can tell
   which tasks offered to groups are theirs (ADR-draft-tasks-for-a-connected-system).
 
+- **Which deployed models a behaviour change touches.** `scripts/behaviour-impact/impact.py`
+  reads the newest and the still running versions from a server — or exported models — and
+  lists each element whose behaviour the scope-aware messaging and compensation changes
+  alter: a compensation throw that now waits, compensation from an event subprocess, a
+  receive task's output mappings, a correlation key or payload in an inner scope. Each
+  finding says whether the element now behaves differently, may (depending on names the
+  model does not state) or only looks different, and `--fail-on changed` makes it a gate
+  before an upgrade (ADR-0508).
+
+- **Light, dark, or following the system, as a preview.** A switch at the top right,
+  beside the favourites, flips the Console between light and dark, and the Display
+  screen adds a third choice that follows the operating system. The choice is kept with
+  the account like the other display preferences (`appearance` in
+  `/api/v1/me/preferences`), in the browser where there is no sign-in, and it is on the
+  page before the first paint and again right after signing in. The dark appearance
+  covers the Console, the BPMN and DMN modelers, Operations and Tasks; the heatmap, forms
+  and the architecture views are not fully adapted yet, so the dark option is labelled a
+  preview and the default stays light. The brand colour is unchanged — where it is read
+  as text, a tone derived from it keeps it at 4.5:1 on the dark surface — and exports
+  stay light (ADR-0507). The Display screen also offers the cockpit, a playful dark
+  skin with glowing instruments whose motion stops under reduced motion (ADR-0509).
+
+- **A cancellation can be handled by an event subprocess inside its transaction.** A
+  cancel end event may now sit in an event subprocess directly inside a `<transaction>`:
+  a customer's cancellation, arriving at any point of the work, interrupts it, the
+  transaction compensates what was done, and its cancel boundary takes over once the
+  rollback is finished. A compensation throw or end event directly in an event subprocess
+  compensates the scope that event subprocess handles, instead of its own run, which
+  holds nothing to compensate (ADR-0508).
+
 - **The shop's fact sheet shows the wiki page as it is laid out.** A product whose
   description comes from the wiki now carries the page's layout beside its text:
   headings, lists, tables, panels, quotes, code, dividers, its images and the items
@@ -253,6 +283,33 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The shop's favourite, basket and information buttons are drawn icons.** The star
+  that marks a favourite is a heart, filled once marked; the "+" that puts a product
+  in the basket is a shopping cart; the "i" that opens a product's information is an
+  info sign; the "−" that takes a chosen product out again, and the disabled one an
+  always-included part carries, is a struck-through cart. They are inline SVG in the
+  shop's main colour, so a catalogue theme that sets another accent recolours them,
+  and every button carries a name a screen reader says, since the icons carry none.
+  Taking one position out of the basket is called that, where it was announced as
+  discarding the whole order.
+- **The shop offers again what a held bundle lacks.** An option that was not taken
+  when a bundle was ordered can be added later, and a position given back out of a
+  bundle can be ordered again. In the catalogue, a part that is always included gets
+  an enabled "+" once its bundle is held and the part is not; in *My services*, a held
+  product lists under *Not held* its options never taken and its parts given back, with
+  the way on to the basket. Neither is offered while a bundle in the basket carries it
+  or an order of the person still has it on its way. The server accepted both orders
+  before; only the shop did not offer them
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28).
+- **Compensation waits for its handlers.** A compensation throw or end event now honours
+  BPMN's `waitForCompletion`, which defaults to true: the step after it runs once the
+  handlers it started have finished, not beside them. `waitForCompletion="false"` keeps
+  the old behaviour (ADR-0103, ADR-0508).
+- **A receive task with output mappings keeps its message to itself.** As with a
+  worker's result, the payload lands in the task's own scope and its output mappings
+  decide what reaches the instance; the raw payload no longer appears on the root beside
+  the mapped values (ADR-0508).
+
 - **Blueprint Marketplace is now atlas hub.** The Console's discovery entry and documentation use the broader hub identity for process applications and their product catalogues, with other offer types explicitly planned. Existing signed Blueprint Registry v1 wire identifiers, API routes, environment settings and native import permissions remain unchanged (ADR-0499).
 - **The catalogue page reads in the order a catalogue is filled.** Its sections are now
   numbered steps — 1 Products, 2 Descriptions, 3 Assemble, 4 Publish — followed by the
@@ -368,6 +425,30 @@ _Changed_ / _Removed_ for each version.
   removed.
 
 ### Fixed
+
+- **A correlation key sees the variables of the scope that waits.** A key was evaluated
+  on the instance root only, so it could not use a variable local to a subprocess, an
+  event-subprocess run or the element's own input mappings; two runs of one event
+  subprocess waiting at once subscribed with whatever the root last held. Keys now
+  resolve up the scope chain like every other expression in a model
+  (ADR-0508).
+- **A message updates the variable the model declared.** A message's or signal's payload
+  was always written to the instance root, hidden behind a local variable of the same
+  name; it now updates the nearest scope that declares the variable, and lands on the
+  root as before when none does (ADR-0508).
+- **Back-to-back messages each start a run.** A non-interrupting message or signal event
+  subprocess re-armed two batches after it fired, so a second message in that window was
+  lost unless it carried a time to live. It now re-arms in the step that fires it, and
+  each run reads the payload of the message that started it
+  (ADR-0508).
+
+- **A diagrams token can be given its applications on the API-token page.** The
+  architecture list shows a `diagrams` token only the applications its reach names, but
+  the page asked a `diagrams` token for no reach, so every token minted there listed no
+  sketch, and a wiki that held one offered no application to insert. The page now offers
+  the applications as an optional reach for a `diagrams` token, says that without one the
+  token reads every process but no sketch, and still requires one for `landscape`
+  (ADR-0493, as amended).
 
 - **The Playground evaluates decisions.** A business rule task in a Playground sandbox
   was answered like any other job: by the default stub, which completed it without a
