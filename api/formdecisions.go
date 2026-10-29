@@ -39,6 +39,7 @@ func (s *Server) newFormDecisions() {
 		Evaluate: func(ctx context.Context, key uint64, id string, in map[string]any) (map[string]any, error) {
 			return s.dmnRegistry.Evaluate(ctx, key, id, in)
 		},
+		MaxBody: s.budgets().Request,
 	})
 }
 

@@ -30,6 +30,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,10 +41,6 @@ import (
 	"github.com/pblumer/atlas/dmn"
 )
 
-// maxRequestBytes bounds a request's body: the values of a form's fields, or an author's
-// inputs — never a document.
-const maxRequestBytes = 64 << 10
-
 // Config is the server's half of this area.
 type Config struct {
 	// Decision resolves a decision id to its newest decision deployment — what it is,
@@ -53,6 +50,8 @@ type Config struct {
 	Decisions func() []dmn.DeployedDecision
 	// Evaluate evaluates the decision from the deployment under key against inputs.
 	Evaluate func(ctx context.Context, key uint64, id string, in map[string]any) (map[string]any, error)
+	// MaxBody bounds a request's body: the server's Request budget.
+	MaxBody int64
 }
 
 // Service serves a form's decision-backed options. Build it with [New].
@@ -280,7 +279,7 @@ type fieldOptionsRequest struct {
 // or a public wizard step's.
 func (s *Service) WriteFieldOptions(w http.ResponseWriter, r *http.Request, schema []byte, key string) {
 	var req fieldOptionsRequest
-	if e := decodeRequest(r, &req); e != nil {
+	if e := decodeRequest(w, r, s.cfg.MaxBody, &req); e != nil {
 		e.Write(w)
 		return
 	}
@@ -292,21 +291,23 @@ func (s *Service) WriteFieldOptions(w http.ResponseWriter, r *http.Request, sche
 	httpapi.JSON(w, http.StatusOK, map[string]any{"field": key, "options": opts, "skipped": skipped})
 }
 
-func decodeRequest(r *http.Request, into any) *Error {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBytes+1))
-	if err != nil {
-		return refuse(http.StatusBadRequest, "invalid_query", "read body: %v", err)
+// decodeRequest reads a request's body into into, bounded by maxBody — the values of a
+// form's fields, or an author's inputs, never a document. An empty body says nothing.
+func decodeRequest(w http.ResponseWriter, r *http.Request, maxBody int64, into any) *Error {
+	if maxBody <= 0 {
+		maxBody = 1 << 16
 	}
-	if len(body) > maxRequestBytes {
-		return refuse(http.StatusBadRequest, "invalid_query", "the request is larger than %d bytes", maxRequestBytes)
-	}
-	if len(bytes.TrimSpace(body)) == 0 {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(body))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
 	dec.UseNumber()
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(into); err != nil {
+		var tooLarge *http.MaxBytesError
+		switch {
+		case errors.Is(err, io.EOF):
+			return nil
+		case errors.As(err, &tooLarge):
+			return refuse(http.StatusRequestEntityTooLarge, "invalid_query", "the request is larger than %d bytes", maxBody)
+		}
 		return refuse(http.StatusBadRequest, "invalid_query", "invalid JSON body: %v", err)
 	}
 	return nil
@@ -347,7 +348,7 @@ type evaluateRequest struct {
 func (s *Service) HandleEvaluate(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("decisionId"))
 	var req evaluateRequest
-	if e := decodeRequest(r, &req); e != nil {
+	if e := decodeRequest(w, r, s.cfg.MaxBody, &req); e != nil {
 		e.Write(w)
 		return
 	}

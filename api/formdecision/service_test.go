@@ -180,8 +180,8 @@ func TestHandleEvaluate(t *testing.T) {
 	if code != http.StatusBadRequest || out["code"] != "invalid_query" {
 		t.Errorf("an unknown member: %d %v", code, out)
 	}
-	code, out = post("/api/v1/form-data/decisions/Mitglieder/options", strings.Repeat(" ", maxRequestBytes+1))
-	if code != http.StatusBadRequest || !strings.Contains(fmt.Sprint(out["error"]), "larger") {
+	code, out = post("/api/v1/form-data/decisions/Mitglieder/options", `{"inputs":{"gruppe":"`+strings.Repeat("x", 1<<16)+`"}}`)
+	if code != http.StatusRequestEntityTooLarge || !strings.Contains(fmt.Sprint(out["error"]), "larger") {
 		t.Errorf("an oversized body: %d %v", code, out)
 	}
 }
