@@ -32,7 +32,7 @@ func decodeMeGroups(t *testing.T, b []byte) meGroups {
 // TestAuthMeAnswersOnesOwnGroups: who am I answers the groups the caller is a member
 // of, by id and name, as the group store holds them at the moment of the request — a
 // connected system that shows a person the tasks offered to their groups learns them
-// from the person's own credential (ADR-draft-tasks-for-a-connected-system §4). Only
+// from the person's own credential (ADR-0510 §4). Only
 // the caller's own: a group the caller is not in is not named, and no group's other
 // members are.
 func TestAuthMeAnswersOnesOwnGroups(t *testing.T) {

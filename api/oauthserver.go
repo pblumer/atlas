@@ -138,7 +138,7 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values) (oauthRequ
 
 // oauthTasksResource is the path that, after the server's origin, names a person's
 // tasks as a resource of its own: a grant for it reaches the task routes and nothing
-// else (ADR-draft-tasks-for-a-connected-system §3).
+// else (ADR-0510 §3).
 const oauthTasksResource = "/tasks"
 
 // isCanonicalResource reports whether uri is one of the three this server publishes

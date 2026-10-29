@@ -1,4 +1,4 @@
-# ADR-DRAFT: Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups
+# ADR-0510: Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups
 
 - **Status:** Proposed
 - **Implementation:** Partial

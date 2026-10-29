@@ -213,7 +213,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 // member of. The groups are the caller's own and nobody else's, by id and by name,
 // because a task names its candidate groups by either (ADR-0318); a connected system
 // working a person's tasks learns them from the person's own credential
-// (ADR-draft-tasks-for-a-connected-system §4). They are read from the group store at
+// (ADR-0510 §4). They are read from the group store at
 // the request, not from the session's snapshot, so a membership granted since the
 // login is answered. The roster of users does not carry them: it is this route's alone.
 type meUser struct {

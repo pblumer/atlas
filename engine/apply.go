@@ -277,7 +277,7 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				v.job.CreatedAt = h.Timestamp
 			}
 			// A user task's turn leaves on the feed
-			// (ADR-draft-tasks-for-a-connected-system §1). Whether a creation opens a
+			// (ADR-0510 §1). Whether a creation opens a
 			// task is read before the put: a job re-created after an incident was open
 			// all along, and is no new task.
 			if kind, ok, err := userTaskFeedKind(tx, h, &v.job); err != nil {
@@ -709,7 +709,7 @@ func putIncidentFeedRow(tx *state.Tx, h model.RecordHeader, kind state.FeedKind,
 }
 
 // userTaskFeedKind says which turn in a user task's life a job record is, and whether
-// it is one at all (ADR-draft-tasks-for-a-connected-system §1): only the user-task
+// it is one at all (ADR-0510 §1): only the user-task
 // type is a task; a creation is one only when no job of that key was open, which it
 // reads through the same batch, live and on replay alike (I4); an assignment is a
 // task taken on or given back by whether it names somebody. A failure, a lease or a

@@ -25,7 +25,7 @@ func taskRows(t *testing.T, s *state.Store) []state.FeedEntry {
 	return out
 }
 
-// TestAUserTasksLifeLeavesOnTheFeed (ADR-draft-tasks-for-a-connected-system §1): a
+// TestAUserTasksLifeLeavesOnTheFeed (ADR-0510 §1): a
 // user task opened, taken on, given back and completed is four rows on the feed, in
 // that order, each with the job as it then stood, its key, the element it waits on and
 // the definition its instance ran — and a replay of the log into an empty store

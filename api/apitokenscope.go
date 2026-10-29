@@ -143,7 +143,7 @@ const (
 	apiScopeDiagrams = "diagrams"
 
 	// apiScopeTaskList reaches the list of open user tasks and one task by its key,
-	// read-only (ADR-draft-tasks-for-a-connected-system §2). It is what a system that
+	// read-only (ADR-0510 §2). It is what a system that
 	// keeps a copy of the open tasks holds to compare its copy with what is open: the
 	// feed's task facts say what changed, this says what is. A leak of it lists tasks;
 	// it cannot take one on, give one back or complete one, nor read a form, an
@@ -156,7 +156,7 @@ const (
 
 	// apiScopeTasks is what a person's OAuth grant carries when they approved a
 	// client for the resource `…/tasks` rather than for the whole server
-	// (ADR-draft-tasks-for-a-connected-system §3): their own tasks, worked as
+	// (ADR-0510 §3): their own tasks, worked as
 	// themselves — seen, taken on, given back and completed with their forms — and
 	// nothing else. Like apiScopeMCP it is not mintable, because nothing asks for it:
 	// it follows from the resource the person approved. Atlas decides on every route

@@ -63,7 +63,7 @@ func openTaskOnFeed(t *testing.T, srv *Server) (defKey, taskKey uint64) {
 }
 
 // TestAUserTasksLifeLeavesOnTheFeedAsFactsOfTheEngine
-// (ADR-draft-tasks-for-a-connected-system §1): a task opened, taken on, given back and
+// (ADR-0510 §1): a task opened, taken on, given back and
 // completed is atlas.task.created, .assigned, .unassigned and .completed on the feed,
 // from the engine's source, under the subject tasks/{key}, naming the task, its
 // instance, its element and process, the groups it is offered to and when it is due —

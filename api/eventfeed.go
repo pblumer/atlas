@@ -39,7 +39,7 @@ import (
 //
 // The feed also carries facts of the engine, which belong to no catalogue: an incident
 // raised or resolved (ADR-0435), and a user task opened, taken on, given back,
-// completed or cancelled (ADR-draft-tasks-for-a-connected-system). A reader narrowed
+// completed or cancelled (ADR-0510). A reader narrowed
 // to catalogues never receives them, since no reach contains the home they do not
 // have. And the feed is no longer the service catalogue's alone: a server whose
 // catalogue is switched off (ADR-0434) still serves and pushes it, passing over the

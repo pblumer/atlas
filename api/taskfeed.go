@@ -9,7 +9,7 @@ import (
 )
 
 // taskEvent is the type, subject and data of a turn in a user task's life on the feed
-// (ADR-draft-tasks-for-a-connected-system §1): the keys that find the task, in the
+// (ADR-0510 §1): the keys that find the task, in the
 // names GET /api/v1/tasks uses, the element and process it belongs to, the groups it is
 // offered to and when it is due — what a copy of the open tasks elsewhere needs to open,
 // route and close a card of its own.

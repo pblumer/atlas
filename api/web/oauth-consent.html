@@ -135,7 +135,7 @@ function signIn(ctx) {
 function consent(ctx) {
   const resource = String(ctx.resource || "");
   // What each resource reaches, in the order isCanonicalResource names them: the
-  // transport, a person's tasks (ADR-draft-tasks-for-a-connected-system §3), and
+  // transport, a person's tasks (ADR-0510 §3), and
   // the whole server.
   const reach = resource.endsWith("/mcp")
     ? ["Drive atlas through its Model Context Protocol tools, as you.",

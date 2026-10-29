@@ -20,19 +20,19 @@ _Changed_ / _Removed_ for each version.
   the engine's source under `tasks/{key}`: the task, its instance, element and process,
   the groups it is offered to and when it is due, and whether somebody holds it — never
   who, nor its form or variables. A reader narrowed to catalogues does not receive them
-  (ADR-draft-tasks-for-a-connected-system).
+  (ADR-0510).
 - **A token that lists the open tasks and nothing else.** The new scope `tasklist`
   reaches `GET /api/v1/tasks` and `GET /api/v1/tasks/{key}` only, for a system that keeps
   a copy of the open tasks, such as a wiki that shows them as its own tasks; it cannot
   take a task on, complete it or read a form, an instance or a variable
-  (ADR-draft-tasks-for-a-connected-system).
+  (ADR-0510).
 - **A person can approve an application for their tasks alone.** An OAuth grant for the
   resource `…/tasks` reaches who the person is, their tasks, taking them on, giving them
   back and completing them with their forms, as the person, and nothing else; the
-  consent page and *AI access* say so (ADR-draft-tasks-for-a-connected-system).
+  consent page and *AI access* say so (ADR-0510).
 - **Who am I names one's own groups.** `GET /api/v1/auth/me` answers the groups the
   caller is a member of, by id and name, so an application acting for a person can tell
-  which tasks offered to groups are theirs (ADR-draft-tasks-for-a-connected-system).
+  which tasks offered to groups are theirs (ADR-0510).
 
 - **Which deployed models a behaviour change touches.** `scripts/behaviour-impact/impact.py`
   reads the newest and the still running versions from a server — or exported models — and

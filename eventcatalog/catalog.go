@@ -452,7 +452,7 @@ var Entries = []Entry{
 }
 
 // taskEntry is one turn in a user task's life on the feed
-// (ADR-draft-tasks-for-a-connected-system §1): a fact of the engine, folded by
+// (ADR-0510 §1): a fact of the engine, folded by
 // applyToState from the job records of the user-task type, all five with the same
 // payload. Never the assignee's name — a model writes a username or an expression's
 // value, and the feed names people by id only (ADR-0314) — nor the form, the

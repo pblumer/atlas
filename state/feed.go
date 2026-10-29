@@ -40,7 +40,7 @@ const (
 	// FeedTaskCreated is a user task opened; FeedTaskAssigned one taken on or handed
 	// to somebody, FeedTaskUnassigned one given back; FeedTaskCompleted one
 	// completed and FeedTaskCancelled one whose element was interrupted
-	// (ADR-draft-tasks-for-a-connected-system §1). Facts of the engine, like incidents.
+	// (ADR-0510 §1). Facts of the engine, like incidents.
 	FeedTaskCreated    FeedKind = 6
 	FeedTaskAssigned   FeedKind = 7
 	FeedTaskUnassigned FeedKind = 8

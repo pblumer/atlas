@@ -158,7 +158,7 @@ func TestAnIncidentRowKeepsTheDefinitionItWasFoldedWith(t *testing.T) {
 
 // TestATaskRowKeepsItsJobElementAndDefinition: a task row reads back with the job as
 // the fold saw it, the job's key, the element it waits on and the definition its
-// instance ran (ADR-draft-tasks-for-a-connected-system §1) — what the envelope needs
+// instance ran (ADR-0510 §1) — what the envelope needs
 // once the element instance is gone. It is no catalogue fact; a task kind cannot be
 // written as an entry or an incident, nor another kind as a task.
 func TestATaskRowKeepsItsJobElementAndDefinition(t *testing.T) {

@@ -56,7 +56,7 @@ var wantPublicRoutes = []string{
 	"GET /.well-known/oauth-protected-resource",
 	"GET /.well-known/oauth-protected-resource/mcp",
 	// A person's tasks as a resource of their own, the same document for the resource
-	// a client asks a tasks grant for (ADR-draft-tasks-for-a-connected-system §3).
+	// a client asks a tasks grant for (ADR-0510 §3).
 	"GET /.well-known/oauth-protected-resource/tasks",
 
 	// The authorization server (ADR-0200). Its metadata is read before a client

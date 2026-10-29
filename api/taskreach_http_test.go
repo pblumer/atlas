@@ -12,7 +12,7 @@ import (
 )
 
 // The two credentials a connected system works user tasks with
-// (ADR-draft-tasks-for-a-connected-system §2 and §3): a token of scope `tasklist`
+// (ADR-0510 §2 and §3): a token of scope `tasklist`
 // that lists the open tasks and can do nothing else, and a person's grant for the
 // resource `…/tasks` that works that person's tasks as them — Atlas deciding, as it
 // does for the person in the Tasks app.
