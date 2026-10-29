@@ -12,6 +12,112 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-29
+
+**A product's description can come from the wiki, and a release's architecture is drawn
+in layers.** An administrator configures a wikiwikibangbang content source, and a product
+manager binds a product — or a service, by a child page of its offering's page — to a
+page: its text, layout and images are copied into the draft, rechecked every fifteen
+minutes and withheld from the shop at once when the page turns protected, unreadable or
+gone ([ADR-0491](docs/adr/0491-service-content-from-an-external-source.md)). A release's
+architecture sketch records five layers — strategy, business, application, data and
+technology — with the personal data the release declares and who else is at the other end
+of its messages and signals, draws the layers you tick, and opens in Panorama's starmap
+with the live state laid over it
+([ADR-0495](docs/adr/0495-layered-release-architecture.md)). A `diagrams` token lets a
+wiki draw a process with its live counts and a release's sketch without a `full` token
+([ADR-0493](docs/adr/0493-diagrams-scope.md)).
+
+**Messages, event subprocesses and compensation behave as drawn.** A correlation key and a
+message's payload see the scope that waits, back-to-back messages each start a run of a
+non-interrupting event subprocess, a compensation throw waits for its handlers, and a
+cancellation can be handled by an event subprocess inside its transaction
+([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)). Three of these
+change how deployed models run — read the notes below before upgrading;
+`scripts/behaviour-impact/impact.py` lists the elements they touch.
+
+**Operations has a heatmap, and the Console speaks German down to its editors.** The
+Operations view shades a version's diagram by runs, waiting, working time or duration
+([ADR-0496](docs/adr/0496-operations-heatmap.md)); an administrator, or their agent, can
+profile the running server ([ADR-0502](docs/adr/0502-admin-profiling.md)). A
+wikiwikibangbang Worker Type opens and moves tasks and writes pages
+([ADR-0498](docs/adr/0498-wikiwikibangbang-worker.md)), and atlas hub imports signed
+application Blueprints from an operator-pinned registry
+([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md)). The Modeler, the BPMN,
+decision and form editors and the BPMN properties panel read from the message catalogue;
+the Console offers a dark appearance as a preview, and a cockpit skin
+([ADR-0507](docs/adr/0507-ui-appearance-modes.md),
+[ADR-0509](docs/adr/0509-cockpit-appearance-skin.md)); every topic of a Console page folds
+([ADR-0505](docs/adr/0505-every-topic-folds.md)); and the Playground evaluates the
+decisions a model calls.
+
+**Read this before upgrading from 0.20.0.** These act on an existing installation as soon
+as it runs 0.21.0:
+
+- Three engine behaviour changes reach every deployed model, instances already running
+  included ([ADR-0508](docs/adr/0508-scope-aware-messaging-and-compensation.md)):
+  - A compensation throw or end event that starts handlers waits for them before the
+    next step (`waitForCompletion`, default true). A model whose next step should run
+    beside the rollback says `waitForCompletion="false"`.
+  - A receive task with output mappings keeps the message's payload in its own scope:
+    only the mapped values reach the instance, where 0.20.0 also wrote the raw payload
+    to the root.
+  - A correlation key, and a message's or signal's payload, resolve up the scope chain
+    from the element that waits: a variable that a subprocess, an event-subprocess run
+    or the element's input mappings declare is read or written there, no longer on the
+    root.
+
+  Run `scripts/behaviour-impact/impact.py --server <url> --fail-on changed` with an
+  operator token against the 0.20.0 server before the upgrade; it names each element
+  these touch and says what to do. A subscription opened before the upgrade keeps the key
+  it was opened with, and a compensation throw that completed before it stays completed.
+- The first start reads the lifecycle trail once, before the server serves, to rebuild the
+  heatmap's counters for the sequence flows; on a store with a long history that start
+  takes longer than usual.
+- A reader who may not see the application a call activity reaches now sees "another
+  application" in a release's sketch, where 0.20.0 named it.
+- A Playground run of a model with a business rule task now carries the decision's
+  result, so a saved scenario's baseline shows a difference there, and a session whose
+  model fixes an `atlas:version` that is not deployed is refused.
+- A Worker that runs apart from the server needs 0.21.0 for the wikiwikibangbang Worker
+  Type (`--connector wikiwikibangbang` with `ATLAS_WIKIWIKIBANGBANG_CONNECTORS`,
+  `ATLAS_WIKIWIKIBANGBANG_<NAME>_URL` and `_CREDENTIALS`). The job routes are unchanged.
+
+What changes on disk, and going back:
+
+- 0.21.0 reads the data directory 0.20.0 wrote. The directory gains one store,
+  `contentsources`, classified in the backup's store registry as this installation's, so
+  it travels with a snapshot and not with a portable export; the catalogue store keeps
+  each bound product's content state and the images copied from the wiki beside its
+  pictures. The state store gains the sequence-flow counters and when each task was taken
+  up and handed back. The log gains no record type and no intent, and no record it had
+  changed. Architecture snapshots are now format and mapping version 7; a release
+  recorded earlier is drawn byte for byte as before. No system process changed, so the
+  first start deploys nothing new.
+- New settings, all optional: `ATLAS_BLUEPRINT_REGISTRY_URL` with
+  `ATLAS_BLUEPRINT_REGISTRY_KEY` (the registry's Ed25519 public key, base64) turn on atlas
+  hub's registry — both or neither: one alone, or a key that is not one, stops the server
+  from starting. Without any `--link-microsoft-*` flag, account linking is set up in the
+  Console; with any of them, the flags decide as before. The MCP tools grow from 157 to
+  167 (`atlas_catalog_product_content`, `atlas_link_catalog_product_content`,
+  `atlas_preview_content_page`, `atlas_process_statistics`,
+  `atlas_refresh_catalog_content`, `atlas_refresh_catalog_product_content`,
+  `atlas_runtime_health`, `atlas_runtime_profile`, `atlas_search_content_source`,
+  `atlas_unlink_catalog_product_content`). `/metrics` and the Helm chart's values are
+  unchanged.
+- Going back to 0.20.0 has not been tested end to end. By its code, 0.20.0 does not open
+  `contentsources` and withholds nothing: every bound product's wiki content is shown as
+  if it had been written in Atlas, quarantined or not and in older releases too, so
+  unlink the bound products first, which puts their own content back. While 0.20.0 runs,
+  the sequence flows and the tasks' take-ups are not counted, and a later 0.21.0 does not
+  count that time again. A deployed process with a wikiwikibangbang task does not compile
+  under 0.20.0, which then refuses to start: remove every deployed version of such a
+  process before going back, once nothing runs under it. A cancel end event in an event
+  subprocess inside a transaction is restored by 0.20.0 with a warning, but not run as
+  0.21.0 runs it: take such a process out as well. Both were checked against the 0.20.0
+  compiler's reload. An instance waiting at a compensation throw for its handlers is not
+  driven on by 0.20.0: let it finish first.
+
 ### Added
 
 - **Which deployed models a behaviour change touches.** `scripts/behaviour-impact/impact.py`
@@ -56,6 +162,37 @@ _Changed_ / _Removed_ for each version.
   mark and which release it describes, and its buttons wear the shop's own style
   (ADR-0491, amended 2026-10-28).
 
+- **A product's description, keywords and picture can come from a wiki page.** An
+  administrator configures a content source (`/api/v1/content-sources`, admin-only): a
+  wikiwikibangbang base URL, https only, and a `credentialsRef` naming the vault secret that
+  holds a read-scope token of a technical account that is nothing but `viewer`. A product
+  manager then binds a product to one page per language its catalogue declares — searched,
+  pasted as an address or a key, and previewed with everything the rules drop — and linking
+  writes the binding and the fetched content in one draft save
+  (`/api/v1/catalog-products/{id}/content`). A page restricted for reading, or below a
+  restricted ancestor, held for a data protection review, not live, or in a space the account
+  does not hold exactly `viewer` in is refused; protected passages are removed by their mark
+  before the text is converted, child pages are taken depth first and a restricted one is
+  dropped with everything below it. While bound, those fields are read-only through the
+  ordinary save. A recheck follows the wiki's change feed and sweeps every fifteen minutes; a
+  page that becomes protected, unreadable or gone, a wrong account standing or an unreachable
+  wiki quarantines the product, which withholds its description, keywords and picture from the
+  shop, the approval page, the order views, the exports, the API and MCP at once, without a
+  publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
+  product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
+  and is audited, and it puts back the description, keywords and picture the product had
+  before its first link, which linking set aside; a language unlinked alone gets its own
+  description back. A `credentialsRef` that is itself a credential — a pasted token — is
+  refused without being quoted, and neither the Console, the audit trail nor an error
+  repeats it. Without a configured source nothing changes
+  ([ADR-0491](docs/adr/0491-service-content-from-an-external-source.md)). In the Console,
+  administrators configure and check sources under **Console › Administration › Content sources**; the
+  catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
+  with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
+  quarantine state — draws a bound product's description, keywords and picture read-only, and
+  offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
+  **More in the wiki** under a description where the source allows it and only while the content
+  is shown.
 - **A service can be described by a child page of its offering's wiki page.** A market
   offering kept as one wiki page with its services as child pages below it can now be
   linked as such: the offering to the page, each service to its child page. A child
@@ -241,6 +378,15 @@ _Changed_ / _Removed_ for each version.
   duplicate JSON member at any depth or excess nesting. A digest binds bytes only; it
   does not certify a Worker, grant routing or record an approval (CDA2b,
   [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)).
+- **Conformance evidence can name a built-in Worker Type's implementation.** A record in
+  `workertype/evidence` binds one built-in Worker Type operation to one technical contract
+  and derives the rest from the module: the contract's digest, the Worker Type's version,
+  job type and operation, the suite and each case's outcome, and a dependency digest of the
+  files the Worker Type is built from on every path it runs on (`internal/impldigest`). A
+  record is current exactly when deriving it again gives its bytes; the gate fails the
+  ordinary test run otherwise, and the `evidence` command creates, renews and verifies
+  records. No contract is published and no record exists yet, so nothing is verified
+  (CDA2, [ADR-0483](docs/adr/0483-technical-capability-conformance-governance.md)).
 - **Account linking is set up in the Console.** An administrator sets up the Microsoft
   app registration people link their accounts through under **Administration →
   Security**: the directory (tenant) id, the application (client) id, the delegated
@@ -272,6 +418,13 @@ _Changed_ / _Removed_ for each version.
   and every button carries a name a screen reader says, since the icons carry none.
   Taking one position out of the basket is called that, where it was announced as
   discarding the whole order.
+- **A product's information opens over the shop, and a market offering's as a fact
+  sheet.** The "i" drew its panel below the last row of the catalogue; it now opens as a
+  dialog over the page, in the catalogue, the basket and the services view, closing on
+  Escape or a click beside it. For a market offering it opens a fact sheet: the offering's
+  description, then each included and each optional service's under its name, followed by
+  price, approval, whether it can be ordered again and its window, ready to copy as text
+  or print on a page of its own.
 - **The shop offers again what a held bundle lacks.** An option that was not taken
   when a bundle was ordered can be added later, and a position given back out of a
   bundle can be ordered again. In the catalogue, a part that is always included gets
@@ -614,33 +767,6 @@ What changes on disk, and going back:
 
 ### Added
 
-- **A product's description, keywords and picture can come from a wiki page.** An
-  administrator configures a content source (`/api/v1/content-sources`, admin-only): a
-  wikiwikibangbang base URL, https only, and a `credentialsRef` naming the vault secret that
-  holds a read-scope token of a technical account that is nothing but `viewer`. A product
-  manager then binds a product to one page per language its catalogue declares — searched,
-  pasted as an address or a key, and previewed with everything the rules drop — and linking
-  writes the binding and the fetched content in one draft save
-  (`/api/v1/catalog-products/{id}/content`). A page restricted for reading, or below a
-  restricted ancestor, held for a data protection review, not live, or in a space the account
-  does not hold exactly `viewer` in is refused; protected passages are removed by their mark
-  before the text is converted, child pages are taken depth first and a restricted one is
-  dropped with everything below it. While bound, those fields are read-only through the
-  ordinary save. A recheck follows the wiki's change feed and sweeps every fifteen minutes; a
-  page that becomes protected, unreadable or gone, a wrong account standing or an unreachable
-  wiki quarantines the product, which withholds its description, keywords and picture from the
-  shop, the approval page, the order views, the exports, the API and MCP at once, without a
-  publish. Only a refresh that passes every rule lifts it, and publishing refuses a quarantined
-  product or one without a passed recheck in the last fifteen minutes. Unlinking needs a reason
-  and is audited. Without a configured source nothing changes
-  ([ADR-draft](docs/adr/0491-service-content-from-an-external-source.md)). In the Console,
-  administrators configure and check sources under **Console › Administration › Content sources**; the
-  catalogue screen's product editor gains a **Content from the wiki** panel — search, preview
-  with every refusal and dropped passage, link, refresh, unlink with a reason, the recheck and
-  quarantine state — draws a bound product's description, keywords and picture read-only, and
-  offers **Refresh all wiki content** for a catalogue with bound products. The shop shows
-  **More in the wiki** under a description where the source allows it and only while the content
-  is shown.
 - **Technical capability contracts can be checked against complete JSON Schema Draft 2020-12 offline.** Design-time input and output validation now checks schema keywords with no remote schema loading, bounded payloads and positive/negative account/contact fixtures. Reports are deliberately schema-only: they do not certify a Worker Type, publish conformance evidence, authorize a job or change runtime routing (CDA2a, governed by ADR-0483).
 
 - **A process finds, keeps and labels the people in any CardDAV address book.** A new
@@ -17073,7 +17199,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.21.0...HEAD
+[0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pblumer/atlas/compare/v0.17.0...v0.18.0
