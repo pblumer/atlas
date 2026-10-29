@@ -185,7 +185,14 @@
         border:1px solid var(--border-strong); background:var(--surface); color:var(--text);
         font:inherit; font-size:13px; cursor:pointer; padding:0; }
   .sq:disabled { opacity:.45; cursor:default; }
-  .sq.info { color:var(--muted); }
+  /* The heart, the cart and the "i" are drawn (svgIcon in shop.js) in currentColor,
+     which is the shop's main colour here — and a catalogue theme's, since it sets
+     --accent. A favourite's heart is filled. */
+  .sq[data-icon] { color:var(--accent); display:inline-flex; align-items:center; justify-content:center; }
+  .sq svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6;
+            stroke-linecap:round; stroke-linejoin:round; }
+  .sq svg.filled path { fill:currentColor; }
+  .sq svg .cut { stroke:var(--surface); stroke-width:4.4; }
   /* The "i" opens its panel over the page (infoDialog in shop.js), where the
      person is looking, instead of under the last row of a long catalogue. */
   .info-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:flex-start;
@@ -392,6 +399,7 @@
     /* Touch: a fingertip needs about 40px; the 24px squares were drawn for a
        pointer. The row grows with them rather than crowding them. */
     .sq { width:40px; height:40px; font-size:15px; border-radius:8px; }
+    .sq svg { width:22px; height:22px; }
     .help, .avatar { width:40px; height:40px; }
     .cell { padding:8px 0; gap:8px; align-items:center; }
     .cell .label { font-size:15px; }

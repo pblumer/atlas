@@ -147,6 +147,7 @@ const STRINGS = {
     'tbl.noMatch': 'Kein Auftrag entspricht der Suche.',
     'note.noCompany': 'Die Spalte Unternehmen bleibt leer: ein Auftrag trägt heute keine Organisation. Er nennt nur, wer bestellt und wer empfängt.',
     'note.included': 'Fest enthalten — nicht abwählbar.',
+    'note.missingPart': 'Nicht mehr bezogen — einzeln nachbestellen.',
     'window.later': 'Bestellbar ab',
     'window.over': 'Nicht mehr bestellbar seit',
     'window.until': 'Bestellbar bis',
@@ -172,7 +173,10 @@ const STRINGS = {
     'info.yes': 'ja',
     'info.no': 'nein',
     'services.none': 'Sie beziehen zurzeit keine Leistungen.',
+    'services.notHeld': 'Nicht bezogen',
     'fav.mark': 'Als Favorit merken',
+    'act.add': 'In den Warenkorb legen',
+    'act.remove': 'Aus dem Warenkorb nehmen',
     'fav.clear': 'Favorit entfernen',
     'fav.only': 'Nur Favoriten',
     'fav.none': 'Sie haben nichts als Favorit gemerkt.',
@@ -330,6 +334,7 @@ const STRINGS = {
     'tbl.noMatch': 'No order matches the search.',
     'note.noCompany': 'The organisation column stays empty: an order carries no organisation today. It names only who ordered and who receives.',
     'note.included': 'Always included — cannot be deselected.',
+    'note.missingPart': 'No longer held — order it again on its own.',
     'window.later': 'Orderable from',
     'window.over': 'No longer orderable since',
     'window.until': 'Orderable until',
@@ -355,7 +360,10 @@ const STRINGS = {
     'info.yes': 'yes',
     'info.no': 'no',
     'services.none': 'You currently hold no services.',
+    'services.notHeld': 'Not held',
     'fav.mark': 'Mark as favourite',
+    'act.add': 'Put in the basket',
+    'act.remove': 'Take out of the basket',
     'fav.clear': 'Remove favourite',
     'fav.only': 'Favourites only',
     'fav.none': 'You have marked nothing as a favourite.',
@@ -513,6 +521,7 @@ const STRINGS = {
     'tbl.noMatch': 'Aucune commande ne correspond à la recherche.',
     'note.noCompany': 'La colonne Organisation reste vide : une commande ne porte aujourd’hui aucune organisation. Elle indique seulement qui commande et qui reçoit.',
     'note.included': 'Toujours inclus — ne peut pas être désélectionné.',
+    'note.missingPart': 'Plus détenu — le recommander séparément.',
     'window.later': 'Commandable à partir du',
     'window.over': 'Plus commandable depuis le',
     'window.until': 'Commandable jusqu’au',
@@ -538,7 +547,10 @@ const STRINGS = {
     'info.yes': 'oui',
     'info.no': 'non',
     'services.none': 'Vous ne détenez actuellement aucune prestation.',
+    'services.notHeld': 'Non détenu',
     'fav.mark': 'Ajouter aux favoris',
+    'act.add': 'Mettre dans le panier',
+    'act.remove': 'Retirer du panier',
     'fav.clear': 'Retirer des favoris',
     'fav.only': 'Favoris uniquement',
     'fav.none': 'Vous n’avez rien mis en favori.',
@@ -695,6 +707,7 @@ const STRINGS = {
     'tbl.noMatch': 'Nessun ordine corrisponde alla ricerca.',
     'note.noCompany': 'La colonna Organizzazione resta vuota: oggi un ordine non porta alcuna organizzazione. Indica soltanto chi ordina e chi riceve.',
     'note.included': 'Sempre incluso — non deselezionabile.',
+    'note.missingPart': 'Non più detenuto — riordinarlo singolarmente.',
     'window.later': 'Ordinabile dal',
     'window.over': 'Non più ordinabile dal',
     'window.until': 'Ordinabile fino al',
@@ -720,7 +733,10 @@ const STRINGS = {
     'info.yes': 'sì',
     'info.no': 'no',
     'services.none': 'Al momento non detiene alcuna prestazione.',
+    'services.notHeld': 'Non detenuto',
     'fav.mark': 'Aggiungere ai preferiti',
+    'act.add': 'Mettere nel carrello',
+    'act.remove': 'Togliere dal carrello',
     'fav.clear': 'Rimuovere dai preferiti',
     'fav.only': 'Solo preferiti',
     'fav.none': 'Non ha contrassegnato nulla come preferito.',
@@ -1528,6 +1544,41 @@ function carriedBy(release, whole, part) {
   return walk(whole);
 }
 
+// missingPart reports whether an always-included part is missing from a bundle this
+// person holds: the bundle is held, the part is not — it was given back on its own,
+// or its position was withdrawn before it was provisioned. Such a part is ordered
+// again by itself, which is what "always included" cannot mean for somebody who
+// already has the rest (ADR-0312, amended 2026-10-28). Only the direct whole
+// counts: a part of a part that is itself missing comes back with that part.
+function missingPart(release, id) {
+  if (state.held.has(id) || orderedAlready(id)) return false;
+  return Object.entries(release.includes || {})
+    .some(([whole, parts]) => parts.includes(id) && state.held.has(whole));
+}
+
+// orderedAlready reports whether one of this person's orders still has a position
+// for the item on its way — placed, waiting or being provisioned. It is not held
+// yet, and offering it again would place a second order for something already
+// coming: the server does not compare orders with each other.
+function orderedAlready(id) {
+  for (const o of state.orders || []) {
+    if (state.meID && o.recipient && o.recipient !== state.meID) continue;
+    for (const l of o.lines || []) {
+      if (l.itemId === id && ['pending', 'running', 'blocked'].includes(l.status)) return true;
+    }
+  }
+  return false;
+}
+
+// carriedByChoice reports whether something else in the basket always brings this
+// item, so that choosing it as well would be the same position twice.
+function carriedByChoice(release, id) {
+  for (const chosen of state.basket) {
+    if (chosen !== id && carriedBy(release, chosen, id)) return true;
+  }
+  return false;
+}
+
 // inBasketNow reports whether an item is chosen, directly or because something
 // chosen always carries it.
 function inBasketNow(release, id) {
@@ -2086,14 +2137,17 @@ function toggle(release, id, integral) {
   if (!state.canOrder) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('noid.title'),
-      'aria-label': t('noid.title'),
-    }, '+');
+      'aria-label': t('noid.title'), 'data-icon': 'cart',
+    }, svgIcon('cart'));
   }
-  if (integral) {
+  // An integral part missing from a bundle this person holds is the exception: it
+  // is offered on its own — unless a bundle in the basket brings it anyway.
+  const missing = integral && missingPart(release, id) && !carriedByChoice(release, id);
+  if (integral && !missing) {
     return el('button', {
       class: 'sq', disabled: 'disabled', title: t('note.included'),
-      'aria-label': t('note.included'),
-    }, '\u2212');
+      'aria-label': t('note.included'), 'data-icon': 'cart-off',
+    }, svgIcon('cart-off'));
   }
   // Outside its window. The title carries the date rather than a bare "no",
   // because the date is the whole of what somebody does next: come back, or stop
@@ -2102,17 +2156,72 @@ function toggle(release, id, integral) {
   const shut = windowNote(item);
   if (!orderableNow(item)) {
     return el('button', {
-      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || '',
-    }, '+');
+      class: 'sq', disabled: 'disabled', title: shut || '', 'aria-label': shut || t('act.add'),
+      'data-icon': 'cart',
+    }, svgIcon('cart'));
   }
   return el('button', {
     class: 'sq',
     'aria-pressed': inIt ? 'true' : 'false',
+    // The cart adds; once chosen, the struck-through cart takes it out again.
+    title: inIt ? t('act.remove') : (missing ? t('note.missingPart') : t('act.add')),
+    'aria-label': inIt ? t('act.remove') : (missing ? t('note.missingPart') : t('act.add')),
+    'data-icon': inIt ? 'cart-off' : 'cart',
     onclick: () => {
       if (state.basket.has(id)) state.basket.delete(id); else state.basket.add(id);
       render();
     },
-  }, inIt ? '\u2212' : '+');
+  }, svgIcon(inIt ? 'cart-off' : 'cart'));
+}
+
+// ICONS are the shop's drawn signs — the heart that marks a favourite, the cart
+// that puts something in the basket and the struck-through one that takes it out,
+// the "i" that opens what a product is —
+// as SVG on a 24-unit grid, drawn after the shop's icon set. They are stroked in
+// currentColor, so they are the shop's main colour (--accent, which a catalogue
+// theme sets) without a colour of their own; the heart of a favourite is filled.
+const ICONS = {
+  heart: [['path', { d: 'M12 20.6C6.2 17 2.6 13.4 2.6 8.7C2.6 5.3 4.9 2.9 7.8 2.9C9.9 2.9 11.5 4.5 12 7.5C12.5 4.5 14.1 2.9 16.2 2.9C19.1 2.9 21.4 5.3 21.4 8.7C21.4 13.4 17.8 17 12 20.6Z' }]],
+  cart: [
+    ['path', { d: 'M0.8 2.4H4.9L8 18H20.7' }],
+    ['path', { d: 'M5.5 4.8H23.2L21.2 14H7.3' }],
+    ['circle', { cx: '9.2', cy: '20', r: '1.7' }],
+    ['circle', { cx: '19.6', cy: '20', r: '1.7' }],
+  ],
+  // The cart struck through: what is in the basket comes out again, or — disabled —
+  // cannot, because something chosen always carries it.
+  'cart-off': [
+    ['path', { d: 'M0.8 2.4H4.9L8 18H20.7' }],
+    ['path', { d: 'M5.5 4.8H23.2L21.2 14H7.3' }],
+    ['circle', { cx: '9.2', cy: '20', r: '1.7' }],
+    ['circle', { cx: '19.6', cy: '20', r: '1.7' }],
+    // A wider stroke in the button's own colour under the slash cuts the cart's
+    // lines where it crosses them, so the strike reads at fifteen pixels.
+    ['path', { d: 'M2.5 0.8L22.5 23.2', class: 'cut' }],
+    ['path', { d: 'M2.5 0.8L22.5 23.2' }],
+  ],
+  info: [
+    ['circle', { cx: '12', cy: '12', r: '11.1' }],
+    ['circle', { cx: '12', cy: '5.7', r: '2.1' }],
+    ['rect', { x: '10.3', y: '9.3', width: '3.4', height: '11.1', rx: '0.3' }],
+  ],
+};
+
+// svgIcon draws one of ICONS. It is hidden from assistive technology: the button it
+// sits in carries the name.
+function svgIcon(kind, filled) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  if (filled) svg.setAttribute('class', 'filled');
+  for (const [tag, attrs] of ICONS[kind]) {
+    const part = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) part.setAttribute(k, v);
+    svg.append(part);
+  }
+  return svg;
 }
 
 // infoButton is the "i" the mockups put at the right edge of the service column,
@@ -2127,13 +2236,14 @@ function toggle(release, id, integral) {
 function infoButton(id) {
   return el('button', {
     class: 'sq info',
+    'data-icon': 'info',
     'aria-label': t('info.title'),
     onclick: () => {
       state.info = state.info === id ? '' : id;
       render();
       focusInfoDialog();
     },
-  }, 'i');
+  }, svgIcon('info'));
 }
 
 // focusInfoDialog moves the focus into an open dialog, so a keyboard user lands
@@ -2395,8 +2505,9 @@ function starButton(id) {
     'aria-pressed': on ? 'true' : 'false',
     'aria-label': t(on ? 'fav.clear' : 'fav.mark'),
     title: t(on ? 'fav.clear' : 'fav.mark'),
+    'data-icon': 'heart',
     onclick: () => star(id),
-  }, on ? '\u2605' : '\u2606');
+  }, svgIcon('heart', on));
 }
 
 // keepFavourites narrows a column when the favourites filter is on.
@@ -2788,10 +2899,13 @@ function renderBasket() {
   const row = (x) => cell({
     text: textOf((by[x.id] || {}).texts, x.id),
     lead: x.integral
-      ? el('button', { class: 'sq', disabled: 'disabled', title: t('note.included') }, '\u2212')
+      ? el('button', {
+        class: 'sq', disabled: 'disabled', title: t('note.included'),
+        'aria-label': t('note.included'), 'data-icon': 'cart-off',
+      }, svgIcon('cart-off'))
       : el('button', {
         class: 'sq',
-        'aria-label': t('act.discard'),
+        'aria-label': t('act.remove'),
         onclick: () => { state.basket.delete(x.id); render(); },
       }, 'X'),
     trail: infoButton(x.id),
@@ -4107,6 +4221,24 @@ function renderServices() {
       : cell({ ...open, text: textOf((by[id] || {}).texts, id), trail: infoButton(id) });
   };
 
+  // What a held product carries and this person does not hold: an option never
+  // taken, or a part given back or withdrawn on its own. It is offered here, with
+  // the catalogue's control, because this is where somebody looks for what their
+  // bundle lacks — the catalogue lists a part only beneath its product, and offers
+  // no Marktleistung of its own for it (ADR-0312, amended 2026-10-28).
+  const lacking = where.offering && held.includes(where.offering)
+    ? descendantsOf(rel, where.offering)
+      .filter((d) => !state.held.has(d.id) && !orderedAlready(d.id) && by[d.id])
+    : [];
+  const missingCol = lacking.length
+    ? [el('div', { class: 'colhead' }, t('services.notHeld')),
+      ...lacking.map((d) => cell({
+        text: textOf((by[d.id] || {}).texts, d.id),
+        lead: toggle(rel, d.id, d.integral),
+        trail: infoButton(d.id),
+      }))]
+    : [];
+
   return el('div', {},
     where.step > 0
       ? el('div', { class: 'stepper' },
@@ -4150,7 +4282,8 @@ function renderServices() {
         sortByName(inGroup).map(productCell)),
       el('div', { class: 'col' },
         el('div', { class: 'colhead' }, t('col.service')),
-        where.offering ? services.filter((id) => productOf(id) === where.offering).map((id) => row(id)) : [])),
+        where.offering ? services.filter((id) => productOf(id) === where.offering).map((id) => row(id)) : [],
+        missingCol)),
     state.info && by[state.info] ? infoDialog(rel, by[state.info]) : null);
 }
 
@@ -4385,11 +4518,21 @@ function renderForWhom() {
 // step, not the screen: the cascade offers the basket, the basket offers the
 // order, and both offer the way back the mockups put on every screen.
 function renderActions() {
+  const count = state.basket.size;
+  // "My services" fills the basket too, with what a held bundle is missing, so it
+  // carries the way on to it; the basket itself lives in the catalogue view.
+  if (state.view === 'services' && count && state.canOrder) {
+    return el('div', { class: 'actions' },
+      el('a', { class: 'backlink', href: '/index.html' }, t('act.back')),
+      el('button', {
+        class: 'primary',
+        onclick: () => { state.view = 'catalog'; state.inBasket = true; state.info = ''; render(); },
+      }, `${t('act.toBasket')} (${count})`));
+  }
   if (state.view !== 'catalog') {
     return el('div', { class: 'actions' },
       el('a', { class: 'backlink', href: '/index.html' }, t('act.back')));
   }
-  const count = state.basket.size;
   return el('div', { class: 'actions' },
     el('button', {
       class: 'secondary',

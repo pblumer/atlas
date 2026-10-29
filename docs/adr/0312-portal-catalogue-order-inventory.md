@@ -1,6 +1,6 @@
 # ADR-0312: Catalogue, order, inventory — three models, not one
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-10-28: what a held bundle lacks is offered again)
 - **Implementation:** Partial
 - **Date:** 2026-09-11
 - **Deciders:** Atlas maintainers
@@ -721,6 +721,29 @@ The marking reads the inventory route and not the orders on the page — derivin
 orders would look identical and work for ninety days, and then retention would delete the
 order, the right would still be held, and the catalogue would quietly stop marking it.
 A test pins the fetch, because that is the difference a comment cannot hold.
+
+> **Amendment (2026-10-28): what a held bundle lacks is offered again.** "Always
+> included, never deselectable" describes ordering a bundle; it cannot mean that a part
+> given back on its own ([§ Giving back what was granted](#giving-back-what-was-granted))
+> is gone for good while the rest is still held. The shop now offers such a part again:
+>
+> - **In the catalogue**, an integral part whose direct whole the person holds, and which
+>   they do not hold themselves, gets an enabled "+" titled *No longer held — order it
+>   again on its own* instead of the disabled "−". It stays included and disabled while
+>   a bundle in the basket carries it, and while one of their orders still has a position
+>   for it pending, waiting or running — not held yet, but coming, and the server does
+>   not compare orders with each other.
+> - **In "My services"**, a held product shows, under *Not held*, everything it carries
+>   that the person does not hold: options never taken and parts given back or withdrawn,
+>   with the catalogue's control. That is where somebody looks for what their bundle
+>   lacks, and an option has no Marktleistung of its own to be found under. The screen
+>   carries the way on to the basket once something is in it.
+>
+> Nothing changed on the server, which took both all along: an option or a part named
+> alone in `items` is one position, ordered for itself and not marked `integral`, and the
+> bundle named again comes back with its held parts `skipped` and the missing one
+> `pending` (`api/order/reorder_test.go`). Covered in the browser by
+> `e2e/shop-reorder-parts.spec.mjs`.
 
 **The one omission worth naming, because it was mine.** The first cut carried the new
 value type through the model, the state store and `applyToState` — but not through the

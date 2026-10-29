@@ -254,6 +254,24 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **The shop's favourite, basket and information buttons are drawn icons.** The star
+  that marks a favourite is a heart, filled once marked; the "+" that puts a product
+  in the basket is a shopping cart; the "i" that opens a product's information is an
+  info sign; the "−" that takes a chosen product out again, and the disabled one an
+  always-included part carries, is a struck-through cart. They are inline SVG in the
+  shop's main colour, so a catalogue theme that sets another accent recolours them,
+  and every button carries a name a screen reader says, since the icons carry none.
+  Taking one position out of the basket is called that, where it was announced as
+  discarding the whole order.
+- **The shop offers again what a held bundle lacks.** An option that was not taken
+  when a bundle was ordered can be added later, and a position given back out of a
+  bundle can be ordered again. In the catalogue, a part that is always included gets
+  an enabled "+" once its bundle is held and the part is not; in *My services*, a held
+  product lists under *Not held* its options never taken and its parts given back, with
+  the way on to the basket. Neither is offered while a bundle in the basket carries it
+  or an order of the person still has it on its way. The server accepted both orders
+  before; only the shop did not offer them
+  ([ADR-0312](docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28).
 - **Compensation waits for its handlers.** A compensation throw or end event now honours
   BPMN's `waitForCompletion`, which defaults to true: the step after it runs once the
   handlers it started have finished, not beside them. `waitForCompletion="false"` keeps

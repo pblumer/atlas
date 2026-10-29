@@ -432,6 +432,20 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   id a deployed version carries and the process's own id are kept; and one undo takes
   back name and id together.
 
+- **`shop-icons.spec.mjs`**: the shop's **icon buttons** — a heart for a favourite,
+  filled once marked, a shopping cart for the basket, a struck-through cart to take a
+  chosen product out again and on an always-included part, and an info sign for a
+  product's information, each an inline SVG with no glyph beside it and a name for screen
+  readers; their stroke is the shop's accent and follows a catalogue theme's.
+
+- **`shop-reorder-parts.spec.mjs`** ([ADR-0312](../docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28):
+  **what a held bundle lacks is offered again**, against a stubbed API in which the
+  iPhone is held, its hardware given back and its case never taken. In the catalogue the
+  hardware gets an enabled "+" and is ordered alone; a part held whole, or carried by a
+  bundle in the basket, stays included and disabled; *My services* lists the hardware
+  and the case under *Not held* and the basket takes both; a bundle held whole offers
+  nothing extra; and a part an open order is already bringing is offered nowhere.
+
 - **`form-doors.spec.mjs`** ([ADR-0465](../docs/adr/0465-form-doors.md)):
   the **way from a step to its form and back**, through the real app (`index.html` →
   `app.js`) against a mocked `/api/v1`, because the routing is half of it. The start
