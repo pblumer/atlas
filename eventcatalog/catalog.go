@@ -480,7 +480,7 @@ func taskEntry(typ, record string, meaning Text) Entry {
 			{Name: "name", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The user task's name as the model gives it, while the definition is deployed.", DE: "Der Name des User-Tasks, wie das Modell ihn nennt, solange die Definition deployt ist."}},
 		},
 		NeverSecret: "TestTheFeedCarriesNoSecret",
-		Since:       Unreleased, Stability: Experimental,
+		Since:       "0.21.0", Stability: Experimental,
 		Access: map[Channel]string{Feed: accessPlatform},
 	}
 }
