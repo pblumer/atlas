@@ -17,6 +17,9 @@
 // checklist or tag list, given the decision's list as its static `values` once the page
 // has fetched it through the `atlasDecisions` service. Until then it shows that it is
 // loading, rather than an empty list form-js would clear a prefilled value against.
+// When the decision's inputs are bound to other fields, it asks again as those change —
+// a group chosen, its members offered — and form-js drops a value the new list does not
+// offer.
 
 import { useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import {
@@ -34,9 +37,12 @@ import { DATA_SOURCE_MEMBER, isRemoteSelect } from './remote-source.js';
 import {
   DECISION_MEMBER,
   MULTI_TYPES,
+  bindingsOf,
   decisionIdOf,
+  dependsOn,
   hasDecisionSource,
-  isDecisionField
+  isDecisionField,
+  isEmptyValue
 } from './decision-source.js';
 import { MAIL_VIEW_TYPE, MailView } from './mailview.jsx';
 
@@ -187,14 +193,58 @@ export function sanitizeDecisionValue(value, multi) {
   return plausible(value) ? value : null;
 }
 
+// How long a field waits after a field it is bound to changes before it asks again, so
+// a value being typed is asked about once and not per keystroke.
+const REASK_MS = 250;
+
+// boundValues reads the values of the fields the options depend on from the form's
+// current data, in the row of every dynamic list the field is in (indexes).
+function boundValues(field, indexes, getService) {
+  const registry = getService('formFieldRegistry', false);
+  const paths = getService('pathRegistry', false);
+  const form = getService('form', false);
+  if (!registry || !paths || !form) return {};
+  const all = registry.getAll();
+  const find = (key) => all.find((f) => f && f.key === key);
+  const data = form._getState().data || {};
+  const values = {};
+  for (const key of dependsOn(field, find)) {
+    const f = find(key);
+    if (!f) continue;
+    let path = null;
+    try { path = paths.getValuePath(f, { indexes }); } catch { path = null; }
+    let v = data;
+    for (const step of path || []) v = v == null ? undefined : v[step];
+    values[key] = v === undefined ? null : v;
+  }
+  return values;
+}
+
 function DecisionOptions(props) {
-  const { Base, field, domId, errors = [], onChange } = props;
+  const { Base, field, domId, errors = [], onChange, indexes } = props;
   const { getService } = useContext(FormContext);
   const service = getService('atlasDecisions', false);
   const text = decisionText(getService('atlasLocale', false));
   const id = decisionIdOf(field);
 
+  // What the decision is asked about: the values of the fields it depends on, and the
+  // inputs those and the fixed ones make. Read on every render, because form-js renders
+  // every field again whenever the form's data changes.
+  const values = boundValues(field, indexes, getService);
+  const inputs = {};
+  let waiting = false;
+  for (const b of bindingsOf(field)) {
+    if (typeof b.field === 'string' && b.field) {
+      inputs[b.name] = values[b.field];
+      if (isEmptyValue(values[b.field])) waiting = true;
+    } else {
+      inputs[b.name] = b.value;
+    }
+  }
+  const asked = JSON.stringify([ id, values ]);
+
   const [ state, setState ] = useState({ status: 'loading' });
+  const first = useRef(true);
 
   useEffect(() => {
     let live = true;
@@ -202,14 +252,25 @@ function DecisionOptions(props) {
       setState({ status: 'failed', reason: id ? '' : 'The field names no decision.' });
       return undefined;
     }
-    setState({ status: 'loading' });
-    Promise.resolve()
-      .then(() => service.options(id))
+    // A field bound to one that holds nothing yet offers nothing, without asking.
+    if (waiting) {
+      setState({ status: 'loaded', options: [] });
+      return undefined;
+    }
+    const ask = () => Promise.resolve()
+      .then(() => service.options({ decisionId: id, field: field.key, inputs, values }))
       .then(
         (options) => { if (live) setState({ status: 'loaded', options: Array.isArray(options) ? options : [] }); },
         (err) => { if (live) setState({ status: 'failed', reason: (err && err.message) || '' }); });
-    return () => { live = false; };
-  }, [ service, id ]);
+    if (first.current) {
+      first.current = false;
+      ask();
+      return () => { live = false; };
+    }
+    // Asked again: the options shown stay until the new ones are there.
+    const timer = setTimeout(ask, REASK_MS);
+    return () => { live = false; clearTimeout(timer); };
+  }, [ service, asked ]);
 
   // The field form-js renders: the same field, with the decision's list as its own
   // static options. One object per list, so form-js's effects keyed on the field run

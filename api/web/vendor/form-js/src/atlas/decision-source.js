@@ -63,3 +63,32 @@ export function hasDecisionSource(options) {
   return !!block && typeof block === 'object' &&
     options.values === undefined && options.valuesKey === undefined && options.valuesExpression === undefined;
 }
+
+// bindingsOf is the field's inputs as the block states them: [{name, field}] for an
+// input bound to another field, [{name, value}] for a fixed one.
+export function bindingsOf(field) {
+  const block = field && field[DECISION_MEMBER];
+  return block && Array.isArray(block.inputs) ? block.inputs.filter((b) => b && typeof b.name === 'string') : [];
+}
+
+// isEmptyValue reports a field that holds nothing chosen yet.
+export function isEmptyValue(v) {
+  return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+}
+
+// dependsOn is every field key the field's options depend on: the fields its inputs are
+// bound to, and theirs in turn where those take their options from a decision. find
+// looks a field up by key. The server refuses cycles; the walk stops at a key seen.
+export function dependsOn(field, find) {
+  const out = [];
+  const visit = (f) => {
+    for (const b of bindingsOf(f)) {
+      if (typeof b.field !== 'string' || !b.field || out.includes(b.field)) continue;
+      out.push(b.field);
+      const next = find(b.field);
+      if (next && next[DECISION_MEMBER]) visit(next);
+    }
+  };
+  visit(field);
+  return out;
+}

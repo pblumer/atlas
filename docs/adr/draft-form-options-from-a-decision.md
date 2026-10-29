@@ -42,8 +42,9 @@ missing:
 
 The question this record answers: **how does a form field show the list a deployed
 decision answers with, kept by the people who own it, without copying it into forms or
-instances, and without opening a door through which a decision is evaluated against
-values of the caller's choosing?**
+instances — and, where the list depends on a choice made in the same form (a group,
+then its members), without opening a door through which a decision is evaluated against
+values the form never offers?**
 
 ## Decision drivers
 
@@ -55,8 +56,9 @@ values of the caller's choosing?**
   variable.
 - **The form stays a form-js document** ([ADR-0028](0028-forms-and-the-tasks-app.md),
   ADR-0473): anything that renders form-js without Atlas still renders it.
-- **No new exposure.** A request may not evaluate decision logic against inputs it
-  chooses, and may not read more than the caller can read already.
+- **No new exposure.** A request may not choose the decision or its inputs, and may not
+  give an input a value the form does not offer; nobody reads more than they could
+  already.
 - **The submission is checked** as ADR-0473 checks a directory field's.
 
 ## Considered options
@@ -69,8 +71,9 @@ values of the caller's choosing?**
    result into the form as static options.
 5. **Evaluation at task activation:** the engine evaluates the decision when the user
    task is created and stores the list with the task.
-6. **Evaluation when the form is shown:** the field names the decision; the server
-   evaluates its newest deployment, without inputs, each time the form is opened.
+6. **Evaluation when the form is shown:** the field names the decision and binds its
+   inputs to other fields of the form or fixes them; the server evaluates the newest
+   deployment when the form is opened and again whenever a bound field changes.
 
 ## Decision outcome
 
@@ -116,6 +119,21 @@ source:
 }
 ```
 
+A decision that takes inputs has each of them bound to another field of the form, whose
+value is the input, or fixed:
+
+```json
+{
+  "type": "radio",
+  "key": "mitglied",
+  "atlasDecision": {
+    "version": 1,
+    "decisionId": "Mitglieder",
+    "inputs": [ { "name": "gruppe", "field": "gruppe" }, { "name": "land", "value": "CH" } ]
+  }
+}
+```
+
 - It is offered on the four fields form-js gives options to: `select`, `radio`,
   `checklist`, `taglist`. A select and a radio group submit one value; a checklist and a
   tag list submit a list of them.
@@ -123,7 +141,17 @@ source:
   would. A field naming one of those as well is refused at save: a field takes its
   options from one source.
 - `decisionId` is a plain decision name — the name Atlas addresses decisions by
-  everywhere — never FEEL.
+  everywhere — never FEEL. There is no expression language in the block at all: the
+  only input at run time is the person's own form state, and a binding says everything
+  an expression over it would, without an evaluation surface — ADR-0473 decided the same
+  for its filters.
+- An input names exactly one of `field` and `value`. The bound field must be a field of
+  the same form whose key no other field has, not the field itself, and either outside
+  every dynamic list or in a row of one the field is in too — a row's field reads its
+  own row's choice, or one outside the rows, never a row of a list it is not in. A field
+  naming a decision has a key no other field has, because a rendered form asks for its
+  options by that key. Decision fields bound to each other in a cycle are refused:
+  neither could be offered before the other was chosen.
 - The save checks the block's shape, not whether the decision is deployed now. That is
   the server's state, it changes after the form is saved, and an import may well bring
   a form in before the decision it names.
@@ -137,9 +165,9 @@ is ignored wherever form-js renders without Atlas.
   process is not a decision in its own right and is not offered; what a form shows is a
   decision somebody published as one, versioned and deleted with the impact check a
   decision deployment gets.
-- A decision that **takes inputs** is refused (`takes_inputs`). Without inputs, a
-  decision's result is a function of its deployment alone, which is what makes the next
-  point true.
+- Every input the decision declares must be given — bound or fixed — or the field
+  answers `unbound_input`. An input bound to a field that holds nothing yet makes the
+  field offer nothing, without asking the decision: no group chosen, no members.
 - Its result must be a **list** (`not_a_list`), of at most 1 000 entries — more is not
   a list a person scrolls through but a search, which is what ADR-0473 is for. The list
   is refused rather than cut, because a cut list hides entries without saying which.
@@ -150,28 +178,44 @@ is ignored wherever form-js renders without Atlas.
   and counted. Normalizing on the server the way form-js does means the server checks a
   submission against exactly what the person was shown.
 
-A boxed list is the natural notation, but any decision without inputs that answers with
-a list qualifies — a decision table with a `COLLECT` hit policy and no input columns,
-a literal expression `["CH", "DE", "AT"]`.
+A boxed list is the natural notation, but any decision that answers with a list
+qualifies — a decision table with a `COLLECT` hit policy, a literal expression
+`if Gruppe = "IT" then ["anna", "ben"] else ["carla"]`.
 
-### Who may read the options
+### Who may ask for the options, and about what
 
-`GET /api/v1/form-data/decisions/{decisionId}/options` answers any signed-in caller,
-like `GET /api/v1/decision-deployments/{key}/xml`, which already gives the same caller
-the whole model the list is evaluated from. Because a decision with inputs is refused,
-the route evaluates nothing against values the caller chose: its answer is a function
-of what is deployed, and the caller could compute it from the model it may read. The
-route adds no exposure; it saves the browser from evaluating FEEL.
+A rendered form asks `POST /api/v1/forms/{id}/fields/{field}/options` with the values
+chosen in the fields the field depends on — the fields its inputs are bound to, and
+theirs in turn where those are decision fields too. Which decision, which input each
+value is, and which inputs are fixed are read from the stored form; a request naming a
+field the options do not depend on, or anything but `values`, is refused. Whoever may
+read the form (`GET /api/v1/forms/{id}`, any signed-in caller) may ask.
 
-`GET /api/v1/form-data/decisions` lists the decisions a field can name — those with a
-decision deployment that take no inputs — for the form editor (role modeler).
+What keeps the route from being a way to ask a decision about anything is one rule: **a
+bound value must be one of the choices the field it comes from offers**, where that
+field fixes them — its own static options, or, for a decision field, the list its own
+decision answers for the values before it. A form that offers the groups IT and
+Vertrieb cannot be used to ask for the members of a group it does not offer, though the
+decision knows them. A field a person types into fixes nothing, and its value is the
+person's: binding a decision to a text field is the author's choice to let anybody who
+can fill in the form ask the decision about any value. Without inputs nothing changes
+from a read of the model: any signed-in caller reads it whole through
+`GET /api/v1/decision-deployments/{key}/xml`.
 
-A **public start link** and a **public wizard step** have nobody signed in to ask the
-route. There the server writes each decision field's options into the schema it serves
-as the field's static `values` and drops the block, so the visitor's browser renders
-plain form-js. A field whose decision cannot answer is left as it was and renders as
-"could not be loaded". Putting such a field on a public form shows the list to anonymous
-visitors — the author's choice, as it is with static options.
+The form editor's previews ask `POST /api/v1/form-data/decisions/{decisionId}/options`
+with the inputs themselves — a form being edited may not be saved — and that route is a
+modeler's, who may already try any model (`POST /api/v1/decisions/evaluate`).
+`GET /api/v1/form-data/decisions` lists the decisions with the inputs each takes, for
+the editor's picker.
+
+A **public start link** and a **public wizard step** have nobody signed in. A field
+whose inputs are all fixed is written into the schema the server serves them, as its
+static `values`, and needs no request. A field bound to another field asks
+`POST /public/forms/{token}/fields/{field}/options` or
+`POST /public/wizard/steps/{taskKey}/fields/{field}/options` — the link or the pass is
+the authorization, the form is the link's or the screen's, the same rule holds, and the
+public routes' rate limit applies. Putting such a field on a public form shows the list
+to anonymous visitors — the author's choice, as it is with static options.
 
 ### Rendering
 
@@ -189,9 +233,16 @@ once they are there if the list does not offer it. Without the wrapper's own san
 form-js would have dropped every prefilled value at import, because the options are not
 known yet.
 
-The console's loader (`formviewer.js`) gives every form it renders — the Tasks app, the
-start form, the repair form, the shop — a service of its own, so each form that is
-opened asks once per decision and shows what the decision answers then.
+A field bound to another field reads that field's value from the form's data, through
+form-js's own path registry and in the row of every dynamic list it is in, whenever
+form-js renders — which it does on every change. When the value changes it asks again,
+a quarter of a second later so a value being typed is asked about once, and keeps
+showing the previous options until the new ones are there; form-js then drops a value
+the new list does not offer, so choosing another group clears the member chosen before.
+
+Every page that renders a stored form — the Tasks app, the start form, the repair form,
+the shop — gives it `decisionOptions({ formId })` (`formviewer.js`); the public page
+gives it the link's or the step's route.
 
 ### Submission
 
@@ -202,9 +253,14 @@ loop:
 
 - a value the list does not offer: `400 invalid_value`, naming the field and the value;
 - a checklist or tag list submitting something other than a list: `400 invalid_value`;
-- a decision that cannot answer — undeployed, now taking inputs, no longer a list:
+- a decision that cannot answer — undeployed, an input not given, no longer a list:
   `422` with the reason's code, because a value that cannot be checked is not completed
   unchecked;
+- the list a value is held to is the one the same submission's choices give: the group
+  submitted beside the member, the row's own group for a member in a dynamic list's
+  row. A bound field form-js did not submit — a disabled one — is read from what the
+  form was opened with (the task's variables), and failing that from its default value;
+- a bound value the field it comes from does not offer: `400 invalid_value`;
 - an empty value is not checked; whether a value is required stays form-js's to insist
   on, as it is for every other field.
 
@@ -262,11 +318,15 @@ inside dmn-js" stays true, and the modules are built into the bundle from
     were.
   - **Each entry is a FEEL editor.** A list of hundreds of entries draws hundreds of
     editors; reference lists of tens of entries are the case this is built for.
+  - **A field bound to a text field can be asked about any value** a person types — the
+    author's choice, as above.
+  - **A dependent field asks per change.** Each choice in a bound field is one request
+    and one evaluation; nothing is cached across people.
   - **The form editor's panel speaks English**, as the rest of form-js's panel does.
 - **Follow-ups / risks to watch:**
   - Count forms naming a decision in the deletion impact check.
-  - A decision with inputs bound to other fields of the form — dependent lists — is the
-    natural next step; it needs the binding rules ADR-0473 wrote for filters.
+  - An input bound to a process variable directly, rather than through a field of the
+    form; today an expression field (`= variable`) carries one into the form.
   - The list editor could move into the dmn-js fork, which already authors other boxed
     expressions generically.
 
@@ -280,20 +340,25 @@ view it had captured. The tab now looks the view up again when it is pressed.
 
 ### As built
 
-- `api/formdecision` — the `atlasDecision` block (`Parse`, `Check`), the path of a
-  field's value through groups and dynamic lists, `OptionsOf` (form-js's normalization,
-  the 1 000-entry bound), the options and listing routes, `Resolve` for public pages and
-  `CheckSubmission`. `api/formdecisions.go` is its reach into the server: the registry
+- `api/formdecision` — the `atlasDecision` block and its bindings (`Parse`, `Check`:
+  bound fields, rows, cycles), the path of a field's value through groups and dynamic
+  lists, `OptionsOf` (form-js's normalization, the 1 000-entry bound), `FieldOptions`
+  with the rule that a bound value is one its field offers, the editor's routes,
+  `WriteFieldOptions` for the console's and the public routes, `Resolve` for public
+  pages and `CheckSubmission`. `api/formdecisions.go` is its reach into the server: the registry
   read on the run loop, the evaluation off it.
 - `dmn.Registry.LatestDeployedDecision` / `LatestDeployedDecisions` — the newest
   decision deployment of a decision, described, and the key it is evaluated under.
-- The form save (`handleSaveForm`), task completion (`checkTaskSubmission`), the public
-  start link (`handlePublicFormSchema`, `handlePublicFormStart`) and the public wizard
-  (`publicStepOf`, `handlePublicWizardComplete`).
+- The form save (`handleSaveForm`), the form's options route (`handleFormFieldOptions`),
+  task completion (`checkTaskSubmission`, `taskVariables`), the public start link
+  (`handlePublicFormSchema`, `handlePublicFieldOptions`, `handlePublicFormStart`) and the
+  public wizard (`publicStepOf`, `handlePublicWizardFieldOptions`,
+  `handlePublicWizardComplete`).
 - `api/web/vendor/form-js/src/atlas/decision-source.js`, `viewer.jsx`, `editor.jsx`,
-  the two entries, and the rebuilt bundles; `api/web/formviewer.js` `decisionOptions`
-  and the loader that hands it to every form; `api/web/form-editor.js` passes the
-  decisions and the service to the Playground and the Validate tab.
+  the two entries, and the rebuilt bundles; `api/web/formviewer.js` `decisionOptions`,
+  given to every form by the pages that render one (`app.js`, `incidents.js`,
+  `shop.js`, `public-form.html`); `api/web/form-editor.js` passes the decisions and the
+  service to the Playground and the Validate tab.
 - `api/web/vendor/dmn/src/atlas/` — `modeler.js`, `list-editor.jsx`, `drd-list.js` —
   and the rebuilt DMN bundle; `api/web/dmn-editor.js` (the list hint, the tab looked up
   again); the decision documentation collects and prints a list's entries
@@ -302,8 +367,9 @@ view it had captured. The tab now looks the view up again when it is pressed.
 Tested by `dmn/latestdeployed_test.go`; `api/formdecision` (schema, normalization,
 routes, resolution, submission); `api/formdecision_http_test.go` (the whole path over
 HTTP against a real server: the picker, the options, the save check, task completion,
-a public link's schema and start, and a new version of the decision shown without
-touching the form); `api/decisiondoc`; and the Playwright specs
+a public link's schema and start, a new version of the decision shown without touching
+the form, and a group chosen deciding the members offered — in the console, on a public
+link and on a wizard screen, and at completion); `api/decisiondoc`; and the Playwright specs
 `form-decision-options`, `dmn-list-editor` and `decision-doc`.
 
 ## Links

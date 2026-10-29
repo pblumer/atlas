@@ -1917,14 +1917,15 @@ the hand-written Details panel one vertical slice at a time:
   configures it under the select's own Options source, without JSON, and previews it with
   made-up people ([ADR-0473](docs/adr/0473-form-remote-data-sources.md), amended).
 - ✅ **Options from a decision**: a select, radio group, checklist or tag list names a
-  deployed decision without inputs — typically a DMN boxed list its owners keep in the
-  decision editor, which now edits lists — and shows what the newest version answers
-  each time the form is opened; public pages are served the options written in, and the
-  submitted value is checked against the list before a task completes or a public form
-  starts or continues an instance
+  deployed decision — typically a DMN boxed list its owners keep in the decision editor,
+  which now edits lists — whose inputs are bound to other fields of the form or fixed, so
+  a choice decides what the next field offers (a group, then its members); the newest
+  version answers when the form is shown and as the choice changes, and the submitted
+  value is checked against the list its own choices give before a task completes or a
+  public form starts or continues an instance
   ([ADR-draft-form-options-from-a-decision](docs/adr/draft-form-options-from-a-decision.md)).
-- 🔲 Dependent lists: a decision with inputs bound to other fields of the form, and forms
-  that name a decision counted in its deletion impact check.
+- 🔲 Forms that name a decision counted in its deletion impact check, and inputs bound to
+  a process variable directly.
 - 🔲 A tag list whose options come from a remote data source: several entries, and a
   submission check over a list of ids.
 - 🔲 Further remote data sources: Entra groups and administrative units, a `$search` mode

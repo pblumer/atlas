@@ -208,7 +208,8 @@ func (s *Server) checkTaskSubmission(w http.ResponseWriter, r *http.Request, key
 		}
 	}
 	if decisions {
-		if refusal := s.formDecision.CheckSubmission(r.Context(), schema, vars); refusal != nil {
+		known := func() map[string]any { return s.taskVariables(key) }
+		if refusal := s.formDecision.CheckSubmission(r.Context(), schema, vars, known); refusal != nil {
 			refusal.Write(w)
 			return true
 		}

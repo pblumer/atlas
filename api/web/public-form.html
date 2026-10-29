@@ -54,6 +54,7 @@
   </div>
   <script type="module">
     import { Form } from "/vendor/form-js/form-viewer.js";
+    import { decisionOptions } from "/formviewer.js";
     import { syncFromServer } from "/theme.js";
     import { syncLogoFromServer } from "/logo.js";
     const card = document.getElementById("card");
@@ -153,7 +154,15 @@
         ${step.documentation ? `<p class="muted">${esc(step.documentation)}</p>` : ""}
         <div id="form"></div>
         <div class="actions"><button class="submit" id="submit" title="Submit this step and continue">Continue</button></div>`;
-      const form = new Form({ container: document.getElementById("form") });
+      // A field bound to another field of this screen asks for its options through the
+      // pass (ADR-draft-form-options-from-a-decision); the others came written in.
+      const form = new Form({
+        container: document.getElementById("form"),
+        atlasDecisions: decisionOptions({
+          url: (field) => `/public/wizard/steps/${step.taskKey}/fields/${encodeURIComponent(field)}/options`,
+          headers: { Authorization: "Bearer " + readPass() },
+        }),
+      });
       await form.importSchema(step.schema || { type: "default", components: [] }, step.data || {});
       document.getElementById("submit").addEventListener("click", async (e) => {
         const btn = e.currentTarget;
@@ -189,7 +198,12 @@
       card.innerHTML = `<h1>${esc(def.processName || "Start a process")}</h1>
         <div id="form"></div>
         <div class="actions"><button class="submit" id="submit" title="Submit this form and start the process">Submit</button></div>`;
-      const form = new Form({ container: document.getElementById("form") });
+      const form = new Form({
+        container: document.getElementById("form"),
+        atlasDecisions: decisionOptions({
+          url: (field) => `/public/forms/${encodeURIComponent(token)}/fields/${encodeURIComponent(field)}/options`,
+        }),
+      });
       await form.importSchema(def.schema, {});
       document.getElementById("submit").addEventListener("click", async (e) => {
         const btn = e.currentTarget;

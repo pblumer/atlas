@@ -7,19 +7,20 @@
          console's own loader (api/web/formviewer.js loadFormViewer), as the Tasks app,
          the start form, the repair form and the shop do
          (ADR-draft-form-options-from-a-decision). What each decision answers is the
-         spec's to say, through page.route on GET /api/v1/form-data/decisions/{id}/options. -->
+         spec's to say, through page.route on POST /api/v1/forms/form-x/fields/{field}/options. -->
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
     <div id="form"></div>
     <script type="module">
-      import { loadFormViewer } from "/formviewer.js";
+      import { decisionOptions, loadFormViewer } from "/formviewer.js";
 
       window.__form = null;
       window.__render = async (schema, data = {}, options = {}) => {
         const { Form } = await loadFormViewer();
         if (window.__form) window.__form.destroy();
-        window.__form = new Form({ container: document.getElementById("form"), ...options });
+        // As the Tasks app renders a stored form: its fields ask through the form's id.
+        window.__form = new Form({ container: document.getElementById("form"), atlasDecisions: decisionOptions({ formId: "form-x" }), ...options });
         await window.__form.importSchema(schema, data);
         return true;
       };

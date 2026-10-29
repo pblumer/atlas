@@ -3817,12 +3817,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A preflight carries no credentials by definition, so it is public with them.
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+	// The options of a field of the link's form whose decision is bound to what the
+	// visitor chose in another field (ADR-draft-form-options-from-a-decision): only
+	// that form's fields, only the values of the fields they bind.
+	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/fields/{field}/options", s.handlePublicFieldOptions)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/fields/{field}/options", s.handlePublicFormPreflight)
 	// A public wizard's later screens (ADR-0449). The pass in the Authorization header
 	// is the whole authorization, and it opens the public sittings of one instance.
 	mountFunc(accessPublic, roleAny, "GET /public/wizard/step", s.handlePublicWizardStep)
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/complete", s.handlePublicWizardComplete)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/step", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicWizardFieldOptions)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicFormPreflight)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a

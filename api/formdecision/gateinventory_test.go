@@ -11,11 +11,12 @@ import (
 //
 // This area's object is a deployed decision, and a deployed decision has no member
 // list: it is engine-wide runtime state, whose whole model any signed-in caller reads
-// through GET /api/v1/decision-deployments/{key}/xml. Both handlers are therefore gated
-// by role alone, and what keeps the options route from being more than that read is the
-// refusal of a decision that takes inputs: nothing is evaluated against values the
-// caller chose. Reflection supplies the actual set of handlers, so adding a route and
-// forgetting to classify it fails the build.
+// through GET /api/v1/decision-deployments/{key}/xml. The two handlers here are the form
+// editor's, gated by the modeler role alone. The options a rendered form asks for go
+// through WriteFieldOptions, which the server calls only after it has resolved the form
+// the caller may read — the console's, a public link's or a wizard step's — and which
+// reads the decision and its inputs from that form. Reflection supplies the actual set
+// of handlers, so adding a route and forgetting to classify it fails the build.
 
 // gateKind says what a handler does about the object axis.
 type gateKind int
@@ -34,8 +35,8 @@ type handlerGate struct {
 }
 
 var decisionGates = []handlerGate{
-	{"HandleList", roleGated, "names the deployed decisions without inputs, each by id, name and model — what the decision-deployments listing already shows every signed-in caller, for the form editor (modeler role)"},
-	{"HandleOptions", roleGated, "evaluates the newest deployment of one decision without inputs — a function of a model the same caller may read whole — and refuses a decision that takes inputs, so no value of the caller's choosing reaches an evaluation"},
+	{"HandleList", roleGated, "names the deployed decisions with the inputs each takes — what the decision-deployments listing and the model itself already show every signed-in caller, for the form editor (modeler role)"},
+	{"HandleEvaluate", roleGated, "evaluates a decision against inputs the author gives, for the form editor's previews — the modeler role, which may already try any model through POST /api/v1/decisions/evaluate"},
 }
 
 // TestEveryHandlerIsClassified is the drift half. Reflection gives the handlers that

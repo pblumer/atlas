@@ -530,8 +530,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   decision's list — each decision asked once per form — and submits the value chosen; a
   prefilled value stays while the list offers it and goes when it does not; a decision that
   cannot answer says the choices could not be loaded, in the form's language; and the field
-  says it is loading while the list is on its way. The options route is answered by
-  `page.route`.
+  says it is loading while the list is on its way. A decision's input is bound to the field
+  of the same name or fixed in the panel, which says what a bound field waits for; rendered,
+  a choice in one field decides what the next one offers, a change clears what no longer
+  fits, and the request names only the bound field's value. The options routes are answered
+  by `page.route`.
 - **`dmn-list-editor.spec.mjs`**
   ([ADR-draft-form-options-from-a-decision](../docs/adr/draft-form-options-from-a-decision.md)):
   the decision editor's boxed list (`vendor/dmn/src/atlas/`) against the real DMN bundle — a list

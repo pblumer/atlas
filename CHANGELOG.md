@@ -15,16 +15,22 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **A form field takes its options from a decision.** A select, radio group, checklist or
-  tag list can name a deployed decision without inputs — typically a list its owners keep
-  in the decision editor — under Options source ▸ Type ▸ Decision (DMN), and shows what
-  the newest version of the decision answers each time the form is opened: no copy of the
-  list in the form, no modelled step that writes it into the instance, and a new version
-  reaches the next form without touching it. The panel shows what the decision answers
-  now; the field says it is loading, or that its choices could not be loaded and why. A
-  public start link and a public wizard step are served the form with the options written
-  in. Task completion, a public start and a wizard step refuse a value the list does not
-  offer (400 `invalid_value`) and a value whose list cannot be read (422). New routes
-  `GET /api/v1/form-data/decisions` and `GET /api/v1/form-data/decisions/{decisionId}/options`
+  tag list can name a deployed decision — typically a list its owners keep in the decision
+  editor — under Options source ▸ Type ▸ Decision (DMN), and shows what the newest version
+  answers: no copy of the list in the form, no modelled step that writes it into the
+  instance, and a new version reaches the next form without touching it. Each of the
+  decision's inputs is bound to another field of the form or fixed, so a choice decides
+  what the next field offers — a group, then its members; the field asks again as the
+  choice changes, also in each row of a dynamic list. A bound value must be one the field
+  it comes from offers, so a form cannot be used to ask the decision about anything else.
+  Public start links and wizard steps get the options written in, or ask through the link
+  or the pass. Task completion, a public start and a wizard step refuse a value the list
+  does not offer for the choices submitted with it (400 `invalid_value`) and a value whose
+  list cannot be read (422). New routes `GET /api/v1/form-data/decisions`,
+  `POST /api/v1/form-data/decisions/{decisionId}/options`,
+  `POST /api/v1/forms/{id}/fields/{field}/options`,
+  `POST /public/forms/{token}/fields/{field}/options` and
+  `POST /public/wizard/steps/{taskKey}/fields/{field}/options`
   (ADR-draft-form-options-from-a-decision).
 - **The decision editor edits a list.** A decision whose logic is a DMN boxed list opens in
   its own tab like a table or a literal expression: entries are added, moved up or down and

@@ -980,10 +980,11 @@ var mcpOmittedRoutes = map[string]string{
 	// task submits the entry's id, and completion checks it against the directory the
 	// same way it checks a person's — so the agent loses nothing it needs, and the
 	// directory behind a Worker's credential is not made browsable by a tool.
-	"POST /api/v1/tasks/{key}/form-data/{field}/query":     "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
-	"GET /api/v1/form-data/sources":                        "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
-	"GET /api/v1/form-data/decisions":                      "the form editor's picker feed for a field whose options come from a decision; an agent lists decisions with atlas_deployed_decisions and authors the form's atlasDecision, which the save checks",
-	"GET /api/v1/form-data/decisions/{decisionId}/options": "what a rendered form asks for each such field; an agent reads the deployed model (atlas_deployed_decision_model) and evaluates it with atlas_try_decision, and completion checks the submitted value",
+	"POST /api/v1/tasks/{key}/form-data/{field}/query":      "a person's interactive directory search inside a task form; an agent submits the id and completion verifies it",
+	"GET /api/v1/form-data/sources":                         "the form editor's picker feed for a directory field; an agent authors the form's atlasDataSource and the save checks it",
+	"GET /api/v1/form-data/decisions":                       "the form editor's picker feed for a field whose options come from a decision; an agent lists decisions with atlas_deployed_decisions and authors the form's atlasDecision, which the save checks",
+	"POST /api/v1/form-data/decisions/{decisionId}/options": "the form editor's preview of a decision against an author's inputs; an agent evaluates a model with atlas_try_decision",
+	"POST /api/v1/forms/{id}/fields/{field}/options":        "what a rendered form asks for a field as a person chooses in the fields it is bound to; an agent reads the form and the deployed model, and completion checks the submitted value",
 
 	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else

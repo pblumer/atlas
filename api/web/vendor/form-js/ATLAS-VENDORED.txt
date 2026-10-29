@@ -19,8 +19,9 @@ is patched or copied:
     Everything in form-js that deals with options sources reads those tables.
   - decision-source.js adds a fifth options source, "Decision (DMN)", to the same
     tables (ADR-draft-form-options-from-a-decision): a select, radio group, checklist
-    or tag list takes its options from the list a deployed decision without inputs
-    answers with, asked of the page's `atlasDecisions` service when the form is shown.
+    or tag list takes its options from the list a deployed decision answers with, its
+    inputs bound to other fields or fixed, asked of the page's `atlasDecisions` service
+    when the form is shown and again whenever a bound field changes.
   - mailview.jsx is the e-mail view (ADR-draft-mail-html-view), a component of its
     own type, "mailview": it shows the mail a mail task read into a variable — the
     envelope, the text, and the cleaned HTML body in a sandboxed frame that loads no
@@ -81,7 +82,7 @@ properties-panel.css and form-js-playground's dist/assets/form-js-playground.css
 verbatim (README.md). License: see LICENSE.
 
 SHA-256 form-viewer.js:
-6aac5e883aa0c273718e01e19eb8c3956267fdae828a93b54c7ed187599cea07
+ca28ad310b3d0a66f80c1ad9bc536aa6eba42180250933ae0e2f5d4b56ac331f
 
 SHA-256 form-playground.js:
-90d6473bb95d3cbb484803c82511d5975aa29b6749d191fe0e794cb4e7ddf57b
+7486c8167f3d9e0aa9c067995a233050aedaaf283922d266dfd8d600568d8b22

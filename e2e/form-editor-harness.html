@@ -108,8 +108,9 @@
       // Kostenstellen), the select already takes its options from that decision.
       window.__mountDecisions = ({ named } = {}) => {
         const decisions = { decisions: [
-          { id: "Kostenstellen", name: "Kostenstellen", model: "Stammdaten" },
-          { id: "Länder", name: "Länder", model: "Stammdaten" },
+          { id: "Kostenstellen", name: "Kostenstellen", model: "Stammdaten", inputs: [] },
+          { id: "Länder", name: "Länder", model: "Stammdaten", inputs: [] },
+          { id: "Regionen", name: "Regionen", model: "Geo", inputs: [{ name: "land", type: "string" }] },
         ] };
         const api = async (method, url, body) => {
           window.__calls.push({ method, url });

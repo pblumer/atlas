@@ -15,15 +15,36 @@ const ANSWERS = {
     { label: "Einkauf", value: "CC100" }, { label: "Verkauf", value: "CC200" }] } },
   "Länder": { status: 200, body: { decisionId: "Länder", skipped: 0, options: [
     { label: "Schweiz", value: "CH" }, { label: "Deutschland", value: "DE" }, { label: "Österreich", value: "AT" }] } },
-  Rabatt: { status: 422, body: { code: "takes_inputs", error: "the decision \"Rabatt\" takes inputs (Menge); a form's options come from a decision without inputs" } },
+  Rabatt: { status: 422, body: { code: "unbound_input", error: "the decision \"Rabatt\" takes \"Menge\", which the field gives no value" } },
 };
 
-// answerDecisions serves the options route from ANSWERS and counts what was asked.
+const REGIONEN = { CH: ["Zürich", "Bern"], DE: ["Bayern"] };
+
+// FIELD_DECISIONS is which decision each field of the rendered forms names, as the
+// stored form would say on the server.
+const FIELD_DECISIONS = {
+  kostenstelle: "Kostenstellen", land: "Länder", laender: "Länder", weitere: "Kostenstellen",
+  rabatt: "Rabatt", region: "Regionen",
+};
+
+// answerDecisions serves both options routes — the form editor's, which names the
+// decision and its inputs, and a stored form's, which names the field and the values
+// it is bound to — and records what was asked.
 async function answerDecisions(page, answers = ANSWERS) {
   page.__asked = [];
-  await page.route("**/api/v1/form-data/decisions/*/options", async (route) => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split("/").slice(-2)[0]);
+  page.__bodies = [];
+  await page.route(/\/api\/v1\/(form-data\/decisions\/[^/]+|forms\/[^/]+\/fields\/[^/]+)\/options$/, async (route) => {
+    const parts = new URL(route.request().url()).pathname.split("/").map(decodeURIComponent);
+    const id = parts[3] === "form-data" ? parts[5] : FIELD_DECISIONS[parts[6]];
+    const body = route.request().postDataJSON() || {};
     page.__asked.push(id);
+    page.__bodies.push(body);
+    if (id === "Regionen") {
+      const land = (body.inputs && body.inputs.land) || (body.values && body.values.land);
+      const options = (REGIONEN[land] || []).map((r) => ({ label: r, value: r }));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ options, skipped: 0 }) });
+      return;
+    }
     const a = answers[id] || { status: 404, body: { code: "not_deployed", error: `no decision "${id}" is deployed on this server` } };
     await route.fulfill({ status: a.status, contentType: "application/json", body: JSON.stringify(a.body) });
   });
@@ -93,7 +114,7 @@ test.describe("in the form editor", () => {
     await typeSelect(page).selectOption("decision");
     const decision = entry(page, "atlasDecision-decision").locator("select");
     await expect(decision).toHaveValue("Kostenstellen");
-    await expect(entry(page, "atlasDecision-decision").locator("option")).toHaveText(["Kostenstellen — Stammdaten", "Länder — Stammdaten"]);
+    await expect(entry(page, "atlasDecision-decision").locator("option")).toHaveText(["Kostenstellen — Stammdaten", "Länder — Stammdaten", "Regionen — Geo"]);
     await expect(entry(page, "atlasDecision-preview")).toContainText("2 options: Einkauf, Verkauf. 1 entry is no option");
 
     await decision.selectOption("Länder");
@@ -127,11 +148,39 @@ test.describe("in the form editor", () => {
     await openGroup(page, "valuesSource");
     const decision = entry(page, "atlasDecision-decision");
     await expect(decision.locator("select")).toHaveValue("Rabatt");
-    await expect(decision.locator('option[value="Rabatt"]')).toHaveText("Rabatt (not deployed, or takes inputs)");
+    await expect(decision.locator('option[value="Rabatt"]')).toHaveText("Rabatt (not deployed)");
     await expect(decision.locator(".bio-properties-panel-error")).toContainText("no deployed decision of that name");
-    await expect(entry(page, "atlasDecision-preview").locator(".bio-properties-panel-error")).toContainText("takes inputs (Menge)");
+    await expect(entry(page, "atlasDecision-preview").locator(".bio-properties-panel-error")).toContainText("which the field gives no value");
     // The canvas says what the runtime would.
     await expect(page.locator('.fjs-editor-container [data-id="Field_ks"]')).toContainText("Die Auswahl konnte nicht geladen werden.");
+  });
+
+  test("a decision's input is bound to a field of the same name, or fixed, and the panel says what it waits for", async ({ page }) => {
+    await open(page);
+    await selectField(page, "Field_more");
+    await openGroup(page, "valuesSource");
+    await typeSelect(page).selectOption("decision");
+    await entry(page, "atlasDecision-decision").locator("select").selectOption("Regionen");
+    // The decision takes "land", and the form has a field of that key: bound to it.
+    const input = entry(page, "atlasDecision-inputs").locator('[data-input="land"] select');
+    await expect(input).toHaveValue("field:land");
+    await expect(entry(page, "atlasDecision-preview")).toContainText("They depend on land");
+    let schema = await save(page);
+    expect(fieldOf(schema, "more").atlasDecision).toEqual({ version: 1, decisionId: "Regionen", inputs: [{ name: "land", field: "land" }] });
+
+    // Fixed instead: the preview asks the decision with it.
+    await input.selectOption("value");
+    const value = entry(page, "atlasDecision-inputs").locator('[data-input="land"] input');
+    await value.fill("CH");
+    await value.press("Tab");
+    await expect(entry(page, "atlasDecision-preview")).toContainText("2 options: Zürich, Bern");
+    await page.evaluate(() => { window.__saved = null; });
+    schema = await save(page);
+    expect(fieldOf(schema, "more").atlasDecision.inputs).toEqual([{ name: "land", value: "CH" }]);
+
+    // Not given at all is pointed out.
+    await input.selectOption("");
+    await expect(entry(page, "atlasDecision-inputs").locator(".bio-properties-panel-error")).toContainText("Bind this input");
   });
 
   test("switching back to static options drops the block", async ({ page }) => {
@@ -171,8 +220,9 @@ test.describe("rendered", () => {
     const { data } = await page.evaluate(() => window.__submit());
     expect(data.land).toBe("DE");
     expect(data.laender).toEqual(["AT"]);
-    // Two decisions, four fields: each decision is asked once per form.
-    expect(page.__asked.sort()).toEqual(["Kostenstellen", "Länder"]);
+    // Each field asks once, through the stored form, naming nothing but itself.
+    expect(page.__asked.sort()).toEqual(["Kostenstellen", "Kostenstellen", "Länder", "Länder"]);
+    expect(page.__bodies.every((b) => JSON.stringify(b) === '{"values":{}}')).toBe(true);
   });
 
   test("a prefilled value stays while the list offers it and goes when it does not", async ({ page }) => {
@@ -195,7 +245,7 @@ test.describe("rendered", () => {
     await page.evaluate((s) => window.__render(s, {}), bad);
     const status = page.locator(".atlas-decision-field [role=status]");
     await expect(status).toHaveText("Die Auswahl konnte nicht geladen werden.");
-    await expect(status).toHaveAttribute("title", /takes inputs/);
+    await expect(status).toHaveAttribute("title", /gives no value/);
     await page.evaluate((s) => window.__render(s, {}, { atlasLocale: "en" }), bad);
     await expect(page.locator(".atlas-decision-field [role=status]")).toHaveText("The choices could not be loaded.");
   });
@@ -203,7 +253,7 @@ test.describe("rendered", () => {
   test("while the list is on its way the field says it is loading", async ({ page }) => {
     let release;
     const held = new Promise((r) => { release = r; });
-    await page.route("**/api/v1/form-data/decisions/*/options", async (route) => {
+    await page.route("**/api/v1/forms/form-x/fields/kostenstelle/options", async (route) => {
       await held;
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(ANSWERS.Kostenstellen.body) });
     });
@@ -214,5 +264,33 @@ test.describe("rendered", () => {
     await expect(page.locator(".fjs-form-field-select")).toContainText("Einkauf");
     const { data } = await page.evaluate(() => window.__submit());
     expect(data.kostenstelle).toBe("CC100");
+  });
+
+  test("a choice in one field decides what the next one offers, row by row and as it changes", async ({ page }) => {
+    await answerDecisions(page);
+    const dependent = { type: "default", components: [
+      { type: "select", id: "f1", key: "land", label: "Land", values: [{ label: "Schweiz", value: "CH" }, { label: "Deutschland", value: "DE" }] },
+      { type: "radio", id: "f2", key: "region", label: "Region", atlasDecision: { version: 1, decisionId: "Regionen", inputs: [{ name: "land", field: "land" }] } },
+    ] };
+    await page.evaluate((s) => window.__render(s, {}), dependent);
+    const region = page.locator(".fjs-form-field-radio");
+    // Nothing chosen: nothing offered, and the decision not asked.
+    await expect(region.locator("input")).toHaveCount(0);
+    expect(page.__asked).toEqual([]);
+
+    await page.locator(".fjs-form-field-select").click();
+    await page.locator(".fjs-select-anchor .fjs-dropdownlist-item", { hasText: "Schweiz" }).click();
+    await expect(region).toContainText("Zürich");
+    await region.getByLabel("Bern").check();
+    expect(page.__bodies.at(-1)).toEqual({ values: { land: "CH" } });
+
+    // Another country: its regions, and the region chosen before is gone.
+    await page.locator(".fjs-form-field-select").click();
+    await page.locator(".fjs-select-anchor .fjs-dropdownlist-item", { hasText: "Deutschland" }).click();
+    await expect(region).toContainText("Bayern");
+    await expect(region).not.toContainText("Bern");
+    const { data } = await page.evaluate(() => window.__submit());
+    expect(data.land).toBe("DE");
+    expect(data.region).toBeNull();
   });
 });
