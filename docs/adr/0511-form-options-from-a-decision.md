@@ -1,4 +1,4 @@
-# ADR-DRAFT: A form field takes its options from a decision
+# ADR-0511: A form field takes its options from a decision
 
 - **Status:** Accepted
 - **Implementation:** Landed

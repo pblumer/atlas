@@ -31,14 +31,14 @@ _Changed_ / _Removed_ for each version.
   `POST /api/v1/forms/{id}/fields/{field}/options`,
   `POST /public/forms/{token}/fields/{field}/options` and
   `POST /public/wizard/steps/{taskKey}/fields/{field}/options`
-  (ADR-draft-form-options-from-a-decision).
+  (ADR-0511).
 - **The decision editor edits a list.** A decision whose logic is a DMN boxed list opens in
   its own tab like a table or a literal expression: entries are added, moved up or down and
   removed, and Ctrl+Z takes each step back. A decision's replace menu in the requirements
   graph offers List beside Decision table and Literal expression and keeps the decision's
   id and requirements; a list decision carries the overlay that opens it, and its published
   documentation lists its entries instead of saying it has no logic
-  (ADR-draft-form-options-from-a-decision).
+  (ADR-0511).
 - **An application can give its grant back.** `POST /oauth/revoke` (RFC 7009) takes
   either token of a grant, with the client's id and secret as the token endpoint takes
   them, and withdraws the whole grant when it belongs to that client — the same

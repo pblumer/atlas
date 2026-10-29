@@ -1,5 +1,5 @@
 // A field whose options come from a deployed decision
-// (ADR-draft-form-options-from-a-decision; vendor/form-js/src/atlas/decision-source.js,
+// (ADR-0511; vendor/form-js/src/atlas/decision-source.js,
 // viewer.jsx, editor.jsx; formviewer.js decisionOptions). In the form editor the
 // decision is a fifth Options source ▸ Type on a select, radio group, checklist and tag
 // list; the panel picks the decision and shows what it answers now, and Save sends the

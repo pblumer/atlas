@@ -43,7 +43,7 @@ var wantPublicRoutes = []string{
 	"OPTIONS /public/forms/{token}/schema",
 	"OPTIONS /public/forms/{token}/start",
 	// The options of a field of that form whose decision depends on what the visitor
-	// chose in another one (ADR-draft-form-options-from-a-decision).
+	// chose in another one (ADR-0511).
 	"POST /public/forms/{token}/fields/{field}/options",
 	"OPTIONS /public/forms/{token}/fields/{field}/options",
 	// A public wizard's later screens, where the pass in the Authorization header is

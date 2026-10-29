@@ -596,6 +596,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0508](0508-scope-aware-messaging-and-compensation.md) | Scope-aware messaging, event-subprocess runs and compensation from an event subprocess | Accepted | Landed |
 | [0509](0509-cockpit-appearance-skin.md) | A gamified cockpit skin as an opt-in appearance | Proposed | Partial |
 | [0510](0510-tasks-for-a-connected-system.md) | Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups | Proposed | Partial |
+| [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
 
 ## The two states of a record
 

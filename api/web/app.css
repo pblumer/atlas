@@ -3792,7 +3792,7 @@ tr[hidden] { display: none; }
   display: block;
   background: none;
 }
-/* A decision whose logic is a list (ADR-draft-form-options-from-a-decision, the list
+/* A decision whose logic is a list (ADR-0511, the list
    editor in vendor/dmn/src/atlas/list-editor.jsx): one row per entry — its number, its
    FEEL expression, and the controls that move or remove it — and the button that adds
    one beneath them. dmn-js gives every literal expression in the boxed-expression view

@@ -436,7 +436,7 @@ func min(a, b int) int {
 }
 
 // A decision whose logic is a boxed list is documented as its entries
-// (ADR-draft-form-options-from-a-decision): the version keeps them, in order, as it
+// (ADR-0511): the version keeps them, in order, as it
 // keeps a table's rules and a literal expression's text.
 func TestAListDecisionKeepsItsEntries(t *testing.T) {
 	svc, _ := newService(t)

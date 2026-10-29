@@ -518,7 +518,7 @@ func (r *Registry) DeployedDecisions() []DeployedDecision {
 // a process is not a decision in its own right, so it is never the answer here, even
 // where the legacy latest pointer [Registry.DeployedDecisions] reads names it.
 //
-// A form whose options come from a decision reads it (ADR-draft-form-options-from-a-decision):
+// A form whose options come from a decision reads it (ADR-0511):
 // what a form offers is a decision somebody published as one, versioned and deleted
 // with the impact check a decision deployment gets, not whatever copy a process
 // happened to bundle last.

@@ -72,7 +72,7 @@ test("a decision whose logic is a literal expression carries the expression", as
 });
 
 test("a decision whose logic is a list carries its entries, and the document sets them", async ({ page }) => {
-  // ADR-draft-form-options-from-a-decision: a boxed list is logic, not its absence.
+  // ADR-0511: a boxed list is logic, not its absence.
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="d" name="Stammdaten" namespace="http://x">
   <decision id="farben" name="Farben">

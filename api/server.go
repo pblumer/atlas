@@ -418,7 +418,7 @@ type Server struct {
 	queryBroker   *workerquery.Broker
 	lookupRate    *rateLimiter
 	// formDecision gives a form field its options from a deployed DMN decision
-	// (ADR-draft-form-options-from-a-decision). It owns no state and holds no run
+	// (ADR-0511). It owns no state and holds no run
 	// loop: formdecisions.go is its whole reach into this server.
 	formDecision *formdecision.Service
 	// feelGen writes a FEEL expression from a conversation with the author
@@ -3818,7 +3818,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
 	// The options of a field of the link's form whose decision is bound to what the
-	// visitor chose in another field (ADR-draft-form-options-from-a-decision): only
+	// visitor chose in another field (ADR-0511): only
 	// that form's fields, only the values of the fields they bind.
 	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/fields/{field}/options", s.handlePublicFieldOptions)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/fields/{field}/options", s.handlePublicFormPreflight)

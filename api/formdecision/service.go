@@ -2,7 +2,7 @@
 // select, radio group, checklist or tag list whose choices are the list a decision
 // answers with — typically a boxed list (DMN §10.3.2.7) that the people who own the list
 // maintain in the decision editor, versioned and published like any other decision
-// (ADR-draft-form-options-from-a-decision). The decision's inputs are bound to other
+// (ADR-0511). The decision's inputs are bound to other
 // fields of the form, or fixed, so a choice in one field decides what the next one
 // offers: a group, then its members; a country, then its regions.
 //

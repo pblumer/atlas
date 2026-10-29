@@ -1923,7 +1923,7 @@ the hand-written Details panel one vertical slice at a time:
   version answers when the form is shown and as the choice changes, and the submitted
   value is checked against the list its own choices give before a task completes or a
   public form starts or continues an instance
-  ([ADR-draft-form-options-from-a-decision](docs/adr/draft-form-options-from-a-decision.md)).
+  ([ADR-0511](docs/adr/0511-form-options-from-a-decision.md)).
 - 🔲 Forms that name a decision counted in its deletion impact check, and inputs bound to
   a process variable directly.
 - 🔲 A tag list whose options come from a remote data source: several entries, and a

@@ -220,7 +220,7 @@ export async function mountFormEditor(root, { api, toast, formId, projectId, gen
   // lists, so it is asked for beside the bundle rather than after it. Not being allowed
   // to ask, or the server not answering, leaves the editor as form-js ships it.
   const sourcesReady = api("GET", "/api/v1/form-data/sources").catch(() => null);
-  // The decisions a field's options can come from (ADR-draft-form-options-from-a-decision),
+  // The decisions a field's options can come from (ADR-0511),
   // asked for beside it for the same reason. The canvas, both previews and the panel ask
   // each decision's list through one service, which asks afresh after a few seconds: a
   // list is maintained in the decision editor, maybe in the next tab.

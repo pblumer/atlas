@@ -85,7 +85,7 @@ export function loadFormViewer() {
 }
 
 // decisionOptions is what a form asks for the options of a field that takes them from a
-// deployed decision (ADR-draft-form-options-from-a-decision).
+// deployed decision (ADR-0511).
 //
 // With formId — a stored form being filled in — it asks
 // POST /api/v1/forms/{formId}/fields/{field}/options with the values chosen in the fields

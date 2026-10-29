@@ -190,7 +190,7 @@ func (s *Server) publicStepOf(tr taskResp) (*publicStep, error) {
 	})
 	if err == nil && step.Schema != nil {
 		// As at the start link: nobody here can ask for a decision field's options, so
-		// they come written into the form (ADR-draft-form-options-from-a-decision).
+		// they come written into the form (ADR-0511).
 		step.Schema = s.formDecision.Resolve(context.Background(), step.Schema)
 	}
 	return step, err

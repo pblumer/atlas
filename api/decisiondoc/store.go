@@ -73,7 +73,7 @@ type Decision struct {
 	// expression rather than a table — for those, this is the whole of the logic.
 	Literal string `json:"literal,omitempty"`
 	// List holds the entries of a decision whose logic is a boxed list, one FEEL
-	// expression each, in order (ADR-draft-form-options-from-a-decision).
+	// expression each, in order (ADR-0511).
 	List []string `json:"list,omitempty"`
 }
 

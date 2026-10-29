@@ -266,7 +266,7 @@ func (s *Server) handlePublicFormSchema(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "unknown or revoked link")
 	default:
 		// Nobody is signed in here to ask for a decision field's options, so they are
-		// written into the form served (ADR-draft-form-options-from-a-decision).
+		// written into the form served (ADR-0511).
 		httpapi.JSON(w, http.StatusOK, map[string]any{
 			"processName": procName,
 			"schema":      json.RawMessage(s.formDecision.Resolve(r.Context(), []byte(schema))),

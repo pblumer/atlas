@@ -12,7 +12,7 @@ import (
 
 // A decision field is a form-js select, radio group, checklist or tag list whose
 // options are the list a deployed DMN decision answers with, named by its atlasDecision
-// block (ADR-draft-form-options-from-a-decision):
+// block (ADR-0511):
 //
 //	{"type": "select", "key": "mitglied", "label": "Mitglied",
 //	 "atlasDecision": {"version": 1, "decisionId": "Mitglieder",

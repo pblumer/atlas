@@ -113,7 +113,7 @@ export function collectDecisionDocumentation(xml) {
         description: textOf(kid(rule, "description")),
       }));
     } else if (kid(el, "list")) {
-      // A boxed list (ADR-draft-form-options-from-a-decision): its entries, in order.
+      // A boxed list (ADR-0511): its entries, in order.
       entry.list = kids(kid(el, "list"), "literalExpression").map((e) => textOf(kid(e, "text")));
     } else {
       entry.literal = textOf(kid(kid(el, "literalExpression"), "text"));

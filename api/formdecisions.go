@@ -17,7 +17,7 @@ import (
 )
 
 // What a form field whose options come from a decision may reach
-// (ADR-draft-form-options-from-a-decision).
+// (ADR-0511).
 //
 // The service holds no state; these closures are its whole reach into this server. The
 // registry's description of a deployment is read on the run loop, as every other reader

@@ -520,7 +520,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
 - **`form-decision-options.spec.mjs`**
-  ([ADR-draft-form-options-from-a-decision](../docs/adr/draft-form-options-from-a-decision.md)):
+  ([ADR-0511](../docs/adr/0511-form-options-from-a-decision.md)):
   a field whose options come from a deployed decision. In the form editor, Decision (DMN) is an
   Options source ▸ Type of the select, radio group, checklist and tag list; choosing it names the
   first decision the server offers, the panel picks another and shows what it answers now, the
@@ -536,7 +536,7 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   fits, and the request names only the bound field's value. The options routes are answered
   by `page.route`.
 - **`dmn-list-editor.spec.mjs`**
-  ([ADR-draft-form-options-from-a-decision](../docs/adr/draft-form-options-from-a-decision.md)):
+  ([ADR-0511](../docs/adr/0511-form-options-from-a-decision.md)):
   the decision editor's boxed list (`vendor/dmn/src/atlas/`) against the real DMN bundle — a list
   decision opens in its own tab as its entries, under a hint that says what a list is and a
   header without the fork's "Expression type"; entries are added, moved and removed, Ctrl+Z and

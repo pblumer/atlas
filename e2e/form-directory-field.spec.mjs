@@ -117,7 +117,7 @@ test("the remote data source is offered on a select only", async ({ page }) => {
   await selectField(page, "Field_dringlichkeit");
   await openGroup(page, "valuesSource");
   // A radio group gets every other source, the decision included
-  // (ADR-draft-form-options-from-a-decision), and not the remote one.
+  // (ADR-0511), and not the remote one.
   await expect(typeSelect(page).locator("option")).toHaveText(["Static", "Input data", "Expression", "Decision (DMN)"]);
 });
 

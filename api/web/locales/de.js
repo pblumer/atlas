@@ -1895,7 +1895,7 @@ export default {
   "lib.Open decision table": "Entscheidungstabelle öffnen",
   "lib.Open literal expression": "Literal Expression öffnen",
   "lib.Remove item": "Eintrag entfernen",
-  // The boxed list editor (vendor/dmn/src/atlas/, ADR-draft-form-options-from-a-decision).
+  // The boxed list editor (vendor/dmn/src/atlas/, ADR-0511).
   "lib.List": "Liste",
   "lib.Open list": "Liste öffnen",
   "lib.Add entry": "Eintrag hinzufügen",

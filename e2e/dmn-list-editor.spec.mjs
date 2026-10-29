@@ -1,4 +1,4 @@
-// The boxed list editor (vendor/dmn/src/atlas/, ADR-draft-form-options-from-a-decision):
+// The boxed list editor (vendor/dmn/src/atlas/, ADR-0511):
 // a decision whose logic is a dmn:List opens in its own tab like a table or a literal
 // expression, its entries are added, moved and removed there as steps that undo, and
 // a decision is turned into a list from the requirements graph's replace menu without
