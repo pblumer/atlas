@@ -38,11 +38,13 @@ import (
 // (ADR-0432).
 //
 // The feed also carries facts of the engine, which belong to no catalogue: an incident
-// raised or resolved (ADR-0435). A reader narrowed to catalogues never receives them,
-// since no reach contains the home they do not have. And the feed is no longer the
-// service catalogue's alone: a server whose catalogue is switched off (ADR-0434) still
-// serves and pushes it, passing over the catalogue's own rows, so a platform fact does
-// not fall silent because the shop is off.
+// raised or resolved (ADR-0435), and a user task opened, taken on, given back,
+// completed or cancelled (ADR-draft-tasks-for-a-connected-system). A reader narrowed
+// to catalogues never receives them, since no reach contains the home they do not
+// have. And the feed is no longer the service catalogue's alone: a server whose
+// catalogue is switched off (ADR-0434) still serves and pushes it, passing over the
+// catalogue's own rows, so a platform fact does not fall silent because the shop is
+// off.
 
 // defaultEventFeedTTL is how long a feed row is kept when the operator set nothing.
 const defaultEventFeedTTL = 30 * 24 * time.Hour
@@ -320,6 +322,9 @@ func feedEnvelope(e state.FeedEntry, nodeID string, sources feedSources, home st
 	case e.Incident != nil:
 		ev.Source = sources.engine
 		ev.Type, ev.Subject, ev.Data = incidentEvent(e, defs)
+	case e.Task != nil:
+		ev.Source = sources.engine
+		ev.Type, ev.Subject, ev.Data = taskEvent(e, defs)
 	case e.Outcome != nil:
 		o := e.Outcome
 		ev.Type = o.EventType

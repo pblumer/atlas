@@ -86,10 +86,15 @@ func (g oauthGrant) accessExpired(now int64) bool {
 // not the OAuth `scope` parameter — it follows from *which resource* the person
 // approved, which is the honest reading of an audience: a token minted to talk to
 // /mcp has no business driving /api/v1 directly. A grant for the server as a whole
-// carries no confinement and reaches what its person reaches.
+// carries no confinement and reaches what its person reaches. A grant for the
+// person's tasks reaches the task routes, worked as the person, and nothing else
+// (ADR-draft-tasks-for-a-connected-system §3).
 func (g oauthGrant) scope() string {
-	if strings.HasSuffix(g.Resource, "/mcp") {
+	switch {
+	case strings.HasSuffix(g.Resource, "/mcp"):
 		return apiScopeMCP
+	case strings.HasSuffix(g.Resource, oauthTasksResource):
+		return apiScopeTasks
 	}
 	return ""
 }

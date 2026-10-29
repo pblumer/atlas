@@ -117,6 +117,8 @@ const grantRow = (g) => `<tr data-id="${esc(g.id)}">
     <td><span class="chip">${esc(g.username)}</span></td>
     <td><code>${esc(g.resource)}</code>${String(g.resource || "").endsWith("/mcp")
       ? ` <span class="muted" style="font-size:12px">— the AI tools only</span>`
+      : String(g.resource || "").endsWith("/tasks")
+      ? ` <span class="muted" style="font-size:12px">— the person's tasks only</span>`
       : ` <span class="muted" style="font-size:12px">— the whole API</span>`}</td>
     <td>${esc(fmtTime(g.createdAt))}</td>
     <td style="text-align:right"><button class="btn ghost danger" data-act="revoke"

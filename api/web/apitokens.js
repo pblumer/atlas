@@ -50,6 +50,7 @@ export const SCOPES = [
   { id: "metrics", reach: "" },
   { id: "status", reach: "" },
   { id: "diagrams", reach: "projects" },
+  { id: "tasklist", reach: "" },
   { id: "worker", reach: "" },
   { id: "events", reach: "catalogues" },
   { id: "landscape", reach: "projects", required: true },

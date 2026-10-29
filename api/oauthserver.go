@@ -136,8 +136,14 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values) (oauthRequ
 	return req, "", ""
 }
 
-// isCanonicalResource reports whether uri is one of the two this server publishes
-// protected-resource metadata for: the server itself, and the MCP transport.
+// oauthTasksResource is the path that, after the server's origin, names a person's
+// tasks as a resource of its own: a grant for it reaches the task routes and nothing
+// else (ADR-draft-tasks-for-a-connected-system §3).
+const oauthTasksResource = "/tasks"
+
+// isCanonicalResource reports whether uri is one of the three this server publishes
+// protected-resource metadata for: the server itself, the MCP transport, and a
+// person's tasks.
 //
 // The origin comes from externalBase, so it is the configured one when an operator
 // stated it and the request's otherwise — the same answer the discovery documents
@@ -148,7 +154,7 @@ func (s *Server) isCanonicalResource(r *http.Request, uri string) bool {
 	if uri == "" || base == "" {
 		return false
 	}
-	if uri == base {
+	if uri == base || uri == base+oauthTasksResource {
 		return true
 	}
 	return s.mcpHandler != nil && uri == base+"/mcp"

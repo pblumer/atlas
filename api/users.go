@@ -189,9 +189,15 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	var (
 		u       User
 		ok      bool
+		groups  []group
 		loadErr error
 	)
-	s.do(func() { u, ok, loadErr = s.users.Get(p.UserID) })
+	s.do(func() {
+		if u, ok, loadErr = s.users.Get(p.UserID); loadErr != nil || !ok {
+			return
+		}
+		groups, loadErr = s.groups.LoadAll()
+	})
 	if loadErr != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "me: "+loadErr.Error())
 		return
@@ -200,7 +206,37 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": u.toPublic()})
+	httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": meOf(u, groups)})
+}
+
+// meUser is who am I's answer: the account's public record and the groups it is a
+// member of. The groups are the caller's own and nobody else's, by id and by name,
+// because a task names its candidate groups by either (ADR-0318); a connected system
+// working a person's tasks learns them from the person's own credential
+// (ADR-draft-tasks-for-a-connected-system §4). They are read from the group store at
+// the request, not from the session's snapshot, so a membership granted since the
+// login is answered. The roster of users does not carry them: it is this route's alone.
+type meUser struct {
+	publicUser
+	Groups []meGroup `json:"groups"`
+}
+
+// meGroup is a group as who am I names it: never its members.
+type meGroup struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// meOf builds who am I's user from the account and every group, keeping the groups
+// it is a member of in the store's order.
+func meOf(u User, all []group) meUser {
+	out := meUser{publicUser: u.toPublic(), Groups: []meGroup{}}
+	for _, g := range all {
+		if g.hasMember(u.ID) {
+			out.Groups = append(out.Groups, meGroup{ID: g.ID, Name: g.Name})
+		}
+	}
+	return out
 }
 
 // handleListUsers returns every account (public projection), oldest first, each

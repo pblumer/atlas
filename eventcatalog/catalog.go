@@ -189,6 +189,11 @@ const (
 	ApprovalRequested  = "atlas.approval.requested"
 	IncidentRaised     = "atlas.incident.raised"
 	IncidentResolved   = "atlas.incident.resolved"
+	TaskCreated        = "atlas.task.created"
+	TaskAssigned       = "atlas.task.assigned"
+	TaskUnassigned     = "atlas.task.unassigned"
+	TaskCompleted      = "atlas.task.completed"
+	TaskCancelled      = "atlas.task.cancelled"
 	// ActionOutcomePrefix is the type of an action's outcome whose product declares
 	// none and whose action names no message: atlas.action.<outcome>.
 	ActionOutcomePrefix = "atlas.action."
@@ -419,4 +424,63 @@ var Entries = []Entry{
 		Since:       "0.9.0", Stability: Experimental,
 		Access: map[Channel]string{Feed: accessPlatform},
 	},
+	taskEntry(TaskCreated, "IntentJobCreated of a job that was not open: a job re-created after an incident is no new task",
+		Text{
+			EN: "A user task opened: a process waits on a person or a group.",
+			DE: "Ein User-Task wurde eröffnet: Ein Prozess wartet auf eine Person oder eine Gruppe.",
+		}),
+	taskEntry(TaskAssigned, "IntentJobAssigned naming somebody: a claim, or a claim for somebody",
+		Text{
+			EN: "A user task was taken on, or handed to somebody.",
+			DE: "Ein User-Task wurde übernommen oder jemandem zugewiesen.",
+		}),
+	taskEntry(TaskUnassigned, "IntentJobAssigned naming nobody: an unclaim",
+		Text{
+			EN: "A user task was given back and waits for somebody to take it on.",
+			DE: "Ein User-Task wurde zurückgegeben und wartet darauf, dass ihn jemand übernimmt.",
+		}),
+	taskEntry(TaskCompleted, "IntentJobCompleted",
+		Text{
+			EN: "A user task was completed, and its process moved on.",
+			DE: "Ein User-Task wurde abgeschlossen, und sein Prozess ist weitergelaufen.",
+		}),
+	taskEntry(TaskCancelled, "IntentJobCanceled: an interrupting boundary event, or a cancelled or terminated instance",
+		Text{
+			EN: "A user task ended without being completed: its element was interrupted.",
+			DE: "Ein User-Task endete, ohne abgeschlossen zu werden: Sein Element wurde unterbrochen.",
+		}),
+}
+
+// taskEntry is one turn in a user task's life on the feed
+// (ADR-draft-tasks-for-a-connected-system §1): a fact of the engine, folded by
+// applyToState from the job records of the user-task type, all five with the same
+// payload. Never the assignee's name — a model writes a username or an expression's
+// value, and the feed names people by id only (ADR-0314) — nor the form, the
+// variables, the content or who completed it: a receiver that needs them asks Atlas,
+// as the person it acts for.
+func taskEntry(typ, record string, meaning Text) Entry {
+	return Entry{
+		Type: typ, Kind: Platform,
+		Meaning:  meaning,
+		Moment:   Moment{Producer: "the job record of a user task (" + record + "), folded into the feed by applyToState"},
+		Channels: []Channel{Feed},
+		Payload: []Field{
+			{Name: "taskKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The task: the key GET /api/v1/tasks/{key} and its commands take.", DE: "Der Task: der Schlüssel, den GET /api/v1/tasks/{key} und seine Befehle erwarten."}},
+			{Name: "processInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The process instance that waits on it.", DE: "Die Prozessinstanz, die auf ihn wartet."}},
+			{Name: "elementInstanceKey", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The element instance it belongs to; its variables are the form's.", DE: "Die Elementinstanz, zu der er gehört; ihre Variablen sind die des Formulars."}},
+			{Name: "elementIndex", Type: "number", Always: true, Data: NotPersonal, Meaning: Text{EN: "The element in the compiled definition; elementId names it while the definition is deployed.", DE: "Das Element in der kompilierten Definition; elementId benennt es, solange die Definition deployt ist."}},
+			{Name: "assigned", Type: "boolean", Always: true, Data: NotPersonal, Meaning: Text{EN: "Whether somebody holds the task. Who, a receiver asks GET /api/v1/tasks/{key} with a credential that may see it.", DE: "Ob jemand den Task hält. Wer, fragt ein Empfänger mit GET /api/v1/tasks/{key} und einem Zugang, der ihn sehen darf."}},
+			{Name: "createdAt", Type: "string", Data: NotPersonal, Meaning: Text{EN: "When the task opened, RFC 3339; absent for a task opened before Atlas recorded it.", DE: "Wann der Task eröffnet wurde, RFC 3339; fehlt bei einem Task, der eröffnet wurde, bevor Atlas das festhielt."}},
+			{Name: "dueDate", Type: "string", Data: NotPersonal, Meaning: Text{EN: "When it is due, RFC 3339, for a task with a due date.", DE: "Wann er fällig ist, RFC 3339, bei einem Task mit Fälligkeit."}},
+			{Name: "candidateGroups", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The groups it is offered to, comma-separated, by id or name, as the task holds them.", DE: "Die Gruppen, denen er angeboten wird, durch Kommas getrennt, nach ID oder Name, wie der Task sie führt."}},
+			{Name: "processDefKey", Type: "number", Data: NotPersonal, Meaning: Text{EN: "The process definition the instance runs.", DE: "Die Prozessdefinition, die die Instanz ausführt."}},
+			{Name: "processId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The process id of that definition, while it is deployed.", DE: "Die Prozess-ID dieser Definition, solange sie deployt ist."}},
+			{Name: "version", Type: "number", Data: NotPersonal, Meaning: Text{EN: "Its version, while it is deployed.", DE: "Ihre Version, solange sie deployt ist."}},
+			{Name: "elementId", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The BPMN id of the user task, while the definition is deployed.", DE: "Die BPMN-ID des User-Tasks, solange die Definition deployt ist."}},
+			{Name: "name", Type: "string", Data: NotPersonal, Meaning: Text{EN: "The user task's name as the model gives it, while the definition is deployed.", DE: "Der Name des User-Tasks, wie das Modell ihn nennt, solange die Definition deployt ist."}},
+		},
+		NeverSecret: "TestTheFeedCarriesNoSecret",
+		Since:       Unreleased, Stability: Experimental,
+		Access: map[Channel]string{Feed: accessPlatform},
+	}
 }

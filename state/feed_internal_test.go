@@ -155,3 +155,43 @@ func TestAnIncidentRowKeepsTheDefinitionItWasFoldedWith(t *testing.T) {
 		t.Fatalf("catalogue facts: raised %v resolved %v grant %v", raised.IsCatalogue(), resolved.IsCatalogue(), grant.IsCatalogue())
 	}
 }
+
+// TestATaskRowKeepsItsJobElementAndDefinition: a task row reads back with the job as
+// the fold saw it, the job's key, the element it waits on and the definition its
+// instance ran (ADR-draft-tasks-for-a-connected-system §1) — what the envelope needs
+// once the element instance is gone. It is no catalogue fact; a task kind cannot be
+// written as an entry or an incident, nor another kind as a task.
+func TestATaskRowKeepsItsJobElementAndDefinition(t *testing.T) {
+	s := openStore(t)
+	tx := s.NewTransaction()
+	job := &model.JobValue{ProcessInstanceKey: 41, ElementInstanceKey: 42, JobType: 1, Assignee: "alice",
+		CandidateGroups: "hr,finance", Deadline: 900, CreatedAt: 80}
+	for i, kind := range []FeedKind{FeedTaskCreated, FeedTaskAssigned, FeedTaskUnassigned, FeedTaskCompleted, FeedTaskCancelled} {
+		must(t, tx.PutFeedTask(1, uint64(10+i), int64(100+i), kind, 7, 4300+uint64(i), 3, job))
+	}
+	if err := tx.PutFeedEntry(1, 20, 300, FeedTaskCreated, job); err == nil {
+		t.Fatal("a task row was written without its key, element and definition")
+	}
+	if err := tx.PutFeedTask(1, 21, 300, FeedIncidentRaised, 7, 1, 3, job); err == nil {
+		t.Fatal("an incident row was written as a task")
+	}
+	commit(t, tx)
+
+	rows := readFeed(t, s, 1, 0)
+	if len(rows) != 5 {
+		t.Fatalf("rows = %+v", rows)
+	}
+	for i, want := range []FeedKind{FeedTaskCreated, FeedTaskAssigned, FeedTaskUnassigned, FeedTaskCompleted, FeedTaskCancelled} {
+		r := rows[i]
+		if r.Kind != want || r.Task == nil || r.TaskKey != 4300+uint64(i) || r.TaskElement != 3 || r.Definition != 7 || r.At != int64(100+i) {
+			t.Fatalf("row %d = %+v (%+v), want kind %d", i, r, r.Task, want)
+		}
+		if r.Task.Assignee != "alice" || r.Task.CandidateGroups != "hr,finance" || r.Task.Deadline != 900 ||
+			r.Task.CreatedAt != 80 || r.Task.ElementInstanceKey != 42 {
+			t.Fatalf("row %d's job = %+v", i, r.Task)
+		}
+		if r.IsCatalogue() {
+			t.Fatalf("a task row is a catalogue fact: %+v", r)
+		}
+	}
+}

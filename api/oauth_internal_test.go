@@ -92,6 +92,12 @@ func TestOAuthGrantScopeFollowsTheResource(t *testing.T) {
 	if got := (oauthGrant{Resource: "https://atlas.example.com"}).scope(); got != "" {
 		t.Errorf("a whole-server grant scoped %q, want unconfined", got)
 	}
+	if got := (oauthGrant{Resource: "https://atlas.example.com/tasks"}).scope(); got != apiScopeTasks {
+		t.Errorf("a …/tasks grant scoped %q, want %q", got, apiScopeTasks)
+	}
+	if validAPIScope(apiScopeTasks) {
+		t.Error("the tasks scope is mintable; it follows from the resource a person approved")
+	}
 
 	// And the scope actually confines: the mcp scope reaches the transport and not
 	// the API. apiScopeMayReach is the one check every confined credential goes

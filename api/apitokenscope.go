@@ -141,6 +141,27 @@ const (
 	// It carries its minter's roles, as status and landscape do: every route it
 	// reaches asks for none, so the roles cannot widen what the allowlist admits.
 	apiScopeDiagrams = "diagrams"
+
+	// apiScopeTaskList reaches the list of open user tasks and one task by its key,
+	// read-only (ADR-draft-tasks-for-a-connected-system §2). It is what a system that
+	// keeps a copy of the open tasks holds to compare its copy with what is open: the
+	// feed's task facts say what changed, this says what is. A leak of it lists tasks;
+	// it cannot take one on, give one back or complete one, nor read a form, an
+	// instance or a variable.
+	//
+	// It carries its minter's roles, as diagrams does, and what it lists is what those
+	// roles see (ADR-0421): an administrator's token holds operator and lists every
+	// open task.
+	apiScopeTaskList = "tasklist"
+
+	// apiScopeTasks is what a person's OAuth grant carries when they approved a
+	// client for the resource `…/tasks` rather than for the whole server
+	// (ADR-draft-tasks-for-a-connected-system §3): their own tasks, worked as
+	// themselves — seen, taken on, given back and completed with their forms — and
+	// nothing else. Like apiScopeMCP it is not mintable, because nothing asks for it:
+	// it follows from the resource the person approved. Atlas decides on every route
+	// it reaches exactly as it decides for the person in the Tasks app.
+	apiScopeTasks = "tasks"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -225,6 +246,28 @@ var apiScopeAllowed = map[string][]string{
 	apiScopeEvents: {
 		"GET /api/v1/events",
 	},
+	// The list and one task, read-only. Not the commands on the same paths, not the
+	// form a task names, not the instance it belongs to.
+	apiScopeTaskList: {
+		"GET /api/v1/tasks",
+		"GET /api/v1/tasks/{key}",
+	},
+	// A person's own tasks, worked as the person: who they are (with their groups,
+	// which a task may be offered to), the tasks Atlas shows them, the three commands
+	// on a task, a directory field's lookups while the form is filled, the form a task
+	// names, and the values it opens with — each route deciding for the person as it
+	// does in the Tasks app (ADR-0317, ADR-0421, ADR-0275).
+	apiScopeTasks: {
+		"GET /api/v1/auth/me",
+		"GET /api/v1/tasks",
+		"GET /api/v1/tasks/{key}",
+		"POST /api/v1/tasks/{key}/claim",
+		"POST /api/v1/tasks/{key}/unclaim",
+		"POST /api/v1/tasks/{key}/complete",
+		"POST /api/v1/tasks/{key}/form-data/{field}/query",
+		"GET /api/v1/forms/{id}",
+		"GET /api/v1/instances/{key}/variables",
+	},
 	// Read-only, and deliberately not the PUT on the same path: a peer reads an
 	// identity, it never sets one.
 	apiScopeStatus: {
@@ -294,7 +337,7 @@ const mcpTransportHeader = "X-Atlas-Via-MCP"
 // apiMintableScopes lists the scopes an API token may be minted with. It is not
 // every scope: apiScopeDeploy belongs to a credential with its own store, so
 // nothing here can ask for it.
-var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents, apiScopeDiagrams}
+var apiMintableScopes = []string{apiScopeFull, apiScopeWorker, apiScopeMetrics, apiScopeStatus, apiScopeDirectory, apiScopeInventory, apiScopeLandscape, apiScopeEvents, apiScopeDiagrams, apiScopeTaskList}
 
 // apiScopes returns the mintable scopes, sorted, for the error message that names
 // them when a request asks for something else.

@@ -660,8 +660,12 @@ it is where the authorization code is sent, so it is matched whole and never by
 prefix.
 
 What each person then gets is confined to what they approved. A connector set up
-against `/mcp` drives the MCP tools and is refused at `/api/v1`; the token expires
-in two hours and renews itself silently. Anyone can see their own approvals at
+against `/mcp` drives the MCP tools and is refused at `/api/v1`; an application that
+asks for the resource `<origin>/tasks` — a wiki that shows each person's tasks and
+completes them with their forms — reaches only `GET /api/v1/auth/me`, that person's
+tasks, taking them on, giving them back and completing them, the form a task names
+and the values it opens with, all as that person; the token expires in two hours and
+renews itself silently. Anyone can see their own approvals at
 `GET /api/v1/oauth-grants` and withdraw one with `DELETE`; an administrator sees
 and can withdraw everyone's, and deleting the client withdraws all of them at
 once — all of it on the same **AI access** page, for people who do not use the API.
@@ -1136,7 +1140,8 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/api-tokens \
 | `metrics` | Only `GET /metrics`. The narrowest scope there is, for a Prometheus scraper |
 | `status` | Only `GET /api/v1/node`, this server's descriptor — for another Atlas asking who this server is |
 | `diagrams` | Only `GET /api/v1/processes`, `GET /api/v1/processes/{key}/xml` and `GET /api/v1/processes/{key}/runtime/counts`: the deployed processes, a definition's model and the counts of its runtime overlay — for a system that shows the processes elsewhere, such as a wiki that draws a process's newest version. It cannot deploy, start or read instances, and it never reads an incident's message: the whole overlay, `/runtime`, is refused (ADR-0493) |
-| `events` | Only `GET /api/v1/events`, the event feed of action outcomes and granted and revoked rights. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`). Name only catalogues you maintain |
+| `tasklist` | Only `GET /api/v1/tasks` and `GET /api/v1/tasks/{key}`: the open user tasks as the token's roles see them — an administrator's token lists every open task — for a system that keeps a copy of the open tasks, such as a wiki that shows them as its own. It cannot take a task on, give one back or complete one, nor read a form, an instance or a variable (ADR-draft-tasks-for-a-connected-system) |
+| `events` | Only `GET /api/v1/events`, the event feed of action outcomes, granted and revoked rights, and the engine's facts — incidents and the life of user tasks. The token carries the `feedreader` role and no other, so it reads the feed and nothing else — the right scope for a CMDB or a billing system that follows the feed. Without a `reach` it reads the whole feed; with `"reach":["<catalogue id>", …]` it reads only the events about products those catalogues maintain (each event names that catalogue as `homeCatalog`), and none of the engine's facts. Name only catalogues you maintain |
 | `landscape` | Only the derived landscape — `GET /api/v1/panorama/mesh`, its ArchiMate projection, and the descriptor — for another Atlas asking for its picture. It **must** state `"reach":["<application id>", …]`, the applications it may see, and you can name only applications you can see yourself |
 | `directory` | Only `GET` and `POST /api/v1/directory-sync`, for the scheduled process that mirrors accounts from a directory. It cannot deploy |
 | `inventory` | Only `GET` and `POST /api/v1/inventory-load` and `POST /api/v1/reconciliation`, for the process that loads a target system's holdings and compares them |
