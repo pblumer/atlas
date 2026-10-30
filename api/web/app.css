@@ -1399,6 +1399,20 @@ thead tr.dt-filter-row th { padding: 3px 8px 7px; background: var(--bg); border-
 }
 .dt-filter::placeholder { color: var(--muted); opacity: .7; }
 .dt-filter:focus { outline: none; border-color: var(--accent); }
+/* The cross that empties a box sits inside it at the trailing edge, shown only while the
+   box has a term. The box keeps room for it whether it shows or not, so the text does
+   not shift under the caret when the first character brings it in. The glyph is small
+   and thin; the button around it is the box's full height, so it is not a small thing
+   to hit. */
+.dt-filter-box { position: relative; display: block; }
+.dt-filter-box .dt-filter { padding-right: 22px; }
+.dt-filter-clear {
+  position: absolute; top: 2px; bottom: 2px; right: 2px; width: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: none; background: none;
+  color: var(--muted); cursor: pointer; line-height: 0;
+}
+.dt-filter-clear:hover { color: var(--text); }
 /* Held off the dmn-js decision table, whose cells the vendor pads itself: there it gave
    the rule number 11px above and below and every cell a second rule under the one
    dmn-js draws. `:where` keeps the selector's weight, so every table of ours that

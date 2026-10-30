@@ -616,6 +616,8 @@ export default {
   "pick.create": "Erstellen",
   "table.filter": "Filter",
   "table.filterBy": "Filtern nach {column}",
+  "table.clearFilter": "Filter leeren (Esc)",
+  "table.clearFilterOf": "Filter nach {column} leeren",
   "table.column": "Spalte {n}",
   "table.toggleFilters": "Spaltenfilter ein- oder ausblenden",
   "table.noMatch": "Keine Zeile passt zu den Filtern.",

@@ -631,6 +631,8 @@ export default {
   "pick.create": "Create",
   "table.filter": "Filter",
   "table.filterBy": "Filter by {column}",
+  "table.clearFilter": "Clear filter (Esc)",
+  "table.clearFilterOf": "Clear the {column} filter",
   "table.column": "column {n}",
   "table.toggleFilters": "Show or hide the column filters",
   "table.noMatch": "No rows match the filters.",
