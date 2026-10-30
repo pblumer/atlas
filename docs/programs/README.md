@@ -6,14 +6,14 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**5 programmes** · active: 4 · blocked: 0 · paused: 0 · planned: 1 · complete: 0
+**5 programmes** · active: 5 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
-| [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | planned | 0/7 | pblumer | Programme owner pblumer to review the MFE0 device/security baseline and incident alerting architecture, then appoint slice coordinators and select the first executable mobile Tasks/Start slice. |
+| [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/7 | pblumer | Review proposed ADR-draft-mobile-first-tasks-start-and-incident-triage and MFE0 source audit; run the real-device validation matrix; decide separate incident-alarm acknowledgement and offline completion ADR boundaries before authorizing MFE1/MFE2 implementation. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code. |
 
 ## atlas hub (BMP)
@@ -73,7 +73,7 @@ Mobile-first BPMN task execution and process initiation, field evidence, operato
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **MFE0** — Architecture and real-device baseline | planned | unassigned | — | [PR #1448](https://github.com/pblumer/atlas/pull/1448) | Draft PR #1448 establishes the programme register only. Audit real devices and review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation; no architecture decision is yet approved. |
+| **MFE0** — Architecture and real-device baseline | active | pblumer | — | [PR #1448](https://github.com/pblumer/atlas/pull/1448), [PR #1449](https://github.com/pblumer/atlas/pull/1449) | PR #1448 merged the programme registration; draft PR #1449 supplies the MFE0 code/ADR baseline and proposed ADR-draft-mobile-first-tasks-start-and-incident-triage. Real iOS/Android/foldable tests, device screenshots and architectural acceptance remain open. |
 | **MFE1** — Mobile Tasks and Process Start | planned | unassigned | MFE0 | — | Ship a safe, accessible mobile task/start journey and validated safety-inspection example using existing form-js and HTTP APIs. |
 | **MFE2** — Mobile incident triage | planned | unassigned | MFE0 | — | Operator-scoped cause-grouped incident inbox, deep-link triage, repair forms and authorized retry/resolve; no invented acknowledgement semantics. |
 | **MFE3** — Incident alerting and escalation | planned | unassigned | MFE2 | — | Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine. |
