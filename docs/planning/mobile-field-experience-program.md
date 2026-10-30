@@ -29,11 +29,11 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 **Acceptance ideas:** Test a QR printed in a PDF and an email link on real phone/tablet/foldable devices; authorized versus wrong-user access; expired/revoked/reused links; cancelled/already-completed work orders; duplicate submissions and a lost response after fsync; deliberate refusal or discrepancy; evidence upload/restart; browser close/reopen and offline reconnect once MFE5 exists. Verify live/replay equivalence for any new persisted acknowledgement fact, and ensure no external mail is sent before the originating event is durable.
 
-## MFE0 source audit and proposal
+## MFE0 source audit and accepted architecture
 
 - [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — code/ADR audit only; physical-device checks remain open.
-- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Proposed**, mobile Tasks/Start/Incidents presentation boundary; not approved and not implemented.
-- MFE0 is **active**, coordinated by pblumer. Programme integration remains gated on architectural review and real-device validation.
+- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Accepted on 2026-10-30 / Not started**. Shared adaptive mobile Tasks/Start/authorized Incidents UX is approved as the architecture contract; it is not yet implemented.
+- MFE0 is **active**, coordinated by pblumer. The architecture decision is accepted; real-device validation and implementation handoff remain open, including the separate MFE3/MFE4/MFE5 ADR gates.
 
 ## Existing baseline and gaps
 
@@ -126,4 +126,4 @@ The processor hot path stays allocation-free; never send alerts or acknowledge c
 
 ## Immediate next action
 
-Programme owner pblumer reviews MFE0's existing-UX audit and the alert acknowledgement/notification architecture, appoints slice coordinators, and selects the first executable mobile Tasks/Start journey plus a parallel read-only incident triage spike. No status in this planning document represents shipped functionality.
+Programme owner pblumer validates MFE0's remaining real-device baseline, appoints slice coordinators and scopes a test-first MFE1 mobile Tasks/Start journey plus an MFE2 read-only incident triage spike. MFE3 alarm acknowledgement, MFE4 field evidence and MFE5 offline completion still require separately reviewed decisions. No status in this planning document represents shipped functionality.

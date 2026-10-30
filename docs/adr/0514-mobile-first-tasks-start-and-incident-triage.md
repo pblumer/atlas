@@ -1,8 +1,9 @@
 # ADR-0514: Mobile-first Tasks, Process Start and incident triage share one adaptive experience
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-30
+- **Decision accepted:** 2026-10-30 by programme owner pblumer
 - **Deciders:** atlas maintainers
 - **Programme:** [MFE](../planning/mobile-field-experience-program.md), MFE0 (architecture baseline)
 - **Open question:** Real iOS Safari/Android touch and keyboard measurements; form-js grid layouts on narrow screens; mobile incident-role boundary; whether the existing Console app shell or a reduced shared navigation surface is the entry point. Alarm acknowledgement and offline completion are **not** decided by this record.
@@ -57,10 +58,12 @@ records what has and has not been measured.
 3. **Simply apply a smaller CSS breakpoint to every Console surface**, including
    Operations and the full desktop BPMN Modeler.
 
-## Proposed decision
+## Decision outcome
 
-**Option 1**: One authoritative set of task, form and incident commands, with
-an adaptive presentation. This is **proposed**, not approved or landed.
+**Chosen option: 1.** One authoritative set of task, form and incident commands,
+with an adaptive presentation. **Accepted on 2026-10-30** by the programme owner.
+**Implementation remains Not started.** MFE0 device checks, incident-alarm
+acknowledgement, evidence and offline completion require their separate gates.
 
 ### Product boundary
 
