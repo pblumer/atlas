@@ -5146,6 +5146,8 @@ tr.wk-stale > td { background: var(--warn-soft); }
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
+/* A card's heading is its <h2>, which is what folds it (fold.js). */
+.wk-head h2 { margin: 0; }
 /* The job-type table folds away, closed by default: an installation runs a handful of
    types and the table lists every one it has ever seen, so the page opens on the
    question rather than on rows of answer. What must survive the fold is the alarm —

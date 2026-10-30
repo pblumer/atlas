@@ -7633,7 +7633,7 @@ async function viewWorkers() {
 
     workers.innerHTML = `
       <div class="wk-head">
-        <b>Workers</b>
+        <h2>Workers</h2>
         <span class="muted small">${workerRows.length} seen this run</span>
       </div>
       ${workerRows.length ? `<table data-dt-key="wk-workers">
@@ -7828,7 +7828,7 @@ async function viewWorkers() {
     if (collided.length) {
       collisions.hidden = false;
       collisions.innerHTML = `
-        <div class="wk-head"><b>Job types on an index a built-in has taken</b>
+        <div class="wk-head"><h2>Job types on an index a built-in has taken</h2>
           <span class="muted small">${collided.length} type${collided.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Job type</th><th class="wk-num">Index</th><th>That index now means</th></tr></thead>
@@ -7857,7 +7857,7 @@ async function viewWorkers() {
     if (held.length) {
       breakers.hidden = false;
       breakers.innerHTML = `
-        <div class="wk-head"><b>Held back</b>
+        <div class="wk-head"><h2>Held back</h2>
           <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
@@ -7912,7 +7912,7 @@ async function viewWorkers() {
     if (missing.length) {
       gaps.hidden = false;
       gaps.innerHTML = `
-        <div class="wk-head"><b>Workers nothing can serve</b>
+        <div class="wk-head"><h2>Workers nothing can serve</h2>
           <span class="muted small">${missing.length} name${missing.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Worker type</th><th>Used by</th></tr></thead>
@@ -7943,7 +7943,7 @@ async function viewWorkers() {
     if (sup.length) {
       supervised.hidden = false;
       supervised.innerHTML = `
-        <div class="wk-head"><b>Supervised by this server</b>
+        <div class="wk-head"><h2>Supervised by this server</h2>
           <span class="muted small">${sup.length} process${sup.length === 1 ? "" : "es"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Serves</th><th>State</th><th class="wk-num">PID</th>
@@ -7991,6 +7991,9 @@ async function viewWorkers() {
     const fold = document.getElementById("wk-types-fold");
     if (fold) fold.addEventListener("toggle", () => setTypesOpen(fold.open));
     enhanceViewTables();
+    // A card that was empty when the route folded the view (no breaker held, every
+    // name served) gets its heading on a later Refresh, and only this finds it then.
+    foldCards(view, pageOf(location.hash));
   };
 
   document.getElementById("refresh").onclick = load;
