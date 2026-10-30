@@ -21,9 +21,10 @@
       "prs": [
         1448,
         1449,
-        1452
+        1452,
+        1453
       ],
-      "note": "Architecture ADR-0514 accepted by pblumer on 2026-10-30 (PR #1452 records status); PRs #1448/#1449 merged the programme and baseline. MFE0 is still active: real-device checks, accessibility screenshots and slice handoff are outstanding."
+      "note": "ADR-0514 accepted (PR #1452); programme and repository baseline merged (#1448/#1449). Draft PR #1453 adds the 320–1280px Chromium Tasks/Start regression matrix, awaiting CI; real iOS/Android/foldable testing, form-js accessibility evidence and slice handoff remain outstanding."
     },
     {
       "id": "MFE1",
