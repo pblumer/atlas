@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/model-independence-and-provenance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code.",
+  "next_action": "Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2.",
   "slices": [
     {
       "id": "MIP0",
@@ -17,9 +17,10 @@
       "depends_on": [],
       "issues": [],
       "prs": [
-        1443
+        1443,
+        1447
       ],
-      "note": "Draft PR #1443 records the initial evidence and proposes a migration ADR; independently verified provenance, SBOM/licence review and architecture acceptance remain outstanding."
+      "note": "PR #1443 merged the initial inventory and Proposed ADR. Draft PR #1447 pins byte-identical Zeebe v1.17.0 source and separate MIT notices for Zeebe/DMN; combined DMN bundle, broader code/fixture provenance, SBOM/watermark and ADR acceptance remain open."
     },
     {
       "id": "MIP1",

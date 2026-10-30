@@ -24,6 +24,13 @@ Upstream references:
 - <https://github.com/bpmn-io/bpmn-js>
 - <https://github.com/bpmn-io/form-js>
 
+## Versioned moddle-extension notices
+
+- `zeebe-bpmn-moddle` **1.17.0**: the bundled BPMN `zeebe.json` descriptor is byte-identical to the [tagged upstream resource](https://github.com/camunda/zeebe-bpmn-moddle/blob/v1.17.0/resources/zeebe.json). Its MIT notice and copyright are retained in [ZEEBE-BPMN-MODDLE-LICENSE](api/web/vendor/bpmn/ZEEBE-BPMN-MODDLE-LICENSE), separately from the bpmn.io licence.
+- `camunda-dmn-moddle` **1.3.1**: integrated into the prebuilt DMN editor; its MIT copyright and permission notice is retained in [CAMUNDA-DMN-MODDLE-LICENSE](api/web/vendor/dmn/CAMUNDA-DMN-MODDLE-LICENSE). Source identification and bundle inclusion do **not** yet constitute an audited rebuild.
+
+All other bundled dependencies and transitive notices remain subject to the incomplete inventory and release checks.
+
 ## Go modules and other assets
 
 Dependencies in `go.mod` and `go.sum`, and vendored JavaScript, CSS, fonts, icons, images, schemas and generated bundles, retain their respective licences. Required upstream `NOTICE` and attribution files must be preserved.
@@ -34,7 +41,7 @@ An automated licence report and SPDX or CycloneDX SBOM must be generated and rev
 
 The project intentionally supports selected `zeebe:` XML extensions. Camunda and Zeebe names, schemas and public behavioural descriptions are not project-owned marks.
 
-No Camunda source code is intentionally declared here as a distributed dependency. The [initial provenance register](docs/legal/PROVENANCE_AUDIT.md) identifies the present dependencies and unresolved evidence. A completed, independently verified audit must establish that implementation code, tests and documentation are independently developed or used under compatible terms.
+No Camunda **engine implementation** is declared as a Go dependency. The separately licensed Camunda-maintained moddle descriptors listed above **are** third-party source material distributed as a file or bundled resource. The [initial provenance register](docs/legal/PROVENANCE_AUDIT.md) identifies the present dependencies and unresolved evidence. A completed, independently verified audit must establish that implementation code, tests and documentation are independently developed or used under compatible terms.
 
 ## Adding third-party material
 
