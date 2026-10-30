@@ -16,8 +16,10 @@
       "owner": "pblumer",
       "depends_on": [],
       "issues": [],
-      "prs": [],
-      "note": "Initial evidence register and draft decision in review; independent upstream comparisons, licence/SBOM checks and ADR acceptance are still outstanding."
+      "prs": [
+        1443
+      ],
+      "note": "Draft PR #1443 records the initial evidence and proposes a migration ADR; independently verified provenance, SBOM/licence review and architecture acceptance remain outstanding."
     },
     {
       "id": "MIP1",
