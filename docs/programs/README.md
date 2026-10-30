@@ -6,13 +6,14 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**3 programmes** · active: 3 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**4 programmes** · active: 4 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+| [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code. |
 
 ## atlas hub (BMP)
 
@@ -62,6 +63,20 @@ Govern external Worker actions through explicit identities, managed Connections,
 | **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
 | **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
 | **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
+
+## Model independence and provenance (MIP)
+
+Make atlas-owned BPMN authoring the future default while preserving versioned Zeebe import/reload compatibility, replacing Camunda-specific DMN authoring only with test evidence, and completing third-party provenance and licence gates.
+
+**[Programme plan](../planning/model-independence-and-provenance-program.md) · [Roadmap track](../../ROADMAP.md#milestone-6--ecosystem-) · [Manifest](mip/program.json) · Reviewed: 2026-10-30**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | — | Initial evidence register and draft decision in review; independent upstream comparisons, licence/SBOM checks and ADR acceptance are still outstanding. |
+| **MIP1** — Native BPMN authoring with legacy round-trip | planned | unassigned | MIP0 | — | Build a reviewed atlas namespace descriptor and test new default authoring alongside lossless Zeebe import/export; no silent conversion. |
+| **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
+| **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
+| **MIP4** — Release provenance and compatibility sign-off | planned | unassigned | MIP1, MIP2, MIP3 | — | Complete upstream/fixture audit, copyright notices, vendor bundle rebuild evidence, SBOM, watermark and compatibility matrix; maintain separate legal trademark gate. |
 
 ## Updating the register
 
