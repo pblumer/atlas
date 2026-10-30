@@ -544,6 +544,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   menu turns a decision table into a list, keeping its id and its requirements and the overlay
   that opens it, and does not offer List to a list; and a decision's tab opens it as it now is
   after the replace menu changed its kind.
+- **`dmn-table-rows.spec.mjs`**:
+  the height of a decision table's rules against the real DMN bundle — a rule is as tall as its
+  longest entry, annotated or not, because the Console's `.empty` placeholder and its `tbody td`
+  padding are held off the dmn-js table (dmn-js flags an unset annotation `empty` itself); the
+  rule number keeps dmn-js's own padding; and the Console's own placeholders and tables keep
+  theirs.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the

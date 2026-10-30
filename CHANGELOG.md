@@ -72,6 +72,11 @@ _Changed_ / _Removed_ for each version.
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed
   there went nowhere. The tab looks the decision up again when it is pressed.
+- **A decision table's rules are one line tall again.** Every rule without an annotation —
+  nearly every rule — was 98 pixels tall for a single line of text, because the Console's
+  "nothing here yet" placeholder styling reached the empty annotation cell, and its table
+  padding reached the rule number. Both are held off the decision table now, so a rule is
+  as tall as its longest entry, as dmn-js draws it.
 - **Somebody who signs in only through single sign-on can approve an application.** The
   OAuth consent page offered a password form and nothing else, and a federated sign-in
   could only come back to the Console or the portal. The page now offers the identity
