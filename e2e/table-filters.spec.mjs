@@ -79,3 +79,69 @@ test("the funnel collapses the row, and a keyed list remembers that on the next 
 
   expect(page.__errors).toEqual([]);
 });
+
+// A box with something in it carries a small cross at its trailing edge that empties
+// it. The cross sits at the field's end, not after the typed text: it stays where the
+// hand learned to find it however long the term is, and it is not where a click goes to
+// put the caret behind the text. An empty box shows none — a cross that does nothing,
+// repeated in every column, would only be noise — so a visible cross also says that
+// this column is filtering.
+test("a box with a term carries a cross that empties it and gives the rows back", async ({ page }) => {
+  await open(page);
+
+  const box = page.locator(`${keyed} input.dt-filter`).first();
+  const clear = page.locator(`${keyed} .dt-filter-clear`).first();
+  const rows = page.locator(`${keyed} tbody tr:not([data-dt-empty]):visible`);
+
+  await expect(clear).toBeHidden();
+  await box.fill("test");
+  await expect(rows).toHaveCount(1);
+  await expect(clear).toBeVisible();
+  // Only the column that has a term shows its cross.
+  await expect(page.locator(`${keyed} .dt-filter-clear:visible`)).toHaveCount(1);
+
+  // At the box's trailing edge, inside it.
+  const b = await box.boundingBox();
+  const c = await clear.boundingBox();
+  expect(c.x + c.width).toBeLessThanOrEqual(b.x + b.width);
+  expect(b.x + b.width - (c.x + c.width)).toBeLessThan(8);
+  expect(c.y).toBeGreaterThanOrEqual(b.y);
+  expect(c.y + c.height).toBeLessThanOrEqual(b.y + b.height);
+
+  await clear.click();
+  await expect(box).toHaveValue("");
+  await expect(rows).toHaveCount(3);
+  await expect(clear).toBeHidden();
+  // The caret stays in the box, ready for the next term.
+  await expect(box).toBeFocused();
+  // Clearing the last term clears the funnel's mark too.
+  await expect(page.locator(`${keyed} .dt-filter-toggle`)).not.toHaveClass(/dt-has-filters/);
+
+  expect(page.__errors).toEqual([]);
+});
+
+// The quickest way to empty a box is not to reach for it at all: Escape does it from the
+// keyboard. It only empties — an empty box lets Escape through, so a dialog around the
+// list still closes on it, one press later.
+test("Escape empties a box with a term, and lets an empty box's Escape through", async ({ page }) => {
+  await open(page);
+
+  const box = page.locator(`${keyed} input.dt-filter`).first();
+  const rows = page.locator(`${keyed} tbody tr:not([data-dt-empty]):visible`);
+  await page.evaluate(() => {
+    window.__escapes = 0;
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") window.__escapes++; });
+  });
+
+  await box.fill("test");
+  await expect(rows).toHaveCount(1);
+  await box.press("Escape");
+  await expect(box).toHaveValue("");
+  await expect(rows).toHaveCount(3);
+  expect(await page.evaluate(() => window.__escapes)).toBe(0);
+
+  await box.press("Escape");
+  expect(await page.evaluate(() => window.__escapes)).toBe(1);
+
+  expect(page.__errors).toEqual([]);
+});

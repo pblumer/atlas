@@ -14,6 +14,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A list's filter box empties with one click.** A column filter box with a term in it
+  shows a small cross at its trailing edge that clears the term and gives the rows back,
+  keeping the caret in the box for the next one; Escape does the same from the keyboard,
+  and only on a box that has a term, so a dialog around the list still closes on the
+  next press. An empty box shows no cross, so a visible one also marks the column that
+  is filtering.
 - **A form field takes its options from a decision.** A select, radio group, checklist or
   tag list can name a deployed decision — typically a list its owners keep in the decision
   editor — under Options source ▸ Type ▸ Decision (DMN), and shows what the newest version
