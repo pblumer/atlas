@@ -181,3 +181,83 @@ test("a filled start form starts the process with what was entered", async ({ pa
   await expect.poll(() => started.length, { timeout: 15000 }).toBe(1);
   expect(started[0].variables.iban).toBe("CH9300762011623852957");
 });
+
+// MFE0 / ADR-0514: render actual form-js fields, not just the responsive
+// list/detail placeholders. Browser viewport emulation cannot certify real
+// iOS/Android keyboards, 200% browser zoom, screen readers or foldable hinges.
+async function expectNoDocumentOverflow(page) {
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  )).toBeLessThanOrEqual(1);
+}
+
+test("MFE0 phone task: failed validation preserves edits through an adaptive layout change", async ({ page }) => {
+  installMock(page);
+  const completions = [];
+  await page.route("**/api/v1/tasks/501/complete", async (route) => {
+    completions.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 501 } });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+
+  const form = page.locator("#task-form");
+  await form.getByLabel("Vorname").fill("Lena");
+  await page.locator("#task-complete").click();
+  await expect(page.locator("#toast")).toContainText("IBAN");
+  expect(completions).toHaveLength(0); // Client-side validation never sent a command.
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await expectNoDocumentOverflow(page);
+
+  // Cross the existing ADR-0417 breakpoint in both directions without
+  // remounting the form or silently discarding a partially entered task.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await form.getByLabel("IBAN").fill("CH9300762011623852957");
+  await page.locator("#task-complete").click();
+  await expect.poll(() => completions.length).toBe(1);
+  expect(completions[0].variables.iban).toBe("CH9300762011623852957");
+  expect(completions[0].variables.vorname).toBe("Lena");
+});
+
+test("MFE0 phone Start: the form and pending values survive changing orientation", async ({ page }) => {
+  installStartMock(page);
+  const starts = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    starts.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 1234 } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openStartForm(page);
+
+  const form = page.locator("#start-form");
+  await form.getByLabel("IBAN").fill("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(form.getByLabel("IBAN")).toHaveValue("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(form.getByLabel("IBAN")).toHaveValue("CH9300762011623852957");
+
+  // A resize is presentation only: it must neither start the process nor
+  // change the submitted form data.
+  expect(starts).toHaveLength(0);
+  await page.locator("#start-go").click();
+  await expect.poll(() => starts.length).toBe(1);
+  expect(starts[0].variables.iban).toBe("CH9300762011623852957");
+});
+
+test("MFE0 320px phone: the real form-js validation names missing required fields", async ({ page }) => {
+  installMock(page, BIG_FORM);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+  await expectNoDocumentOverflow(page);
+  await page.locator("#task-complete").click();
+  const toast = page.locator("#toast");
+  await expect(toast).toContainText("Vorname");
+  await expect(toast).toContainText("und 2 weitere Felder");
+  await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+  await expectNoDocumentOverflow(page);
+});

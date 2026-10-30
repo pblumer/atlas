@@ -961,6 +961,13 @@ contract and horizontal page overflow. One additional scenario resizes a
 selected Tasks detail from portrait (390×844) to landscape (844×390) and
 back. The same test mocks the API but renders the production web assets.
 
+The additional `form-refusal.spec.mjs` MFE0 browser scenarios exercise **real
+vendored form-js fields**, not placeholder cards: a required-field refusal at
+320px without sending a command, preservation of typed data while crossing the
+ADR-0417 breakpoint, and preservation of a Process Start form across
+portrait/landscape resizing. They also assert the document does not overflow
+horizontally at the measured small sizes.
+
 These tests **do not** validate complex multi-column form-js schemas, text zoom,
 iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
