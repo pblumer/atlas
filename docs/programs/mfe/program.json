@@ -3,11 +3,11 @@
   "name": "Mobile & Field Experience",
   "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
   "status": "planned",
-  "owner": "unassigned",
+  "owner": "pblumer",
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Maintainer to accept programme ownership, review MFE0 device/security baseline and alerting architecture, and select the first executable mobile Tasks/Start slice.",
+  "next_action": "Programme owner pblumer to review the MFE0 device/security baseline and incident alerting architecture, then appoint slice coordinators and select the first executable mobile Tasks/Start slice.",
   "slices": [
     {
       "id": "MFE0",
