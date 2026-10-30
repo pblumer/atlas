@@ -55,8 +55,10 @@ function installSlowShop(catalogStatus) {
   let release;
   window.__answerCatalogue = new Promise((r) => { release = r; });
   window.__letCatalogueAnswer = release;
+  window.__requested = [];
   window.fetch = (input) => {
     const path = String(input).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+    window.__requested.push(path);
     if (path === "/api/v1/shop/catalog") {
       return window.__answerCatalogue.then(() => catalogStatus === 200
         ? new Response(JSON.stringify(ROUTES[path]), { status: 200, headers: { "content-type": "application/json" } })
@@ -119,4 +121,23 @@ test("a catalogue that cannot be read is a failure with a retry, not none assign
   await expect(page.locator("p.error").getByRole("button")).toBeVisible();
   await expect(page.getByText(NONE)).toHaveCount(0);
   await expect(page.getByText("Loading the shop …")).toHaveCount(0);
+});
+
+// The reads that do not depend on the catalogue do not wait for it: while it is still
+// unanswered, the orders, the open tasks, the inventory, the favourites and the
+// directory have all been asked for. Only the catalogue's releases wait, because they
+// are read under the catalogue's id. The shop used to ask for each in turn, so the
+// slowest answers added up to the time it said it was loading.
+test("the reads that do not need the catalogue run while it is still unanswered", async ({ page }) => {
+  await open(page, 200);
+  await expect(page.getByText("Loading the shop …")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__requested)).toEqual(expect.arrayContaining([
+    "/api/v1/shop/catalog", "/api/v1/orders", "/api/v1/shop/tasks", "/api/v1/inventory",
+    "/api/v1/shop/favourites", "/api/v1/principals",
+  ]));
+  expect(await page.evaluate(() => window.__requested)).not.toContain("/api/v1/catalogs/cat_s/releases");
+
+  await page.evaluate(() => window.__letCatalogueAnswer());
+  await expect(page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first()).toBeVisible();
+  expect(await page.evaluate(() => window.__requested)).toContain("/api/v1/catalogs/cat_s/releases");
 });
