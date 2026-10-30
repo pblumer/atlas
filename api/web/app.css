@@ -7738,6 +7738,15 @@ button.im-problem:hover { background: var(--accent-soft); }
   .tasks-detail-tabs { overflow-x: auto; }
   .tasks-detail-tabs button { white-space: nowrap; }
 
+  /* ADR-0514: keep the authored form-js row on desktop, but let each field
+     occupy a full line when Tasks/Start collapses to one narrow pane.
+     This changes presentation only, not the form schema or its data. */
+  #task-form .fjs-columns, #start-form .fjs-columns { flex-direction: column; }
+  #task-form .fjs-columns > .fjs-column,
+  #start-form .fjs-columns > .fjs-column {
+    flex-basis: auto !important; width: 100%; min-width: 0;
+  }
+
   /* Access review: a row is a card, each cell named by its data-label, the answer
      buttons under it at a size a thumb finds. The column heads, and the filter row
      the table enhancer puts under them, go with the columns they stood above. */

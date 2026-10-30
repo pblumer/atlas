@@ -23,9 +23,10 @@
         1449,
         1452,
         1453,
-        1454
+        1454,
+        1455
       ],
-      "note": "ADR-0514 accepted; PRs #1448/#1449/#1452/#1453 merged. Draft PR #1454 adds real form-js mobile validation and resize-continuity Chromium tests, pending CI. MFE0 remains active: hardware iOS/Android/foldables, keyboard, zoom, complex forms and accessibility evidence remain open."
+      "note": "ADR-0514 accepted; PRs #1448/#1449/#1452/#1453/#1454 merged with PR CI. Draft PR #1455 checks schema-authored two-column form-js layout on mobile Tasks/Start (CI pending). MFE0 still requires physical iOS/Android/foldable, native 200% zoom and accessibility/keyboard evidence."
     },
     {
       "id": "MFE1",
