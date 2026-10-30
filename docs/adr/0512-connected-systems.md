@@ -1,4 +1,4 @@
-# ADR-DRAFT: Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own
+# ADR-0512: Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own
 
 - **Status:** Proposed
 - **Implementation:** Not started
