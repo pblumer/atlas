@@ -68,6 +68,11 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
+  example in the Modeler saves it in the reader's reusable `atlas-samples` application,
+  creating that application on first use. An existing ungrouped draft is filed there;
+  a draft already in another application is not silently moved. Installing a full
+  example application and running a recipe remain separate actions.
 - **The shop loads in about half the time.** After the sign-in check it read the
   catalogue, its release, the orders, the open tasks, the positions' actions, the
   inventory, the favourites and the directory one after another, so their answers'
