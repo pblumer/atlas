@@ -5,7 +5,7 @@
 - **Date:** 2026-10-30
 - **Deciders:** atlas maintainers
 - **Programme:** [MFE](../planning/mobile-field-experience-program.md), MFE0 (architecture baseline)
-- **Open questions:** Real iOS Safari/Android touch and keyboard measurements; form-js grid layouts on narrow screens; mobile incident-role boundary; whether the existing Console app shell or a reduced shared navigation surface is the entry point. Alarm acknowledgement and offline completion are **not** decided by this record.
+- **Open question:** Real iOS Safari/Android touch and keyboard measurements; form-js grid layouts on narrow screens; mobile incident-role boundary; whether the existing Console app shell or a reduced shared navigation surface is the entry point. Alarm acknowledgement and offline completion are **not** decided by this record.
 - **Question checked:** 2026-10
 
 ## Context and problem statement
