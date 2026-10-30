@@ -31,9 +31,10 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 ## MFE0 source audit and accepted architecture
 
-- [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — code/ADR audit only; physical-device checks remain open.
+- [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — source/ADR audit plus merged Chromium Tasks/Start/form-js regression tests; physical-device checks remain open.
+- [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md) — hardware test matrix, evidence requirements, accessibility/security cases, and handoff; all hardware outcomes remain unverified.
 - [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Accepted on 2026-10-30 / Not started**. Shared adaptive mobile Tasks/Start/authorized Incidents UX is approved as the architecture contract; it is not yet implemented.
-- MFE0 is **active**, coordinated by pblumer. The architecture decision is accepted; real-device validation and implementation handoff remain open, including the separate MFE3/MFE4/MFE5 ADR gates.
+- MFE0 is **active**, coordinated by pblumer. The architecture decision is accepted; merged PRs #1453/#1454 prove Chromium regressions only. Real-device validation and implementation handoff remain open, including the separate MFE3/MFE4/MFE5 ADR gates. Initial MFE1/MFE2 scoped issues are [#1456](https://github.com/pblumer/atlas/issues/1456) and [#1457](https://github.com/pblumer/atlas/issues/1457).
 
 ## Existing baseline and gaps
 
@@ -126,4 +127,4 @@ The processor hot path stays allocation-free; never send alerts or acknowledge c
 
 ## Immediate next action
 
-Programme owner pblumer validates MFE0's remaining real-device baseline, appoints slice coordinators and scopes a test-first MFE1 mobile Tasks/Start journey plus an MFE2 read-only incident triage spike. MFE3 alarm acknowledgement, MFE4 field evidence and MFE5 offline completion still require separately reviewed decisions. No status in this planning document represents shipped functionality.
+Programme owner pblumer executes and reviews the [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md) under [issue #1451](https://github.com/pblumer/atlas/issues/1451), then appoints coordinators for [MFE1 Tasks/Start #1456](https://github.com/pblumer/atlas/issues/1456) and [MFE2 read-only incident triage #1457](https://github.com/pblumer/atlas/issues/1457). MFE3 alarm acknowledgement, MFE4 field evidence and MFE5 offline completion still require separately reviewed decisions. No status in this planning document represents shipped functionality.
