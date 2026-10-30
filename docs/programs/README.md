@@ -72,7 +72,7 @@ Make atlas-owned BPMN authoring the future default while preserving versioned Ze
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | — | Initial evidence register and draft decision in review; independent upstream comparisons, licence/SBOM checks and ADR acceptance are still outstanding. |
+| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | [PR #1443](https://github.com/pblumer/atlas/pull/1443) | Draft PR #1443 records the initial evidence and proposes a migration ADR; independently verified provenance, SBOM/licence review and architecture acceptance remain outstanding. |
 | **MIP1** — Native BPMN authoring with legacy round-trip | planned | unassigned | MIP0 | — | Build a reviewed atlas namespace descriptor and test new default authoring alongside lossless Zeebe import/export; no silent conversion. |
 | **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
 | **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
