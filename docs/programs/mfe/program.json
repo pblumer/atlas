@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review proposed ADR-draft-mobile-first-tasks-start-and-incident-triage and MFE0 source audit; run the real-device validation matrix; decide separate incident-alarm acknowledgement and offline completion ADR boundaries before authorizing MFE1/MFE2 implementation.",
+  "next_action": "Review proposed ADR-0514 and MFE0 source audit; run the real-device validation matrix; decide separate incident-alarm acknowledgement and offline completion ADR boundaries before authorizing MFE1/MFE2 implementation.",
   "slices": [
     {
       "id": "MFE0",
@@ -20,7 +20,7 @@
         1448,
         1449
       ],
-      "note": "PR #1448 merged the programme registration; draft PR #1449 supplies the MFE0 code/ADR baseline and proposed ADR-draft-mobile-first-tasks-start-and-incident-triage. Real iOS/Android/foldable tests, device screenshots and architectural acceptance remain open."
+      "note": "PR #1448 merged the programme registration; draft PR #1449 supplies the MFE0 code/ADR baseline and proposed ADR-0514. Real iOS/Android/foldable tests, device screenshots and architectural acceptance remain open."
     },
     {
       "id": "MFE1",
