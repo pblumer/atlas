@@ -16,8 +16,10 @@
       "owner": "unassigned",
       "depends_on": [],
       "issues": [],
-      "prs": [],
-      "note": "Audit actual device/form/incident UX; review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation."
+      "prs": [
+        1448
+      ],
+      "note": "Draft PR #1448 establishes the programme register only. Audit real devices and review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation; no architecture decision is yet approved."
     },
     {
       "id": "MFE1",
