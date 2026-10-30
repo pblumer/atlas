@@ -24,6 +24,7 @@
         1452,
         1453,
         1454,
+        1458,
         1460
       ],
       "note": "ADR-0514 Accepted. PRs #1448/#1449/#1452/#1453/#1454/#1458 merged. Draft PR #1460 adds grouped form-js phone/tablet browser regression, CI pending. Hardware iOS/Android/assistive-technology tests, 200% browser zoom and true multi-column form validation remain unverified; MFE0 #1451 remains open."
