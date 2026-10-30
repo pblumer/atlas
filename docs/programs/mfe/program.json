@@ -22,9 +22,10 @@
         1448,
         1449,
         1452,
-        1453
+        1453,
+        1454
       ],
-      "note": "ADR-0514 accepted (PR #1452); programme and repository baseline merged (#1448/#1449). Draft PR #1453 adds the 320–1280px Chromium Tasks/Start regression matrix, awaiting CI; real iOS/Android/foldable testing, form-js accessibility evidence and slice handoff remain outstanding."
+      "note": "ADR-0514 accepted; PRs #1448/#1449/#1452/#1453 merged. Draft PR #1454 adds real form-js mobile validation and resize-continuity Chromium tests, pending CI. MFE0 remains active: hardware iOS/Android/foldables, keyboard, zoom, complex forms and accessibility evidence remain open."
     },
     {
       "id": "MFE1",
