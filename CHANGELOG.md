@@ -62,6 +62,11 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
+  example in the Modeler saves it in the reader's reusable `atlas-samples` application,
+  creating that application on first use. An existing ungrouped draft is filed there;
+  a draft already in another application is not silently moved. Installing a full
+  example application and running a recipe remain separate actions.
 - **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed
