@@ -1750,6 +1750,14 @@ async function viewConsoleDashboard() {
     <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // These slots are filled after the route has folded the view, each when its module's
+  // answer arrives, and the storage card is redrawn in place after a checkpoint; a watch
+  // on each slot's own children folds what lands in it (fold.js), whenever it lands.
+  for (const id of ["storage-alert-slot", "catalogue-stranded-slot", "api-tokens-expiring-slot",
+    "approvals-waiting-slot", "storage-card-slot"]) {
+    const slot = document.getElementById(id);
+    new MutationObserver(() => foldCards(slot, pageOf(location.hash))).observe(slot, { childList: true });
+  }
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
@@ -2162,9 +2170,12 @@ async function viewConsoleAudit() {
 // authentication enabled both endpoints are admin-only.
 async function viewConsoleBackup() {
   const gen = navGen;
+  // Two topics under one title, each a card headed by its <h2> so it folds (fold.js):
+  // the design-time archive, and the whole-instance snapshot.
   view.innerHTML = `
-    <div class="card">
-      <h1>Backup &amp; restore</h1>
+    <h1>Backup &amp; restore</h1>
+    <div class="card" id="backup-design">
+      <h2>Design-time data</h2>
       <p class="muted">Download a single archive of your design-time data — projects, drafts,
       deployments, forms, decisions, workers — to keep or move to another instance.
       User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
@@ -2183,8 +2194,8 @@ async function viewConsoleBackup() {
       <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
     </div>
 
-    <div class="card" style="margin-top:16px">
-      <h1>Full snapshot</h1>
+    <div class="card" id="backup-full" style="margin-top:16px">
+      <h2>Full snapshot</h2>
       <p class="muted">A whole-instance snapshot for disaster recovery or migration: it also captures the
       <strong>WAL — every running instance</strong> — plus user accounts and the vault key, so a restore
       reconstitutes a complete, immediately-usable engine elsewhere. The derivable state store is rebuilt
@@ -4032,6 +4043,9 @@ function renderAppConstants(id) {
     intro: tr("constants.app.intro"),
     none: tr("constants.app.none"),
     held: tr("constants.app.held"),
+    // The tab's two lists fold under their headings, as the Deployments tab's do; on
+    // Admin → Engine they are parts of a card that folds as a whole.
+    fold: true,
   });
 }
 
@@ -4097,14 +4111,21 @@ async function renderHeldConstants(host, o) {
       <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="${esc(tr("constants.removeTitle"))}" aria-label="${esc(tr("constants.remove"))}">✕</button>` : ""}</td>
     </tr>`;
 
+  // A heading either folds what follows it (sectionHead, closed by the </div> after
+  // the part) or is a plain part heading inside a card that folds as a whole.
+  const partHead = (key, title, count, style) => o.fold
+    ? sectionHead(`${p}-sec-${key}`, esc(title), count) + sectionBody(`${p}-sec-${key}`)
+    : `<h3 style="${style}">${esc(title)}</h3>`;
+  const partEnd = o.fold ? "</div>" : "";
   host.innerHTML = `
     <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
-    <h3 style="margin:6px 0">${esc(tr("constants.required"))}</h3>
+    ${partHead("required", tr("constants.required"), trPlural("constants.count", view.required.length), "margin:6px 0")}
     ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
         <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.processes"))}</th><th>${esc(tr("constants.th.here"))}</th></tr></thead>
         <tbody>${reqRows}</tbody></table></div>`
       : `<p class="muted">${esc(o.none)}</p>`}
-    <h3 style="margin:16px 0 6px">${esc(o.held)}</h3>
+    ${partEnd}
+    ${partHead("held", o.held, trPlural("constants.count", view.constants.length), "margin:16px 0 6px")}
     <div class="card" style="padding:0"><table id="${p}-table">
       <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.value"))}</th><th></th></tr></thead>
       <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
@@ -4116,7 +4137,9 @@ async function renderHeldConstants(host, o) {
       : `<p class="muted" style="margin-top:8px">${esc(tr("constants.adminOnly"))}</p>`}
     ${view.updatedAt ? `<p class="muted" style="font-size:12px">${esc(view.updatedBy
       ? tr("constants.lastChangedBy", { at: fmtTime(view.updatedAt), who: view.updatedByName || view.updatedBy })
-      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}`;
+      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}
+    ${partEnd}`;
+  if (o.fold) wireSections(host);
   if (!canEdit) return;
 
   const tbody = host.querySelector(`#${p}-rows`);
@@ -7489,7 +7512,7 @@ async function viewWorkers() {
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
     <div class="card wk-card" id="wk-breakers" hidden></div>
-    <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
+    <div class="card wk-card" id="wk-types" data-fold-default="closed"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
@@ -7529,16 +7552,6 @@ async function viewWorkers() {
   // lease is five minutes, so anything beyond it has let its work go back on offer.
   const STALE_MS = 5 * 60 * 1000;
   const isStale = (w) => w.lastSeen && Date.now() - w.lastSeen / 1e6 > STALE_MS;
-
-  // Whether the job-type table is unfolded. Default closed: the page's question is
-  // "is anything unserved?", which the summary answers, and the table is the detail
-  // behind it. try/catch because a locked-down browser can make storage throw.
-  const typesOpen = () => {
-    try { return localStorage.getItem("atlas.workers.types") === "1"; } catch { return false; }
-  };
-  const setTypesOpen = (open) => {
-    try { localStorage.setItem("atlas.workers.types", open ? "1" : "0"); } catch { /* not storable */ }
-  };
 
   const servedBy = (row, pullers) => {
     if (row.servedInProcess) {
@@ -7592,16 +7605,18 @@ async function viewWorkers() {
     const unserved = typeRows.filter(
       (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);
 
+    // The job-type table folds like every card here, but starts folded
+    // (data-fold-default): the page's question is "is anything unserved?", which the
+    // heading row answers, and the table is the detail behind it.
     types.innerHTML = `
-      <details class="wk-fold" id="wk-types-fold"${typesOpen() ? " open" : ""}>
-      <summary class="wk-head">
-        <b><span class="wk-caret" aria-hidden="true">&#9656;</span> Job types</b>
+      <div class="wk-head">
+        <h2>Job types</h2>
         <span class="muted small">${typeRows.length} shown${unserved.length
           ? ` &middot; <span class="wk-unserved" title="${esc(`${unserved.length} job type${unserved.length === 1
             ? " has" : "s have"} work queued and nothing pulling it`)}">${unserved.length} unserved</span>` : ""}${
           idleBuiltIns.length ? ` &middot; <a href="#" id="wk-toggle-all">${showAllTypes
             ? "hide" : "show"} ${idleBuiltIns.length} idle built-in${idleBuiltIns.length === 1 ? "" : "s"}</a>` : ""}</span>
-      </summary>
+      </div>
       ${typeRows.length ? `<table data-dt-key="wk-types">
         <thead><tr>
           <th>Type</th><th>Served by</th>
@@ -7628,8 +7643,7 @@ async function viewWorkers() {
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
       <p class="wk-note">An <b>in-process</b> type is worked by atlas itself and cannot be leased from
-        outside; relocating it to a worker means turning that handler off.</p>
-      </details>`;
+        outside; relocating it to a worker means turning that handler off.</p>`;
 
     workers.innerHTML = `
       <div class="wk-head">
@@ -7985,11 +7999,10 @@ async function viewWorkers() {
 
     const toggle = document.getElementById("wk-toggle-all");
     if (toggle) {
-      // The link sits inside the <summary>, where a click would also fold the card.
-      toggle.onclick = (e) => { e.preventDefault(); e.stopPropagation(); showAllTypes = !showAllTypes; load(); };
+      // The link sits in the card's heading row; on a folded card, fold.js opens the
+      // card before it acts, so the rows it asks for are shown.
+      toggle.onclick = (e) => { e.preventDefault(); showAllTypes = !showAllTypes; load(); };
     }
-    const fold = document.getElementById("wk-types-fold");
-    if (fold) fold.addEventListener("toggle", () => setTypesOpen(fold.open));
     enhanceViewTables();
     // A card that was empty when the route folded the view (no breaker held, every
     // name served) gets its heading on a later Refresh, and only this finds it then.
@@ -11061,8 +11074,9 @@ async function viewDataInstances() {
         : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modelled</span>`}`
       : `<span class="do-class none">untyped</span><span class="im-unresolved"
            title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
-    return `<div class="card" style="padding:0; margin-top:16px">
-      <div class="im-group-head">${head}<span class="muted">${items.length}
+    // Each type's card folds under its heading (fold.js), remembered by the type.
+    return `<div class="card" style="padding:0; margin-top:16px" data-fold="${esc(type || "-untyped")}">
+      <div class="im-group-head"><h2>${head}</h2><span class="muted">${items.length}
         ${items.length === 1 ? "object" : "objects"}</span></div>
       <div class="im-groups">${identityBlock(items)}</div>
     </div>`;

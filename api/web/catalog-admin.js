@@ -318,16 +318,16 @@ const languageList = (s) => String(s || "").split(/[,;\s]+/).filter(Boolean);
 //     into a clean bill of health.
 function approverCard(report) {
   if (report === null) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Approvers</h3>
+    return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Approvers</h2>
       <p class="muted" style="margin:0">This report could not be read, so nothing here says
         whether any approval rule reaches somebody.</p></div>`;
   }
   const problems = report.problems || [];
   const checked = report.checked || 0;
   if (!problems.length) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Approvers</h3>
+    return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Approvers</h2>
       <p class="muted" style="margin:0">Every approval rule reaches somebody
         &mdash; ${checked} product${checked === 1 ? "" : "s"} checked.</p></div>`;
   }
@@ -337,8 +337,8 @@ function approverCard(report) {
     <td>${esc(p.kind)}</td>
     <td>${p.ref ? `<code>${esc(p.ref)}</code>` : "<span class='muted'>—</span>"}</td>
     <td>${esc(p.why)}</td></tr>`).join("");
-  return `<div class="card" style="margin-top:18px; max-width:860px">
-    <h3 style="margin:0 0 6px">Approvers that reach nobody</h3>
+  return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+    <h2 style="margin:0 0 6px">Approvers that reach nobody</h2>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">${problems.length} of ${checked}
       products name an approver that resolves to nobody. The approval is still created when one
       is ordered; it lands in no inbox, and the order waits without saying why. Correct each in
@@ -363,8 +363,8 @@ function approverCard(report) {
 // approver card's, for the reason given there.
 function translationCard(report) {
   if (report === null) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Translations</h3>
+    return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Translations</h2>
       <p class="muted" style="margin:0">This report could not be read, so nothing here says
         whether any catalogue is missing a translation.</p></div>`;
   }
@@ -377,8 +377,8 @@ function translationCard(report) {
   const over = `${checked} product${checked === 1 ? "" : "s"} in
     ${covered} catalogue${covered === 1 ? "" : "s"}`;
   if (!gaps.length) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Translations</h3>
+    return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Translations</h2>
       <p class="muted" style="margin:0">Every product is written in every language its
         catalogue declares &mdash; ${over} checked.</p></div>`;
   }
@@ -393,8 +393,8 @@ function translationCard(report) {
     <td><code>${esc(r.item)}</code></td>
     <td><a href="#/catalog/c/${encodeURIComponent(r.catalog)}">${esc(r.catalog)}</a></td>
     <td>${r.what.map((w) => esc(w)).join("; ")}</td></tr>`).join("");
-  return `<div class="card" style="margin-top:18px; max-width:860px">
-    <h3 style="margin:0 0 6px">Still to translate</h3>
+  return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+    <h2 style="margin:0 0 6px">Still to translate</h2>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">${byProduct.size} of ${over}
       say something in one of their catalogue's languages and not in another. This
       does <b>not</b> stop a publish: the shop shows the language that exists rather than a
@@ -1489,9 +1489,10 @@ function transferCard(cat) {
 }
 
 // importCard is the list page's panel for importing a whole catalogue document.
+// Like every section below the list, it folds under its heading (fold-topic, fold.js).
 function importCard() {
-  return `<section style="margin-top:26px">
-    <h3 style="margin:0 0 10px">Import a catalogue</h3>
+  return `<section class="fold-topic" data-fold="import" style="margin-top:26px">
+    <h2 style="margin:0 0 10px">Import a catalogue</h2>
     <p class="muted" style="max-width:62ch">A file exported from a catalogue, here or on
       another installation. Nothing is written unless all of it can be: every problem is
       listed at once. Importing the same file again updates what it created.</p>

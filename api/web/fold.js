@@ -7,7 +7,9 @@
 // gets folding by being written the way pages already are and nothing has to remember
 // to ask for it. A card headed by an <h1> is the page's title and stays; an <h3> heads
 // a form or a part of a topic, not a topic. A card that must not fold says so with
-// class "no-fold".
+// class "no-fold". A topic a page draws outside a card, an <h2> over a list of cards
+// say, is the one shape the rule cannot find by itself, so it asks with class
+// "fold-topic" on the element that holds the heading and what it heads.
 //
 // The toggle and the memory are sectionHead's in app.js: the same caret button in the
 // heading, the same localStorage namespace, open until somebody folds it. A section
@@ -21,8 +23,14 @@ import { t } from "./i18n.js";
 const STORE = "atlas.sec.";
 const CONTROL = "a[href], button, input, select, textarea, [role='button']";
 
-function remembered(key) {
-  try { return localStorage.getItem(STORE + key) !== "0"; } catch { return true; }
+// remembered is the state the browser kept for a topic, or open when it kept none —
+// unless the card says it starts folded (data-fold-default="closed"), which a topic
+// does when its heading row already answers what the page is for.
+function remembered(key, dflt) {
+  try {
+    const v = localStorage.getItem(STORE + key);
+    return v === null ? dflt : v !== "0";
+  } catch { return dflt; }
 }
 function remember(key, open) {
   try { localStorage.setItem(STORE + key, open ? "1" : "0"); } catch { /* storage off: folds for this visit only */ }
@@ -98,8 +106,10 @@ function foldCard(card, page) {
   }
   // A card with no padding of its own has a heading row that pads itself and leaves
   // its bottom to the body; folded, that row is all there is, so it pads its bottom too.
-  card.classList.toggle("fold-flush", getComputedStyle(card).paddingBottom === "0px");
-  setOpen(card, remembered(card.dataset.foldKey), false);
+  // A fold-topic has no frame for the row to sit against, so it needs none.
+  card.classList.toggle("fold-flush",
+    card.classList.contains("card") && getComputedStyle(card).paddingBottom === "0px");
+  setOpen(card, remembered(card.dataset.foldKey, card.dataset.foldDefault !== "closed"), false);
 
   if (watched.has(card)) return;
   watched.add(card);
@@ -122,5 +132,5 @@ function foldCard(card, page) {
 // foldCards gives every topic under root its toggle and its remembered state. It is
 // safe to run again on the same cards: a card is enhanced once and only re-synced.
 export function foldCards(root, page) {
-  for (const card of root.querySelectorAll(".card:not(.no-fold)")) foldCard(card, page);
+  for (const card of root.querySelectorAll(".card:not(.no-fold), .fold-topic:not(.no-fold)")) foldCard(card, page);
 }

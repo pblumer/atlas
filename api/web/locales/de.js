@@ -400,6 +400,8 @@ export default {
   "constants.state.typeMismatch": "Typ abweichend",
   "constants.state.typeMismatchTitle": "Hier mit einem anderen Typ gehalten, als ein Prozess deklariert; Instanzen erhalten den hier gehaltenen Typ",
   "constants.required": "Von den deployten Prozessen verlangt",
+  "constants.count.one": "{n} Konstante",
+  "constants.count.other": "{n} Konstanten",
   "constants.th.name": "Name",
   "constants.th.type": "Typ",
   "constants.th.processes": "Prozesse",

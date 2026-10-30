@@ -1,7 +1,7 @@
 // End-to-end coverage for folding the cards of Operations › Workers (ADR-0505): each
 // card is headed by its <h2>, so it folds under it like every topic of the Console, and
-// the browser remembers each one. A card that was empty when the page opened — no
-// breaker held yet — folds too once a Refresh fills it.
+// the browser remembers each one; the job types start folded. A card that was empty
+// when the page opened — no breaker held yet — folds too once a Refresh fills it.
 import { test, expect } from "@playwright/test";
 
 const CARDS = ["wk-collisions", "wk-workers", "wk-gaps", "wk-supervised"];
@@ -64,6 +64,23 @@ test("every card of Operations › Workers folds under its heading, and stays fo
     await expect(page.locator(`#${id}`)).toHaveAttribute("data-folded", "");
     await expect(page.locator(`#${id} table`)).toBeHidden();
   }
+  expect(page.__errors).toEqual([]);
+});
+
+// The job types fold the same way, but start folded: the heading row says how many
+// are shown and how many nobody serves, which is the page's question.
+test("the job types start folded, with their heading row, and open like the others", async ({ page }) => {
+  await openWorkers(page);
+  const types = page.locator("#wk-types");
+  const toggle = types.locator("[data-fold-toggle]");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(types.locator("table")).toBeHidden();
+  await expect(types.locator(".wk-head")).toContainText("1 shown");
+  await toggle.click();
+  await expect(types.locator("table")).toBeVisible();
+  await page.click("#refresh");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(types.locator("table")).toBeVisible();
   expect(page.__errors).toEqual([]);
 });
 

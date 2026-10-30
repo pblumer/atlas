@@ -58,6 +58,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Changed
 
+- **Every page with two or more sections folds each of them.** The sections the
+  folding of [ADR-0505](docs/adr/0505-every-topic-folds.md) did not find now fold under
+  their headings and are remembered like the rest: every card of Operations › Workers
+  (the job types the same way as the others now, still folded at first), the
+  dashboard's notices and storage card, the lists of Connected
+  accounts and Approvals, both topics of Backup (under one page title now), the choices
+  of Display settings, both lists of an application's Constants tab, a business object's
+  sections, both sides of Planned against built, each type on Data › Instances, and the
+  sections below the catalogue list. A section drawn outside a card asks to fold with
+  class `fold-topic`.
+
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
   `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and
   then one a second per address: they allow 300 at once and 10 a second, so a server-side

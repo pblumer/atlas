@@ -3225,15 +3225,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
 .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-/* Every card headed by an <h2> folds the same way (fold.js): folded, it keeps its
-   heading row, the title and the card's own actions, and nothing else. */
-.card[data-folded] > :not(.fold-head) { display: none !important; }
+/* Every card headed by an <h2> folds the same way (fold.js), and so does a headed
+   section drawn outside a card that asks with .fold-topic: folded, it keeps its
+   heading row, the title and its own actions, and nothing else. */
+.card[data-folded] > :not(.fold-head),
+.fold-topic[data-folded] > :not(.fold-head) { display: none !important; }
 .card[data-folded] > .fold-head,
-.card[data-folded] > .fold-head h2 { margin-bottom: 0; }
+.card[data-folded] > .fold-head h2,
+.fold-topic[data-folded] > .fold-head,
+.fold-topic[data-folded] > .fold-head h2 { margin-bottom: 0; }
 .card.fold-flush[data-folded] > .fold-head { padding-bottom: 16px !important; }
 .sec-head h2 { margin: 0; }
-#pd-deployments .sec-head { margin: 22px 0 10px; }
-#pd-deployments .sec-head h2 { font-size: 15px; }
+#pd-deployments .sec-head, #pd-constants .sec-head { margin: 22px 0 10px; }
+#pd-deployments .sec-head h2, #pd-constants .sec-head h2 { font-size: 15px; }
 
 /* ---------- Tasks (Outlook-style inbox, ADR-0028) ---------- */
 .tasks-mode main { max-width: none; }
@@ -5148,16 +5152,10 @@ tr.wk-stale > td { background: var(--warn-soft); }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
 /* A card's heading is its <h2>, which is what folds it (fold.js). */
 .wk-head h2 { margin: 0; }
-/* The job-type table folds away, closed by default: an installation runs a handful of
-   types and the table lists every one it has ever seen, so the page opens on the
-   question rather than on rows of answer. What must survive the fold is the alarm —
-   hence .wk-unserved in the summary. */
-summary.wk-head { cursor: pointer; list-style: none; user-select: none; }
-summary.wk-head::-webkit-details-marker { display: none; }
-summary.wk-head:hover { background: var(--bg); }
-.wk-caret { display: inline-block; font-size: 10px; color: var(--muted); transition: transform .12s ease; }
-.wk-fold[open] > summary .wk-caret { transform: rotate(90deg); }
-.wk-fold:not([open]) > summary.wk-head { padding-bottom: 15px; }
+/* The job-type table starts folded: an installation runs a handful of types and the
+   table lists every one it has ever seen, so the page opens on the question rather
+   than on rows of answer. What must survive the fold is the alarm — hence
+   .wk-unserved in the heading row. */
 .wk-unserved { color: var(--danger); font-weight: 600; }
 /* Which process a job type belongs to. Without it a table of fifty types is fifty
    names with no way back to the model that needs them. */
@@ -7080,6 +7078,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
   margin-top: 18px; padding: 12px 16px; border: 1px solid var(--border);
   border-radius: 10px; background: var(--bg); font-size: 12.5px;
 }
+.md-excluded h2 { font-size: inherit; margin: 0 0 6px; }
 .md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
 .md-excluded li { margin: 4px 0; }
 
@@ -7299,6 +7298,8 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
 .im-unresolved { color: var(--muted); border: 1px solid var(--border); }
 .im-group-head .muted { margin-left: auto; font-size: 12px; }
+.im-group-head h2 { margin: 0; font-size: inherit; font-weight: inherit; display: flex; align-items: center; gap: 10px; }
+.card[data-folded] > .im-group-head { border-bottom: 0; }
 
 /* ---- The object diagram: the Data tab's second reading ---------------------
    (ADR-0230, slice 4)
