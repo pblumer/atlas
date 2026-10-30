@@ -18,10 +18,12 @@
 import { t } from "./i18n.js";
 
 let deps = null;
-// enabled is whether somebody is signed in. A mark belongs to an account, so with
-// nobody signed in — or with enforcement off, where there is nobody to be — the stars
-// and the menu are not drawn at all rather than drawn and refused.
-let enabled = false;
+// account is the id of whoever is signed in, empty with nobody. A mark belongs to an
+// account, so with nobody signed in — or with enforcement off, where there is nobody
+// to be — the stars and the menu are not drawn at all rather than drawn and refused.
+// It is the id and not a yes or no because everything below is that one account's: a
+// tab that signs out and somebody else signs in at must not keep the first list.
+let account = "";
 // marked is the set of "kind:id" the caller has starred, as the server last said.
 let marked = new Set();
 let last = { favourites: [], recent: [] };
@@ -45,22 +47,29 @@ export function installDiagramShortcuts({ api, esc, toast }) {
   document.addEventListener("click", onStarClick, true);
 }
 
-// setShortcutsEnabled is called on every navigation with whether somebody is signed
-// in. Turning on loads the record once; the rest of the time it is current from the
-// answers to the writes.
-export function setShortcutsEnabled(on) {
-  const was = enabled;
-  enabled = !!on;
+// setShortcutsAccount is called on every navigation, the login screen's included, with
+// the id of whoever is signed in or nothing. A new account loads its record once; the
+// rest of the time it is current from the answers to the writes. Any change of account
+// first drops what the last one's record put in memory and in the menu's markup: the
+// login screen keeps the top bar, and a sign-out must not leave the names of the
+// diagrams somebody marked and opened one click — or one look at the page — away.
+export function setShortcutsAccount(id) {
+  const next = id ? String(id) : "";
+  if (next === account) return;
+  account = next;
+  marked = new Set();
+  last = { favourites: [], recent: [] };
+  const menu = document.getElementById("shortcuts-menu");
+  if (menu) menu.innerHTML = "";
   const wrap = document.getElementById("shortcuts-dropdown");
-  if (wrap) wrap.hidden = !enabled;
-  if (enabled && !was) refresh();
-  if (!enabled) { marked = new Set(); last = { favourites: [], recent: [] }; }
+  if (wrap) wrap.hidden = !account;
+  if (account) refresh();
 }
 
 // starButton is the star a row draws beside a diagram's name. Empty when nobody is
 // signed in, so a list built before the state is known simply has no stars.
 export function starButton(kind, id) {
-  if (!enabled || !deps || !id) return "";
+  if (!account || !deps || !id) return "";
   const on = marked.has(keyOf(kind, id));
   const label = t(on ? "shortcuts.unmark" : "shortcuts.mark");
   return `<button type="button" class="dg-star${on ? " on" : ""}" data-dg-kind="${deps.esc(kind)}" ` +
@@ -72,7 +81,7 @@ export function starButton(kind, id) {
 // shows a diagram. Fire and forget: nothing waits on history, and a visit that is
 // refused (a diagram the caller cannot open) is simply not history.
 export function noteDiagramOpened(path) {
-  if (!enabled || !deps) return;
+  if (!account || !deps) return;
   const body = diagramOfRoute(path);
   if (!body) return;
   deps.api("POST", "/api/v1/diagram-shortcuts/recent", body).catch(() => {});
@@ -94,15 +103,18 @@ export function diagramOfRoute(path) {
 }
 
 async function refresh() {
-  if (!enabled || !deps) return;
+  if (!account || !deps) return;
+  const asked = account;
   try {
-    adopt(await deps.api("GET", "/api/v1/diagram-shortcuts"));
+    adopt(await deps.api("GET", "/api/v1/diagram-shortcuts"), asked);
   } catch { /* the menu keeps what it last knew */ }
 }
 
 // adopt takes the server's answer as the truth and repaints every star on screen and
-// the menu if it is open.
-function adopt(resp) {
+// the menu if it is open — unless the answer was asked for an account that has since
+// signed out, which a slow answer arriving after the sign-out would otherwise restore.
+function adopt(resp, asked) {
+  if (asked !== account) return;
   last = { favourites: (resp && resp.favourites) || [], recent: (resp && resp.recent) || [] };
   marked = new Set(last.favourites.map((f) => keyOf(f.kind, f.id)));
   document.querySelectorAll(".dg-star").forEach(paintStar);
@@ -131,9 +143,10 @@ async function onStarClick(e) {
   // refusal or another tab's change both land on screen the same way.
   if (on) marked.delete(keyOf(kind, id)); else marked.add(keyOf(kind, id));
   document.querySelectorAll(".dg-star").forEach(paintStar);
+  const asked = account;
   try {
     adopt(await deps.api(on ? "DELETE" : "PUT",
-      `/api/v1/diagram-shortcuts/favourites/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`));
+      `/api/v1/diagram-shortcuts/favourites/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`), asked);
   } catch (err) {
     await refresh();
     const msg = err && err.message ? err.message : String(err);
@@ -145,7 +158,7 @@ const KIND_CHIP = { process: "BPMN", decision: "DMN", infomodel: "UML", panorama
 
 function paintMenu() {
   const menu = document.getElementById("shortcuts-menu");
-  if (!menu || !deps) return;
+  if (!menu || !deps || !account) return;
   const { esc } = deps;
   const row = (d, withStar) => {
     const chip = `<span class="chip dg-chip">${KIND_CHIP[d.kind] || esc(d.kind)}</span>`;

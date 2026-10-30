@@ -79,7 +79,9 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   deployment key for a deployed version, and not at all for a route that opens nothing
   stored), every diagram row of an application's list — process, decision reference and
   decision draft — carries its star beside a working link, and with nobody signed in neither
-  the stars nor the menu are drawn.
+  the stars nor the menu are drawn. A sign-out in the tab hides the star on the login screen
+  and leaves none of the last person's diagrams in the menu's markup, and whoever signs in
+  next sees their own stars, not the last person's.
 - **`feel-assistant.spec.mjs`** ([ADR-0445](../docs/adr/0445-feel-assistant.md)):
   the **FEEL assistant** against a stubbed API — Ctrl+Shift+E opens and closes it from anywhere;
   a message sends the whole conversation, the model's earlier turn as the reply it came with and

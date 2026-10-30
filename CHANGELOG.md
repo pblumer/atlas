@@ -68,6 +68,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Signing out takes your favourite and recent diagrams with it.** After a sign-out in the
+  same tab, the star in the top bar stayed on the login screen and still opened the last
+  person's favourites and recently opened diagrams, by name — and whoever signed in next in
+  that tab saw that person's stars in the lists until the menu was opened. The login screen
+  now hides the star and clears the menu, and the list is kept per account, so a change of
+  account always starts from the new account's own record. The server never answered the
+  list without a session; what stayed behind was the browser's copy
+  (ADR-0460).
 - **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed

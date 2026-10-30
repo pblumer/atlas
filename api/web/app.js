@@ -62,7 +62,7 @@ import { secretShapeFor, checkSecretValue, secretHintHTML, secretValueFieldHTML 
 import { viewAIAccess } from "./aiaccess.js";
 // Favourite and recent diagrams (ADR-0460): the top-bar menu and the
 // star beside a diagram in the lists. Its own module for the reason aiaccess.js is.
-import { installDiagramShortcuts, setShortcutsEnabled, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
+import { installDiagramShortcuts, setShortcutsAccount, starButton, noteDiagramOpened } from "./diagram-shortcuts.js";
 import { renderKeyFeatures, paintKeyFeatures } from "./key-features.js";
 import { fmtDate, fmtDateTime } from "./datefmt.js";
 import { mockupsHTML } from "./mockups.js";
@@ -11828,6 +11828,9 @@ async function route() {
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     stopPresence(); // and nobody to be present: a logged-out tab reports nothing
+    // Nor anybody's favourites: the star stays in the top bar, and after a sign-out in
+    // this tab it would otherwise still hold the last person's list.
+    setShortcutsAccount("");
     updateAccount();
     return viewLogin();
   }
@@ -11838,7 +11841,7 @@ async function route() {
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
-  setShortcutsEnabled(!!AUTH.user);
+  setShortcutsAccount(AUTH.user && AUTH.user.id);
   noteDiagramOpened(path);
   updateAccount();
   window.scrollTo(0, 0);
