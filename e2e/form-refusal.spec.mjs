@@ -261,3 +261,79 @@ test("MFE0 320px phone: the real form-js validation names missing required field
   await expect(page.locator("#task-form .fjs-form")).toBeVisible();
   await expectNoDocumentOverflow(page);
 });
+
+// MFE0 / ADR-0514: schema-authored two-column layout. Form-js owns the
+// schema and its data, while the Tasks/Start hosts must adapt it for a phone.
+const TWO_COLUMN_FORM = {
+  schema: {
+    type: "default",
+    id: "kredit",
+    components: [
+      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 8 } },
+      { type: "textfield", key: "iban", label: "IBAN", validate: { required: true },
+        layout: { row: "Row_1", columns: 8 } },
+    ],
+  },
+};
+
+test("MFE0 two-column form-js task remains usable at 320px and keeps desktop layout", async ({ page }) => {
+  installMock(page, TWO_COLUMN_FORM);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+  const fields = page.locator("#task-form");
+  const first = fields.getByLabel("Vorname");
+  const second = fields.getByLabel("IBAN");
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
+
+  // Two fields in one schema-authored row must become vertically readable on
+  // a phone, and both input boxes must remain inside the visible screen.
+  const phoneFirst = await first.boundingBox();
+  const phoneSecond = await second.boundingBox();
+  expect(phoneSecond.y).toBeGreaterThanOrEqual(phoneFirst.y + phoneFirst.height - 1);
+  expect(phoneFirst.x).toBeGreaterThanOrEqual(0);
+  expect(phoneSecond.x).toBeGreaterThanOrEqual(0);
+  expect(phoneFirst.x + phoneFirst.width).toBeLessThanOrEqual(321);
+  expect(phoneSecond.x + phoneSecond.width).toBeLessThanOrEqual(321);
+  await expectNoDocumentOverflow(page);
+
+  await first.fill("Lena");
+  await second.fill("CH9300762011623852957");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  const wideFirst = await first.boundingBox();
+  const wideSecond = await second.boundingBox();
+  expect(Math.abs(wideFirst.y - wideSecond.y)).toBeLessThanOrEqual(2);
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+});
+
+test("MFE0 two-column Process Start fields stack on a phone without losing input", async ({ page }) => {
+  const form = TWO_COLUMN_FORM;
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path.endsWith("/api/v1/processes")) return route.fulfill({ json: [PROC] });
+    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: form });
+    return route.fulfill({ json: [] });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openStartForm(page);
+  const first = page.locator("#start-form").getByLabel("Vorname");
+  const second = page.locator("#start-form").getByLabel("IBAN");
+  const before = await first.boundingBox();
+  const after = await second.boundingBox();
+  expect(after.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
+  expect(after.x + after.width).toBeLessThanOrEqual(321);
+  await expectNoDocumentOverflow(page);
+
+  await first.fill("Lena");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(first).toHaveValue("Lena");
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(first).toHaveValue("Lena");
+});
