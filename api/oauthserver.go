@@ -335,18 +335,19 @@ func errorRedirect(redirectURI, code, state string) string {
 // (limits.TokenEndpointBurst, ADR-0510).
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	if !s.tokenRate.allow(httpapi.ClientIP(r)) {
-		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
+		refuseToken(w, r, "token", http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "malformed form body")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_request", "malformed form body")
 		return
 	}
 	client, ok := s.oauthClients.authenticate(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
 	if !ok {
 		// 401 with the OAuth error code, not the API's envelope: the caller here is a
 		// client library that parses this shape.
-		oauthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+		refuseToken(w, r, "token", http.StatusUnauthorized, "invalid_client", "client authentication failed",
+			slog.String("reason", s.clientFailure(r.PostFormValue("client_id"))))
 		return
 	}
 	switch r.PostFormValue("grant_type") {
@@ -355,7 +356,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	case "refresh_token":
 		s.refreshGrant(w, r, client)
 	default:
-		oauthError(w, http.StatusBadRequest, "unsupported_grant_type",
+		refuseToken(w, r, "token", http.StatusBadRequest, "unsupported_grant_type",
 			"only authorization_code and refresh_token are supported")
 	}
 }
@@ -364,25 +365,25 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, client oauthClient) {
 	rec, ok := s.oauthCodes.spend(r.PostFormValue("code"), time.Now())
 	if !ok {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "the code is unknown, spent or expired")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_grant", "the code is unknown, spent or expired")
 		return
 	}
 	// Every one of these was fixed when the person approved, and is re-checked here
 	// because the exchange arrives from a different party on a different connection.
 	if rec.clientID != client.ID {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "the code was issued to another client")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_grant", "the code was issued to another client")
 		return
 	}
 	if rec.redirectURI != r.PostFormValue("redirect_uri") {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the authorization")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_grant", "redirect_uri does not match the authorization")
 		return
 	}
 	if res := r.PostFormValue("resource"); res != "" && res != rec.resource {
-		oauthError(w, http.StatusBadRequest, "invalid_target", "resource does not match the authorization")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_target", "resource does not match the authorization")
 		return
 	}
 	if !verifyPKCE(rec.challenge, r.PostFormValue("code_verifier")) {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "code_verifier does not match the challenge")
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_grant", "code_verifier does not match the challenge")
 		return
 	}
 
@@ -408,7 +409,16 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, client oau
 func (s *Server) refreshGrant(w http.ResponseWriter, r *http.Request, client oauthClient) {
 	grant, ok := s.oauthGrants.matchRefresh(r.PostFormValue("refresh_token"))
 	if !ok || grant.ClientID != client.ID {
-		oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown or revoked")
+		// One answer for both, as before; the log tells them apart. An unknown token
+		// is one never issued, one already rotated away by its first use, or one whose
+		// grant was withdrawn — the hash of a spent token is not kept, so which of the
+		// three is not knowable here, and the grant listing is where to look next.
+		why := "the refresh token is unknown, rotated away or its grant withdrawn"
+		if ok {
+			why = "the refresh token belongs to another client's grant"
+		}
+		refuseToken(w, r, "token", http.StatusBadRequest, "invalid_grant", "the refresh token is unknown or revoked",
+			slog.String("reason", why))
 		return
 	}
 	s.issueTokens(w, r, grant, "refresh_token")
@@ -486,21 +496,22 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauth
 // own prefix says which kind it is, so a wrong hint changes nothing.
 func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	if !s.tokenRate.allow(httpapi.ClientIP(r)) {
-		oauthError(w, http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
+		refuseToken(w, r, "revoke", http.StatusTooManyRequests, "temporarily_unavailable", "too many requests")
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "malformed form body")
+		refuseToken(w, r, "revoke", http.StatusBadRequest, "invalid_request", "malformed form body")
 		return
 	}
 	client, ok := s.oauthClients.authenticate(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
 	if !ok {
-		oauthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+		refuseToken(w, r, "revoke", http.StatusUnauthorized, "invalid_client", "client authentication failed",
+			slog.String("reason", s.clientFailure(r.PostFormValue("client_id"))))
 		return
 	}
 	token := r.PostFormValue("token")
 	if token == "" {
-		oauthError(w, http.StatusBadRequest, "invalid_request", "token is required")
+		refuseToken(w, r, "revoke", http.StatusBadRequest, "invalid_request", "token is required")
 		return
 	}
 	if hash, ok := grantTokenHash(token); ok {
@@ -516,6 +527,80 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
+}
+
+// refuseToken answers a request to the token or revocation endpoint with the OAuth
+// error, and records the refusal as auth.oauth_denied (ADR-0197).
+//
+// Without the record, a client whose renewal is refused simply stops working, and
+// the only trace is on the client's side: the person sees "the connection has
+// expired" there, and nothing here says when, which client, or why. That is the
+// question the log exists to answer, and auth.oauth_denied is already the event for
+// it — the server refusing a request is the same "why did this not connect" as the
+// person declining (logging/events.go).
+//
+// Only what is safe to ship is recorded: the endpoint, the OAuth error, the reason,
+// the grant type asked for, and the client id when it has the shape of one this
+// server issues. Never a secret, a code, a verifier or a token — and the client id
+// only by that shape, because a client that put its secret into the wrong field
+// would otherwise have it written to the log. The form is read as already parsed and
+// never parsed here, so a throttled request costs no more than it did.
+func refuseToken(w http.ResponseWriter, r *http.Request, endpoint string, status int, code, describe string, attrs ...slog.Attr) {
+	rec := []slog.Attr{
+		slog.String("endpoint", endpoint),
+		slog.String("error", code),
+		slog.String("error_description", describe),
+	}
+	if id := r.PostForm.Get("client_id"); isIssuedClientID(id) {
+		rec = append(rec, slog.String("client_id", id))
+	}
+	if gt := r.PostForm.Get("grant_type"); gt != "" {
+		rec = append(rec, slog.String("grant_type", clipLogValue(gt)))
+	}
+	auditRefusal(r, logging.AuthOAuthDenied, "oauth: "+endpoint+" request refused", append(rec, attrs...)...)
+	oauthError(w, status, code, describe)
+}
+
+// clientFailure says, for the log only, why a client did not authenticate. The
+// answer on the wire stays the one invalid_client (authenticate keeps the two cases
+// indistinguishable), but an operator needs to know whether a client was removed —
+// deleted, or evicted from the self-registration table — or presents a wrong secret.
+func (s *Server) clientFailure(id string) string {
+	switch {
+	case strings.TrimSpace(id) == "":
+		return "no client_id"
+	case !isIssuedClientID(id):
+		return "not a client id this server issues"
+	}
+	if _, ok := s.oauthClients.lookup(id); !ok {
+		return "unknown client: never registered here, deleted, or evicted from the self-registration table"
+	}
+	return "wrong client secret"
+}
+
+// isIssuedClientID reports whether id has the shape of a client id this server
+// hands out (newID: sixteen lowercase hex digits). Anything else is withheld from
+// the log, so a credential sent in that field cannot reach it.
+func isIssuedClientID(id string) bool {
+	if len(id) != 16 {
+		return false
+	}
+	for _, c := range id {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// clipLogValue bounds a caller-supplied value before it becomes a log field, so a
+// request cannot make one line as large as its body.
+func clipLogValue(v string) string {
+	const max = 64
+	if len(v) <= max {
+		return v
+	}
+	return strings.ToValidUTF8(v[:max], "") + "…"
 }
 
 // oauthError writes the error shape RFC 6749 §5.2 defines, which is not the API's

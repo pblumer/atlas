@@ -121,3 +121,40 @@ func TestTheTokenThrottleIsConfigured(t *testing.T) {
 			srv.tokenRate.capacity, srv.tokenRate.refill)
 	}
 }
+
+// TestAThrottledTokenRequestIsAudited: a refusal from the spent bucket is recorded
+// like every other one (ADR-0197: a throttle whose refusals are invisible can be
+// neither tuned nor shown), and without reading the body it was refused before —
+// so the client id in it does not reach the record.
+func TestAThrottledTokenRequestIsAudited(t *testing.T) {
+	sink := captureWarnings(t)
+	srv := newServerForErrors(t)
+	srv.tokenRate = newRateLimiter(0, 0)
+	h := srv.Handler()
+	form := url.Values{"client_id": {"0123456789abcdef"}, "client_secret": {"nope"}, "grant_type": {"refresh_token"}}
+
+	for _, path := range []string{oauthTokenPath, oauthRevokePath} {
+		if status, _, _ := oauthPost(t, h, path, form); status != http.StatusTooManyRequests {
+			t.Fatalf("POST %s under a spent bucket = %d, want 429 — the premise of this test", path, status)
+		}
+	}
+	var found []map[string]any
+	for _, line := range strings.Split(sink.String(), "\n") {
+		var rec map[string]any
+		if json.Unmarshal([]byte(line), &rec) == nil && rec["event"] == "auth.oauth_denied" {
+			found = append(found, rec)
+		}
+	}
+	if len(found) != 2 {
+		t.Fatalf("want one auth.oauth_denied per throttled request, got %d\n%s", len(found), sink.String())
+	}
+	for i, endpoint := range []string{"token", "revoke"} {
+		rec := found[i]
+		if rec["endpoint"] != endpoint || rec["error"] != "temporarily_unavailable" || rec["level"] != "WARN" {
+			t.Errorf("record %d = %v, want a WARN temporarily_unavailable from %s", i, rec, endpoint)
+		}
+		if _, ok := rec["client_id"]; ok {
+			t.Errorf("record %d = %v: the throttled request's body was read", i, rec)
+		}
+	}
+}

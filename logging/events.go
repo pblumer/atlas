@@ -193,7 +193,10 @@ var (
 	// an audit of "who let that application in" is looking for. AuthOAuthDenied
 	// covers both halves of a refusal — the person declining, and the server
 	// refusing a request that never should have been made — because for an operator
-	// reading a log they are the same question: why did this not connect.
+	// reading a log they are the same question: why did this not connect. The token
+	// and revocation endpoints say it too, for every client they refuse, with the
+	// endpoint, the OAuth error and a reason the answer on the wire withholds: a
+	// renewal refused there is how a connection "expires" on the client's side.
 	AuthOAuthClientRegistered = newEvent("auth.oauth_client_registered")
 	// AuthOAuthClientSelfRegistered is a client that registered *itself* (RFC 7591),
 	// which only happens where an operator opened that. Kept apart from the admin

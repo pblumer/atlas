@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A refused OAuth token request is recorded.** The token endpoint and the revocation
+  endpoint write `auth.oauth_denied` (WARN) for every request they refuse — a wrong or
+  unknown client, a refresh token that is unknown, rotated away or another client's, a
+  spent code, a grant type not offered, a malformed request and a spent throttle — with
+  `endpoint` (`token` or `revoke`), the OAuth `error` and `error_description`, the
+  `grant_type` and the `client_id`, and a `reason` the answer on the wire withholds:
+  whether the client is unknown here (never registered, deleted, or evicted from the
+  self-registration table) or presented a wrong secret. A client whose renewal is refused
+  shows its person that the connection has expired; until now nothing on this side said
+  when, which client, or why. The client id is recorded only in the shape this server
+  issues, so a secret sent in that field never reaches the log, and no secret, code,
+  verifier or token is recorded at all.
 - **A list's filter box empties with one click.** A column filter box with a term in it
   shows a small cross at its trailing edge that clears the term and gives the rows back,
   keeping the caret in the box for the next one; Escape does the same from the keyboard,
