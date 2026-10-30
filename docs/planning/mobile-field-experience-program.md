@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). All MFE slices are planned, not delivered.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 is active as a source/architecture audit; MFE1–MFE6 remain planned. No MFE slice is delivered.
 
 ## Outcome
 
@@ -28,6 +28,12 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 **MFE slice ownership:** MFE0 validates the QR/link threat model and device matrix; **MFE1** owns the authenticated mobile task detail, accessible explicit confirmation and deep-link navigation; **MFE4** owns QR/barcode entry and optional field evidence; **MFE5** adds safe offline draft/sync and duplicate/unknown-result reconciliation. Mail/PDF composition is a Worker-side integration dependency, not a new engine execution path. MFE2/MFE3 incident alerting remain separate priorities.
 
 **Acceptance ideas:** Test a QR printed in a PDF and an email link on real phone/tablet/foldable devices; authorized versus wrong-user access; expired/revoked/reused links; cancelled/already-completed work orders; duplicate submissions and a lost response after fsync; deliberate refusal or discrepancy; evidence upload/restart; browser close/reopen and offline reconnect once MFE5 exists. Verify live/replay equivalence for any new persisted acknowledgement fact, and ensure no external mail is sent before the originating event is durable.
+
+## MFE0 source audit and proposal
+
+- [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — code/ADR audit only; physical-device checks remain open.
+- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Proposed**, mobile Tasks/Start/Incidents presentation boundary; not approved and not implemented.
+- MFE0 is **active**, coordinated by pblumer. Programme integration remains gated on architectural review and real-device validation.
 
 ## Existing baseline and gaps
 
