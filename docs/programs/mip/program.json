@@ -1,0 +1,73 @@
+{
+  "id": "mip",
+  "name": "Model independence and provenance",
+  "summary": "Make atlas-owned BPMN authoring the future default while preserving versioned Zeebe import/reload compatibility, replacing Camunda-specific DMN authoring only with test evidence, and completing third-party provenance and licence gates.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-30",
+  "plan": "../../planning/model-independence-and-provenance-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
+  "next_action": "Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code.",
+  "slices": [
+    {
+      "id": "MIP0",
+      "title": "Provenance evidence and architecture gate",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "Initial evidence register and draft decision in review; independent upstream comparisons, licence/SBOM checks and ADR acceptance are still outstanding."
+    },
+    {
+      "id": "MIP1",
+      "title": "Native BPMN authoring with legacy round-trip",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MIP0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Build a reviewed atlas namespace descriptor and test new default authoring alongside lossless Zeebe import/export; no silent conversion."
+    },
+    {
+      "id": "MIP2",
+      "title": "Compiler compatibility and restart recovery",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MIP1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality."
+    },
+    {
+      "id": "MIP3",
+      "title": "DMN editor independence",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MIP0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution."
+    },
+    {
+      "id": "MIP4",
+      "title": "Release provenance and compatibility sign-off",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MIP1",
+        "MIP2",
+        "MIP3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Complete upstream/fixture audit, copyright notices, vendor bundle rebuild evidence, SBOM, watermark and compatibility matrix; maintain separate legal trademark gate."
+    }
+  ]
+}
