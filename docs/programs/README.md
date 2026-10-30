@@ -73,7 +73,7 @@ Mobile-first BPMN task execution and process initiation, field evidence, operato
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **MFE0** — Architecture and real-device baseline | planned | unassigned | — | — | Audit actual device/form/incident UX; review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation. |
+| **MFE0** — Architecture and real-device baseline | planned | unassigned | — | [PR #1448](https://github.com/pblumer/atlas/pull/1448) | Draft PR #1448 establishes the programme register only. Audit real devices and review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation; no architecture decision is yet approved. |
 | **MFE1** — Mobile Tasks and Process Start | planned | unassigned | MFE0 | — | Ship a safe, accessible mobile task/start journey and validated safety-inspection example using existing form-js and HTTP APIs. |
 | **MFE2** — Mobile incident triage | planned | unassigned | MFE0 | — | Operator-scoped cause-grouped incident inbox, deep-link triage, repair forms and authorized retry/resolve; no invented acknowledgement semantics. |
 | **MFE3** — Incident alerting and escalation | planned | unassigned | MFE2 | — | Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine. |
