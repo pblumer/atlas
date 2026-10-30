@@ -951,3 +951,19 @@ The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
 The `e2e` job in `.github/workflows/ci.yml` runs this suite on every push and PR, in
 parallel with the Go `check` job.
+
+## MFE0 mobile browser matrix
+
+`tasks-responsive.spec.mjs` now includes a Chromium regression matrix for
+Tasks and Process Start at **320, 360, 390, 600, 768, 1024 and 1280 CSS px**,
+including initial list, selected task/start detail, the ADR-0417 860px pane
+contract and horizontal page overflow. One additional scenario resizes a
+selected Tasks detail from portrait (390×844) to landscape (844×390) and
+back. The same test mocks the API but renders the production web assets.
+
+These tests **do not** validate complex multi-column form-js schemas, text zoom,
+iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
+focus or foldable hinges. They are a *browser regression baseline*, not
+evidence that MFE0's real-device exit gate is complete. Record the remaining
+checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
+and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
