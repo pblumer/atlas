@@ -968,8 +968,15 @@ ADR-0417 breakpoint, and preservation of a Process Start form across
 portrait/landscape resizing. They also assert the document does not overflow
 horizontally at the measured small sizes.
 
-These tests **do not** validate complex multi-column form-js schemas, text zoom,
-iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
+The two-column form-js regression exercises a schema-authored shared row
+in **Task and Process Start**, and checks that its input fields stack at 320px,
+remain visible without document overflow, retain typed values through a
+320px → 1024px → 320px resize, and recover their side-by-side layout on desktop.
+The fix lives only in Tasks/Start CSS and leaves the original schema unchanged.
+These tests run against mocked HTTP and the real vendored form-js renderer.
+
+These tests **do not** verify every complex form-js component, 200% real browser
+zoom, iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
 evidence that MFE0's real-device exit gate is complete. Record the remaining
 checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
