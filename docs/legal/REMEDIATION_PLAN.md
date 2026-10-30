@@ -2,6 +2,8 @@
 
 This plan implements the controls identified in [IP_AND_LICENSE_REVIEW.md](IP_AND_LICENSE_REVIEW.md).
 
+**2026-10-30 update:** Original project code is currently published under `AGPL-3.0-only` (`LICENSE`, `README.md`); earlier Apache-2.0 language is superseded. An [initial provenance register](PROVENANCE_AUDIT.md) now exists, but the upstream comparisons and release sign-off remain open.
+
 ## P0 — Must be complete before public or commercial release
 
 ### 1. Rename and trade-mark clearance
@@ -40,7 +42,7 @@ For every affected subsystem:
 - [ ] compare against the relevant upstream revision and licence;
 - [ ] classify as independent, standards/interoperability-driven, compatibly derived, uncertain, or incompatible;
 - [ ] rewrite, remove, relicense or obtain permission for uncertain/incompatible material;
-- [ ] record conclusions in `docs/legal/PROVENANCE_AUDIT.md`;
+- [ ] complete the **initial, non-final** `docs/legal/PROVENANCE_AUDIT.md` with independently checked upstream revisions, evidence and reviewer decisions;
 - [ ] require contributors to disclose copied, adapted, translated or AI-generated third-party material.
 
 **Acceptance:** no item remains classified as uncertain or incompatibly derived.
@@ -70,7 +72,7 @@ For every affected subsystem:
 ### 6. Clarify project licensing
 
 - [ ] Remove provisional licence wording from README.
-- [ ] State that original project code is Apache-2.0 unless a file says otherwise.
+- [ ] State that original project code is AGPL-3.0-only unless a file says otherwise, and check compatibility with redistributed third-party components.
 - [ ] State that third-party components retain their own licences.
 - [ ] Align copyright wording, source headers and release metadata.
 - [ ] Keep DCO sign-off and add provenance disclosure to contribution guidance.
@@ -99,7 +101,7 @@ For every affected subsystem:
 - Add this review and plan.
 - Add `TRADEMARKS.md` and `THIRD_PARTY_NOTICES.md`.
 - Add temporary-name/release-gate wording to README.
-- Clarify Apache-2.0 wording and contribution provenance requirements.
+- Align AGPL-3.0-only wording with contribution and third-party provenance requirements.
 
 ### Phase 1 — Evidence
 
