@@ -83,6 +83,6 @@ test("an example already filed in another application is not silently moved", as
   await page.goto("/handbuch.html#rezepte");
   await page.locator("#rz-script-list .rz-open").click();
   await expect(page.locator("#rz-script-list .rz-status")).toHaveClass(/err/);
-  await expect(page.locator("#rz-script-list .rz-status")).toContainText("Application");
+  await expect(page.locator("#rz-script-list .rz-status")).toContainText(/another application/i);
   expect(opened(calls)).toHaveLength(0);
 });
