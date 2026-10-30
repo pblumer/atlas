@@ -1,4 +1,4 @@
-# ADR-DRAFT: Native atlas authoring with versioned vendor-format compatibility
+# ADR-0513: Native atlas authoring with versioned vendor-format compatibility
 
 - **Status:** Proposed
 - **Implementation:** Not started

@@ -30,7 +30,7 @@ The current product name **Atlas** is treated as a temporary development name an
 - BPMN and DMN names are used only to identify the OMG standards implemented or consumed.
 - Selected `zeebe:` XML extensions are intentionally supported for file-format interoperability. This does not imply Camunda affiliation, certification or full feature equivalence.
 - bpmn.io software is intentionally embedded to provide modelling and form functionality, subject to its licence and watermark conditions.
-- New project-owned XML extensions should use the existing project-controlled `atlas:` namespace where appropriate. Changing the default authoring dialect is **proposed, not implemented**; see [ADR-draft-native-model-dialect-and-vendor-compatibility](../adr/draft-native-model-dialect-and-vendor-compatibility.md). A later project rename would need a separate namespace migration.
+- New project-owned XML extensions should use the existing project-controlled `atlas:` namespace where appropriate. Changing the default authoring dialect is **proposed, not implemented**; see [ADR-0513](../adr/0513-native-model-dialect-and-vendor-compatibility.md). A later project rename would need a separate namespace migration.
 
 ## Release blockers
 

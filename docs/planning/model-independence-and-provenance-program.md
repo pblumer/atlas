@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Roadmap Milestone 6 (interoperability), Milestone A (Modeler), Milestone 1 (compiler); legal/IP release-readiness gate.  
 **Owner:** pblumer, repository maintainer (review/merge responsibility).  
-**Architecture authority:** [ADR-0176](../adr/0176-standards-boundary-and-runtime-contract.md) (Accepted/Landed); [ADR-draft-native-model-dialect-and-vendor-compatibility](../adr/draft-native-model-dialect-and-vendor-compatibility.md) (Proposed/Not started).  
+**Architecture authority:** [ADR-0176](../adr/0176-standards-boundary-and-runtime-contract.md) (Accepted/Landed); [ADR-0513](../adr/0513-native-model-dialect-and-vendor-compatibility.md) (Proposed/Not started).  
 **Operational status:** [programme manifest](../programs/mip/program.json). The technical migration is not approved or implemented by this plan.
 
 ## Intended outcome
@@ -85,7 +85,7 @@ This is a **compatibility and independence** programme, not a promise to remove 
 ## Immediate next action and explicit exclusions
 
 1. Review the [initial evidence register](../legal/PROVENANCE_AUDIT.md) and complete its upstream comparisons; prioritise shipped JavaScript bundles, moddle descriptors, copied fixtures and compiler history.
-2. Accept, revise or reject [ADR-draft-native-model-dialect-and-vendor-compatibility](../adr/draft-native-model-dialect-and-vendor-compatibility.md).
+2. Accept, revise or reject [ADR-0513](../adr/0513-native-model-dialect-and-vendor-compatibility.md).
 3. Only after these gates, start the first vertical TDD slice in MIP1.
 
 **Not part of MIP0:** no compiler or Modeler behaviour changes; no renaming of the Go module, product, third-party software, public API or deployed BPMN; no legal clearance claim.

@@ -48,5 +48,5 @@ The original atlas source and third-party software have different licensing obli
 
 - [IP and licence review](IP_AND_LICENSE_REVIEW.md)
 - [Remediation plan](REMEDIATION_PLAN.md)
-- [Native dialect decision proposal](../adr/draft-native-model-dialect-and-vendor-compatibility.md)
+- [Native dialect decision proposal](../adr/0513-native-model-dialect-and-vendor-compatibility.md)
 - [Model independence programme](../planning/model-independence-and-provenance-program.md)
