@@ -31,7 +31,10 @@ func TestTheOrdersTableResolvesWhoAnOrderIsFor(t *testing.T) {
 	}
 	// Resolved from the directory, and from the account records behind it — not
 	// from anything the order carries, which is the half ADR-0314 forbids.
-	body := webRegion(t, src, "async function load(", "\n}")
+	if load := webRegion(t, src, "async function load(", "\n}"); !strings.Contains(load, "loadDirectory()") {
+		t.Error("the load no longer reads the directory through loadDirectory")
+	}
+	body := webRegion(t, src, "async function loadDirectory(", "\n}")
 	if !strings.Contains(body, "/api/v1/principals") {
 		t.Error("nothing reads the directory, so the names have no source")
 	}
@@ -50,7 +53,9 @@ func TestTheOrdersTableResolvesWhoAnOrderIsFor(t *testing.T) {
 // apart, and the load reads the directory once for both.
 func TestTheDirectoryAndThePickerAreNotTheSameField(t *testing.T) {
 	src := readWeb(t, "shop.js")
-	load := webRegion(t, src, "async function load(", "\n}")
+	// The load reads the directory in loadDirectory; neither writes the picker's field.
+	load := webRegion(t, src, "async function load(", "\n}") +
+		webRegion(t, src, "async function loadDirectory(", "\n}")
 	if strings.Contains(load, "state.people") {
 		t.Error("the load writes the recipient picker's field, which loadWhoIAm " +
 			"overwrites with an array straight afterwards")

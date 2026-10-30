@@ -22,6 +22,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
+    'portal.loading': 'Shop wird geladen …',
     'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
     'portal.none.hint': 'Wenden Sie sich an die Stelle, die Ihren Zugang eingerichtet hat.',
     'portal.empty': 'Dieser Katalog enthält zurzeit nichts Bestellbares.',
@@ -211,6 +212,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
+    'portal.loading': 'Loading the shop …',
     'portal.none': 'No catalogue is assigned to you.',
     'portal.none.hint': 'Ask whoever set up your access.',
     'portal.empty': 'This catalogue currently offers nothing.',
@@ -398,6 +400,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
+    'portal.loading': 'Chargement de la boutique …',
     'portal.none': 'Aucun catalogue ne vous est attribué.',
     'portal.none.hint': 'Adressez-vous au service qui a créé votre accès.',
     'portal.empty': 'Ce catalogue ne propose actuellement rien.',
@@ -584,6 +587,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
+    'portal.loading': 'Caricamento del negozio …',
     'portal.none': 'Non le è assegnato alcun catalogo.',
     'portal.none.hint': 'Si rivolga al servizio che ha creato il suo accesso.',
     'portal.empty': 'Questo catalogo al momento non offre nulla.',
@@ -1121,6 +1125,11 @@ const state = {
   // the one whose form is open, and taskError what answering it last said.
   tasks: [],
   tasksTruncated: false,
+  // loaded says the first load has finished. Until it has, nothing on the page is
+  // known — not the catalogue, not what this person holds — and a screen that drew
+  // its "none" there would say "no catalogue is assigned to you" for the seconds the
+  // server takes to answer.
+  loaded: false,
   taskOpen: '',
   taskError: '',
   catalog: null,
@@ -1637,6 +1646,7 @@ async function readMe() {
 // page that keeps presenting a catalogue as yours after establishing that you are
 // nobody is a page saying two things at once.
 function forgetTheReader() {
+  state.loaded = false;
   state.catalog = null;
   state.release = null;
   state.orders = [];
@@ -1666,6 +1676,78 @@ async function loadSignInOptions() {
   } catch { /* registration off or unreachable — the line stays hidden */ }
 }
 
+// loadCatalogue reads the catalogue assigned to this person and its newest release.
+async function loadCatalogue() {
+  let catalog = null;
+  try {
+    catalog = await api('/api/v1/shop/catalog');
+  } catch (e) {
+    // 404 here is the ordinary "you are the audience for nothing" answer, not a
+    // failure: the page says so rather than showing an error. Anything else is a
+    // failure, and is said as one — read as "none assigned", a server that could
+    // not answer told people they had no catalogue.
+    if (!e || e.status !== 404) throw e;
+  }
+  state.catalog = catalog;
+  applyTheme(state.catalog);
+  // The catalogue decides which languages there are to choose between, so the
+  // choice is settled onto one of them the moment it is known — before anything
+  // is drawn, or the first paint would be in a language the switch cannot show as
+  // chosen.
+  settleLocale();
+  state.release = null;
+  if (state.catalog) {
+    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
+    state.release = releases && releases.length ? releases[0] : null;
+  }
+}
+
+// loadOrdersAndTasks reads this person's orders and the open tasks on orders at once,
+// then merges the tasks' orders into the list.
+async function loadOrdersAndTasks() {
+  const [orders, tasks] = await Promise.all([api('/api/v1/orders'), fetchTasks()]);
+  state.orders = orders;
+  mergeTasks(tasks);
+}
+
+// loadHeld reads what this person holds, and loadFavourites what they have marked.
+// Both are facts about an account, and with enforcement off there is no account —
+// the server says so rather than inventing an empty answer, which is right of the
+// server and must not take the page down with it. An unreadable per-person list is
+// a list missing, not a catalogue missing (ADR-0377).
+async function loadHeld() {
+  let held = new Map();
+  try {
+    const inv = await api('/api/v1/inventory');
+    held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
+  } catch { /* nobody holds anything when there is nobody */ }
+  state.held = held;
+}
+
+async function loadFavourites() {
+  let favourites = new Set();
+  try {
+    const favs = await api('/api/v1/shop/favourites');
+    favourites = new Set((favs && favs.itemIds) || []);
+  } catch { /* and nobody has marked anything */ }
+  state.favourites = favourites;
+}
+
+// loadDirectory reads the directory, for the columns that show who an order is for.
+// Any authenticated caller may read it (ADR-0073), and a reader who is nobody cannot
+// — so a failure leaves the map empty and every row falls back to the id, which is
+// what those rows showed before.
+async function loadDirectory() {
+  try {
+    state.principals = (await api('/api/v1/principals')) || [];
+    state.directory = new Map(state.principals.map((p) => [p.id, p.name]));
+  } catch {
+    // No directory, no names — the ids still say who.
+    state.principals = [];
+    state.directory = new Map();
+  }
+}
+
 async function load() {
   state.error = '';
   // First, because everything below needs a session: a load that read the
@@ -1677,54 +1759,21 @@ async function load() {
     render();
     return;
   }
-  try {
-    state.catalog = await api('/api/v1/shop/catalog');
-  } catch {
-    // 404 here is the ordinary "you are the audience for nothing" answer, not a
-    // failure: the page says so rather than showing an error.
-    state.catalog = null;
-  }
-  applyTheme(state.catalog);
-  // The catalogue decides which languages there are to choose between, so the
-  // choice is settled onto one of them the moment it is known — before anything
-  // is drawn, or the first paint would be in a language the switch cannot show as
-  // chosen.
-  settleLocale();
-  if (state.catalog) {
-    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
-    state.release = releases && releases.length ? releases[0] : null;
-  }
-  state.orders = await api('/api/v1/orders');
-  await loadTasks();
-  await loadLineActions();
-  // What one person holds, and what they have marked. Both are facts about an
-  // account, and with enforcement off there is no account — the server says so
-  // rather than inventing an empty answer, which is right of the server and must
-  // not take the page down with it. An unreadable per-person list is a list
-  // missing, not a catalogue missing (ADR-0377).
-  state.held = new Map();
-  state.favourites = new Set();
-  try {
-    const inv = await api('/api/v1/inventory');
-    state.held = new Map(((inv && inv.items) || []).map((i) => [i.itemId, i.since]));
-  } catch { /* nobody holds anything when there is nobody */ }
-  try {
-    const favs = await api('/api/v1/shop/favourites');
-    state.favourites = new Set((favs && favs.itemIds) || []);
-  } catch { /* and nobody has marked anything */ }
-  // The directory, for the columns that show who an order is for. Any
-  // authenticated caller may read it (ADR-0073), and a
-  // reader who is nobody cannot — so a failure leaves the map empty and every row
-  // falls back to the id, which is what those rows showed before.
-  try {
-    state.principals = (await api('/api/v1/principals')) || [];
-    state.directory = new Map(state.principals.map((p) => [p.id, p.name]));
-  } catch {
-    // No directory, no names — the ids still say who.
-    state.principals = [];
-    state.directory = new Map();
-  }
+  // Two chains and three single reads, at once. Only a chain is ordered inside:
+  // the releases are read under the catalogue's id, and a position's actions are
+  // asked of the order list the open tasks have been merged into. Everything else
+  // is independent, and read one after another the answers' times added up to the
+  // seconds the shop said it was loading. A failure still fails the load, as it
+  // did when the reads were in turn.
+  await Promise.all([
+    loadCatalogue(),
+    loadOrdersAndTasks().then(loadLineActions),
+    loadHeld(),
+    loadFavourites(),
+    loadDirectory(),
+  ]);
   loadWhoIAm();
+  state.loaded = true;
   render();
 }
 
@@ -3747,22 +3796,26 @@ function actionSentNote(order, line) {
 // approval rule where the task is an approval, which is how an orderer knows it),
 // and whether this reader may answer (the task route's own gate). The page draws.
 
-// loadTasks reads the tasks, and the orders the reader holds a task in, which are
-// listed beside the reader's own. A failure leaves the orders as they were: a
-// missing task list is a list missing, not an order missing.
-async function loadTasks() {
-  state.tasks = [];
-  state.tasksTruncated = false;
+// fetchTasks reads the tasks, and the orders the reader holds a task in, without
+// touching the order list, so it can run beside the read of the orders; mergeTasks
+// lists those orders beside the reader's own once both are in. A failure leaves the
+// orders as they were: a missing task list is a list missing, not an order missing.
+async function fetchTasks() {
   try {
-    const got = await api('/api/v1/shop/tasks');
-    state.tasks = (got && got.tasks) || [];
-    state.tasksTruncated = !!(got && got.truncated);
-    const own = new Set(state.orders.map((o) => o.id));
-    for (const o of (got && got.orders) || []) {
-      if (!own.has(o.id)) state.orders.push({ ...o, held: true });
-    }
-    state.orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  } catch { /* no task list; the orders still stand */ }
+    return await api('/api/v1/shop/tasks');
+  } catch {
+    return null; // no task list; the orders still stand
+  }
+}
+
+function mergeTasks(got) {
+  state.tasks = (got && got.tasks) || [];
+  state.tasksTruncated = !!(got && got.truncated);
+  const own = new Set(state.orders.map((o) => o.id));
+  for (const o of (got && got.orders) || []) {
+    if (!own.has(o.id)) state.orders.push({ ...o, held: true });
+  }
+  state.orders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
 // tasksOf are the open tasks of one position.
@@ -4572,7 +4625,16 @@ function renderActions() {
       : el('span', { class: 'muted', title: t('noid.hint') }, t('noid.title')));
 }
 
+// renderLoading stands where a screen will be until the first load has finished. With
+// a failure it stays empty: the error above says what happened and offers the retry.
+function renderLoading() {
+  if (state.error) return el('div', { class: 'empty' });
+  return el('div', { class: 'empty', role: 'status', 'aria-live': 'polite' },
+    el('p', {}, t('portal.loading')));
+}
+
 function currentView() {
+  if (!state.loaded) return renderLoading();
   if (state.view === 'orders') return renderOrders();
   if (state.view === 'services') return renderServices();
   return state.inBasket ? renderBasket() : renderCatalogue();

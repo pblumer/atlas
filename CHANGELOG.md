@@ -14,6 +14,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A list's filter box empties with one click.** A column filter box with a term in it
+  shows a small cross at its trailing edge that clears the term and gives the rows back,
+  keeping the caret in the box for the next one; Escape does the same from the keyboard,
+  and only on a box that has a term, so a dialog around the list still closes on the
+  next press. An empty box shows no cross, so a visible one also marks the column that
+  is filtering.
 - **A form field takes its options from a decision.** A select, radio group, checklist or
   tag list can name a deployed decision — typically a list its owners keep in the decision
   editor — under Options source ▸ Type ▸ Decision (DMN), and shows what the newest version
@@ -67,10 +73,28 @@ _Changed_ / _Removed_ for each version.
   creating that application on first use. An existing ungrouped draft is filed there;
   a draft already in another application is not silently moved. Installing a full
   example application and running a recipe remain separate actions.
+- **The shop loads in about half the time.** After the sign-in check it read the
+  catalogue, its release, the orders, the open tasks, the positions' actions, the
+  inventory, the favourites and the directory one after another, so their answers'
+  times added up. Only two of those depend on another — the release on the catalogue,
+  the actions on the orders and tasks — and the rest are now read at once. With every
+  answer taking 300 ms, the catalogue appears after about 1.4 s instead of 2.9 s.
+- **The shop says it is loading, not that no catalogue is assigned.** The first paint
+  came before the catalogue was known, and an unknown catalogue read as none, so the
+  shop said "No catalogue is assigned to you" for the seconds the server took to
+  answer. It now says "Loading the shop …" until its first load has finished, on every
+  screen. "No catalogue is assigned" appears only when the server answers so (404); a
+  catalogue that cannot be read is reported as a failure with *Try again*, where it
+  too used to read as none assigned.
 - **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed
   there went nowhere. The tab looks the decision up again when it is pressed.
+- **A decision table's rules are one line tall again.** Every rule without an annotation —
+  nearly every rule — was 98 pixels tall for a single line of text, because the Console's
+  "nothing here yet" placeholder styling reached the empty annotation cell, and its table
+  padding reached the rule number. Both are held off the decision table now, so a rule is
+  as tall as its longest entry, as dmn-js draws it.
 - **Somebody who signs in only through single sign-on can approve an application.** The
   OAuth consent page offered a password form and nothing else, and a federated sign-in
   could only come back to the Console or the portal. The page now offers the identity
