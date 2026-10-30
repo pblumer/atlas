@@ -968,6 +968,14 @@ ADR-0417 breakpoint, and preservation of a Process Start form across
 portrait/landscape resizing. They also assert the document does not overflow
 horizontally at the measured small sizes.
 
+Further MFE0 regressions exercise a grouped, several-field form-js schema
+(with a required text field, select, date field and a long-label text area)
+inside the actual Tasks and Process Start screens at narrow phone widths.
+The checks cover visible, labelled controls, required-field refusal without
+an outgoing completion command, no document overflow, and preservation of
+select/text values across phone-to-tablet resizing. This covers a **grouped**
+layout, not a proof that any form-js multi-column renderer fits small screens.
+
 These tests **do not** validate complex multi-column form-js schemas, text zoom,
 iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
