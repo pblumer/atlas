@@ -1,6 +1,6 @@
 # MFE0: Repository and device-contract baseline
 
-**Status:** Repository/code audit completed 2026-10-30; browser and physical-device measurements **not executed**.  
+**Status:** Repository/code audit completed 2026-10-30; automated Chromium mobile regression tests merged and green in PRs #1453/#1454. Physical-device measurements **not executed** as part of this baseline.  
 **Programme:** [Mobile & Field Experience](mobile-field-experience-program.md), slice MFE0.  
 **Architecture decision:** [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) (Accepted 2026-10-30; implementation Not started; hardware validation still open).
 
@@ -32,6 +32,9 @@
 5. **MFE5 — Interrupted work:** Offline local draft; photo upload pending; reconnection with changed task assignment; timeout after server fsync; duplicate manual resend. The UI must never turn an unknown result into a success.
 
 ## Browser/device acceptance matrix
+
+**Execution protocol:** [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md), with case IDs HW-01 to HW-12, reproducible evidence headers and privacy controls. Chromium PR #1453 tests viewport geometry, and PR #1454 tests form-js validation/input continuity. Neither replaces real iOS/Android/assistive-technology evidence.
+
 
 | Device class | Viewport or environment | Required examination |
 | --- | --- | --- |
@@ -90,9 +93,4 @@ completion protocol require explicit policy and ADR review.
 
 ## First executable follow-up
 
-After architecture acceptance, implement **MFE1 Task/Start mobile navigation** as one
-small vertical TDD slice on the existing API/UI: tests for 320/390px and tablet
-visibility, role-independent Tasks/Start entry, no overflow, valid and refused
-submissions, and stable navigation across orientation changes. In parallel,
-prepare MFE2's **read-only, cause-first incident view** using existing
-`/api/v1/incidents/summary`; do not yet implement alarm acknowledgement.
+MFE0 remains active until the [hardware acceptance runbook](mfe0-device-validation-runbook.md) has actual evidence and issue [#1451](https://github.com/pblumer/atlas/issues/1451) is reviewed. The scoped next vertical slices are [MFE1 mobile Tasks/Start #1456](https://github.com/pblumer/atlas/issues/1456) and [MFE2 read-only incident triage #1457](https://github.com/pblumer/atlas/issues/1457). They are **planned** pending device/handoff evidence and owner assignment. Keep incident-alarm acknowledgement out of this work (MFE3 requires a separate ADR).
