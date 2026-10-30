@@ -2,24 +2,24 @@
   "id": "mfe",
   "name": "Mobile & Field Experience",
   "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
-  "status": "planned",
+  "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Programme owner pblumer to review the MFE0 device/security baseline and incident alerting architecture, then appoint slice coordinators and select the first executable mobile Tasks/Start slice.",
+  "next_action": "Review proposed ADR-0514 and MFE0 source audit; run the real-device validation matrix; decide separate incident-alarm acknowledgement and offline completion ADR boundaries before authorizing MFE1/MFE2 implementation.",
   "slices": [
     {
       "id": "MFE0",
       "title": "Architecture and real-device baseline",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [],
       "issues": [],
       "prs": [
         1448
       ],
-      "note": "Draft PR #1448 establishes the programme register only. Audit real devices and review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation; no architecture decision is yet approved."
+      "note": "ADR-0514 Proposed and MFE0 source/device baseline audited in the current planning PR; real iOS/Android/foldable tests and architectural acceptance remain open. PR #1448 merged the programme registration, not MFE0."
     },
     {
       "id": "MFE1",
