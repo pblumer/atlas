@@ -172,3 +172,85 @@ test("a wide screen keeps the inbox's three panes and no back button", async ({ 
   expect(detail.x).toBeGreaterThanOrEqual(list.x + list.width - 1);
   await expect(page.locator(".rct-table")).toHaveCount(0);
 });
+
+// MFE0 / ADR-0514: widths in the accepted mobile contract. This is a Chromium
+// geometry regression, NOT evidence for hardware keyboard, Safari, Android,
+// form-js multi-column schemas or safe areas; those remain in issue #1451.
+// Each case enters the real Tasks/Start app with the same mocked HTTP responses
+// as the 390px and 1280px behaviour checks above.
+const MFE0_VIEWPORTS = [
+  { width: 320, height: 640 },
+  { width: 360, height: 740 },
+  { width: 390, height: 844 },
+  { width: 600, height: 900 },
+  { width: 768, height: 1024 },
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+];
+
+for (const { width, height } of MFE0_VIEWPORTS) {
+  test(`MFE0 Tasks ${width}px: list and selected detail fit without page overflow`, async ({ page }) => {
+    installMock(page);
+    await page.setViewportSize({ width, height });
+    await page.goto("/index.html#/tasks");
+    const item = page.locator('.tasks-item[data-key="101"]');
+    await expect(item).toBeVisible({ timeout: 15000 });
+    await expect(page.locator(".tasks-list-pane")).toBeVisible();
+    if (width < 860) await expect(page.locator("#task-detail")).toBeHidden();
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+
+    await item.click();
+    await expect(page.locator(".tasks-approval")).toBeVisible();
+    if (width < 860) {
+      await expect(page.locator(".tasks-list-pane")).toBeHidden();
+      await expect(page.locator("#task-back")).toBeVisible();
+    } else {
+      await expect(page.locator(".tasks-list-pane")).toBeVisible();
+      await expect(page.locator("#task-back")).toBeHidden();
+    }
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+  });
+
+  test(`MFE0 Start ${width}px: list and selected form fit without page overflow`, async ({ page }) => {
+    installMock(page);
+    await page.setViewportSize({ width, height });
+    await page.goto("/index.html#/tasks/start");
+    const item = page.locator("#start-list .tasks-item").first();
+    await expect(item).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("#start-list")).toBeVisible();
+    if (width < 860) await expect(page.locator("#start-detail")).toBeHidden();
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+
+    await item.click();
+    await expect(page.locator("#start-go")).toBeVisible();
+    if (width < 860) {
+      await expect(page.locator("#start-list")).toBeHidden();
+      await expect(page.locator("#start-back")).toBeVisible();
+    } else {
+      await expect(page.locator("#start-list")).toBeVisible();
+      await expect(page.locator("#start-back")).toBeHidden();
+    }
+    expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+  });
+}
+
+test("MFE0 mobile Tasks selection survives portrait-to-landscape resize", async ({ page }) => {
+  installMock(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/index.html#/tasks");
+  const item = page.locator('.tasks-item[data-key="101"]');
+  await expect(item).toBeVisible({ timeout: 15000 });
+  await item.click();
+  await expect(page.locator(".tasks-approval")).toBeVisible();
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.locator(".tasks-list-pane")).toBeHidden();
+  await expect(page.locator(".tasks-approval")).toBeVisible();
+  expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".tasks-approval")).toBeVisible();
+  await page.locator("#task-back").click();
+  await expect(item).toBeVisible();
+  expect(await overflow(page)).toEqual({ page: 0, wide: [] });
+});
