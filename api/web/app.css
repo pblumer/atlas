@@ -1399,7 +1399,11 @@ thead tr.dt-filter-row th { padding: 3px 8px 7px; background: var(--bg); border-
 }
 .dt-filter::placeholder { color: var(--muted); opacity: .7; }
 .dt-filter:focus { outline: none; border-color: var(--accent); }
-tbody td { padding: 11px 12px; border-bottom: 1px solid var(--border); }
+/* Held off the dmn-js decision table, whose cells the vendor pads itself: there it gave
+   the rule number 11px above and below and every cell a second rule under the one
+   dmn-js draws. `:where` keeps the selector's weight, so every table of ours that
+   overrides this padding still does. */
+tbody td:where(:not(.dmn-js-parent *)) { padding: 11px 12px; border-bottom: 1px solid var(--border); }
 tbody tr:hover { background: #fafbfc; }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .tabs button { background: none; border: none; padding: 10px 12px; font: inherit; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
@@ -1412,8 +1416,11 @@ tbody tr:hover { background: #fafbfc; }
    Form and DMN editors into a 68px block with its title pushed in and truncated, beside
    the 27px rows of the groups that happened to be filled. Not neutralised inside the
    panel but excluded from it, so the vendor's own styling stands rather than being
-   overridden back to something of ours. */
-.empty:not([class*="bio-properties-panel"]) { text-align: center; color: var(--muted); padding: 34px; }
+   overridden back to something of ours. dmn-js puts the same flag on any of its
+   editables whose value is unset — a decision rule's annotation among them, so every
+   rule without one was 98px tall for a line of text — and is held off the same way;
+   `:where` keeps the selector's weight. */
+.empty:not([class*="bio-properties-panel"]):where(:not(.dmn-js-parent *)) { text-align: center; color: var(--muted); padding: 34px; }
 
 textarea, input[type=text], select { width: 100%; font: 13px/1.5 ui-monospace, monospace; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text); }
 select { font-family: inherit; cursor: pointer; }
