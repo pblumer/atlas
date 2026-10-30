@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha1"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"strings"
@@ -71,5 +72,90 @@ func TestVendoredCamundaDMNModdleNotice(t *testing.T) {
 	if !strings.Contains(string(manifest), "camunda-dmn-moddle@1.3.1") ||
 		!strings.Contains(string(manifest), "CAMUNDA-DMN-MODDLE-LICENSE") {
 		t.Error("DMN vendor manifest must pin the extension's exact upstream version and MIT notice")
+	}
+}
+
+// TestVendoredDMNForkLicences pins the separately copyrighted dmn-js and
+// dmn-moddle fork notices to their recorded Git commits, not to each other.
+// Even a license-only change must have its provenance reviewed.
+func TestVendoredDMNForkLicences(t *testing.T) {
+	const vendorManifest = "web/vendor/dmn/ATLAS-VENDORED.txt"
+	const dmnJSNotice = "web/vendor/dmn/LICENSE"
+	const dmnJSLicenceGitBlob = "c6786fe7f8afb91b456f3009ae5d69bb9e387402"
+	const moddleNotice = "web/vendor/dmn/DMN-MODDLE-LICENSE"
+	const moddleLicenceGitBlob = "e0a77fed0e410060b20cae9e1f2ec9eccc5618dc"
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{dmnJSNotice, dmnJSLicenceGitBlob},
+		{moddleNotice, moddleLicenceGitBlob},
+	} {
+		data, err := fs.ReadFile(webFS, tc.path)
+		if err != nil {
+			t.Errorf("missing original upstream licence %s: %v", tc.path, err)
+			continue
+		}
+		if got := gitBlobSHA1(data); got != tc.want {
+			t.Errorf("%s: Git blob SHA %s, want pinned upstream %s", tc.path, got, tc.want)
+		}
+	}
+
+	manifest, err := fs.ReadFile(webFS, vendorManifest)
+	if err != nil {
+		t.Fatalf("read DMN vendor manifest: %v", err)
+	}
+	for _, want := range []string{
+		"481cc5a02ffa855689b59d81181478b84b25f9a5",
+		"ac76928df99382c36833d9300fd98acc604dc673",
+		"DMN-MODDLE-LICENSE",
+	} {
+		if !strings.Contains(string(manifest), want) {
+			t.Errorf("%s must record %s", vendorManifest, want)
+		}
+	}
+}
+
+// TestVendoredDMNLockfileLicenceInventory is intentionally strict: new
+// dependencies require rechecking exact package sources, metadata and notices.
+// A lockfile is build evidence, NOT proof that all these packages ship in JS.
+func TestVendoredDMNLockfileLicenceInventory(t *testing.T) {
+	data, err := fs.ReadFile(webFS, "web/vendor/dmn/src/package-lock.json")
+	if err != nil {
+		t.Fatalf("read DMN vendor npm lockfile: %v", err)
+	}
+	var lock struct {
+		Packages map[string]struct {
+			Version string `json:"version"`
+			License string `json:"license"`
+			Resolved string `json:"resolved"`
+			Integrity string `json:"integrity"`
+		} `json:"packages"`
+	}
+	if err := json.Unmarshal(data, &lock); err != nil {
+		t.Fatalf("parse DMN vendor npm lockfile: %v", err)
+	}
+	const expectedPackages = 68
+	total, mit, isc := 0, 0, 0
+	for name, dep := range lock.Packages {
+		if !strings.HasPrefix(name, "node_modules/") {
+			continue
+		}
+		total++
+		if dep.Version == "" || dep.Resolved == "" || dep.Integrity == "" {
+			t.Errorf("%s is not pinned to a version, source URL and integrity digest", name)
+		}
+		switch dep.License {
+		case "MIT":
+			mit++
+		case "ISC":
+			isc++
+		default:
+			t.Errorf("%s has missing or unreviewed declared licence %q", name, dep.License)
+		}
+	}
+	if total != expectedPackages || mit != 67 || isc != 1 {
+		t.Errorf("DMN npm lockfile licence inventory changed: packages=%d MIT=%d ISC=%d, want %d/67/1; review before updating the evidence", total, mit, isc, expectedPackages)
 	}
 }
