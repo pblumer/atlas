@@ -9,7 +9,7 @@ This is the central register for third-party software and assets distributed wit
 
 The web interface intentionally embeds components such as `bpmn-js`, `bpmn-moddle`, `diagram-js`, properties-panel packages and `form-js` / `@bpmn-io/form-js-editor`.
 
-These components retain their own licence terms and copyright notices. Their use is not covered solely by this project's Apache-2.0 licence. Applicable bpmn.io terms may require preservation and visibility of the bpmn.io watermark; the project must not remove, change, hide or obstruct it where required.
+These components retain their own licence terms and copyright notices. Their use is not covered solely by this project's AGPL-3.0-only licence. Applicable bpmn.io terms may require preservation and visibility of the bpmn.io watermark; the project must not remove, change, hide or obstruct it where required.
 
 Before release, record for every embedded package and transitive bundle component:
 
@@ -34,7 +34,7 @@ An automated licence report and SPDX or CycloneDX SBOM must be generated and rev
 
 The project intentionally supports selected `zeebe:` XML extensions. Camunda and Zeebe names, schemas and public behavioural descriptions are not project-owned marks.
 
-No Camunda source code is intentionally declared here as a distributed dependency. A separate provenance audit must verify that implementation code, tests and documentation are independently developed or used under compatible terms.
+No Camunda source code is intentionally declared here as a distributed dependency. The [initial provenance register](docs/legal/PROVENANCE_AUDIT.md) identifies the present dependencies and unresolved evidence. A completed, independently verified audit must establish that implementation code, tests and documentation are independently developed or used under compatible terms.
 
 ## Adding third-party material
 
