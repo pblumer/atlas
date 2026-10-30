@@ -68,6 +68,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The shop says it is loading, not that no catalogue is assigned.** The first paint
+  came before the catalogue was known, and an unknown catalogue read as none, so the
+  shop said "No catalogue is assigned to you" for the seconds the server took to
+  answer. It now says "Loading the shop …" until its first load has finished, on every
+  screen. "No catalogue is assigned" appears only when the server answers so (404); a
+  catalogue that cannot be read is reported as a failure with *Try again*, where it
+  too used to read as none assigned.
 - **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed

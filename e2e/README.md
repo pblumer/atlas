@@ -438,6 +438,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   product's information, each an inline SVG with no glyph beside it and a name for screen
   readers; their stroke is the shop's accent and follows a catalogue theme's.
 
+- **`shop-loading.spec.mjs`**: the shop **while it loads**, against a catalogue route
+  that answers only when the test lets it. It says "Loading the shop …", and not that
+  no catalogue is assigned, until the first load has finished, on the catalogue and on
+  *My services*; "No catalogue is assigned to you" appears only after a 404; a 500 is a
+  failure with a retry.
+
 - **`shop-reorder-parts.spec.mjs`** ([ADR-0312](../docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28):
   **what a held bundle lacks is offered again**, against a stubbed API in which the
   iPhone is held, its hardware given back and its case never taken. In the catalogue the

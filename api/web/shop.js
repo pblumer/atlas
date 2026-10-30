@@ -22,6 +22,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
+    'portal.loading': 'Shop wird geladen …',
     'portal.none': 'Ihnen ist kein Katalog zugeordnet.',
     'portal.none.hint': 'Wenden Sie sich an die Stelle, die Ihren Zugang eingerichtet hat.',
     'portal.empty': 'Dieser Katalog enthält zurzeit nichts Bestellbares.',
@@ -211,6 +212,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
+    'portal.loading': 'Loading the shop …',
     'portal.none': 'No catalogue is assigned to you.',
     'portal.none.hint': 'Ask whoever set up your access.',
     'portal.empty': 'This catalogue currently offers nothing.',
@@ -398,6 +400,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
+    'portal.loading': 'Chargement de la boutique …',
     'portal.none': 'Aucun catalogue ne vous est attribué.',
     'portal.none.hint': 'Adressez-vous au service qui a créé votre accès.',
     'portal.empty': 'Ce catalogue ne propose actuellement rien.',
@@ -584,6 +587,7 @@ const STRINGS = {
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
+    'portal.loading': 'Caricamento del negozio …',
     'portal.none': 'Non le è assegnato alcun catalogo.',
     'portal.none.hint': 'Si rivolga al servizio che ha creato il suo accesso.',
     'portal.empty': 'Questo catalogo al momento non offre nulla.',
@@ -1121,6 +1125,11 @@ const state = {
   // the one whose form is open, and taskError what answering it last said.
   tasks: [],
   tasksTruncated: false,
+  // loaded says the first load has finished. Until it has, nothing on the page is
+  // known — not the catalogue, not what this person holds — and a screen that drew
+  // its "none" there would say "no catalogue is assigned to you" for the seconds the
+  // server takes to answer.
+  loaded: false,
   taskOpen: '',
   taskError: '',
   catalog: null,
@@ -1637,6 +1646,7 @@ async function readMe() {
 // page that keeps presenting a catalogue as yours after establishing that you are
 // nobody is a page saying two things at once.
 function forgetTheReader() {
+  state.loaded = false;
   state.catalog = null;
   state.release = null;
   state.orders = [];
@@ -1679,9 +1689,12 @@ async function load() {
   }
   try {
     state.catalog = await api('/api/v1/shop/catalog');
-  } catch {
+  } catch (e) {
     // 404 here is the ordinary "you are the audience for nothing" answer, not a
-    // failure: the page says so rather than showing an error.
+    // failure: the page says so rather than showing an error. Anything else is a
+    // failure, and is said as one — read as "none assigned", a server that could
+    // not answer told people they had no catalogue.
+    if (!e || e.status !== 404) throw e;
     state.catalog = null;
   }
   applyTheme(state.catalog);
@@ -1725,6 +1738,7 @@ async function load() {
     state.directory = new Map();
   }
   loadWhoIAm();
+  state.loaded = true;
   render();
 }
 
@@ -4572,7 +4586,16 @@ function renderActions() {
       : el('span', { class: 'muted', title: t('noid.hint') }, t('noid.title')));
 }
 
+// renderLoading stands where a screen will be until the first load has finished. With
+// a failure it stays empty: the error above says what happened and offers the retry.
+function renderLoading() {
+  if (state.error) return el('div', { class: 'empty' });
+  return el('div', { class: 'empty', role: 'status', 'aria-live': 'polite' },
+    el('p', {}, t('portal.loading')));
+}
+
 function currentView() {
+  if (!state.loaded) return renderLoading();
   if (state.view === 'orders') return renderOrders();
   if (state.view === 'services') return renderServices();
   return state.inBasket ? renderBasket() : renderCatalogue();
