@@ -4,13 +4,19 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). All MFE slices are planned, not delivered.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 is active as a source/architecture audit; MFE1–MFE6 remain planned. No MFE slice is delivered.
 
 ## Outcome
 
 People can start business processes, work assigned BPMN user tasks and safely triage actionable incidents on a phone, foldable or tablet without using a cramped desktop Console. An operator can receive an incident alert, identify the affected process and cause, acknowledge responsibility, and choose an authorized remediation or escalation. Larger tablets may optionally support BPMN authoring via the existing bpmn-js modeler. Mobile work never promises that an offline draft or an unconfirmed command is durably completed.
 
 **End-to-end proof:** An operator uses a phone to start a safety-inspection process, completes a field checklist with evidence, and watches a deliberately failing downstream worker raise an incident. The on-call operator receives one correctly routed alert for the grouped cause, authenticates via a deep link, acknowledges it, inspects the failure and carries out an authorized resolution or escalation. Verify both offline and lost-response variants; test a foldable/tablet layout and real devices. A business safety finding is process data, **not** automatically an engine incident.
+
+## MFE0 source audit and proposal
+
+- [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — code/ADR audit only; physical-device checks remain open.
+- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Proposed**, mobile Tasks/Start/Incidents presentation boundary; not approved and not implemented.
+- MFE0 is **active**, coordinated by pblumer. Programme integration remains gated on architectural review and real-device validation.
 
 ## Existing baseline and gaps
 
