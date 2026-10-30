@@ -6,13 +6,14 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**4 programmes** · active: 4 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**5 programmes** · active: 4 · blocked: 0 · paused: 0 · planned: 1 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
+| [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | planned | 0/7 | unassigned | Maintainer to accept programme ownership, review MFE0 device/security baseline and alerting architecture, and select the first executable mobile Tasks/Start slice. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code. |
 
 ## atlas hub (BMP)
@@ -63,6 +64,22 @@ Govern external Worker actions through explicit identities, managed Connections,
 | **IAE6** — Console, Operations and audit | planned | unassigned | IAE1, IAE3, IAE4, IAE5 | — | Deliver user identity linking, Connection and policy management, simulator, Worker bindings and accessible audited decision history. |
 | **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
 | **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
+
+## Mobile & Field Experience (MFE)
+
+Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.
+
+**[Programme plan](../planning/mobile-field-experience-program.md) · [Roadmap track](../../ROADMAP.md#milestone-s--single-binary-server--web-ui-) · [Manifest](mfe/program.json) · Reviewed: 2026-10-30**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **MFE0** — Architecture and real-device baseline | planned | unassigned | — | — | Audit actual device/form/incident UX; review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation. |
+| **MFE1** — Mobile Tasks and Process Start | planned | unassigned | MFE0 | — | Ship a safe, accessible mobile task/start journey and validated safety-inspection example using existing form-js and HTTP APIs. |
+| **MFE2** — Mobile incident triage | planned | unassigned | MFE0 | — | Operator-scoped cause-grouped incident inbox, deep-link triage, repair forms and authorized retry/resolve; no invented acknowledgement semantics. |
+| **MFE3** — Incident alerting and escalation | planned | unassigned | MFE2 | — | Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine. |
+| **MFE4** — Field capture and evidence | planned | unassigned | MFE1 | — | Camera, QR/barcode, staged evidence with validated durable references outside process variables and WAL. |
+| **MFE5** — Offline drafts and synchronization | planned | unassigned | MFE1, MFE4 | — | Secure drafts, completion operation IDs, server-side dedup/status checks, conflict handling and restart/replay tests; no premature success display. |
+| **MFE6** — Optional large-tablet BPMN authoring | planned | unassigned | MFE1 | — | Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it. |
 
 ## Model independence and provenance (MIP)
 
