@@ -17,9 +17,10 @@
       "depends_on": [],
       "issues": [],
       "prs": [
-        1448
+        1448,
+        1449
       ],
-      "note": "ADR-0514 Proposed and MFE0 source/device baseline audited in the current planning PR; real iOS/Android/foldable tests and architectural acceptance remain open. PR #1448 merged the programme registration, not MFE0."
+      "note": "PR #1448 merged the programme registration; draft PR #1449 supplies the MFE0 code/ADR baseline and proposed ADR-0514. Real iOS/Android/foldable tests, device screenshots and architectural acceptance remain open."
     },
     {
       "id": "MFE1",
