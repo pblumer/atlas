@@ -3,7 +3,7 @@
 **Programme ID:** MFE.  
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
-**Owner:** unassigned; maintainer acceptance is required before starting integration work.  
+**Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
 **Operational status:** [programme manifest](../programs/mfe/program.json). All MFE slices are planned, not delivered.
 
 ## Outcome
@@ -103,4 +103,4 @@ The processor hot path stays allocation-free; never send alerts or acknowledge c
 
 ## Immediate next action
 
-The human maintainer accepts or delegates programme ownership, reviews MFE0's existing-UX audit and the alert acknowledgement/notification architecture, and assigns the first executable mobile Tasks/Start journey plus a parallel read-only incident triage spike. No status in this planning document represents shipped functionality.
+Programme owner pblumer reviews MFE0's existing-UX audit and the alert acknowledgement/notification architecture, appoints slice coordinators, and selects the first executable mobile Tasks/Start journey plus a parallel read-only incident triage spike. No status in this planning document represents shipped functionality.
