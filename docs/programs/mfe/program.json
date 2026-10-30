@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "ADR-0514 accepted on 2026-10-30; complete MFE0's real iOS/Android/tablet device and accessibility validation (#1451), then scope the first test-first MFE1 Tasks/Start and MFE2 read-only incident triage slices. MFE3 alarm acknowledgement and MFE4/MFE5 evidence/offline work retain separate ADR gates.",
+  "next_action": "Execute MFE0 hardware acceptance runbook (docs/planning/mfe0-device-validation-runbook.md), record device/zoom/accessibility/privacy evidence in #1451, review blockers and formally hand off. MFE1 #1456 and MFE2 #1457 are scoped but planned until the gate is met; MFE3/MFE4/MFE5 retain separate ADR gates.",
   "slices": [
     {
       "id": "MFE0",
@@ -25,7 +25,7 @@
         1453,
         1454
       ],
-      "note": "ADR-0514 accepted; PRs #1448/#1449/#1452/#1453 merged. Draft PR #1454 adds real form-js mobile validation and resize-continuity Chromium tests, pending CI. MFE0 remains active: hardware iOS/Android/foldables, keyboard, zoom, complex forms and accessibility evidence remain open."
+      "note": "ADR-0514 accepted; PRs #1448/#1449/#1452/#1453/#1454 merged, with successful PR CI on #1453/#1454. Hardware runbook in docs/planning/mfe0-device-validation-runbook.md defines remaining real iOS/Android, 200% zoom, assistive technology and foldable evidence (#1451). MFE0 remains active, not complete."
     },
     {
       "id": "MFE1",
@@ -35,9 +35,11 @@
       "depends_on": [
         "MFE0"
       ],
-      "issues": [],
+      "issues": [
+        1456
+      ],
       "prs": [],
-      "note": "Ship a safe, accessible mobile task/start journey and validated safety-inspection example using existing form-js and HTTP APIs."
+      "note": "Scoped in issue #1456: first mobile Tasks/Start vertical TDD slice using current HTTP API and form-js. Planned, unassigned, blocked on MFE0 hardware evidence and owner-approved handoff."
     },
     {
       "id": "MFE2",
@@ -47,9 +49,11 @@
       "depends_on": [
         "MFE0"
       ],
-      "issues": [],
+      "issues": [
+        1457
+      ],
       "prs": [],
-      "note": "Operator-scoped cause-grouped incident inbox, deep-link triage, repair forms and authorized retry/resolve; no invented acknowledgement semantics."
+      "note": "Scoped in issue #1457: operator-only, bounded, read-only cause-grouped incident view. Planned, unassigned, blocked on MFE0 device/security handoff; no new alarm acknowledgement."
     },
     {
       "id": "MFE3",
