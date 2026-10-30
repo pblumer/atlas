@@ -1,0 +1,98 @@
+{
+  "id": "mfe",
+  "name": "Mobile & Field Experience",
+  "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
+  "status": "planned",
+  "owner": "pblumer",
+  "last_reviewed": "2026-10-30",
+  "plan": "../../planning/mobile-field-experience-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
+  "next_action": "Programme owner pblumer to review the MFE0 device/security baseline and incident alerting architecture, then appoint slice coordinators and select the first executable mobile Tasks/Start slice.",
+  "slices": [
+    {
+      "id": "MFE0",
+      "title": "Architecture and real-device baseline",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1448
+      ],
+      "note": "Draft PR #1448 establishes the programme register only. Audit real devices and review ADR-0417 extension, alert acknowledgement and offline trust boundaries before implementation; no architecture decision is yet approved."
+    },
+    {
+      "id": "MFE1",
+      "title": "Mobile Tasks and Process Start",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Ship a safe, accessible mobile task/start journey and validated safety-inspection example using existing form-js and HTTP APIs."
+    },
+    {
+      "id": "MFE2",
+      "title": "Mobile incident triage",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Operator-scoped cause-grouped incident inbox, deep-link triage, repair forms and authorized retry/resolve; no invented acknowledgement semantics."
+    },
+    {
+      "id": "MFE3",
+      "title": "Incident alerting and escalation",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine."
+    },
+    {
+      "id": "MFE4",
+      "title": "Field capture and evidence",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Camera, QR/barcode, staged evidence with validated durable references outside process variables and WAL."
+    },
+    {
+      "id": "MFE5",
+      "title": "Offline drafts and synchronization",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Secure drafts, completion operation IDs, server-side dedup/status checks, conflict handling and restart/replay tests; no premature success display."
+    },
+    {
+      "id": "MFE6",
+      "title": "Optional large-tablet BPMN authoring",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it."
+    }
+  ]
+}
