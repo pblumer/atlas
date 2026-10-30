@@ -68,6 +68,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **The shop loads in about half the time.** After the sign-in check it read the
+  catalogue, its release, the orders, the open tasks, the positions' actions, the
+  inventory, the favourites and the directory one after another, so their answers'
+  times added up. Only two of those depend on another — the release on the catalogue,
+  the actions on the orders and tasks — and the rest are now read at once. With every
+  answer taking 300 ms, the catalogue appears after about 1.4 s instead of 2.9 s.
+- **The shop says it is loading, not that no catalogue is assigned.** The first paint
+  came before the catalogue was known, and an unknown catalogue read as none, so the
+  shop said "No catalogue is assigned to you" for the seconds the server took to
+  answer. It now says "Loading the shop …" until its first load has finished, on every
+  screen. "No catalogue is assigned" appears only when the server answers so (404); a
+  catalogue that cannot be read is reported as a failure with *Try again*, where it
+  too used to read as none assigned.
 - **A decision's tab opens the decision as it now is after its kind was changed.** Turning a
   decision table into a literal expression in the requirements graph's replace menu left
   its tab opening the old table — over a decision no longer in the model, so what was typed
