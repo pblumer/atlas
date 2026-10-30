@@ -12,6 +12,23 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 **End-to-end proof:** An operator uses a phone to start a safety-inspection process, completes a field checklist with evidence, and watches a deliberately failing downstream worker raise an incident. The on-call operator receives one correctly routed alert for the grouped cause, authenticates via a deep link, acknowledges it, inspects the failure and carries out an authorized resolution or escalation. Verify both offline and lost-response variants; test a foldable/tablet layout and real devices. A business safety finding is process data, **not** automatically an engine incident.
 
+### Candidate showcase — QR-linked work order acknowledgement ("Scan & Confirm")
+
+**Status:** Proposed use case, not a delivered feature or committed integration slice. It complements the safety-inspection/alarming proof above; it does not replace the MFE0 hardware and architecture gate.
+
+**Business journey:** A dispatcher starts a BPMN work-order process. Once its order data is durable, a configured Mail Worker sends the recipient an email with order details, optionally attaching a PDF work order. The document contains a QR code plus a human-readable URL; email readers on the same phone can tap the link instead of trying to scan their own screen. At the job site, workshop, delivery point or customer premises, a person scans the printed QR code (or follows the link), reviews the identified order on a responsive mobile Tasks surface, explicitly acknowledges receipt, handover or completion, and optionally records a remark or evidence. The ordinary BPMN user-task completion command advances the process only after the server confirms durability. A following gateway can route acknowledgement, rejection or a discrepancy to the right business handling.
+
+**Boundary and UX rules:**
+- Scanning is **navigation**, never consent, authentication, task claim, or completion by itself. Show a concise order summary, intended acknowledgement, any mandatory fields and one explicit confirmation step. No QR image can confer broader process access by exposing a raw instance or task key.
+- Start with the **authenticated, assignment-checked** path using the existing Tasks/task API and a deep link that resolves a permitted context. A public-start token from [ADR-0029](../adr/0029-public-process-start-links.md) authorizes starting a *new* instance, **not** confirming an existing task.
+- If external recipients must acknowledge **without an atlas account**, decide that as a separate security/authorization ADR before implementation: one order/action scope, short expiry, revocation, replay/duplicate handling, rate limits, payload limits and a deliberate audit/identity-assurance level. Possession of a forwarded email or photographed QR code must not silently equal verified identity; do not imply legal/electronic-signature assurance.
+- Generate and deliver mail/PDF/QR artifacts **outside the processor**, through job-backed Workers after durable state transitions. Existing outbound Mail Worker support is not proof of a complete QR/PDF generation or public task-completion flow; inventory and test those components before committing a delivery slice.
+- Evidence files live outside WAL process variables. Only validated durable references and integrity metadata travel with completion. An offline device may save a clearly labelled local draft, never display a completed receipt until server confirmation; queued and unknown outcomes belong to MFE5.
+
+**MFE slice ownership:** MFE0 validates the QR/link threat model and device matrix; **MFE1** owns the authenticated mobile task detail, accessible explicit confirmation and deep-link navigation; **MFE4** owns QR/barcode entry and optional field evidence; **MFE5** adds safe offline draft/sync and duplicate/unknown-result reconciliation. Mail/PDF composition is a Worker-side integration dependency, not a new engine execution path. MFE2/MFE3 incident alerting remain separate priorities.
+
+**Acceptance ideas:** Test a QR printed in a PDF and an email link on real phone/tablet/foldable devices; authorized versus wrong-user access; expired/revoked/reused links; cancelled/already-completed work orders; duplicate submissions and a lost response after fsync; deliberate refusal or discrepancy; evidence upload/restart; browser close/reopen and offline reconnect once MFE5 exists. Verify live/replay equivalence for any new persisted acknowledgement fact, and ensure no external mail is sent before the originating event is durable.
+
 ## Existing baseline and gaps
 
 | Surface | Current implementation | Gap / not yet demonstrated |
