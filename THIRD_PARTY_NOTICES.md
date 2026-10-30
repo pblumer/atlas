@@ -41,7 +41,7 @@ An automated licence report and SPDX or CycloneDX SBOM must be generated and rev
 
 The project intentionally supports selected `zeebe:` XML extensions. Camunda and Zeebe names, schemas and public behavioural descriptions are not project-owned marks.
 
-No Camunda source code is intentionally declared here as a distributed dependency. The [initial provenance register](docs/legal/PROVENANCE_AUDIT.md) identifies the present dependencies and unresolved evidence. A completed, independently verified audit must establish that implementation code, tests and documentation are independently developed or used under compatible terms.
+No Camunda **engine implementation** is declared as a Go dependency. The separately licensed Camunda-maintained moddle descriptors listed above **are** third-party source material distributed as a file or bundled resource. The [initial provenance register](docs/legal/PROVENANCE_AUDIT.md) identifies the present dependencies and unresolved evidence. A completed, independently verified audit must establish that implementation code, tests and documentation are independently developed or used under compatible terms.
 
 ## Adding third-party material
 
