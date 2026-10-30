@@ -2,7 +2,7 @@
 
 **Status:** Repository/code audit completed 2026-10-30; browser and physical-device measurements **not executed**.  
 **Programme:** [Mobile & Field Experience](mobile-field-experience-program.md), slice MFE0.  
-**Architecture proposal:** [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) (Proposed, not accepted).
+**Architecture proposal:** [ADR-draft-mobile-first-tasks-start-and-incident-triage](../adr/draft-mobile-first-tasks-start-and-incident-triage.md) (Proposed, not accepted).
 
 ## Exact evidence on `main`
 
@@ -82,7 +82,7 @@ completion protocol require explicit policy and ADR review.
 
 ## Architecture and security decisions to review in MFE0
 
-1. Accept/revise [proposed ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) on mobile navigation and component reuse; decide role-gated Incidents entry and desktop compatibility.
+1. Accept/revise [proposed ADR-draft-mobile-first-tasks-start-and-incident-triage](../adr/draft-mobile-first-tasks-start-and-incident-triage.md) on mobile navigation and component reuse; decide role-gated Incidents entry and desktop compatibility.
 2. For MFE3, choose modelled BPMN human acknowledgement tasks vs a new durable operations-side acknowledgement record; define stable alarm episode identity, deduplication, authorised recipients, escalation/fallback and retention. Separate ADR mandatory.
 3. For MFE5, choose a server-enforced idempotent completion contract with outcome lookup and local storage threat model. Separate ADR mandatory.
 4. For MFE4, agree durable attachment store/API/reference format and retention/authorization; never place photographs in process variables.
