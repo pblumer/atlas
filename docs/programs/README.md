@@ -13,7 +13,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
-| [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code. |
+| [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
 
 ## atlas hub (BMP)
 
@@ -72,7 +72,7 @@ Make atlas-owned BPMN authoring the future default while preserving versioned Ze
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | [PR #1443](https://github.com/pblumer/atlas/pull/1443) | Draft PR #1443 records the initial evidence and proposes a migration ADR; independently verified provenance, SBOM/licence review and architecture acceptance remain outstanding. |
+| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | [PR #1443](https://github.com/pblumer/atlas/pull/1443), [PR #1447](https://github.com/pblumer/atlas/pull/1447) | PR #1443 merged the initial inventory and Proposed ADR. Draft PR #1447 pins byte-identical Zeebe v1.17.0 source and separate MIT notices for Zeebe/DMN; combined DMN bundle, broader code/fixture provenance, SBOM/watermark and ADR acceptance remain open. |
 | **MIP1** — Native BPMN authoring with legacy round-trip | planned | unassigned | MIP0 | — | Build a reviewed atlas namespace descriptor and test new default authoring alongside lossless Zeebe import/export; no silent conversion. |
 | **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
 | **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
