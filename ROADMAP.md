@@ -2782,6 +2782,18 @@ actions with closed effects, each a command whose outcome is a fact published be
     message.
   - 🔲 The remaining entries: user created and rejected, offboarding, access review,
     deployments.
+**tshopper — phase A** ([programme TSH](docs/planning/tshopper-program.md),
+[ADR-draft-service-reporting-and-customer-views](docs/adr/draft-service-reporting-and-customer-views.md))
+- 🔲 **A delivery promise on every product.** A service level and its delivery time in working days, frozen
+  into the release, copied onto the order line and measured from approval to the start of the right.
+- 🔲 **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
+  product and period, CSV, no names.
+- 🔲 **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
+  read audited.
+- 🔲 **The tshopper shell.** The shop page as an application of its own in the same binary, with its
+  dashboards and the wiki's building blocks.
+- 🔲 **One contract between shop and engine,** mapped to TMF620/622/637.
+
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes
