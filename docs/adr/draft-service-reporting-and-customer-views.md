@@ -1,9 +1,9 @@
 # ADR-DRAFT: A product promises a delivery time, and three people may read how it was kept
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-31
-- **Deciders:** dbuchs7 (programme owner, TSH)
+- **Deciders:** dbuchs7 (programme owner, TSH); the four choices (customer responsible = catalogue groups and line managers, delivery-time SLA, names permitted, owner) confirmed by the requester on 2026-10-31
 - **Open question:** Should the working-day count skip public holidays, and from which calendar (federal, cantonal, per catalogue)?
 - **Question checked:** 2026-10
 
