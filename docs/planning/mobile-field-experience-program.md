@@ -1,10 +1,10 @@
 # Mobile & Field Experience (MFE) delivery programme
 
 **Programme ID:** MFE.  
-**Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
+**Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-31.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised **limited MFE1 browser-only UI work** on 2026-10-31 while MFE0 remains incomplete. PR #1468 is merged with green CI (mobile Tasks/role-authorised Start navigation); PR #1469 is merged: it adds a server-confirmed mobile completion receipt with form-js browser tests. A deployable safety-inspection BPMN and form-js example is in review. MFE1 remains active and not complete; MFE2–MFE7 remain planned. No real-device release is claimed.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. MFE1 process-start permission expansion is separately gated on ADR review #1471. MFE2–MFE7 are not delivered.
 
 ## Outcome
 
@@ -39,7 +39,7 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 - [Mobile contract and device baseline](mfe0-device-and-contract-baseline.md) — source/ADR audit plus merged Chromium Tasks/Start/form-js regression tests; physical-device checks remain open.
 - [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md) — hardware test matrix, evidence requirements, accessibility/security cases, and handoff; all hardware outcomes remain unverified.
-- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Accepted on 2026-10-30 / Not started**. Shared adaptive mobile Tasks/Start/authorized Incidents UX is approved as the architecture contract; it is not yet implemented.
+- [ADR-0514](../adr/0514-mobile-first-tasks-start-and-incident-triage.md) — **Accepted on 2026-10-30 / partially implemented**. Shared adaptive mobile Tasks/Start/authorized Incidents UX is approved as the architecture contract; it is not yet implemented.
 - MFE0 is **active**, coordinated by pblumer. The architecture decision is accepted; merged PRs #1453/#1454 prove Chromium regressions only. Real-device validation and implementation handoff remain open, including the separate MFE3/MFE4/MFE5 ADR gates. Initial MFE1/MFE2 scoped issues are [#1456](https://github.com/pblumer/atlas/issues/1456) and [#1457](https://github.com/pblumer/atlas/issues/1457).
 
 ## Existing baseline and gaps
