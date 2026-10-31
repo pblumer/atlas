@@ -27,6 +27,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`building-blocks.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the catalogue app's Building blocks page offers the sources the server names, shows each wiki
+  page with the products using it, turns an unused page into a draft product bound to it, says
+  when no source is configured, and writes product ids as product ids are written.
+
 - **`shop-reports.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the shop draws a My team tab only for a line manager and an Organisation tab only for a customer

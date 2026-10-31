@@ -392,6 +392,31 @@ func catalogTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_catalog_building_blocks",
+			Description: "Search a content source (a wikiwikibangbang wiki) for the services it describes, " +
+				"as building blocks for offerings: each page with id, key, title, space and state, the " +
+				"products you maintain that are bound to it (usedBy) and how many products you do not " +
+				"maintain use it (usedElsewhere). A page nobody uses is a service described and not yet " +
+				"offered. Read-only. Bind a page to a product with the product's content binding.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source": stringProp("The content source's id"),
+					"q":      stringProp("What to search for"),
+				},
+				"required": []string{"source", "q"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, k := range []string{"source", "q"} {
+					if v, _ := args[k].(string); v != "" {
+						q.Set(k, v)
+					}
+				}
+				return asText(c.get("/api/v1/catalog-building-blocks?" + q.Encode()))
+			},
+		},
+		{
 			Name: "atlas_catalog_delivery_report",
 			Description: "How the products of the catalogues you maintain were ordered, delivered " +
 				"against their promise and are held now. Per product: positions ordered in the " +

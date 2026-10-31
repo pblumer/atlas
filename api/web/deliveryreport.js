@@ -125,3 +125,11 @@ export function wireDelivery({ api, view }) {
   form.addEventListener("submit", (e) => { e.preventDefault(); load(); });
   load();
 }
+
+// viewDeliveryReport is the catalogue app's Reporting page: the same card as on the
+// overview, on a page of its own so a product manager can open it directly.
+export function viewDeliveryReport({ api, view }) {
+  view.innerHTML = `<div class="row"><h2 style="margin:0">${esc(t("delivery.page"))}</h2></div>
+    ${deliveryCard()}`;
+  wireDelivery({ api, view });
+}

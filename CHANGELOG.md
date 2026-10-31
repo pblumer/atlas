@@ -14,6 +14,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The catalogue app finds the wiki's services and reports on its own page.** The catalogue and
+  the shop are grouped as tshopper in the app drawer, and the catalogue app gains a top bar with
+  Catalogues, Building blocks and Reporting. Building blocks searches a content source
+  (`GET /api/v1/catalog-building-blocks`, MCP tool `atlas_catalog_building_blocks`) and shows each
+  wiki page with the products that already use it — named where you maintain them, counted where
+  you do not — and Create product turns an unused page into a draft product bound to it.
 - **Line managers and customer responsibles see what their people hold.** The shop gains a
   My team tab for line managers — every account naming them as its manager — and an
   Organisation tab for the members of a catalogue's new customer-responsible groups, covering

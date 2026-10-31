@@ -54,6 +54,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_catalog_fulfilment_report": "GET /api/v1/catalog-products/fulfilment-report",
 	"atlas_catalog_translation_gaps":  "GET /api/v1/catalog-products/translation-gaps",
 	"atlas_catalog_delivery_report":   "GET /api/v1/catalog-products/delivery-report",
+	"atlas_catalog_building_blocks":   "GET /api/v1/catalog-building-blocks",
 	"atlas_save_catalog_product":      "POST /api/v1/catalog-products",
 	"atlas_publish_catalog":           "POST /api/v1/catalogs/{id}/releases",
 	"atlas_rebind_catalog_product":    "POST /api/v1/catalog-products/{id}/rebind",

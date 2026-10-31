@@ -720,7 +720,7 @@ const APPS = [
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "tshopper" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -732,7 +732,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "tshopper" },
 ];
 
 // Secondary (in-app) navigation.
@@ -857,6 +857,14 @@ const TOPNAV = {
     { name: "Model", route: "#/data", role: "modeler" },
     { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
+  ],
+  // The catalogue app is the product manager's half of tshopper (phase A,
+  // ADR-0515): the catalogues, the wiki's
+  // services to compose them from, and how what they offer is delivered.
+  catalog: [
+    { name: "Catalogues", route: "#/catalog", role: "productmanager", feature: "catalogue" },
+    { name: "Building blocks", route: "#/catalog/building-blocks", role: "productmanager", feature: "catalogue" },
+    { name: "Reporting", route: "#/catalog/reporting", role: "productmanager", feature: "catalogue" },
   ],
 };
 
@@ -1449,10 +1457,19 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
-    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
-  ).join("");
+  // Apps of one suite sit under its name, once, above the first of them: the
+  // catalogue and the shop are tshopper (phase A,
+  // ADR-0515), and saying so in the drawer is
+  // what tells a person the two belong together. The caption is not a link and not
+  // part of any link's name.
+  let suite = "";
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) => {
+    const head = a.suite && a.suite !== suite ? `<div class="app-suite" aria-hidden="true">${a.suite}</div>` : "";
+    suite = a.suite || "";
+    return head +
+      `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+      `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
+  }).join("");
 }
 
 function setChrome(appId, route) {
@@ -11889,6 +11906,15 @@ async function route() {
       const gen = navGen;
       const { viewEvents } = await import("./events.js");
       return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/catalog/reporting") {
+      const { viewDeliveryReport } = await import("./deliveryreport.js");
+      return viewDeliveryReport({ api, view });
+    }
+    if (path === "#/catalog/building-blocks") {
+      const gen = navGen;
+      const { viewBuildingBlocks } = await import("./buildingblocks.js");
+      return await viewBuildingBlocks({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/catalog") {
       const gen = navGen;
