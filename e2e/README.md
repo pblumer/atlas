@@ -1058,6 +1058,8 @@ tabs and refreshes on return; API failures are not an empty inbox. Tests
 include new tasks, incident counts and open-task preservation using a
 controlled clock, on the production DOM with mocked HTTP responses.
 
+The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
 or field conditions. Record those separately under MFE0 issue #1451.
