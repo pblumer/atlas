@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH1 (#1462), then TSH2: line-manager team view and customer-responsible organisation dashboard with names, CSV and audit.",
+  "next_action": "Merge TSH2 (team and organisation reports with names), then TSH3 (tshopper shell, building blocks) and TSH4 (shop contract).",
   "slices": [
     {
       "id": "TSH0",
@@ -28,7 +28,7 @@
     {
       "id": "TSH1",
       "title": "Service level on products and the delivery report",
-      "status": "active",
+      "status": "complete",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH0"
@@ -37,7 +37,12 @@
       "prs": [
         1462
       ],
-      "note": "Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool in review in PR #1462."
+      "note": "Complete: PR #1462 merged with all CI checks green (race, windows, e2e, coverage). Service level frozen into release and order line; delivery report route, Console card, CSV and MCP tool.",
+      "evidence": [
+        "../../../api/servicereport/measure_test.go",
+        "../../../api/deliveryreport_http_test.go",
+        "../../../e2e/delivery-report.spec.mjs"
+      ]
     },
     {
       "id": "TSH2",
