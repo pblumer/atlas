@@ -102,3 +102,14 @@ test("MFE1 auth-off phone: both destinations follow existing public-mode navigat
   await expect(page.locator('.tasks-item[data-key="101"]')).toBeVisible({ timeout: 15000 });
   await expect(navLinks(page)).toHaveText(["My tasks", "Start process"]);
 });
+
+// The reverse role boundary matters too: an operator without user role may start
+// an instance, but is not automatically entitled to see somebody's task inbox.
+test("MFE1 operator-only phone: Start remains available without a task inbox shortcut", async ({ page }) => {
+  installMock(page, ["operator"]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/index.html?lang=en#/tasks/start");
+  await expect(page.locator("#start-list .tasks-item")).toBeVisible({ timeout: 15000 });
+  await expect(navLinks(page)).toHaveText(["Start process"]);
+  await expect(mobileNav(page).locator('a[href="#/tasks"]')).toHaveCount(0);
+});
