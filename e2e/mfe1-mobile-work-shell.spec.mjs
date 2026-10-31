@@ -103,3 +103,38 @@ test("10-second foreground polling notices new work and incidents without touchi
   expect(api.calls.tasks).toBeGreaterThanOrEqual(2);
   expect(api.calls.stats).toBeGreaterThanOrEqual(2);
 });
+
+test("background tabs do not poll and foreground reactivation fetches immediately", async ({ page }) => {
+  await page.clock.install();
+  const api = stub(page, ["user"]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/index.html?lang=en#/tasks");
+  await expect(page.locator('.tasks-item[data-key="101"]')).toBeVisible({ timeout: 15000 });
+  await expect.poll(() => api.calls.tasks).toBeGreaterThan(0);
+  const before = api.calls.tasks;
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.fastForward(31000);
+  expect(api.calls.tasks).toBe(before);
+  expect(api.calls.stats).toBe(0); // the user role has no operator incident visibility
+  api.setTasks([task(102, "After foreground")]);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator('.tasks-item[data-key="102"]')).toBeVisible();
+  expect(api.calls.tasks).toBeGreaterThan(before);
+});
+
+test("task-only role never polls incident counts", async ({ page }) => {
+  await page.clock.install();
+  const api = stub(page, ["user"]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/index.html?lang=en#/tasks");
+  await expect(page.locator('.tasks-item[data-key="101"]')).toBeVisible({ timeout: 15000 });
+  await page.clock.fastForward(31000);
+  expect(api.calls.tasks).toBeGreaterThanOrEqual(2);
+  expect(api.calls.stats).toBe(0);
+});
