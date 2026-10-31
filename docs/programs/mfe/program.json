@@ -1,13 +1,13 @@
 {
   "id": "mfe",
   "name": "Mobile & Field Experience",
-  "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
+  "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review MFE1 safety-inspection demo PR #1470 and CI, then test its two business outcomes on a running atlas instance. MFE0 #1451 still requires iOS/Android, screen-reader, 200% zoom and form-grid evidence; non-operator process starts remain blocked on #1467.",
+  "next_action": "Complete MFE0 real-device/tablet-landscape acceptance #1451 and MFE1 phone work-menu/polling review #1472; get scoped process-start ADR #1471 approved before any permission changes. MFE2/MFE3 incident triage and secure alarm delivery remain priority. MFE7 watch companion is a proposed future ADR-gated slice, not implemented.",
   "slices": [
     {
       "id": "MFE0",
@@ -24,10 +24,11 @@
         1452,
         1453,
         1454,
+        1455,
         1458,
         1460
       ],
-      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. Physical iOS/Android, accessibility, 200% zoom, foldable and complex multi-column form evidence still missing. MFE0 #1451 remains open; no device acceptance inferred from E2E."
+      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. PR #1455 adds responsive two-column form-js Tasks/Start layouts with new E2E; merge and hardware acceptance still pending. Physical iOS/Android, 200% zoom, accessible inputs, keyboard, foldable and complex-form evidence remain open in #1451."
     },
     {
       "id": "MFE1",
@@ -44,9 +45,10 @@
       "prs": [
         1468,
         1469,
-        1470
+        1470,
+        1472
       ],
-      "note": "Limited MFE1 web-UI work is authorised while MFE0 #1451 remains open. PR #1468 (mobile Tasks/authorised Start navigation) and PR #1469 (post-server-ack task receipt, real form-js E2E) are merged. Draft PR #1470 adds a deployable BPMN+form safety-inspection example, not yet CI- or device-accepted. Self-service starts for ordinary task users remain gated by #1467; no runtime/API/permission/offline changes."
+      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) is open; no real-device acceptance or deployment is inferred. Scoped start grants for ordinary users remain gated on proposed ADR PR #1471 and issue #1467; no current runtime/API/permission/offline scope expansion. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
     },
     {
       "id": "MFE2",
@@ -110,6 +112,19 @@
       "issues": [],
       "prs": [],
       "note": "Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it."
+    },
+    {
+      "id": "MFE7",
+      "title": "Wearable companion and cross-device handoff",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Proposed watchOS/Wear OS companion proof only after MFE1 authenticated task deep links and MFE3 durable alarm identity/delivery: privacy-safe minimal urgent signal and authenticated handoff to phone, no new task/incident command path. Secure draft continuity depends on MFE5. Watch delivery, authorization and any one-tap action require a separately accepted ADR and actual hardware tests; no watch functionality is shipped."
     }
   ]
 }

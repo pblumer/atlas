@@ -19,14 +19,14 @@ const FORM = { schema: {
   ],
 } };
 
-function setup(page, handler) {
+function setup(page, handler, task = TASK) {
   let completed = false;
   const requests = [];
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path.endsWith("/api/v1/tasks")) return route.fulfill({ json: {
-      items: completed ? [] : [TASK], total: completed ? 0 : 1, totalExact: true,
+      items: completed ? [] : [task], total: completed ? 0 : 1, totalExact: true,
       truncated: false, nextCursor: null,
     } });
     if (path.endsWith("/api/v1/forms/mfe-safety-check")) return route.fulfill({ json: FORM });
@@ -138,4 +138,68 @@ test("MFE1 desktop inspection: completion keeps normal desktop behaviour", async
   await expect(page.locator("#toast")).toContainText("Task completed");
   await expect(page.locator(".mfe-completion")).toBeHidden();
   expect(requests).toHaveLength(1);
+});
+
+
+test("MFE1 Android tablet landscape: inspection form stays readable across rotation", async ({ page }) => {
+  // Regression for #1473: at tablet widths the three-pane grid previously
+  // left the form a few pixels wide and wrapped this title one letter per line.
+  const inspection = { ...TASK, name: "Sicherheitskontrolle vor Ort" };
+  setup(page, (route) => route.fulfill({ json: { key: TASK.key } }), inspection);
+  await openInspection(page, 1024);
+  const title = page.locator(".tasks-detail-head h1");
+  await expect(title).toHaveText(inspection.name);
+
+  for (const width of [900, 1024, 1180]) {
+    await page.setViewportSize({ width, height: 768 });
+    await expect(page.locator(".tasks-list-pane")).toBeVisible();
+    await expect(page.locator(".tasks-folders")).toBeVisible();
+    await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+    await expect(page.locator("#tasks-col-resizer")).toBeHidden();
+    await expect(page.locator("#task-back")).toBeHidden();
+
+    const geometry = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const grid = box(".tasks");
+      const folders = box(".tasks-folders");
+      const list = box(".tasks-list-pane");
+      const detail = box("#task-detail");
+      const form = box("#task-form .fjs-form");
+      const heading = box(".tasks-detail-head h1");
+      const fontSize = parseFloat(getComputedStyle(document.querySelector(".tasks-detail-head h1")).fontSize);
+      return {
+        gridWidth: grid.width, folderWidth: folders.width,
+        folderBottom: folders.bottom, listTop: list.top,
+        listRight: list.right, listWidth: list.width,
+        detailLeft: detail.left, detailWidth: detail.width,
+        formWidth: form.width, titleWidth: heading.width,
+        titleLines: heading.height / fontSize,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+    expect(geometry.folderWidth).toBeGreaterThanOrEqual(geometry.gridWidth - 4);
+    expect(geometry.folderBottom).toBeLessThanOrEqual(geometry.listTop + 2);
+    expect(geometry.listRight).toBeLessThanOrEqual(geometry.detailLeft + 2);
+    expect(geometry.listWidth).toBeGreaterThanOrEqual(240);
+    expect(geometry.detailWidth).toBeGreaterThanOrEqual(400);
+    expect(geometry.formWidth).toBeGreaterThanOrEqual(320);
+    expect(geometry.titleWidth).toBeGreaterThanOrEqual(150);
+    expect(geometry.titleLines).toBeLessThan(4);
+    expect(geometry.overflow).toBeLessThanOrEqual(1);
+  }
+
+  // Orientation changes must preserve both the selected task and form input.
+  const location = page.locator("#task-form").getByLabel("Inspection location");
+  await location.fill("Workshop 12");
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect(page.locator(".tasks-list-pane")).toBeHidden();
+  await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+  await expect(location).toHaveValue("Workshop 12");
+
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(page.locator(".tasks-list-pane")).toBeVisible();
+  await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+  await expect(location).toHaveValue("Workshop 12");
+  expect(await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });

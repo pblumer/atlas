@@ -4,11 +4,17 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised **limited MFE1 browser-only UI work** on 2026-10-31 while MFE0 remains incomplete. PR #1468 is merged with green CI (mobile Tasks/role-authorised Start navigation); PR #1469 is merged: it adds a server-confirmed mobile completion receipt with form-js browser tests. A deployable safety-inspection BPMN and form-js example is in review. MFE1 remains active and not complete; MFE2–MFE6 remain planned. No real-device release is claimed.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised **limited MFE1 browser-only UI work** on 2026-10-31 while MFE0 remains incomplete. PR #1468 is merged with green CI (mobile Tasks/role-authorised Start navigation); PR #1469 is merged: it adds a server-confirmed mobile completion receipt with form-js browser tests. A deployable safety-inspection BPMN and form-js example is in review. MFE1 remains active and not complete; MFE2–MFE7 remain planned. No real-device release is claimed.
 
 ## Outcome
 
 People can start business processes, work assigned BPMN user tasks and safely triage actionable incidents on a phone, foldable or tablet without using a cramped desktop Console. An operator can receive an incident alert, identify the affected process and cause, acknowledge responsibility, and choose an authorized remediation or escalation. Larger tablets may optionally support BPMN authoring via the existing bpmn-js modeler. Mobile work never promises that an offline draft or an unconfirmed command is durably completed.
+
+### Cross-device product ambition (proposed expansion)
+
+**One atlas. Every device. The right experience.** The north star is a personal, role-aware workplace where Tasks, process starts, decisions, Incidents, monitoring and authorized follow-up can be managed comfortably from desktop, tablet and phone, with a **future watch companion for minimal urgent signals and authenticated handoff**. The intent is to make atlas the natural place to manage daily work, not clone every desktop feature on tiny screens. Same BPMN definitions, forms, APIs and permissions; the presentation is adaptive to available width, input, context and risk.
+
+[Cross-device experience and MFE7 proposal](mfe-cross-device-workplace.md) records a device/capability matrix, experience principles, four end-to-end journeys, acceptance tests, watch risks and phased priorities. This is **product direction**, not implementation or an amendment to accepted ADR-0514; watch actions and notifications require a separate ADR and MFE3 authoritative alarm design. MFE0 real tablet-landscape and iPhone evidence remain open.
 
 **End-to-end proof:** An operator uses a phone to start a safety-inspection process, completes a field checklist with evidence, and watches a deliberately failing downstream worker raise an incident. The on-call operator receives one correctly routed alert for the grouped cause, authenticates via a deep link, acknowledges it, inspects the failure and carries out an authorized resolution or escalation. Verify both offline and lost-response variants; test a foldable/tablet layout and real devices. A business safety finding is process data, **not** automatically an engine incident.
 
@@ -52,7 +58,7 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 **In scope:** Mobile Tasks and process initiation as equal primary destinations; accessible touch interactions; incident read/triage and alarm response for authorized operators; reliable evidence handling; optional offline drafts and synchronized completion; adaptable layouts on tablets/foldables; a later optional authoring mode.
 
-**Out of scope:** A second process execution engine; bespoke BPMN renderer; full smartphone Operations/Insights/administration/Modeler; an independent notification subsystem inside the processor; a promise of guaranteed Web Push delivery; an offline process-execution runtime. No client-side UI decision may substitute for BPMN/DMN routing or server-side authorization.
+**Out of scope (current committed MFE1–MFE6 work, not the long-term product ambition):** A second process execution engine; bespoke BPMN renderer; a complete desktop Operations/Insights/administration/Modeler mirrored on a phone; an independent notification subsystem inside the processor; a promise of guaranteed Web Push delivery; an offline process-execution runtime. No client-side UI decision may substitute for BPMN/DMN routing or server-side authorization.
 
 ## Architecture authority and unresolved decisions
 
@@ -119,9 +125,17 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - Keep the same model, compiler validation and deployment semantics; never build a second BPMN renderer or promise full phone-based authoring.
 - **Exit:** successful bpmn-js open/edit/save/reopen/deploy on tested tablets with keyboard, pen and touch parity where supported.
 
+### MFE7 — Wearable companion and cross-device handoff (proposed)
+
+- **Planned only:** a future watchOS/Wear OS companion should deliver a privacy-safe, role-authorized urgent signal and hand off to the already authenticated phone Tasks/Incidents experience. This is not a shrinking of the web Console onto a watch.
+- MFE1 provides authenticated deep links; MFE3 must first settle durable alarms, acknowledgement/ownership, recipients, delivery fallback and security. Do not mistake a polled count for a delivered alarm. Shared unsent drafts would depend on the separately accepted MFE5 design.
+- A new ADR must decide native/watch delivery adapters, risk-limited actions, device pairing, explicit consent, account/permission revocation, audit attribution, lock-screen privacy and failure modes before implementing any write operation.
+- **First proof:** a watch displays a minimal urgent incident indicator, then launches an authenticated, server-authorized phone deep link to a read-only cause summary. Test actual watch hardware, lost delivery, logout and duplicate alert cases. No engine incident resolve or task completion from a notification.
+- **Exit:** owner-approved security/notification ADR, real-device evidence, loss/fallback and post-fsync visibility tests. Detailed [experience contract](mfe-cross-device-workplace.md).
+
 ## Delivery dependencies and priorities
 
-MFE0 gates every implementation slice. MFE1 and MFE2 can proceed as separate vertical products after the architecture review, with a default limit of two active integration slices. MFE3 depends on MFE2's actionable, authorized incident view; MFE4 depends on MFE1; MFE5 depends on MFE1/MFE4; MFE6 is optional after MFE1. MFE2 and MFE3 are **P0**, not after offline or tablet modelling.
+MFE0 gates every implementation slice. MFE1 and MFE2 can proceed as separate vertical products after the architecture review, with a default limit of two active integration slices. MFE3 depends on MFE2's actionable, authorized incident view; MFE4 depends on MFE1; MFE5 depends on MFE1/MFE4; MFE6 is optional after MFE1. MFE7 depends on MFE1/MFE3 and remains a future research/ADR slice; full unsent-draft continuity additionally depends on MFE5. MFE2 and MFE3 are **P0**, not after offline, tablet modelling or watch companion work.
 
 Strategic ownership: [Milestone S](../../ROADMAP.md#milestone-s--single-binary-server--web-ui-) is the primary roadmap home; [Milestone A](../../ROADMAP.md#milestone-a--modeler--authoring-experience-) provides the shared form/editor design dependency; [Milestone 4](../../ROADMAP.md#milestone-4--operability-) owns existing incident runtime functionality. This programme coordinates across those tracks; it is not another execution subsystem.
 
