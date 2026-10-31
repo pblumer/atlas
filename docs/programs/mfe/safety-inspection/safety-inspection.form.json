@@ -1,0 +1,63 @@
+{
+  "type": "default",
+  "id": "mfe1-safety-inspection",
+  "components": [
+    {
+      "type": "text",
+      "text": "# Sicherheitskontrolle vor Ort\n\nKontrolliere den Gegenstand und dokumentiere den Befund. Eine Bestätigung erscheint erst, wenn der Server den Abschluss bestätigt."
+    },
+    {
+      "type": "textfield",
+      "key": "site",
+      "label": "Standort",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "textfield",
+      "key": "asset",
+      "label": "Kontrollobjekt / Anlagen-ID",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "textfield",
+      "key": "inspector",
+      "label": "Kontrollierende Person",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "radio",
+      "key": "safetyCheckResult",
+      "label": "Kontrollergebnis",
+      "values": [
+        {
+          "label": "Ohne Befund",
+          "value": "ok"
+        },
+        {
+          "label": "Befund festgestellt",
+          "value": "finding"
+        }
+      ],
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "type": "textarea",
+      "key": "findingDescription",
+      "label": "Bemerkungen / Befund",
+      "rows": 4,
+      "description": "Bei einem Befund bitte die Abweichung und nötige Massnahmen beschreiben."
+    },
+    {
+      "type": "text",
+      "text": "Prüfe die Angaben vor dem Abschluss. Ein Befund ist ein fachliches Prozessergebnis und kein technischer Engine-Incident."
+    }
+  ]
+}
