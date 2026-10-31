@@ -1,7 +1,7 @@
 # ADR-0514: Mobile-first Tasks, Process Start and incident triage share one adaptive experience
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-30
 - **Decision accepted:** 2026-10-30 by programme owner pblumer
 - **Deciders:** atlas maintainers
@@ -62,7 +62,7 @@ records what has and has not been measured.
 
 **Chosen option: 1.** One authoritative set of task, form and incident commands,
 with an adaptive presentation. **Accepted on 2026-10-30** by the programme owner.
-**Implementation remains Not started.** MFE0 device checks, incident-alarm
+**Implementation is Partial:** MFE1 navigation and the mobile server-confirmed completion receipt have landed. A deployable safety-inspection example is under review. MFE0 device checks, incident-alarm
 acknowledgement, evidence and offline completion require their separate gates.
 
 ### Product boundary
@@ -166,6 +166,14 @@ acknowledgement, evidence and offline completion require their separate gates.
   device-based tests; some desktop operations are intentionally not portable.
 - **Deferred:** alarm lifecycle, push transport, offline write protocol,
   capture/evidence storage and tablet authoring are gated by MFE3–MFE6.
+
+## As built (partial)
+
+- [MFE1 PR #1468](https://github.com/pblumer/atlas/pull/1468) (merged): accessible Tasks/authorised Start navigation on narrow screens with six Chromium E2E scenarios and unchanged server roles.
+- [MFE1 PR #1469](https://github.com/pblumer/atlas/pull/1469) (merged): mobile Task-completion receipt that appears only after the existing HTTP command is acknowledged. The browser test uses real form-js with a **mocked** safety-inspection task.
+- A separate [MFE1 safety-inspection example](../programs/mfe/safety-inspection/README.md) is now proposed for review as a BPMN model plus form-js schema. It is not installed by default, nor does it demonstrate physical-device acceptance.
+- The choice of a full field-worker process-start permission independent of broad `operator` is **not made** in this ADR: see issue [#1467](https://github.com/pblumer/atlas/issues/1467).
+- **Not landed:** MFE2 mobile incident triage, MFE0 real-device/screen-reader/zoom acceptance, MFE3 alarm acknowledgement, MFE4 QR/evidence and MFE5 offline/idempotency. Marking this ADR Partial does not claim any of those gates.
 
 ## Links
 

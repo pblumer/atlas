@@ -423,6 +423,9 @@ func checkItems(in Input, add func(Problem)) {
 			add(Problem{Item: it.ID, Message: "names a blank price; leave it out for a " +
 				"product the catalogue says nothing about the cost of"})
 		}
+		for _, p := range serviceLevelProblems(it) {
+			add(p)
+		}
 		// A form id of nothing but spaces is a product that asks a question nobody
 		// can answer: the shop would look for a form under a name no form has, and
 		// the orderer would be stopped by a blank that cannot be filled in
@@ -880,6 +883,7 @@ func freeze(items []Item) []Item {
 		it.CategoryTexts = copyTexts(it.CategoryTexts)
 		it.ProductGroupTexts = copyTexts(it.ProductGroupTexts)
 		it.Operations = copyOperations(it.Operations)
+		it.ServiceLevel = it.ServiceLevel.Copy()
 		it.Actions = CopyActions(it.Actions)
 		if len(it.Variants) > 0 {
 			vs := make([]Variant, len(it.Variants))

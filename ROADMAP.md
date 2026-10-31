@@ -1369,7 +1369,7 @@ A parallel track (not strictly sequential with the engine milestones): make Atla
 something you *start*, not only something you *import*. Everything ships in one
 self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
 
-**Mobile & Field Experience (MFE) programme — active (MFE0 architecture and device baseline)** ([programme plan](docs/planning/mobile-field-experience-program.md), [manifest](docs/programs/mfe/program.json)). Mobile is a **Tasks and Process Start first** surface, not a miniature admin Console. After an architecture and real-device baseline (MFE0), deliver accessible adaptive Tasks/Start (MFE1), operator-scoped mobile incident triage (MFE2), and modelled, deduplicated alerting and human acknowledgement/escalation from the existing incident CloudEvents feed (MFE3). Follow with field capture/evidence outside WAL variables (MFE4), safe offline drafts and idempotent completion reconciliation (MFE5), and optional bpmn-js authoring on large tablets (MFE6). MFE0 must review the existing narrow-screen ADR-0417, incident ADR-0061/0169/0337, notification ADR-0343/0433/0435, security/roles and loss-of-response durability semantics. **MFE0's source audit and proposed ADR-0514 are in review; real-device checks and architectural acceptance are not complete. No MFE functionality is implemented merely by this roadmap entry.**
+**Mobile & Field Experience (MFE) programme — active (MFE0 architecture and device baseline)** ([programme plan](docs/planning/mobile-field-experience-program.md), [manifest](docs/programs/mfe/program.json)). Mobile is a **Tasks and Process Start first** surface, not a miniature admin Console. After an architecture and real-device baseline (MFE0), deliver accessible adaptive Tasks/Start (MFE1), operator-scoped mobile incident triage (MFE2), and modelled, deduplicated alerting and human acknowledgement/escalation from the existing incident CloudEvents feed (MFE3). Follow with field capture/evidence outside WAL variables (MFE4), safe offline drafts and idempotent completion reconciliation (MFE5), and optional bpmn-js authoring on large tablets (MFE6). **Proposed adaptive-workplace extension (MFE7):** Make atlas a coherent, role-aware personal workplace from desktop through tablet and phone, with an optional later watchOS/Wear OS companion limited to privacy-safe urgent status and authenticated phone handoff. This [cross-device product target](docs/planning/mfe-cross-device-workplace.md) is not shipped, does not imply full Watch/phone Modeler or administration, and requires a separate security/notification ADR after MFE1/MFE3 (unsent draft continuity requires MFE5). MFE0 must review the existing narrow-screen ADR-0417, incident ADR-0061/0169/0337, notification ADR-0343/0433/0435, security/roles and loss-of-response durability semantics. **MFE0's source audit and Chromium Tasks/Start/form-js regression checks are merged (PRs #1449, #1453, #1454), and ADR-0514 is Accepted (PR #1452). Real-device iOS/Android, complex-form/accessibility and handoff evidence remain open in issue #1451; MFE0 stays active. MFE1's first mobile Tasks/authorised Start navigation is merged (PR #1468, green CI); mobile server-confirmed completion feedback is under review (draft PR #1469). MFE0 hardware acceptance remains open and no mobile release is claimed. Normal task users cannot start processes under ADR-0209's operator-only start rule; a scoped self-service permission decision is tracked in issue #1467. MFE2 remains planned in issue #1457.**
 
 - ✅ `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
   serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
@@ -2782,6 +2782,20 @@ actions with closed effects, each a command whose outcome is a fact published be
     message.
   - 🔲 The remaining entries: user created and rejected, offboarding, access review,
     deployments.
+**tshopper — phase A** ([programme TSH](docs/planning/tshopper-program.md),
+[ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md))
+- ✅ **A delivery promise on every product.** A service level and its delivery time in working days, frozen
+  into the release, copied onto the order line and measured from approval to the start of the right.
+- ✅ **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
+  product and period, CSV, no names.
+- ✅ **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
+  read audited.
+- ✅ **The tshopper shell.** The shop page as an application of its own in the same binary, with its
+  dashboards and the wiki's building blocks.
+- 🚧 **One contract between shop and engine,** mapped to TMF620/622/637. `api/shopcontract` exists and
+  the report service uses only it; 37 server files still import the shop's packages directly, a count a
+  test lets only fall.
+
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

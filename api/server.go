@@ -106,6 +106,7 @@ import (
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/releasenotes"
+	"github.com/pblumer/atlas/api/servicereport"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/api/workerquery"
@@ -373,6 +374,9 @@ type Server struct {
 	// area service on the ADR-0147 shape: its own store, the run loop for every
 	// access, no engine state anywhere.
 	catalogs *catalog.Service
+	// reports answers the delivery report and the reports that name people
+	// (ADR-0515), reaching the engine through api/shopcontract only.
+	reports *servicereport.Service
 	// orders serves the portal's orders: what somebody asked for, against one
 	// frozen catalogue release.
 	orders *order.Service
@@ -1907,6 +1911,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// what may start next. Publishing runs the processor, which is a visit to the
 	// loop of its own — so the order service calls this outside its own closure.
 	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.reports = &servicereport.Service{
+		Now: func() int64 { return s.now() }, Catalogs: catalogStore.Catalogs, ReleasesOf: catalogStore.ReleasesOf,
+		MayEdit: s.catalogs.MayEdit, Orders: orderStore.All,
+		Inventory: shopInventory{s}, Directory: shopDirectory{s},
+		NameOf: s.principalNamer, Audit: auditNamesRead,
+	}
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
 		// Which groups the recipient is in, for the eligibility check

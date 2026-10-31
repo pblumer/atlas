@@ -720,7 +720,7 @@ const APPS = [
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "tshopper" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -732,7 +732,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "tshopper" },
 ];
 
 // Secondary (in-app) navigation.
@@ -857,6 +857,14 @@ const TOPNAV = {
     { name: "Model", route: "#/data", role: "modeler" },
     { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
+  ],
+  // The catalogue app is the product manager's half of tshopper (phase A,
+  // ADR-0515): the catalogues, the wiki's
+  // services to compose them from, and how what they offer is delivered.
+  catalog: [
+    { name: "Catalogues", route: "#/catalog", role: "productmanager", feature: "catalogue" },
+    { name: "Building blocks", route: "#/catalog/building-blocks", role: "productmanager", feature: "catalogue" },
+    { name: "Reporting", route: "#/catalog/reporting", role: "productmanager", feature: "catalogue" },
   ],
 };
 
@@ -1449,10 +1457,19 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
-    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
-  ).join("");
+  // Apps of one suite sit under its name, once, above the first of them: the
+  // catalogue and the shop are tshopper (phase A,
+  // ADR-0515), and saying so in the drawer is
+  // what tells a person the two belong together. The caption is not a link and not
+  // part of any link's name.
+  let suite = "";
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) => {
+    const head = a.suite && a.suite !== suite ? `<div class="app-suite" aria-hidden="true">${a.suite}</div>` : "";
+    suite = a.suite || "";
+    return head +
+      `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+      `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
+  }).join("");
 }
 
 function setChrome(appId, route) {
@@ -8907,6 +8924,24 @@ const wizardHistory = {
 // then less often, for about two minutes in all.
 const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
+// MFE1: offer both primary work destinations without inventing a mobile router.
+// Start remains operator-only (ADR-0209); mobile navigation must use the same
+// role predicate as the desktop top bar, not a separate authorisation rule.
+// On task selection the list pane (and this navigation) hides on narrow screens,
+// so following a Start link cannot silently discard an in-progress form draft.
+function mobileWorkEntryHTML(active) {
+  const tasksCurrent = active === "tasks" ? ' aria-current="page"' : "";
+  const startCurrent = active === "start" ? ' aria-current="page"' : "";
+  return `<nav class="mfe-entry" aria-label="${esc(tr("mfe.navigation"))}">
+    ${offered({ role: "user" })
+      ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
+      : ""}
+    ${offered({ role: "operator" })
+      ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
+      : ""}
+  </nav>`;
+}
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
@@ -8944,6 +8979,7 @@ async function viewTasks(preselectKey) {
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
     mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    receipt: null, // mobile-only receipt after a server-confirmed task completion
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
@@ -8988,6 +9024,8 @@ async function viewTasks(preselectKey) {
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
+        <div class="mfe-completion" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        ${mobileWorkEntryHTML("tasks")}
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
           <button class="btn ghost small" id="task-select" title="Select multiple tasks to act on them together">Select</button>
@@ -9377,6 +9415,9 @@ async function viewTasks(preselectKey) {
   // into its place (auto-advance), so an operator can clear a queue without
   // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
   async function completeCurrent() {
+    // Ctrl/⌘+Enter invokes this handler independently of the button's disabled
+    // state. A still-pending completion must not send a duplicate command.
+    if (document.getElementById("task-complete")?.disabled) return;
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) return;
     if (decidedHere(t)) {
@@ -9461,6 +9502,17 @@ async function viewTasks(preselectKey) {
       // slot of the queue (ADR-0449).
       if (res && res.wizard && followWizard(res.wizard, t)) {
         renderAll();
+        return;
+      }
+      if (window.matchMedia("(max-width: 860px)").matches) {
+        // On a phone auto-advancing to the next detail would hide the confirmation
+        // behind the selected pane. Return to the inbox instead: the server has
+        // acknowledged completion and the person can now choose the next task.
+        // This is an in-memory receipt, not a replacement event or a claim about
+        // an unconfirmed offline action.
+        state.receipt = { name: taskTitle(t) };
+        renderAll();
+        document.querySelector(".mfe-completion")?.focus();
         return;
       }
       const after = visible();
@@ -10122,7 +10174,25 @@ async function viewTasks(preselectKey) {
     if (next === "process" && t && !state.mountedProc) mountProc(t);
   }
 
+  function renderMobileReceipt() {
+    const el = document.querySelector(".mfe-completion");
+    if (!el) return;
+    if (!state.receipt) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = `<span>${esc(tr("mfe.completed", { task: state.receipt.name }))}</span>
+      <button type="button" class="btn ghost small" aria-label="${esc(tr("mfe.dismiss"))}">${esc(tr("mfe.dismiss"))}</button>`;
+    el.querySelector("button").addEventListener("click", () => {
+      state.receipt = null;
+      renderMobileReceipt();
+    });
+  }
+
   function renderAll() {
+    renderMobileReceipt();
     renderFolders();
     renderTrunc();
     renderList();
@@ -10418,6 +10488,7 @@ async function viewStartProcess() {
   view.innerHTML = `
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("start")}
         <header class="tasks-list-head"><h2>Start a process</h2>
           <button class="btn ghost small" id="start-refresh" title="Reload the list of startable processes">Refresh</button></header>
         <div class="tasks-toolbar">
@@ -11889,6 +11960,15 @@ async function route() {
       const gen = navGen;
       const { viewEvents } = await import("./events.js");
       return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/catalog/reporting") {
+      const { viewDeliveryReport } = await import("./deliveryreport.js");
+      return viewDeliveryReport({ api, view });
+    }
+    if (path === "#/catalog/building-blocks") {
+      const gen = navGen;
+      const { viewBuildingBlocks } = await import("./buildingblocks.js");
+      return await viewBuildingBlocks({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/catalog") {
       const gen = navGen;

@@ -586,6 +586,10 @@ var (
 	// ApprovalAnswered is an approver answering, or withdrawing an answer to, an
 	// approval of an action.
 	ApprovalAnswered = newEvent("authz.approval_answered")
+	// ReportNamesRead is somebody reading a report that names people: a line
+	// manager's team report or a customer responsible's organisation report
+	// (ADR-0515).
+	ReportNamesRead = newEvent("audit.report_names_read")
 )
 
 // The FEEL assistant (ADR-0445).

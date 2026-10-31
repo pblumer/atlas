@@ -7676,6 +7676,73 @@ button.im-problem:hover { background: var(--accent-soft); }
 .estate-table td[data-tone="unknown"] { color: var(--muted); }
 .estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
 
+/* MFE1: an explicit, local receipt only after an acknowledged server completion.
+   Do not let a toast or another task's auto-advance hide the outcome on a phone. */
+.mfe-completion { display: none; }
+.mfe-completion[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .mfe-completion:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin: 10px 12px 0;
+    min-width: 0;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .mfe-completion > span { min-width: 0; }
+  .mfe-completion button { flex: 0 0 auto; min-height: 44px; }
+  .mfe-completion:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+/* MFE1: one shared work destination switcher inside the two existing lists.
+   It is hidden on desktop and naturally disappears with the list on a selected
+   mobile task. Server roles still decide whether Start can actually be offered. */
+.mfe-entry { display: none; }
+
+@media (max-width: 860px) {
+  .mfe-entry {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px 0;
+  }
+  .mfe-entry-link {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 10px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+  }
+  .mfe-entry-link.active {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .mfe-entry-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
 /* ---------- Tasks and the top bar on a narrow screen ----------
    (ADR-0417) The shop's breakpoint,
    860px, so a phone reads the shop and the inbox the same way: one column.
@@ -8023,3 +8090,20 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
    row's text, so it reads as a note on the verb rather than as a second headline. */
 .el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }
+
+/* ---------- Delivery and SLA (ADR-0515) ---------- */
+.dr-period { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0 0 12px; }
+.dr-period .field { margin: 0; }
+.dr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.dr-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.dr-v { font-size: 22px; font-weight: 700; }
+.dr-ok { color: var(--ok, #2d8a4e); }
+.dr-warn { color: #b26a00; }
+.dr-bad { color: var(--danger); }
+.dr-scroll { overflow-x: auto; }
+.dr-table td.num, .dr-table th.num { text-align: right; white-space: nowrap; }
+.sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.sl-row .field { margin: 0; min-width: 180px; }
+
+/* A suite's name above its apps in the drawer: tshopper is the catalogue and the shop. */
+.app-suite { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 14px 2px; }

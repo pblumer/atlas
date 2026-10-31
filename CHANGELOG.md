@@ -13,7 +13,35 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
+- **The shop reaches the engine through one contract.** The delivery report and the reports that
+  name people moved into their own service (`api/servicereport`), which reads the inventory and the
+  directory only through the new `api/shopcontract` interfaces. A test holds that service to the
+  contract and pins how many server files still import the catalogue or order packages directly
+  (37), a number that may only fall — the measurable start of separating tshopper from the engine.
+- **The catalogue app finds the wiki's services and reports on its own page.** The catalogue and
+  the shop are grouped as tshopper in the app drawer, and the catalogue app gains a top bar with
+  Catalogues, Building blocks and Reporting. Building blocks searches a content source
+  (`GET /api/v1/catalog-building-blocks`, MCP tool `atlas_catalog_building_blocks`) and shows each
+  wiki page with the products that already use it — named where you maintain them, counted where
+  you do not — and Create product turns an unused page into a draft product bound to it.
+- **Line managers and customer responsibles see what their people hold.** The shop gains a
+  My team tab for line managers — every account naming them as its manager — and an
+  Organisation tab for the members of a catalogue's new customer-responsible groups, covering
+  everybody that catalogue is shown to. Both list per person what they hold and how their
+  positions in a period stand against the delivery promise, by name and as CSV, from
+  `GET /api/v1/shop/team-report` and `GET /api/v1/shop/organisation-report`; every reading writes
+  an `audit.report_names_read` line. Only the catalogue's owner or an administrator sets the
+  groups, and a catalogue document neither exports nor imports them.
+- **A product promises a delivery time, and the catalogue reports how it was kept.** A product
+  may carry a service level — a name and a delivery time in working days — that is frozen into
+  the release and copied onto the order line, so every position is measured against the promise
+  it was ordered under. The Delivery and SLA card on the catalogue page, the route
+  `GET /api/v1/catalog-products/delivery-report` and the MCP tool `atlas_catalog_delivery_report`
+  show per product and period how many positions were ordered, met, missed, overdue and open, the
+  share kept, the median and 90th-percentile lead time from approval to the start of the right
+  (Monday to Friday) and how many hold it now, as a table or CSV and without naming anybody.
 - **A list's filter box empties with one click.** A column filter box with a term in it
   shows a small cross at its trailing edge that clears the term and gives the rows back,
   keeping the caret in the box for the next one; Escape does the same from the keyboard,

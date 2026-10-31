@@ -27,6 +27,26 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`building-blocks.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the catalogue app's Building blocks page offers the sources the server names, shows each wiki
+  page with the products using it, turns an unused page into a draft product bound to it, says
+  when no source is configured, and writes product ids as product ids are written.
+
+- **`shop-reports.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the shop draws a My team tab only for a line manager and an Organisation tab only for a customer
+  responsible; each reads its report, names the people with what they hold and their positions,
+  says that every reading is recorded, and asks for and exports a chosen period.
+
+- **`delivery-report.spec.mjs`** and **`service-level-body.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the product manager's Delivery and SLA card draws four tiles and a row per product from the
+  delivery report, fills the period the server chose, asks for and exports a chosen period, and
+  says when the report cannot be read; the product editor sends no service level for empty boxes,
+  a typed one as typed (a half-filled one for the publish to refuse), and keeps names in languages
+  the catalogue does not declare.
+
 - **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
@@ -968,16 +988,59 @@ ADR-0417 breakpoint, and preservation of a Process Start form across
 portrait/landscape resizing. They also assert the document does not overflow
 horizontally at the measured small sizes.
 
-The two-column form-js regression exercises a schema-authored shared row
-in **Task and Process Start**, and checks that its input fields stack at 320px,
-remain visible without document overflow, retain typed values through a
-320px → 1024px → 320px resize, and recover their side-by-side layout on desktop.
-The fix lives only in Tasks/Start CSS and leaves the original schema unchanged.
-These tests run against mocked HTTP and the real vendored form-js renderer.
+Further MFE0 regressions exercise a grouped, several-field form-js schema
+(with a required text field, select, date field and a long-label text area)
+inside the actual Tasks and Process Start screens at narrow phone widths.
+The checks cover visible, labelled controls, required-field refusal without
+an outgoing completion command, no document overflow, and preservation of
+select/text values across phone-to-tablet resizing. This covers a **grouped**
+layout, not a proof that any form-js multi-column renderer fits small screens.
 
-These tests **do not** verify every complex form-js component, 200% real browser
-zoom, iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
+Two-column form-js regression tests exercise a valid 6+6 grid row in Tasks
+and Process Start. At 320px the inputs stack without page overflow; at 1024px
+the authored row is preserved when the form has adequate space, and typed
+values survive a 320px → 1024px → 320px resize without remounting the form.
+
+These tests **do not** validate every complex multi-column form-js schema, text zoom,
+iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
 evidence that MFE0's real-device exit gate is complete. Record the remaining
 checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
 and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
+
+## MFE1 mobile work destinations (ADR-0514)
+
+`mfe1-mobile-entry.spec.mjs` covers the first bounded MFE1 navigation slice on
+the real Console/Tasks production DOM: a 320px operator can switch between
+My tasks and Start process via equally sized, 44px-minimum direct destinations,
+with the correct current-page semantics; a `user`-only worker is **not**
+offered operator-only Start (ADR-0209); an `operator` without the `user` role is not offered a task inbox shortcut; a selected phone task hides the
+list-level navigation to avoid losing a partially entered form; desktop retains
+the existing top bar without duplicated controls; auth-disabled mode follows
+existing open-server navigation. The normal HTTP task/start routes remain the
+server-side authority.
+
+This is **not** proof that ordinary `user` principals can start processes:
+they cannot under ADR-0209. Scoped self-service process starts need a separate
+decision ([MFE1 issue #1467](https://github.com/pblumer/atlas/issues/1467)).
+Real-device MFE0 checks, screen-reader/zoom evidence, field inspection BPMN,
+and final MFE1 task completion/confirmation journeys are still outstanding.
+
+## MFE1 mobile task completion receipt
+
+`mfe1-mobile-completion.spec.mjs` adds five browser regressions against the
+**real Tasks DOM and vendored form-js**, using a **mocked** safety inspection
+task. At 320–390 CSS px, the UI keeps the editing form in place on validation
+refusal, a server-side 403 and while an HTTP completion command is pending;
+a second Ctrl/Enter during the pending command does not duplicate the POST.
+Only a successful HTTP response provides a dismissible, accessible
+`role=status` receipt naming the completed task. On mobile, completion
+returns to the inbox rather than instantly selecting another task; desktop
+retains the existing auto-advance behaviour. Any wizard continuation still
+takes precedence.
+
+These are **not** real-device tests, a persistently queryable receipt, an
+offline retry protocol, or an end-to-end deployed BPMN safety-inspection
+process. Unknown/lost responses remain failures to confirm and must not be
+reported as successful. Recording those outcomes safely is an MFE5 design
+gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.

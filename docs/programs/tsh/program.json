@@ -1,0 +1,98 @@
+{
+  "id": "tsh",
+  "name": "tshopper — catalogue and shop as a capability of their own",
+  "summary": "Phase A: draw the boundary between the service catalogue/shop and the engine inside the single binary, and give product managers, line managers and customer responsibles delivery-SLA, consumption and order reporting.",
+  "status": "paused",
+  "owner": "dbuchs7",
+  "last_reviewed": "2026-10-31",
+  "plan": "../../planning/tshopper-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
+  "next_action": "Paused after phase A by the owner's decision (2026-10-31). To restart: move the 37 server files that import api/catalog or api/order behind api/shopcontract (TestServerFilesReachingIntoTheShopOnlyBecomeFewer tracks the count), settle ADR-0515's open question on public holidays, and decide phase B (separate binary) in its own ADR before any work on it.",
+  "slices": [
+    {
+      "id": "TSH0",
+      "title": "Charter, plan and ADR draft",
+      "status": "complete",
+      "owner": "dbuchs7",
+      "depends_on": [],
+      "issues": [],
+      "prs": [
+        1461
+      ],
+      "note": "Complete: PR #1461 merged; ADR-0515 Accepted (decisions confirmed by the requester on 2026-10-31), plan, manifest and ROADMAP entry on main.",
+      "evidence": [
+        "../../adr/0515-service-reporting-and-customer-views.md",
+        "../../planning/tshopper-program.md"
+      ]
+    },
+    {
+      "id": "TSH1",
+      "title": "Service level on products and the delivery report",
+      "status": "complete",
+      "owner": "dbuchs7",
+      "depends_on": [
+        "TSH0"
+      ],
+      "issues": [],
+      "prs": [
+        1462
+      ],
+      "note": "Complete: PR #1462 merged with all CI checks green (race, windows, e2e, coverage). Service level frozen into release and order line; delivery report route, Console card, CSV and MCP tool.",
+      "evidence": [
+        "../../../api/servicereport/measure_test.go",
+        "../../../api/deliveryreport_http_test.go",
+        "../../../e2e/delivery-report.spec.mjs"
+      ]
+    },
+    {
+      "id": "TSH2",
+      "title": "Line-manager and customer-responsible views",
+      "status": "complete",
+      "owner": "dbuchs7",
+      "depends_on": [
+        "TSH1"
+      ],
+      "issues": [],
+      "prs": [
+        1463
+      ],
+      "note": "Complete: PR #1463 merged with all CI checks green. reportingGroups (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section.",
+      "evidence": [
+        "../../../api/customerreport_http_test.go",
+        "../../../e2e/shop-reports.spec.mjs"
+      ]
+    },
+    {
+      "id": "TSH3",
+      "title": "tshopper shell and wiki building blocks",
+      "status": "complete",
+      "owner": "dbuchs7",
+      "depends_on": [
+        "TSH2"
+      ],
+      "issues": [],
+      "prs": [
+        1464
+      ],
+      "note": "Complete: PR #1464 merged with all CI checks green. App-drawer suite tshopper, catalogue top bar, building-blocks route and MCP tool, Create product from a wiki page. The shop keeps the catalogue brand (ADR-0316).",
+      "evidence": [
+        "../../../api/catalog/buildingblocks_test.go",
+        "../../../e2e/building-blocks.spec.mjs"
+      ]
+    },
+    {
+      "id": "TSH4",
+      "title": "Boundary contract between shop and engine",
+      "status": "paused",
+      "owner": "dbuchs7",
+      "depends_on": [
+        "TSH1"
+      ],
+      "issues": [],
+      "prs": [
+        1465
+      ],
+      "note": "PR #1465 merged with all CI checks green: api/shopcontract, servicereport.Service behind it, guards. Paused, not complete: 37 server files still import api/catalog or api/order directly; the ratchet test lets that count only fall. Restart by moving them behind the contract."
+    }
+  ]
+}
