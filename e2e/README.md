@@ -1009,7 +1009,7 @@ and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
 the real Console/Tasks production DOM: a 320px operator can switch between
 My tasks and Start process via equally sized, 44px-minimum direct destinations,
 with the correct current-page semantics; a `user`-only worker is **not**
-offered operator-only Start (ADR-0209); a selected phone task hides the
+offered operator-only Start (ADR-0209); an `operator` without the `user` role is not offered a task inbox shortcut; a selected phone task hides the
 list-level navigation to avoid losing a partially entered form; desktop retains
 the existing top bar without duplicated controls; auth-disabled mode follows
 existing open-server navigation. The normal HTTP task/start routes remain the
