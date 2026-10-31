@@ -38,7 +38,7 @@ no users or permissions.
 
 ## Checks and boundaries
 
-`go test ./docs/programs/mfe/safety-inspection` checks that the BPMN compiles,
+`go test ./examples -run TestSafetyInspection` checks that the BPMN compiles,
 that the form reference resolves, and that required fields and the fail-closed
 business branch remain present. The CI Go checks and browser E2E suite remain
 mandatory. Actual phone/tablet acceptance belongs to MFE0 #1451.
