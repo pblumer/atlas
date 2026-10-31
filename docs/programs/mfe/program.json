@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Complete MFE0 real-device/tablet-landscape acceptance #1451 and MFE1 phone work-menu/polling review #1472; get scoped process-start ADR #1471 approved before any permission changes. MFE2/MFE3 incident triage and secure alarm delivery remain priority. MFE7 watch companion is a proposed future ADR-gated slice, not implemented.",
+  "next_action": "Owner accepted the scoped MFE1 process-start ADR on 2026-10-31; integrate its decision PR #1471, then specify and TDD-implement deny-by-default per-process start grants with security/recovery tests (not yet shipped). Finish mobile phone menu/polling PR #1472, tablet landscape under MFE0 #1451; hardware acceptance remains open.",
   "slices": [
     {
       "id": "MFE0",
@@ -47,7 +47,7 @@
         1470,
         1472
       ],
-      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) is open; no real-device acceptance or deployment is inferred. Scoped start grants for ordinary users remain gated on proposed ADR PR #1471 and issue #1467; no current runtime/API/permission/offline scope expansion. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
+      "note": "Owner explicitly approved MFE1 delivery and associated scoped-start ADR on 2026-10-31, alongside previously Accepted ADR-0514/0417. PRs #1468/#1469/#1470 are merged. Scoped-start ADR PR #1471 documents an accepted option but no API/authorization implementation; detailed sidecar/revocation and security/recovery tests remain mandatory. Mobile UX PR #1472 is open; tablet/iOS/Android hardware acceptance #1451 is pending. No unauthorized user may start a process yet."
     },
     {
       "id": "MFE2",
