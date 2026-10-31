@@ -1047,3 +1047,27 @@ offline retry protocol, or an end-to-end deployed BPMN safety-inspection
 process. Unknown/lost responses remain failures to confirm and must not be
 reported as successful. Recording those outcomes safely is an MFE5 design
 gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.
+
+## MFE1 compact phone work menu and foreground polling
+
+`mfe1-mobile-work-shell.spec.mjs` is a regression for the first real iPhone
+Safari feedback: a phone shows the app identity and a single **More** menu,
+not a clipped desktop navigation bar with six utility controls. The menu
+reuses role-filtered app destinations; a task-only user never gains the
+operator's Start or Incidents links. One permitted mobile destination no
+longer duplicates the page name in a 44px-tall strip. Desktop navigation is
+unchanged (also covered by `console-menu.spec.mjs`).
+
+While the tab is visible, read-only task and (for operators) incident status
+queries run every ten seconds. Changing task snapshots refresh the inbox only
+when no task, form or bulk selection is active, and the menu shows counts
+without interpreting them as alarm acknowledgements. Polling pauses in hidden
+tabs and refreshes on return; API failures are not an empty inbox. Tests
+include new tasks, incident counts and open-task preservation using a
+controlled clock, on the production DOM with mocked HTTP responses.
+
+The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
+Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
+or field conditions. Record those separately under MFE0 issue #1451.

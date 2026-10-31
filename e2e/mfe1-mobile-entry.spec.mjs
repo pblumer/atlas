@@ -62,7 +62,8 @@ test("MFE1 user phone: navigation does not offer operator-only Start", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/index.html?lang=en#/tasks");
   await expect(page.locator('.tasks-item[data-key="101"]')).toBeVisible({ timeout: 15000 });
-  await expect(mobileNav(page)).toBeVisible();
+  // A single permitted destination is no switcher: the phone header already says Tasks.
+  await expect(mobileNav(page)).toBeHidden();
   await expect(navLinks(page)).toHaveText(["My tasks"]);
   await expect(mobileNav(page).locator('a[href="#/tasks/start"]')).toHaveCount(0);
   await expect(page.locator('#topnav a[href="#/tasks/start"]')).toHaveCount(0);
@@ -111,5 +112,6 @@ test("MFE1 operator-only phone: Start remains available without a task inbox sho
   await page.goto("/index.html?lang=en#/tasks/start");
   await expect(page.locator("#start-list .tasks-item")).toBeVisible({ timeout: 15000 });
   await expect(navLinks(page)).toHaveText(["Start process"]);
+  await expect(mobileNav(page)).toBeHidden();
   await expect(mobileNav(page).locator('a[href="#/tasks"]')).toHaveCount(0);
 });
