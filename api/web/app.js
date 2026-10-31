@@ -612,6 +612,16 @@ document.addEventListener("click", (e) => {
   // opens on hover and on keyboard focus, and a click on it should leave the menu
   // standing rather than dismiss the lot.
   if (e.target.closest(".submenu-toggle")) { e.preventDefault(); e.stopPropagation(); return; }
+  const mobileAction = e.target.closest("[data-mobile-action]");
+  if (mobileAction) {
+    e.preventDefault();
+    closeAllMenus();
+    if (mobileAction.dataset.mobileAction === "search") openSearchPalette();
+    if (mobileAction.dataset.mobileAction === "appearance") {
+      document.getElementById("appearance-toggle")?.click();
+    }
+    return;
+  }
   const toggle = e.target.closest(".dropdown-toggle");
   if (toggle) {
     e.preventDefault(); e.stopPropagation();
@@ -1399,52 +1409,99 @@ function openSystemOverview(returnTo = document.activeElement) {
   done.focus();
 }
 
-// ---------- Operations nav incident badge ----------
-// A stuck token is now marked on the live diagram, in the replay and in the lists
-// (ADR-0150/0151) — but each of those only says so once you are already looking at
-// it. The nav badge is the one that finds *you*: while the Operations app is open,
-// the shell polls the live counts and puts the number of parked tokens on the
-// Incidents entry, so "something is stuck" arrives without a view being opened.
-// It polls only in Operations (nowhere else shows the entry) and stops on the way
-// out, so no other app pays for it.
-const INCIDENT_BADGE_INTERVAL = 5000;
+// ---------- Foreground work awareness (MFE1 / ADR-0514) ----------
+// Poll only while this tab is visible and a relevant role/view exists. An incident
+// count is a read-side hint, not a push notification, delivery receipt or human
+// acknowledgement. Task snapshots never mutate an open form or process instance.
+const WORK_POLL_INTERVAL = 10000;
 let incidentCount = 0;
-let incidentBadgeTimer = null;
+let taskCount = null;
+let taskCountExact = true;
+let taskFingerprint = null;
+let workPollTimer = null;
+let workPollBusy = false;
+let watchTasks = false;
+let watchIncidents = false;
 
-// paintIncidentBadge writes the current count into whatever badge slot the chrome
-// has right now. setChrome rebuilds the nav on every navigation, so the value is
-// re-applied rather than assumed to survive.
 function paintIncidentBadge() {
-  const slot = document.querySelector('#topnav .nav-badge[data-badge="incidents"]');
-  if (!slot) return;
-  slot.hidden = incidentCount === 0;
-  // A four-digit pill would push the nav around; past 999 the exact number does not
-  // change what an operator does next.
-  slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
-  slot.title = incidentCount === 1
-    ? "1 token is parked behind an unresolved incident"
-    : `${incidentCount} tokens are parked behind unresolved incidents`;
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="incidents"]')) {
+    slot.hidden = incidentCount === 0;
+    slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
+    slot.title = incidentCount === 1
+      ? "1 token is parked behind an unresolved incident"
+      : String(incidentCount) + " tokens are parked behind unresolved incidents";
+  }
 }
 
-// refreshIncidentBadge re-reads the count. The incidents table calls it straight
-// after a resolve, so the nav agrees at once instead of waiting out the interval.
+function paintTaskBadge() {
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="tasks"]')) {
+    slot.hidden = taskCount === null || taskCount === 0;
+    slot.textContent = taskCount > 999 ? "999+" : String(taskCount) + (taskCountExact ? "" : "+");
+    slot.title = taskCountExact ? String(taskCount) + " open tasks" : "At least " + taskCount + " open tasks";
+  }
+}
+
+// An operator may see incident statistics, while a task user may see the inbox.
+// Never request either solely because another role could see it.
 async function refreshIncidentBadge() {
-  let stats;
-  try { stats = await api("GET", "/api/v1/stats"); }
-  catch { return; } // transient; the badge keeps its last value
-  incidentCount = (stats && stats.unresolvedIncidents) || 0;
-  paintIncidentBadge();
+  if (!watchIncidents || document.hidden) return;
+  try {
+    const stats = await api("GET", "/api/v1/stats");
+    incidentCount = (stats && stats.unresolvedIncidents) || 0;
+    paintIncidentBadge();
+  } catch { /* preserve the last confirmed value across transient errors */ }
 }
 
+async function refreshWorkStatus() {
+  if (document.hidden || workPollBusy || (!watchTasks && !watchIncidents)) return;
+  workPollBusy = true;
+  const generation = navGen;
+  try {
+    const checks = [];
+    if (watchTasks) checks.push(api("GET", "/api/v1/tasks").then((page) => {
+      if (generation !== navGen) return;
+      const items = (page && page.items) || [];
+      const exact = !!(page && page.totalExact);
+      taskCount = exact && Number.isFinite(page.total) ? page.total : items.length;
+      taskCountExact = exact;
+      paintTaskBadge();
+      const fingerprint = JSON.stringify([page && page.total, page && page.truncated,
+        items.map((t) => [t.key, t.assignee, t.candidateGroups, t.name, t.dueDate, t.priority])]);
+      if (taskFingerprint !== null && fingerprint !== taskFingerprint) {
+        document.dispatchEvent(new Event("atlas:tasks-changed"));
+      }
+      taskFingerprint = fingerprint;
+    }).catch(() => { /* a failed read is not proof that tasks disappeared */ }));
+    if (watchIncidents) checks.push(refreshIncidentBadge());
+    await Promise.all(checks);
+  } finally {
+    workPollBusy = false;
+  }
+}
+
+// Called on every route change. A single interval follows the authenticated,
+// role-filtered shell; the foreground event catches tasks arriving while Safari
+// suspended a background tab. On leaving a work surface, stop its reads.
 function syncIncidentBadge(appId) {
-  if (appId !== "operations") {
-    if (incidentBadgeTimer) { clearInterval(incidentBadgeTimer); incidentBadgeTimer = null; }
+  const phone = window.matchMedia("(max-width: 520px)").matches;
+  watchTasks = mayUse("user") && (appId === "tasks" || phone);
+  watchIncidents = mayUse("operator") && (appId === "operations" || phone);
+  if (AUTH.enabled && !AUTH.user) { watchTasks = false; watchIncidents = false; }
+  paintIncidentBadge();
+  paintTaskBadge();
+  if (!watchTasks && !watchIncidents) {
+    if (workPollTimer) clearInterval(workPollTimer);
+    workPollTimer = null;
     return;
   }
-  paintIncidentBadge(); // the freshly rendered nav starts from what we already know
-  refreshIncidentBadge();
-  if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
+  refreshWorkStatus();
+  if (!workPollTimer) workPollTimer = setInterval(refreshWorkStatus, WORK_POLL_INTERVAL);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshWorkStatus();
+});
+window.addEventListener("focus", () => { if (!document.hidden) refreshWorkStatus(); });
 
 // paintApps fills the drawer with the apps this person may use. It runs at boot,
 // before /auth/me has answered — when nothing is known and everything is offered —
@@ -1470,6 +1527,57 @@ function paintApps() {
       `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
       `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
   }).join("");
+}
+
+// Phone navigation uses the same role-filtered TOPNAV, not a mobile-only access
+// policy. The work links remain available on every app, and nonessential chrome
+// actions live behind a single thumb-sized control.
+function paintMobileMenu(appId, route) {
+  const wrap = document.getElementById("mobile-more");
+  const menu = document.getElementById("mobile-more-menu");
+  if (!wrap || !menu) return;
+  wrap.hidden = false;
+  menu.replaceChildren();
+  const seen = new Set();
+  const addLink = (entry) => {
+    if (!entry.route || seen.has(entry.route) || !offered(entry)) return;
+    seen.add(entry.route);
+    const link = document.createElement("a");
+    link.href = entry.route;
+    link.setAttribute("role", "menuitem");
+    if (entry.separate) { link.target = "_blank"; link.rel = "noopener"; }
+    if (route === entry.route) link.setAttribute("aria-current", "page");
+    link.textContent = entry.name;
+    if (entry.badge) {
+      const count = document.createElement("span");
+      count.className = "nav-badge";
+      count.dataset.badge = entry.badge;
+      count.hidden = true;
+      link.append(count);
+    }
+    menu.append(link);
+  };
+  if (mayUse("user")) addLink({ name: "My tasks", route: "#/tasks", badge: "tasks" });
+  if (mayUse("operator")) addLink({ name: "Start process", route: "#/tasks/start" });
+  if (mayUse("operator")) addLink({ name: "Incidents", route: "#/operations/incidents", badge: "incidents" });
+  for (const entry of (TOPNAV[appId] || [])) {
+    if (entry.items) entry.items.forEach(addLink);
+    else addLink(entry);
+  }
+  const separator = document.createElement("div");
+  separator.className = "sep";
+  separator.setAttribute("role", "separator");
+  menu.append(separator);
+  for (const [name, action] of [["Search processes", "search"], ["Switch appearance", "appearance"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "menuitem");
+    button.dataset.mobileAction = action;
+    button.textContent = name;
+    menu.append(button);
+  }
+  addLink({ name: "Display settings", route: "#/console/settings" });
+  addLink({ name: "Help", route: "/handbuch.html" });
 }
 
 function setChrome(appId, route) {
@@ -1507,6 +1615,7 @@ function setChrome(appId, route) {
     const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
     topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
   }
+  paintMobileMenu(appId, route);
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
