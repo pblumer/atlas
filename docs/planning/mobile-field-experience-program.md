@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised a **limited MFE1 browser-only navigation slice** on 2026-10-31 while MFE0 remains incomplete; MFE1 is active for this strictly bounded work, MFE2–MFE6 remain planned. No MFE1 feature is delivered until its PR passes review/CI.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised **limited MFE1 browser-only UI work** on 2026-10-31 while MFE0 remains incomplete. PR #1468 is merged with green CI (mobile Tasks/role-authorised Start navigation); draft PR #1469 adds a server-confirmed mobile completion receipt with form-js browser tests. MFE1 remains active and not complete; MFE2–MFE6 remain planned. No real-device release is claimed.
 
 ## Outcome
 
@@ -76,7 +76,7 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 
 ### MFE1 — Mobile Tasks and Process Start
 
-**Controlled early integration (2026-10-31):** The programme owner requested continuation with MFE1 despite MFE0 device acceptance still open. The first test-first PR may change only the responsive Tasks/Start *navigation and translations* and its browser regression tests. It must preserve the existing operator-only Start permission and the server-owned task/instance mutation paths. This is a documented narrow **implementation exception**, not an MFE0 acceptance, device release authorisation, or permission to implement unreviewed security changes. MFE0 #1451 stays active; two active slices (MFE0/MFE1) respect the programme WIP cap.
+**Controlled early integration (2026-10-31):** The programme owner requested continuation with MFE1 despite MFE0 device acceptance still open. The first test-first PR changed only responsive Tasks/Start *navigation and translations* plus browser regression tests; it has merged. The next limited MFE1 UI-only slice (#1469) adds a completion receipt **after server acknowledgement** while preserving the server-owned completion command and existing form-js validation. It must preserve the existing operator-only Start permission and the server-owned task/instance mutation paths. This is a documented narrow **implementation exception**, not an MFE0 acceptance, device release authorisation, or permission to implement unreviewed security changes. MFE0 #1451 stays active; two active slices (MFE0/MFE1) respect the programme WIP cap.
 
 **Security gate:** The present `POST /api/v1/processes/{key}/instances` requires `operator` (ADR-0209). That role also grants operational privileges; simply offering Start to `user` would violate least privilege. [Issue #1467](https://github.com/pblumer/atlas/issues/1467) tracks a new ADR for scoped self-service process starts. Until then only permitted operators see both mobile destinations; ordinary task users see Tasks without a misleading Start action.
 
@@ -131,4 +131,4 @@ The processor hot path stays allocation-free; never send alerts or acknowledge c
 
 ## Immediate next action
 
-Programme owner pblumer executes and reviews the [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md) under [issue #1451](https://github.com/pblumer/atlas/issues/1451), then appoints coordinators for [MFE1 Tasks/Start #1456](https://github.com/pblumer/atlas/issues/1456) and [MFE2 read-only incident triage #1457](https://github.com/pblumer/atlas/issues/1457). MFE3 alarm acknowledgement, MFE4 field evidence and MFE5 offline completion still require separately reviewed decisions. No status in this planning document represents shipped functionality.
+Programme owner pblumer continues and reviews the [MFE0 real-device acceptance runbook](mfe0-device-validation-runbook.md) under [issue #1451](https://github.com/pblumer/atlas/issues/1451), then appoints coordinators for [MFE1 Tasks/Start #1456](https://github.com/pblumer/atlas/issues/1456) and [MFE2 read-only incident triage #1457](https://github.com/pblumer/atlas/issues/1457). MFE3 alarm acknowledgement, MFE4 field evidence and MFE5 offline completion still require separately reviewed decisions. No status in this planning document represents shipped functionality.

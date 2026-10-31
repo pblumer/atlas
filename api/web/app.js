@@ -8979,6 +8979,7 @@ async function viewTasks(preselectKey) {
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
     mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    receipt: null, // mobile-only receipt after a server-confirmed task completion
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
@@ -9023,6 +9024,7 @@ async function viewTasks(preselectKey) {
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
+        <div class="mfe-completion" role="status" aria-live="polite" tabindex="-1" hidden></div>
         ${mobileWorkEntryHTML("tasks")}
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
@@ -9413,6 +9415,9 @@ async function viewTasks(preselectKey) {
   // into its place (auto-advance), so an operator can clear a queue without
   // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
   async function completeCurrent() {
+    // Ctrl/⌘+Enter invokes this handler independently of the button's disabled
+    // state. A still-pending completion must not send a duplicate command.
+    if (document.getElementById("task-complete")?.disabled) return;
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) return;
     if (decidedHere(t)) {
@@ -9497,6 +9502,17 @@ async function viewTasks(preselectKey) {
       // slot of the queue (ADR-0449).
       if (res && res.wizard && followWizard(res.wizard, t)) {
         renderAll();
+        return;
+      }
+      if (window.matchMedia("(max-width: 860px)").matches) {
+        // On a phone auto-advancing to the next detail would hide the confirmation
+        // behind the selected pane. Return to the inbox instead: the server has
+        // acknowledged completion and the person can now choose the next task.
+        // This is an in-memory receipt, not a replacement event or a claim about
+        // an unconfirmed offline action.
+        state.receipt = { name: taskTitle(t) };
+        renderAll();
+        document.querySelector(".mfe-completion")?.focus();
         return;
       }
       const after = visible();
@@ -10158,7 +10174,25 @@ async function viewTasks(preselectKey) {
     if (next === "process" && t && !state.mountedProc) mountProc(t);
   }
 
+  function renderMobileReceipt() {
+    const el = document.querySelector(".mfe-completion");
+    if (!el) return;
+    if (!state.receipt) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = `<span>${esc(tr("mfe.completed", { task: state.receipt.name }))}</span>
+      <button type="button" class="btn ghost small" aria-label="${esc(tr("mfe.dismiss"))}">${esc(tr("mfe.dismiss"))}</button>`;
+    el.querySelector("button").addEventListener("click", () => {
+      state.receipt = null;
+      renderMobileReceipt();
+    });
+  }
+
   function renderAll() {
+    renderMobileReceipt();
     renderFolders();
     renderTrunc();
     renderList();

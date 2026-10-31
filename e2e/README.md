@@ -1020,3 +1020,22 @@ they cannot under ADR-0209. Scoped self-service process starts need a separate
 decision ([MFE1 issue #1467](https://github.com/pblumer/atlas/issues/1467)).
 Real-device MFE0 checks, screen-reader/zoom evidence, field inspection BPMN,
 and final MFE1 task completion/confirmation journeys are still outstanding.
+
+## MFE1 mobile task completion receipt
+
+`mfe1-mobile-completion.spec.mjs` adds five browser regressions against the
+**real Tasks DOM and vendored form-js**, using a **mocked** safety inspection
+task. At 320–390 CSS px, the UI keeps the editing form in place on validation
+refusal, a server-side 403 and while an HTTP completion command is pending;
+a second Ctrl/Enter during the pending command does not duplicate the POST.
+Only a successful HTTP response provides a dismissible, accessible
+`role=status` receipt naming the completed task. On mobile, completion
+returns to the inbox rather than instantly selecting another task; desktop
+retains the existing auto-advance behaviour. Any wizard continuation still
+takes precedence.
+
+These are **not** real-device tests, a persistently queryable receipt, an
+offline retry protocol, or an end-to-end deployed BPMN safety-inspection
+process. Unknown/lost responses remain failures to confirm and must not be
+reported as successful. Recording those outcomes safely is an MFE5 design
+gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.

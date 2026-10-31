@@ -599,7 +599,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
 | [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Proposed | Not started |
 | [0513](0513-native-model-dialect-and-vendor-compatibility.md) | Native atlas authoring with versioned vendor-format compatibility | Proposed | Not started |
-| [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Not started |
+| [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
 | [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
 
 ## The two states of a record
