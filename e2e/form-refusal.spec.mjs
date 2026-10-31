@@ -135,12 +135,12 @@ const PROC = {
   startFormId: "kredit", executable: true,
 };
 
-function installStartMock(page) {
+function installStartMock(page, form = FORM) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path.endsWith("/api/v1/processes")) return route.fulfill({ json: [PROC] });
-    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: FORM });
+    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: form });
     return route.fulfill({ json: [] });
   });
 }
@@ -259,5 +259,92 @@ test("MFE0 320px phone: the real form-js validation names missing required field
   await expect(toast).toContainText("Vorname");
   await expect(toast).toContainText("und 2 weitere Felder");
   await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+  await expectNoDocumentOverflow(page);
+});
+
+// MFE0 / ADR-0514: use the actual form-js renderer for a multi-field group,
+// a form-js select, a date picker and a long-label field. The 320px viewport
+// checks narrow reflow; it is NOT a 200% browser-zoom or physical-device test.
+const MFE0_GROUPED_FORM = {
+  schema: {
+    type: "default", id: "kredit",
+    components: [
+      { type: "group", label: "Einsatzdaten", components: [
+        { type: "textfield", key: "einsatzort", label: "Einsatzort",
+          validate: { required: true } },
+        { type: "select", key: "zustand", label: "Zustand der Kontrolle",
+          values: [
+            { label: "Offen", value: "open" },
+            { label: "Geprüft", value: "checked" },
+          ], validate: { required: true } },
+        { type: "datetime", subtype: "date", key: "datum",
+          dateLabel: "Einsatzdatum", validate: { required: true } },
+      ] },
+      { type: "textarea", key: "bemerkung",
+        label: "Zusätzliche Beobachtungen bei der Sicherheitskontrolle vor Ort" },
+    ],
+  },
+};
+
+test("MFE0 grouped form at 320px: required feedback and controls remain reachable", async ({ page }) => {
+  installMock(page, MFE0_GROUPED_FORM);
+  const completions = [];
+  await page.route("**/api/v1/tasks/501/complete", async (route) => {
+    completions.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 501 } });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+
+  const form = page.locator("#task-form");
+  const site = form.getByLabel("Einsatzort");
+  const status = form.locator(".fjs-form-field-select");
+  await expect(site).toBeVisible();
+  await expect(status.locator(".fjs-select-display")).toBeVisible();
+  await expect(form.getByText("Einsatzdatum")).toBeVisible();
+  await expect(form.getByLabel("Zusätzliche Beobachtungen bei der Sicherheitskontrolle vor Ort")).toBeVisible();
+  await expectNoDocumentOverflow(page);
+
+  await site.fill("Werkhalle A");
+  await page.locator("#task-complete").click();
+  await expect(page.locator("#toast")).toContainText("Zustand der Kontrolle");
+  expect(completions).toHaveLength(0);
+  await expect(site).toHaveValue("Werkhalle A");
+  await expectNoDocumentOverflow(page);
+
+  // form-js renders a custom select; its labelled input is intentionally hidden.
+  // Operate the visible dropdown as the user does (see reise-form.spec.mjs).
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Geprüft" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Geprüft");
+  await expect(site).toHaveValue("Werkhalle A");
+});
+
+test("MFE0 grouped Start form: filled fields survive phone-to-tablet resize", async ({ page }) => {
+  installStartMock(page, MFE0_GROUPED_FORM);
+  const started = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    started.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 1234 } });
+  });
+  await page.setViewportSize({ width: 360, height: 740 });
+  await openStartForm(page);
+  const form = page.locator("#start-form");
+  const site = form.getByLabel("Einsatzort");
+  const status = form.locator(".fjs-form-field-select");
+  await site.fill("Industriehof");
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Offen" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect(site).toHaveValue("Industriehof");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await expect(site).toHaveValue("Industriehof");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  expect(started).toHaveLength(0); // Resizing never starts a BPMN instance.
   await expectNoDocumentOverflow(page);
 });
