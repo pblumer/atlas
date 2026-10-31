@@ -3,6 +3,7 @@ package catalog
 import (
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -206,4 +207,32 @@ func (s *Service) MayEdit(c Catalog, p *httpapi.Principal) bool { return s.mayEd
 // for (ADR-0211 §3).
 func (s *Service) MayMaintain(c Catalog, p *httpapi.Principal) bool {
 	return s.mayEdit(c, p) || grantedRole(c, p) == RoleViewer
+}
+
+// ReportsTo reports whether somebody in these groups is one of this catalogue's
+// customer responsibles (ADR-0515 §3).
+func (c Catalog) ReportsTo(groups []string) bool {
+	for _, want := range c.ReportingGroups {
+		for _, has := range groups {
+			if want == has {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cleanGroups trims, drops blanks and duplicates, and keeps the order given.
+func cleanGroups(in []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, g := range in {
+		g = strings.TrimSpace(g)
+		if g == "" || seen[g] {
+			continue
+		}
+		seen[g] = true
+		out = append(out, g)
+	}
+	return out
 }

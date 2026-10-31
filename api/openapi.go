@@ -1337,6 +1337,18 @@ func (s *Server) apiRoutes() []apiRoute {
 				"take away, and products edited since the release it is serving",
 			tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The difference between the newest release and the catalogue", tObject())}},
+		{"GET", "/api/v1/shop/reports", s.handleMyReports, apiOp{
+			summary: "Which of the two reports that name people you may open (ADR-0515): `team`, how many accounts name you as their line manager, and `organisations`, the catalogues whose reporting groups you are a member of. The shop draws a tab for each and none for the rest. Reads no report and names nobody",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The reports you may open", tObject())}},
+		{"GET", "/api/v1/shop/team-report", s.handleTeamReport, apiOp{
+			summary: "What your direct reports hold now and how their positions ordered in the period stand — the accounts that name you as their line manager (ADR-0470), one level, by name (ADR-0515 §3). Per person: every right held, with its origin, its start and end and the price its order line carried; per position: who ordered it for whom, its service level, lead time in working days and verdict (met, missed, overdue, open, awaitingApproval, failed, noPromise, unmeasured); and per product the same counts the product manager's report has, over these people only. ?from= and ?to= are order dates (YYYY-MM-DD, default the last 90 days); ?lang= names products; ?format=csv with ?kind=positions answers the positions, otherwise the rights held, as semicolon-separated CSV. 404 when no account names you. Every answer writes an audit line (event audit.report_names_read) before it is sent",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("Your team's rights and positions", tObject())}},
+		{"GET", "/api/v1/shop/organisation-report", s.handleOrganisationReport, apiOp{
+			summary: "What the audience of one catalogue (?catalog=) holds and has ordered, for one of its customer responsibles — a member of a group the catalogue names in reportingGroups (ADR-0515 §3). The audience is everybody to whom this catalogue is the one they see: reached by its groups and by no higher-ranked catalogue (ADR-0347). The answer has the team report's shape, by name, over the products this catalogue has ever offered; ?from=, ?to=, ?lang=, ?format=csv and ?kind=positions as there. 404 for a catalogue that does not report to you, whether or not it exists. Every answer writes an audit line (event audit.report_names_read) before it is sent",
+			tag:     "Catalogue", role: RoleUser,
+			resp: jsonBody("The organisation's rights and positions", tObject())}},
 		{"GET", "/api/v1/shop/favourites", s.handleListFavourites, apiOp{
 			summary: "The products you have marked to find again. Always your own — there is no way to ask about anybody else, because nothing needs to see what another person bookmarked. A favourite stores a product id and nothing else: it says \"show me this again\", never \"I may have this\", so a catalogue reassignment or a withdrawn product leaves the mark alone and simply resolves to less",
 			tag:     "Catalogue", role: RoleUser,

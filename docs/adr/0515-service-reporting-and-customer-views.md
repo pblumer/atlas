@@ -129,7 +129,8 @@ delivered, or nothing needed to be.
   - Scope: direct reports only. The account records one level, and Atlas does not
     invent a hierarchy ([ADR-0349](0349-ordering-for-others.md)).
 - **Customer responsible** — a member of any group a catalogue names in
-  `reportingGroups`.
+  `reportingGroups` (see *As built*: set by whoever may share the catalogue and in
+  force at once, not frozen into the release).
   - What is shown: the organisation dashboard for that catalogue's audience, that is,
     every person to whom this catalogue is the one they see
     ([ADR-0347](0347-product-eligibility.md)). For those
@@ -196,7 +197,28 @@ The MCP surface follows ADR-0016:
       mark);
     - Console card *Delivery and SLA*, MCP tool `atlas_catalog_delivery_report`.
   - Working days are counted in the server's time zone.
-- **TSH2 (pending):** the line-manager and customer-responsible views.
+- **TSH2 (2026-10-31):**
+  - **Reporting groups.** `Catalog.ReportingGroups` is set by whoever may share the
+    catalogue: its owner or an administrator, as with members. An editor's change is
+    refused.
+  - **Deviation from §3.** The groups are **not** frozen into the release. Withdrawing
+    access to names must take effect at once, not with the next publish. A catalogue
+    document neither exports nor imports them, because they name this installation's
+    groups.
+  - **Routes.**
+    - `GET /api/v1/shop/reports` says which tabs to draw.
+    - `GET /api/v1/shop/team-report` lists the accounts whose `managerId` is the
+      caller. Disabled accounts are left out.
+    - `GET /api/v1/shop/organisation-report?catalog=` lists the people `catalog.Resolve`
+      places in that catalogue. It answers 404 to a non-member, whether or not the
+      catalogue exists.
+  - **Contents.** Both report every right a person holds to a product the scope ever
+    offered, with the price its order line carried, plus the positions and per-product
+    counts. They answer as JSON, or as CSV of rights or positions.
+  - **Audit.** Each answer logs `audit.report_names_read` before it is sent.
+  - **MCP.** All three routes are omitted from MCP.
+  - **Shop.** The tabs are *My team* and *Organisation*. The Console's catalogue page
+    has a *Customer responsibles* section.
 
 ## Pros and cons of the options
 

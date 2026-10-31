@@ -2788,7 +2788,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   into the release, copied onto the order line and measured from approval to the start of the right.
 - ✅ **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
   product and period, CSV, no names.
-- 🔲 **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
+- ✅ **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
   read audited.
 - 🔲 **The tshopper shell.** The shop page as an application of its own in the same binary, with its
   dashboards and the wiki's building blocks.

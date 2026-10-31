@@ -228,6 +228,13 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	// The reports that name people (ADR-0515 §3).
+	// They list who holds which right; an agent acting for somebody does not need a
+	// list of other people's rights to do it, and the product manager's counting
+	// report is a tool (atlas_catalog_delivery_report).
+	"GET /api/v1/shop/reports":             "which name-bearing reports a person may open, for the shop's tabs; an agent has no tab to draw",
+	"GET /api/v1/shop/team-report":         "names a line manager's reports and every right they hold; a disclosure for the person, not for an agent acting for them",
+	"GET /api/v1/shop/organisation-report": "names a catalogue's whole audience and every right they hold; a disclosure for the customer responsible, not for an agent",
 	// Identity-aware Worker execution (ADR-0475). An
 	// agent reads the decisions (atlas_instance_authorizations); everything else here is
 	// a Worker's protocol step, a person's consent or answer, or the administration of

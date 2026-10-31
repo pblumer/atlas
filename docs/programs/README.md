@@ -15,7 +15,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/7 | pblumer | Execute MFE0 hardware acceptance runbook (docs/planning/mfe0-device-validation-runbook.md), record device/zoom/accessibility/privacy evidence in #1451, review blockers and formally hand off. MFE1 #1456 and MFE2 #1457 are scoped but planned until the gate is met; MFE3/MFE4/MFE5 retain separate ADR gates. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
-| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | active | 1/5 | dbuchs7 | Merge TSH1 (#1462), then TSH2: line-manager team view and customer-responsible organisation dashboard with names, CSV and audit. |
+| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | active | 2/5 | dbuchs7 | Merge TSH2 (team and organisation reports with names), then TSH3 (tshopper shell, building blocks) and TSH4 (shop contract). |
 
 ## atlas hub (BMP)
 
@@ -105,8 +105,8 @@ Phase A: draw the boundary between the service catalogue/shop and the engine ins
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
 | **TSH0** — Charter, plan and ADR draft | complete | dbuchs7 | — | [PR #1461](https://github.com/pblumer/atlas/pull/1461) | Complete: PR #1461 merged; ADR-0515 Accepted (decisions confirmed by the requester on 2026-10-31), plan, manifest and ROADMAP entry on main.; [Evidence 1](../adr/0515-service-reporting-and-customer-views.md), [Evidence 2](../planning/tshopper-program.md) |
-| **TSH1** — Service level on products and the delivery report | active | dbuchs7 | TSH0 | [PR #1462](https://github.com/pblumer/atlas/pull/1462) | Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool in review in PR #1462. |
-| **TSH2** — Line-manager and customer-responsible views | planned | dbuchs7 | TSH1 | — | Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited. |
+| **TSH1** — Service level on products and the delivery report | complete | dbuchs7 | TSH0 | [PR #1462](https://github.com/pblumer/atlas/pull/1462) | Complete: PR #1462 merged with all CI checks green (race, windows, e2e, coverage). Service level frozen into release and order line; delivery report route, Console card, CSV and MCP tool.; [Evidence 1](../../api/servicereport/measure_test.go), [Evidence 2](../../api/deliveryreport_http_test.go), [Evidence 3](../../e2e/delivery-report.spec.mjs) |
+| **TSH2** — Line-manager and customer-responsible views | active | dbuchs7 | TSH1 | — | reportingGroups on catalogues (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section implemented on branch; PR pending. |
 | **TSH3** — tshopper shell and wiki building blocks | planned | dbuchs7 | TSH2 | — | Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor. |
 | **TSH4** — Boundary contract between shop and engine | planned | dbuchs7 | TSH1 | — | One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change. |
 

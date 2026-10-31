@@ -27,6 +27,12 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`shop-reports.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the shop draws a My team tab only for a line manager and an Organisation tab only for a customer
+  responsible; each reads its report, names the people with what they hold and their positions,
+  says that every reading is recorded, and asks for and exports a chosen period.
+
 - **`delivery-report.spec.mjs`** and **`service-level-body.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the product manager's Delivery and SLA card draws four tiles and a row per product from the

@@ -14,6 +14,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Line managers and customer responsibles see what their people hold.** The shop gains a
+  My team tab for line managers — every account naming them as its manager — and an
+  Organisation tab for the members of a catalogue's new customer-responsible groups, covering
+  everybody that catalogue is shown to. Both list per person what they hold and how their
+  positions in a period stand against the delivery promise, by name and as CSV, from
+  `GET /api/v1/shop/team-report` and `GET /api/v1/shop/organisation-report`; every reading writes
+  an `audit.report_names_read` line. Only the catalogue's owner or an administrator sets the
+  groups, and a catalogue document neither exports nor imports them.
 - **A product promises a delivery time, and the catalogue reports how it was kept.** A product
   may carry a service level — a name and a delivery time in working days — that is frozen into
   the release and copied onto the order line, so every position is measured against the promise
