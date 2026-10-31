@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH2 (team and organisation reports with names), then TSH3 (tshopper shell, building blocks) and TSH4 (shop contract).",
+  "next_action": "Merge TSH3 (tshopper shell, building blocks), then TSH4 (shop contract).",
   "slices": [
     {
       "id": "TSH0",
@@ -47,14 +47,20 @@
     {
       "id": "TSH2",
       "title": "Line-manager and customer-responsible views",
-      "status": "active",
+      "status": "complete",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH1"
       ],
       "issues": [],
-      "prs": [],
-      "note": "reportingGroups on catalogues (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section implemented on branch; PR pending."
+      "prs": [
+        1463
+      ],
+      "note": "Complete: PR #1463 merged with all CI checks green. reportingGroups (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section.",
+      "evidence": [
+        "../../../api/customerreport_http_test.go",
+        "../../../e2e/shop-reports.spec.mjs"
+      ]
     },
     {
       "id": "TSH3",
