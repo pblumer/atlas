@@ -220,6 +220,20 @@ The MCP surface follows ADR-0016:
   - **Shop.** The tabs are *My team* and *Organisation*. The Console's catalogue page
     has a *Customer responsibles* section.
 
+- **TSH3 (2026-10-31):** the tshopper shell, in the same binary.
+  - **App drawer.** It names the catalogue and the shop together as *tshopper*.
+  - **Catalogue app.** It gains a top bar with *Catalogues*, *Building blocks* and
+    *Reporting*. *Reporting* is the delivery report on a page of its own.
+  - **Building blocks.** `GET /api/v1/catalog-building-blocks` searches a content
+    source and lists every page with the products that use it.
+    - Products the reader maintains are named; others are counted.
+    - Without parameters it answers the configured sources. The content-source list
+      itself stays admin-only.
+    - *Create product* makes a draft product through the existing save and link routes.
+  - **Deviation from the plan.** The shop page does not carry the tshopper name. It
+    keeps the brand of the reader's catalogue (ADR-0316), which is what a customer
+    should see. The shop's *My team* and *Organisation* tabs (TSH2) are its dashboards.
+
 ## Pros and cons of the options
 
 ### Directory groups on the catalogue (chosen)

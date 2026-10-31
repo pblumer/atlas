@@ -84,3 +84,10 @@ func TestReportingGroupsNeitherLeaveNorEnterWithADocument(t *testing.T) {
 		t.Errorf("an import changed the reporting groups to %v", got.ReportingGroups)
 	}
 }
+
+func TestReportingGroupsAreTrimmedAndKeptOnce(t *testing.T) {
+	got := cleanGroups([]string{" grp_a ", "", "grp_b", "grp_a", "  "})
+	if len(got) != 2 || got[0] != "grp_a" || got[1] != "grp_b" {
+		t.Errorf("cleanGroups = %q", got)
+	}
+}

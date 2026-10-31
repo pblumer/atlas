@@ -2790,7 +2790,7 @@ actions with closed effects, each a command whose outcome is a fact published be
   product and period, CSV, no names.
 - ✅ **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
   read audited.
-- 🔲 **The tshopper shell.** The shop page as an application of its own in the same binary, with its
+- ✅ **The tshopper shell.** The shop page as an application of its own in the same binary, with its
   dashboards and the wiki's building blocks.
 - 🔲 **One contract between shop and engine,** mapped to TMF620/622/637.
 
