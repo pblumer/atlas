@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
 - **The shop reaches the engine through one contract.** The delivery report and the reports that
   name people moved into their own service (`api/servicereport`), which reads the inventory and the

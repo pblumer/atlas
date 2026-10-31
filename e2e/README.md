@@ -996,7 +996,15 @@ an outgoing completion command, no document overflow, and preservation of
 select/text values across phone-to-tablet resizing. This covers a **grouped**
 layout, not a proof that any form-js multi-column renderer fits small screens.
 
-These tests **do not** validate complex multi-column form-js schemas, text zoom,
+Two-column form-js regression tests exercise a full 8+8 row on the
+16-unit Carbon grid in Tasks and Process Start. At 320px the inputs stack without page overflow; at 1024px
+the vendored form-js <=66rem grid breakpoint also stacks the task inputs. At
+1600px the authored row is retained, but it stacks when the Tasks detail pane
+itself is narrowed below 560px (without shrinking the viewport). Typed values
+survive a 320px → 1024px → 1600px → narrow pane → 320px resize without
+remounting the form.
+
+These tests **do not** validate every complex multi-column form-js schema, text zoom,
 iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
 evidence that MFE0's real-device exit gate is complete. Record the remaining

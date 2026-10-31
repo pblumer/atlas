@@ -24,10 +24,11 @@
         1452,
         1453,
         1454,
+        1455,
         1458,
         1460
       ],
-      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. Physical iOS/Android, accessibility, 200% zoom, foldable and complex multi-column form evidence still missing. MFE0 #1451 remains open; no device acceptance inferred from E2E."
+      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. PR #1455 adds responsive two-column form-js Tasks/Start layouts with new E2E; merge and hardware acceptance still pending. Physical iOS/Android, 200% zoom, accessible inputs, keyboard, foldable and complex-form evidence remain open in #1451."
     },
     {
       "id": "MFE1",

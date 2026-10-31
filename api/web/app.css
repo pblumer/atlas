@@ -3409,6 +3409,21 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Detail pane */
 .tasks-detail { padding: 22px; overflow-y: auto; }
+/* MFE0 / ADR-0514: form-js renders authored grid rows as .cds--row and
+   .fjs-layout-column (not the editor's .fjs-columns). Its vendored Carbon
+   breakpoint follows the viewport (66rem), not the Tasks/Start pane. A user
+   can narrow a task pane on a wide screen; keep its fields readable without
+   mutating the authored form schema or re-mounting the viewer. */
+#task-form, #start-form { container: atlas-form-host / inline-size; }
+@container atlas-form-host (max-width: 560px) {
+  #task-form .fjs-layout-row > .fjs-layout-column,
+  #start-form .fjs-layout-row > .fjs-layout-column {
+    flex: 0 0 100% !important;
+    max-inline-size: 100% !important;
+    min-inline-size: 0;
+  }
+}
+
 .tasks-detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
