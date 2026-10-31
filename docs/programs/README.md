@@ -6,7 +6,7 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**5 programmes** · active: 5 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**6 programmes** · active: 6 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/7 | pblumer | Execute MFE0 hardware acceptance runbook (docs/planning/mfe0-device-validation-runbook.md), record device/zoom/accessibility/privacy evidence in #1451, review blockers and formally hand off. MFE1 #1456 and MFE2 #1457 are scoped but planned until the gate is met; MFE3/MFE4/MFE5 retain separate ADR gates. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
+| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | active | 0/5 | dbuchs7 | Merge the TSH0 charter, then start TSH1 test-first: a product's serviceLevel survives publish and release read and is copied onto the order line. |
 
 ## atlas hub (BMP)
 
@@ -94,6 +95,20 @@ Make atlas-owned BPMN authoring the future default while preserving versioned Ze
 | **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
 | **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
 | **MIP4** — Release provenance and compatibility sign-off | planned | unassigned | MIP1, MIP2, MIP3 | — | Complete upstream/fixture audit, copyright notices, vendor bundle rebuild evidence, SBOM, watermark and compatibility matrix; maintain separate legal trademark gate. |
+
+## tshopper — catalogue and shop as a capability of their own (TSH)
+
+Phase A: draw the boundary between the service catalogue/shop and the engine inside the single binary, and give product managers, line managers and customer responsibles delivery-SLA, consumption and order reporting.
+
+**[Programme plan](../planning/tshopper-program.md) · [Roadmap track](../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-) · [Manifest](tsh/program.json) · Reviewed: 2026-10-31**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **TSH0** — Charter, plan and ADR draft | active | dbuchs7 | — | — | Plan, manifest, ROADMAP entry and ADR-draft-service-reporting-and-customer-views in review. |
+| **TSH1** — Service level on products and the delivery report | planned | dbuchs7 | TSH0 | — | serviceLevel {name, deliveryDays} frozen into the release and copied onto the line; off-loop delivery report with lead time, SLA met and overdue; dashboard, CSV, MCP tool. |
+| **TSH2** — Line-manager and customer-responsible views | planned | dbuchs7 | TSH1 | — | Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited. |
+| **TSH3** — tshopper shell and wiki building blocks | planned | dbuchs7 | TSH2 | — | Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor. |
+| **TSH4** — Boundary contract between shop and engine | planned | dbuchs7 | TSH1 | — | One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change. |
 
 ## Updating the register
 

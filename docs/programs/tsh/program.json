@@ -1,0 +1,63 @@
+{
+  "id": "tsh",
+  "name": "tshopper — catalogue and shop as a capability of their own",
+  "summary": "Phase A: draw the boundary between the service catalogue/shop and the engine inside the single binary, and give product managers, line managers and customer responsibles delivery-SLA, consumption and order reporting.",
+  "status": "active",
+  "owner": "dbuchs7",
+  "last_reviewed": "2026-10-31",
+  "plan": "../../planning/tshopper-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
+  "next_action": "Merge the TSH0 charter, then start TSH1 test-first: a product's serviceLevel survives publish and release read and is copied onto the order line.",
+  "slices": [
+    {
+      "id": "TSH0",
+      "title": "Charter, plan and ADR draft",
+      "status": "active",
+      "owner": "dbuchs7",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "Plan, manifest, ROADMAP entry and ADR-draft-service-reporting-and-customer-views in review."
+    },
+    {
+      "id": "TSH1",
+      "title": "Service level on products and the delivery report",
+      "status": "planned",
+      "owner": "dbuchs7",
+      "depends_on": ["TSH0"],
+      "issues": [],
+      "prs": [],
+      "note": "serviceLevel {name, deliveryDays} frozen into the release and copied onto the line; off-loop delivery report with lead time, SLA met and overdue; dashboard, CSV, MCP tool."
+    },
+    {
+      "id": "TSH2",
+      "title": "Line-manager and customer-responsible views",
+      "status": "planned",
+      "owner": "dbuchs7",
+      "depends_on": ["TSH1"],
+      "issues": [],
+      "prs": [],
+      "note": "Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited."
+    },
+    {
+      "id": "TSH3",
+      "title": "tshopper shell and wiki building blocks",
+      "status": "planned",
+      "owner": "dbuchs7",
+      "depends_on": ["TSH2"],
+      "issues": [],
+      "prs": [],
+      "note": "Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor."
+    },
+    {
+      "id": "TSH4",
+      "title": "Boundary contract between shop and engine",
+      "status": "planned",
+      "owner": "dbuchs7",
+      "depends_on": ["TSH1"],
+      "issues": [],
+      "prs": [],
+      "note": "One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change."
+    }
+  ]
+}
