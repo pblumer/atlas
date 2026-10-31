@@ -226,9 +226,14 @@ type Line struct {
 	// one than the one that was approved.
 	//
 	// Displayed and never computed — see [catalog.Item.Price].
-	Price      string            `json:"price,omitempty"`
-	ConfigForm string            `json:"configForm,omitempty"`
-	Config     map[string]string `json:"config,omitempty"`
+	Price string `json:"price,omitempty"`
+	// ServiceLevel is the delivery promise the release made for this product when the
+	// order was placed, or nil for none. The position is measured against this copy,
+	// never against what the catalogue promises today
+	// (ADR-0515).
+	ServiceLevel *catalog.ServiceLevel `json:"serviceLevel,omitempty"`
+	ConfigForm   string                `json:"configForm,omitempty"`
+	Config       map[string]string     `json:"config,omitempty"`
 	// Amendments are the corrections made to Config after the recipient already
 	// held this line, oldest first
 	// (ADR-0359). Empty is the

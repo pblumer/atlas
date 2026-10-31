@@ -7,31 +7,35 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge the TSH0 charter, then start TSH1 test-first: a product's serviceLevel survives publish and release read and is copied onto the order line.",
+  "next_action": "Merge TSH0 (#1461), then open and merge the TSH1 PR; next TSH2: line-manager team view and customer-responsible organisation dashboard with names, CSV and audit.",
   "slices": [
     {
       "id": "TSH0",
       "title": "Charter, plan and ADR draft",
-      "status": "active",
+      "status": "complete",
       "owner": "dbuchs7",
       "depends_on": [],
       "issues": [],
       "prs": [
         1461
       ],
-      "note": "Plan, manifest, ROADMAP entry and ADR-0515 in review in PR #1461."
+      "note": "Complete: PR #1461 merged; ADR-0515 Accepted (decisions confirmed by the requester on 2026-10-31), plan, manifest and ROADMAP entry on main.",
+      "evidence": [
+        "../../adr/0515-service-reporting-and-customer-views.md",
+        "../../planning/tshopper-program.md"
+      ]
     },
     {
       "id": "TSH1",
       "title": "Service level on products and the delivery report",
-      "status": "planned",
+      "status": "active",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH0"
       ],
       "issues": [],
       "prs": [],
-      "note": "serviceLevel {name, deliveryDays} frozen into the release and copied onto the line; off-loop delivery report with lead time, SLA met and overdue; dashboard, CSV, MCP tool."
+      "note": "Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool implemented on branch; PR pending."
     },
     {
       "id": "TSH2",

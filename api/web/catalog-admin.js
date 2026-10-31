@@ -38,6 +38,7 @@ import { uploadPicture, PRODUCT } from "./picturescale.js";
 // the panel, the catalogue's refresh, and the words the read-only fields use.
 import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
 import { t } from "./i18n.js";
+import { deliveryCard, wireDelivery } from "./deliveryreport.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -257,9 +258,11 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     ${importCard()}
     ${mappingsCard(mappings, dir, accounts)}
     ${approverCard(report)}
-    ${translationCard(translation)}`;
+    ${translationCard(translation)}
+    ${deliveryCard()}`;
 
   wireImport({ api, toast, view });
+  wireDelivery({ api, view });
   wireMappings({ api, toast, view, dir, accounts, redraw });
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
@@ -1092,6 +1095,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     category: cg.key, categoryTexts: cg.texts,
     productGroup: pg.key, productGroupTexts: pg.texts,
     price: String(f.get("price") || "").trim(),
+    serviceLevel: serviceLevelFrom(f, langs || [], was.serviceLevel),
     configForm: f.get("configForm") || "",
     provisionProcess: f.get("provisionProcess") || "",
     deprovisionProcess: f.get("deprovisionProcess") || "",
@@ -2377,6 +2381,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
           empty to say nothing about cost.</span>
         <input name="price" value="${esc(v.price || "")}" autocomplete="off"
           placeholder="CHF 1'200.&ndash;"></label>
+      ${serviceLevelField(v.serviceLevel, langs)}
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
@@ -3344,4 +3349,44 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       }
     });
   }
+}
+
+// ---------- Service level (ADR-0515) ----------
+//
+// A name and a delivery time in working days. The per-language names are drawn only
+// for a catalogue with more than one language; a name in a language the catalogue
+// does not declare survives a save made here, as the texts do.
+
+function serviceLevelField(sl, langs) {
+  const v = sl || {};
+  const names = langs.length > 1 ? langs.map((l) => `<label class="field">${esc(t("product.serviceLevel.nameIn", { lang: l }))}
+      <input name="sl-${esc(l)}" value="${esc((v.nameTexts || {})[l] || "")}" autocomplete="off"></label>`).join("") : "";
+  return `<div class="field wide" data-service-level>${esc(t("product.serviceLevel.title"))}
+    <span class="muted" style="display:block; margin:2px 0 6px">${esc(t("product.serviceLevel.hint"))}</span>
+    <div class="sl-row">
+      <label class="field">${esc(t("product.serviceLevel.name"))}
+        <input name="slName" value="${esc(v.name || "")}" autocomplete="off" placeholder="Standard"></label>
+      <label class="field">${esc(t("product.serviceLevel.days"))}
+        <input name="slDays" type="number" min="1" max="365" step="1" value="${v.deliveryDays || ""}"></label>
+      ${names}
+    </div></div>`;
+}
+
+// serviceLevelFrom reads the fields back. No name and no days is no service level;
+// anything else is sent as typed, so a half-filled one is refused by the publish
+// with its reason rather than silently dropped here.
+export function serviceLevelFrom(f, langs, was) {
+  const name = String(f.get("slName") || "").trim();
+  const daysRaw = String(f.get("slDays") || "").trim();
+  if (!name && !daysRaw) return undefined;
+  const nameTexts = { ...((was && was.nameTexts) || {}) };
+  if (langs.length > 1) {
+    for (const l of langs) {
+      const val = String(f.get(`sl-${l}`) || "").trim();
+      if (val) nameTexts[l] = val; else delete nameTexts[l];
+    }
+  }
+  const out = { name, deliveryDays: daysRaw ? Number(daysRaw) : 0 };
+  if (Object.keys(nameTexts).length) out.nameTexts = nameTexts;
+  return out;
 }

@@ -1,7 +1,7 @@
 # ADR-0515: A product promises a delivery time, and three people may read how it was kept
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-31
 - **Deciders:** dbuchs7 (programme owner, TSH); the four choices (customer responsible = catalogue groups and line managers, delivery-time SLA, names permitted, owner) confirmed by the requester on 2026-10-31
 - **Open question:** Should the working-day count skip public holidays, and from which calendar (federal, cantonal, per catalogue)?
@@ -174,6 +174,29 @@ The MCP surface follows ADR-0016:
   - A large installation computes the report on every call. If that proves slow, a
     maintained counter is the remedy, not a cache that may disagree.
   - Phase B (a separate binary) must carry these routes over unchanged.
+
+### As built
+
+- **TSH1 (2026-10-31):**
+  - `catalog.ServiceLevel` (`api/catalog/servicelevel.go`) is on the product. The publish
+    refuses a nameless promise and one outside 1 to 365 working days. It is copied into
+    the release and onto the order line (`order.Line.ServiceLevel`).
+  - The measurement lives in `api/servicereport`.
+  - A done line is dated by the hold its own order produced: `Since` of the current
+    entitlement, or of its history for a returned line.
+  - Besides the verdicts above, the measurement adds three:
+    - **awaitingApproval** for an open line whose approval is still owed;
+    - **failed** for a line whose provisioning failed;
+    - **unmeasured** for a delivered line whose hold no longer names this order.
+      This happens where a later order re-granted the right. The report counts it
+      as delivered at an unknown time rather than guessing a time.
+  - The product manager's report is `GET /api/v1/catalog-products/delivery-report`:
+    - a period over the order date, by default the last 90 days;
+    - `?catalog=`, `?lang=` and `?format=csv` (semicolon-separated, with a byte-order
+      mark);
+    - Console card *Delivery and SLA*, MCP tool `atlas_catalog_delivery_report`.
+  - Working days are counted in the server's time zone.
+- **TSH2 (pending):** the line-manager and customer-responsible views.
 
 ## Pros and cons of the options
 

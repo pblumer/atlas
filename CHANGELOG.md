@@ -14,6 +14,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A product promises a delivery time, and the catalogue reports how it was kept.** A product
+  may carry a service level — a name and a delivery time in working days — that is frozen into
+  the release and copied onto the order line, so every position is measured against the promise
+  it was ordered under. The Delivery and SLA card on the catalogue page, the route
+  `GET /api/v1/catalog-products/delivery-report` and the MCP tool `atlas_catalog_delivery_report`
+  show per product and period how many positions were ordered, met, missed, overdue and open, the
+  share kept, the median and 90th-percentile lead time from approval to the start of the right
+  (Monday to Friday) and how many hold it now, as a table or CSV and without naming anybody.
 - **A list's filter box empties with one click.** A column filter box with a term in it
   shows a small cross at its trailing edge that clears the term and gives the rows back,
   keeping the caret in the box for the next one; Escape does the same from the keyboard,

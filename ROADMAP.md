@@ -2784,9 +2784,9 @@ actions with closed effects, each a command whose outcome is a fact published be
     deployments.
 **tshopper — phase A** ([programme TSH](docs/planning/tshopper-program.md),
 [ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md))
-- 🔲 **A delivery promise on every product.** A service level and its delivery time in working days, frozen
+- ✅ **A delivery promise on every product.** A service level and its delivery time in working days, frozen
   into the release, copied onto the order line and measured from approval to the start of the right.
-- 🔲 **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
+- ✅ **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
   product and period, CSV, no names.
 - 🔲 **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
   read audited.
