@@ -388,13 +388,23 @@ test("MFE0 two-column form-js task remains usable at 320px and keeps desktop lay
 
   await first.fill("Lena");
   await second.fill("CH9300762011623852957");
+  // The vendored form-js CSS deliberately removes grid flex-basis at <=66rem
+  // (1056px with the default 16px root font), so 1024px is NOT a two-column
+  // desktop control. Assert its compact layout, then cross that breakpoint.
   await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  const compactFirst = await first.boundingBox();
+  const compactSecond = await second.boundingBox();
+  expect(compactSecond.y).toBeGreaterThanOrEqual(compactFirst.y + compactFirst.height - 1);
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 1600, height: 900 });
   await expect(first).toHaveValue("Lena");
   await expect(second).toHaveValue("CH9300762011623852957");
   const wideFirst = await first.boundingBox();
   const wideSecond = await second.boundingBox();
-  // When the container fits both 6-unit grid columns, preserve the authored
-  // row; a narrow phone must not force desktop layout onto the form.
+  // Above the vendor's grid breakpoint, preserve the authored 6+6 row.
   expect(Math.abs(wideFirst.y - wideSecond.y)).toBeLessThanOrEqual(2);
   expect(wideSecond.x).toBeGreaterThanOrEqual(wideFirst.x + wideFirst.width - 2);
   await expectNoDocumentOverflow(page);
