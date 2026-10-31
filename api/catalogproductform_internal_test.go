@@ -248,7 +248,10 @@ var productFieldControls = map[string]string{
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
-	"lifecycleProcess":   `procSelect("lifecycleProcess", v.lifecycleProcess)`,
+	// The delivery promise (ADR-draft-service-reporting-and-customer-views): a name,
+	// the working days and a name per declared language, drawn by one helper.
+	"serviceLevel":     `serviceLevelField(v.serviceLevel, langs)`,
+	"lifecycleProcess": `procSelect("lifecycleProcess", v.lifecycleProcess)`,
 	// The legacy operation map and the actions are one grid: a product that still
 	// carries the map opens as the actions it means and is saved as actions
 	// (ADR-0429), so both fields are proved by the grid being given the product.
