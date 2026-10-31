@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/pblumer/atlas/api/contentsource/wikifake"
 )
 
 // The wiki's services as building blocks (tshopper phase A, TSH3).
@@ -88,5 +90,33 @@ func TestBuildingBlocksWithNoSource(t *testing.T) {
 	s := serviceWithAdmin(t)
 	if rec := call(t, s.HandleBuildingBlocks, user("usr_a"), "GET", "/x?source=wiki&q=a", ""); rec.Code != http.StatusNotFound {
 		t.Errorf("no source configured = %d, want 404", rec.Code)
+	}
+}
+
+func TestBuildingBlocksSayWhenTheSourceCannotBeSearched(t *testing.T) {
+	b := newBoundFixture(t)
+	b.wiki.Set(func(s *wikifake.Server) { s.Down = true })
+	if rec := call(t, b.s.HandleBuildingBlocks, b.owner, "GET", "/x?source=wiki&q=VPN", ""); rec.Code != http.StatusBadGateway {
+		t.Errorf("a source that is down = %d, want 502", rec.Code)
+	}
+}
+
+// A binding that names the same page in two languages uses it once, and a slot with
+// no page is not a use at all.
+func TestAPageBoundTwiceByOneProductCountsOnce(t *testing.T) {
+	b := newBoundFixture(t)
+	b.s.loop.Do(func() {
+		it, _, _ := b.s.store.Item("mail")
+		it.ContentSource = &ContentSource{Source: "wiki", Primary: "de", Pages: map[string]PageRef{
+			"de": {Ref: "it_de"}, "fr": {Ref: "it_de"}, "it": {Ref: ""}}}
+		_ = b.s.store.SaveItem(it)
+	})
+	rec := call(t, b.s.HandleBuildingBlocks, b.owner, "GET", "/x?source=wiki&q=VPN", "")
+	var out blockResp
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	for _, bl := range out.Blocks {
+		if bl.Key == "SVC-12" && (len(bl.UsedBy) != 1 || bl.UsedBy[0] != "mail") {
+			t.Errorf("SVC-12 used by %v, want mail once", bl.UsedBy)
+		}
 	}
 }
