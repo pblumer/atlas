@@ -741,6 +741,8 @@ export default {
   "start.fav.add": "Zu den Favoriten hinzufügen",
   "start.fav.remove": "Aus den Favoriten entfernen",
   "start.fav.failed": "Favorit nicht gespeichert: {error}",
+  "mfe.completed": "{task} abgeschlossen",
+  "mfe.dismiss": "Schliessen",
   "mfe.navigation": "Mobile Arbeitsbereiche",
   "mfe.tasks": "Meine Aufgaben",
   "mfe.start": "Prozess starten",
