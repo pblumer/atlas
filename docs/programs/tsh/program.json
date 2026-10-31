@@ -2,12 +2,12 @@
   "id": "tsh",
   "name": "tshopper — catalogue and shop as a capability of their own",
   "summary": "Phase A: draw the boundary between the service catalogue/shop and the engine inside the single binary, and give product managers, line managers and customer responsibles delivery-SLA, consumption and order reporting.",
-  "status": "active",
+  "status": "paused",
   "owner": "dbuchs7",
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH4 (shop contract). Then phase A stops by the owner's decision; the remaining A3 work (37 server files behind the contract) is tracked by the ratchet test.",
+  "next_action": "Paused after phase A by the owner's decision (2026-10-31). To restart: move the 37 server files that import api/catalog or api/order behind api/shopcontract (TestServerFilesReachingIntoTheShopOnlyBecomeFewer tracks the count), settle ADR-0515's open question on public holidays, and decide phase B (separate binary) in its own ADR before any work on it.",
   "slices": [
     {
       "id": "TSH0",
@@ -83,14 +83,16 @@
     {
       "id": "TSH4",
       "title": "Boundary contract between shop and engine",
-      "status": "active",
+      "status": "paused",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH1"
       ],
       "issues": [],
-      "prs": [],
-      "note": "api/shopcontract (inventory view, directory) and servicereport.Service behind it; guards hold the report service to the contract and pin 37 server files importing api/catalog or api/order (may only fall). Moving those 37 files is the remaining A3 work."
+      "prs": [
+        1465
+      ],
+      "note": "PR #1465 merged with all CI checks green: api/shopcontract, servicereport.Service behind it, guards. Paused, not complete: 37 server files still import api/catalog or api/order directly; the ratchet test lets that count only fall. Restart by moving them behind the contract."
     }
   ]
 }
