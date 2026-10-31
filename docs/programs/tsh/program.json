@@ -16,15 +16,19 @@
       "owner": "dbuchs7",
       "depends_on": [],
       "issues": [],
-      "prs": [],
-      "note": "Plan, manifest, ROADMAP entry and ADR-draft-service-reporting-and-customer-views in review."
+      "prs": [
+        1461
+      ],
+      "note": "Plan, manifest, ROADMAP entry and ADR-draft-service-reporting-and-customer-views in review in PR #1461."
     },
     {
       "id": "TSH1",
       "title": "Service level on products and the delivery report",
       "status": "planned",
       "owner": "dbuchs7",
-      "depends_on": ["TSH0"],
+      "depends_on": [
+        "TSH0"
+      ],
       "issues": [],
       "prs": [],
       "note": "serviceLevel {name, deliveryDays} frozen into the release and copied onto the line; off-loop delivery report with lead time, SLA met and overdue; dashboard, CSV, MCP tool."
@@ -34,7 +38,9 @@
       "title": "Line-manager and customer-responsible views",
       "status": "planned",
       "owner": "dbuchs7",
-      "depends_on": ["TSH1"],
+      "depends_on": [
+        "TSH1"
+      ],
       "issues": [],
       "prs": [],
       "note": "Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited."
@@ -44,7 +50,9 @@
       "title": "tshopper shell and wiki building blocks",
       "status": "planned",
       "owner": "dbuchs7",
-      "depends_on": ["TSH2"],
+      "depends_on": [
+        "TSH2"
+      ],
       "issues": [],
       "prs": [],
       "note": "Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor."
@@ -54,7 +62,9 @@
       "title": "Boundary contract between shop and engine",
       "status": "planned",
       "owner": "dbuchs7",
-      "depends_on": ["TSH1"],
+      "depends_on": [
+        "TSH1"
+      ],
       "issues": [],
       "prs": [],
       "note": "One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change."
