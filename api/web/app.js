@@ -1430,6 +1430,22 @@ let workPollBusy = false;
 let watchTasks = false;
 let watchIncidents = false;
 
+function paintMobileWorkBadge() {
+  const button = document.getElementById("mobile-more-btn");
+  const badge = document.getElementById("mobile-more-count");
+  if (!button || !badge) return;
+  const incident = watchIncidents && incidentCount > 0;
+  const task = watchTasks && taskCount !== null && taskCount > 0;
+  badge.hidden = !incident && !task;
+  badge.classList.toggle("incident", incident);
+  badge.textContent = incident ? (incidentCount > 99 ? "99+" : String(incidentCount)) :
+    task ? (taskCount > 99 ? "99+" : String(taskCount)) : "";
+  button.setAttribute("aria-label", incident
+    ? "More navigation: " + incidentCount + " unresolved incidents"
+    : task ? "More navigation: " + taskCount + (taskCountExact ? "" : " or more") + " open tasks"
+      : "More navigation");
+}
+
 function paintIncidentBadge() {
   for (const slot of document.querySelectorAll('.nav-badge[data-badge="incidents"]')) {
     slot.hidden = incidentCount === 0;
@@ -1438,6 +1454,7 @@ function paintIncidentBadge() {
       ? "1 token is parked behind an unresolved incident"
       : String(incidentCount) + " tokens are parked behind unresolved incidents";
   }
+  paintMobileWorkBadge();
 }
 
 function paintTaskBadge() {
@@ -1446,6 +1463,7 @@ function paintTaskBadge() {
     slot.textContent = taskCount > 999 ? "999+" : String(taskCount) + (taskCountExact ? "" : "+");
     slot.title = taskCountExact ? String(taskCount) + " open tasks" : "At least " + taskCount + " open tasks";
   }
+  paintMobileWorkBadge();
 }
 
 // An operator may see incident statistics, while a task user may see the inbox.
@@ -1492,7 +1510,7 @@ async function refreshWorkStatus() {
 // role-filtered shell; the foreground event catches tasks arriving while Safari
 // suspended a background tab. On leaving a work surface, stop its reads.
 function syncIncidentBadge(appId) {
-  const phone = window.matchMedia("(max-width: 520px)").matches;
+  const phone = window.matchMedia("(max-width: 860px)").matches;
   const identity = AUTH.enabled ? String(AUTH.user?.id || AUTH.user?.username || "") : "auth-off";
   if (identity !== workPollIdentity) {
     workPollIdentity = identity;
