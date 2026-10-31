@@ -1,7 +1,7 @@
 {
   "id": "mfe",
   "name": "Mobile & Field Experience",
-  "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
+  "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-10-31",
@@ -44,7 +44,8 @@
       "prs": [
         1468,
         1469,
-        1470
+        1470,
+        1472
       ],
       "note": "Owner explicitly approved MFE1 delivery and associated scoped-start ADR on 2026-10-31, alongside previously Accepted ADR-0514/0417. PRs #1468/#1469/#1470 are merged. Scoped-start ADR PR #1471 documents an accepted option but no API/authorization implementation; detailed sidecar/revocation and security/recovery tests remain mandatory. Mobile UX PR #1472 is open; tablet/iOS/Android hardware acceptance #1451 is pending. No unauthorized user may start a process yet."
     },
@@ -110,6 +111,19 @@
       "issues": [],
       "prs": [],
       "note": "Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it."
+    },
+    {
+      "id": "MFE7",
+      "title": "Wearable companion and cross-device handoff",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Proposed watchOS/Wear OS companion proof only after MFE1 authenticated task deep links and MFE3 durable alarm identity/delivery: privacy-safe minimal urgent signal and authenticated handoff to phone, no new task/incident command path. Secure draft continuity depends on MFE5. Watch delivery, authorization and any one-tap action require a separately accepted ADR and actual hardware tests; no watch functionality is shipped."
     }
   ]
 }
