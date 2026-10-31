@@ -7756,9 +7756,18 @@ button.im-problem:hover { background: var(--accent-soft); }
    list's resizer writes the column widths inline — a width dragged on a desktop
    is not a width for this screen. */
 @media (max-width: 1180px) and (min-width: 861px) {
-  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  /* Keep folder navigation accessible without spending a whole column on it.
+     The remaining width belongs to the task list and the actual task form. */
+  .tasks:not(#start-grid) { grid-template-columns: minmax(240px, 35%) minmax(0, 1fr) !important; }
+  .tasks:not(#start-grid) > .tasks-folders { grid-column: 1 / -1; padding: 8px 12px; }
+  .tasks:not(#start-grid) > .tasks-folders nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .tasks:not(#start-grid) > .tasks-folders nav .tasks-folder { white-space: nowrap; }
+  .tasks:not(#start-grid) > .tasks-list-pane,
+  .tasks:not(#start-grid) > .tasks-detail { min-width: 0; }
+  .tasks:not(#start-grid) .tasks-col-resizer { display: none; }
   .tasks-detail { padding: 16px; }
-  .tasks-field { grid-template-columns: 120px 1fr; }
+  .tasks-detail-head h1 { overflow-wrap: break-word; }
+  .tasks-field { grid-template-columns: 120px minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
