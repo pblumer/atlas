@@ -1337,15 +1337,15 @@ func (s *Server) apiRoutes() []apiRoute {
 				"take away, and products edited since the release it is serving",
 			tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The difference between the newest release and the catalogue", tObject())}},
-		{"GET", "/api/v1/shop/reports", s.handleMyReports, apiOp{
+		{"GET", "/api/v1/shop/reports", s.reports.HandleMyReports, apiOp{
 			summary: "Which of the two reports that name people you may open (ADR-0515): `team`, how many accounts name you as their line manager, and `organisations`, the catalogues whose reporting groups you are a member of. The shop draws a tab for each and none for the rest. Reads no report and names nobody",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("The reports you may open", tObject())}},
-		{"GET", "/api/v1/shop/team-report", s.handleTeamReport, apiOp{
+		{"GET", "/api/v1/shop/team-report", s.reports.HandleTeamReport, apiOp{
 			summary: "What your direct reports hold now and how their positions ordered in the period stand — the accounts that name you as their line manager (ADR-0470), one level, by name (ADR-0515 §3). Per person: every right held, with its origin, its start and end and the price its order line carried; per position: who ordered it for whom, its service level, lead time in working days and verdict (met, missed, overdue, open, awaitingApproval, failed, noPromise, unmeasured); and per product the same counts the product manager's report has, over these people only. ?from= and ?to= are order dates (YYYY-MM-DD, default the last 90 days); ?lang= names products; ?format=csv with ?kind=positions answers the positions, otherwise the rights held, as semicolon-separated CSV. 404 when no account names you. Every answer writes an audit line (event audit.report_names_read) before it is sent",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("Your team's rights and positions", tObject())}},
-		{"GET", "/api/v1/shop/organisation-report", s.handleOrganisationReport, apiOp{
+		{"GET", "/api/v1/shop/organisation-report", s.reports.HandleOrganisationReport, apiOp{
 			summary: "What the audience of one catalogue (?catalog=) holds and has ordered, for one of its customer responsibles — a member of a group the catalogue names in reportingGroups (ADR-0515 §3). The audience is everybody to whom this catalogue is the one they see: reached by its groups and by no higher-ranked catalogue (ADR-0347). The answer has the team report's shape, by name, over the products this catalogue has ever offered; ?from=, ?to=, ?lang=, ?format=csv and ?kind=positions as there. 404 for a catalogue that does not report to you, whether or not it exists. Every answer writes an audit line (event audit.report_names_read) before it is sent",
 			tag:     "Catalogue", role: RoleUser,
 			resp: jsonBody("The organisation's rights and positions", tObject())}},
@@ -1377,7 +1377,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/catalog-building-blocks", s.catalogs.HandleBuildingBlocks, apiOp{
 			summary: "The services a content source describes, as building blocks to compose offerings from (tshopper phase A): a search of the source (?source=, ?q=) as its technical account reads it — id, key, title, space, state and address of each page — with `usedBy`, the products you maintain whose content binding names the page, and `usedElsewhere`, how many products you do not maintain use it, counted and not named. A page nobody uses is a service described and not yet offered. With neither ?source= nor ?q= it answers `sources`, the configured sources by id, name and kind, so a product manager can choose one without the administrator's configuration. 404 when no content source is configured, 400 for a missing or unknown source or an empty query, 502 when the source cannot be searched. Nothing is written",
 			tag:     "Catalogue", role: RoleProductManager, resp: jsonBody("The pages found and what uses them", tObject())}},
-		{"GET", "/api/v1/catalog-products/delivery-report", s.handleDeliveryReport, apiOp{
+		{"GET", "/api/v1/catalog-products/delivery-report", s.reports.HandleDeliveryReport, apiOp{
 			summary: "How the products of the catalogues you maintain were ordered, delivered against their promise and are held now (ADR-0515). Per product: positions ordered in the period, delivered, met, missed, overdue, open, awaiting approval and failed, the share of promises kept, the median and 90th-percentile lead time in working days (Monday to Friday, from the later of the order and its approval until the right began) and the median approval wait, which is reported apart because the customer's organisation decides it; plus how many hold it now, whoever ordered it. A position is measured against the service level its line was ordered under, never against what the catalogue promises today. ?from= and ?to= are dates (YYYY-MM-DD, the server's zone, both inclusive) of when the order was placed, by default the last 90 days; ?catalog= narrows to one catalogue you maintain (404 otherwise); ?lang= names products in that language; ?format=csv answers the product rows as semicolon-separated CSV. Counts and durations only — nobody is named, as ADR-0353 decided for the person maintaining a service. Computed off the run loop on every call and stored nowhere",
 			tag:     "Catalogue", role: RoleProductManager, resp: jsonBody("The delivery report", tObject())}},
 		{"GET", "/api/v1/catalog-products/translation-gaps", s.catalogs.HandleTranslationGaps, apiOp{

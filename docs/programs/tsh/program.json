@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH3 (tshopper shell, building blocks), then TSH4 (shop contract).",
+  "next_action": "Merge TSH4 (shop contract). Then phase A stops by the owner's decision; the remaining A3 work (37 server files behind the contract) is tracked by the ratchet test.",
   "slices": [
     {
       "id": "TSH0",
@@ -65,26 +65,32 @@
     {
       "id": "TSH3",
       "title": "tshopper shell and wiki building blocks",
-      "status": "active",
+      "status": "complete",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH2"
       ],
       "issues": [],
-      "prs": [],
-      "note": "App-drawer suite tshopper, catalogue top bar (Catalogues, Building blocks, Reporting), building-blocks route and MCP tool, Create product from a wiki page; implemented on branch, PR pending. The shop keeps the catalogue brand (ADR-0316)."
+      "prs": [
+        1464
+      ],
+      "note": "Complete: PR #1464 merged with all CI checks green. App-drawer suite tshopper, catalogue top bar, building-blocks route and MCP tool, Create product from a wiki page. The shop keeps the catalogue brand (ADR-0316).",
+      "evidence": [
+        "../../../api/catalog/buildingblocks_test.go",
+        "../../../e2e/building-blocks.spec.mjs"
+      ]
     },
     {
       "id": "TSH4",
       "title": "Boundary contract between shop and engine",
-      "status": "planned",
+      "status": "active",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH1"
       ],
       "issues": [],
       "prs": [],
-      "note": "One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change."
+      "note": "api/shopcontract (inventory view, directory) and servicereport.Service behind it; guards hold the report service to the contract and pin 37 server files importing api/catalog or api/order (may only fall). Moving those 37 files is the remaining A3 work."
     }
   ]
 }

@@ -2792,7 +2792,9 @@ actions with closed effects, each a command whose outcome is a fact published be
   read audited.
 - ✅ **The tshopper shell.** The shop page as an application of its own in the same binary, with its
   dashboards and the wiki's building blocks.
-- 🔲 **One contract between shop and engine,** mapped to TMF620/622/637.
+- 🚧 **One contract between shop and engine,** mapped to TMF620/622/637. `api/shopcontract` exists and
+  the report service uses only it; 37 server files still import the shop's packages directly, a count a
+  test lets only fall.
 
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
