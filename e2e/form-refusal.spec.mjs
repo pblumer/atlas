@@ -262,6 +262,8 @@ test("MFE0 320px phone: the real form-js validation names missing required field
   await expectNoDocumentOverflow(page);
 });
 
+// Two columns of 6 use one valid 12-unit form-js grid row (8+8 overflowed
+// and invalidated the desktop side-by-side assertion in the previous CI run).
 // MFE0 / ADR-0514: schema-authored two-column layout. Form-js owns the
 // schema and its data, while the Tasks/Start hosts must adapt it for a phone.
 const TWO_COLUMN_FORM = {
@@ -269,9 +271,9 @@ const TWO_COLUMN_FORM = {
     type: "default",
     id: "kredit",
     components: [
-      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 8 } },
+      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 6 } },
       { type: "textfield", key: "iban", label: "IBAN", validate: { required: true },
-        layout: { row: "Row_1", columns: 8 } },
+        layout: { row: "Row_1", columns: 6 } },
     ],
   },
 };
@@ -304,7 +306,10 @@ test("MFE0 two-column form-js task remains usable at 320px and keeps desktop lay
   await expect(second).toHaveValue("CH9300762011623852957");
   const wideFirst = await first.boundingBox();
   const wideSecond = await second.boundingBox();
+  // When the container fits both 6-unit grid columns, preserve the authored
+  // row; a narrow phone must not force desktop layout onto the form.
   expect(Math.abs(wideFirst.y - wideSecond.y)).toBeLessThanOrEqual(2);
+  expect(wideSecond.x).toBeGreaterThanOrEqual(wideFirst.x + wideFirst.width - 2);
   await expectNoDocumentOverflow(page);
 
   await page.setViewportSize({ width: 320, height: 640 });
