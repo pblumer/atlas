@@ -263,7 +263,7 @@ test("MFE0 320px phone: the real form-js validation names missing required field
 });
 
 // MFE0 / ADR-0514: use the actual form-js renderer for a multi-field group,
-// a native select, a date picker and a long-label field. The 320px viewport
+// a form-js select, a date picker and a long-label field. The 320px viewport
 // checks narrow reflow; it is NOT a 200% browser-zoom or physical-device test.
 const MFE0_GROUPED_FORM = {
   schema: {
@@ -298,9 +298,9 @@ test("MFE0 grouped form at 320px: required feedback and controls remain reachabl
 
   const form = page.locator("#task-form");
   const site = form.getByLabel("Einsatzort");
-  const status = form.getByLabel("Zustand der Kontrolle");
+  const status = form.locator(".fjs-form-field-select");
   await expect(site).toBeVisible();
-  await expect(status).toBeVisible();
+  await expect(status.locator(".fjs-select-display")).toBeVisible();
   await expect(form.getByText("Einsatzdatum")).toBeVisible();
   await expect(form.getByLabel("Zusätzliche Beobachtungen bei der Sicherheitskontrolle vor Ort")).toBeVisible();
   await expectNoDocumentOverflow(page);
@@ -312,9 +312,11 @@ test("MFE0 grouped form at 320px: required feedback and controls remain reachabl
   await expect(site).toHaveValue("Werkhalle A");
   await expectNoDocumentOverflow(page);
 
-  // The select is operated as a standard input, not via an atlas-only widget.
-  await status.selectOption("checked");
-  await expect(status).toHaveValue("checked");
+  // form-js renders a custom select; its labelled input is intentionally hidden.
+  // Operate the visible dropdown as the user does (see reise-form.spec.mjs).
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Geprüft" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Geprüft");
   await expect(site).toHaveValue("Werkhalle A");
 });
 
@@ -329,18 +331,20 @@ test("MFE0 grouped Start form: filled fields survive phone-to-tablet resize", as
   await openStartForm(page);
   const form = page.locator("#start-form");
   const site = form.getByLabel("Einsatzort");
-  const status = form.getByLabel("Zustand der Kontrolle");
+  const status = form.locator(".fjs-form-field-select");
   await site.fill("Industriehof");
-  await status.selectOption("open");
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Offen" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
   await expectNoDocumentOverflow(page);
 
   await page.setViewportSize({ width: 768, height: 1024 });
   await expect(site).toHaveValue("Industriehof");
-  await expect(status).toHaveValue("open");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
   await expectNoDocumentOverflow(page);
   await page.setViewportSize({ width: 360, height: 740 });
   await expect(site).toHaveValue("Industriehof");
-  await expect(status).toHaveValue("open");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
   expect(started).toHaveLength(0); // Resizing never starts a BPMN instance.
   await expectNoDocumentOverflow(page);
 });
