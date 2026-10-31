@@ -1414,11 +1414,14 @@ function openSystemOverview(returnTo = document.activeElement) {
 // count is a read-side hint, not a push notification, delivery receipt or human
 // acknowledgement. Task snapshots never mutate an open form or process instance.
 const WORK_POLL_INTERVAL = 10000;
+const LEGACY_OPERATIONS_POLL_INTERVAL = 5000;
 let incidentCount = 0;
 let taskCount = null;
 let taskCountExact = true;
 let taskFingerprint = null;
 let workPollTimer = null;
+let workPollPeriod = 0;
+let workPollIdentity = "";
 let workPollBusy = false;
 let watchTasks = false;
 let watchIncidents = false;
@@ -1445,8 +1448,10 @@ function paintTaskBadge() {
 // Never request either solely because another role could see it.
 async function refreshIncidentBadge() {
   if (!watchIncidents || document.hidden) return;
+  const generation = navGen;
   try {
     const stats = await api("GET", "/api/v1/stats");
+    if (generation !== navGen || !watchIncidents || document.hidden) return;
     incidentCount = (stats && stats.unresolvedIncidents) || 0;
     paintIncidentBadge();
   } catch { /* preserve the last confirmed value across transient errors */ }
@@ -1458,8 +1463,8 @@ async function refreshWorkStatus() {
   const generation = navGen;
   try {
     const checks = [];
-    if (watchTasks) checks.push(api("GET", "/api/v1/tasks").then((page) => {
-      if (generation !== navGen) return;
+    if (watchTasks) checks.push(api("GET", "/api/v1/tasks?limit=50").then((page) => {
+      if (generation !== navGen || !watchTasks || document.hidden) return;
       const items = (page && page.items) || [];
       const exact = !!(page && page.totalExact);
       taskCount = exact && Number.isFinite(page.total) ? page.total : items.length;
@@ -1484,6 +1489,13 @@ async function refreshWorkStatus() {
 // suspended a background tab. On leaving a work surface, stop its reads.
 function syncIncidentBadge(appId) {
   const phone = window.matchMedia("(max-width: 520px)").matches;
+  const identity = AUTH.enabled ? String(AUTH.user?.id || AUTH.user?.username || "") : "auth-off";
+  if (identity !== workPollIdentity) {
+    workPollIdentity = identity;
+    taskCount = null;
+    incidentCount = 0;
+    taskFingerprint = null;
+  }
   watchTasks = mayUse("user") && (appId === "tasks" || phone);
   watchIncidents = mayUse("operator") && (appId === "operations" || phone);
   if (AUTH.enabled && !AUTH.user) { watchTasks = false; watchIncidents = false; }
@@ -1492,10 +1504,18 @@ function syncIncidentBadge(appId) {
   if (!watchTasks && !watchIncidents) {
     if (workPollTimer) clearInterval(workPollTimer);
     workPollTimer = null;
+    workPollPeriod = 0;
     return;
   }
+  const period = phone ? WORK_POLL_INTERVAL :
+    appId === "operations" ? LEGACY_OPERATIONS_POLL_INTERVAL : WORK_POLL_INTERVAL;
+  if (workPollTimer && workPollPeriod !== period) {
+    clearInterval(workPollTimer);
+    workPollTimer = null;
+  }
+  workPollPeriod = period;
   refreshWorkStatus();
-  if (!workPollTimer) workPollTimer = setInterval(refreshWorkStatus, WORK_POLL_INTERVAL);
+  if (!workPollTimer) workPollTimer = setInterval(refreshWorkStatus, period);
 }
 
 document.addEventListener("visibilitychange", () => {
@@ -1537,6 +1557,8 @@ function paintMobileMenu(appId, route) {
   const menu = document.getElementById("mobile-more-menu");
   if (!wrap || !menu) return;
   wrap.hidden = false;
+  menu.hidden = true;
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
   menu.replaceChildren();
   const seen = new Set();
   const addLink = (entry) => {
@@ -12034,6 +12056,7 @@ async function route() {
     document.getElementById("app-name").textContent = "atlas";
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
+    document.getElementById("mobile-more").hidden = true;
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();
