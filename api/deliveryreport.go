@@ -141,21 +141,33 @@ func (s *Server) scopeOf(cats []catalog.Catalog, lang string) (reportScope, erro
 	return sc, nil
 }
 
+// scopeRead is what one read of a report's scope found.
+type scopeRead struct {
+	positions []servicereport.Position
+	// heldCount is the current rights per product in scope.
+	heldCount map[string]int
+	// held is every current right of the people asked for; nil without people.
+	held []servicereport.Held
+	// orders is every order by id, for the price a held right was ordered at.
+	orders map[string]order.Order
+}
+
 // measureScope reads the orders placed against the scope's releases in the window
 // and the holds that date them, and measures every position. It also counts the
 // current rights to the scope's products. people, when not nil, narrows both to
-// the orders and holds of those principals.
-func (s *Server) measureScope(sc reportScope, fromNS, toNS int64, people map[string]bool) (
-	[]servicereport.Position, map[string]int, error) {
-
+// the orders and holds of those principals, and then also answers every right they
+// hold to a product the scope ever offered.
+func (s *Server) measureScope(sc reportScope, fromNS, toNS int64, people map[string]bool) (scopeRead, error) {
 	all, err := s.orderStore.All()
 	if err != nil {
-		return nil, nil, err
+		return scopeRead{}, err
 	}
+	out := scopeRead{heldCount: map[string]int{}, orders: make(map[string]order.Order, len(all))}
 	var orders []order.Order
 	ids := map[string]bool{}
 	returned := map[string]bool{}
 	for _, o := range all {
+		out.orders[o.ID] = o
 		if !sc.releases[o.ReleaseID] || o.CreatedAt < fromNS || o.CreatedAt >= toNS {
 			continue
 		}
@@ -172,13 +184,22 @@ func (s *Server) measureScope(sc reportScope, fromNS, toNS int64, people map[str
 	}
 
 	var holds []servicereport.Hold
-	held := map[string]int{}
 	err = s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
 		if err := rv.Entitlements(func(v *model.EntitlementValue) error {
-			if !sc.items[v.ItemID] || (people != nil && !people[v.Principal]) {
+			if people != nil {
+				if !people[v.Principal] {
+					return nil
+				}
+				if _, offered := sc.names[v.ItemID]; offered {
+					out.held = append(out.held, servicereport.Held{Principal: v.Principal, ItemID: v.ItemID,
+						VariantID: v.VariantID, OrderID: v.OrderID, Origin: v.Origin.String(),
+						Since: v.Since, Until: v.Until})
+				}
+			}
+			if !sc.items[v.ItemID] {
 				return nil
 			}
-			held[v.ItemID]++
+			out.heldCount[v.ItemID]++
 			if ids[v.OrderID] {
 				holds = append(holds, servicereport.Hold{Principal: v.Principal, ItemID: v.ItemID,
 					VariantID: v.VariantID, OrderID: v.OrderID, Since: v.Since})
@@ -203,10 +224,11 @@ func (s *Server) measureScope(sc reportScope, fromNS, toNS int64, people map[str
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return scopeRead{}, err
 	}
 	now := time.Unix(0, s.now())
-	return servicereport.Measure(orders, holds, now, time.Local), held, nil
+	out.positions = servicereport.Measure(orders, holds, now, time.Local)
+	return out, nil
 }
 
 // handleDeliveryReport answers the delivery report over the catalogues the caller
@@ -242,12 +264,12 @@ func (s *Server) handleDeliveryReport(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "delivery report: "+err.Error())
 		return
 	}
-	positions, held, err := s.measureScope(sc, fromNS, toNS, nil)
+	read, err := s.measureScope(sc, fromNS, toNS, nil)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "delivery report: "+err.Error())
 		return
 	}
-	rows := servicereport.Summarise(positions, sc.names, held)
+	rows := servicereport.Summarise(read.positions, sc.names, read.heldCount)
 	if r.URL.Query().Get("format") == "csv" {
 		var b bytes.Buffer
 		if err := servicereport.WriteProductsCSV(&b, rows); err != nil {

@@ -106,7 +106,7 @@ Phase A: draw the boundary between the service catalogue/shop and the engine ins
 | --- | --- | --- | --- | --- | --- |
 | **TSH0** — Charter, plan and ADR draft | complete | dbuchs7 | — | [PR #1461](https://github.com/pblumer/atlas/pull/1461) | Complete: PR #1461 merged; ADR-0515 Accepted (decisions confirmed by the requester on 2026-10-31), plan, manifest and ROADMAP entry on main.; [Evidence 1](../adr/0515-service-reporting-and-customer-views.md), [Evidence 2](../planning/tshopper-program.md) |
 | **TSH1** — Service level on products and the delivery report | active | dbuchs7 | TSH0 | [PR #1462](https://github.com/pblumer/atlas/pull/1462) | Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool in review in PR #1462. |
-| **TSH2** — Line-manager and customer-responsible views | planned | dbuchs7 | TSH1 | — | Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited. |
+| **TSH2** — Line-manager and customer-responsible views | active | dbuchs7 | TSH1 | — | reportingGroups on catalogues (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section implemented on branch; PR pending. |
 | **TSH3** — tshopper shell and wiki building blocks | planned | dbuchs7 | TSH2 | — | Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor. |
 | **TSH4** — Boundary contract between shop and engine | planned | dbuchs7 | TSH1 | — | One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change. |
 

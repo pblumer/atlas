@@ -323,6 +323,9 @@ type catalogUpdate struct {
 	Items     []string          `json:"items,omitempty"`
 	Groups    []string          `json:"groups,omitempty"`
 	Members   []Member          `json:"members,omitempty"`
+	// ReportingGroups replaces the customer responsibles whole; an empty list
+	// clears them. Like Members, only whoever may share the catalogue sets it.
+	ReportingGroups []string `json:"reportingGroups,omitempty"`
 	// Edges are the structure and precedence between the items this catalogue
 	// offers. They live with the catalogue because they are what its release is
 	// computed from.
@@ -450,6 +453,13 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			got.Members = in.Members
+		}
+		if in.ReportingGroups != nil {
+			if !s.mayShare(got, p) {
+				mayNotShare = true
+				return
+			}
+			got.ReportingGroups = cleanGroups(in.ReportingGroups)
 		}
 		if in.Edges != nil {
 			got.Edges = in.Edges

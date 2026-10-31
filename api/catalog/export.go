@@ -107,7 +107,7 @@ func (s *Service) ExportDocument(p *httpapi.Principal, id string, processes bool
 				doc.Products = append(doc.Products, x)
 			}
 		}
-		c.OwnerID, c.Theme = "", Theme{}
+		c.OwnerID, c.Theme, c.ReportingGroups = "", Theme{}, nil
 		c.Revision, c.CreatedAt, c.UpdatedAt = 0, 0, 0
 		doc.Catalogs = []Catalog{c}
 	})

@@ -42,14 +42,14 @@
     {
       "id": "TSH2",
       "title": "Line-manager and customer-responsible views",
-      "status": "planned",
+      "status": "active",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH1"
       ],
       "issues": [],
       "prs": [],
-      "note": "Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited."
+      "note": "reportingGroups on catalogues (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section implemented on branch; PR pending."
     },
     {
       "id": "TSH3",

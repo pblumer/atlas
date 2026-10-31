@@ -581,6 +581,13 @@ type Catalog struct {
 	Items []string `json:"items"`
 	// Groups are the directory or Atlas groups whose members reach this catalogue.
 	Groups []string `json:"groups,omitempty"`
+	// ReportingGroups are the groups whose members are this catalogue's customer
+	// responsibles: they read the organisation dashboard of its audience, with names
+	// (ADR-0515 §3). It is an access grant to
+	// people's rights, so only whoever may share the catalogue sets it, and it takes
+	// effect at once rather than with the next release: withdrawing it must not wait
+	// for a publish.
+	ReportingGroups []string `json:"reportingGroups,omitempty"`
 	// Members are the object axis (ADR-0071/0180/0278): the role says a caller may
 	// maintain catalogues at all, this says which ones. Without it a product
 	// manager can rebuild and publish every customer's catalogue, with nothing in

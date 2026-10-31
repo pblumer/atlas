@@ -1324,6 +1324,9 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
     ${pageSection("sharing", "", "Who maintains this catalogue", [sharing.summary], sharing.about, sharing.body)}
 
+    ${pageSection("reporting", "", t("catalog.reporting.title"), [reportingSummary(cat)], `<p>${esc(t("catalog.reporting.about"))}</p>`,
+    reportingBody(cat, dir, mayShare(cat, me, enforced)))}
+
     ${pageSection("transfer", "", "Export and import", [], transfer.about, transfer.body)}
 
     ${purge ? pageSection("purge", "", "Delete for good", [], purge.about, purge.body, "danger") : ""}`;
@@ -1332,6 +1335,7 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
   wireTransfer({ api, toast, view }, cat);
+  wireReporting({ api, toast, view }, cat, redraw);
   // Refreshing every bound product is offered only where there is one: a catalogue
   // without a bound product has nothing to refresh, and an installation without a
   // content source cannot have one, so its screen is the one it always had.
@@ -3389,4 +3393,61 @@ export function serviceLevelFrom(f, langs, was) {
   const out = { name, deliveryDays: daysRaw ? Number(daysRaw) : 0 };
   if (Object.keys(nameTexts).length) out.nameTexts = nameTexts;
   return out;
+}
+
+// ---------- Customer responsibles (ADR-0515) ----------
+//
+// The groups whose members read the organisation dashboard of this catalogue's
+// audience, by name. A grant of access to names, so it is the owner's and an
+// administrator's to give, as sharing is; an editor sees who holds it and no form.
+
+function reportingSummary(cat) {
+  const n = (cat.reportingGroups || []).length;
+  return n ? t("catalog.reporting.some", { n }) : t("catalog.reporting.none");
+}
+
+function reportingBody(cat, dir, can) {
+  const chosen = cat.reportingGroups || [];
+  if (!can) {
+    return `<div class="card"><p class="muted" style="margin:0">${chosen.length
+      ? esc(chosen.map((g) => nameOfPrincipal(dir, g)).join(", ")) : esc(t("catalog.reporting.none"))}</p>
+      <p class="muted" style="margin:6px 0 0">${esc(t("catalog.reporting.ownerOnly"))}</p></div>`;
+  }
+  const have = new Set(chosen);
+  const field = dir === null
+    ? `<label class="field">${esc(t("catalog.reporting.ids"))}
+        <input name="rgroups-raw" value="${esc(chosen.join(", "))}" autocomplete="off"></label>`
+    : (() => {
+      const choices = groupChoices(dir);
+      const orphans = chosen.filter((id) => !choices.some((g) => g.id === id)).map((id) => ({ id, name: id }));
+      const boxes = [...choices, ...orphans];
+      if (!boxes.length) return `<p class="muted">${esc(t("catalog.reporting.noGroups"))}</p>`;
+      return `<div class="audience-boxes" style="display:grid; gap:4px; margin-top:6px">
+        ${boxes.map((g) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+          <input type="checkbox" name="rgroups" value="${esc(g.id)}"${have.has(g.id) ? " checked" : ""}>
+          <span>${esc(g.name)}</span></label>`).join("")}</div>`;
+    })();
+  return `<div class="card"><form class="cat-reporting">
+    <p class="muted" style="margin:0 0 8px">${esc(t("catalog.reporting.hint"))}</p>
+    ${field}
+    <button class="btn" type="submit" style="margin-top:10px">${esc(t("catalog.reporting.save"))}</button>
+  </form></div>`;
+}
+
+// reportingFrom reads whichever control was drawn, as audienceFrom does.
+export const reportingFrom = (f) =>
+  f.get("rgroups-raw") === null ? f.getAll("rgroups").map(String) : list(f.get("rgroups-raw"));
+
+function wireReporting({ api, toast, view }, cat, reload) {
+  const form = view.querySelector(".cat-reporting");
+  if (!form) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("PATCH", `/api/v1/catalogs/${encodeURIComponent(cat.id)}`,
+        { reportingGroups: reportingFrom(new FormData(form)), revision: cat.revision });
+      toast(t("catalog.reporting.saved"));
+      reload();
+    } catch (err) { toast(err.message, "err"); }
+  });
 }
