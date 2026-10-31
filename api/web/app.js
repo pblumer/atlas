@@ -8933,7 +8933,9 @@ function mobileWorkEntryHTML(active) {
   const tasksCurrent = active === "tasks" ? ' aria-current="page"' : "";
   const startCurrent = active === "start" ? ' aria-current="page"' : "";
   return `<nav class="mfe-entry" aria-label="${esc(tr("mfe.navigation"))}">
-    <a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>
+    ${offered({ role: "user" })
+      ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
+      : ""}
     ${offered({ role: "operator" })
       ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
       : ""}
