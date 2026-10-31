@@ -90,8 +90,11 @@ test("10-second foreground polling notices new work and incidents without touchi
   await expect(page.locator('.tasks-item[data-key="102"]')).toBeVisible();
   await page.locator("#mobile-more-btn").click();
   await expect(page.locator('#mobile-more-menu .nav-badge[data-badge="incidents"]')).toHaveText("3");
+  await expect(page.locator("#mobile-more-count")).toHaveText("3");
+  await expect(page.locator("#mobile-more-btn")).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator('#mobile-more-menu .nav-badge[data-badge="tasks"]')).toHaveText("2");
   await page.locator("#mobile-more-btn").click();
+  await expect(page.locator("#mobile-more-btn")).toHaveAttribute("aria-expanded", "false");
 
   await page.locator('.tasks-item[data-key="101"]').click();
   await expect(page.locator("#task-detail")).toBeVisible();
