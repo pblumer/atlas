@@ -104,7 +104,7 @@ Phase A: draw the boundary between the service catalogue/shop and the engine ins
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **TSH0** — Charter, plan and ADR draft | active | dbuchs7 | — | [PR #1461](https://github.com/pblumer/atlas/pull/1461) | Plan, manifest, ROADMAP entry and ADR-draft-service-reporting-and-customer-views in review in PR #1461. |
+| **TSH0** — Charter, plan and ADR draft | active | dbuchs7 | — | [PR #1461](https://github.com/pblumer/atlas/pull/1461) | Plan, manifest, ROADMAP entry and ADR-0515 in review in PR #1461. |
 | **TSH1** — Service level on products and the delivery report | planned | dbuchs7 | TSH0 | — | serviceLevel {name, deliveryDays} frozen into the release and copied onto the line; off-loop delivery report with lead time, SLA met and overdue; dashboard, CSV, MCP tool. |
 | **TSH2** — Line-manager and customer-responsible views | planned | dbuchs7 | TSH1 | — | Team view from managerId; reportingGroups per catalogue with an organisation dashboard showing names and CSV; every read with names audited. |
 | **TSH3** — tshopper shell and wiki building blocks | planned | dbuchs7 | TSH2 | — | Shop page carries the tshopper name, app switcher and the dashboards; wiki building blocks listed in the catalogue editor. |

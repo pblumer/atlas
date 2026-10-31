@@ -5,7 +5,7 @@
 **Strategic track:** [Milestone K — Service catalogue, orders & the portal](../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-).  
 **Owner:** dbuchs7 (named by the requester on 2026-10-31).  
 **Operational status:** [programme manifest](../programs/tsh/program.json).  
-**Architecture contract:** [ADR-draft-service-reporting-and-customer-views](../adr/draft-service-reporting-and-customer-views.md).
+**Architecture contract:** [ADR-0515](../adr/0515-service-reporting-and-customer-views.md).
 
 ## Outcome
 

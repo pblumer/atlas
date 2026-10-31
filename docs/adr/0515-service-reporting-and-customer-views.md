@@ -1,4 +1,4 @@
-# ADR-DRAFT: A product promises a delivery time, and three people may read how it was kept
+# ADR-0515: A product promises a delivery time, and three people may read how it was kept
 
 - **Status:** Accepted
 - **Implementation:** Not started
