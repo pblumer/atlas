@@ -51,6 +51,7 @@ what `api/catalog` holds.
 | `Lifecycle{From, Until}` | `validFor{startDateTime, endDateTime}` | Same concept, same purpose. |
 | `Variant` (`id`, `texts`, unordered) | `ProductSpecificationCharacteristic`, or a plan-like offering | Atlas's variant carries no characteristic structure; configuration is delegated to a form. See §4. |
 | `price` (a string, ADR-0361) | `ProductOfferingPrice` (amount, currency, tax, recurring period) | The standard is substantially richer. Open question; see §7. |
+| `serviceLevel` (`name`, `deliveryDays`, ADR-0515) | a service level agreement referenced from the offering, or a product offering term | Not checked against a specific TMF620 version; to be verified before an export is built. Atlas promises only a delivery time it can measure. |
 | `category` (a string on the item, ADR-0360) | `Category` as an entity with a hierarchy | The standard is richer. Open question; see §7. |
 | `keywords` (ADR-0355) | no direct equivalent | Atlas-specific, for browser-side search. |
 | `targets` (`TargetRef{system, ref}`) | no equivalent | Belongs to identity governance, not to a commercial catalogue. See §5. |

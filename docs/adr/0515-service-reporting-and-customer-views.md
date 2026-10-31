@@ -234,6 +234,21 @@ The MCP surface follows ADR-0016:
     keeps the brand of the reader's catalogue (ADR-0316), which is what a customer
     should see. The shop's *My team* and *Organisation* tabs (TSH2) are its dashboards.
 
+- **TSH4 (2026-10-31):** the boundary between shop and engine.
+  - **The contract.** `api/shopcontract` declares the inventory as an off-loop read
+    view and the directory as accounts with groups and manager.
+  - **The report service.** The four report routes moved into
+    `servicereport.Service` (ADR-0147), which reaches the engine through that contract
+    and an audit callback only. The server implements both in
+    `api/shopcontract_adapters.go`.
+  - **Guards.**
+    - `TestTheShopsSideReachesTheEngineOnlyThroughTheContract` refuses an import of
+      the engine, state, model or run loop in either package.
+    - `TestServerFilesReachingIntoTheShopOnlyBecomeFewer` pins the 37 server files
+      that still import `api/catalog` or `api/order`; the count may only fall.
+  - **Open.** Moving those 37 files behind the contract is the remainder of the
+    plan's A3. Starting a position stays on ADR-0425's routes.
+
 ## Pros and cons of the options
 
 ### Directory groups on the catalogue (chosen)

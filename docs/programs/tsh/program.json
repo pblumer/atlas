@@ -77,14 +77,14 @@
     {
       "id": "TSH4",
       "title": "Boundary contract between shop and engine",
-      "status": "planned",
+      "status": "active",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH1"
       ],
       "issues": [],
       "prs": [],
-      "note": "One contract package the order side reaches the engine through, mapped to TMF620/622/637 (ADR-0387); no behaviour change."
+      "note": "api/shopcontract (inventory view, directory) and servicereport.Service behind it; guards hold the report service to the contract and pin 37 server files importing api/catalog or api/order (may only fall). Moving those 37 files is the remaining A3 work."
     }
   ]
 }

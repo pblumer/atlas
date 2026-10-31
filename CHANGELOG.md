@@ -14,6 +14,11 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop reaches the engine through one contract.** The delivery report and the reports that
+  name people moved into their own service (`api/servicereport`), which reads the inventory and the
+  directory only through the new `api/shopcontract` interfaces. A test holds that service to the
+  contract and pins how many server files still import the catalogue or order packages directly
+  (37), a number that may only fall — the measurable start of separating tshopper from the engine.
 - **The catalogue app finds the wiki's services and reports on its own page.** The catalogue and
   the shop are grouped as tshopper in the app drawer, and the catalogue app gains a top bar with
   Catalogues, Building blocks and Reporting. Building blocks searches a content source
