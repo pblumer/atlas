@@ -8104,6 +8104,7 @@ button.im-problem:hover { background: var(--accent-soft); }
    limited width to the current app and two touch targets, not clipped tabs,
    an inactive notifications bell, or diagram/modeler utilities. */
 #mobile-more { display: none; }
+#mobile-more[hidden] { display: none !important; }
 
 @media (max-width: 860px) {
   /* A single destination is not a switcher: the same title is already on screen.
@@ -8133,7 +8134,18 @@ button.im-problem:hover { background: var(--accent-soft); }
     width: 44px; height: 44px;
   }
   .topbar .avatar { width: 38px; height: 38px; }
-  .topbar #mobile-more-btn { font-size: 27px; font-weight: 600; line-height: 1; }
+  .topbar #mobile-more-btn { font-size: 27px; font-weight: 600; line-height: 1; position: relative; }
+  .topbar #mobile-more-btn .mobile-more-count {
+    position: absolute; top: -3px; right: -4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box;
+    border-radius: 99px; font: 700 10px/1 system-ui, sans-serif;
+    color: var(--status-ink); background: var(--accent);
+    border: 2px solid var(--surface);
+  }
+  .topbar #mobile-more-btn .mobile-more-count.incident { background: var(--danger); }
+  .topbar #mobile-more-btn .mobile-more-count[hidden] { display: none; }
+
   #mobile-more-menu {
     max-height: min(72dvh, 560px);
     overflow-y: auto;
