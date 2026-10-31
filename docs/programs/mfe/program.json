@@ -44,9 +44,10 @@
       "prs": [
         1468,
         1469,
-        1470
+        1470,
+        1472
       ],
-      "note": "Limited MFE1 web-UI work is authorised while MFE0 #1451 remains open. PR #1468 (mobile Tasks/authorised Start navigation) and PR #1469 (post-server-ack task receipt, real form-js E2E) are merged. Draft PR #1470 adds a deployable BPMN+form safety-inspection example, not yet CI- or device-accepted. Self-service starts for ordinary task users remain gated by #1467; no runtime/API/permission/offline changes."
+      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) is open; no real-device acceptance or deployment is inferred. Scoped start grants for ordinary users remain gated on proposed ADR PR #1471 and issue #1467; no current runtime/API/permission/offline scope expansion. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
     },
     {
       "id": "MFE2",
