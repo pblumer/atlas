@@ -141,3 +141,37 @@ test("task-only role never polls incident counts", async ({ page }) => {
   expect(api.calls.tasks).toBeGreaterThanOrEqual(2);
   expect(api.calls.stats).toBe(0);
 });
+
+test("tablet landscape uses two readable working panes with a full-width folder strip", async ({ page }) => {
+  stub(page);
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto("/index.html?lang=en#/tasks");
+  const item = page.locator('.tasks-item[data-key="101"]');
+  await expect(item).toBeVisible({ timeout: 15000 });
+  await item.click();
+  await expect(page.locator("#task-detail")).toBeVisible();
+  const boxes = await page.evaluate(() => {
+    const rect = (q) => document.querySelector(q).getBoundingClientRect();
+    const folder = rect(".tasks-folders"), list = rect(".tasks-list-pane"),
+      detail = rect("#task-detail");
+    return {
+      folderBottom: folder.bottom, folderWidth: folder.width, listTop: list.top,
+      listWidth: list.width, detailTop: detail.top, detailWidth: detail.width,
+      left: detail.left, right: list.right,
+      overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    };
+  });
+  expect(boxes.folderBottom).toBeLessThanOrEqual(boxes.listTop + 2);
+  expect(boxes.folderWidth).toBeGreaterThan(900);
+  expect(boxes.listWidth).toBeGreaterThanOrEqual(300);
+  expect(boxes.detailWidth).toBeGreaterThanOrEqual(500);
+  expect(boxes.detailTop).toBeCloseTo(boxes.listTop, 0);
+  expect(boxes.left).toBeGreaterThanOrEqual(boxes.right - 2);
+  expect(boxes.overflow).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect(page.locator("#task-detail")).toBeVisible();
+  await expect(page.locator("#task-back")).toBeVisible();
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(page.locator(".tasks-detail-head h1")).toContainText("Original inspection");
+  await expect(page.locator("#task-detail")).toBeVisible();
+});
