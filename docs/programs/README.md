@@ -6,7 +6,7 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**6 programmes** · active: 6 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**6 programmes** · active: 5 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
@@ -15,7 +15,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/7 | pblumer | Execute MFE0 hardware acceptance runbook (docs/planning/mfe0-device-validation-runbook.md), record device/zoom/accessibility/privacy evidence in #1451, review blockers and formally hand off. MFE1 #1456 and MFE2 #1457 are scoped but planned until the gate is met; MFE3/MFE4/MFE5 retain separate ADR gates. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
-| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | active | 4/5 | dbuchs7 | Merge TSH4 (shop contract). Then phase A stops by the owner's decision; the remaining A3 work (37 server files behind the contract) is tracked by the ratchet test. |
+| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | paused | 4/5 | dbuchs7 | Paused after phase A by the owner's decision (2026-10-31). To restart: move the 37 server files that import api/catalog or api/order behind api/shopcontract (TestServerFilesReachingIntoTheShopOnlyBecomeFewer tracks the count), settle ADR-0515's open question on public holidays, and decide phase B (separate binary) in its own ADR before any work on it. |
 
 ## atlas hub (BMP)
 
@@ -108,7 +108,7 @@ Phase A: draw the boundary between the service catalogue/shop and the engine ins
 | **TSH1** — Service level on products and the delivery report | complete | dbuchs7 | TSH0 | [PR #1462](https://github.com/pblumer/atlas/pull/1462) | Complete: PR #1462 merged with all CI checks green (race, windows, e2e, coverage). Service level frozen into release and order line; delivery report route, Console card, CSV and MCP tool.; [Evidence 1](../../api/servicereport/measure_test.go), [Evidence 2](../../api/deliveryreport_http_test.go), [Evidence 3](../../e2e/delivery-report.spec.mjs) |
 | **TSH2** — Line-manager and customer-responsible views | complete | dbuchs7 | TSH1 | [PR #1463](https://github.com/pblumer/atlas/pull/1463) | Complete: PR #1463 merged with all CI checks green. reportingGroups (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section.; [Evidence 1](../../api/customerreport_http_test.go), [Evidence 2](../../e2e/shop-reports.spec.mjs) |
 | **TSH3** — tshopper shell and wiki building blocks | complete | dbuchs7 | TSH2 | [PR #1464](https://github.com/pblumer/atlas/pull/1464) | Complete: PR #1464 merged with all CI checks green. App-drawer suite tshopper, catalogue top bar, building-blocks route and MCP tool, Create product from a wiki page. The shop keeps the catalogue brand (ADR-0316).; [Evidence 1](../../api/catalog/buildingblocks_test.go), [Evidence 2](../../e2e/building-blocks.spec.mjs) |
-| **TSH4** — Boundary contract between shop and engine | active | dbuchs7 | TSH1 | — | api/shopcontract (inventory view, directory) and servicereport.Service behind it; guards hold the report service to the contract and pin 37 server files importing api/catalog or api/order (may only fall). Moving those 37 files is the remaining A3 work. |
+| **TSH4** — Boundary contract between shop and engine | paused | dbuchs7 | TSH1 | [PR #1465](https://github.com/pblumer/atlas/pull/1465) | PR #1465 merged with all CI checks green: api/shopcontract, servicereport.Service behind it, guards. Paused, not complete: 37 server files still import api/catalog or api/order directly; the ratchet test lets that count only fall. Restart by moving them behind the contract. |
 
 ## Updating the register
 
