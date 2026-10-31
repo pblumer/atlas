@@ -998,8 +998,9 @@ layout, not a proof that any form-js multi-column renderer fits small screens.
 
 Two-column form-js regression tests exercise a valid 6+6 grid row in Tasks
 and Process Start. At 320px the inputs stack without page overflow; at 1024px
-the authored row is preserved when the form has adequate space, and typed
-values survive a 320px → 1024px → 320px resize without remounting the form.
+the vendored form-js <=66rem grid breakpoint also stacks the task inputs. At
+1600px the authored row is retained, and typed values survive a
+320px → 1024px → 1600px → 320px resize without remounting the form.
 
 These tests **do not** validate every complex multi-column form-js schema, text zoom,
 iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
