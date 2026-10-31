@@ -41,8 +41,10 @@
         1456,
         1467
       ],
-      "prs": [],
-      "note": "Owner requested limited MFE1 work before MFE0 device acceptance on 2026-10-31. Scope exception: browser-only mobile Tasks and role-authorised Start navigation; no runtime/API/role expansion, no hardware release claim. TDD PR pending review; ordinary user self-service start is blocked by ADR-0209 and tracked in #1467. MFE0 #1451 stays active."
+      "prs": [
+        1468
+      ],
+      "note": "Owner requested limited MFE1 work before MFE0 device acceptance on 2026-10-31. Scope exception: browser-only mobile Tasks and role-authorised Start navigation; no runtime/API/role expansion, no hardware release claim. Draft PR #1468 in review / CI pending; ordinary user self-service start is blocked by ADR-0209 and tracked in #1467. MFE0 #1451 stays active."
     },
     {
       "id": "MFE2",
