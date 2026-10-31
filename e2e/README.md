@@ -1002,3 +1002,21 @@ focus or foldable hinges. They are a *browser regression baseline*, not
 evidence that MFE0's real-device exit gate is complete. Record the remaining
 checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
 and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
+
+## MFE1 mobile work destinations (ADR-0514)
+
+`mfe1-mobile-entry.spec.mjs` covers the first bounded MFE1 navigation slice on
+the real Console/Tasks production DOM: a 320px operator can switch between
+My tasks and Start process via equally sized, 44px-minimum direct destinations,
+with the correct current-page semantics; a `user`-only worker is **not**
+offered operator-only Start (ADR-0209); a selected phone task hides the
+list-level navigation to avoid losing a partially entered form; desktop retains
+the existing top bar without duplicated controls; auth-disabled mode follows
+existing open-server navigation. The normal HTTP task/start routes remain the
+server-side authority.
+
+This is **not** proof that ordinary `user` principals can start processes:
+they cannot under ADR-0209. Scoped self-service process starts need a separate
+decision ([MFE1 issue #1467](https://github.com/pblumer/atlas/issues/1467)).
+Real-device MFE0 checks, screen-reader/zoom evidence, field inspection BPMN,
+and final MFE1 task completion/confirmation journeys are still outstanding.
