@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH0 (#1461), then open and merge the TSH1 PR; next TSH2: line-manager team view and customer-responsible organisation dashboard with names, CSV and audit.",
+  "next_action": "Merge TSH1 (#1462), then TSH2: line-manager team view and customer-responsible organisation dashboard with names, CSV and audit.",
   "slices": [
     {
       "id": "TSH0",
@@ -34,8 +34,10 @@
         "TSH0"
       ],
       "issues": [],
-      "prs": [],
-      "note": "Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool implemented on branch; PR pending."
+      "prs": [
+        1462
+      ],
+      "note": "Service level on products (frozen into release and order line), api/servicereport measurement, delivery-report route, Console card, CSV and MCP tool in review in PR #1462."
     },
     {
       "id": "TSH2",
