@@ -6,6 +6,8 @@
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
 **Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. MFE1 process-start permission expansion is separately gated on ADR review #1471. MFE2–MFE7 are not delivered.
 
+**User and operations guidance:** [MFE1 mobile work guide](mfe1-user-operations-guide.md) documents navigation, polling, confirmation semantics, authorization and remaining hardware evidence.
+
 ## Outcome
 
 People can start business processes, work assigned BPMN user tasks and safely triage actionable incidents on a phone, foldable or tablet without using a cramped desktop Console. An operator can receive an incident alert, identify the affected process and cause, acknowledge responsibility, and choose an authorized remediation or escalation. Larger tablets may optionally support BPMN authoring via the existing bpmn-js modeler. Mobile work never promises that an offline draft or an unconfirmed command is durably completed.
