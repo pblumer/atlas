@@ -1,13 +1,13 @@
 {
   "id": "mfe",
   "name": "Mobile & Field Experience",
-  "summary": "Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.",
+  "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review MFE1 safety-inspection demo PR #1470 and CI, then test its two business outcomes on a running atlas instance. MFE0 #1451 still requires iOS/Android, screen-reader, 200% zoom and form-grid evidence; non-operator process starts remain blocked on #1467.",
+  "next_action": "Complete MFE0 real-device/tablet-landscape acceptance #1451 and MFE1 phone work-menu/polling review #1472; get scoped process-start ADR #1471 approved before any permission changes. MFE2/MFE3 incident triage and secure alarm delivery remain priority. MFE7 watch companion is a proposed future ADR-gated slice, not implemented.",
   "slices": [
     {
       "id": "MFE0",
@@ -110,6 +110,19 @@
       "issues": [],
       "prs": [],
       "note": "Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it."
+    },
+    {
+      "id": "MFE7",
+      "title": "Wearable companion and cross-device handoff",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Proposed watchOS/Wear OS companion proof only after MFE1 authenticated task deep links and MFE3 durable alarm identity/delivery: privacy-safe minimal urgent signal and authenticated handoff to phone, no new task/incident command path. Secure draft continuity depends on MFE5. Watch delivery, authorization and any one-tap action require a separately accepted ADR and actual hardware tests; no watch functionality is shipped."
     }
   ]
 }
