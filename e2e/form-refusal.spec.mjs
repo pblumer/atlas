@@ -349,8 +349,8 @@ test("MFE0 grouped Start form: filled fields survive phone-to-tablet resize", as
   await expectNoDocumentOverflow(page);
 });
 
-// Two columns of 6 use one valid 12-unit form-js grid row (8+8 overflowed
-// and invalidated the desktop side-by-side assertion in the previous CI run).
+// Form-js uses a 16-unit Carbon grid. Two 8-unit fields form one full row;
+// the vendored CSS changes their layout at a viewport width of 66rem.
 // MFE0 / ADR-0514: schema-authored two-column layout. Form-js owns the
 // schema and its data, while the Tasks/Start hosts must adapt it for a phone.
 const TWO_COLUMN_FORM = {
@@ -358,9 +358,9 @@ const TWO_COLUMN_FORM = {
     type: "default",
     id: "kredit",
     components: [
-      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 6 } },
+      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 8 } },
       { type: "textfield", key: "iban", label: "IBAN", validate: { required: true },
-        layout: { row: "Row_1", columns: 6 } },
+        layout: { row: "Row_1", columns: 8 } },
     ],
   },
 };
@@ -408,6 +408,23 @@ test("MFE0 two-column form-js task remains usable at 320px and keeps desktop lay
   expect(Math.abs(wideFirst.y - wideSecond.y)).toBeLessThanOrEqual(2);
   expect(wideSecond.x).toBeGreaterThanOrEqual(wideFirst.x + wideFirst.width - 2);
   await expectNoDocumentOverflow(page);
+
+  // Simulate a user narrowing the task detail pane on a WIDE desktop. The
+  // viewport remains 1600px, so the vendor's 66rem viewport breakpoint does
+  // not apply. This proves the atlas host's container query actually works.
+  const tasksGrid = page.locator(".tasks");
+  await tasksGrid.evaluate(el => { el.style.gridTemplateColumns = "232px 900px minmax(0, 1fr)"; });
+  const narrowFirst = await first.boundingBox();
+  const narrowSecond = await second.boundingBox();
+  expect(narrowSecond.y).toBeGreaterThanOrEqual(narrowFirst.y + narrowFirst.height - 1);
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+
+  await tasksGrid.evaluate(el => { el.style.removeProperty("grid-template-columns"); });
+  const restoredFirst = await first.boundingBox();
+  const restoredSecond = await second.boundingBox();
+  expect(Math.abs(restoredFirst.y - restoredSecond.y)).toBeLessThanOrEqual(2);
 
   await page.setViewportSize({ width: 320, height: 640 });
   await expect(first).toHaveValue("Lena");
