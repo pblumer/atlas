@@ -7756,9 +7756,39 @@ button.im-problem:hover { background: var(--accent-soft); }
    list's resizer writes the column widths inline — a width dragged on a desktop
    is not a width for this screen. */
 @media (max-width: 1180px) and (min-width: 861px) {
-  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  /* Tablet landscape: move folders above the working panes. The old fixed
+     180 + 300px rails left a landscape form too narrow to be useful. */
+  .tasks:has(> .tasks-folders) {
+    grid-template-columns: minmax(300px, 34%) minmax(0, 1fr) !important;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .tasks > .tasks-folders {
+    grid-column: 1 / -1; grid-row: 1;
+    flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px;
+    min-width: 0;
+  }
+  .tasks-folders .tasks-identity { flex: 0 0 auto; }
+  .tasks-folders nav {
+    flex: 1 1 0; min-width: 0; overflow-x: auto; flex-direction: row;
+    align-items: center; gap: 4px; overscroll-behavior-inline: contain;
+  }
+  .tasks-folders nav .tasks-folder { flex: 0 0 auto; }
+  .tasks-folders nav .tasks-folder-new { flex: 0 0 auto; width: auto; margin-top: 0; }
+  .tasks > .tasks-list-pane { grid-column: 1; grid-row: 2; min-width: 0; }
+  .tasks > .tasks-detail { grid-column: 2; grid-row: 2; min-width: 0; }
+  /* Start is a two-pane grid without folders; avoid an implicit third
+     column caused by applying the inbox's three-column rule to it. */
+  #start-grid {
+    grid-template-columns: minmax(300px, 34%) minmax(0, 1fr) !important;
+    grid-template-rows: auto;
+  }
+  #start-grid > .tasks-list-pane { grid-column: 1; grid-row: 1; }
+  #start-grid > .tasks-detail { grid-column: 2; grid-row: 1; }
+  .tasks-col-resizer { display: none; }
   .tasks-detail { padding: 16px; }
-  .tasks-field { grid-template-columns: 120px 1fr; }
+  .tasks-detail-head { flex-wrap: wrap; }
+  .tasks-detail-actions { flex-wrap: wrap; flex-shrink: 1; }
+  .tasks-field { grid-template-columns: 120px minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
