@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/tshopper-program.md",
   "milestone": "../../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-",
-  "next_action": "Merge TSH3 (tshopper shell, building blocks), then TSH4 (shop contract).",
+  "next_action": "Merge TSH4 (shop contract). Then phase A stops by the owner's decision; the remaining A3 work (37 server files behind the contract) is tracked by the ratchet test.",
   "slices": [
     {
       "id": "TSH0",
@@ -65,14 +65,20 @@
     {
       "id": "TSH3",
       "title": "tshopper shell and wiki building blocks",
-      "status": "active",
+      "status": "complete",
       "owner": "dbuchs7",
       "depends_on": [
         "TSH2"
       ],
       "issues": [],
-      "prs": [],
-      "note": "App-drawer suite tshopper, catalogue top bar (Catalogues, Building blocks, Reporting), building-blocks route and MCP tool, Create product from a wiki page; implemented on branch, PR pending. The shop keeps the catalogue brand (ADR-0316)."
+      "prs": [
+        1464
+      ],
+      "note": "Complete: PR #1464 merged with all CI checks green. App-drawer suite tshopper, catalogue top bar, building-blocks route and MCP tool, Create product from a wiki page. The shop keeps the catalogue brand (ADR-0316).",
+      "evidence": [
+        "../../../api/catalog/buildingblocks_test.go",
+        "../../../e2e/building-blocks.spec.mjs"
+      ]
     },
     {
       "id": "TSH4",
