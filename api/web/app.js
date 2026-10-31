@@ -10214,6 +10214,7 @@ async function viewTasks(preselectKey) {
       state.selected = null;
       renderList();
       renderDetail();
+      if (refreshPending) refreshInboxSafely();
     });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -10326,7 +10327,7 @@ async function viewTasks(preselectKey) {
     if (older) older.addEventListener("click", loadOlder);
   }
 
-  async function load() {
+  async function load({ passive = false } = {}) {
     try {
       // The list is capped and newest-first; the response says so in `truncated` and
       // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
@@ -10334,6 +10335,7 @@ async function viewTasks(preselectKey) {
       // has to know to ask for, and this one went unread for years
       // (ADR-0378).
       const [page, names] = await Promise.all([api("GET", "/api/v1/tasks?content=1"), peopleNames()]);
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       state.names = names;
       state.tasks = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);
@@ -10354,6 +10356,7 @@ async function viewTasks(preselectKey) {
       // Before the first paint, so a row is never drawn unmarked and then relabelled
       // under somebody's eyes.
       await loadApprovalKeys();
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
@@ -10578,6 +10581,31 @@ async function viewTasks(preselectKey) {
     }
   };
   document.addEventListener("keydown", onTasksKey, true);
+
+  // Background snapshots can arrive while the user is typing into a form.
+  // Only repaint a list with no selected task; keep the pending update until
+  // Back to the list is pressed. Never re-mount a selected form-js instance.
+  let refreshPending = false;
+  let refreshingInbox = false;
+  async function refreshInboxSafely() {
+    if (!refreshPending || refreshingInbox || document.hidden || state.selected != null ||
+        state.wizardWait || state.selectMode || state.picked.size) return;
+    refreshPending = false;
+    refreshingInbox = true;
+    try { await load({ passive: true }); }
+    finally {
+      refreshingInbox = false;
+      if (refreshPending) refreshInboxSafely();
+    }
+  }
+  const onTasksChanged = () => { refreshPending = true; refreshInboxSafely(); };
+  document.addEventListener("atlas:tasks-changed", onTasksChanged);
+  const existingCleanup = window.__atlasCleanup;
+  window.__atlasCleanup = () => {
+    document.removeEventListener("atlas:tasks-changed", onTasksChanged);
+    document.removeEventListener("keydown", onTasksKey, true);
+    if (existingCleanup) existingCleanup();
+  };
 
   await loadAssignable();
   await load();
