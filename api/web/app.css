@@ -8014,3 +8014,17 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
    row's text, so it reads as a note on the verb rather than as a second headline. */
 .el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }
+
+/* ---------- Delivery and SLA (ADR-0515) ---------- */
+.dr-period { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0 0 12px; }
+.dr-period .field { margin: 0; }
+.dr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.dr-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.dr-v { font-size: 22px; font-weight: 700; }
+.dr-ok { color: var(--ok, #2d8a4e); }
+.dr-warn { color: #b26a00; }
+.dr-bad { color: var(--danger); }
+.dr-scroll { overflow-x: auto; }
+.dr-table td.num, .dr-table th.num { text-align: right; white-space: nowrap; }
+.sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.sl-row .field { margin: 0; min-width: 180px; }

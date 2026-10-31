@@ -27,6 +27,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`delivery-report.spec.mjs`** and **`service-level-body.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the product manager's Delivery and SLA card draws four tiles and a row per product from the
+  delivery report, fills the period the server chose, asks for and exports a chosen period, and
+  says when the report cannot be read; the product editor sends no service level for empty boxes,
+  a typed one as typed (a half-filled one for the publish to refuse), and keeps names in languages
+  the catalogue does not declare.
+
 - **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,

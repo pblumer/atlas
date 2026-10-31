@@ -370,6 +370,10 @@ type Item struct {
 	// the approval rule's and the ceiling's, and it is the reason this is on the
 	// line as well as in the release.
 	Price string `json:"price,omitempty"`
+	// ServiceLevel is what the product promises about its delivery, or nil for a
+	// product that promises nothing (ADR-0515).
+	// Frozen into the release and copied onto the order line, like the price.
+	ServiceLevel *ServiceLevel `json:"serviceLevel,omitempty"`
 	// Category is the heading this product sits under in the portal — "Arbeitsplatz",
 	// "Kommunikation", "Fachanwendungen" (ADR-0360).
 	// Empty is the ordinary case and puts the product under the heading the portal
