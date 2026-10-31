@@ -497,6 +497,7 @@ function closeAllMenus() {
   clearTimeout(submenuTimer);
   submenuTimer = null;
   closeSubmenus();
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
   openMenu = openTrigger = null;
 }
 // placeMenu puts an open menu under its trigger, or above it when there is no room
@@ -629,7 +630,10 @@ document.addEventListener("click", (e) => {
     closeAllMenus();
     if (menu) {
       menu.hidden = wasOpen;
-      if (!menu.hidden) { openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false); }
+      if (!menu.hidden) {
+        toggle.setAttribute("aria-expanded", "true");
+        openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false);
+      }
     }
     return;
   }
