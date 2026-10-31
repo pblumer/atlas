@@ -248,7 +248,7 @@ var productFieldControls = map[string]string{
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
-	// The delivery promise (ADR-draft-service-reporting-and-customer-views): a name,
+	// The delivery promise (ADR-0515): a name,
 	// the working days and a name per declared language, drawn by one helper.
 	"serviceLevel":     `serviceLevelField(v.serviceLevel, langs)`,
 	"lifecycleProcess": `procSelect("lifecycleProcess", v.lifecycleProcess)`,
