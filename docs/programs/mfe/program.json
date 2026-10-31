@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review MFE1 draft PR #1469 and E2E/Go CI, then build a deployable safety inspection BPMN+form example as the next vertical slice. Keep real-device, screen-reader, 200% zoom and form-grid checks open under MFE0 #1451; authorise non-operator process starts only after separate ADR #1467.",
+  "next_action": "Review the MFE1 deployable safety-inspection BPMN+form example and CI, then test it end to end on a running atlas instance. Keep iOS/Android, screen-reader, 200% zoom and form-grid evidence open under MFE0 #1451; non-operator self-service starts remain blocked by ADR decision #1467.",
   "slices": [
     {
       "id": "MFE0",
@@ -45,7 +45,7 @@
         1468,
         1469
       ],
-      "note": "Limited MFE1 web-UI work authorised while MFE0 #1451 device tests remain open. PR #1468 merged with green CI: 44px mobile Tasks and role-authorised Start navigation. Draft PR #1469 adds post-server-ack mobile task receipt and mocked safety inspection E2E, awaiting CI. Broader self-service process starts remain blocked on ADR-0209 and decision #1467; no runtime/API/permission/offline changes."
+      "note": "Limited MFE1 web-UI work is authorised while MFE0 #1451 remains open. PR #1468 (mobile Tasks/authorised Start navigation) and PR #1469 (post-server-ack task receipt, real form-js E2E) are merged. A deployable BPMN+form safety-inspection example is in review, not yet installed or device-accepted. Self-service starts for ordinary task users remain gated by #1467; no runtime/API/permission/offline changes."
     },
     {
       "id": "MFE2",
