@@ -70,7 +70,7 @@ Govern external Worker actions through explicit identities, managed Connections,
 
 Mobile-first BPMN task execution and process initiation, field evidence, operator incident triage and policy-driven alarming, with safe offline synchronization and optional large-tablet BPMN authoring.
 
-**[Programme plan](../planning/mobile-field-experience-program.md) · [Roadmap track](../../ROADMAP.md#milestone-s--single-binary-server--web-ui-) · [Manifest](mfe/program.json) · Reviewed: 2026-10-30**
+**[Programme plan](../planning/mobile-field-experience-program.md) · [Roadmap track](../../ROADMAP.md#milestone-s--single-binary-server--web-ui-) · [Manifest](mfe/program.json) · Reviewed: 2026-10-31**
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
