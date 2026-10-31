@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-30.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 is active as a source/architecture audit; MFE1–MFE6 remain planned. No MFE slice is delivered.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE0 remains active with open real-device evidence. Programme owner pblumer authorised a **limited MFE1 browser-only navigation slice** on 2026-10-31 while MFE0 remains incomplete; MFE1 is active for this strictly bounded work, MFE2–MFE6 remain planned. No MFE1 feature is delivered until its PR passes review/CI.
 
 ## Outcome
 
@@ -75,6 +75,10 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - **Exit:** reviewed architectural boundaries, maintainers' programme ownership, chosen first executable user journey and regression baseline. Documentation alone does not complete this slice.
 
 ### MFE1 — Mobile Tasks and Process Start
+
+**Controlled early integration (2026-10-31):** The programme owner requested continuation with MFE1 despite MFE0 device acceptance still open. The first test-first PR may change only the responsive Tasks/Start *navigation and translations* and its browser regression tests. It must preserve the existing operator-only Start permission and the server-owned task/instance mutation paths. This is a documented narrow **implementation exception**, not an MFE0 acceptance, device release authorisation, or permission to implement unreviewed security changes. MFE0 #1451 stays active; two active slices (MFE0/MFE1) respect the programme WIP cap.
+
+**Security gate:** The present `POST /api/v1/processes/{key}/instances` requires `operator` (ADR-0209). That role also grants operational privileges; simply offering Start to `user` would violate least privilege. [Issue #1467](https://github.com/pblumer/atlas/issues/1467) tracks a new ADR for scoped self-service process starts. Until then only permitted operators see both mobile destinations; ordinary task users see Tasks without a misleading Start action.
 
 - One accessible mobile entry for **My tasks** and **Start a process**, including search, favourites, application context and authenticated deep links.
 - Adaptive forms: step guidance on phones, contextual side-by-side panes at wider sizes, preservation of entered fields on rotation/fold.

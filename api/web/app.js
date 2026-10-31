@@ -8924,6 +8924,24 @@ const wizardHistory = {
 // then less often, for about two minutes in all.
 const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
+// MFE1: offer both primary work destinations without inventing a mobile router.
+// Start remains operator-only (ADR-0209); mobile navigation must use the same
+// role predicate as the desktop top bar, not a separate authorisation rule.
+// On task selection the list pane (and this navigation) hides on narrow screens,
+// so following a Start link cannot silently discard an in-progress form draft.
+function mobileWorkEntryHTML(active) {
+  const tasksCurrent = active === "tasks" ? ' aria-current="page"' : "";
+  const startCurrent = active === "start" ? ' aria-current="page"' : "";
+  return `<nav class="mfe-entry" aria-label="${esc(tr("mfe.navigation"))}">
+    ${offered({ role: "user" })
+      ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
+      : ""}
+    ${offered({ role: "operator" })
+      ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
+      : ""}
+  </nav>`;
+}
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
@@ -9005,6 +9023,7 @@ async function viewTasks(preselectKey) {
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("tasks")}
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
           <button class="btn ghost small" id="task-select" title="Select multiple tasks to act on them together">Select</button>
@@ -10435,6 +10454,7 @@ async function viewStartProcess() {
   view.innerHTML = `
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("start")}
         <header class="tasks-list-head"><h2>Start a process</h2>
           <button class="btn ghost small" id="start-refresh" title="Reload the list of startable processes">Refresh</button></header>
         <div class="tasks-toolbar">
