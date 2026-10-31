@@ -1,7 +1,8 @@
 # ADR-DRAFT: Scoped authenticated process starts for task users
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
+- **Decision accepted:** 2026-10-31 by MFE programme owner pblumer (explicit MFE1 implementation and associated ADR approval)
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
 - **Programme:** [Mobile & Field Experience, MFE1](../planning/mobile-field-experience-program.md)
@@ -85,12 +86,12 @@ operator's runtime-control endpoints or creating a second mobile engine?
 4. **Use public form links or application viewer grants.** Would confuse
    possession or visibility with authenticated, auditable permission.
 
-## Proposed decision outcome (not yet accepted)
+## Accepted decision outcome
 
-**Recommend option 1:** retain the existing operator start contract; add a
+**Accepted option 1:** retain the existing operator start contract; add a
 distinct authenticated, least-privilege path for MFE1 self-service starts.
 
-### Proposed minimal API
+### Approved API shape (not yet implemented)
 
 - `GET /api/v1/me/startable-processes` (role `user`): return a bounded
   list of currently published, executable, startable definitions the
@@ -104,14 +105,14 @@ distinct authenticated, least-privilege path for MFE1 self-service starts.
   Only then delegate to the existing `startInstance` path. A client-supplied
   key, URL, favourite or QR deep link is not a permission.
 
-The proposed URL shape is part of the decision, **not yet an implemented
+The URL shape is approved in principle by this decision, **not yet an implemented
 endpoint**. The `user` role is a necessary coarse gate, never sufficient
 authorization; no self-service POST may mutate state before the object
 policy check. Keep both existing operator POST routes and their roles
 unchanged, including the by-process-ID and CSV/trigger paths. The initial
 self-service path must not offer those privileged variants.
 
-### Proposed grant and administration contract
+### Accepted grant and administration contract
 
 A grant identifies `applicationId`, stable `processId` and an audience:
 explicit user IDs and/or group IDs from the existing identity directory.
@@ -158,7 +159,7 @@ stronger total-order guarantee would require a separate design review.
   state and preserve operator/desktop behaviour. UI availability is not
   an access-control boundary.
 
-### Required test-first implementation slices (after owner approval)
+### Required test-first implementation slices (owner approval granted; validation still mandatory)
 
 1. Tests for grant deny/default, admin-only mutation, effective group
    membership, revocation, cross-application mismatches and unpublished,
@@ -195,7 +196,7 @@ stronger total-order guarantee would require a separate design review.
 
 ## Pros and cons of the options
 
-### 1 — Explicit self-service routes and grants (recommended)
+### 1 — Explicit self-service routes and grants (accepted)
 - Good: limited blast radius, precise resource scope, testable fail closed.
 - Bad: extra HTTP endpoints and grant management surface.
 
