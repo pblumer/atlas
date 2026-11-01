@@ -113,7 +113,8 @@
       const api = async (method, url, body) => {
         if (method !== "GET") return {};
         if (url === "/api/v1/processes") {
-          return [{ key: DEF, processId: "identitaet", name: "Identitäts-Lebenszyklus", version: 2 }];
+          return [{ key: DEF, processId: "identitaet",
+            name: window.__processName ?? "Identitäts-Lebenszyklus", version: 2 }];
         }
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances/search")) {
