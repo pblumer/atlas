@@ -151,6 +151,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, state.ReplayActivated); err != nil {
 				return err
 			}
+			// Persist MI body/round lineage as a deterministic read projection of
+			// the same activation fact, including body activation position (ADR-0517).
+			if err := tx.RecordMIActivation(h.Key, &v.element, h.Position); err != nil {
+				return err
+			}
 			// Maintain the per-(definition, element) live-token counter and the
 			// cumulative-visit counter so the runtime overlay reads them in
 			// O(elements) rather than scanning every instance (ADR-0080).
@@ -192,6 +197,11 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				}
 			}
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
+				return err
+			}
+			// Preserve completed/terminated MI rounds after live element cleanup;
+			// old pre-index elements are left unindexed until a safe backfill.
+			if err := tx.RecordMIEnd(h.Key, &v.element, h.Position, h.Intent == model.IntentTerminated); err != nil {
 				return err
 			}
 			// The armed branch that won its race: the arrow from the gateway is now the
