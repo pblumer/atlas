@@ -324,8 +324,7 @@ type Server struct {
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
-
-	startGrants *startgrant.Store // ADR-0516, run-loop owned; never accessed by engine
+	startGrants         *startgrant.Store // ADR-0516, run-loop owned; never accessed by engine
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
@@ -1792,8 +1791,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
-
-		startGrants: startGrants,
+		startGrants:       startGrants,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
