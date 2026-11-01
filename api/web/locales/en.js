@@ -7,6 +7,7 @@ export default {
   "ops.mi.expand": "Show iterations",
   "ops.mi.collapse": "Hide iterations",
   "ops.mi.count": "{count} iterations",
+  "ops.mi.incidents": "{count} incidents",
   "ops.mi.summary": "{completed} completed, {active} active, {terminated} terminated",
 
   // The language's own name, in itself: how the language picker lists it.
