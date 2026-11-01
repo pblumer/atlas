@@ -48,7 +48,10 @@ for (const width of [1440, 900, 375]) {
 
 test("process identity survives selecting an individual instance", async ({ page }) => {
   const { title, errors } = await open(page, 900, LONG_NAME);
-  await page.locator("#instance-sel").selectOption("900001");
+  // The instance picker is filled asynchronously; pick a key on the first page.
+  // 900001 is deliberately off-page in this harness and is only found via search.
+  await expect(page.locator('#instance-sel option[value="900119"]')).toHaveCount(1);
+  await page.locator("#instance-sel").selectOption("900119");
   await expect(title).toHaveText(LONG_NAME);
   await expect(page.locator(".live-process-version")).toHaveText("v2");
   expect(errors).toEqual([]);
