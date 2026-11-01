@@ -18,8 +18,10 @@
       "issues": [
         1481
       ],
-      "prs": [],
-      "note": "In integration: group body/iteration history using persisted token lineage; still reads the full timeline."
+      "prs": [
+        1483
+      ],
+      "note": "PR #1483 in review: group body/iteration history using persisted token lineage; current API still returns the full timeline. Browser/Go CI must pass before merge."
     },
     {
       "id": "OHS2",
