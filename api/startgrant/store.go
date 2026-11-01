@@ -3,16 +3,15 @@ package startgrant
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// SchemaVersion identifies the durable change record format.
+// SchemaVersion identifies the durable grant-document format.
 const SchemaVersion = 1
 
-// ActionGrant and ActionRevoke are immutable changes to a process-start audience.
+// ActionGrant and ActionRevoke describe immutable audited audience changes.
 const (
 	ActionGrant  = "grant"
 	ActionRevoke = "revoke"
@@ -20,9 +19,8 @@ const (
 
 const maxAudience = 256
 
-// Change is both an immutable audit entry and the effective grant snapshot
-// at its revision. A single atomic sidecar write commits both facts together.
-// This is installation-specific authorization data, never a portable app export.
+// Change is one immutable audit entry in a process-scoped grant document.
+// Revision increases per application/process, not globally.
 type Change struct {
 	SchemaVersion int    `json:"schemaVersion"`
 	Revision      uint64 `json:"revision"`
@@ -32,8 +30,8 @@ type Change struct {
 	Grant         Grant  `json:"grant"`
 }
 
-// ChangeRequest is a mutation prepared by an admin-only handler. ExpectedRevision
-// prevents stale administration screens from overwriting a newer grant.
+// ChangeRequest is prepared by a future admin-only HTTP service. The actor and
+// timestamp must come from the authenticated server context, not the client.
 type ChangeRequest struct {
 	Grant            Grant
 	ActorID          string
@@ -41,11 +39,10 @@ type ChangeRequest struct {
 	ExpectedRevision uint64
 }
 
-// ErrStaleRevision means another mutation won before this request.
+// ErrStaleRevision means another admin change won before this request.
 var ErrStaleRevision = errors.New("start grant revision changed")
 
-// ErrUncertainWrite means a sidecar write failed; its durability is unknown.
-// Until restart/reload, no further writes or positive authorization are allowed.
+// ErrUncertainWrite requires restart/recovery before any positive authorization.
 var ErrUncertainWrite = errors.New("start grant store requires recovery after write error")
 
 type scope struct {
@@ -53,23 +50,31 @@ type scope struct {
 	processID     string
 }
 
-// Store owns append-only, fsync-backed grant revisions and their audit history.
-// It is single-writer state: mutate and query it on the server's run-loop only.
-// HTTP route role checks and session authentication are not implemented here.
+// document is one atomic sidecar record per application/process. The latest
+// policy and its complete immutable logical audit trail share one fsync-backed
+// replacement. A missing record denies access; losing a separate tail-revoke
+// file cannot resurrect a grant, because there is no separate tail file.
+type document struct {
+	SchemaVersion int      `json:"schemaVersion"`
+	ApplicationID string   `json:"applicationId"`
+	ProcessID     string   `json:"processId"`
+	Revision      uint64   `json:"revision"`
+	History       []Change `json:"history"`
+}
+
+// Store owns durable process-start grants, with single-writer run-loop access.
+// Never call its mutable methods concurrently or from the processor hot path.
 type Store struct {
-	files     *sidecar.Store[Change]
-	history   []Change
-	current   map[scope]Change
-	revision  uint64
+	files     *sidecar.Store[document]
+	current   map[scope]document
 	uncertain bool
 }
 
-// NewStore reconstructs the effective grants from immutable change records.
-// A malformed or incomplete audit chain refuses startup instead of granting
-// permissions from an ambiguous snapshot.
+// NewStore loads all scoped grant documents and validates their audit chains.
+// A corrupt record fails startup instead of granting access from partial data.
 func NewStore(dir string) (*Store, error) {
-	files, err := sidecar.NewStore(dir, "startgrantstore", func(c Change) string {
-		return fmt.Sprintf("%020d", c.Revision)
+	files, err := sidecar.NewStore(dir, "startgrantstore", func(d document) string {
+		return d.ApplicationID + "\x00" + d.ProcessID
 	})
 	if err != nil {
 		return nil, err
@@ -78,17 +83,16 @@ func NewStore(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(all, func(i, j int) bool { return all[i].Revision < all[j].Revision })
-	s := &Store{files: files, current: make(map[scope]Change), history: all}
-	for i, change := range all {
-		if change.Revision != uint64(i)+1 {
-			return nil, fmt.Errorf("startgrantstore: missing or duplicate revision at %d", i+1)
+	s := &Store{files: files, current: make(map[scope]document, len(all))}
+	for _, d := range all {
+		if err := validateDocument(d); err != nil {
+			return nil, fmt.Errorf("startgrantstore: invalid %q/%q: %w", d.ApplicationID, d.ProcessID, err)
 		}
-		if err := validateChange(change); err != nil {
-			return nil, fmt.Errorf("startgrantstore: invalid revision %d: %w", change.Revision, err)
+		key := scope{d.ApplicationID, d.ProcessID}
+		if _, duplicate := s.current[key]; duplicate {
+			return nil, errors.New("startgrantstore: duplicate scope")
 		}
-		s.current[scope{change.Grant.ApplicationID, change.Grant.ProcessID}] = change
-		s.revision = change.Revision
+		s.current[key] = d
 	}
 	return s, nil
 }
@@ -135,17 +139,33 @@ func validateChange(c Change) error {
 	return nil
 }
 
+func validateDocument(d document) error {
+	if d.SchemaVersion != SchemaVersion || !validID(d.ApplicationID) || !validID(d.ProcessID) ||
+		d.Revision == 0 || uint64(len(d.History)) != d.Revision {
+		return errors.New("unsupported schema or incomplete audit history")
+	}
+	for i, c := range d.History {
+		if err := validateChange(c); err != nil {
+			return err
+		}
+		if c.Revision != uint64(i)+1 || c.Grant.ApplicationID != d.ApplicationID || c.Grant.ProcessID != d.ProcessID {
+			return errors.New("audit revision or scope mismatch")
+		}
+	}
+	return nil
+}
+
 func cloneChange(c Change) Change {
 	c.Grant.UserIDs = append([]string(nil), c.Grant.UserIDs...)
 	c.Grant.GroupIDs = append([]string(nil), c.Grant.GroupIDs...)
 	return c
 }
 
-// Set commits a grant replacement or revocation as one immutable audited file.
-// Callers MUST authorize an administrator and validate application/process and
-// audience existence before calling Set; this is not an HTTP permission check.
-// A failed Save poisons the store because an fsync error can have an unknown
-// outcome, and retrying the same revision could overwrite audit evidence.
+// Set atomically replaces the effective policy and its complete audit trail.
+// Callers MUST first enforce admin authorization and validate the target
+// application, BPMN process and audience against current server-side records.
+// The store is not itself a route guard. A failed write poisons authorization
+// until recovery because a failed fsync can have an unknown outcome.
 func (s *Store) Set(req ChangeRequest) (Change, error) {
 	if s.uncertain {
 		return Change{}, ErrUncertainWrite
@@ -164,7 +184,7 @@ func (s *Store) Set(req ChangeRequest) (Change, error) {
 	}
 	change := Change{
 		SchemaVersion: SchemaVersion,
-		Revision:      s.revision + 1,
+		Revision:      current.Revision + 1,
 		At:            req.At,
 		ActorID:       req.ActorID,
 		Action:        action,
@@ -173,28 +193,38 @@ func (s *Store) Set(req ChangeRequest) (Change, error) {
 	if err := validateChange(change); err != nil {
 		return Change{}, err
 	}
-	if err := s.files.Save(change); err != nil {
+	next := document{
+		SchemaVersion: SchemaVersion,
+		ApplicationID: key.applicationID,
+		ProcessID:     key.processID,
+		Revision:      change.Revision,
+		History:       make([]Change, len(current.History), len(current.History)+1),
+	}
+	copy(next.History, current.History)
+	next.History = append(next.History, change)
+	if err := s.files.Save(next); err != nil {
 		s.uncertain = true
 		return Change{}, err
 	}
-	s.revision = change.Revision
-	s.history = append(s.history, change)
-	s.current[key] = change
+	s.current[key] = next
 	return cloneChange(change), nil
 }
 
-// Current returns a copy of the last durable mutation, including a revocation.
-// An uncertain write makes the snapshot unavailable until restart.
+// Current returns a defensive copy of the latest audited mutation. It is
+// unavailable after an uncertain write until restart/recovery.
 func (s *Store) Current(applicationID, processID string) (Change, bool) {
 	if s.uncertain {
 		return Change{}, false
 	}
-	rec, ok := s.current[scope{applicationID, processID}]
-	return cloneChange(rec), ok
+	d, ok := s.current[scope{applicationID, processID}]
+	if !ok || len(d.History) == 0 {
+		return Change{}, false
+	}
+	return cloneChange(d.History[len(d.History)-1]), true
 }
 
-// Allowed evaluates the latest durable grant without inferring any operator,
-// project-viewer or task-assignment privilege. Call only on the run-loop.
+// Allowed checks only the exact last durable audience, never project viewer,
+// editor, task assignment or operator privileges. Call it on the run-loop.
 func (s *Store) Allowed(applicationID, processID string, principal Principal) bool {
 	rec, ok := s.Current(applicationID, processID)
 	if !ok || rec.Action != ActionGrant {
@@ -203,14 +233,15 @@ func (s *Store) Allowed(applicationID, processID string, principal Principal) bo
 	return Allowed([]Grant{rec.Grant}, applicationID, processID, principal)
 }
 
-// History returns the immutable audit trail for one application and process,
-// ordered oldest first. It never grants permission by itself.
+// History returns defensive copies of all audited changes, oldest first.
 func (s *Store) History(applicationID, processID string) []Change {
+	d, ok := s.current[scope{applicationID, processID}]
 	out := []Change{}
-	for _, rec := range s.history {
-		if rec.Grant.ApplicationID == applicationID && rec.Grant.ProcessID == processID {
-			out = append(out, cloneChange(rec))
-		}
+	if !ok {
+		return out
+	}
+	for _, rec := range d.History {
+		out = append(out, cloneChange(rec))
 	}
 	return out
 }
