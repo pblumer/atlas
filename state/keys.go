@@ -65,6 +65,9 @@ const (
 	cfAuthorization          columnFamily = 0x34 // authz:<piKey>:<jobKey>:<pos> → AuthorizationValue (ADR-0475 §12); 0x32 until it was found to be the event log's
 	cfApprovalExpiry         columnFamily = 0x35 // aprExp:<expiresAt>:<approvalKey> → piKey(8): the open approval requests, soonest first (ADR-0475 §9)
 	cfFlowTakenAgg           columnFamily = 0x36 // flowAgg:<procDefKey>:<flowId> → int64 cumulative traversals (merge, ADR-0496)
+	cfMIBody                 columnFamily = 0x38 // miBody:<piKey>:<activationPosition>:<bodyElKey> (ADR-0517)
+	cfMIIteration            columnFamily = 0x39 // miRound:<piKey>:<bodyElKey>:<activationPosition>:<roundElKey> (ADR-0517)
+	cfMIRoundByElement       columnFamily = 0x3A // miRoundByEl:<piKey>:<roundElKey> (ADR-0517)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
