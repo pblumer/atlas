@@ -11,7 +11,7 @@ import (
 
 func testRequest(app, process, actor string, expected uint64, users, groups []string) ChangeRequest {
 	return ChangeRequest{
-		Grant: Grant{ApplicationID: app, ProcessID: process, UserIDs: users, GroupIDs: groups},
+		Grant:   Grant{ApplicationID: app, ProcessID: process, UserIDs: users, GroupIDs: groups},
 		ActorID: actor, At: 1762010000, ExpectedRevision: expected,
 	}
 }
