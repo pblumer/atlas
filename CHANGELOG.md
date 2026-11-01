@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
 - **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
