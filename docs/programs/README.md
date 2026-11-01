@@ -6,7 +6,7 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**6 programmes** · active: 5 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
+**7 programmes** · active: 6 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
@@ -15,6 +15,7 @@ See [delivery protocol](../development/program-delivery.md) and
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/8 | pblumer | Validate MFE0 on physical iOS/Android devices (#1451), including tablet landscape, accessibility and complex forms; integrate the owner-accepted scoped-start ADR #1471, then specify and TDD-implement deny-by-default process grants with sidecar revocation, security and recovery tests. Continue MFE2 device/security acceptance and MFE3 alarm design. |
 | [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
+| [Operations History at Scale](../planning/operations-history-at-scale-program.md) | active | 0/3 | pblumer | Review OHS1 grouped-history PR, then accept the bounded query/replay ADR and implement OHS2 (Issue #1481). |
 | [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | paused | 4/5 | dbuchs7 | Paused after phase A by the owner's decision (2026-10-31). To restart: move the 37 server files that import api/catalog or api/order behind api/shopcontract (TestServerFilesReachingIntoTheShopOnlyBecomeFewer tracks the count), settle ADR-0515's open question on public holidays, and decide phase B (separate binary) in its own ADR before any work on it. |
 
 ## atlas hub (BMP)
@@ -96,6 +97,18 @@ Make atlas-owned BPMN authoring the future default while preserving versioned Ze
 | **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
 | **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
 | **MIP4** — Release provenance and compatibility sign-off | planned | unassigned | MIP1, MIP2, MIP3 | — | Complete upstream/fixture audit, copyright notices, vendor bundle rebuild evidence, SBOM, watermark and compatibility matrix; maintain separate legal trademark gate. |
+
+## Operations History at Scale (OHS)
+
+Keep instance replay intelligible and responsive with grouped multi-instance execution, bounded iteration discovery and exact causal drill-down at 50,000 iterations.
+
+**[Programme plan](../planning/operations-history-at-scale-program.md) · [Roadmap track](../../ROADMAP.md#milestone-4--operability-) · [Manifest](ohs/program.json) · Reviewed: 2026-11-01**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **OHS1** — Default grouped multi-instance history | active | pblumer | — | [PR #1483](https://github.com/pblumer/atlas/pull/1483), [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | PR #1483 in review: group body/iteration history using persisted token lineage; current API still returns the full timeline. Browser/Go CI must pass before merge. |
+| **OHS2** — Bounded iteration lookup and filtering | planned | unassigned | OHS1 | [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | Requires accepted scalable replay ADR, paged query and indexed exact lookup with nonblocking off-loop read and recovery tests. |
+| **OHS3** — Scalable iteration detail replay | planned | unassigned | OHS2 | [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | Bounded causal frame and variable/incident/decision drill-down, 50k performance evidence and full replay/retention compatibility. |
 
 ## tshopper — catalogue and shop as a capability of their own (TSH)
 
