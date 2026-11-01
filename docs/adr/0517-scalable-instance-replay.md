@@ -1,4 +1,4 @@
-# ADR-DRAFT: Bounded instance history and causal detail replay
+# ADR-0517: Bounded instance history and causal detail replay
 
 - **Status:** Proposed
 - **Implementation:** Not started

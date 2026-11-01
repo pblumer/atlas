@@ -15,7 +15,7 @@ An operator can understand a process containing 50,000 multi-instance iterations
 
 - Existing [ADR-0077](../adr/0077-multi-instance-activities.md) defines MI body and inner execution. [ADR-0065](../adr/0065-multi-token-process-replay.md) defines durable token lineage; [ADR-0046](../adr/0046-single-process-step-replay.md) defines step history.
 - The initial UI grouping uses those existing facts only. Repeated or nested bodies may not be identified by BPMN element id alone. Older records without sufficient lineage remain ungrouped rather than incorrectly attributed.
-- The later bounded query API needs its own [draft decision](../adr/draft-scalable-instance-replay.md) before implementation.
+- The later bounded query API needs its own [draft decision](../adr/0517-scalable-instance-replay.md) before implementation.
 - I1/I3/I4/I6: no hot-path allocations, no data-dependent scans on the single-writer loop, one deterministic applier, and no fabricated facts. A grouped display is not aggregated execution or a new BPMN semantic.
 - The full timeline endpoint is currently unbounded, so OHS1 explicitly **does not** claim suitability for 50,000 iterations. The upper bound becomes a hard acceptance condition of OHS2/OHS3.
 
