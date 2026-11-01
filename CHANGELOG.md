@@ -22,8 +22,8 @@ _Changed_ / _Removed_ for each version.
   contract and pins how many server files still import the catalogue or order packages directly
   (37), a number that may only fall — the measurable start of separating tshopper from the engine.
 - **The catalogue app finds the wiki's services and reports on its own page.** The catalogue and
-  the shop are grouped as tshopper in the app drawer, and the catalogue app gains a top bar with
-  Catalogues, Building blocks and Reporting. Building blocks searches a content source
+  the shop are grouped as Marketplace in the app drawer, with the same caption in German and
+  English, and the catalogue app gains a top bar with Catalogues, Building blocks and Reporting. Building blocks searches a content source
   (`GET /api/v1/catalog-building-blocks`, MCP tool `atlas_catalog_building_blocks`) and shows each
   wiki page with the products that already use it — named where you maintain them, counted where
   you do not — and Create product turns an unused page into a draft product bound to it.
@@ -86,6 +86,12 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
+  writes the service configuration from that run's parameters alone, so a parameter left out falls
+  back to its default. A TLS installation then comes back as plain HTTP on `127.0.0.1:8080`. The
+  Windows section of `docs/install.md` now lists which start parameters to repeat, which the update
+  ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
+  TLS update example and names the folder the release archive unpacks to.
 
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
   `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and

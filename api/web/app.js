@@ -734,7 +734,7 @@ const APPS = [
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "tshopper" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "Marketplace" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -746,7 +746,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "tshopper" },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "Marketplace" },
 ];
 
 // Secondary (in-app) navigation.
@@ -1557,7 +1557,7 @@ function paintApps() {
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
   // Apps of one suite sit under its name, once, above the first of them: the
-  // catalogue and the shop are tshopper (phase A,
+  // catalogue and the shop are the Marketplace (tshopper phase A,
   // ADR-0515), and saying so in the drawer is
   // what tells a person the two belong together. The caption is not a link and not
   // part of any link's name.

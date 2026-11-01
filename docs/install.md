@@ -795,6 +795,98 @@ the Go workers either way; give the server an exception there.
 not the Windows PowerShell 5.1 that ships with the OS. Install it separately if
 you need them, or start with `--powershell=false`.
 
+### 4. Upgrade a service the script installed
+
+Run `install-atlas-service.ps1` again, in an elevated PowerShell. Where a service of
+that name exists and points at the script's wrapper
+(`<InstallRoot>\service\<ServiceName>-service.exe`), the script switches to update mode.
+It then does these steps in this order:
+
+1. It tries the new `atlas.exe` in the foreground with a throw-away data directory
+   while the old service keeps running (skip with `-SkipSmokeTest`).
+2. It stops the service.
+3. It copies the data directory to `<InstallRoot>\backup\data-<yyyyMMdd-HHmmss>`, with
+   `config\vault.key` if there is one (skip with `-SkipBackup`). Old backups are never
+   deleted.
+4. It replaces `<InstallRoot>\bin\atlas.exe`, but only if the new file differs from it.
+5. It **rewrites the WinSW configuration from the parameters of this run** and starts
+   the service again.
+
+Step 5 is the trap. The script does not read the old configuration back: every start
+parameter you gave at installation has to be given again. A parameter you leave out
+falls back to its default. Leave out `-Addr`, `-TlsCert` and `-TlsKey` on a server
+installed with TLS on `:8443`, and the service comes back on `http://127.0.0.1:8080`.
+A non-local `-Addr` without its certificate stops the script before anything has been
+changed. A loopback address does not. Before the upgrade, read the current start line
+from the configuration and repeat it:
+
+```powershell
+Select-String -Path D:\atlas\service\atlas-service.xml -Pattern '<arguments>'
+```
+
+Then unpack the release next to the installation and point the script at the binary.
+The archive holds a folder `atlas_<version>_windows_amd64`, so the binary is one level
+down:
+
+```powershell
+$Version = '0.22.0'
+$Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
+$Dir  = "D:\atlas\releases\$Version"
+New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile "$Dir\atlas.zip"
+Invoke-WebRequest "$Base/SHA256SUMS" -OutFile "$Dir\SHA256SUMS"
+$expected = (Select-String -Path "$Dir\SHA256SUMS" -Pattern "atlas_${Version}_windows_amd64.zip").Line.Split(' ')[0]
+if ($expected -ne (Get-FileHash "$Dir\atlas.zip" -Algorithm SHA256).Hash.ToLower()) { throw "checksum mismatch - do not use this download" }
+Expand-Archive "$Dir\atlas.zip" -DestinationPath $Dir
+
+# Local only, as installed with the defaults:
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe"
+
+# TLS in the binary: the script's own copies under config\ can be named directly.
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe" `
+    -Addr ':8443' -TlsCert D:\atlas\config\tls.crt -TlsKey D:\atlas\config\tls.key `
+    -ExternalUrl 'https://atlas.example.ch:8443'
+
+# Behind IIS/ARR:
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe" `
+    -ExternalUrl 'https://atlas.example.ch'
+```
+
+If the script itself was downloaded, unblock it first
+(`Unblock-File .\install-atlas-service.ps1`) or start it with
+`powershell -ExecutionPolicy Bypass -File .\install-atlas-service.ps1 …`.
+
+What each parameter does in update mode:
+
+| Parameter | In update mode |
+| --- | --- |
+| `-InstallRoot`, `-ServiceName` | **Repeat** if not the defaults (`D:\atlas`, `atlas`). With another `-ServiceName` the script takes the run for a new installation. It stops there only if an `atlas.exe` is running. With another `-InstallRoot` it finds the service, sees that it points elsewhere, and stops. |
+| `-DataDir` | **Repeat** if not the default. The default is `<InstallRoot>\data`, or an existing `<InstallRoot>\atlas-data` when `data` does not exist. |
+| `-AtlasExe` | The new binary. **Recommended always.** |
+| `-Version` | Downloads and verifies a release, but only when no `atlas.exe` is found under `-InstallRoot`. That search skips `bin`, `data`, `backup`, `service`, `logs` and `config`, and takes the newest file. After one installation a `releases\<old>\atlas.exe` is usually there, so `-Version` alone silently keeps the old binary. Use `-AtlasExe`. |
+| `-Addr`, `-TlsCert`, `-TlsKey`, `-ExternalUrl`, `-AllowPlaintext` | **Repeat.** They are written into the configuration again. |
+| `-ExtraArgs`, `-KeepAllInterpreters` | **Repeat** if you used them. The `--powershell`/`--python`/`--javascript=false` flags are worked out again from the machine `PATH` on every run. |
+| `-OpenFirewall`, `-FirewallProfile` | Optional. Without them the existing rule stays as it is. With them it is recreated for the port in `-Addr`, which is needed when the port changes. |
+| `-DefenderExclusion` | Optional. An existing exclusion stays. |
+| `-AdminUsername`, `-AdminPassword` | Ignored. The script seeds an administrator only while the user store is empty. |
+| `-VaultKeyMode` | Leave out. An existing `config\vault.key` is detected and kept. `File` on an installation whose key is `data\vault.key` stops the script. |
+| `-WinSWPath`, `-WinSWUrl`, `-WinSWSha256` | Ignored. The wrapper under `service\` is kept. |
+| `-ReadyTimeoutSec` | How long to wait for `recovery is complete` after the start (default 300 s). Raise it for a large data directory. |
+| `-SkipSmokeTest`, `-SkipBackup` | Leave out. |
+
+At the end the script prints the version now running. `Get-Content
+D:\atlas\service\atlas-service.xml` shows the configuration it wrote.
+
+**Going back.** Downgrading over newer data is not supported (see
+[Upgrading](#upgrading)). The script does not keep the previous binary. It stays only
+where you unpacked it, for instance `D:\atlas\releases\<old version>`. To go back:
+
+1. Stop the service.
+2. Replace the data directory with the backup from step 3. If the backup holds a
+   folder `_config`, that is the copy of `config\vault.key`: put it back under
+   `config\`, not into the data directory.
+3. Run the script with `-AtlasExe` pointing at the old binary and `-SkipBackup`.
+
 ## macOS
 
 `darwin_amd64` and `darwin_arm64` builds are published. Installation is the same
@@ -1332,6 +1424,9 @@ journalctl -u atlas -n 50
 
 Downgrading is not supported: a newer build may have written state an older one
 cannot read. Restore the backup instead.
+
+On Windows, with the service installed by `install-atlas-service.ps1`, follow
+[Upgrade a service the script installed](#4-upgrade-a-service-the-script-installed).
 
 ## Uninstalling
 
