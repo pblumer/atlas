@@ -29,6 +29,14 @@
     Dienst stoppen, Datenverzeichnis sichern, atlas.exe ersetzen (falls eine
     andere Datei gefunden wurde), Konfiguration neu schreiben, Dienst starten.
 
+    Die Konfiguration wird dabei allein aus den Parametern dieses Laufs
+    geschrieben, nicht aus der bestehenden gelesen. Beim Update daher alle
+    Startparameter der Installation wiederholen (-Addr, -TlsCert, -TlsKey,
+    -ExternalUrl, -DataDir, -ExtraArgs, ...); ein weggelassener Parameter
+    faellt auf seinen Standard zurueck. Die bisherigen stehen in
+    <InstallRoot>\service\<ServiceName>-service.xml unter <arguments>.
+    Ausfuehrlich: docs/install.md, "Upgrade a service the script installed".
+
     Das Skript ist fuer Windows PowerShell 5.1 geschrieben und laeuft auch unter
     PowerShell 7.
 
@@ -123,8 +131,16 @@
         -ExternalUrl 'https://atlas.example.ch:8443' -OpenFirewall
 
 .EXAMPLE
-    # Update: neue atlas.exe nach D:\atlas\releases\0.9.0 entpacken, dann
-    .\install-atlas-service.ps1 -AtlasExe D:\atlas\releases\0.9.0\atlas.exe
+    # Update: Release-ZIP nach D:\atlas\releases\0.9.0 entpacken (das Archiv
+    # enthaelt den Ordner atlas_0.9.0_windows_amd64), dann
+    .\install-atlas-service.ps1 -AtlasExe D:\atlas\releases\0.9.0\atlas_0.9.0_windows_amd64\atlas.exe
+
+.EXAMPLE
+    # Update einer Installation mit TLS im Binary: alle Startparameter wiederholen;
+    # die Kopien unter config\ koennen direkt angegeben werden
+    .\install-atlas-service.ps1 -AtlasExe D:\atlas\releases\0.9.0\atlas_0.9.0_windows_amd64\atlas.exe `
+        -Addr ':8443' -TlsCert D:\atlas\config\tls.crt -TlsKey D:\atlas\config\tls.key `
+        -ExternalUrl 'https://atlas.example.ch:8443'
 
 .EXAMPLE
     .\install-atlas-service.ps1 -Uninstall

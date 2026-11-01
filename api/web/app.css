@@ -8120,7 +8120,7 @@ button.im-problem:hover { background: var(--accent-soft); }
 .sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .sl-row .field { margin: 0; min-width: 180px; }
 
-/* A suite's name above its apps in the drawer: tshopper is the catalogue and the shop. */
+/* A suite's name above its apps in the drawer: Marketplace is the catalogue and the shop. */
 .app-suite { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 14px 2px; }
 
 /* MFE1: phone-first shell. Keep the desktop nav unchanged; a phone gives its
