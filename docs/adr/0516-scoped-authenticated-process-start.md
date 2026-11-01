@@ -186,20 +186,23 @@ The approved design-time sidecar approach is implemented as a separate
 `api/startgrant.Store` (this follow-up PR) and wired into the server's
 single-writer run loop. It **does not yet authorize an HTTP route**.
 
-- **Record:** immutable JSON `Change` with `schemaVersion=1`, monotonic
-  global `revision`, server-supplied `at`, `actorId`, `action` (`grant` or
-  `revoke`) and the complete `Grant{applicationId, processId, userIds,
-  groupIds}` snapshot. A single sidecar atomic write/fsync durably commits the
-  effective policy **and** its audit fact, rather than risking a grant that
-  becomes effective before a second audit write succeeds.
-- **Identity and scope:** the effective audience is the last revision for
-  the exact application and BPMN process ID. An empty audience is an explicit
-  revocation; there are no default grants or viewer/editor implications.
-  An expected per-scope revision rejects stale administrator changes.
-- **Recovery:** startup loads and validates the entire revision sequence,
-  rebuilding the effective map. Corrupt or missing audit records fail closed.
-  On a write/fsync error, the in-memory store becomes uncertain and refuses
-  positive authorization and subsequent writes until restart/recovery.
+- **Record:** one versioned JSON `document` per exact
+  `applicationId/processId`, with a monotonic **per-scope** revision and a
+  complete logically immutable `Change` history. Each change contains the
+  server-supplied timestamp and actor, `grant`/`revoke` action and full
+  user/group audience. One atomic sidecar replacement/fsync commits the latest
+  policy **and** its complete audit history together. This avoids both a
+  visible grant without audit and a lost final revoke file resurrecting a
+  previously granted audience.
+- **Identity and scope:** an empty audience explicitly revokes the process
+  grant; there are no default grants or viewer/editor implications. Expected
+  per-scope revisions reject stale administration changes.
+- **Recovery:** startup validates each complete audit chain and rebuilds the
+  effective policy. Corrupt/truncated documents fail startup; a missing
+  document grants nobody. A write/fsync error makes the in-memory store
+  uncertain, refusing positive authorization and further writes until restart.
+  Restoring an intentionally older backup is still an administrative rollback
+  and needs normal restore governance; no store can infer missing future writes.
 - **Ownership:** only the API run-loop may mutate or query the store. No
   processor, WAL, `applyToState` or engine hot path changes. The store is
   classified as `credential` in the backup inventory; it is not part of
