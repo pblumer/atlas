@@ -68,6 +68,7 @@ const (
 	cfMIBody                 columnFamily = 0x38 // miBody:<piKey>:<activationPosition>:<bodyElKey> (ADR-0517)
 	cfMIIteration            columnFamily = 0x39 // miRound:<piKey>:<bodyElKey>:<activationPosition>:<roundElKey> (ADR-0517)
 	cfMIRoundByElement       columnFamily = 0x3A // miRoundByEl:<piKey>:<roundElKey> (ADR-0517)
+	cfMIBodyByElement        columnFamily = 0x3B // miBodyByEl:<piKey>:<bodyElKey> → activationPosition(8) (ADR-0517)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 

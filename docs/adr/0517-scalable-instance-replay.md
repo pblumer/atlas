@@ -1,7 +1,7 @@
 # ADR-0517: Bounded instance history and causal detail replay
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-11-01
 - **Deciders:** atlas maintainers, Operations History at Scale programme owner
 - **Approved by:** programme owner, 2026-11-01
@@ -43,7 +43,7 @@ alone. Use the event's body/iteration lineage and log positions. Keep the summar
 on the cheap read path; avoid copying snapshots/frames until a user selects a
 specific iteration.
 
-## Proposed OHS2 implementation contract (approval requested)
+## OHS2 implementation contract
 
 ### Durable index
 
@@ -112,6 +112,27 @@ Implementation remains subject to the listed tests, performance and recovery gat
 - **Follow-ups / risks to watch:** Mixed old/new events, nested and overlapping
   body executions, replay causality, incident history versus current incidents,
   canceled rounds, scope-variable retention, privacy and export-gated purge.
+
+## As built: deterministic index projection (OHS2 increment 1)
+
+PR #1487 reserves MI index key families. PR #1488 adds a versioned Pebble
+projection for *newly applied* MI body and iteration activations, their durable
+activation/end positions and token lineage, keyed to the concrete body activation.
+A body-element reverse key allows a round's `FlowScopeKey` to resolve the exact
+body activation through a point read of the indexed transaction, including
+activations in the same processor batch. `applyToState` is the only writer;
+independent WAL recovery of parallel and sequential MI is tested against live
+projection output. Purge removes the new per-instance index ranges by range
+tombstones. Shared Store/ReadView queries support bounded reads, but the public
+cursor-paged HTTP surface is not implemented yet.
+
+**Not built in this increment:** historical event backfill/schema readiness
+marker; exact `loopCounter` search; cursor/high-watermark and indexed status/
+incident filters; API/UI endpoints; 50,000-iteration performance evidence.
+An old live body without an indexed activation does not acquire guessed lineage:
+rounds observed after upgrade are left absent from the new projection until the
+historical backfill has reconstructed their parent activation. Do not expose
+incomplete projections as if they covered a whole instance.
 
 ## Pros and cons of the options
 
