@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
+	"github.com/pblumer/atlas/api/startgrant"
 	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
@@ -323,6 +324,7 @@ type Server struct {
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
+	startGrants         *startgrant.Store // ADR-0516, run-loop owned; never accessed by engine
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
@@ -1599,6 +1601,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	startGrants, err := startgrant.NewStore(filepath.Join(dataDir, "start-grants"))
+	if err != nil {
+		return nil, err
+	}
 	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
 	if err != nil {
 		return nil, err
@@ -1785,6 +1791,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
+		startGrants:       startGrants,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,

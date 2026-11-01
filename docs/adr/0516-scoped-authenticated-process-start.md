@@ -1,7 +1,7 @@
 # ADR-0516: Scoped authenticated process starts for task users
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Decision accepted:** 2026-10-31 by MFE programme owner pblumer (explicit MFE1 implementation and associated ADR approval)
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
@@ -180,7 +180,46 @@ stronger total-order guarantee would require a separate design review.
    and Playwright E2E. Update public OpenAPI documentation, security
    runbooks and programme evidence together with the implementation PR.
 
-### Consequences
+### Durable grant persistence implementation checkpoint (2026-11-01)
+
+The approved design-time sidecar approach is implemented as a separate
+`api/startgrant.Store` (this follow-up PR) and wired into the server's
+single-writer run loop. It **does not yet authorize an HTTP route**.
+
+- **Record:** one versioned JSON `document` per exact
+  `applicationId/processId`, with a monotonic **per-scope** revision and a
+  complete logically immutable `Change` history. Each change contains the
+  server-supplied timestamp and actor, `grant`/`revoke` action and full
+  user/group audience. One atomic sidecar replacement/fsync commits the latest
+  policy **and** its complete audit history together. This avoids both a
+  visible grant without audit and a lost final revoke file resurrecting a
+  previously granted audience.
+- **Identity and scope:** an empty audience explicitly revokes the process
+  grant; there are no default grants or viewer/editor implications. Expected
+  per-scope revisions reject stale administration changes.
+- **Recovery:** startup validates each complete audit chain and rebuilds the
+  effective policy. Corrupt/truncated documents fail startup; a missing
+  document grants nobody. A write/fsync error makes the in-memory store
+  uncertain, refusing positive authorization and further writes until restart.
+  Restoring an intentionally older backup is still an administrative rollback
+  and needs normal restore governance; no store can infer missing future writes.
+- **Ownership:** only the API run-loop may mutate or query the store. No
+  processor, WAL, `applyToState` or engine hot path changes. The store is
+  classified as `credential` in the backup inventory; it is not part of
+  portable design-time application exports.
+- **Revocation ordering:** a request checked **after** a persisted revoke is
+  refused. A start that passed its policy check **before** that revoke may
+  finish. This is the accepted ADR-0516 prospective ordering, not a claim of
+  total-order cancellation of already accepted work.
+
+**Still required before exposing self-service Start:** an admin-only audited
+management API, server-side application/process and principal validation,
+published-version resolution, the two separate user-role self-service routes,
+form enforcement, end-to-end 401/403/404 and machine-token tests, and a
+post-fsync instance-start/replay test. MFE0 physical-device acceptance #1451
+remains open.
+
+## Consequences
 
 - **Positive:** real process starts for field users without handing out
   `operator` or exposing runtime repair controls; one server authority
