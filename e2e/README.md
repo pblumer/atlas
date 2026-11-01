@@ -1071,3 +1071,15 @@ The 1024x768 landscape-tablet regression checks that the inbox uses a full-width
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
 or field conditions. Record those separately under MFE0 issue #1451.
+
+## MFE2 read-only mobile incident triage (ADR-0514)
+
+`mfe2-mobile-triage.spec.mjs` verifies the first actual MFE2 UI slice at
+320/390/768 CSS pixels and unchanged desktop Operations at 1280 px. It
+mocks the real operator-only summary and bounded incident-list contracts;
+non-operators and 401/403/expired sessions must show no incident metadata.
+Cause selection may request only a specifically scoped `limit=10` read-only
+sample. Long incident messages render as text, not HTML. Truncated summaries
+must disclose ungrouped counts. No incident POST, repair, retry or alarm
+acknowledgement may occur. Physical iOS/Android/screen-reader and foldable
+acceptance remains open in MFE0 #1451; these Chromium tests do not replace it.
