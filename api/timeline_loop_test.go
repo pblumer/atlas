@@ -113,6 +113,7 @@ type loopVar struct {
 type loopStep struct {
 	ElementID      string    `json:"elementId"`
 	TokenID        uint64    `json:"tokenId"`
+	ParentTokenID  uint64    `json:"parentTokenId"`
 	Iteration      int       `json:"iteration"`
 	Inputs         []loopVar `json:"inputs"`
 	Variables      []loopVar `json:"variables"`
