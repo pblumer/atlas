@@ -42,10 +42,65 @@ alone. Use the event's body/iteration lineage and log positions. Keep the summar
 on the cheap read path; avoid copying snapshots/frames until a user selects a
 specific iteration.
 
-The precise on-disk index, cursor stability model, read snapshot lifetime,
-historical-data fallback and HTTP response shape must be resolved and reviewed
-before OHS2 begins. Do not treat this proposal as authorization for a new index
-or a new engine write path.
+## Proposed OHS2 implementation contract (approval requested)
+
+### Durable index
+
+Use a versioned Pebble key prefix keyed by
+`(processInstanceKey, bodyElementInstanceKey, activationPosition, roundElementInstanceKey)`
+for iterations, and a separate body summary prefix keyed by
+`(processInstanceKey, bodyActivationPosition, bodyElementInstanceKey)`.
+Values retain durable body token, parent token, definition key/version, round
+number, lifecycle state and positions needed for exact lookup. Store a
+secondary key for `(processInstanceKey, roundElementInstanceKey)` to resolve
+exact element-instance lookups. No arbitrary free-text search.
+
+Write the index exclusively from the existing deterministic `applyToState`
+event fold, with a reusable encoding buffer and no new per-command allocation.
+On recovery the same events rebuild the same index. A schema/version marker
+allows a one-time bounded background backfill for pre-index histories; until
+backfill completes, the endpoint explicitly reports index unavailable, rather
+than scanning all historical events in an HTTP request.
+
+### Snapshot and pagination
+
+Each request takes a `state.ReadView` off the writer loop. The cursor contains
+version, instance key, body key, canonical filter digest, last returned ordered
+key, and a high-watermark position. Encode and authenticate the opaque cursor
+to prevent accidental or malicious tampering. No long-lived Pebble snapshot
+is held across HTTP requests. Subsequent pages scan keys only up to the frozen
+high-watermark; already returned records are never reordered. Status/incident
+filters that depend on mutable current state require either an as-of projection
+or an explicit restart-on-change cursor error, not silent page drift.
+
+Default page size 100, maximum 200. Iterator seeks must use bounded index
+prefixes and cursor keys. Stop after `limit+1` matching rows; for any filter,
+the access path must bound work, not just the serialized response size. If
+status/incident filtering needs additional indexes, implement and benchmark
+them before enabling those filters.
+
+### API and compatibility
+
+- `GET /api/v1/instances/{key}/multi-instances?limit=100&cursor=...`
+  returns body executions, not merged BPMN element names.
+- `GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations`
+  supports exact iteration, element-instance key, state and incident filters
+  through indexed reads. Cursor binds the entire filter set.
+- No variable snapshots or full replay frames are built for these endpoints.
+- Legacy `/timeline` remains unchanged. OHS3 will add scoped detail replay.
+- Purged instances return not found/gone according to existing retention API
+  semantics; index keys are removed consistently with purge events.
+
+### Acceptance and recovery
+
+Tests cover repeated/nested/parallel MI bodies, migration, termination,
+50,000 iterations, cursor boundaries and concurrent writes. Persist, restart,
+replay WAL and compare index keys and query results to live state. Benchmark
+response size, read latency, allocations and single-writer responsiveness.
+
+**Decision gate:** This section specifies the recommended approach, but
+requires maintainer acceptance before implementation of the new durable index.
+Do not treat this proposed ADR as an accepted architectural change.
 
 ### Consequences
 
