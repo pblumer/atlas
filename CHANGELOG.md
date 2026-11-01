@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
+- **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
 - **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
@@ -104,6 +105,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Operations Live views identify the process.** A dedicated heading now keeps the full process name and deployed version visible above the BPMN diagram, even with a crowded toolbar or on a narrow screen.
 - **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
   example in the Modeler saves it in the reader's reusable `atlas-samples` application,
   creating that application on first use. An existing ungrouped draft is filed there;

@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-31.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. The MFE owner accepted the scoped-start decision in ADR PR #1471, but grants and self-service API are not implemented and still require security/recovery tests. MFE2 read-only triage PR #1477 has merged, but physical-device acceptance remains open; MFE3–MFE7 are not delivered.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. The MFE owner accepted the scoped-start decision in ADR PR #1471, but grants and self-service API are not implemented and still require security/recovery tests. MFE2 implementation contract #1477 is merged; the actual read-only UI is under review in PR #1479, with physical-device evidence still pending; MFE3–MFE7 are not delivered.
 
 **User and operations guidance:** [MFE1 mobile work guide](mfe1-user-operations-guide.md) documents navigation, polling, confirmation semantics, authorization and remaining hardware evidence.
 
@@ -94,6 +94,8 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - **Exit:** device-size and E2E tests for claim, data validation, submit, back navigation, expired session and server refusal; no unsupported form-js features claimed.
 
 ### MFE2 — Mobile incident triage
+
+**Implementation in progress (2026-11-01):** The MFE owner approved read-only UI implementation in parallel with MFE0 device acceptance and MFE1 scoped-start security design (explicit three-slice WIP exception). [PR #1477](https://github.com/pblumer/atlas/pull/1477) merged only the implementation contract; [draft PR #1479](https://github.com/pblumer/atlas/pull/1479) implements an adaptive cause-first view, scoped `limit=10` detail and negative authorization tests for mobile devices. Desktop Operations remains unchanged. No server permission expansion, alarm acknowledgement, repair, retry or engine persistence work is part of MFE2. CI and physical-device acceptance (#1451) remain open.
 
 - Operator-scoped incident inbox with grouping by cause using existing `GET /api/v1/incidents/summary` instead of downloading flood-sized row lists.
 - Present impact, process, element, latest error and remediation options; provide safe read-only detail for roles without remediation rights.

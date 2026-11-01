@@ -12251,7 +12251,20 @@ async function route() {
     const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
-    if (path === "#/operations/incidents") return await viewIncidents();
+    if (path === "#/operations/incidents") {
+      // MFE2: a bounded, read-only cause-first view on phones and tablets.
+      // Desktop Operations retains all its existing remediation controls.
+      if (window.matchMedia("(max-width: 800px), (max-width: 1100px) and (pointer: coarse)").matches) {
+        const gen = navGen;
+        const { viewMobileIncidentTriage } = await import("./mfe2-triage.js");
+        if (superseded(gen)) return;
+        return await viewMobileIncidentTriage({
+          api, view, t: tr, fmtRaised, canOperate: mayUse("operator"),
+          isSuperseded: () => superseded(gen),
+        });
+      }
+      return await viewIncidents();
+    }
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/messages") return await viewBufferedMessages();

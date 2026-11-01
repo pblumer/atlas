@@ -173,7 +173,8 @@ acknowledgement, evidence and offline completion require their separate gates.
 - [MFE1 PR #1469](https://github.com/pblumer/atlas/pull/1469) (merged): mobile Task-completion receipt that appears only after the existing HTTP command is acknowledged. The browser test uses real form-js with a **mocked** safety-inspection task.
 - A separate [MFE1 safety-inspection example](../programs/mfe/safety-inspection/README.md) is now proposed for review as a BPMN model plus form-js schema. It is not installed by default, nor does it demonstrate physical-device acceptance.
 - The choice of a full field-worker process-start permission independent of broad `operator` is **not made** in this ADR: see issue [#1467](https://github.com/pblumer/atlas/issues/1467).
-- **Not landed:** MFE2 mobile incident triage, MFE0 real-device/screen-reader/zoom acceptance, MFE3 alarm acknowledgement, MFE4 QR/evidence and MFE5 offline/idempotency. Marking this ADR Partial does not claim any of those gates.
+- **Under review:** MFE2 read-only mobile incident triage in draft PR #1479, after contract-only merged PR #1477; no accepted device evidence or incident acknowledgement.
+- **Not landed:** MFE0 real-device/screen-reader/zoom acceptance, MFE3 alarm acknowledgement, MFE4 QR/evidence and MFE5 offline/idempotency. Marking this ADR Partial does not claim any of those gates.
 
 ## Links
 

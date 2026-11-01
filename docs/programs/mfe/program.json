@@ -4,10 +4,10 @@
   "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-10-31",
+  "last_reviewed": "2026-11-01",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Validate MFE0 on physical iOS/Android devices (#1451), including tablet landscape, accessibility and complex forms; integrate the owner-accepted scoped-start ADR #1471, then specify and TDD-implement deny-by-default process grants with sidecar revocation, security and recovery tests. Continue MFE2 device/security acceptance and MFE3 alarm design.",
+  "next_action": "Review MFE2 mobile triage PR #1479 for CI, server-side denial, responsive behaviour and physical-device acceptance (#1451). ADR-0516 is accepted and merged; separately TDD-implement per-process start grants with sidecar/revocation and recovery tests. MFE3 alarm design follows MFE2.",
   "slices": [
     {
       "id": "MFE0",
@@ -53,16 +53,19 @@
     {
       "id": "MFE2",
       "title": "Mobile incident triage",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "MFE0"
       ],
       "issues": [
         1457
       ],
-      "prs": [],
-      "note": "Scoped in issue #1457: operator-only, bounded, read-only cause-grouped incident view. Planned, unassigned, blocked on MFE0 device/security handoff; no new alarm acknowledgement."
+      "prs": [
+        1477,
+        1479
+      ],
+      "note": "Owner-approved limited parallel MFE2 UI slice on 2026-11-01 despite active MFE0/MFE1 (explicit three-slice WIP exception). PR #1477 merged only the implementation contract; draft PR #1479 implements operator-only mobile grouped incident summary and scoped limit=10 read-only details with negative Playwright cases. CI and actual devices remain unverified; no notification, acknowledgement, retry, repair, persistence or authorization expansion. MFE0 #1451 stays open."
     },
     {
       "id": "MFE3",

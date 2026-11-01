@@ -12521,11 +12521,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         `<option value="${v.key}"${v.key === key ? " selected" : ""}>v${v.version}</option>`).join("")
     : `<option value="${key}" selected>current</option>`;
 
+  const currentVersion = versions.find((v) => v.key === key);
+  const versionLabel = currentVersion ? `v${currentVersion.version}` : "current";
+
   root.innerHTML = `
     <div class="editor live">
       <div class="editor-bar">
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
-        <span class="crumbs" style="margin-left:8px">Live &middot; <b>${esc(procName)}</b>${layoutNote}${frozenNote}</span>
+        <span class="crumbs" style="margin-left:8px">Live</span>
         <label class="bar-select"><span>Version</span>
           <select id="version-sel">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>
@@ -12542,6 +12545,14 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <span class="pill ok" style="margin-left:8px"><span class="dot"></span><b id="inst-count">0</b>&nbsp;running</span>
         <span class="pill" style="margin-left:8px"><b id="token-count">0</b>&nbsp;tokens total</span>
         <span class="pill err" id="incident-pill" style="margin-left:8px" hidden><span class="dot"></span><b id="incident-count">0</b>&nbsp;incidents</span>
+      </div>
+      <div class="live-process-heading" aria-label="Current process">
+        <div class="live-process-identity">
+          <span class="live-process-label">Process</span>
+          <h1 class="live-process-name" title="${esc(procName)}">${esc(procName)}</h1>
+          <span class="live-process-version">${esc(versionLabel)}</span>
+        </div>
+        ${layoutNote}${frozenNote}
       </div>
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
