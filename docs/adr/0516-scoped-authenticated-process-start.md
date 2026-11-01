@@ -1,7 +1,7 @@
 # ADR-0516: Scoped authenticated process starts for task users
 
 - **Status:** Accepted
-- **Implementation:** In progress (PR #1486 grant evaluator merged; durable policy store in follow-up PR)
+- **Implementation:** Partial
 - **Decision accepted:** 2026-10-31 by MFE programme owner pblumer (explicit MFE1 implementation and associated ADR approval)
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
