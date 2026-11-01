@@ -12,7 +12,7 @@
     {
       "id": "OHS1",
       "title": "Default grouped multi-instance history",
-      "status": "completed",
+      "status": "complete",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [
