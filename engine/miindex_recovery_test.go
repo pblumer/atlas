@@ -72,6 +72,9 @@ func TestMIHistoryProjectionReplayEqualsLive(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if ready, err := h.store.MIHistoryIndexReady(); err != nil || !ready {
+				t.Fatalf("live MI index readiness: ready=%v err=%v", ready, err)
+			}
 			live := miHistoryProjection(t, h.store, piKey)
 			if len(live) != 4 {
 				t.Fatalf("live projection has %d records, want body and 3 iterations: %+v", len(live), live)
@@ -102,6 +105,9 @@ func TestMIHistoryProjectionReplayEqualsLive(t *testing.T) {
 			replay.Deploy(cp)
 			if err := replay.Recover(); err != nil {
 				t.Fatal(err)
+			}
+			if ready, err := recoveredStore.MIHistoryIndexReady(); err != nil || !ready {
+				t.Fatalf("fresh WAL replay index readiness: ready=%v err=%v", ready, err)
 			}
 			got := miHistoryProjection(t, recoveredStore, piKey)
 			if !reflect.DeepEqual(got, live) {

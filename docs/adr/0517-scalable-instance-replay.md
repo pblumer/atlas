@@ -126,9 +126,26 @@ projection output. Purge removes the new per-instance index ranges by range
 tombstones. Shared Store/ReadView queries support bounded reads, but the public
 cursor-paged HTTP surface is not implemented yet.
 
-**Not built in this increment:** historical event backfill/schema readiness
-marker; exact `loopCounter` search; cursor/high-watermark and indexed status/
-incident filters; API/UI endpoints; 50,000-iteration performance evidence.
+**OHS2 increment 2 (PR following #1488):** The store now persists a
+versioned, durable `mi_history_index_v1` readiness marker only when the retained
+instance-history families are demonstrably empty before event replay. A
+pre-existing store with an applied event position or any retained lifecycle
+facts is deliberately **not** marked complete. Every MI index query (on both
+Store and ReadView) fails with `ErrMIHistoryIndexUnavailable` while the marker
+is absent; individual keys from a partially upgraded store must not look like
+a complete timeline. The startup check performs bounded prefix seeks, not
+historical scans. A corrupt marker fails closed. This is a safety gate, **not**
+a historical backfill or a migration-complete flag for old state.
+
+**Still not built:** verified background WAL-based historical backfill for
+legacy stores; exact `loopCounter` search; cursor/high-watermark and indexed
+status/incident filters; API/UI endpoints; 50,000-iteration performance
+evidence. A historical reconstruction must use durable event payloads,
+including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
+does not record either field; inferring them from the token trail is unsafe,
+especially for repeated/nested MI bodies and migrations. A history with
+compacted/unavailable required WAL must remain unavailable rather than be
+silently declared complete.
 An old live body without an indexed activation does not acquire guessed lineage:
 rounds observed after upgrade are left absent from the new projection until the
 historical backfill has reconstructed their parent activation. Do not expose
