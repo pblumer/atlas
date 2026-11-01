@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-01",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Review PR #1488 for deterministic MI index and WAL recovery; then implement versioned historical backfill, round-number lookup, paginated API and Operations UI (Issue #1481).",
+  "next_action": "Verify OHS2 PR #1490 readiness barrier (CI, recovery, coverage); then design audited bounded WAL-event backfill for legacy stores before paginated API and UI (Issue #1481).",
   "slices": [
     {
       "id": "OHS1",
@@ -39,9 +39,10 @@
       ],
       "prs": [
         1487,
-        1488
+        1488,
+        1490
       ],
-      "note": "PR #1487 merged key codecs. PR #1488 implements deterministic durable projection and recovery tests; historical backfill, HTTP pagination, exact round-number search and 50k acceptance remain open."
+      "note": "PR #1487 (keys) and PR #1488 (durable projection) merged. PR #1490 adds fail-closed readiness/version marker and legacy-store regression tests. Audited WAL backfill, exact round-number search, cursor-paged API, UI and 50k acceptance remain open."
     },
     {
       "id": "OHS3",
