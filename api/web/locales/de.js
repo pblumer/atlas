@@ -13,6 +13,7 @@ export default {
   "ops.mi.expand": "Ausführungen einblenden",
   "ops.mi.collapse": "Ausführungen ausblenden",
   "ops.mi.count": "{count} Ausführungen",
+  "ops.mi.incidents": "{count} Incidents",
   "ops.mi.summary": "{completed} abgeschlossen, {active} aktiv, {terminated} abgebrochen",
 
   // The language's own name, in itself: how the language picker lists it.
