@@ -90,6 +90,9 @@ func validateMILimit(limit int) error {
 // MIBody gets one concrete body activation via the exact reverse index.
 // Both *Store and *ReadView expose this query through their shared queries.
 func (q queries) MIBody(piKey, bodyKey uint64) (*MIHistoryEntry, bool, error) {
+	if err := q.requireMIHistoryIndex(); err != nil {
+		return nil, false, err
+	}
 	ref, ok, err := getCopy(q.r, keyMIBodyByElement(piKey, bodyKey))
 	if err != nil || !ok {
 		return nil, false, err
@@ -119,6 +122,9 @@ func (q queries) MIBody(piKey, bodyKey uint64) (*MIHistoryEntry, bool, error) {
 
 // MIIteration finds one exact iteration without scanning any body history.
 func (q queries) MIIteration(piKey, roundKey uint64) (*MIHistoryEntry, bool, error) {
+	if err := q.requireMIHistoryIndex(); err != nil {
+		return nil, false, err
+	}
 	ref, ok, err := getCopy(q.r, keyMIRoundReference(piKey, roundKey))
 	if err != nil || !ok {
 		return nil, false, err
@@ -149,6 +155,9 @@ func (q queries) MIIteration(piKey, roundKey uint64) (*MIHistoryEntry, bool, err
 // A cursor-aware API will supply start keys in the next OHS2 increment.
 func (q queries) MIBodies(piKey uint64, limit int, fn func(MIHistoryEntry) error) error {
 	if err := validateMILimit(limit); err != nil {
+		return err
+	}
+	if err := q.requireMIHistoryIndex(); err != nil {
 		return err
 	}
 	count := 0
@@ -183,6 +192,9 @@ func (q queries) MIBodies(piKey uint64, limit int, fn func(MIHistoryEntry) error
 // mixing repeated or nested executions of the same BPMN element.
 func (q queries) MIIterations(piKey, bodyKey, bodyPosition uint64, limit int, fn func(MIHistoryEntry) error) error {
 	if err := validateMILimit(limit); err != nil {
+		return err
+	}
+	if err := q.requireMIHistoryIndex(); err != nil {
 		return err
 	}
 	count := 0
