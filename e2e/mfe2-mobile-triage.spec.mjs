@@ -36,7 +36,9 @@ function mockAPI(page, { roles = ["operator", "user"], summaryStatus = 200,
         total: 18, totalExact: false, truncated: true,
       } });
     }
-    if (req.method() !== "GET") calls.push({ path, method: req.method() });
+    if (req.method() !== "GET" && path.startsWith("/api/v1/incidents")) {
+      calls.push({ path, method: req.method() });
+    }
     return route.fulfill({ json: [] });
   });
   return calls;
