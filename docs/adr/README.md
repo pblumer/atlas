@@ -602,7 +602,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
 | [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
 | [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Not started |
-| [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Proposed | Not started |
+| [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Not started |
 
 ## The two states of a record
 
