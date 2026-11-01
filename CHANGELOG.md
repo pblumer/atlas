@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
 - **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
