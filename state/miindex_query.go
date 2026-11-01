@@ -19,16 +19,16 @@ const (
 // BodyElementKey equals ElementInstanceKey; an iteration references its own
 // body's concrete activation, not merely a BPMN element ID.
 type MIHistoryEntry struct {
-	ElementInstanceKey uint64
-	BodyElementKey uint64
+	ElementInstanceKey     uint64
+	BodyElementKey         uint64
 	BodyActivationPosition uint64
-	ActivationPosition uint64
-	EndPosition uint64
-	ProcessDefKey uint64
-	ElementID int32
-	TokenID uint64
-	ParentTokenID uint64
-	State MIHistoryState
+	ActivationPosition     uint64
+	EndPosition            uint64
+	ProcessDefKey          uint64
+	ElementID              int32
+	TokenID                uint64
+	ParentTokenID          uint64
+	State                  MIHistoryState
 }
 
 const miHistoryValueVersion byte = 1
