@@ -7,12 +7,12 @@
   "last_reviewed": "2026-11-01",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Implement OHS2 durable MI index from deterministic applyToState, recovery tests, then bounded read API; ADR-0517 accepted.",
+  "next_action": "Review OHS1 grouped-history PR, then accept the bounded query/replay ADR and implement OHS2 (Issue #1481).",
   "slices": [
     {
       "id": "OHS1",
       "title": "Default grouped multi-instance history",
-      "status": "complete",
+      "status": "active",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [
@@ -21,16 +21,13 @@
       "prs": [
         1483
       ],
-      "note": "PR #1483 merged; presentation grouping is implemented, but timeline remains unbounded.",
-      "evidence": [
-        "../../planning/operations-history-at-scale-program.md"
-      ]
+      "note": "PR #1483 in review: group body/iteration history using persisted token lineage; current API still returns the full timeline. Browser/Go CI must pass before merge."
     },
     {
       "id": "OHS2",
       "title": "Bounded iteration lookup and filtering",
-      "status": "active",
-      "owner": "pblumer",
+      "status": "planned",
+      "owner": "unassigned",
       "depends_on": [
         "OHS1"
       ],
@@ -38,7 +35,7 @@
         1481
       ],
       "prs": [],
-      "note": "ADR-0517 accepted. Index key schema foundation in progress; event application, backfill, recovery and HTTP pagination not yet implemented."
+      "note": "Requires accepted scalable replay ADR, paged query and indexed exact lookup with nonblocking off-loop read and recovery tests."
     },
     {
       "id": "OHS3",
