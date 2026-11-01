@@ -996,7 +996,15 @@ an outgoing completion command, no document overflow, and preservation of
 select/text values across phone-to-tablet resizing. This covers a **grouped**
 layout, not a proof that any form-js multi-column renderer fits small screens.
 
-These tests **do not** validate complex multi-column form-js schemas, text zoom,
+Two-column form-js regression tests exercise a full 8+8 row on the
+16-unit Carbon grid in Tasks and Process Start. At 320px the inputs stack without page overflow; at 1024px
+the vendored form-js <=66rem grid breakpoint also stacks the task inputs. At
+1600px the authored row is retained, but it stacks when the Tasks detail pane
+itself is narrowed below 560px (without shrinking the viewport). Typed values
+survive a 320px → 1024px → 1600px → narrow pane → 320px resize without
+remounting the form.
+
+These tests **do not** validate every complex multi-column form-js schema, text zoom,
 iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
 focus or foldable hinges. They are a *browser regression baseline*, not
 evidence that MFE0's real-device exit gate is complete. Record the remaining
@@ -1039,3 +1047,27 @@ offline retry protocol, or an end-to-end deployed BPMN safety-inspection
 process. Unknown/lost responses remain failures to confirm and must not be
 reported as successful. Recording those outcomes safely is an MFE5 design
 gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.
+
+## MFE1 compact phone work menu and foreground polling
+
+`mfe1-mobile-work-shell.spec.mjs` is a regression for the first real iPhone
+Safari feedback: a phone shows the app identity and a single **More** menu,
+not a clipped desktop navigation bar with six utility controls. The menu
+reuses role-filtered app destinations; a task-only user never gains the
+operator's Start or Incidents links. One permitted mobile destination no
+longer duplicates the page name in a 44px-tall strip. Desktop navigation is
+unchanged (also covered by `console-menu.spec.mjs`).
+
+While the tab is visible, read-only task and (for operators) incident status
+queries run every ten seconds. Changing task snapshots refresh the inbox only
+when no task, form or bulk selection is active, and the menu shows counts
+without interpreting them as alarm acknowledgements. Polling pauses in hidden
+tabs and refreshes on return; API failures are not an empty inbox. Tests
+include new tasks, incident counts and open-task preservation using a
+controlled clock, on the production DOM with mocked HTTP responses.
+
+The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
+Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
+or field conditions. Record those separately under MFE0 issue #1451.

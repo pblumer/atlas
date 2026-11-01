@@ -497,6 +497,7 @@ function closeAllMenus() {
   clearTimeout(submenuTimer);
   submenuTimer = null;
   closeSubmenus();
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
   openMenu = openTrigger = null;
 }
 // placeMenu puts an open menu under its trigger, or above it when there is no room
@@ -612,6 +613,16 @@ document.addEventListener("click", (e) => {
   // opens on hover and on keyboard focus, and a click on it should leave the menu
   // standing rather than dismiss the lot.
   if (e.target.closest(".submenu-toggle")) { e.preventDefault(); e.stopPropagation(); return; }
+  const mobileAction = e.target.closest("[data-mobile-action]");
+  if (mobileAction) {
+    e.preventDefault();
+    closeAllMenus();
+    if (mobileAction.dataset.mobileAction === "search") openSearchPalette();
+    if (mobileAction.dataset.mobileAction === "appearance") {
+      document.getElementById("appearance-toggle")?.click();
+    }
+    return;
+  }
   const toggle = e.target.closest(".dropdown-toggle");
   if (toggle) {
     e.preventDefault(); e.stopPropagation();
@@ -619,7 +630,10 @@ document.addEventListener("click", (e) => {
     closeAllMenus();
     if (menu) {
       menu.hidden = wasOpen;
-      if (!menu.hidden) { openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false); }
+      if (!menu.hidden) {
+        toggle.setAttribute("aria-expanded", "true");
+        openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false);
+      }
     }
     return;
   }
@@ -720,7 +734,7 @@ const APPS = [
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "tshopper" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "Marketplace" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -732,7 +746,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "tshopper" },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "Marketplace" },
 ];
 
 // Secondary (in-app) navigation.
@@ -1399,52 +1413,137 @@ function openSystemOverview(returnTo = document.activeElement) {
   done.focus();
 }
 
-// ---------- Operations nav incident badge ----------
-// A stuck token is now marked on the live diagram, in the replay and in the lists
-// (ADR-0150/0151) — but each of those only says so once you are already looking at
-// it. The nav badge is the one that finds *you*: while the Operations app is open,
-// the shell polls the live counts and puts the number of parked tokens on the
-// Incidents entry, so "something is stuck" arrives without a view being opened.
-// It polls only in Operations (nowhere else shows the entry) and stops on the way
-// out, so no other app pays for it.
-const INCIDENT_BADGE_INTERVAL = 5000;
+// ---------- Foreground work awareness (MFE1 / ADR-0514) ----------
+// Poll only while this tab is visible and a relevant role/view exists. An incident
+// count is a read-side hint, not a push notification, delivery receipt or human
+// acknowledgement. Task snapshots never mutate an open form or process instance.
+const WORK_POLL_INTERVAL = 10000;
+const LEGACY_OPERATIONS_POLL_INTERVAL = 5000;
 let incidentCount = 0;
-let incidentBadgeTimer = null;
+let taskCount = null;
+let taskCountExact = true;
+let taskFingerprint = null;
+let workPollTimer = null;
+let workPollPeriod = 0;
+let workPollIdentity = "";
+let workPollBusy = false;
+let watchTasks = false;
+let watchIncidents = false;
 
-// paintIncidentBadge writes the current count into whatever badge slot the chrome
-// has right now. setChrome rebuilds the nav on every navigation, so the value is
-// re-applied rather than assumed to survive.
+function paintMobileWorkBadge() {
+  const button = document.getElementById("mobile-more-btn");
+  const badge = document.getElementById("mobile-more-count");
+  if (!button || !badge) return;
+  const incident = watchIncidents && incidentCount > 0;
+  const task = watchTasks && taskCount !== null && taskCount > 0;
+  badge.hidden = !incident && !task;
+  badge.classList.toggle("incident", incident);
+  badge.textContent = incident ? (incidentCount > 99 ? "99+" : String(incidentCount)) :
+    task ? (taskCount > 99 ? "99+" : String(taskCount)) : "";
+  button.setAttribute("aria-label", incident
+    ? "More navigation: " + incidentCount + " unresolved incidents"
+    : task ? "More navigation: " + taskCount + (taskCountExact ? "" : " or more") + " open tasks"
+      : "More navigation");
+}
+
 function paintIncidentBadge() {
-  const slot = document.querySelector('#topnav .nav-badge[data-badge="incidents"]');
-  if (!slot) return;
-  slot.hidden = incidentCount === 0;
-  // A four-digit pill would push the nav around; past 999 the exact number does not
-  // change what an operator does next.
-  slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
-  slot.title = incidentCount === 1
-    ? "1 token is parked behind an unresolved incident"
-    : `${incidentCount} tokens are parked behind unresolved incidents`;
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="incidents"]')) {
+    slot.hidden = incidentCount === 0;
+    slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
+    slot.title = incidentCount === 1
+      ? "1 token is parked behind an unresolved incident"
+      : String(incidentCount) + " tokens are parked behind unresolved incidents";
+  }
+  paintMobileWorkBadge();
 }
 
-// refreshIncidentBadge re-reads the count. The incidents table calls it straight
-// after a resolve, so the nav agrees at once instead of waiting out the interval.
+function paintTaskBadge() {
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="tasks"]')) {
+    slot.hidden = taskCount === null || taskCount === 0;
+    slot.textContent = taskCount > 999 ? "999+" : String(taskCount) + (taskCountExact ? "" : "+");
+    slot.title = taskCountExact ? String(taskCount) + " open tasks" : "At least " + taskCount + " open tasks";
+  }
+  paintMobileWorkBadge();
+}
+
+// An operator may see incident statistics, while a task user may see the inbox.
+// Never request either solely because another role could see it.
 async function refreshIncidentBadge() {
-  let stats;
-  try { stats = await api("GET", "/api/v1/stats"); }
-  catch { return; } // transient; the badge keeps its last value
-  incidentCount = (stats && stats.unresolvedIncidents) || 0;
-  paintIncidentBadge();
+  if (!watchIncidents || document.hidden) return;
+  const generation = navGen;
+  try {
+    const stats = await api("GET", "/api/v1/stats");
+    if (generation !== navGen || !watchIncidents || document.hidden) return;
+    incidentCount = (stats && stats.unresolvedIncidents) || 0;
+    paintIncidentBadge();
+  } catch { /* preserve the last confirmed value across transient errors */ }
 }
 
+async function refreshWorkStatus() {
+  if (document.hidden || workPollBusy || (!watchTasks && !watchIncidents)) return;
+  workPollBusy = true;
+  const generation = navGen;
+  try {
+    const checks = [];
+    if (watchTasks) checks.push(api("GET", "/api/v1/tasks?limit=50").then((page) => {
+      if (generation !== navGen || !watchTasks || document.hidden) return;
+      const items = (page && page.items) || [];
+      const exact = !!(page && page.totalExact);
+      taskCount = exact && Number.isFinite(page.total) ? page.total : items.length;
+      taskCountExact = exact;
+      paintTaskBadge();
+      const fingerprint = JSON.stringify([page && page.total, page && page.truncated,
+        items.map((t) => [t.key, t.assignee, t.candidateGroups, t.name, t.dueDate, t.priority])]);
+      if (taskFingerprint !== null && fingerprint !== taskFingerprint) {
+        document.dispatchEvent(new Event("atlas:tasks-changed"));
+      }
+      taskFingerprint = fingerprint;
+    }).catch(() => { /* a failed read is not proof that tasks disappeared */ }));
+    if (watchIncidents) checks.push(refreshIncidentBadge());
+    await Promise.all(checks);
+  } finally {
+    workPollBusy = false;
+  }
+}
+
+// Called on every route change. A single interval follows the authenticated,
+// role-filtered shell; the foreground event catches tasks arriving while Safari
+// suspended a background tab. On leaving a work surface, stop its reads.
 function syncIncidentBadge(appId) {
-  if (appId !== "operations") {
-    if (incidentBadgeTimer) { clearInterval(incidentBadgeTimer); incidentBadgeTimer = null; }
+  const phone = window.matchMedia("(max-width: 860px)").matches;
+  const identity = AUTH.enabled ? String(AUTH.user?.id || AUTH.user?.username || "") : "auth-off";
+  if (identity !== workPollIdentity) {
+    workPollIdentity = identity;
+    taskCount = null;
+    incidentCount = 0;
+    taskFingerprint = null;
+  }
+  watchTasks = mayUse("user") && (appId === "tasks" || phone);
+  watchIncidents = mayUse("operator") && (appId === "operations" || phone);
+  if (AUTH.enabled && !AUTH.user) { watchTasks = false; watchIncidents = false; }
+  paintIncidentBadge();
+  paintTaskBadge();
+  if (!watchTasks && !watchIncidents) {
+    if (workPollTimer) clearInterval(workPollTimer);
+    workPollTimer = null;
+    workPollPeriod = 0;
     return;
   }
-  paintIncidentBadge(); // the freshly rendered nav starts from what we already know
-  refreshIncidentBadge();
-  if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
+  const period = phone ? WORK_POLL_INTERVAL :
+    appId === "operations" ? LEGACY_OPERATIONS_POLL_INTERVAL : WORK_POLL_INTERVAL;
+  if (workPollTimer && workPollPeriod !== period) {
+    clearInterval(workPollTimer);
+    workPollTimer = null;
+  }
+  workPollPeriod = period;
+  refreshWorkStatus();
+  if (!workPollTimer) workPollTimer = setInterval(refreshWorkStatus, period);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshWorkStatus();
+});
+window.addEventListener("focus", () => { if (!document.hidden) refreshWorkStatus(); });
 
 // paintApps fills the drawer with the apps this person may use. It runs at boot,
 // before /auth/me has answered — when nothing is known and everything is offered —
@@ -1458,7 +1557,7 @@ function paintApps() {
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
   // Apps of one suite sit under its name, once, above the first of them: the
-  // catalogue and the shop are tshopper (phase A,
+  // catalogue and the shop are the Marketplace (tshopper phase A,
   // ADR-0515), and saying so in the drawer is
   // what tells a person the two belong together. The caption is not a link and not
   // part of any link's name.
@@ -1470,6 +1569,59 @@ function paintApps() {
       `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
       `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
   }).join("");
+}
+
+// Phone navigation uses the same role-filtered TOPNAV, not a mobile-only access
+// policy. The work links remain available on every app, and nonessential chrome
+// actions live behind a single thumb-sized control.
+function paintMobileMenu(appId, route) {
+  const wrap = document.getElementById("mobile-more");
+  const menu = document.getElementById("mobile-more-menu");
+  if (!wrap || !menu) return;
+  wrap.hidden = false;
+  menu.hidden = true;
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
+  menu.replaceChildren();
+  const seen = new Set();
+  const addLink = (entry) => {
+    if (!entry.route || seen.has(entry.route) || !offered(entry)) return;
+    seen.add(entry.route);
+    const link = document.createElement("a");
+    link.href = entry.route;
+    link.setAttribute("role", "menuitem");
+    if (entry.separate) { link.target = "_blank"; link.rel = "noopener"; }
+    if (route === entry.route) link.setAttribute("aria-current", "page");
+    link.textContent = entry.name;
+    if (entry.badge) {
+      const count = document.createElement("span");
+      count.className = "nav-badge";
+      count.dataset.badge = entry.badge;
+      count.hidden = true;
+      link.append(count);
+    }
+    menu.append(link);
+  };
+  if (mayUse("user")) addLink({ name: "My tasks", route: "#/tasks", badge: "tasks" });
+  if (mayUse("operator")) addLink({ name: "Start process", route: "#/tasks/start" });
+  if (mayUse("operator")) addLink({ name: "Incidents", route: "#/operations/incidents", badge: "incidents" });
+  for (const entry of (TOPNAV[appId] || [])) {
+    if (entry.items) entry.items.forEach(addLink);
+    else addLink(entry);
+  }
+  const separator = document.createElement("div");
+  separator.className = "sep";
+  separator.setAttribute("role", "separator");
+  menu.append(separator);
+  for (const [name, action] of [["Search processes", "search"], ["Switch appearance", "appearance"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "menuitem");
+    button.dataset.mobileAction = action;
+    button.textContent = name;
+    menu.append(button);
+  }
+  addLink({ name: "Display settings", route: "#/console/settings" });
+  addLink({ name: "Help", route: "/handbuch.html" });
 }
 
 function setChrome(appId, route) {
@@ -1507,6 +1659,7 @@ function setChrome(appId, route) {
     const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
     topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
   }
+  paintMobileMenu(appId, route);
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
@@ -10105,6 +10258,7 @@ async function viewTasks(preselectKey) {
       state.selected = null;
       renderList();
       renderDetail();
+      if (refreshPending) refreshInboxSafely();
     });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -10217,7 +10371,7 @@ async function viewTasks(preselectKey) {
     if (older) older.addEventListener("click", loadOlder);
   }
 
-  async function load() {
+  async function load({ passive = false } = {}) {
     try {
       // The list is capped and newest-first; the response says so in `truncated` and
       // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
@@ -10225,6 +10379,7 @@ async function viewTasks(preselectKey) {
       // has to know to ask for, and this one went unread for years
       // (ADR-0378).
       const [page, names] = await Promise.all([api("GET", "/api/v1/tasks?content=1"), peopleNames()]);
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       state.names = names;
       state.tasks = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);
@@ -10245,6 +10400,7 @@ async function viewTasks(preselectKey) {
       // Before the first paint, so a row is never drawn unmarked and then relabelled
       // under somebody's eyes.
       await loadApprovalKeys();
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
@@ -10469,6 +10625,31 @@ async function viewTasks(preselectKey) {
     }
   };
   document.addEventListener("keydown", onTasksKey, true);
+
+  // Background snapshots can arrive while the user is typing into a form.
+  // Only repaint a list with no selected task; keep the pending update until
+  // Back to the list is pressed. Never re-mount a selected form-js instance.
+  let refreshPending = false;
+  let refreshingInbox = false;
+  async function refreshInboxSafely() {
+    if (!refreshPending || refreshingInbox || document.hidden || state.selected != null ||
+        state.wizardWait || state.selectMode || state.picked.size) return;
+    refreshPending = false;
+    refreshingInbox = true;
+    try { await load({ passive: true }); }
+    finally {
+      refreshingInbox = false;
+      if (refreshPending) refreshInboxSafely();
+    }
+  }
+  const onTasksChanged = () => { refreshPending = true; refreshInboxSafely(); };
+  document.addEventListener("atlas:tasks-changed", onTasksChanged);
+  const existingCleanup = window.__atlasCleanup;
+  window.__atlasCleanup = () => {
+    document.removeEventListener("atlas:tasks-changed", onTasksChanged);
+    document.removeEventListener("keydown", onTasksKey, true);
+    if (existingCleanup) existingCleanup();
+  };
 
   await loadAssignable();
   await load();
@@ -11897,6 +12078,7 @@ async function route() {
     document.getElementById("app-name").textContent = "atlas";
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
+    document.getElementById("mobile-more").hidden = true;
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();

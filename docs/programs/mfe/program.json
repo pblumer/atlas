@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Owner accepted the scoped MFE1 process-start ADR on 2026-10-31; integrate its decision PR #1471, then specify and TDD-implement deny-by-default per-process start grants with security/recovery tests (not yet shipped). Finish mobile phone menu/polling PR #1472, tablet landscape under MFE0 #1451; hardware acceptance remains open.",
+  "next_action": "Validate MFE0 on physical iOS/Android devices (#1451), including tablet landscape, accessibility and complex forms; integrate the owner-accepted scoped-start ADR #1471, then specify and TDD-implement deny-by-default process grants with sidecar revocation, security and recovery tests. Continue MFE2 device/security acceptance and MFE3 alarm design.",
   "slices": [
     {
       "id": "MFE0",
@@ -24,10 +24,11 @@
         1452,
         1453,
         1454,
+        1455,
         1458,
         1460
       ],
-      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. Physical iOS/Android, accessibility, 200% zoom, foldable and complex multi-column form evidence still missing. MFE0 #1451 remains open; no device acceptance inferred from E2E."
+      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. PR #1455 adds responsive two-column form-js Tasks/Start layouts with E2E; code is merged, but hardware acceptance remains pending. Physical iOS/Android, 200% zoom, accessible inputs, keyboard, foldable and complex-form evidence remain open in #1451."
     },
     {
       "id": "MFE1",
@@ -47,7 +48,7 @@
         1470,
         1472
       ],
-      "note": "Owner explicitly approved MFE1 delivery and associated scoped-start ADR on 2026-10-31, alongside previously Accepted ADR-0514/0417. PRs #1468/#1469/#1470 are merged. Scoped-start ADR PR #1471 documents an accepted option but no API/authorization implementation; detailed sidecar/revocation and security/recovery tests remain mandatory. Mobile UX PR #1472 is open; tablet/iOS/Android hardware acceptance #1451 is pending. No unauthorized user may start a process yet."
+      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) was squash-merged as 9a2e911828286b628613ff86c0126aa246981fe1; CI passed, but real-device acceptance is not inferred. Owner accepted the scoped-start ADR in PR #1471 (issue #1467) on 2026-10-31. Grant storage, revocation ordering and self-service start endpoints are not implemented; security/recovery tests remain mandatory. This documentation PR changes no API, runtime permissions or offline behaviour. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
     },
     {
       "id": "MFE2",

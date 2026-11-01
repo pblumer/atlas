@@ -3409,6 +3409,21 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Detail pane */
 .tasks-detail { padding: 22px; overflow-y: auto; }
+/* MFE0 / ADR-0514: form-js renders authored grid rows as .cds--row and
+   .fjs-layout-column (not the editor's .fjs-columns). Its vendored Carbon
+   breakpoint follows the viewport (66rem), not the Tasks/Start pane. A user
+   can narrow a task pane on a wide screen; keep its fields readable without
+   mutating the authored form schema or re-mounting the viewer. */
+#task-form, #start-form { container: atlas-form-host / inline-size; }
+@container atlas-form-host (max-width: 560px) {
+  #task-form .fjs-layout-row > .fjs-layout-column,
+  #start-form .fjs-layout-row > .fjs-layout-column {
+    flex: 0 0 100% !important;
+    max-inline-size: 100% !important;
+    min-inline-size: 0;
+  }
+}
+
 .tasks-detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
@@ -7756,9 +7771,18 @@ button.im-problem:hover { background: var(--accent-soft); }
    list's resizer writes the column widths inline — a width dragged on a desktop
    is not a width for this screen. */
 @media (max-width: 1180px) and (min-width: 861px) {
-  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  /* Keep folder navigation accessible without spending a whole column on it.
+     The remaining width belongs to the task list and the actual task form. */
+  .tasks:not(#start-grid) { grid-template-columns: minmax(240px, 35%) minmax(0, 1fr) !important; }
+  .tasks:not(#start-grid) > .tasks-folders { grid-column: 1 / -1; padding: 8px 12px; }
+  .tasks:not(#start-grid) > .tasks-folders nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .tasks:not(#start-grid) > .tasks-folders nav .tasks-folder { white-space: nowrap; }
+  .tasks:not(#start-grid) > .tasks-list-pane,
+  .tasks:not(#start-grid) > .tasks-detail { min-width: 0; }
+  .tasks:not(#start-grid) .tasks-col-resizer { display: none; }
   .tasks-detail { padding: 16px; }
-  .tasks-field { grid-template-columns: 120px 1fr; }
+  .tasks-detail-head h1 { overflow-wrap: break-word; }
+  .tasks-field { grid-template-columns: 120px minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
@@ -8096,5 +8120,67 @@ button.im-problem:hover { background: var(--accent-soft); }
 .sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
 .sl-row .field { margin: 0; min-width: 180px; }
 
-/* A suite's name above its apps in the drawer: tshopper is the catalogue and the shop. */
+/* A suite's name above its apps in the drawer: Marketplace is the catalogue and the shop. */
 .app-suite { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 14px 2px; }
+
+/* MFE1: phone-first shell. Keep the desktop nav unchanged; a phone gives its
+   limited width to the current app and two touch targets, not clipped tabs,
+   an inactive notifications bell, or diagram/modeler utilities. */
+#mobile-more { display: none; }
+#mobile-more[hidden] { display: none !important; }
+
+@media (max-width: 860px) {
+  /* A single destination is not a switcher: the same title is already on screen.
+     Two permitted destinations stay equally prominent as in ADR-0514. */
+  .mfe-entry:has(> .mfe-entry-link:only-child) { display: none; }
+}
+
+@media (max-width: 520px) {
+  .topbar { gap: 4px; padding: 0 8px; }
+  .topbar > .topbrand { flex: 1 1 auto !important; min-width: 0; }
+  .topbar #app-name {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .topbar #topnav,
+  .topbar #feel-assistant-btn,
+  .topbar #shortcuts-dropdown,
+  .topbar #appearance-toggle,
+  .topbar #global-search,
+  .topbar #help-btn,
+  .topbar #help-btn + .dropdown-menu,
+  .topbar .icon-btn[aria-label="Notifications"] {
+    display: none !important;
+  }
+  .topbar > #mobile-more { display: inline-flex; flex: 0 0 auto; }
+  .topbar #app-switcher, .topbar #mobile-more-btn, .topbar .avatar {
+    width: 44px; height: 44px;
+  }
+  .topbar .avatar { width: 38px; height: 38px; }
+  .topbar #mobile-more-btn { font-size: 27px; font-weight: 600; line-height: 1; position: relative; }
+  .topbar #mobile-more-btn .mobile-more-count {
+    position: absolute; top: -3px; right: -4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box;
+    border-radius: 99px; font: 700 10px/1 system-ui, sans-serif;
+    color: var(--status-ink); background: var(--accent);
+    border: 2px solid var(--surface);
+  }
+  .topbar #mobile-more-btn .mobile-more-count.incident { background: var(--danger); }
+  .topbar #mobile-more-btn .mobile-more-count[hidden] { display: none; }
+
+  #mobile-more-menu {
+    max-height: min(72dvh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-width: min(272px, calc(100vw - 16px));
+  }
+  #mobile-more-menu [role="menuitem"] { min-height: 44px; white-space: normal; }
+  #mobile-more-menu a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
+  #mobile-more-menu .nav-badge {
+    display: inline-flex; min-width: 20px; border-radius: 999px; margin-left: auto;
+    padding: 2px 6px; justify-content: center;
+    background: var(--danger); color: var(--status-ink); font-size: 11px; font-weight: 700;
+  }
+  #mobile-more-menu .nav-badge[hidden] { display: none; }
+}
