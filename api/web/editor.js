@@ -16505,7 +16505,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         </div>`;
       }
       const done = s.endAt > 0;
-      const inc = incidentByEik(s.elementInstanceKey);
+      // An incident on one of the collapsed rounds must remain visible on its body.
+      const groupIncidents = (groups.children.get(i) || [])
+        .filter((idx) => incidentByEik(steps[idx].elementInstanceKey)).length;
+      const inc = incidentByEik(s.elementInstanceKey) ||
+        (groupIncidents ? { message: tr("ops.mi.incidents", { count: groupIncidents }) } : null);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
       const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
       // A loop runs the same node again and again, so without its round number every
