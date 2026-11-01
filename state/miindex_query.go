@@ -10,8 +10,8 @@ import (
 type MIHistoryState byte
 
 const (
-	MIHistoryActive MIHistoryState = 1
-	MIHistoryCompleted MIHistoryState = 2
+	MIHistoryActive     MIHistoryState = 1
+	MIHistoryCompleted  MIHistoryState = 2
 	MIHistoryTerminated MIHistoryState = 3
 )
 
@@ -52,13 +52,13 @@ func decodeMIHistoryValue(raw []byte) (MIHistoryEntry, error) {
 		return MIHistoryEntry{}, fmt.Errorf("state: invalid MI history value version or size (%d bytes)", len(raw))
 	}
 	v := MIHistoryEntry{
-		ProcessDefKey: binary.BigEndian.Uint64(raw[1:9]),
-		ElementID: int32(binary.BigEndian.Uint32(raw[9:13])),
-		TokenID: binary.BigEndian.Uint64(raw[13:21]),
-		ParentTokenID: binary.BigEndian.Uint64(raw[21:29]),
+		ProcessDefKey:      binary.BigEndian.Uint64(raw[1:9]),
+		ElementID:          int32(binary.BigEndian.Uint32(raw[9:13])),
+		TokenID:            binary.BigEndian.Uint64(raw[13:21]),
+		ParentTokenID:      binary.BigEndian.Uint64(raw[21:29]),
 		ActivationPosition: binary.BigEndian.Uint64(raw[29:37]),
-		EndPosition: binary.BigEndian.Uint64(raw[37:45]),
-		State: MIHistoryState(raw[45]),
+		EndPosition:        binary.BigEndian.Uint64(raw[37:45]),
+		State:              MIHistoryState(raw[45]),
 	}
 	if v.State < MIHistoryActive || v.State > MIHistoryTerminated {
 		return MIHistoryEntry{}, fmt.Errorf("state: invalid MI lifecycle state %d", v.State)
