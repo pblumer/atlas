@@ -1,9 +1,10 @@
 # ADR-0517: Bounded instance history and causal detail replay
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-11-01
 - **Deciders:** atlas maintainers, Operations History at Scale programme owner
+- **Approved by:** programme owner, 2026-11-01
 
 ## Context and problem statement
 
@@ -34,7 +35,7 @@ parent-token lineage but does not solve the unbounded read.
 
 ## Decision outcome
 
-**Proposed (not yet accepted):** A separate, versioned bounded query surface
+**Accepted:** A separate, versioned bounded query surface
 for multi-instance body summaries, cursor-paged iteration discovery and an exact
 causal replay window, leaving the old full timeline contract intact.
 A group is identified by its *specific body activation*, never by BPMN element ID
@@ -98,9 +99,8 @@ Tests cover repeated/nested/parallel MI bodies, migration, termination,
 replay WAL and compare index keys and query results to live state. Benchmark
 response size, read latency, allocations and single-writer responsiveness.
 
-**Decision gate:** This section specifies the recommended approach, but
-requires maintainer acceptance before implementation of the new durable index.
-Do not treat this proposed ADR as an accepted architectural change.
+**Decision:** The programme owner approved this architecture on 2026-11-01.
+Implementation remains subject to the listed tests, performance and recovery gates.
 
 ### Consequences
 
