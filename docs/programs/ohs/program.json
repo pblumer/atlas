@@ -21,7 +21,10 @@
       "prs": [
         1483
       ],
-      "note": "PR #1483 merged; presentation grouping is implemented, but timeline remains unbounded."
+      "note": "PR #1483 merged; presentation grouping is implemented, but timeline remains unbounded.",
+      "evidence": [
+        "../../planning/operations-history-at-scale-program.md"
+      ]
     },
     {
       "id": "OHS2",
