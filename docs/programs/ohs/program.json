@@ -7,12 +7,12 @@
   "last_reviewed": "2026-11-01",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Review OHS1 grouped-history PR, then accept the bounded query/replay ADR and implement OHS2 (Issue #1481).",
+  "next_action": "Review PR #1488 for deterministic MI index and WAL recovery; then implement versioned historical backfill, round-number lookup, paginated API and Operations UI (Issue #1481).",
   "slices": [
     {
       "id": "OHS1",
       "title": "Default grouped multi-instance history",
-      "status": "active",
+      "status": "complete",
       "owner": "pblumer",
       "depends_on": [],
       "issues": [
@@ -21,21 +21,27 @@
       "prs": [
         1483
       ],
-      "note": "PR #1483 in review: group body/iteration history using persisted token lineage; current API still returns the full timeline. Browser/Go CI must pass before merge."
+      "note": "PR #1483 merged: grouped history is available in Operations, while legacy timeline loading remains unbounded until OHS2/OHS3.",
+      "evidence": [
+        "../../planning/operations-history-at-scale-program.md"
+      ]
     },
     {
       "id": "OHS2",
       "title": "Bounded iteration lookup and filtering",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "OHS1"
       ],
       "issues": [
         1481
       ],
-      "prs": [],
-      "note": "Requires accepted scalable replay ADR, paged query and indexed exact lookup with nonblocking off-loop read and recovery tests."
+      "prs": [
+        1487,
+        1488
+      ],
+      "note": "PR #1487 merged key codecs. PR #1488 implements deterministic durable projection and recovery tests; historical backfill, HTTP pagination, exact round-number search and 50k acceptance remain open."
     },
     {
       "id": "OHS3",
