@@ -1,7 +1,7 @@
 # ADR-0516: Scoped authenticated process starts for task users
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** In progress (PR #1486 grant evaluator merged; durable policy store in follow-up PR)
 - **Decision accepted:** 2026-10-31 by MFE programme owner pblumer (explicit MFE1 implementation and associated ADR approval)
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
@@ -180,7 +180,43 @@ stronger total-order guarantee would require a separate design review.
    and Playwright E2E. Update public OpenAPI documentation, security
    runbooks and programme evidence together with the implementation PR.
 
-### Consequences
+### Durable grant persistence implementation checkpoint (2026-11-01)
+
+The approved design-time sidecar approach is implemented as a separate
+`api/startgrant.Store` (this follow-up PR) and wired into the server's
+single-writer run loop. It **does not yet authorize an HTTP route**.
+
+- **Record:** immutable JSON `Change` with `schemaVersion=1`, monotonic
+  global `revision`, server-supplied `at`, `actorId`, `action` (`grant` or
+  `revoke`) and the complete `Grant{applicationId, processId, userIds,
+  groupIds}` snapshot. A single sidecar atomic write/fsync durably commits the
+  effective policy **and** its audit fact, rather than risking a grant that
+  becomes effective before a second audit write succeeds.
+- **Identity and scope:** the effective audience is the last revision for
+  the exact application and BPMN process ID. An empty audience is an explicit
+  revocation; there are no default grants or viewer/editor implications.
+  An expected per-scope revision rejects stale administrator changes.
+- **Recovery:** startup loads and validates the entire revision sequence,
+  rebuilding the effective map. Corrupt or missing audit records fail closed.
+  On a write/fsync error, the in-memory store becomes uncertain and refuses
+  positive authorization and subsequent writes until restart/recovery.
+- **Ownership:** only the API run-loop may mutate or query the store. No
+  processor, WAL, `applyToState` or engine hot path changes. The store is
+  classified as `credential` in the backup inventory; it is not part of
+  portable design-time application exports.
+- **Revocation ordering:** a request checked **after** a persisted revoke is
+  refused. A start that passed its policy check **before** that revoke may
+  finish. This is the accepted ADR-0516 prospective ordering, not a claim of
+  total-order cancellation of already accepted work.
+
+**Still required before exposing self-service Start:** an admin-only audited
+management API, server-side application/process and principal validation,
+published-version resolution, the two separate user-role self-service routes,
+form enforcement, end-to-end 401/403/404 and machine-token tests, and a
+post-fsync instance-start/replay test. MFE0 physical-device acceptance #1451
+remains open.
+
+## Consequences
 
 - **Positive:** real process starts for field users without handing out
   `operator` or exposing runtime repair controls; one server authority
