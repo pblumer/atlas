@@ -103,6 +103,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Operations Live views identify the process.** A dedicated heading now keeps the full process name and deployed version visible above the BPMN diagram, even with a crowded toolbar or on a narrow screen.
 - **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
   example in the Modeler saves it in the reader's reusable `atlas-samples` application,
   creating that application on first use. An existing ungrouped draft is filed there;
