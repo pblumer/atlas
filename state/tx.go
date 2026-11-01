@@ -34,7 +34,9 @@ type Tx struct {
 	b       *pebble.Batch
 	store   *Store
 	scratch []byte   // reused value-encode buffer; Pebble copies on Set
-	miKey   [33]byte // reusable MI index key, including the longest iteration key
+	miKey   [33]byte                 // reusable MI index key, including the longest iteration key
+	miValue [miHistoryValueSize]byte // reusable fixed-width lifecycle projection
+	miRef   [16]byte                 // reusable body and round reverse references
 }
 
 // Commit applies the transaction. It does not fsync: durability is the WAL's
