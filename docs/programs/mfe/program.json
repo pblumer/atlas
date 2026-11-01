@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-31",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Validate MFE0 on physical iOS/Android devices (#1451), including tablet landscape, accessibility and complex forms; review scoped process-start authorization ADR #1471 before permission changes. Plan MFE2 incident triage and MFE3 alarm delivery.",
+  "next_action": "Validate MFE0 on physical iOS/Android devices (#1451), including tablet landscape, accessibility and complex forms; integrate the owner-accepted scoped-start ADR #1471, then specify and TDD-implement deny-by-default process grants with sidecar revocation, security and recovery tests. Continue MFE2 device/security acceptance and MFE3 alarm design.",
   "slices": [
     {
       "id": "MFE0",
@@ -48,7 +48,7 @@
         1470,
         1472
       ],
-      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) was squash-merged as 9a2e911828286b628613ff86c0126aa246981fe1; CI passed, but real-device acceptance is not inferred. Scoped start grants for ordinary users remain gated on proposed ADR PR #1471 and issue #1467; no current runtime/API/permission/offline scope expansion. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
+      "note": "PRs #1468 (mobile Tasks/authorised Start navigation), #1469 (server-confirmed completion receipt), and #1470 (deployable safety-inspection BPMN/form example) are merged. PR #1472 (compact phone menu and foreground task/incident polling) was squash-merged as 9a2e911828286b628613ff86c0126aa246981fe1; CI passed, but real-device acceptance is not inferred. Owner accepted the scoped-start ADR in PR #1471 (issue #1467) on 2026-10-31. Grant storage, revocation ordering and self-service start endpoints are not implemented; security/recovery tests remain mandatory. This documentation PR changes no API, runtime permissions or offline behaviour. MFE0 #1451 tablet landscape, iPhone/Android and accessibility evidence remains open."
     },
     {
       "id": "MFE2",
