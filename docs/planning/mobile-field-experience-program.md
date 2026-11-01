@@ -4,7 +4,7 @@
 **Baseline:** Public `pblumer/atlas` main, reviewed 2026-10-31.  
 **Strategic tracks:** Milestone S (single-binary server and web UI); Milestone A (Forms and Modeler); Milestone 4 (operability).  
 **Owner:** pblumer (accepted 2026-10-30); slice coordinators remain unassigned until explicitly appointed.  
-**Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. MFE1 process-start permission expansion is separately gated on ADR review #1471. MFE2–MFE7 are not delivered.
+**Operational status:** [programme manifest](../programs/mfe/program.json). MFE1 browser UI changes, including PR #1472, are merged (squash commit `9a2e911828286b628613ff86c0126aa246981fe1`), with green CI for that PR. MFE0 physical-device acceptance #1451 remains open, so no iOS/Android release acceptance is claimed. MFE1 process-start permission expansion is separately gated on ADR review #1471. MFE2 read-only mobile triage is under implementation in draft PR #1479 (not yet accepted); MFE3–MFE7 are not delivered.
 
 **User and operations guidance:** [MFE1 mobile work guide](mfe1-user-operations-guide.md) documents navigation, polling, confirmation semantics, authorization and remaining hardware evidence.
 
@@ -94,6 +94,8 @@ People can start business processes, work assigned BPMN user tasks and safely tr
 - **Exit:** device-size and E2E tests for claim, data validation, submit, back navigation, expired session and server refusal; no unsupported form-js features claimed.
 
 ### MFE2 — Mobile incident triage
+
+**Implementation in progress (2026-11-01):** The programme owner requested the actual MFE2 implementation while the separate MFE1 authorization decision PR #1471 is in CI. This is a recorded exception to the default two-active-slice WIP limit (MFE0, MFE1, MFE2). MFE2 remains a strictly read-only UI slice: [PR #1477](https://github.com/pblumer/atlas/pull/1477) merged the contract only, while [draft PR #1479](https://github.com/pblumer/atlas/pull/1479) adds a phone/tablet cause-first view, bounded `limit=10` detail and negative role/session tests. No new API, server rights, engine action, human acknowledgement or MFE3 delivery is approved. Tests, CI and physical-device MFE0 #1451 evidence are pending. Desktop Operations keeps its existing incident tools.
 
 - Operator-scoped incident inbox with grouping by cause using existing `GET /api/v1/incidents/summary` instead of downloading flood-sized row lists.
 - Present impact, process, element, latest error and remediation options; provide safe read-only detail for roles without remediation rights.
