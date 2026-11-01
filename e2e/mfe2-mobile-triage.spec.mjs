@@ -132,3 +132,27 @@ test("MFE2: phone and portrait tablet remain accessible; desktop Operations rema
   await expect(page.locator("#causes")).toBeVisible({ timeout: 15000 });
   await expect(page.locator("#mfe2-triage")).toHaveCount(0);
 });
+
+test("MFE2: 900px mouse-driven desktop still gets full Operations incident tools", async ({ page }) => {
+  mockAPI(page);
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("/index.html?lang=en#/operations/incidents");
+  await expect(page.locator("#view h1").first()).toHaveText("Incidents");
+  await expect(page.locator("#causes")).toBeVisible();
+  await expect(page.locator("#mfe2-triage")).toHaveCount(0);
+});
+
+test.describe("touch tablet landscape", () => {
+  test.use({ hasTouch: true });
+  test("MFE2: 1024px landscape touch device uses a two-pane read-only triage", async ({ page }) => {
+    mockAPI(page);
+    await openMobile(page, 1024);
+    await expect(page.locator("#mfe2-causes button").first()).toBeVisible();
+    await expect(page.locator("#mfe2-details")).toBeVisible();
+    const bounds = await page.evaluate(() => ({
+      causes: document.querySelector(".mfe2-cause-pane").getBoundingClientRect(),
+      details: document.querySelector(".mfe2-detail-pane").getBoundingClientRect(),
+    }));
+    expect(bounds.details.left).toBeGreaterThanOrEqual(bounds.causes.right - 2);
+  });
+});
