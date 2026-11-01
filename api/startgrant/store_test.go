@@ -1,6 +1,7 @@
 package startgrant
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -182,5 +183,73 @@ func TestStoreWriteFailureNeverGrants(t *testing.T) {
 	}
 	if _, err := s.Set(testRequest("app-a", "credit", "admin", 0, []string{"alice"}, nil)); err == nil {
 		t.Fatal("uncertain store accepted another write")
+	}
+}
+
+func TestStoreMissingRevokedDocumentDoesNotResurrectGrant(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(testRequest("app-a", "credit", "admin", 0, []string{"alice"}, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(testRequest("app-a", "credit", "admin", 1, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	files, err := os.ReadDir(dir)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("grant and revoke must share one atomic document: %v, %v", files, err)
+	}
+	if err := os.Remove(filepath.Join(dir, files[0].Name())); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.Allowed("app-a", "credit", Principal{UserID: "alice"}) {
+		t.Fatal("lost revocation resurrected an old grant")
+	}
+}
+
+func TestStoreRefusesTruncatedAuditDocument(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(testRequest("app-a", "credit", "admin", 0, []string{"alice"}, nil)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(testRequest("app-a", "credit", "admin", 1, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	files, err := os.ReadDir(dir)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("files: %v, %v", files, err)
+	}
+	path := filepath.Join(dir, files[0].Name())
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Remove the second audit entry without changing the recorded revision.
+	// The current policy must never be accepted from an incomplete history.
+	var doc document
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	doc.History = doc.History[:1]
+	data, err = json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(dir); err == nil {
+		t.Fatal("incomplete audit history accepted")
 	}
 }
