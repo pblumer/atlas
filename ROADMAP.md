@@ -1114,6 +1114,15 @@ Composition and reuse.
 
 What it takes to run this for real.
 
+- 🚧 **Operations History at Scale (OHS programme)** ([plan](docs/planning/operations-history-at-scale-program.md),
+  [issue #1481](https://github.com/pblumer/atlas/issues/1481)): default-collapsed
+  Multi-Instance bodies in Operations Instance History are being delivered in OHS1
+  (PR #1483), using durable parent-token lineage. OHS1 still receives the complete
+  timeline and is **not** a 50,000-iteration performance solution. OHS2 adds bounded
+  server-side iteration discovery, OHS3 scoped detail replay after an accepted
+  [query ADR](docs/adr/draft-scalable-instance-replay.md), recovery tests and 50k
+  memory/latency/writer-responsiveness evidence. UI integration is on Milestone S.
+
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
 - ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
   only): the roles a token will carry are shown before it is minted, the secret once, and an
