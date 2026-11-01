@@ -71,8 +71,7 @@ func (t *Tx) miRoundReference(piKey, roundKey uint64) (uint64, uint64, bool, err
 }
 
 func (t *Tx) miStoreValue(key []byte, v MIHistoryEntry) error {
-	t.scratch = appendMIHistoryValue(t.scratch[:0], v)
-	return t.b.Set(key, t.scratch, nil)
+	return t.b.Set(key, appendMIHistoryValue(t.miValue[:0], v), nil)
 }
 
 // RecordMIActivation materializes body/round lineage from the durable
@@ -93,8 +92,8 @@ func (t *Tx) RecordMIActivation(elementKey uint64, v *model.ElementInstanceValue
 		if err := t.miStoreValue(t.miBodyKey(v.ProcessInstanceKey, pos, elementKey), entry); err != nil {
 			return err
 		}
-		t.scratch = appendBE64(t.scratch[:0], pos)
-		return t.b.Set(t.miReverseKey(cfMIBodyByElement, v.ProcessInstanceKey, elementKey), t.scratch, nil)
+		binary.BigEndian.PutUint64(t.miRef[:8], pos)
+		return t.b.Set(t.miReverseKey(cfMIBodyByElement, v.ProcessInstanceKey, elementKey), t.miRef[:8], nil)
 	}
 	bodyKey := v.FlowScopeKey
 	bodyPos, ok, err := t.miBodyActivationPosition(v.ProcessInstanceKey, bodyKey)
@@ -107,9 +106,9 @@ func (t *Tx) RecordMIActivation(elementKey uint64, v *model.ElementInstanceValue
 	if err := t.miStoreValue(t.miIterationKey(v.ProcessInstanceKey, bodyKey, bodyPos, elementKey), entry); err != nil {
 		return err
 	}
-	t.scratch = appendBE64(t.scratch[:0], bodyKey)
-	t.scratch = appendBE64(t.scratch, bodyPos)
-	return t.b.Set(t.miReverseKey(cfMIRoundByElement, v.ProcessInstanceKey, elementKey), t.scratch, nil)
+	binary.BigEndian.PutUint64(t.miRef[:8], bodyKey)
+	binary.BigEndian.PutUint64(t.miRef[8:], bodyPos)
+	return t.b.Set(t.miReverseKey(cfMIRoundByElement, v.ProcessInstanceKey, elementKey), t.miRef[:], nil)
 }
 
 func (t *Tx) miFinishValue(key []byte, endPosition uint64, state MIHistoryState) error {
