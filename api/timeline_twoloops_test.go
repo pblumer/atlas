@@ -113,3 +113,28 @@ func TestALoopsLastRoundIsNotRepeatedByTheNextLoop(t *testing.T) {
 		}
 	}
 }
+
+// TestMultiInstanceRoundsCarryBodyLineageForHistory verifies that the replay API
+// names the actual parent token of each round. The Operations grouping must not
+// infer ownership from a task name, which is shared by separate body executions.
+func TestMultiInstanceRoundsCarryBodyLineageForHistory(t *testing.T) {
+	steps := runLoopModelWith(t, twoLoopsModel, `{"variables":{"n":0,"kunden":["a","b","c"]}}`).Steps
+	body := bodyOfElement(t, steps, "jeKunde")
+	if body.TokenID == 0 {
+		t.Fatal("multi-instance body has no token id")
+	}
+	rounds := 0
+	for _, step := range steps {
+		if step.ElementID != "jeKunde" || step.Loop == nil || step.Loop.Round == 0 {
+			continue
+		}
+		rounds++
+		if step.ParentTokenID != body.TokenID {
+			t.Errorf("iteration %d parent token = %d, want body token %d",
+				step.Loop.Round, step.ParentTokenID, body.TokenID)
+		}
+	}
+	if rounds != 3 {
+		t.Fatalf("saw %d multi-instance rounds, want 3", rounds)
+	}
+}

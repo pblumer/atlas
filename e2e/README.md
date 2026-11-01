@@ -27,6 +27,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`mi-history.spec.mjs`** ([OHS1](../docs/planning/operations-history-at-scale-program.md)):
+  Operations instance replay groups the iterations of one multi-instance body by
+  default, expands them on demand and still selects an exact iteration. The grouping
+  uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
+  accidentally merged. This is a UI/DOM slice only: the timeline payload is not yet
+  bounded (OHS2/OHS3).
+
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the catalogue app's Building blocks page offers the sources the server names, shows each wiki

@@ -3,6 +3,7 @@
 // wiring are ours. Assets load lazily so non-editor pages stay light.
 
 import { attachFeelEditor } from "./feel.js";
+import { groupReplayHistory } from "./replay-history.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -14753,6 +14754,8 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
 
   let steps = [];    // element-activation audit timeline, oldest first
   let frames = [];   // complete logical token states, oldest first
+  const expandedHistory = new Set(); // collapsed by default, scoped to this replay view
+  let historyParents = new Map();
   // Whether this instance's history records which element wrote each variable
   // (ADR-0219). False for an instance that ran before it
   // did — there the "out" side falls back to the old inference, and says so.
@@ -16460,7 +16463,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const i = Number(row.dataset.i);
       const pos = steps[i] ? steps[i].position : 0;
       row.classList.toggle("done", atPos >= 0 && pos <= atPos);
-      row.classList.toggle("cur", i === curIdx);
+      row.classList.toggle("cur", i === curIdx || (historyParents.get(curIdx) === i && !expandedHistory.has(i)));
       row.classList.toggle("sel", (steps[i] && steps[i].elementInstanceKey === selEik && selEik !== 0)
         || (selMig >= 0 && i === selMig));
     });
@@ -16485,7 +16488,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       historyEl.innerHTML = `<p class="ops-empty">No history recorded yet.</p>`;
       return;
     }
+    const groups = groupReplayHistory(steps);
+    historyParents = groups.parents;
     const rows = steps.map((s, i) => {
+      const parent = groups.parents.get(i);
+      if (parent !== undefined && !expandedHistory.has(parent)) return "";
       if (s.action === "migrate") {
         // Drawn as a rule across the list rather than another element row: the steps
         // above it and below it are on different versions of the process, and that is
@@ -16509,7 +16516,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         </div>`;
       }
       const done = s.endAt > 0;
-      const inc = incidentByEik(s.elementInstanceKey);
+      // An incident on one of the collapsed rounds must remain visible on its body.
+      const groupIncidents = (groups.children.get(i) || [])
+        .filter((idx) => incidentByEik(steps[idx].elementInstanceKey)).length;
+      const inc = incidentByEik(s.elementInstanceKey) ||
+        (groupIncidents ? { message: tr("ops.mi.incidents", { count: groupIncidents }) } : null);
       const icon = inc ? "&#9888;" : done ? "&#10003;" : "&#9679;";
       const when = showEnd ? (s.endAt ? fmtClock(s.endAt) : "—") : fmtClock(s.at);
       // A loop runs the same node again and again, so without its round number every
@@ -16518,10 +16529,25 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const round = s.iteration
         ? ` <span class="ops-hiter" title="Round ${s.iteration} of this loop">#${s.iteration}</span>`
         : "";
-      return `<div class="ops-hrow${inc ? " inc" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}"${
+      const children = groups.children.get(i);
+      const isGroup = !!children?.length;
+      const opened = expandedHistory.has(i);
+      const toggleLabel = isGroup ? tr(opened ? "ops.mi.collapse" : "ops.mi.expand") : "";
+      const button = isGroup
+        ? `<button type="button" class="ops-mi-toggle" data-body="${i}" aria-expanded="${opened}" aria-label="${esc(toggleLabel)}" title="${esc(toggleLabel)}">${opened ? "&#9662;" : "&#9656;"}</button>`
+        : "";
+      const summary = isGroup
+        ? ` <span class="ops-mi-count" title="${esc(tr("ops.mi.summary", {
+            completed: children.filter((idx) => steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
+            active: children.filter((idx) => !steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
+            terminated: children.filter((idx) => steps[idx].loop?.outcome === "terminated").length,
+          }))}">${esc(tr("ops.mi.count", { count: children.length }))}</span>`
+        : "";
+      return `<div class="ops-hrow${inc ? " inc" : ""}${parent !== undefined ? " mi-child" : ""}${isGroup ? " mi-group" : ""}" data-i="${i}" data-eik="${s.elementInstanceKey || 0}"${
         inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
+        ${button}
         <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>
+        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");
@@ -16550,6 +16576,13 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
+    }));
+    historyEl.querySelectorAll(".ops-mi-toggle").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation(); // toggling a group never changes the replay position
+      const body = Number(button.dataset.body);
+      if (expandedHistory.has(body)) expandedHistory.delete(body);
+      else expandedHistory.add(body);
+      renderHistory(); // only now materialize the individual rows
     }));
     highlightHistory();
   }

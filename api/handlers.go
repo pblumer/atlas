@@ -473,6 +473,7 @@ type timelineStep struct {
 	Iteration          int    `json:"iteration,omitempty"`
 	Position           uint64 `json:"position"`
 	TokenID            uint64 `json:"tokenId,omitempty"`
+	ParentTokenID      uint64 `json:"parentTokenId,omitempty"` // durable lineage for exact MI body grouping
 	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
 	SourceElementID    string `json:"sourceElementId,omitempty"`
 	Action             string `json:"action,omitempty"`
@@ -2776,7 +2777,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				Action:    "activate",
 			}
 			if rv, ok := activations[sr.pos]; ok {
-				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				step.TokenID, step.ParentTokenID, step.ElementInstanceKey = rv.TokenID, rv.ParentTokenID, rv.ElementInstanceKey
 				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
 				step.Iteration = iterationByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).
