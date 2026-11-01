@@ -2372,6 +2372,29 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 /* The replay's Details tab renders the very same block (ADR-0151) — one incident
    vocabulary across both diagrams — so it needs no rules of its own. */
+/* A Live view's process identity is context, not a toolbar action. The shared
+   editor breadcrumb deliberately yields its width to controls; the name must not.
+   Keep it readable at tablet/phone widths and let a long name wrap instead of
+   disappearing behind an ellipsis (issue #1480). */
+.editor.live .live-process-heading {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.editor.live .live-process-identity {
+  display: flex; align-items: baseline; flex: 1 1 360px;
+  flex-wrap: wrap; gap: 4px 10px; min-width: 0;
+}
+.editor.live .live-process-label {
+  color: var(--muted); font-size: 12px; flex: none;
+}
+.editor.live .live-process-name {
+  margin: 0; min-width: 0; font-size: 18px; line-height: 1.35;
+  font-weight: 650; overflow-wrap: anywhere;
+}
+.editor.live .live-process-version {
+  color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
