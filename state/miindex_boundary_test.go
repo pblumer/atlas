@@ -118,7 +118,7 @@ func TestMIHistoryCorruptionCannotReadAsPlausibleLineage(t *testing.T) {
 	// Each corrupt key/value can otherwise silently return a wrong body or round.
 	tests := []struct {
 		name string
-		key []byte
+		key  []byte
 		read func() error
 	}{
 		{"body reference", keyMIBodyByElement(80, 100), func() error { _, _, err := s.MIBody(80, 100); return err }},
