@@ -12254,7 +12254,7 @@ async function route() {
     if (path === "#/operations/incidents") {
       // MFE2: a bounded, read-only cause-first view on phones and tablets.
       // Desktop Operations retains all its existing remediation controls.
-      if (window.matchMedia("(max-width: 1100px)").matches) {
+      if (window.matchMedia("(max-width: 800px), (max-width: 1100px) and (pointer: coarse)").matches) {
         const gen = navGen;
         const { viewMobileIncidentTriage } = await import("./mfe2-triage.js");
         if (superseded(gen)) return;
