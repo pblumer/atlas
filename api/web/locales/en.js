@@ -4,6 +4,11 @@
 // selected only when somebody asks for it: German is the default, and the browser's
 // language is not consulted.
 export default {
+  "ops.mi.expand": "Show iterations",
+  "ops.mi.collapse": "Hide iterations",
+  "ops.mi.count": "{count} iterations",
+  "ops.mi.summary": "{completed} completed, {active} active, {terminated} terminated",
+
   // The language's own name, in itself: how the language picker lists it.
   "locale.name": "English",
 
