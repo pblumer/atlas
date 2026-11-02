@@ -145,6 +145,11 @@ func (c *OnlineClient) post(ctx context.Context, cmdlet, target, anchor string, 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("X-AnchorMailbox", anchor)
+	// Uncompressed, said out loud. Without it Go's transport asks for gzip itself and
+	// decompresses what comes back; Exchange Online's admin API was observed answering
+	// a request with a body labelled gzip that was not, which surfaced as "gzip: invalid
+	// header" in place of the cmdlet's own answer.
+	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("exchange: %s: %w", cmdlet, err)
