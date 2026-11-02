@@ -28,7 +28,9 @@ import (
 //     password, and neither is a thing to add without a reason to.
 //   - **Pre-registered clients by default.** Registration is an admin act unless an
 //     operator opens RFC 7591 self-registration (oauthregister.go), which is off
-//     until they do. Client ID Metadata Documents are not built.
+//     until they do. A connected system names itself by a client ID metadata
+//     document instead (oauthclientmeta.go, ADR-0512), which writes nothing until an
+//     administrator approved it.
 //   - **The token carries a person.** Not a role, not a service identity — the human
 //     who approved it, so ADR-0196's property survives: a tool call is exactly as
 //     privileged as whoever made it.
@@ -72,11 +74,18 @@ func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		"code_challenge_methods_supported":      []string{"S256"},
-		"token_endpoint_auth_methods_supported": []string{"client_secret_post"},
+		// A client entered here holds a secret; a connected system named by its
+		// metadata document signs an assertion instead (RFC 7523, ADR-0512 §1).
+		"token_endpoint_auth_methods_supported":            []string{"client_secret_post", privateKeyJWT},
+		"token_endpoint_auth_signing_alg_values_supported": []string{"EdDSA", "ES256"},
 		// RFC 7009, with the token endpoint's own client authentication: a client
 		// that can renew a grant can give it back, and nobody else can (handleRevoke).
-		"revocation_endpoint":                        base + oauthRevokePath,
-		"revocation_endpoint_auth_methods_supported": []string{"client_secret_post"},
+		"revocation_endpoint":                                   base + oauthRevokePath,
+		"revocation_endpoint_auth_methods_supported":            []string{"client_secret_post", privateKeyJWT},
+		"revocation_endpoint_auth_signing_alg_values_supported": []string{"EdDSA", "ES256"},
+		// A client_id may be the URL of the client's own metadata document (ADR-0512
+		// §1), so a system connects without anybody entering it here first.
+		"client_id_metadata_document_supported": true,
 	}
 	// Advertised only when it is served. A registration_endpoint in this document is
 	// a promise, and a client that takes it and gets a 404 has been told a lie about
@@ -106,11 +115,18 @@ type oauthRequest struct {
 // hands the code to whoever supplied the URI. Everything after that is the
 // client's own mistake and travels back to it as an error, which is what lets a
 // client show its user something better than a blank page.
-func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values) (oauthRequest, string, string) {
+//
+// A client named by its metadata document is read from it here (lookupClient): from the
+// cache for the consent screen, and again for the approval itself, which is what fresh
+// asks for, so what a person approves is what the system publishes at that moment. A
+// document that cannot be read or does not pass is the first kind of failure — it is
+// shown, never redirected, because a redirect URI from a document that did not pass is
+// not one anybody vouched for.
+func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values, fresh bool) (oauthRequest, string, string) {
 	clientID := strings.TrimSpace(q.Get("client_id"))
-	client, ok := s.oauthClients.lookup(clientID)
-	if !ok {
-		return oauthRequest{}, "", "unknown client_id"
+	client, err := s.lookupClient(r.Context(), clientID, fresh)
+	if err != nil {
+		return oauthRequest{}, "", err.Error()
 	}
 	redirectURI := strings.TrimSpace(q.Get("redirect_uri"))
 	if redirectURI == "" || !client.allowsRedirect(redirectURI) {
@@ -193,7 +209,7 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 // id — which is the name that client is about to show the person anyway, and the
 // id travels in the URL the client itself constructed.
 func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) {
-	req, clientErr, fatal := s.parseAuthorizeRequest(r, r.URL.Query())
+	req, clientErr, fatal := s.parseAuthorizeRequest(r, r.URL.Query(), false)
 	if fatal != "" {
 		httpapi.JSON(w, http.StatusOK, map[string]any{"error": fatal})
 		return
@@ -207,6 +223,15 @@ func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) 
 		// the person about to decide has to be told that — see oauthregister.go. Always
 		// present, so the page can rely on it rather than infer from an absent field.
 		"selfRegistered": req.client.Dynamic,
+		// A client named by its metadata document is shown by the host its client_id
+		// is on, above the name it claims (ADR-0512 §1): the host is what TLS vouched
+		// for when the document was read, and the name is only what the document says.
+		"metadataDocument": req.client.Metadata,
+	}
+	if req.client.Metadata {
+		if u, err := url.Parse(req.client.ID); err == nil {
+			out["clientHost"] = u.Host
+		}
 	}
 	if clientErr != "" {
 		out["error"] = "the client's request is not valid (" + clientErr + ")"
@@ -252,7 +277,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		"resource":              {payload.Resource},
 		"response_type":         {"code"},
 	}
-	req, clientErr, fatal := s.parseAuthorizeRequest(r, q)
+	req, clientErr, fatal := s.parseAuthorizeRequest(r, q, true)
 	if fatal != "" {
 		httpapi.Error(w, http.StatusBadRequest, fatal)
 		return
@@ -342,7 +367,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "malformed form body")
 		return
 	}
-	client, ok := s.oauthClients.authenticate(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
+	base := s.externalBase(r)
+	client, ok := s.authenticateClient(r, base+oauthTokenPath, base)
 	if !ok {
 		// 401 with the OAuth error code, not the API's envelope: the caller here is a
 		// client library that parses this shape.
@@ -397,7 +423,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, client oau
 		Roles: rec.roles, GroupIDs: rec.groupIDs,
 		Resource: rec.resource, CreatedAt: time.Now().Unix(),
 	}
-	s.issueTokens(w, r, grant, "authorization_code")
+	s.issueTokens(w, r, grant, "authorization_code", client)
 }
 
 // refreshGrant rotates a grant's tokens.
@@ -411,7 +437,7 @@ func (s *Server) refreshGrant(w http.ResponseWriter, r *http.Request, client oau
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown or revoked")
 		return
 	}
-	s.issueTokens(w, r, grant, "refresh_token")
+	s.issueTokens(w, r, grant, "refresh_token", oauthClient{})
 }
 
 // issueTokens mints a fresh pair onto a grant and saves it.
@@ -419,7 +445,12 @@ func (s *Server) refreshGrant(w http.ResponseWriter, r *http.Request, client oau
 // The durable write goes first and the index second, inside one run-loop turn: a
 // failure between them leaves the *old* tokens still resolving rather than a grant
 // nobody can use, which is the recoverable direction — the client refreshes again.
-func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauthGrant, how string) {
+//
+// client is the client a code was just exchanged by, and the zero value on a renewal.
+// A client named by its metadata document is saved here, in the turn that saves the
+// first grant anybody approved for it, and nowhere earlier (ADR-0512 §1): this is the
+// first moment Atlas has a reason to remember it.
+func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauthGrant, how string, client oauthClient) {
 	accessSecret, err := randomHex(32)
 	if err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "generate token")
@@ -439,6 +470,11 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauth
 
 	var saveErr error
 	s.do(func() {
+		if client.Metadata {
+			if saveErr = s.rememberMetadataClient(client, grant.UserID); saveErr != nil {
+				return
+			}
+		}
 		if saveErr = s.oauthGrantStore.Save(grant); saveErr != nil {
 			return
 		}
@@ -493,7 +529,11 @@ func (s *Server) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "malformed form body")
 		return
 	}
-	client, ok := s.oauthClients.authenticate(r.PostFormValue("client_id"), r.PostFormValue("client_secret"))
+	// An assertion made out to the token endpoint is accepted here too: RFC 7009 has
+	// the revocation endpoint authenticate a client as the token endpoint does, and a
+	// system signs for whichever of Atlas's endpoints its library names.
+	base := s.externalBase(r)
+	client, ok := s.authenticateClient(r, base+oauthTokenPath, base, base+oauthRevokePath)
 	if !ok {
 		oauthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 		return

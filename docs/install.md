@@ -944,6 +944,10 @@ away.
 | `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` | 300 | How many requests one address may make at once to the OAuth token and revocation endpoints — enough for a server-side client, such as a wiki, to renew all its people's tokens after its own restart |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` | 10 | How many of those requests per second the address earns back |
+| `ATLAS_LIMIT_CLIENT_METADATA` | 64 KiB | How much of a connected system's client ID metadata document atlas reads ([ADR-0512](adr/0512-connected-systems.md)) |
+| `ATLAS_LIMIT_CLIENT_METADATA_SECONDS` | 5 | How long atlas waits for that document before it tells the person on the consent screen that it could not be read |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_BURST` | 10 | How many such documents atlas reads from one host at once — a document is cached, so a working system needs one read an hour |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_RATE` | 1 | How many of those reads per second the host earns back |
 
 `TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
 hundred thousand iterations are a hundred thousand tokens taking one step each, which

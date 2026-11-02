@@ -66,6 +66,16 @@ type oauthClient struct {
 	// is monotonic without a clock. Zero on an operator-registered client, which is
 	// never evicted anyway.
 	Seq int64 `json:"seq,omitempty"`
+
+	// Metadata marks the third kind of client (ADR-0512 §1): one named by its client ID
+	// metadata document, whose ID is that document's URL. Nobody entered it and it did
+	// not register; it is read from the document on every authorization request and
+	// saved only in the run-loop turn that saves a grant somebody approved for it
+	// (issueTokens). It has no secret — SecretHash stays empty, so authenticate can
+	// never match it — and proves who it is with a signed assertion instead
+	// (oauthassertion.go). Its name and redirect URIs here are the document's as of
+	// that save; the document, not this record, is what a request is checked against.
+	Metadata bool `json:"metadata,omitempty"`
 }
 
 // allowsRedirect reports whether uri is one this client registered. Exact string
@@ -92,13 +102,17 @@ type oauthClientView struct {
 	// than omitted when false: a listing where the field is simply absent on the
 	// vetted ones reads as if the distinction were not being made.
 	SelfRegistered bool `json:"selfRegistered"`
+
+	// Metadata says the client is named by its metadata document (ADR-0512 §1), so
+	// its ID is that document's URL and it holds no secret.
+	Metadata bool `json:"metadata"`
 }
 
 func (c oauthClient) view() oauthClientView {
 	return oauthClientView{
 		ID: c.ID, Name: c.Name, RedirectURIs: c.RedirectURIs,
 		CreatedAt: c.CreatedAt, CreatedBy: c.CreatedBy,
-		SelfRegistered: c.Dynamic,
+		SelfRegistered: c.Dynamic, Metadata: c.Metadata,
 	}
 }
 
