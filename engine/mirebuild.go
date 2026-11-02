@@ -22,8 +22,9 @@ type MIRebuildResult struct {
 }
 
 // miRebuildCommitEvery bounds one shadow-store transaction, so a long log is not
-// one huge batch and an interrupted rebuild resumes from its last commit.
-const miRebuildCommitEvery = 50_000
+// one huge batch and an interrupted rebuild resumes from its last commit. A
+// variable only so a test can make a small log commit several times.
+var miRebuildCommitEvery = 50_000
 
 // miRebuildCopyBatch bounds the keys per durable commit of the swap.
 const miRebuildCopyBatch = 10_000
@@ -120,26 +121,23 @@ func (p *Processor) RebuildMIHistory(scratchDir string) (MIRebuildResult, error)
 // applyToState, committing every miRebuildCommitEvery events with the applied
 // position, exactly as recovery commits once.
 func replayInto(p *Processor, dst *state.Store, from, target uint64) (int, error) {
-	applied := 0
+	applied, pending := 0, 0
+	var pendingPos uint64
 	tx := dst.NewTransaction()
-	pendingPos := uint64(0)
-	pending := 0
 	commit := func() error {
 		if pending == 0 {
 			return nil
 		}
-		if err := tx.SetLastAppliedPosition(pendingPos); err != nil {
-			return err
+		err := tx.SetLastAppliedPosition(pendingPos)
+		if err == nil {
+			err = tx.Commit()
 		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-		if err := tx.Close(); err != nil {
-			return err
+		if cerr := tx.Close(); err == nil {
+			err = cerr
 		}
 		tx = dst.NewTransaction()
 		pending = 0
-		return nil
+		return err
 	}
 	errDone := errors.New("replay reached its target")
 	err := p.log.ReplayFrom(from, recordPosition, func(data []byte) error {
@@ -166,13 +164,14 @@ func replayInto(p *Processor, dst *state.Store, from, target uint64) (int, error
 		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, errDone) {
-		_ = tx.Close()
-		return applied, err
+	if errors.Is(err, errDone) {
+		err = nil
 	}
-	if err := commit(); err != nil {
-		_ = tx.Close()
-		return applied, err
+	if err == nil {
+		err = commit()
 	}
-	return applied, tx.Close()
+	if cerr := tx.Close(); err == nil {
+		err = cerr
+	}
+	return applied, err
 }

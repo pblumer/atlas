@@ -181,13 +181,10 @@ func (t *Tx) miLoopCounter(roundKey uint64) (uint64, error) {
 		return 0, err
 	}
 	n, ok := model.VariableNumberUint(raw)
-	if err := closer.Close(); err != nil {
-		return 0, err
-	}
 	if !ok {
-		return 0, nil
+		n = 0 // not a positive integer: not recorded, never guessed
 	}
-	return n, nil
+	return n, closer.Close()
 }
 
 // miEnclosingRound walks from a scope up the live scope chain to the innermost
@@ -230,14 +227,16 @@ func (t *Tx) RecordMIActivation(elementKey uint64, v *model.ElementInstanceValue
 			return err
 		}
 		entry.ParentIterationKey = parent
-		if err := t.miStoreBody(pi, elementKey, &entry); err != nil {
-			return err
-		}
+		// Batch writes only fail on a closed batch; the chain stops at the first.
+		err = t.miStoreBody(pi, elementKey, &entry)
 		binary.BigEndian.PutUint64(t.miRef[:8], pos)
-		if err := t.b.Set(t.miRefKey(cfMIBodyByElement, pi, elementKey), t.miRef[:8], nil); err != nil {
-			return err
+		if err == nil {
+			err = t.b.Set(t.miRefKey(cfMIBodyByElement, pi, elementKey), t.miRef[:8], nil)
 		}
-		return t.b.Set(t.miQuadKey(cfMIBodyByParent, pi, parent, pos, elementKey), nil, nil)
+		if err == nil {
+			err = t.b.Set(t.miQuadKey(cfMIBodyByParent, pi, parent, pos, elementKey), nil, nil)
+		}
+		return err
 	}
 	bodyKey := v.FlowScopeKey
 	bodyPos, ok, err := t.miBodyActivationPosition(pi, bodyKey)
@@ -252,24 +251,25 @@ func (t *Tx) RecordMIActivation(elementKey uint64, v *model.ElementInstanceValue
 		return err
 	}
 	entry.LoopCounter = loop
-	if err := t.miStoreRound(pi, bodyKey, bodyPos, elementKey, &entry); err != nil {
-		return err
-	}
+	err = t.miStoreRound(pi, bodyKey, bodyPos, elementKey, &entry)
 	binary.BigEndian.PutUint64(t.miRef[:8], bodyKey)
 	binary.BigEndian.PutUint64(t.miRef[8:16], bodyPos)
-	if err := t.b.Set(t.miRefKey(cfMIRoundByElement, pi, elementKey), t.miRef[:16], nil); err != nil {
-		return err
+	if err == nil {
+		err = t.b.Set(t.miRefKey(cfMIRoundByElement, pi, elementKey), t.miRef[:16], nil)
 	}
-	if err := t.b.Set(t.miOrderedKey(cfMIRoundOrder, pi, bodyKey, bodyPos, 0, loop, elementKey), nil, nil); err != nil {
-		return err
+	if err == nil {
+		err = t.b.Set(t.miOrderedKey(cfMIRoundOrder, pi, bodyKey, bodyPos, 0, loop, elementKey), nil, nil)
 	}
-	if err := t.b.Set(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, MIHistoryActive, loop, elementKey), nil, nil); err != nil {
-		return err
+	if err == nil {
+		err = t.b.Set(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, MIHistoryActive, loop, elementKey), nil, nil)
 	}
-	if err := t.miCount(pi, bodyKey, miCountIterations, 1); err != nil {
-		return err
+	if err == nil {
+		err = t.miCount(pi, bodyKey, miCountIterations, 1)
 	}
-	return t.miCount(pi, bodyKey, miCountChanges, 1)
+	if err == nil {
+		err = t.miCount(pi, bodyKey, miCountChanges, 1)
+	}
+	return err
 }
 
 // RecordMIEnd applies the final lifecycle fact to a historical projection.
@@ -310,24 +310,25 @@ func (t *Tx) RecordMIEnd(elementKey uint64, v *model.ElementInstanceValue, pos u
 		// read projection, and overwriting would double-count the body.
 		return nil
 	}
-	if err := t.b.Delete(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, round.State, round.LoopCounter, elementKey), nil); err != nil {
-		return err
-	}
-	if err := t.b.Set(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, st, round.LoopCounter, elementKey), nil, nil); err != nil {
-		return err
-	}
-	round.EndPosition, round.State = pos, st
-	if err := t.miStoreRound(pi, bodyKey, bodyPos, elementKey, &round); err != nil {
-		return err
-	}
 	kind := miCountCompleted
 	if terminated {
 		kind = miCountTerminated
 	}
-	if err := t.miCount(pi, bodyKey, kind, 1); err != nil {
-		return err
+	err = t.b.Delete(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, round.State, round.LoopCounter, elementKey), nil)
+	if err == nil {
+		err = t.b.Set(t.miOrderedKey(cfMIRoundByState, pi, bodyKey, bodyPos, st, round.LoopCounter, elementKey), nil, nil)
 	}
-	return t.miCount(pi, bodyKey, miCountChanges, 1)
+	round.EndPosition, round.State = pos, st
+	if err == nil {
+		err = t.miStoreRound(pi, bodyKey, bodyPos, elementKey, &round)
+	}
+	if err == nil {
+		err = t.miCount(pi, bodyKey, kind, 1)
+	}
+	if err == nil {
+		err = t.miCount(pi, bodyKey, miCountChanges, 1)
+	}
+	return err
 }
 
 // miIncidentOwner finds the innermost MI iteration or body an incident's
@@ -388,47 +389,49 @@ func (t *Tx) RecordMIIncidentRaised(inc *model.IncidentValue, pos uint64) error 
 	if err != nil {
 		return err
 	}
-	if open {
-		if err := t.miSetIncidentRecord(pi, prevOwner, prevRaised, elKey, pos, MIIncidentSuperseded); err != nil {
+	var round MIHistoryEntry
+	if isRound {
+		if round, err = t.miLoadRound(pi, bodyKey, bodyPos, owner); err != nil {
 			return err
 		}
 	}
-	if err := t.miSetIncidentRecord(pi, owner, pos, elKey, 0, MIIncidentUnresolved); err != nil {
-		return err
+	// From here on only batch writes follow; the chain stops at the first that
+	// fails, which only a closed batch does.
+	if open {
+		err = t.miSetIncidentRecord(pi, prevOwner, prevRaised, elKey, pos, MIIncidentSuperseded)
+	}
+	if err == nil {
+		err = t.miSetIncidentRecord(pi, owner, pos, elKey, 0, MIIncidentUnresolved)
 	}
 	binary.BigEndian.PutUint64(t.miRef[:8], owner)
 	binary.BigEndian.PutUint64(t.miRef[8:16], pos)
-	if err := t.b.Set(t.miRefKey(cfMIIncidentOpen, pi, elKey), t.miRef[:16], nil); err != nil {
-		return err
+	if err == nil {
+		err = t.b.Set(t.miRefKey(cfMIIncidentOpen, pi, elKey), t.miRef[:16], nil)
 	}
-	firstForRound := false
+	firstForRound := isRound && round.FirstIncidentPosition == 0
 	if isRound {
-		round, err := t.miLoadRound(pi, bodyKey, bodyPos, owner)
-		if err != nil {
-			return err
-		}
 		round.IncidentsRaised++
-		if round.FirstIncidentPosition == 0 {
-			firstForRound = true
+		if firstForRound {
 			round.FirstIncidentPosition = pos
 			binary.BigEndian.PutUint64(t.miRef[:8], pos)
-			if err := t.b.Set(t.miOrderedKey(cfMIRoundIncident, pi, bodyKey, bodyPos, 0, round.LoopCounter, owner), t.miRef[:8], nil); err != nil {
-				return err
+			if err == nil {
+				err = t.b.Set(t.miOrderedKey(cfMIRoundIncident, pi, bodyKey, bodyPos, 0, round.LoopCounter, owner), t.miRef[:8], nil)
 			}
 		}
-		if err := t.miStoreRound(pi, bodyKey, bodyPos, owner, &round); err != nil {
-			return err
+		if err == nil {
+			err = t.miStoreRound(pi, bodyKey, bodyPos, owner, &round)
 		}
 	}
-	if err := t.miCount(pi, bodyKey, miCountIncidentsRaised, 1); err != nil {
-		return err
+	if err == nil {
+		err = t.miCount(pi, bodyKey, miCountIncidentsRaised, 1)
 	}
-	if firstForRound {
-		if err := t.miCount(pi, bodyKey, miCountIterationsWithIncidents, 1); err != nil {
-			return err
-		}
+	if err == nil && firstForRound {
+		err = t.miCount(pi, bodyKey, miCountIterationsWithIncidents, 1)
 	}
-	return t.miCount(pi, bodyKey, miCountChanges, 1)
+	if err == nil {
+		err = t.miCount(pi, bodyKey, miCountChanges, 1)
+	}
+	return err
 }
 
 // RecordMIIncidentResolved closes the attribution an IncidentResolved event
@@ -440,10 +443,11 @@ func (t *Tx) RecordMIIncidentResolved(inc *model.IncidentValue, pos uint64) erro
 	if err != nil || !open {
 		return err
 	}
-	if err := t.miSetIncidentRecord(pi, owner, raised, elKey, pos, MIIncidentResolved); err != nil {
-		return err
+	err = t.miSetIncidentRecord(pi, owner, raised, elKey, pos, MIIncidentResolved)
+	if err == nil {
+		err = t.b.Delete(t.miRefKey(cfMIIncidentOpen, pi, elKey), nil)
 	}
-	return t.b.Delete(t.miRefKey(cfMIIncidentOpen, pi, elKey), nil)
+	return err
 }
 
 // RecordMIDecision attributes a DecisionEvaluated event to the innermost MI
@@ -471,6 +475,7 @@ var miIndexFamilies = [...]columnFamily{
 // scan or individual deletes over potentially 50,000 rounds. Other instances'
 // indexes and the immutable WAL are not affected.
 func (t *Tx) purgeMIIndexHistory(piKey uint64) error {
+	var err error
 	for _, family := range miIndexFamilies {
 		var lo, hi [9]byte
 		lo[0], hi[0] = byte(family), byte(family)
@@ -483,9 +488,9 @@ func (t *Tx) purgeMIIndexHistory(piKey uint64) error {
 			binary.BigEndian.PutUint64(hi[1:], piKey+1)
 			end = hi[:]
 		}
-		if err := t.b.DeleteRange(lo[:], end, nil); err != nil {
-			return err
+		if err == nil {
+			err = t.b.DeleteRange(lo[:], end, nil)
 		}
 	}
-	return nil
+	return err
 }

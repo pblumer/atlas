@@ -80,19 +80,17 @@ func (s *Store) AdoptMIHistory(src *Store, batch int) (int, error) {
 		// written in the same batch, so a crash after it resumes the copy rather
 		// than clearing again (which would be harmless, but is not needed).
 		b := s.db.NewBatch()
-		if err := b.DeleteRange(miRangeLo, miRangeHi, nil); err != nil {
-			_ = b.Close()
-			return 0, err
+		err := b.DeleteRange(miRangeLo, miRangeHi, nil)
+		if err == nil {
+			err = b.Set(keyMeta(metaMIRebuildProgress), nil, nil)
 		}
-		if err := b.Set(keyMeta(metaMIRebuildProgress), nil, nil); err != nil {
-			_ = b.Close()
-			return 0, err
-		}
-		if err := b.Commit(pebble.Sync); err != nil {
-			_ = b.Close()
-			return 0, err
+		if err == nil {
+			err = b.Commit(pebble.Sync)
 		}
 		_ = b.Close()
+		if err != nil {
+			return 0, err
+		}
 		after = nil
 	}
 
@@ -111,26 +109,25 @@ func (s *Store) AdoptMIHistory(src *Store, batch int) (int, error) {
 	pending := 0
 	var last []byte
 	flush := func(final bool) error {
+		var err error
 		if final {
-			if err := b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil); err != nil {
-				return err
+			err = b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil)
+			if err == nil {
+				err = b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil)
 			}
-			if err := b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil); err != nil {
-				return err
+			if err == nil {
+				err = b.Delete(keyMeta(metaMIRebuildProgress), nil)
 			}
-			if err := b.Delete(keyMeta(metaMIRebuildProgress), nil); err != nil {
-				return err
-			}
-		} else if err := b.Set(keyMeta(metaMIRebuildProgress), last, nil); err != nil {
-			return err
+		} else {
+			err = b.Set(keyMeta(metaMIRebuildProgress), last, nil)
 		}
-		if err := b.Commit(pebble.Sync); err != nil {
-			return err
+		if err == nil {
+			err = b.Commit(pebble.Sync)
 		}
 		_ = b.Close()
 		b = s.db.NewBatch()
 		pending = 0
-		return nil
+		return err
 	}
 	for iter.First(); iter.Valid(); iter.Next() {
 		k := iter.Key()
@@ -139,16 +136,15 @@ func (s *Store) AdoptMIHistory(src *Store, batch int) (int, error) {
 		}
 		// The source's merge counters read as their folded value; written with Set
 		// into a cleared range they are that value exactly.
-		if err := b.Set(k, iter.Value(), nil); err != nil {
-			return copied, err
-		}
+		err = b.Set(k, iter.Value(), nil)
 		last = append(last[:0], k...)
 		copied++
 		pending++
-		if pending == batch {
-			if err := flush(false); err != nil {
-				return copied, err
-			}
+		if err == nil && pending == batch {
+			err = flush(false)
+		}
+		if err != nil {
+			return copied, err
 		}
 	}
 	if err := iter.Error(); err != nil {

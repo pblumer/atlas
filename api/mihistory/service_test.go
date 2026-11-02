@@ -1,6 +1,7 @@
 package mihistory
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"io"
@@ -709,5 +710,122 @@ func TestRenderingHelpers(t *testing.T) {
 	}
 	if string(rawJSON("")) != "null" || string(rawJSON("{bad")) != `"{bad"` || string(rawJSON(`[1]`)) != `[1]` {
 		t.Fatal("rawJSON")
+	}
+}
+
+// An element that failed, was resolved and failed again keeps both incidents on
+// its iteration's detail, each with its own status.
+func TestIterationDetailKeepsEveryIncidentOfAnElement(t *testing.T) {
+	w := newWorld(t, listIter(2), false)
+	pi := w.start()
+	body := w.onlyBody(pi)
+	k := exactKeyOf(t, w, pi, body.BodyElementInstanceKey, 1)
+	w.p.FailJob(w.jobFor(k), 0, "first", 0)
+	w.run()
+	// A retry that fails again raises a second incident on the same element.
+	w.p.ResolveIncident(k, 1)
+	w.run()
+	w.p.FailJob(w.jobFor(k), 0, "second", 0)
+	w.run()
+	var d IterationResponse
+	w.get(iterPath(pi, body.BodyElementInstanceKey)+"/"+strconv.FormatUint(k, 10), nil, &d)
+	if len(d.Incidents) != 2 || d.Incidents[0].Status != "resolved" || d.Incidents[1].Status != "open" {
+		t.Fatalf("incidents: %+v", d.Incidents)
+	}
+	// Paging the bodies with a cursor resumes after the body the cursor names.
+	var first BodiesResponse
+	w.get(instPath(pi), url.Values{"limit": {"1"}}, &first)
+	if len(first.Bodies) != 1 || first.NextCursor != "" {
+		t.Fatalf("bodies: %+v", first)
+	}
+}
+
+// The engine raises a second incident on an element only after resolving the
+// first; a superseded attribution is the index's guard against one that did
+// not, and it must read as superseded without consulting the incident table.
+func TestIncidentStatusOfAResolvedOrSupersededRecordNeedsNoLookup(t *testing.T) {
+	for outcome, want := range map[state.MIIncidentOutcome]string{
+		state.MIIncidentResolved:   "resolved",
+		state.MIIncidentSuperseded: "superseded",
+	} {
+		got, err := incidentStatus(nil, state.MIIncidentRecord{Outcome: outcome})
+		if err != nil || got != want {
+			t.Fatalf("outcome %d: %q %v, want %q", outcome, got, err, want)
+		}
+	}
+}
+
+// twoBodyProcess runs two parallel MI service tasks one after the other, so an
+// instance has two top-level body executions once the first has completed.
+func twoBodyWorld(t *testing.T) (*world, uint64) {
+	t.Helper()
+	w := newWorld(t, "[1]", false)
+	b := compiler.NewBuilder(1, "mi-two", 1)
+	start := b.AddStartEvent()
+	first := b.AddScriptTask(compileFEEL(t, "loopCounter"), "a")
+	b.SetMultiInstance(first, false, "", "", nil, compileFEEL(t, "2"), nil, nil)
+	second := b.AddServiceTask("twowork", 3)
+	b.SetMultiInstance(second, false, "", "", nil, compileFEEL(t, "2"), nil, nil)
+	end := b.AddEndEvent()
+	b.Connect(start, first)
+	b.Connect(first, second)
+	b.Connect(second, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.cp, w.jobType = cp, cp.ServiceTask(cp.Node(second).Detail).JobType
+	w.p.Deploy(cp)
+	return w, w.start()
+}
+
+func TestBodiesPageByCursorAndKeysStayInsideTheirBody(t *testing.T) {
+	w, pi := twoBodyWorld(t)
+	var first BodiesResponse
+	w.get(instPath(pi), url.Values{"limit": {"1"}}, &first)
+	if len(first.Bodies) != 1 || first.NextCursor == "" {
+		t.Fatalf("first page: %+v", first)
+	}
+	var second BodiesResponse
+	w.get(instPath(pi), url.Values{"limit": {"1"}, "cursor": {first.NextCursor}}, &second)
+	if len(second.Bodies) != 1 || second.Bodies[0].BodyElementInstanceKey == first.Bodies[0].BodyElementInstanceKey ||
+		second.Bodies[0].ActivationPosition <= first.Bodies[0].ActivationPosition || second.NextCursor != "" {
+		t.Fatalf("second page: %+v", second)
+	}
+	a, b := first.Bodies[0].BodyElementInstanceKey, second.Bodies[0].BodyElementInstanceKey
+	var rows IterationsResponse
+	w.get(iterPath(pi, a), nil, &rows)
+	foreign := rows.Iterations[0].ElementInstanceKey
+	// An iteration key of body a, asked for under body b, is not one of b's.
+	var none IterationsResponse
+	w.get(iterPath(pi, b), url.Values{"elementInstanceKey": {strconv.FormatUint(foreign, 10)}}, &none)
+	if len(none.Iterations) != 0 {
+		t.Fatalf("a foreign iteration was listed under another body: %+v", none.Iterations)
+	}
+	var ignored any
+	if status, e := w.get(iterPath(pi, b)+"/"+strconv.FormatUint(foreign, 10), nil, &ignored); status != 404 || e["code"] != "not_found" {
+		t.Fatalf("foreign iteration detail: %d %v", status, e)
+	}
+	// A cursor naming body b at another activation position is refused: a
+	// body key alone does not name an execution.
+	cur := w.svc.encodeCursor(cursor{kind: kindIterations, instance: pi, body: b, bodyPos: second.Bodies[0].ActivationPosition + 1,
+		filter: filterDigest(iterationFilter{}.canonical()), issuedAt: w.now.Unix()})
+	if status, e := w.get(iterPath(pi, b), url.Values{"cursor": {cur}}, &ignored); status != 400 || e["code"] != "cursor_mismatch" {
+		t.Fatalf("cursor for another activation: %d %v", status, e)
+	}
+}
+
+// A request whose client has gone away opens no read view.
+func TestACancelledRequestReadsNothing(t *testing.T) {
+	opened := false
+	svc := newService(func(func(*state.ReadView, Definitions) error) error { opened = true; return nil }, []byte("k"), time.Now)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/instances/1/multi-instances", nil).WithContext(ctx)
+	req.SetPathValue("key", "1")
+	rec := httptest.NewRecorder()
+	svc.HandleBodies(rec, req)
+	if opened || rec.Code == http.StatusOK {
+		t.Fatalf("cancelled request: status %d, view opened %v", rec.Code, opened)
 	}
 }

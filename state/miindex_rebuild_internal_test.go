@@ -159,3 +159,19 @@ func TestMIFamiliesAreOneContiguousRange(t *testing.T) {
 		}
 	}
 }
+
+func TestMIHistoryRebuildNeededReportsACorruptMarker(t *testing.T) {
+	f := newMIFixture(t, 50)
+	if needed, err := f.s.MIHistoryRebuildNeeded(); err != nil || needed {
+		t.Fatalf("fresh store: %v %v", needed, err)
+	}
+	f.must(f.s.db.Set(keyMeta(metaMIHistoryIndex), []byte{7}, pebble.Sync))
+	if _, err := f.s.MIHistoryRebuildNeeded(); err == nil {
+		t.Fatal("a corrupt index marker was accepted")
+	}
+	f.must(f.s.db.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], pebble.Sync))
+	f.must(f.s.db.Set(keyMeta(metaMIDecisionIndex), []byte{7}, pebble.Sync))
+	if _, err := f.s.MIHistoryRebuildNeeded(); err == nil {
+		t.Fatal("a corrupt decision marker was accepted")
+	}
+}
