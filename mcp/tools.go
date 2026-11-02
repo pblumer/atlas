@@ -453,6 +453,119 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_multi_instances",
+			Description: "List one process instance's multi-instance body executions (ADR-0517): each concrete " +
+				"activation of a multi-instance activity with its mode, state and iteration counters (seeded, active, " +
+				"completed, terminated, incidents raised). Bounded and paged: pass the nextCursor back as 'cursor'. " +
+				"'parentIteration' lists the bodies nested in that iteration instead of the top level. A 409 " +
+				"history_unavailable means this installation's history index is not verified complete — not that no " +
+				"iterations ran. Use this instead of atlas_instance_timeline for large loops.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":             integerProp("The instance key (from atlas_list_instances)."),
+					"parentIteration": integerProp("Optional iteration element-instance key whose nested bodies to list."),
+					"limit":           integerProp("Optional page size, 1-200 (default 100)."),
+					"cursor":          stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "parentIteration", "limit")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/multi-instances" + q))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_body",
+			Description: "Read one multi-instance body execution of an instance (ADR-0517): its iteration counters " +
+				"and how many of its incidents are open now.",
+			InputSchema: miBodySchema(nil),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_iterations",
+			Description: "Page through the iterations of one multi-instance body execution in iteration-number order " +
+				"(ADR-0517). Filters: 'state' (active, completed, terminated), 'incidents' (true: iterations that had an " +
+				"incident), 'iteration' (exact iteration number), 'from' (start at an iteration number), " +
+				"'elementInstanceKey' (exact lookup). Pass nextCursor back as 'cursor' with the same filters; a page " +
+				"may hold fewer rows than the limit and still carry a cursor.",
+			InputSchema: miBodySchema(map[string]any{
+				"state":              stringProp("Optional lifecycle state: active, completed or terminated."),
+				"incidents":          map[string]any{"type": "boolean", "description": "Optional: true lists only iterations that had at least one incident."},
+				"iteration":          integerProp("Optional exact iteration number (loopCounter)."),
+				"from":               integerProp("Optional iteration number to start the page at."),
+				"elementInstanceKey": integerProp("Optional exact iteration element-instance key; not combinable with filters."),
+				"limit":              integerProp("Optional page size, 1-200 (default 100)."),
+				"cursor":             stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+			}),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "iteration", "from", "elementInstanceKey", "limit")
+				if err != nil {
+					return "", err
+				}
+				extra := url.Values{}
+				if v, ok := args["state"]; ok {
+					st, isStr := v.(string)
+					if !isStr {
+						return "", fmt.Errorf("argument %q must be a string", "state")
+					}
+					extra.Set("state", st)
+				}
+				if v, ok := args["incidents"]; ok {
+					b, isBool := v.(bool)
+					if !isBool {
+						return "", fmt.Errorf("argument %q must be a boolean", "incidents")
+					}
+					extra.Set("incidents", strconv.FormatBool(b))
+				}
+				if len(extra) > 0 {
+					if q == "" {
+						q = "?" + extra.Encode()
+					} else {
+						q += "&" + extra.Encode()
+					}
+				}
+				return asText(c.get(path + "/iterations" + q))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_iteration",
+			Description: "Read one multi-instance iteration (ADR-0517): its iteration number, state and log positions, " +
+				"the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and " +
+				"the multi-instance bodies nested in it.",
+			InputSchema: miBodySchema(map[string]any{
+				"iterationKey": integerProp("The iteration's element-instance key (from atlas_multi_instance_iterations)."),
+			}, "iterationKey"),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				it, err := argUint(args, "iterationKey")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10)))
+			},
+		},
+		{
 			Name: "atlas_instance_decisions",
 			Description: "Read the DMN decision evaluations one process instance made — each with the decision id, " +
 				"the business rule task that called it, and the inputs, outputs, and evaluation trace. An instance " +
@@ -1713,4 +1826,63 @@ func historyPurgePath(key uint64, q url.Values) string {
 		path += "?" + q.Encode()
 	}
 	return path
+}
+
+// miBodySchema is the input schema of a tool addressing one multi-instance body
+// execution, plus extra properties.
+func miBodySchema(extra map[string]any, required ...string) map[string]any {
+	props := map[string]any{
+		"key":     integerProp("The instance key (from atlas_list_instances)."),
+		"bodyKey": integerProp("The body execution's element-instance key (from atlas_instance_multi_instances)."),
+	}
+	for k, v := range extra {
+		props[k] = v
+	}
+	req := []any{"key", "bodyKey"}
+	for _, r := range required {
+		req = append(req, r)
+	}
+	return map[string]any{"type": "object", "properties": props, "required": req}
+}
+
+func miBodyPath(args map[string]any) (string, error) {
+	key, err := argUint(args, "key")
+	if err != nil {
+		return "", err
+	}
+	body, err := argUint(args, "bodyKey")
+	if err != nil {
+		return "", err
+	}
+	return "/api/v1/instances/" + strconv.FormatUint(key, 10) + "/multi-instances/" + strconv.FormatUint(body, 10), nil
+}
+
+// miQuery renders the optional integer arguments and the cursor of the MI
+// history tools as a query string. A cursor is passed through verbatim; one that
+// is not a string is refused rather than dropped, since dropping it would
+// silently restart from the first page.
+func miQuery(args map[string]any, ints ...string) (string, error) {
+	q := url.Values{}
+	for _, name := range ints {
+		v, present, err := optPositiveUint(args, name)
+		if err != nil {
+			return "", err
+		}
+		if present {
+			q.Set(name, strconv.FormatUint(v, 10))
+		}
+	}
+	if v, present := args["cursor"]; present {
+		cur, ok := v.(string)
+		if !ok {
+			return "", fmt.Errorf("argument %q must be the nextCursor string the previous call returned", "cursor")
+		}
+		if cur = strings.TrimSpace(cur); cur != "" {
+			q.Set("cursor", cur)
+		}
+	}
+	if len(q) == 0 {
+		return "", nil
+	}
+	return "?" + q.Encode(), nil
 }
