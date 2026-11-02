@@ -440,7 +440,7 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
 
 - Ein normaler `tofu apply` nach Änderungen an `atlas-bootstrap.py` oder `atlas-setup.sh`
   ersetzt die Atlas-VM (Cloud-Init-Daten); `ignore_changes` wäre zu erwägen.
-- M365-Gruppen (Teams) erhalten die Standard-Domain des Tenants (`…@blumer.net`), nicht
+- M365-Gruppen (Teams) erhalten die Standard-Domain des Tenants (die eigene, nicht die `onmicrosoft.com`-Domain), nicht
   `MAIL_DOMAIN`.
 - Ungetestet: Postfachzugriff, Lizenz, Sitzungszimmer, Aktionen an Bestellungen,
   Governance-Prüfung, Teams Phone.

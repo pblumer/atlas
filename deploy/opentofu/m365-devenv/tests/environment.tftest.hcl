@@ -304,7 +304,7 @@ run "ipv6_and_open_ranges_are_refused" {
   command = plan
 
   variables {
-    atlas_allowed_cidrs = ["2a02:1210::/32", "::/0"]
+    atlas_allowed_cidrs = ["2001:db8::/32", "::/0"]
     ad_allowed_cidrs    = ["0.0.0.0/0"]
   }
 
