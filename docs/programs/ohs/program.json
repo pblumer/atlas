@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge the follow-up PR (Multi-Instance Explorer, iteration variables and decisions, startup rebuild of older stores); then a bounded outline of the non-MI steps of a large instance and the iteration replay window (OHS3). Engine quadratic MI-subprocess completion is Issue #1494.",
+  "next_action": "Merge #1502 (Multi-Instance Explorer, iteration variables and decisions, startup rebuild of older stores); then a bounded outline of the non-MI steps of a large instance and the iteration replay window (OHS3). Engine quadratic MI-subprocess completion is Issue #1494.",
   "slices": [
     {
       "id": "OHS1",
@@ -42,7 +42,8 @@
         1487,
         1488,
         1490,
-        1496
+        1496,
+        1502
       ],
       "note": "#1487 (keys), #1488 (projection), #1490 (fail-closed readiness) and #1496 (index v2, bounded API, 50k acceptance) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). Open: a bounded outline of the other steps of a large instance, per-instance readiness for compacted logs, and #1494 (quadratic MI-subprocess completion). Stores that predate the index are rebuilt at startup from the retained log (accepted shadow-replay ADR draft).",
       "evidence": [
@@ -64,7 +65,9 @@
       "issues": [
         1481
       ],
-      "prs": [],
+      "prs": [
+        1502
+      ],
       "note": "Increment 1: one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Open: the step-by-step replay window of one iteration on the diagram, job/user-task history per iteration, 50k acceptance of the detail view and the retention/migration verification.",
       "evidence": [
         "../../../engine/miindex_v2_recovery_test.go",
