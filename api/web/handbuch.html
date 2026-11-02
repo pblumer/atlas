@@ -1075,6 +1075,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <h2 data-l="de">Rezepte</h2><h2 data-l="en">Recipes</h2>
       <p class="lead" data-l="de">Fertige Bausteine für die wichtigsten BPMN-Muster. Jedes Rezept zeigt dir zuerst das <b>Diagramm</b> — du kannst es mit einem Klick <b>ausprobieren</b> (atlas deployt und startet es in dieser Instanz) oder <b>im Modeler öffnen</b> und umbauen. Das XML dahinter ist eingeklappt: du brauchst es nur, wenn du Modelle von Hand bearbeitest.</p>
       <p class="lead" data-l="en">Ready-made building blocks for the essential BPMN patterns. Every recipe leads with its <b>diagram</b> — <b>try it</b> in one click (atlas deploys and starts it in this instance) or <b>open it in the Modeler</b> and rebuild it. The XML behind it is collapsed: you only need it if you edit models by hand.</p>
+      <p class="muted" data-l="de">«Im Modeler öffnen» legt den Entwurf in deiner Application <b>atlas-samples</b> ab (wird bei Bedarf angelegt), nicht unter den ungruppierten Entwürfen. «Ausprobieren» deployt und startet den Prozess unabhängig davon.</p>
+      <p class="muted" data-l="en">“Open in the Modeler” saves the draft in your <b>atlas-samples</b> application (created when needed), not among ungrouped drafts. “Try it” still deploys and starts the process separately.</p>
       <h3 class="rz-group"><span data-l="de">Automatisieren</span><span data-l="en">Automate</span></h3>
       <div class="recipe" id="rz-script-value" data-proc="recipe-script-value">
         <h4><span class="rz-emoji" aria-hidden="true">🧮</span>
@@ -2251,6 +2253,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
         one-person business to a corporate directory with 50,000 accounts.</p>
+      <p class="muted" data-l="de">«Im Modeler öffnen» speichert nur einen Entwurf in <b>atlas-samples</b>. «Installieren» erstellt dagegen die vollständige Beispiel-Applikation mit ihren Abhängigkeiten.</p>
+      <p class="muted" data-l="en">“Open in the Modeler” only saves a draft in <b>atlas-samples</b>. “Install” creates the complete example application with its dependencies instead.</p>
 
       <div class="note">
         <span class="lbl" data-l="de">Wie dieses Kapitel zu den anderen steht</span><span class="lbl" data-l="en">How this chapter relates to the others</span>
@@ -13629,6 +13633,42 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
     return text ? JSON.parse(text) : {};
   }
 
+  // All handbook copy-to-Modeler actions use one design-time application. This
+  // is deliberately separate from installing a complete example application.
+  // Its private scope belongs to the current reader (ADR-0071).
+  async function applicationId(name){
+    const list = await call("GET", "/api/v1/applications");
+    const found = (list || []).find((a) => a.name === name && !a.protected);
+    if (found) return found.id;
+    return (await call("POST", "/api/v1/applications", { name })).id;
+  }
+
+  let samplesApp;
+  function samplesApplicationId(){
+    if (!samplesApp){
+      samplesApp = applicationId("atlas-samples").catch((e) => {
+        samplesApp = null; // a failed attempt must not poison the next click
+        throw e;
+      });
+    }
+    return samplesApp;
+  }
+
+  async function saveHandbookSampleDraft(xml, processId){
+    const appId = await samplesApplicationId();
+    // Draft IDs are installation-global (ADR-0222). POST with projectId can MOVE
+    // an existing draft, so never silently take one out of another application.
+    // An earlier ungrouped handbook draft may be filed into samples on re-open.
+    const drafts = await call("GET", "/api/v1/drafts");
+    const existing = (drafts || []).find((d) => d.processId === processId);
+    if (existing && existing.projectId && existing.projectId !== appId){
+      throw new Error(T("Für diesen Prozess gibt es bereits einen Entwurf in einer anderen Application. Öffne ihn dort, statt ihn zu verschieben.",
+                        "A draft for this process already belongs to another application. Open it there rather than moving it."));
+    }
+    const draft = await call("POST", "/api/v1/drafts?projectId=" + encodeURIComponent(appId), xml, true);
+    return draft.processId || processId;
+  }
+
   // --- bpmn-js loader (same assets the Modeler uses) ---
   const BPMN_CSS = ["vendor/bpmn/assets/diagram-js.css", "vendor/bpmn/assets/bpmn-js.css",
                     "vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css"];
@@ -13830,8 +13870,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       let xml = xmlOf(card);
       try { xml = await call("POST", "/api/v1/layout", xml, true, true); }
       catch (e) { /* fall back to the raw model rather than not opening at all */ }
-      const d = await call("POST", "/api/v1/drafts", xml, true);
-      const id = d.processId || card.dataset.proc;
+      const id = await saveHandbookSampleDraft(xml, card.dataset.proc);
       setStatus(card, T("✓ Entwurf angelegt — wird geöffnet…", "✓ Draft created — opening…"), "ok");
       window.location.href = "/#/modeler/draft/" + encodeURIComponent(id);
     } catch (e) {
@@ -13880,15 +13919,6 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       b.className = "rz-btn" + (ghost ? " ghost" : "") + " " + cls;
       b.innerHTML = '<span data-l="de">' + de + '</span><span data-l="en">' + en + '</span>';
       return b;
-    }
-
-    // Reuse an application of the same name rather than leaving a second, empty copy
-    // behind — installing an example twice has to be harmless.
-    async function applicationId(name){
-      const list = await call("GET", "/api/v1/applications");
-      const found = (list || []).find((a) => a.name === name && !a.protected);
-      if (found) return found.id;
-      return (await call("POST", "/api/v1/applications", { name })).id;
     }
 
     async function install(ex, card){
@@ -13974,9 +14004,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           // would hand straight back is a round trip that can only fail.
           try { xml = await call("POST", "/api/v1/layout", xml, true, true); } catch (e) { /* raw model still opens */ }
         }
-        const d = await call("POST", "/api/v1/drafts", xml, true);
+        const id = await saveHandbookSampleDraft(xml, proc.processId);
         setStatus(card, T("✓ Entwurf angelegt — wird geöffnet…", "✓ Draft created — opening…"), "ok");
-        window.location.href = "/#/modeler/draft/" + encodeURIComponent(d.processId || proc.processId);
+        window.location.href = "/#/modeler/draft/" + encodeURIComponent(id);
       } catch (e) {
         // A 401 is "you are not signed in"; a 403 is the server declining with a reason
         // worth reading (a protected artifact, a scope you may not write). Showing the

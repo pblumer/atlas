@@ -135,12 +135,12 @@ const PROC = {
   startFormId: "kredit", executable: true,
 };
 
-function installStartMock(page) {
+function installStartMock(page, form = FORM) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
     if (path.endsWith("/api/v1/processes")) return route.fulfill({ json: [PROC] });
-    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: FORM });
+    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: form });
     return route.fulfill({ json: [] });
   });
 }
@@ -180,4 +180,279 @@ test("a filled start form starts the process with what was entered", async ({ pa
 
   await expect.poll(() => started.length, { timeout: 15000 }).toBe(1);
   expect(started[0].variables.iban).toBe("CH9300762011623852957");
+});
+
+// MFE0 / ADR-0514: render actual form-js fields, not just the responsive
+// list/detail placeholders. Browser viewport emulation cannot certify real
+// iOS/Android keyboards, 200% browser zoom, screen readers or foldable hinges.
+async function expectNoDocumentOverflow(page) {
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  )).toBeLessThanOrEqual(1);
+}
+
+test("MFE0 phone task: failed validation preserves edits through an adaptive layout change", async ({ page }) => {
+  installMock(page);
+  const completions = [];
+  await page.route("**/api/v1/tasks/501/complete", async (route) => {
+    completions.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 501 } });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+
+  const form = page.locator("#task-form");
+  await form.getByLabel("Vorname").fill("Lena");
+  await page.locator("#task-complete").click();
+  await expect(page.locator("#toast")).toContainText("IBAN");
+  expect(completions).toHaveLength(0); // Client-side validation never sent a command.
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await expectNoDocumentOverflow(page);
+
+  // Cross the existing ADR-0417 breakpoint in both directions without
+  // remounting the form or silently discarding a partially entered task.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(form.getByLabel("Vorname")).toHaveValue("Lena");
+  await form.getByLabel("IBAN").fill("CH9300762011623852957");
+  await page.locator("#task-complete").click();
+  await expect.poll(() => completions.length).toBe(1);
+  expect(completions[0].variables.iban).toBe("CH9300762011623852957");
+  expect(completions[0].variables.vorname).toBe("Lena");
+});
+
+test("MFE0 phone Start: the form and pending values survive changing orientation", async ({ page }) => {
+  installStartMock(page);
+  const starts = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    starts.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 1234 } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openStartForm(page);
+
+  const form = page.locator("#start-form");
+  await form.getByLabel("IBAN").fill("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(form.getByLabel("IBAN")).toHaveValue("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(form.getByLabel("IBAN")).toHaveValue("CH9300762011623852957");
+
+  // A resize is presentation only: it must neither start the process nor
+  // change the submitted form data.
+  expect(starts).toHaveLength(0);
+  await page.locator("#start-go").click();
+  await expect.poll(() => starts.length).toBe(1);
+  expect(starts[0].variables.iban).toBe("CH9300762011623852957");
+});
+
+test("MFE0 320px phone: the real form-js validation names missing required fields", async ({ page }) => {
+  installMock(page, BIG_FORM);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+  await expectNoDocumentOverflow(page);
+  await page.locator("#task-complete").click();
+  const toast = page.locator("#toast");
+  await expect(toast).toContainText("Vorname");
+  await expect(toast).toContainText("und 2 weitere Felder");
+  await expect(page.locator("#task-form .fjs-form")).toBeVisible();
+  await expectNoDocumentOverflow(page);
+});
+
+// MFE0 / ADR-0514: use the actual form-js renderer for a multi-field group,
+// a form-js select, a date picker and a long-label field. The 320px viewport
+// checks narrow reflow; it is NOT a 200% browser-zoom or physical-device test.
+const MFE0_GROUPED_FORM = {
+  schema: {
+    type: "default", id: "kredit",
+    components: [
+      { type: "group", label: "Einsatzdaten", components: [
+        { type: "textfield", key: "einsatzort", label: "Einsatzort",
+          validate: { required: true } },
+        { type: "select", key: "zustand", label: "Zustand der Kontrolle",
+          values: [
+            { label: "Offen", value: "open" },
+            { label: "Geprüft", value: "checked" },
+          ], validate: { required: true } },
+        { type: "datetime", subtype: "date", key: "datum",
+          dateLabel: "Einsatzdatum", validate: { required: true } },
+      ] },
+      { type: "textarea", key: "bemerkung",
+        label: "Zusätzliche Beobachtungen bei der Sicherheitskontrolle vor Ort" },
+    ],
+  },
+};
+
+test("MFE0 grouped form at 320px: required feedback and controls remain reachable", async ({ page }) => {
+  installMock(page, MFE0_GROUPED_FORM);
+  const completions = [];
+  await page.route("**/api/v1/tasks/501/complete", async (route) => {
+    completions.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 501 } });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+
+  const form = page.locator("#task-form");
+  const site = form.getByLabel("Einsatzort");
+  const status = form.locator(".fjs-form-field-select");
+  await expect(site).toBeVisible();
+  await expect(status.locator(".fjs-select-display")).toBeVisible();
+  await expect(form.getByText("Einsatzdatum")).toBeVisible();
+  await expect(form.getByLabel("Zusätzliche Beobachtungen bei der Sicherheitskontrolle vor Ort")).toBeVisible();
+  await expectNoDocumentOverflow(page);
+
+  await site.fill("Werkhalle A");
+  await page.locator("#task-complete").click();
+  await expect(page.locator("#toast")).toContainText("Zustand der Kontrolle");
+  expect(completions).toHaveLength(0);
+  await expect(site).toHaveValue("Werkhalle A");
+  await expectNoDocumentOverflow(page);
+
+  // form-js renders a custom select; its labelled input is intentionally hidden.
+  // Operate the visible dropdown as the user does (see reise-form.spec.mjs).
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Geprüft" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Geprüft");
+  await expect(site).toHaveValue("Werkhalle A");
+});
+
+test("MFE0 grouped Start form: filled fields survive phone-to-tablet resize", async ({ page }) => {
+  installStartMock(page, MFE0_GROUPED_FORM);
+  const started = [];
+  await page.route("**/api/v1/processes/77/instances", async (route) => {
+    started.push(route.request().postDataJSON());
+    await route.fulfill({ json: { key: 1234 } });
+  });
+  await page.setViewportSize({ width: 360, height: 740 });
+  await openStartForm(page);
+  const form = page.locator("#start-form");
+  const site = form.getByLabel("Einsatzort");
+  const status = form.locator(".fjs-form-field-select");
+  await site.fill("Industriehof");
+  await status.locator(".fjs-select-display").click();
+  await status.locator(".fjs-dropdownlist-item", { hasText: "Offen" }).click();
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect(site).toHaveValue("Industriehof");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  await expectNoDocumentOverflow(page);
+  await page.setViewportSize({ width: 360, height: 740 });
+  await expect(site).toHaveValue("Industriehof");
+  await expect(status.locator(".fjs-select-display")).toContainText("Offen");
+  expect(started).toHaveLength(0); // Resizing never starts a BPMN instance.
+  await expectNoDocumentOverflow(page);
+});
+
+// Form-js uses a 16-unit Carbon grid. Two 8-unit fields form one full row;
+// the vendored CSS changes their layout at a viewport width of 66rem.
+// MFE0 / ADR-0514: schema-authored two-column layout. Form-js owns the
+// schema and its data, while the Tasks/Start hosts must adapt it for a phone.
+const TWO_COLUMN_FORM = {
+  schema: {
+    type: "default",
+    id: "kredit",
+    components: [
+      { type: "textfield", key: "vorname", label: "Vorname", layout: { row: "Row_1", columns: 8 } },
+      { type: "textfield", key: "iban", label: "IBAN", validate: { required: true },
+        layout: { row: "Row_1", columns: 8 } },
+    ],
+  },
+};
+
+test("MFE0 two-column form-js task remains usable at 320px and keeps desktop layout", async ({ page }) => {
+  installMock(page, TWO_COLUMN_FORM);
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openTask(page);
+  const fields = page.locator("#task-form");
+  const first = fields.getByLabel("Vorname");
+  const second = fields.getByLabel("IBAN");
+  await expect(first).toBeVisible();
+  await expect(second).toBeVisible();
+
+  // Two fields in one schema-authored row must become vertically readable on
+  // a phone, and both input boxes must remain inside the visible screen.
+  const phoneFirst = await first.boundingBox();
+  const phoneSecond = await second.boundingBox();
+  expect(phoneSecond.y).toBeGreaterThanOrEqual(phoneFirst.y + phoneFirst.height - 1);
+  expect(phoneFirst.x).toBeGreaterThanOrEqual(0);
+  expect(phoneSecond.x).toBeGreaterThanOrEqual(0);
+  expect(phoneFirst.x + phoneFirst.width).toBeLessThanOrEqual(321);
+  expect(phoneSecond.x + phoneSecond.width).toBeLessThanOrEqual(321);
+  await expectNoDocumentOverflow(page);
+
+  await first.fill("Lena");
+  await second.fill("CH9300762011623852957");
+  // The vendored form-js CSS deliberately removes grid flex-basis at <=66rem
+  // (1056px with the default 16px root font), so 1024px is NOT a two-column
+  // desktop control. Assert its compact layout, then cross that breakpoint.
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  const compactFirst = await first.boundingBox();
+  const compactSecond = await second.boundingBox();
+  expect(compactSecond.y).toBeGreaterThanOrEqual(compactFirst.y + compactFirst.height - 1);
+  await expectNoDocumentOverflow(page);
+
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  const wideFirst = await first.boundingBox();
+  const wideSecond = await second.boundingBox();
+  // Above the vendor's grid breakpoint, preserve the authored 6+6 row.
+  expect(Math.abs(wideFirst.y - wideSecond.y)).toBeLessThanOrEqual(2);
+  expect(wideSecond.x).toBeGreaterThanOrEqual(wideFirst.x + wideFirst.width - 2);
+  await expectNoDocumentOverflow(page);
+
+  // Simulate a user narrowing the task detail pane on a WIDE desktop. The
+  // viewport remains 1600px, so the vendor's 66rem viewport breakpoint does
+  // not apply. This proves the atlas host's container query actually works.
+  const tasksGrid = page.locator(".tasks");
+  await tasksGrid.evaluate(el => { el.style.gridTemplateColumns = "232px 900px minmax(0, 1fr)"; });
+  const narrowFirst = await first.boundingBox();
+  const narrowSecond = await second.boundingBox();
+  expect(narrowSecond.y).toBeGreaterThanOrEqual(narrowFirst.y + narrowFirst.height - 1);
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+  await expectNoDocumentOverflow(page);
+
+  await tasksGrid.evaluate(el => { el.style.removeProperty("grid-template-columns"); });
+  const restoredFirst = await first.boundingBox();
+  const restoredSecond = await second.boundingBox();
+  expect(Math.abs(restoredFirst.y - restoredSecond.y)).toBeLessThanOrEqual(2);
+
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(first).toHaveValue("Lena");
+  await expect(second).toHaveValue("CH9300762011623852957");
+});
+
+test("MFE0 two-column Process Start fields stack on a phone without losing input", async ({ page }) => {
+  const form = TWO_COLUMN_FORM;
+  await page.route("**/api/v1/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    if (path.endsWith("/api/v1/processes")) return route.fulfill({ json: [PROC] });
+    if (path.includes("/api/v1/forms/")) return route.fulfill({ json: form });
+    return route.fulfill({ json: [] });
+  });
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openStartForm(page);
+  const first = page.locator("#start-form").getByLabel("Vorname");
+  const second = page.locator("#start-form").getByLabel("IBAN");
+  const before = await first.boundingBox();
+  const after = await second.boundingBox();
+  expect(after.y).toBeGreaterThanOrEqual(before.y + before.height - 1);
+  expect(after.x + after.width).toBeLessThanOrEqual(321);
+  await expectNoDocumentOverflow(page);
+
+  await first.fill("Lena");
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect(first).toHaveValue("Lena");
+  await page.setViewportSize({ width: 320, height: 640 });
+  await expect(first).toHaveValue("Lena");
 });

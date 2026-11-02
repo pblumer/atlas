@@ -38,6 +38,8 @@ import { uploadPicture, PRODUCT } from "./picturescale.js";
 // the panel, the catalogue's refresh, and the words the read-only fields use.
 import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
 import { t } from "./i18n.js";
+import { deliveryCard, wireDelivery } from "./deliveryreport.js";
+import { foldCards, pageOf } from "./fold.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -257,9 +259,11 @@ export async function viewCatalogs({ api, toast, view, isSuperseded }) {
     ${importCard()}
     ${mappingsCard(mappings, dir, accounts)}
     ${approverCard(report)}
-    ${translationCard(translation)}`;
+    ${translationCard(translation)}
+    ${deliveryCard()}`;
 
   wireImport({ api, toast, view });
+  wireDelivery({ api, view });
   wireMappings({ api, toast, view, dir, accounts, redraw });
 
   view.querySelector(".cat-new").addEventListener("submit", async (e) => {
@@ -318,16 +322,16 @@ const languageList = (s) => String(s || "").split(/[,;\s]+/).filter(Boolean);
 //     into a clean bill of health.
 function approverCard(report) {
   if (report === null) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Approvers</h3>
+    return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Approvers</h2>
       <p class="muted" style="margin:0">This report could not be read, so nothing here says
         whether any approval rule reaches somebody.</p></div>`;
   }
   const problems = report.problems || [];
   const checked = report.checked || 0;
   if (!problems.length) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Approvers</h3>
+    return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Approvers</h2>
       <p class="muted" style="margin:0">Every approval rule reaches somebody
         &mdash; ${checked} product${checked === 1 ? "" : "s"} checked.</p></div>`;
   }
@@ -337,8 +341,8 @@ function approverCard(report) {
     <td>${esc(p.kind)}</td>
     <td>${p.ref ? `<code>${esc(p.ref)}</code>` : "<span class='muted'>—</span>"}</td>
     <td>${esc(p.why)}</td></tr>`).join("");
-  return `<div class="card" style="margin-top:18px; max-width:860px">
-    <h3 style="margin:0 0 6px">Approvers that reach nobody</h3>
+  return `<div class="card" data-fold="approvers" style="margin-top:18px; max-width:860px">
+    <h2 style="margin:0 0 6px">Approvers that reach nobody</h2>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">${problems.length} of ${checked}
       products name an approver that resolves to nobody. The approval is still created when one
       is ordered; it lands in no inbox, and the order waits without saying why. Correct each in
@@ -363,8 +367,8 @@ function approverCard(report) {
 // approver card's, for the reason given there.
 function translationCard(report) {
   if (report === null) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Translations</h3>
+    return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Translations</h2>
       <p class="muted" style="margin:0">This report could not be read, so nothing here says
         whether any catalogue is missing a translation.</p></div>`;
   }
@@ -377,8 +381,8 @@ function translationCard(report) {
   const over = `${checked} product${checked === 1 ? "" : "s"} in
     ${covered} catalogue${covered === 1 ? "" : "s"}`;
   if (!gaps.length) {
-    return `<div class="card" style="margin-top:18px; max-width:860px">
-      <h3 style="margin:0 0 6px">Translations</h3>
+    return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+      <h2 style="margin:0 0 6px">Translations</h2>
       <p class="muted" style="margin:0">Every product is written in every language its
         catalogue declares &mdash; ${over} checked.</p></div>`;
   }
@@ -393,8 +397,8 @@ function translationCard(report) {
     <td><code>${esc(r.item)}</code></td>
     <td><a href="#/catalog/c/${encodeURIComponent(r.catalog)}">${esc(r.catalog)}</a></td>
     <td>${r.what.map((w) => esc(w)).join("; ")}</td></tr>`).join("");
-  return `<div class="card" style="margin-top:18px; max-width:860px">
-    <h3 style="margin:0 0 6px">Still to translate</h3>
+  return `<div class="card" data-fold="translations" style="margin-top:18px; max-width:860px">
+    <h2 style="margin:0 0 6px">Still to translate</h2>
     <p class="muted" style="max-width:62ch; margin:0 0 10px">${byProduct.size} of ${over}
       say something in one of their catalogue's languages and not in another. This
       does <b>not</b> stop a publish: the shop shows the language that exists rather than a
@@ -1092,6 +1096,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     category: cg.key, categoryTexts: cg.texts,
     productGroup: pg.key, productGroupTexts: pg.texts,
     price: String(f.get("price") || "").trim(),
+    serviceLevel: serviceLevelFrom(f, langs || [], was.serviceLevel),
     configForm: f.get("configForm") || "",
     provisionProcess: f.get("provisionProcess") || "",
     deprovisionProcess: f.get("deprovisionProcess") || "",
@@ -1320,14 +1325,21 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
 
     ${pageSection("sharing", "", "Who maintains this catalogue", [sharing.summary], sharing.about, sharing.body)}
 
+    ${pageSection("reporting", "", t("catalog.reporting.title"), [reportingSummary(cat)], `<p>${esc(t("catalog.reporting.about"))}</p>`,
+    reportingBody(cat, dir, mayShare(cat, me, enforced)))}
+
     ${pageSection("transfer", "", "Export and import", [], transfer.about, transfer.body)}
 
     ${purge ? pageSection("purge", "", "Delete for good", [], purge.about, purge.body, "danger") : ""}`;
-  wirePageSections(view);
+  // The sections fold like every topic (fold.js). The page folds them itself rather than
+  // waiting for the router, so a section is folded or open as remembered from the first
+  // paint, also where the page is mounted without the router.
+  foldCards(view, pageOf(location.hash));
 
   wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, formList,
     mayShare(cat, me, enforced), mayTheme(me, enforced), dir, people, apps);
   wireTransfer({ api, toast, view }, cat);
+  wireReporting({ api, toast, view }, cat, redraw);
   // Refreshing every bound product is offered only where there is one: a catalogue
   // without a bound product has nothing to refresh, and an installation without a
   // content source cannot have one, so its screen is the one it always had.
@@ -1489,9 +1501,10 @@ function transferCard(cat) {
 }
 
 // importCard is the list page's panel for importing a whole catalogue document.
+// Like every section below the list, it folds under its heading (fold-topic, fold.js).
 function importCard() {
-  return `<section style="margin-top:26px">
-    <h3 style="margin:0 0 10px">Import a catalogue</h3>
+  return `<section class="fold-topic" data-fold="import" style="margin-top:26px">
+    <h2 style="margin:0 0 10px">Import a catalogue</h2>
     <p class="muted" style="max-width:62ch">A file exported from a catalogue, here or on
       another installation. Nothing is written unless all of it can be: every problem is
       listed at once. Importing the same file again updates what it created.</p>
@@ -2198,47 +2211,29 @@ function publishNeedsHTML(needs) {
 
 // The catalogue page in sections, in the order a catalogue is filled — products in,
 // described, assembled, published — and then what is done to the catalogue as a
-// whole. Each section is a <details>: its summary is the heading and one line of
-// what it holds, readable while it is folded, and its body puts the controls on the
-// left and what they do on the right, where a paragraph is read beside the field it
-// explains rather than above it. Folded by default — the page is read for one step
-// at a time — and the sections a maintainer opens stay open in this browser, for the
-// reason the product form's do (see foldedSections below). A storage that cannot be
-// read opens nothing and folds nothing differently: the page still works, it only
-// forgets.
-const PAGE_SECTIONS_KEY = "atlas.catalog.pageSections";
-function openPageSections() {
-  try { return JSON.parse(localStorage.getItem(PAGE_SECTIONS_KEY) || "{}") || {}; } catch { return {}; }
-}
-function rememberPageSection(key, open) {
-  try {
-    const opened = openPageSections();
-    if (open) opened[key] = true; else delete opened[key];
-    localStorage.setItem(PAGE_SECTIONS_KEY, JSON.stringify(opened));
-  } catch { /* the fold still works; it is only not remembered */ }
-}
+// whole. Each section folds under its heading like every topic of the Console
+// (fold-topic, fold.js): its heading row is the title and one line of what it holds,
+// readable while it is folded, and its body puts the controls on the left and what
+// they do on the right, where a paragraph is read beside the field it explains rather
+// than above it. Folded by default (data-fold-default) — the page is read for one step
+// at a time — and the sections a maintainer opens stay open in this browser, keyed by
+// the section, for the reason the product form's do (see foldedSections below).
 
 // pageSection draws one section. step is its number in the sequence, or "" for one
 // that belongs to no step; summary is the parts of its one-line status, empty ones
-// left out; about is the explanation for the right-hand column.
+// left out; about is the explanation for the right-hand column. The step sits inside
+// the heading, so the caret comes first and the number beside the words.
 export function pageSection(key, step, title, summary, about, body, tone) {
-  const open = openPageSections()[key] === true;
   const line = (summary || []).filter(Boolean).map(esc).join(" · ");
-  return `<details class="cat-section${tone ? ` ${tone}` : ""}" data-section="${esc(key)}"${open ? " open" : ""}>
-    <summary>${step ? `<span class="cat-sec-step" aria-hidden="true">${esc(step)}</span>` : ""}<h3>${esc(title)}</h3>${
-  line ? `<span class="muted cat-sec-sum">${line}</span>` : ""}</summary>
+  return `<section class="cat-section fold-topic${tone ? ` ${tone}` : ""}" data-section="${esc(key)}"
+      data-fold="${esc(key)}" data-fold-default="closed">
+    <div class="cat-sec-head"><h2>${step ? `<span class="cat-sec-step" aria-hidden="true">${esc(step)}</span>` : ""}${
+  esc(title)}</h2>${line ? `<span class="muted cat-sec-sum">${line}</span>` : ""}</div>
     <div class="cat-sec-body">
       <div class="cat-sec-main">${body || ""}</div>
       ${about ? `<aside class="cat-sec-about">${about}</aside>` : ""}
     </div>
-  </details>`;
-}
-
-// wirePageSections remembers each section's fold as it changes.
-function wirePageSections(view) {
-  view.querySelectorAll("details.cat-section").forEach((d) => {
-    d.addEventListener("toggle", () => rememberPageSection(d.dataset.section, d.open));
-  });
+  </section>`;
 }
 
 // Which sections of the product form a maintainer has folded away, per browser. The
@@ -2377,6 +2372,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
           empty to say nothing about cost.</span>
         <input name="price" value="${esc(v.price || "")}" autocomplete="off"
           placeholder="CHF 1'200.&ndash;"></label>
+      ${serviceLevelField(v.serviceLevel, langs)}
       <label class="field inline wide"><input type="checkbox" name="multipleAllowed"
         ${v.multipleAllowed ? "checked" : ""}> May be held more than once
         <span class="muted">— two licences, two mailboxes</span></label>
@@ -3344,4 +3340,101 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
       }
     });
   }
+}
+
+// ---------- Service level (ADR-0515) ----------
+//
+// A name and a delivery time in working days. The per-language names are drawn only
+// for a catalogue with more than one language; a name in a language the catalogue
+// does not declare survives a save made here, as the texts do.
+
+function serviceLevelField(sl, langs) {
+  const v = sl || {};
+  const names = langs.length > 1 ? langs.map((l) => `<label class="field">${esc(t("product.serviceLevel.nameIn", { lang: l }))}
+      <input name="sl-${esc(l)}" value="${esc((v.nameTexts || {})[l] || "")}" autocomplete="off"></label>`).join("") : "";
+  return `<div class="field wide" data-service-level>${esc(t("product.serviceLevel.title"))}
+    <span class="muted" style="display:block; margin:2px 0 6px">${esc(t("product.serviceLevel.hint"))}</span>
+    <div class="sl-row">
+      <label class="field">${esc(t("product.serviceLevel.name"))}
+        <input name="slName" value="${esc(v.name || "")}" autocomplete="off" placeholder="Standard"></label>
+      <label class="field">${esc(t("product.serviceLevel.days"))}
+        <input name="slDays" type="number" min="1" max="365" step="1" value="${v.deliveryDays || ""}"></label>
+      ${names}
+    </div></div>`;
+}
+
+// serviceLevelFrom reads the fields back. No name and no days is no service level;
+// anything else is sent as typed, so a half-filled one is refused by the publish
+// with its reason rather than silently dropped here.
+export function serviceLevelFrom(f, langs, was) {
+  const name = String(f.get("slName") || "").trim();
+  const daysRaw = String(f.get("slDays") || "").trim();
+  if (!name && !daysRaw) return undefined;
+  const nameTexts = { ...((was && was.nameTexts) || {}) };
+  if (langs.length > 1) {
+    for (const l of langs) {
+      const val = String(f.get(`sl-${l}`) || "").trim();
+      if (val) nameTexts[l] = val; else delete nameTexts[l];
+    }
+  }
+  const out = { name, deliveryDays: daysRaw ? Number(daysRaw) : 0 };
+  if (Object.keys(nameTexts).length) out.nameTexts = nameTexts;
+  return out;
+}
+
+// ---------- Customer responsibles (ADR-0515) ----------
+//
+// The groups whose members read the organisation dashboard of this catalogue's
+// audience, by name. A grant of access to names, so it is the owner's and an
+// administrator's to give, as sharing is; an editor sees who holds it and no form.
+
+function reportingSummary(cat) {
+  const n = (cat.reportingGroups || []).length;
+  return n ? t("catalog.reporting.some", { n }) : t("catalog.reporting.none");
+}
+
+function reportingBody(cat, dir, can) {
+  const chosen = cat.reportingGroups || [];
+  if (!can) {
+    return `<div class="card"><p class="muted" style="margin:0">${chosen.length
+      ? esc(chosen.map((g) => nameOfPrincipal(dir, g)).join(", ")) : esc(t("catalog.reporting.none"))}</p>
+      <p class="muted" style="margin:6px 0 0">${esc(t("catalog.reporting.ownerOnly"))}</p></div>`;
+  }
+  const have = new Set(chosen);
+  const field = dir === null
+    ? `<label class="field">${esc(t("catalog.reporting.ids"))}
+        <input name="rgroups-raw" value="${esc(chosen.join(", "))}" autocomplete="off"></label>`
+    : (() => {
+      const choices = groupChoices(dir);
+      const orphans = chosen.filter((id) => !choices.some((g) => g.id === id)).map((id) => ({ id, name: id }));
+      const boxes = [...choices, ...orphans];
+      if (!boxes.length) return `<p class="muted">${esc(t("catalog.reporting.noGroups"))}</p>`;
+      return `<div class="audience-boxes" style="display:grid; gap:4px; margin-top:6px">
+        ${boxes.map((g) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
+          <input type="checkbox" name="rgroups" value="${esc(g.id)}"${have.has(g.id) ? " checked" : ""}>
+          <span>${esc(g.name)}</span></label>`).join("")}</div>`;
+    })();
+  return `<div class="card"><form class="cat-reporting">
+    <p class="muted" style="margin:0 0 8px">${esc(t("catalog.reporting.hint"))}</p>
+    ${field}
+    <button class="btn" type="submit" style="margin-top:10px">${esc(t("catalog.reporting.save"))}</button>
+  </form></div>`;
+}
+
+// reportingFrom reads whichever control was drawn, as audienceFrom does.
+export const reportingFrom = (f) =>
+  f.get("rgroups-raw") === null ? f.getAll("rgroups").map(String) : list(f.get("rgroups-raw"));
+
+function wireReporting({ api, toast, view }, cat, reload) {
+  const form = view.querySelector(".cat-reporting");
+  if (!form) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api("PATCH", `/api/v1/catalogs/${encodeURIComponent(cat.id)}`,
+        { reportingGroups: reportingFrom(new FormData(form)), revision: cat.revision });
+      toast(t("catalog.reporting.saved"));
+      reload();
+    } catch (err) { toast(err.message, "err"); }
+  });
 }

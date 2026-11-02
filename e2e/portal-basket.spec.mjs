@@ -60,6 +60,7 @@ function installFixture() {
     "/api/v1/shop/tasks": { tasks: [], orders: [], truncated: false },
     "/api/v1/inventory": { items: [] },
     "/api/v1/shop/favourites": { itemIds: [] },
+    "/api/v1/shop/reports": { team: 0, organisations: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
   };
   window.fetch = (input) => {

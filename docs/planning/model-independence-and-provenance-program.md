@@ -28,7 +28,7 @@ This is a **compatibility and independence** programme, not a promise to remove 
 
 ### MIP0 — Provenance baseline and architecture gate
 
-**Current PR: documentation/coordination only.** Register known components, what is verified and what is not; record the current root AGPL-3.0-only licence; propose a native authoring/compatibility ADR; publish milestones and independent acceptance gates.
+**Progress:** PR #1443 (merged) registered the programme, AGPL-3.0-only baseline and Proposed ADR. PR #1447 (in review) preserves original MIT licences for the pinned Zeebe v1.17.0 BPMN descriptor and Camunda DMN moddle v1.3.1 and adds Git-blob identity regression guards. These are audited *components*, not a completed implementation/fixture or bundled-software provenance review.
 
 **Exit gate:** Proposed ADR reviewed and explicitly accepted before any code change that alters canonical BPMN authoring. Complete the provenance audit with upstream revision comparisons; a first inventory is **not** a legal clearance. This PR does not complete MIP0.
 

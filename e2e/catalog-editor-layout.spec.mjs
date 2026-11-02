@@ -331,7 +331,7 @@ test("a section reads its controls and their explanation side by side, using the
   // Each section now puts its controls and what they do side by side
   // (catalog-admin.js pageSection).
   const b = await page.evaluate(() => {
-    const sec = document.querySelector('details.cat-section[data-section="settings"]');
+    const sec = document.querySelector('section.cat-section[data-section="settings"]');
     const left = sec && sec.querySelector(".cat-sec-main").getBoundingClientRect();
     const right = sec && sec.querySelector(".cat-sec-about").getBoundingClientRect();
     const main = document.querySelector("main") || document.body;

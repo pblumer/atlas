@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas building blocks e2e harness</title>
+    <!-- Drives the real api/web/buildingblocks.js page against a mock api (tshopper
+         phase A): the sources a product manager may choose, a search's pages with what
+         uses them, and "Create product", which saves a draft product and binds the page. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { viewBuildingBlocks, productIdFor } from "/buildingblocks.js";
+      window.__calls = [];
+      window.__toasts = [];
+      window.__world = {};
+      const api = async (method, url, body) => {
+        window.__calls.push({ method, url, body });
+        const w = window.__world;
+        if (method === "GET" && url === "/api/v1/catalog-building-blocks") return { sources: w.sources || [], blocks: [] };
+        if (method === "GET" && url.startsWith("/api/v1/catalog-building-blocks?")) return { source: "wiki", blocks: w.blocks || [] };
+        if (method === "GET" && url === "/api/v1/catalogs") return w.catalogs || [];
+        return {};
+      };
+      window.__mount = async (world) => {
+        window.__world = world;
+        window.__calls = [];
+        await viewBuildingBlocks({ api, toast: (m) => window.__toasts.push(m), view: document.getElementById("view"), isSuperseded: () => false });
+      };
+      window.__productIdFor = productIdFor;
+      window.__ready = true;
+    </script>
+  </body>
+</html>

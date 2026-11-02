@@ -104,7 +104,15 @@ for (const [width, hash] of [[900, ""], [700, ""], [390, ""], [360, ""], [900, "
     expect(l.wrapped).toEqual([]);
     expect(l.clipped).toEqual([]);
     expect(l.barOverflows).toBe(false);
-    expect(l.navWidth, "the bar of view names keeps room of its own rather than none").toBeGreaterThan(40);
+    if (width <= 520) {
+      // MFE1 phone: no squeezed/half-visible view names. A named app and one
+      // overflow replace the tab strip, with all page links still role-filtered.
+      await expect(page.locator(".topbar #app-name")).toBeVisible();
+      await expect(page.locator("#mobile-more-btn")).toBeVisible();
+      await expect(page.locator("#topnav")).toBeHidden();
+    } else {
+      expect(l.navWidth, "the bar of view names keeps room of its own rather than none").toBeGreaterThan(40);
+    }
   });
 }
 

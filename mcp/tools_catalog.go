@@ -211,6 +211,17 @@ func catalogItemProps() map[string]any {
 			"\"49.– / Monat\", \"im Grundpaket enthalten\". DISPLAYED AND NEVER COMPUTED — nothing " +
 			"adds these up. It is frozen into the release and copied onto the order line, so an " +
 			"approver's figure stays the figure they decided on."),
+		"serviceLevel": map[string]any{"type": "object",
+			"description": "What the product promises about its delivery: {name, nameTexts, deliveryDays}. " +
+				"deliveryDays is a whole number of working days (Monday to Friday, 1 to 365) from the later " +
+				"of the order and its approval until the right begins. Frozen into the release and copied " +
+				"onto the order line, so every position is measured against the promise it was ordered " +
+				"under (atlas_catalog_delivery_report). Leave it out for a product that promises nothing.",
+			"properties": map[string]any{
+				"name":         stringProp("The service level's name, e.g. Standard or Express"),
+				"nameTexts":    map[string]any{"type": "object", "description": "The name per language tag"},
+				"deliveryDays": map[string]any{"type": "integer", "minimum": 1, "maximum": 365},
+			}},
 		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
 			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
 			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
@@ -378,6 +389,66 @@ func catalogTools() []Tool {
 			InputSchema: noArgs(),
 			Handler: func(c *Client, _ map[string]any) (string, error) {
 				return asText(c.get("/api/v1/catalog-products/fulfilment-report"))
+			},
+		},
+		{
+			Name: "atlas_catalog_building_blocks",
+			Description: "Search a content source (a wikiwikibangbang wiki) for the services it describes, " +
+				"as building blocks for offerings: each page with id, key, title, space and state, the " +
+				"products you maintain that are bound to it (usedBy) and how many products you do not " +
+				"maintain use it (usedElsewhere). A page nobody uses is a service described and not yet " +
+				"offered. Read-only. Bind a page to a product with the product's content binding.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source": stringProp("The content source's id"),
+					"q":      stringProp("What to search for"),
+				},
+				"required": []string{"source", "q"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, k := range []string{"source", "q"} {
+					if v, _ := args[k].(string); v != "" {
+						q.Set(k, v)
+					}
+				}
+				return asText(c.get("/api/v1/catalog-building-blocks?" + q.Encode()))
+			},
+		},
+		{
+			Name: "atlas_catalog_delivery_report",
+			Description: "How the products of the catalogues you maintain were ordered, delivered " +
+				"against their promise and are held now. Per product: positions ordered in the " +
+				"period, delivered, met, missed, overdue, open, awaiting approval and failed, the " +
+				"share of promises kept, the median and 90th-percentile lead time in working days " +
+				"(Monday to Friday, from the later of the order and its approval until the right " +
+				"began) and the median approval wait, plus how many hold the product now. A " +
+				"position is measured against the service level its line was ORDERED UNDER, not " +
+				"against what the catalogue promises today. A product with no service level has a " +
+				"lead time and no verdict. Counts and durations only; nobody is named. Use it to " +
+				"answer whether a service keeps its delivery promise, and which products are late.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"from":    stringProp("First order date in the period, YYYY-MM-DD (default: 90 days before to)"),
+					"to":      stringProp("Last order date in the period, YYYY-MM-DD (default: today)"),
+					"catalog": stringProp("Narrow to one catalogue you maintain, by id"),
+					"lang":    stringProp("Language tag to name products in (default de)"),
+				},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				q := url.Values{}
+				for _, k := range []string{"from", "to", "catalog", "lang"} {
+					if v, _ := args[k].(string); v != "" {
+						q.Set(k, v)
+					}
+				}
+				path := "/api/v1/catalog-products/delivery-report"
+				if len(q) > 0 {
+					path += "?" + q.Encode()
+				}
+				return asText(c.get(path))
 			},
 		},
 		{

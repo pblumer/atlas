@@ -465,7 +465,9 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 			return plan, nil, err
 		}
 		next := in
-		next.Theme, next.OwnerID = Theme{}, ""
+		// Reporting groups are this installation's access grant to names: a document
+		// neither carries nor sets them (ADR-0515).
+		next.Theme, next.OwnerID, next.ReportingGroups = Theme{}, "", nil
 		if found {
 			// The same authority a PATCH needs, and sharing stays the owner's.
 			if !s.mayRead(prev, p) || !s.mayEdit(prev, p) {
@@ -477,6 +479,7 @@ func (s *Service) planImport(doc Document, p *httpapi.Principal) (importPlan, []
 				continue
 			}
 			next.Theme, next.OwnerID, next.CreatedAt = prev.Theme, prev.OwnerID, prev.CreatedAt
+			next.ReportingGroups = prev.ReportingGroups
 			next.Revision = prev.Revision + 1
 			plan.existing[subject] = true
 			plan.prevCatalogs[in.ID] = prev

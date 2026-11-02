@@ -164,10 +164,12 @@ export async function viewConnections({ api, toast, view, isSuperseded, canConfi
           || `<tr><td colspan="5" class="muted" style="padding:14px 18px">${esc(t("connections.identities.empty"))}</td></tr>`}</tbody>
       </table>
     </div>
-    <h2 style="margin-top:22px">${esc(t("connections.list.title"))}</h2>
-    <p class="muted">${esc(t("connections.list.intro"))}</p>
-    <div id="con-list">${conns.map((c) => connectionCard(c, ctx)).join("")
-      || `<p class="muted" id="con-empty">${esc(t("connections.list.empty"))}</p>`}</div>
+    <section class="fold-topic" id="con-section" style="margin-top:22px">
+      <h2>${esc(t("connections.list.title"))}</h2>
+      <p class="muted">${esc(t("connections.list.intro"))}</p>
+      <div id="con-list">${conns.map((c) => connectionCard(c, ctx)).join("")
+        || `<p class="muted" id="con-empty">${esc(t("connections.list.empty"))}</p>`}</div>
+    </section>
   </div>`;
 
   const root = document.getElementById("connections");

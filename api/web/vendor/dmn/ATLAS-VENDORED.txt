@@ -7,6 +7,10 @@ dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
   - dmn-js-properties-panel@3.11.1
   - @bpmn-io/properties-panel@3.48.0
   - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
+    MIT licence: CAMUNDA-DMN-MODDLE-LICENSE (upstream v1.3.1)
+    Upstream: https://github.com/camunda/camunda-dmn-moddle/tree/v1.3.1
+    Upstream resources/camunda.json Git blob: 36eb57aefabf9aa7c0123731395337dee130a99b
+    Upstream LICENSE Git blob: 49c025e38d8340f3e30d24111e7ad3f071d71b5e
   - inferno-create-element@5.6.3 (JSX for Atlas's own module below, on the fork's Inferno)
   - Atlas's own dmn-js modules in src/atlas/ (ADR-draft-form-options-from-a-decision)
   - esbuild@0.25.9              (bundler only; not shipped)

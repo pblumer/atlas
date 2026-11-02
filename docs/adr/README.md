@@ -590,7 +590,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0502](0502-admin-profiling.md) | An administrator profiles the running server through the API | Accepted | Landed |
 | [0503](0503-mail-reply-routing.md) | A customer's reply finds the process that wrote to them | Proposed | Not started |
 | [0504](0504-what-a-mail-reply-proves.md) | What a mail reply proves, and what a decision may rest on | Proposed | Not started |
-| [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted | Landed |
+| [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted (amended) | Landed |
 | [0506](0506-marketplace-catalogue-bundles-and-updates.md) | atlas hub catalogue bundles and opt-in updates | Proposed | Not started |
 | [0507](0507-ui-appearance-modes.md) | Appearance mode is a personal preference, not an organisation brand | Proposed | Partial |
 | [0508](0508-scope-aware-messaging-and-compensation.md) | Scope-aware messaging, event-subprocess runs and compensation from an event subprocess | Accepted | Landed |
@@ -599,6 +599,10 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
 | [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Proposed | Not started |
 | [0513](0513-native-model-dialect-and-vendor-compatibility.md) | Native atlas authoring with versioned vendor-format compatibility | Proposed | Not started |
+| [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
+| [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
+| [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Partial |
+| [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 
 ## The two states of a record
 

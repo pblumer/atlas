@@ -6,14 +6,17 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**4 programmes** · active: 4 · blocked: 0 · paused: 0 · planned: 0 · complete: 0
+**7 programmes** · active: 6 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry. |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
-| [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review the initial provenance evidence and proposed native-dialect ADR; verify upstream component licences and legacy model compatibility before touching runtime or authoring code. |
+| [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/8 | pblumer | Review MFE1 durable audited grant-store PR #1489 (ADR-0516) for sidecar/restart, fail-closed revocation, backup classification and CI. Next implement admin-only grant/revoke/preview and authenticated self-service start API with security/recovery tests. MFE0 physical-device acceptance #1451 remains open; MFE2 PR #1479 is merged. |
+| [Model independence and provenance](../planning/model-independence-and-provenance-program.md) | active | 0/5 | pblumer | Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2. |
+| [Operations History at Scale](../planning/operations-history-at-scale-program.md) | active | 1/3 | pblumer | Verify OHS2 PR #1490 readiness barrier (CI, recovery, coverage); then design audited bounded WAL-event backfill for legacy stores before paginated API and UI (Issue #1481). |
+| [tshopper — catalogue and shop as a capability of their own](../planning/tshopper-program.md) | paused | 4/5 | dbuchs7 | Paused after phase A by the owner's decision (2026-10-31). To restart: move the 37 server files that import api/catalog or api/order behind api/shopcontract (TestServerFilesReachingIntoTheShopOnlyBecomeFewer tracks the count), settle ADR-0515's open question on public holidays, and decide phase B (separate binary) in its own ADR before any work on it. |
 
 ## atlas hub (BMP)
 
@@ -64,6 +67,23 @@ Govern external Worker actions through explicit identities, managed Connections,
 | **IAE7** — Additional Worker Type enforcement | planned | unassigned | IAE4, IAE6 | — | Provider-by-provider proof for Microsoft Mail, selected Entra, Google, Jira/REST; no general security claim before verified PEP. |
 | **IAE8** — Controlled SharePoint PoC and readiness | planned | unassigned | IAE4, IAE5, IAE6 | — | Test against an explicitly consented tenant/site with denied and approved operations; separate mocked evidence from real BIT validation. |
 
+## Mobile & Field Experience (MFE)
+
+Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.
+
+**[Programme plan](../planning/mobile-field-experience-program.md) · [Roadmap track](../../ROADMAP.md#milestone-s--single-binary-server--web-ui-) · [Manifest](mfe/program.json) · Reviewed: 2026-11-01**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **MFE0** — Architecture and real-device baseline | active | pblumer | — | [PR #1448](https://github.com/pblumer/atlas/pull/1448), [PR #1449](https://github.com/pblumer/atlas/pull/1449), [PR #1452](https://github.com/pblumer/atlas/pull/1452), [PR #1453](https://github.com/pblumer/atlas/pull/1453), [PR #1454](https://github.com/pblumer/atlas/pull/1454), [PR #1455](https://github.com/pblumer/atlas/pull/1455), [PR #1458](https://github.com/pblumer/atlas/pull/1458), [PR #1460](https://github.com/pblumer/atlas/pull/1460), [Issue #1451](https://github.com/pblumer/atlas/issues/1451) | ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. PR #1455 adds responsive two-column form-js Tasks/Start layouts with E2E; code is merged, but hardware acceptance remains pending. Physical iOS/Android, 200% zoom, accessible inputs, keyboard, foldable and complex-form evidence remain open in #1451. |
+| **MFE1** — Mobile Tasks and Process Start | active | pblumer | MFE0 | [PR #1468](https://github.com/pblumer/atlas/pull/1468), [PR #1469](https://github.com/pblumer/atlas/pull/1469), [PR #1470](https://github.com/pblumer/atlas/pull/1470), [PR #1472](https://github.com/pblumer/atlas/pull/1472), [PR #1486](https://github.com/pblumer/atlas/pull/1486), [PR #1489](https://github.com/pblumer/atlas/pull/1489), [Issue #1456](https://github.com/pblumer/atlas/issues/1456), [Issue #1467](https://github.com/pblumer/atlas/issues/1467) | MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged a deny-by-default process-scoped grant evaluator with negative tests and an MFE0 device acceptance matrix. Draft PR #1489 adds audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart, without exposing any new endpoint. Admin-only grant management, effective identity checks, self-service GET/POST, form validation, durable startedBy/replay tests and physical-device acceptance remain open. Existing operator rights are unchanged. |
+| **MFE2** — Mobile incident triage | active | pblumer | MFE0 | [PR #1477](https://github.com/pblumer/atlas/pull/1477), [PR #1479](https://github.com/pblumer/atlas/pull/1479), [Issue #1457](https://github.com/pblumer/atlas/issues/1457) | Owner-approved limited parallel MFE2 UI slice on 2026-11-01 despite active MFE0/MFE1 (explicit three-slice WIP exception). PR #1477 delivered the contract and PR #1479 was merged with green CI for read-only operator mobile grouped incident triage and bounded details. No notification, acknowledgement, repair or new authorization; physical-device acceptance #1451 remains open. |
+| **MFE3** — Incident alerting and escalation | planned | unassigned | MFE2 | — | Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine. |
+| **MFE4** — Field capture and evidence | planned | unassigned | MFE1 | — | Camera, QR/barcode, staged evidence with validated durable references outside process variables and WAL. |
+| **MFE5** — Offline drafts and synchronization | planned | unassigned | MFE1, MFE4 | — | Secure drafts, completion operation IDs, server-side dedup/status checks, conflict handling and restart/replay tests; no premature success display. |
+| **MFE6** — Optional large-tablet BPMN authoring | planned | unassigned | MFE1 | — | Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it. |
+| **MFE7** — Wearable companion and cross-device handoff | planned | unassigned | MFE1, MFE3 | — | Proposed watchOS/Wear OS companion proof only after MFE1 authenticated task deep links and MFE3 durable alarm identity/delivery: privacy-safe minimal urgent signal and authenticated handoff to phone, no new task/incident command path. Secure draft continuity depends on MFE5. Watch delivery, authorization and any one-tap action require a separately accepted ADR and actual hardware tests; no watch functionality is shipped. |
+
 ## Model independence and provenance (MIP)
 
 Make atlas-owned BPMN authoring the future default while preserving versioned Zeebe import/reload compatibility, replacing Camunda-specific DMN authoring only with test evidence, and completing third-party provenance and licence gates.
@@ -72,11 +92,37 @@ Make atlas-owned BPMN authoring the future default while preserving versioned Ze
 
 | Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
 | --- | --- | --- | --- | --- | --- |
-| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | [PR #1443](https://github.com/pblumer/atlas/pull/1443) | Draft PR #1443 records the initial evidence and proposes a migration ADR; independently verified provenance, SBOM/licence review and architecture acceptance remain outstanding. |
+| **MIP0** — Provenance evidence and architecture gate | active | pblumer | — | [PR #1443](https://github.com/pblumer/atlas/pull/1443), [PR #1447](https://github.com/pblumer/atlas/pull/1447) | PR #1443 merged the initial inventory and Proposed ADR. Draft PR #1447 pins byte-identical Zeebe v1.17.0 source and separate MIT notices for Zeebe/DMN; combined DMN bundle, broader code/fixture provenance, SBOM/watermark and ADR acceptance remain open. |
 | **MIP1** — Native BPMN authoring with legacy round-trip | planned | unassigned | MIP0 | — | Build a reviewed atlas namespace descriptor and test new default authoring alongside lossless Zeebe import/export; no silent conversion. |
 | **MIP2** — Compiler compatibility and restart recovery | planned | unassigned | MIP1 | — | Enforce namespace-aware compatibility at deploy; test unsupported/conflicting extensions, historical definition reload and live/replay equality. |
 | **MIP3** — DMN editor independence | planned | unassigned | MIP0 | — | Replace Camunda-specific authoring modules without losing existing DMN/version-tag data or changing temis execution. |
 | **MIP4** — Release provenance and compatibility sign-off | planned | unassigned | MIP1, MIP2, MIP3 | — | Complete upstream/fixture audit, copyright notices, vendor bundle rebuild evidence, SBOM, watermark and compatibility matrix; maintain separate legal trademark gate. |
+
+## Operations History at Scale (OHS)
+
+Keep instance replay intelligible and responsive with grouped multi-instance execution, bounded iteration discovery and exact causal drill-down at 50,000 iterations.
+
+**[Programme plan](../planning/operations-history-at-scale-program.md) · [Roadmap track](../../ROADMAP.md#milestone-4--operability-) · [Manifest](ohs/program.json) · Reviewed: 2026-11-01**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **OHS1** — Default grouped multi-instance history | complete | pblumer | — | [PR #1483](https://github.com/pblumer/atlas/pull/1483), [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | PR #1483 merged: grouped history is available in Operations, while legacy timeline loading remains unbounded until OHS2/OHS3.; [Evidence 1](../planning/operations-history-at-scale-program.md) |
+| **OHS2** — Bounded iteration lookup and filtering | active | pblumer | OHS1 | [PR #1487](https://github.com/pblumer/atlas/pull/1487), [PR #1488](https://github.com/pblumer/atlas/pull/1488), [PR #1490](https://github.com/pblumer/atlas/pull/1490), [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | PR #1487 (keys) and PR #1488 (durable projection) merged. PR #1490 adds fail-closed readiness/version marker and legacy-store regression tests. Audited WAL backfill, exact round-number search, cursor-paged API, UI and 50k acceptance remain open. |
+| **OHS3** — Scalable iteration detail replay | planned | unassigned | OHS2 | [Issue #1481](https://github.com/pblumer/atlas/issues/1481) | Bounded causal frame and variable/incident/decision drill-down, 50k performance evidence and full replay/retention compatibility. |
+
+## tshopper — catalogue and shop as a capability of their own (TSH)
+
+Phase A: draw the boundary between the service catalogue/shop and the engine inside the single binary, and give product managers, line managers and customer responsibles delivery-SLA, consumption and order reporting.
+
+**[Programme plan](../planning/tshopper-program.md) · [Roadmap track](../../ROADMAP.md#milestone-k--service-catalogue-orders--the-portal-) · [Manifest](tsh/program.json) · Reviewed: 2026-10-31**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **TSH0** — Charter, plan and ADR draft | complete | dbuchs7 | — | [PR #1461](https://github.com/pblumer/atlas/pull/1461) | Complete: PR #1461 merged; ADR-0515 Accepted (decisions confirmed by the requester on 2026-10-31), plan, manifest and ROADMAP entry on main.; [Evidence 1](../adr/0515-service-reporting-and-customer-views.md), [Evidence 2](../planning/tshopper-program.md) |
+| **TSH1** — Service level on products and the delivery report | complete | dbuchs7 | TSH0 | [PR #1462](https://github.com/pblumer/atlas/pull/1462) | Complete: PR #1462 merged with all CI checks green (race, windows, e2e, coverage). Service level frozen into release and order line; delivery report route, Console card, CSV and MCP tool.; [Evidence 1](../../api/servicereport/measure_test.go), [Evidence 2](../../api/deliveryreport_http_test.go), [Evidence 3](../../e2e/delivery-report.spec.mjs) |
+| **TSH2** — Line-manager and customer-responsible views | complete | dbuchs7 | TSH1 | [PR #1463](https://github.com/pblumer/atlas/pull/1463) | Complete: PR #1463 merged with all CI checks green. reportingGroups (owner/admin only, not exported), team and organisation reports with names, CSV, audit.report_names_read, shop tabs and Console section.; [Evidence 1](../../api/customerreport_http_test.go), [Evidence 2](../../e2e/shop-reports.spec.mjs) |
+| **TSH3** — tshopper shell and wiki building blocks | complete | dbuchs7 | TSH2 | [PR #1464](https://github.com/pblumer/atlas/pull/1464) | Complete: PR #1464 merged with all CI checks green. App-drawer suite tshopper, catalogue top bar, building-blocks route and MCP tool, Create product from a wiki page. The shop keeps the catalogue brand (ADR-0316).; [Evidence 1](../../api/catalog/buildingblocks_test.go), [Evidence 2](../../e2e/building-blocks.spec.mjs) |
+| **TSH4** — Boundary contract between shop and engine | paused | dbuchs7 | TSH1 | [PR #1465](https://github.com/pblumer/atlas/pull/1465) | PR #1465 merged with all CI checks green: api/shopcontract, servicereport.Service behind it, guards. Paused, not complete: 37 server files still import api/catalog or api/order directly; the ratchet test lets that count only fall. Restart by moving them behind the contract. |
 
 ## Updating the register
 
