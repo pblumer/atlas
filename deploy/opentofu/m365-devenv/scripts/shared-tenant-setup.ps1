@@ -8,7 +8,7 @@
   administrator:
 
     tofu output -json shared_tenant > out/shared-tenant.json
-    pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json [-Device]
+    pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json [-Device] [-Part SharePoint]
 
   Exchange Online:
     - a management scope over every recipient whose alias starts with the prefix;
@@ -27,7 +27,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Config,
-    [switch] $Device
+    [switch] $Device,
+    # Repeat one part only, e.g. SharePoint after its sign-in timed out.
+    [ValidateSet('All', 'Exchange', 'SharePoint')] [string] $Part = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,7 +45,7 @@ function Step([string] $Text) { Write-Host "== $Text" }
 function Find([scriptblock] $Get) { try { & $Get } catch { $null } }
 
 # ---------------------------------------------------------------- Exchange Online
-if ($c.mail_app_id -or $c.exchange_app_id) {
+if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
     $exo = @{ ShowBanner = $false }
     if ($Device) { $exo.Device = $true }
     Connect-ExchangeOnline @exo
@@ -98,9 +100,11 @@ if ($c.mail_app_id -or $c.exchange_app_id) {
 }
 
 # ---------------------------------------------------------------- SharePoint
-if ($c.sharepoint_app_id) {
+if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
     $mg = @{ Scopes = 'Sites.FullControl.All'; NoWelcome = $true }
-    if ($Device) { $mg.UseDeviceCode = $true }
+    # Connect-MgGraph gives up on a device code after 120 s by default; allow 15 minutes,
+    # as Exchange does.
+    if ($Device) { $mg.UseDeviceCode = $true; $mg.ClientTimeout = 900 }
     Connect-MgGraph @mg
     try {
         # The group's site is provisioned some minutes after the group.
