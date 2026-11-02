@@ -4,10 +4,10 @@
   "summary": "Multi-layer trusted discovery and distribution of process applications and related product catalogues, with independently governed standalone catalogues, reusable components and public, internal or commercial offers. No runtime licensing.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-10-28",
+  "last_reviewed": "2026-11-02",
   "plan": "../../planning/blueprint-marketplace-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review draft PR #1424 for durable pending-only atlas hub provenance; finish verified native application/catalogue completion and restart recovery (#1422), then publish a public independently signed demonstration registry.",
+  "next_action": "Owner key ceremony for the atlas hub sample registry (atlas hub keygen, publicKey in examples/hub/releases.json, secret ATLAS_HUB_SIGNING_KEY), first Pages publication and a Console import from a real installation; then rebase draft PR #1424 and finish verified installation finalization and restart recovery (#1422).",
   "slices": [
     {
       "id": "BMP0",
@@ -47,7 +47,11 @@
         1423,
         1424
       ],
-      "note": "Merged #1411, #1415, #1416, #1420 and #1423 implement signed Blueprint Registry v1 browsing and human-reviewed application-plus-catalogue import. Draft #1424 provides pending-only durable provenance, not complete installation. Server-verified finalization, partial-failure/restart/re-import tests, independently signed public demo and separately approved standalone-catalogue contracts remain open. Product name is atlas hub; BMP and Blueprint v1 wire IDs remain stable."
+      "note": "Merged #1411, #1415, #1416, #1420 and #1423 implement signed Blueprint Registry v1 browsing and human-reviewed application-plus-catalogue import. atlas hub keygen/lock/build publishes all 43 installable examples as deterministic signed packages with an immutable release lock; every package installs, publishes and re-imports as a no-op against a live server. Public publication awaits the owner's signing key. Draft #1424 provides pending-only durable provenance, not complete installation. Server-verified finalization, partial-failure/restart tests and separately approved standalone-catalogue contracts remain open. Product name is atlas hub; BMP and Blueprint v1 wire IDs remain stable.",
+      "evidence": [
+        "../../../api/blueprintregistry/publish_test.go",
+        "../../../cmd/atlas/hub_test.go"
+      ]
     },
     {
       "id": "BMP2",

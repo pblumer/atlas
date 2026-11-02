@@ -375,8 +375,41 @@ func TestEveryPackageManifestNamesWhatItShips(t *testing.T) {
 	for _, path := range shopDocuments(t) {
 		dir := filepath.Dir(path)
 		man := readPackageManifest(t, dir)
-		if man.FormatVersion != 1 || man.Name == "" || !applicationKey.MatchString(man.Key) {
-			t.Errorf("%s: format %d, key %q, name %q — want format 1, a slug key and a name", dir, man.FormatVersion, man.Key, man.Name)
+		// The lowest format that holds the tree whole, as the server writes one
+		// (api/appsource.go): 2 once a decision carries its model, else 1. A package
+		// whose decisions are references alone installs only where somebody uploaded
+		// the models first; carrying them is what lets `atlas import` and atlas hub
+		// install it in one step.
+		carried := map[string]bool{}
+		for _, raw := range man.Decisions {
+			var d struct {
+				ModelRef string `json:"modelRef"`
+				Path     string `json:"path"`
+			}
+			if err := json.Unmarshal(raw, &d); err != nil {
+				t.Errorf("%s: a decision entry: %v", dir, err)
+				continue
+			}
+			if d.Path == "" {
+				continue
+			}
+			carried[d.Path] = true
+			if _, err := os.Stat(filepath.Join(dir, d.Path)); err != nil {
+				t.Errorf("%s: decision %s carries its model as %s: %v", dir, d.ModelRef, d.Path, err)
+			}
+		}
+		wantFormat := 1
+		if len(carried) > 0 {
+			wantFormat = 2
+		}
+		if man.FormatVersion != wantFormat || man.Name == "" || !applicationKey.MatchString(man.Key) {
+			t.Errorf("%s: format %d, key %q, name %q — want format %d, a slug key and a name", dir, man.FormatVersion, man.Key, man.Name, wantFormat)
+		}
+		dmns, _ := filepath.Glob(filepath.Join(dir, "*.dmn"))
+		for _, m := range dmns {
+			if !carried[filepath.Base(m)] {
+				t.Errorf("%s ships %s, which no decision in its manifest carries", dir, filepath.Base(m))
+			}
 		}
 
 		listed := map[string]string{}

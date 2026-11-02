@@ -5,7 +5,7 @@
 .DESCRIPTION
   Dieselben Schritte wie installieren.sh, für Windows PowerShell 5.1 und PowerShell 7:
     1. die fünf Entscheidungsmodelle unter ihren Handles hochladen;
-    2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungsreferenzen);
+    2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
     3. die Applikation veröffentlichen;
     4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
        Dokument importieren und veröffentlichen.
@@ -43,7 +43,7 @@ foreach ($m in 'm365-lizenzprofil', 'm365-namensregel', 'm365-postfachzugriff', 
 
 Write-Host '2. Applikation importieren'
 $manifest = [IO.File]::ReadAllText((Join-Path $here 'atlas.json'), $utf8) | ConvertFrom-Json
-$files = @('atlas.json') + @($manifest.processes | ForEach-Object { $_.path }) + @($manifest.forms | ForEach-Object { $_.path })
+$files = @('atlas.json') + @($manifest.processes | ForEach-Object { $_.path }) + @($manifest.forms | ForEach-Object { $_.path }) + @($manifest.decisions | Where-Object { $_.path } | ForEach-Object { $_.path } | Sort-Object -Unique)
 $work = Join-Path ([IO.Path]::GetTempPath()) ('m365-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 try {

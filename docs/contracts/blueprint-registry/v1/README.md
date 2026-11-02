@@ -7,7 +7,7 @@ wire contract is still **Blueprint Registry v1**, with existing
 packages (optionally including product catalogues); standalone catalogues
 and other offer kinds require separately approved extensions.
 
-**Status: accepted v1 contract; public Console integration landed in PR #1416 (BMP1 remains active).** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). Signed-index verification, bounded HTTPS fetching, archive inspection and authorized Console package import are implemented. A publicly hosted signed sample and persistent installation provenance are still missing.
+**Status: accepted v1 contract; public Console integration landed in PR #1416 (BMP1 remains active).** See [ADR-0499](../../../adr/0499-blueprint-registry-and-distribution.md) (**Accepted / Partial**). Signed-index verification, bounded HTTPS fetching, archive inspection and authorized Console package import are implemented. Publisher tooling for the signed sample registry exists (`atlas hub keygen|lock|build`, [examples/hub](../../../../examples/hub/README.md)); its first public publication and persistent installation provenance are still missing.
 
 ## Publication layout
 

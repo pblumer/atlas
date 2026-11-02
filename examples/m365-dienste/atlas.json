@@ -1,5 +1,5 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "key": "beispiel-m365-dienste",
   "name": "Beispiel: Microsoft-365-Dienste",
   "processes": [
@@ -190,27 +190,32 @@
     {
       "id": "dmn-m365-lizenzprofil",
       "name": "M365Lizenzprofil",
-      "modelRef": "m365-lizenzprofil"
+      "modelRef": "m365-lizenzprofil",
+      "path": "m365-lizenzprofil.dmn"
     },
     {
       "id": "dmn-m365-namensregel",
       "name": "M365Namensregel",
-      "modelRef": "m365-namensregel"
+      "modelRef": "m365-namensregel",
+      "path": "m365-namensregel.dmn"
     },
     {
       "id": "dmn-m365-postfachzugriff",
       "name": "M365PostfachzugriffFreigabe",
-      "modelRef": "m365-postfachzugriff"
+      "modelRef": "m365-postfachzugriff",
+      "path": "m365-postfachzugriff.dmn"
     },
     {
       "id": "dmn-m365-telefonie",
       "name": "M365TelefonieSprachregion",
-      "modelRef": "m365-telefonie"
+      "modelRef": "m365-telefonie",
+      "path": "m365-telefonie.dmn"
     },
     {
       "id": "dmn-m365-verteiler-zuordnung",
       "name": "M365VerteilerZuordnung",
-      "modelRef": "m365-verteiler-zuordnung"
+      "modelRef": "m365-verteiler-zuordnung",
+      "path": "m365-verteiler-zuordnung.dmn"
     }
   ]
 }
