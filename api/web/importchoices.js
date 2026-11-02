@@ -80,7 +80,7 @@ export function openImportChoices({ title, artifacts }) {
             <button type="button" class="btn ghost small" data-none title="${esc(t("choices.tickNoneTitle"))}">${esc(t("choices.tickNone"))}</button>
           </div>
           ${GROUPS.map(group).join("")}
-          ${fresh.length ? `<details class="import-new"><summary>${esc(t("choices.fresh", { n: fresh.length }))}</summary>
+          ${fresh.length ? `<details class="import-new fold-sub"><summary>${esc(t("choices.fresh", { n: fresh.length }))}</summary>
             <ul>${fresh.map((a) => `<li>${label(a)}</li>`).join("")}</ul></details>` : ""}
         </div>
         <div class="modal-foot">

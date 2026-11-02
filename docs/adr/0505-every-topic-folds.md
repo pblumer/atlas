@@ -170,7 +170,10 @@ The keys these folds were remembered under (`atlas.events.catalog`, `atlas.event
 `atlas.catalog.pageSections`) are no longer read: a browser that had folded or opened one
 sees it in its default state once more. What stays a `<details>` is a fold inside a
 topic — a product form's groups, an outbox message, a release in the release notes —
-and the panels of the canvases, which are not stacked topics.
+and the panels of the canvases, which are not stacked topics. Such a fold is marked
+`fold-sub` and draws the caret a topic draws, turning the same way, so the two read as
+one; a `<details>` a library draws (form-js, the API reference) is not marked and keeps
+its own marker.
 
 ## Links
 
