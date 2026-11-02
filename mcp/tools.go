@@ -60,6 +60,7 @@ func defaultTools() []Tool {
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
 	tools = append(tools, catalogTools()...)
+	tools = append(tools, mockAPITools()...)
 	return append(tools, contentTools()...)
 }
 

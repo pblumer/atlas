@@ -26,7 +26,11 @@ _Changed_ / _Removed_ for each version.
   on recompiles what is stored. What a run actually called is under Operations ›
   Diagnostics › Mockups, which is the *only* place it is readable: unlike the standalone
   mock, the served route refuses `/__mock/calls`, because a recorded request body comes
-  from a real instance.
+  from a real instance. `atlas mock-openapi` is unchanged and stays the way to run a mock
+  outside atlas. The same five operations are MCP tools (`atlas_list_mock_apis`,
+  `atlas_create_mock_api`, `atlas_update_mock_api`, `atlas_delete_mock_api`,
+  `atlas_mock_api_document`), so an agent that just authored a REST task can stand up the
+  API it calls.
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.

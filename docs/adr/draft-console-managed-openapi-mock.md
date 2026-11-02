@@ -146,9 +146,10 @@ and no report store are needed for a mock the server holds itself, so neither is
   if a mock ever needs to be reachable from outside the network Atlas sits in, that is
   the standalone process, not a flag here.
 
-  There is no MCP tool for any of this yet. Every route here is an ordinary
-  Modeler-gated one, so adding tools is a mapping rather than a design question, and an
-  agent authoring a REST task standing up its own mock is the obvious next step.
+  The five operations are also MCP tools, which the repository's route/tool drift test
+  required a decision on either way: an agent that authored a REST task standing up the
+  API it calls is the same act as a person doing it in the Console, so omitting them
+  would have needed a reason there is not one for.
 
 ## Pros and cons of the options
 
