@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
 - **Another system is connected with one approval.** A system such as a wiki that shows
   atlas's processes and mirrors people's tasks names itself by the https URL of a client
   ID metadata document it publishes and signs its token requests with a key from it
