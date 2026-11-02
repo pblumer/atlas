@@ -446,11 +446,25 @@ func (t *Tx) RecordMIIncidentResolved(inc *model.IncidentValue, pos uint64) erro
 	return t.b.Delete(t.miRefKey(cfMIIncidentOpen, pi, elKey), nil)
 }
 
+// RecordMIDecision attributes a DecisionEvaluated event to the innermost MI
+// iteration (or body) whose live scope chain holds the evaluating element, by
+// recording the evaluation's own key — the decision history row it names is
+// written beside it by RecordDecisionEvaluation. One iteration's decisions are
+// then a prefix read instead of a walk over every evaluation of the instance.
+func (t *Tx) RecordMIDecision(v *model.DecisionEvaluationValue, ts int64, pos uint64) error {
+	owner, _, _, _, ok, err := t.miIncidentOwner(v.ProcessInstanceKey, v.ElementInstanceKey)
+	if err != nil || !ok {
+		return err
+	}
+	return t.b.Set(t.miQuadKey(cfMIDecision, v.ProcessInstanceKey, owner, uint64(ts)^(1<<63), pos), nil, nil)
+}
+
 // miIndexFamilies is every per-instance family of the MI history index.
 var miIndexFamilies = [...]columnFamily{
 	cfMIBody, cfMIIteration, cfMIRoundByElement, cfMIBodyByElement,
 	cfMIRoundOrder, cfMIRoundByState, cfMIRoundIncident,
 	cfMIIncidentByOwner, cfMIIncidentOpen, cfMIBodyByParent, cfMIBodyCounter,
+	cfMIDecision,
 }
 
 // purgeMIIndexHistory drops complete per-instance MI index ranges without a

@@ -1887,7 +1887,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
 	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
-	if s.miHistory, err = mihistory.New(s.miHistoryView, time.Now); err != nil {
+	if s.miHistory, err = mihistory.New(s.miHistoryView, time.Now, func(v *model.VariableValue) (string, string) {
+		view := toVariableView(v)
+		return view.Kind, view.Value
+	}); err != nil {
 		return nil, err
 	}
 	s.processDocs = processdoc.New(

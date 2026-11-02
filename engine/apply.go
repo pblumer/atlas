@@ -664,7 +664,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// record what the event carries (header timestamp/position plus the frozen
 			// evaluation), so replay rebuilds it without re-evaluating — invariants
 			// I4/I6.
-			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
+			if err := tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval); err != nil {
+				return err
+			}
+			// Name the evaluation under the multi-instance iteration that made it, so
+			// one iteration's decisions are read without the instance's others
+			// (ADR-0517). The element is live when its job completes, so its scope
+			// chain is state and replay attributes identically (I4).
+			return tx.RecordMIDecision(&v.decisionEval, h.Timestamp, h.Position)
 		}
 
 	case model.VTCompensable:

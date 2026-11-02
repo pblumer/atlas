@@ -106,8 +106,16 @@
         const one = u.pathname.match(/\/iterations\/(\d+)$/);
         if (one) {
           const n = Number(one[1]) - 1_000_000;
+          const technical = u.searchParams.get("technical") === "true";
           return { instanceKey: KEY, body, iteration: row(n), nestedBodies: [], incidentsTruncated: false,
-            incidents: incidentAt(n) ? [{ elementInstanceKey: one[1], raisedPosition: 150 + n, endPosition: 160 + n, status: "resolved" }] : [] };
+            incidents: incidentAt(n) ? [{ elementInstanceKey: one[1], raisedPosition: 150 + n, endPosition: 160 + n, status: "resolved" }] : [],
+            variables: [
+              { name: "loopCounter", kind: "number", value: String(n), position: 90 + n, at: 1 },
+              { name: "record", kind: "json", value: `{"id":${n}}`, position: 90 + n, at: 1 },
+            ],
+            variablesTruncated: false, decisionsAvailable: true, decisionsTruncated: false,
+            decisions: [{ decisionId: "position-rule", elementInstanceKey: one[1], position: 120 + n, at: 2,
+              inputs: { amount: n }, outputs: { approved: n % 2 === 0 }, ...(technical ? { trace: { matched: [1] } } : {}) }] };
         }
         if (/\/instances\/\d+\/timeline$/.test(u.pathname)) {
           // A 50,000-iteration timeline is what this view exists to avoid.

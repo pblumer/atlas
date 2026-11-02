@@ -106,6 +106,7 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
     selected: "", // element-instance key of the open iteration, as a string
     detail: null,
     detailError: null,
+    technical: false, // include rule traces: detail for the person who asks for it
   };
   let seq = 0; // the newest request; an older answer arriving late is dropped
   let destroyed = false;
@@ -230,14 +231,35 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
           `<li><span>${esc(b.elementId || b.bodyElementInstanceKey)}</span> ${bodySummaryHTML(b)}
             <button type="button" class="btn neutral small mi-open-nested" data-key="${esc(b.bodyElementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button></li>`).join("")}</ul>`
       : "";
+    const variables = d.variables && d.variables.length
+      ? `<table class="mi-vars"><thead><tr><th>${esc(tr("ops.mi.detail.var.name"))}</th><th>${esc(tr("ops.mi.detail.var.value"))}</th><th>${esc(tr("ops.mi.detail.var.at"))}</th></tr></thead><tbody>${
+          d.variables.map((v) => `<tr><td class="mono">${esc(v.name)}</td><td class="mono mi-var-${esc(v.kind)}">${esc(v.value)}</td><td class="mono muted">${esc(v.position)}</td></tr>`).join("")}</tbody></table>${
+          d.variablesTruncated ? `<p class="muted">${esc(tr("ops.mi.detail.truncated.vars"))}</p>` : ""}`
+      : `<p class="muted">${esc(tr("ops.mi.detail.novars"))}</p>`;
+    const json = (x) => esc(JSON.stringify(x));
+    const decisions = d.decisionsAvailable === false
+      ? `<p class="muted">${esc(tr("ops.mi.detail.decisions.unavailable"))}</p>`
+      : (d.decisions && d.decisions.length
+        ? `<ul class="mi-dec-list">${d.decisions.map((x) => `<li><b class="mono">${esc(x.decisionId)}</b>
+            <span class="muted">${esc(tr("ops.mi.detail.decision.at", { pos: x.position }))}</span>
+            <div class="mi-dec-io"><span>${esc(tr("ops.mi.detail.decision.in"))}</span> <code>${json(x.inputs)}</code></div>
+            <div class="mi-dec-io"><span>${esc(tr("ops.mi.detail.decision.out"))}</span> <code>${json(x.outputs)}</code></div>
+            ${st.technical && x.trace ? `<pre class="mi-dec-trace">${esc(JSON.stringify(x.trace, null, 2))}</pre>` : ""}</li>`).join("")}</ul>${
+            d.decisionsTruncated ? `<p class="muted">${esc(tr("ops.mi.detail.truncated.decisions"))}</p>` : ""}`
+        : `<p class="muted">${esc(tr("ops.mi.detail.nodecisions"))}</p>`);
     el.innerHTML = `<h4>${esc(tr("ops.mi.detail.title", { n: iterationLabel(it) }))}
         <span class="mi-row-state ${stateClass(it.state)}">${esc(tr(`ops.mi.state.${stateClass(it.state)}`))}</span></h4>
       <dl class="mi-facts">
         <dt>${esc(tr("ops.mi.detail.key"))}</dt><dd class="mono">${esc(it.elementInstanceKey)}</dd>
         <dt>${esc(tr("ops.mi.detail.positions"))}</dt><dd class="mono">${esc(it.activationPosition)} &rarr; ${esc(it.endPosition || "…")}</dd>
       </dl>
-      <h5>${esc(tr("ops.mi.detail.incidents"))}</h5>${incidents}${nested}
+      <h5>${esc(tr("ops.mi.detail.incidents"))}</h5>${incidents}
+      <h5>${esc(tr("ops.mi.detail.variables"))}</h5>${variables}
+      <h5>${esc(tr("ops.mi.detail.decisions"))}</h5>${decisions}${nested}
+      <label class="mi-ex-check mi-ex-technical"><input type="checkbox" class="mi-ex-tech"${st.technical ? " checked" : ""}/> ${esc(tr("ops.mi.detail.technical"))}</label>
       <p class="muted mi-ex-later">${esc(tr("ops.mi.detail.replaynote"))}</p>`;
+    const techBox = el.querySelector(".mi-ex-tech");
+    if (techBox) techBox.addEventListener("change", () => { st.technical = techBox.checked; openIteration(st.selected); });
     el.querySelectorAll(".mi-open-nested").forEach((btn) => btn.addEventListener("click", () => {
       const nb = d.nestedBodies.find((b) => String(b.bodyElementInstanceKey) === btn.dataset.key);
       if (nb && onOpenBody) onOpenBody(nb);
@@ -291,7 +313,7 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
     drawList();
     st.detailError = null;
     try {
-      const d = await api("GET", `${base(instanceKey)}/${encodeURIComponent(String(st.body.bodyElementInstanceKey))}/iterations/${encodeURIComponent(String(key))}`);
+      const d = await api("GET", `${base(instanceKey)}/${encodeURIComponent(String(st.body.bodyElementInstanceKey))}/iterations/${encodeURIComponent(String(key))}${st.technical ? "?technical=true" : ""}`);
       if (destroyed || st.selected !== key) return;
       st.detail = d;
       drawDetail();

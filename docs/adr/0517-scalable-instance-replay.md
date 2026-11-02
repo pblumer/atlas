@@ -211,10 +211,28 @@ timeline. Playwright specs `e2e/mi-explorer.spec.mjs` and `e2e/mi-history.spec.m
 assert that the bounded view never requests `/timeline` and never holds more
 than one page of rows.
 
+**OHS3 increment 1 — one iteration's recorded facts (2026-11-02).** The
+iteration detail route also returns the iteration's own scope variable changes
+(a bounded prefix read of the existing per-scope snapshot history, ADR-0048,
+rendered by the server's one variable renderer, so a personal value stays
+enciphered) and the DMN evaluations attributed to it. `DecisionEvaluated` is now
+also attributed in `applyToState` to the innermost MI iteration (family
+`cfMIDecision`, a reference to the decision history row, never a copy); the
+inputs and outputs are what the worker froze into the log and are not
+re-evaluated. Decision attribution has its **own** readiness marker
+(`mi_history_decisions_v1`): a store that recorded MI history before it existed
+keeps its iteration listing, and its iteration details say
+`decisionsAvailable: false` rather than "no decisions". Rule traces are returned
+only with `technical=true`. Contributions to the body's output collection are
+recorded on the body's collection (ADR-0296), not per iteration, and are not
+shown as iteration outputs.
+
 **Still not built:** a verified historical rebuild for legacy (pre-v2) stores —
 they stay `history_unavailable`; a bounded outline of the *other* steps of a
 large instance (the bounded view shows only its multi-instance executions);
-OHS3's scoped detail replay of one iteration (variables, decisions, step frames). A historical reconstruction must use durable event payloads,
+the step-by-step replay window of one iteration on the diagram (its inner
+elements' step frames for subprocess iterations); job and user-task history per
+iteration. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
 especially for repeated/nested MI bodies and migrations. A history with

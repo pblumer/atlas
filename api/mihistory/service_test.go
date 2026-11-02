@@ -496,7 +496,11 @@ func TestIncidentFilterAndDetailDistinguishOpenFromHistorical(t *testing.T) {
 	}
 }
 
-func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
+// legacyWorld runs one instance of a two-iteration MI process, then reopens its
+// store with the named readiness marker removed — what a store written before
+// that part of the index existed looks like.
+func legacyWorld(t *testing.T, marker string) (*world, uint64) {
+	t.Helper()
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "state")
 	w := &world{t: t, now: time.Unix(1_800_000_000, 0)}
@@ -504,7 +508,7 @@ func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
 	if w.log, err = wal.Open(wal.Options{Dir: filepath.Join(dir, "wal")}); err != nil {
 		t.Fatal(err)
 	}
-	defer w.log.Close()
+	t.Cleanup(func() { _ = w.log.Close() })
 	if w.store, err = state.Open(statePath); err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +522,6 @@ func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
 	if err := w.store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate a store written before the v2 index: remove its readiness marker.
 	// The state store's merge operator is checked by name on open; this copy
 	// sums the same little-endian int64 deltas, so a merge Pebble runs while the
 	// test edits the store keeps the counters intact.
@@ -532,7 +535,7 @@ func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Delete(append([]byte{0x00}, "mi_history_index_v2"...), pebble.Sync); err != nil {
+	if err := db.Delete(append([]byte{0x00}, marker...), pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
@@ -541,19 +544,38 @@ func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
 	if w.store, err = state.Open(statePath); err != nil {
 		t.Fatal(err)
 	}
-	defer w.store.Close()
+	t.Cleanup(func() { _ = w.store.Close() })
 	w.svc = newService(w.view, []byte("k"), func() time.Time { return w.now })
 	mux := http.NewServeMux()
 	w.mount(mux, w.svc)
 	w.srv = httptest.NewServer(mux)
-	defer w.srv.Close()
+	t.Cleanup(w.srv.Close)
+	return w, pi
+}
 
+func TestUnavailableIndexIsAnExplainedConflictNotAnEmptyList(t *testing.T) {
+	w, pi := legacyWorld(t, "mi_history_index_v2")
 	for _, path := range []string{instPath(pi), instPath(pi) + "/1", iterPath(pi, 1), iterPath(pi, 1) + "/2"} {
 		var ignored any
 		status, e := w.get(path, nil, &ignored)
 		if status != http.StatusConflict || e["code"] != "history_unavailable" || !strings.Contains(e["error"], "does not mean no iterations ran") {
 			t.Fatalf("%s: %d %v", path, status, e)
 		}
+	}
+}
+
+// History that predates decision attribution keeps its iteration detail and says
+// that its decision list is unknown rather than empty.
+func TestDecisionsUnavailableOnOlderHistoryIsNotAnEmptyList(t *testing.T) {
+	w, pi := legacyWorld(t, "mi_history_decisions_v1")
+	body := w.onlyBody(pi)
+	k := exactKeyOf(t, w, pi, body.BodyElementInstanceKey, 1)
+	var d IterationResponse
+	if code, e := w.get(iterPath(pi, body.BodyElementInstanceKey)+"/"+strconv.FormatUint(k, 10), nil, &d); code != 200 {
+		t.Fatalf("detail: %d %v", code, e)
+	}
+	if d.DecisionsAvailable || len(d.Decisions) != 0 || len(d.Variables) == 0 {
+		t.Fatalf("detail of older history: %+v", d)
 	}
 }
 
@@ -630,4 +652,62 @@ func (m *sumMerger) MergeOlder(v []byte) error { return m.MergeNewer(v) }
 
 func (m *sumMerger) Finish(bool) ([]byte, io.Closer, error) {
 	return binary.LittleEndian.AppendUint64(nil, uint64(m.sum)), nil, nil
+}
+
+func TestIterationDetailShowsItsVariablesAndDecisions(t *testing.T) {
+	w := newWorld(t, listIter(3), false)
+	pi := w.start()
+	body := w.onlyBody(pi)
+	k2 := exactKeyOf(t, w, pi, body.BodyElementInstanceKey, 2)
+	w.p.CompleteJobWithDecision(w.jobFor(k2), &model.DecisionEvaluationValue{
+		DecisionId: "risk", InputsJSON: `{"item":2}`, OutputsJSON: `{"ok":true}`, TraceJSON: `{"rules":[1]}`,
+	})
+	w.run()
+	path := iterPath(pi, body.BodyElementInstanceKey) + "/" + strconv.FormatUint(k2, 10)
+	var d IterationResponse
+	if code, e := w.get(path, nil, &d); code != 200 {
+		t.Fatalf("detail: %d %v", code, e)
+	}
+	names := map[string]string{}
+	for _, v := range d.Variables {
+		names[v.Name] = v.Value
+	}
+	if names["loopCounter"] != "2" || names["item"] != "2" {
+		t.Fatalf("iteration variables: %+v", d.Variables)
+	}
+	if !d.DecisionsAvailable || len(d.Decisions) != 1 || d.Decisions[0].DecisionID != "risk" ||
+		string(d.Decisions[0].Inputs) != `{"item":2}` || d.Decisions[0].Trace != nil {
+		t.Fatalf("decisions: %+v", d)
+	}
+	var tech IterationResponse
+	w.get(path, url.Values{"technical": {"true"}}, &tech)
+	if len(tech.Decisions) != 1 || string(tech.Decisions[0].Trace) != `{"rules":[1]}` {
+		t.Fatalf("technical detail: %+v", tech.Decisions)
+	}
+	// Another iteration made no decision: an empty list that is known to be empty.
+	var other IterationResponse
+	w.get(iterPath(pi, body.BodyElementInstanceKey)+"/"+strconv.FormatUint(exactKeyOf(t, w, pi, body.BodyElementInstanceKey, 1), 10), nil, &other)
+	if !other.DecisionsAvailable || len(other.Decisions) != 0 {
+		t.Fatalf("iteration 1 decisions: %+v", other)
+	}
+}
+
+func TestRenderingHelpers(t *testing.T) {
+	for _, tt := range []struct {
+		v          model.VariableValue
+		kind, text string
+	}{
+		{model.VariableValue{Kind: model.VarBool, Bool: true}, "boolean", "true"},
+		{model.VariableValue{Kind: model.VarNumber, Text: "1"}, "number", "1"},
+		{model.VariableValue{Kind: model.VarString, Text: "a"}, "string", "a"},
+		{model.VariableValue{Kind: model.VarJSON, Text: "{}"}, "json", "{}"},
+		{model.VariableValue{Kind: model.VarNull}, "null", "null"},
+	} {
+		if k, v := plainVariable(&tt.v); k != tt.kind || v != tt.text {
+			t.Fatalf("%+v rendered %s %s", tt.v, k, v)
+		}
+	}
+	if string(rawJSON("")) != "null" || string(rawJSON("{bad")) != `"{bad"` || string(rawJSON(`[1]`)) != `[1]` {
+		t.Fatal("rawJSON")
+	}
 }

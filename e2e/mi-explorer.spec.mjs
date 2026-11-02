@@ -115,3 +115,21 @@ test("the explorer stacks its controls on a narrow screen", async ({ page }) => 
   });
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("an iteration shows its own variables and decisions, technical detail on request", async ({ page }) => {
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-ex-jump").fill("37421");
+  await page.locator(".mi-ex-controls button[type=submit]").click();
+  await page.locator(".mi-explorer .mi-row").first().click();
+  const detail = page.locator(".mi-ex-detail");
+  await expect(detail.locator(".mi-vars tbody tr")).toHaveCount(2);
+  await expect(detail.locator(".mi-vars")).toContainText("37421");
+  await expect(detail.locator(".mi-dec-list li")).toHaveCount(1);
+  await expect(detail.locator(".mi-dec-list")).toContainText("position-rule");
+  await expect(detail.locator(".mi-dec-trace")).toHaveCount(0);
+  await detail.locator(".mi-ex-tech").check();
+  await expect(page.locator(".mi-ex-detail .mi-dec-trace")).toHaveCount(1);
+  const asked = await page.evaluate(() => window.__requests.filter((u) => u.includes("technical=true")));
+  expect(asked.length).toBe(1);
+});

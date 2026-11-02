@@ -9844,7 +9844,11 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           blättert vor und zurück, springt direkt zu einer Nummer wie 37421, filtert nach Zustand und zeigt auf
           Wunsch nur Iterationen mit Incidents. Wählst du eine Iteration, siehst du ihre Elementinstanz, ihre
           Log-Positionen und jeden zugeordneten Incident – <b>offen</b>, <b>behoben</b>, durch einen späteren
-          <b>ersetzt</b> oder <b>ohne Behebung beendet</b>, weil das Element abgebrochen wurde. Hat eine
+          <b>ersetzt</b> oder <b>ohne Behebung beendet</b>, weil das Element abgebrochen wurde. Dazu kommen die
+          Variablen ihres eigenen Bereichs, so wie sie aufgezeichnet wurden (Nummer, Element der Liste, was die
+          Iteration selbst geschrieben hat), und die DMN-Entscheidungen, die sie ausgewertet hat, mit den
+          Eingaben und dem Ergebnis aus dem Log – nichts davon wird neu berechnet. <b>Technische Details
+          anzeigen</b> ergänzt die Regel-Spur einer Entscheidung. Hat eine
           Ausführung mehr als 500 Iterationen, lädt das Replay die vollständige schrittweise Historie nicht, weil
           sie mit der Zahl der Iterationen quadratisch wächst; du siehst dann das Diagramm, die Ausführungen und
           den Explorer. Die schrittweise Wiedergabe einer einzelnen Iteration und die übrigen Schritte einer so
@@ -9861,7 +9865,10 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           to a number such as 37421, filters by state and, if you ask, shows only iterations that had an incident.
           Choose an iteration to see its element instance, its log positions and every incident attributed to it –
           <b>open</b>, <b>resolved</b>, <b>replaced</b> by a later one, or <b>ended without resolution</b> because
-          its element was terminated. When an execution has more than 500 iterations, the replay does not load the
+          its element was terminated – together with the variables of its own scope as they were recorded (its
+          number, its list item, what the iteration wrote itself) and the DMN decisions it evaluated, with the
+          inputs and the result taken from the log; none of it is recomputed. <b>Show technical details</b> adds a
+          decision's rule trace. When an execution has more than 500 iterations, the replay does not load the
           complete step-by-step history, because that grows with the square of the iteration count; you see the
           diagram, the executions and the explorer instead. A step-by-step replay of one iteration and the other
           steps of such a large instance are not available in this view yet. When the explorer says the history

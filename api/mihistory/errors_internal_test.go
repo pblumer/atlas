@@ -64,11 +64,11 @@ func TestErrorsKeepTheEnvelopeAndAStableCode(t *testing.T) {
 
 func TestNewDrawsADistinctCursorKey(t *testing.T) {
 	view := func(func(*state.ReadView, Definitions) error) error { return nil }
-	a, err := New(view, time.Now)
+	a, err := New(view, time.Now, plainVariable)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := New(view, time.Now)
+	b, err := New(view, time.Now, plainVariable)
 	if err != nil {
 		t.Fatal(err)
 	}

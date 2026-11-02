@@ -54,8 +54,8 @@
     {
       "id": "OHS3",
       "title": "Scalable iteration detail replay",
-      "status": "planned",
-      "owner": "unassigned",
+      "status": "active",
+      "owner": "pblumer",
       "depends_on": [
         "OHS2"
       ],
@@ -63,7 +63,11 @@
         1481
       ],
       "prs": [],
-      "note": "Bounded causal frame and variable/incident/decision drill-down, 50k performance evidence and full replay/retention compatibility."
+      "note": "Increment 1: one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Open: the step-by-step replay window of one iteration on the diagram, job/user-task history per iteration, 50k acceptance of the detail view and the retention/migration verification.",
+      "evidence": [
+        "../../../engine/miindex_v2_recovery_test.go",
+        "../../../api/mihistory/service_test.go"
+      ]
     }
   ]
 }

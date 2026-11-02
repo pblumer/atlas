@@ -3,10 +3,12 @@ package engine_test
 import (
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 )
@@ -289,5 +291,76 @@ func TestMIIndexV2NestedReplayEqualsLive(t *testing.T) {
 	got := miReadSnapshot(t, miReplayInto(t, dir, cp), pi)
 	if !reflect.DeepEqual(got, live) {
 		t.Fatalf("MI history differs after WAL replay\nlive:   %+v\nreplay: %+v", live, got)
+	}
+}
+
+// TestMIIterationDetailReplayEqualsLive covers what one iteration's detail reads
+// (OHS3): the decisions attributed to it and its own scope's variable changes,
+// live against an independent WAL replay.
+func TestMIIterationDetailReplayEqualsLive(t *testing.T) {
+	dir := t.TempDir()
+	h := openHarness(t, dir)
+	cp, jobType := miServiceProcess(t, "[10, 20, 30]")
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	p.CreateInstance(cp.Key)
+	miRun(t, p)
+	var pi uint64
+	for _, n := range []int{1, 2, 3} {
+		jk := jobByLoopCounter(t, h, jobType, n)
+		j, _, _ := h.store.GetJob(jk)
+		pi = j.ProcessInstanceKey
+		if n == 2 {
+			p.CompleteJob(jk)
+		} else {
+			p.CompleteJobWithDecision(jk, &model.DecisionEvaluationValue{
+				DecisionId: "risk", InputsJSON: `{"item":` + strconv.Itoa(n*10) + `}`, OutputsJSON: `{"ok":true}`,
+			}, model.VariableValue{Name: "result", Kind: model.VarNumber, Text: strconv.Itoa(n * 100)})
+		}
+		miRun(t, p)
+	}
+	type detail struct {
+		Loop      uint64
+		Decisions []string
+		Variables []string
+	}
+	read := func(s *state.Store) []detail {
+		t.Helper()
+		var out []detail
+		body := miReadSnapshot(t, s, pi).Bodies[0]
+		if _, err := s.MIIterationPage(pi, body.ElementInstanceKey, body.ActivationPosition, state.MIIterationQuery{Limit: 10}, func(e state.MIHistoryEntry) error {
+			d := detail{Loop: e.LoopCounter}
+			if _, err := s.MIDecisions(pi, e.ElementInstanceKey, 10, func(_ int64, pos uint64, v *model.DecisionEvaluationValue) error {
+				d.Decisions = append(d.Decisions, v.DecisionId+v.InputsJSON+"@"+strconv.FormatUint(pos, 10))
+				return nil
+			}); err != nil {
+				return err
+			}
+			_, err := s.VariableSnapshotPage(e.ElementInstanceKey, 50, func(_ int64, pos uint64, v *model.VariableValue) error {
+				d.Variables = append(d.Variables, v.Name+"="+v.Text+"@"+strconv.FormatUint(pos, 10))
+				return nil
+			})
+			out = append(out, d)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	live := read(h.store)
+	if len(live) != 3 || len(live[0].Decisions) != 1 || len(live[1].Decisions) != 0 || len(live[2].Decisions) != 1 {
+		t.Fatalf("decisions per iteration: %+v", live)
+	}
+	for i, d := range live {
+		if len(d.Variables) < 2 { // loopCounter and the item, at least
+			t.Fatalf("iteration %d variables: %v", i+1, d.Variables)
+		}
+	}
+	h.close(t)
+	if got := read(miReplayInto(t, dir, cp)); !reflect.DeepEqual(got, live) {
+		t.Fatalf("iteration detail differs after WAL replay\nlive:   %+v\nreplay: %+v", live, got)
 	}
 }
