@@ -170,19 +170,16 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 	b := s.db.NewBatch()
 	defer b.Close()
 	if !ready {
-		if err := b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil); err != nil {
-			return err
-		}
+		err = b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil)
 	}
-	if !decisions {
-		if err := b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil); err != nil {
-			return err
-		}
+	if err == nil && !decisions {
+		err = b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil)
 	}
-	if !outline {
-		if err := b.Set(keyMeta(metaOutlineIndex), outlineIndexVersion[:], nil); err != nil {
-			return err
-		}
+	if err == nil && !outline {
+		err = b.Set(keyMeta(metaOutlineIndex), outlineIndexVersion[:], nil)
 	}
-	return b.Commit(pebble.Sync)
+	if err == nil {
+		err = b.Commit(pebble.Sync)
+	}
+	return err
 }

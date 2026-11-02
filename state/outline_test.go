@@ -67,6 +67,10 @@ func TestOutlineHidesWhatRunsInsideAnIteration(t *testing.T) {
 	if _, err := f.s.OutlinePage(pi, nil, 0, 0, func(OutlineStep) error { return nil }); err == nil {
 		t.Fatal("an invalid limit was accepted")
 	}
+	stop := errors.New("stop")
+	if _, err := f.s.OutlinePage(pi, nil, 0, 50, func(OutlineStep) error { return stop }); !errors.Is(err, stop) {
+		t.Fatalf("a visitor's error was not returned: %v", err)
+	}
 
 	f.must(f.tx.PurgeInstanceHistory(pi, 9, 0))
 	f.commit()
@@ -93,6 +97,9 @@ func TestOutlineRefusesWhatItCannotProve(t *testing.T) {
 	f.must(f.s.db.Set(keyMeta(metaOutlineIndex), []byte{9}, pebble.Sync))
 	if _, err := f.s.OutlineIndexReady(); err == nil {
 		t.Fatal("a corrupt outline marker was accepted")
+	}
+	if _, err := f.s.MIHistoryRebuildNeeded(); err == nil {
+		t.Fatal("a corrupt outline marker did not stop the rebuild check")
 	}
 }
 

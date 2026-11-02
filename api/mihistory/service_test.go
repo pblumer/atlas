@@ -375,6 +375,9 @@ func TestIterationRequestsRejectBadParametersAndCursors(t *testing.T) {
 		{"unknown body", iterPath(pi, 424242), nil, 404, "not_found"},
 		{"body of another instance", iterPath(pi, otherBody.BodyElementInstanceKey), nil, 404, "not_found"},
 		{"bad instance key", "/api/v1/instances/abc/multi-instances", nil, 400, "invalid_parameter"},
+		{"from not a number", path, url.Values{"from": {"x"}}, 400, "invalid_parameter"},
+		{"outline of a bad instance key", "/api/v1/instances/abc/outline", nil, 400, "invalid_parameter"},
+		{"outline limit too large", "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/outline", url.Values{"limit": {"201"}}, 400, "invalid_parameter"},
 		{"unknown iteration", path + "/31337", nil, 404, "not_found"},
 	}
 	for _, tt := range tests {
