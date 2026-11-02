@@ -266,9 +266,24 @@ encoding adds no allocation of its own; the MI benchmark shows about 40 more
 allocations per 100-iteration instance (18,744–18,761 against 18,704–18,714),
 all inside Pebble's read path for the extra rows (`getIter.Next`).
 
-**Still not built:** per-instance readiness for compacted logs; variable values
-at each step of an iteration's replay window (the iteration detail shows its
-scope's changes); marking elements inside a *collapsed* subprocess, which
+**OHS3 increment 3 — variable values at each step (2026-11-02).** `GET
+/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=<position>`
+(MCP `atlas_multi_instance_iteration_variables`) answers what one iteration's
+scopes held at a step: the iteration's own scope, and every element inside it
+that was activated by then and had not ended — a subprocess, a nested body, an
+activity's local inputs — each folded to the latest retained change per name at
+or before the position (ADR-0048), rendered by the server's one variable
+renderer. Nothing new is recorded: it is a bounded prefix read of the existing
+per-scope snapshot history (`VariableSnapshotsUpTo`, which stops at the first
+change past the position) and of the iteration's steps. Bounds: 200 steps to
+find the open scopes, 200 changes per scope, 4,096 bytes per value, each with a
+truncation flag. The body's and the instance's scopes are deliberately not
+folded: the body's history grows with the iteration count. The explorer shows
+the values under the replay window and reads each step once. Measured on the
+50,000-iteration instance: 519 bytes, 0.9 ms.
+
+**Still not built:** per-instance readiness for compacted logs; the body's and
+the instance's variables at a step; marking elements inside a *collapsed* subprocess, which
 bpmn-js draws on a separate plane; job and user-task history per
 iteration. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone

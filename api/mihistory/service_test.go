@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/pblumer/atlas/compiler"
@@ -103,6 +104,7 @@ func (w *world) mount(mux *http.ServeMux, svc *Service) {
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", svc.HandleIterations)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", svc.HandleIteration)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", svc.HandleIterationSteps)
+	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables", svc.HandleIterationVariables)
 	mux.HandleFunc("GET /api/v1/instances/{key}/outline", svc.HandleOutline)
 }
 
@@ -1091,5 +1093,201 @@ func TestIterationStepsOfOlderHistoryAreUnavailable(t *testing.T) {
 	status, e := w.get(iterPath(pi, b.BodyElementInstanceKey)+"/"+strconv.FormatUint(rounds.Iterations[0].ElementInstanceKey, 10)+"/steps", nil, &ignored)
 	if status != http.StatusConflict || e["code"] != "history_unavailable" {
 		t.Fatalf("steps of older history: %d %v", status, e)
+	}
+}
+
+func varsPath(pi, body, iter uint64) string {
+	return iterPath(pi, body) + "/" + strconv.FormatUint(iter, 10) + "/variables"
+}
+
+func scopeValues(sc StepScope) map[string]string {
+	out := map[string]string{}
+	for _, v := range sc.Variables {
+		out[v.Name] = v.Value
+	}
+	return out
+}
+
+// The variables at a step are the iteration's own scope and the scopes running
+// inside it then, each folded to the latest value per name at or before the
+// step — never another iteration's.
+func TestIterationVariablesAtAStep(t *testing.T) {
+	w, pi := nestedWorld(t)
+	var top BodiesResponse
+	w.get(instPath(pi), nil, &top)
+	outer := top.Bodies[0].BodyElementInstanceKey
+	var rounds IterationsResponse
+	w.get(iterPath(pi, outer), nil, &rounds)
+	second := rounds.Iterations[1].ElementInstanceKey
+	var steps IterationStepsResponse
+	w.get(iterPath(pi, outer)+"/"+strconv.FormatUint(second, 10)+"/steps", nil, &steps)
+	last := steps.Steps[len(steps.Steps)-1]
+
+	at := func(pos uint64) IterationVariablesResponse {
+		t.Helper()
+		var resp IterationVariablesResponse
+		if code, e := w.get(varsPath(pi, outer, second), url.Values{"at": {strconv.FormatUint(pos, 10)}}, &resp); code != 200 {
+			t.Fatalf("variables at %d: %d %v", pos, code, e)
+		}
+		return resp
+	}
+	end := at(last.Position)
+	if end.At != last.Position || end.Iteration.ElementInstanceKey != second || len(end.Scopes) == 0 ||
+		!end.Scopes[0].Iteration || end.Scopes[0].ElementInstanceKey != second {
+		t.Fatalf("variables at the last step: %+v", end)
+	}
+	own := scopeValues(end.Scopes[0])
+	if own["o"] != "2" || own["loopCounter"] != "2" {
+		t.Fatalf("the second iteration's own variables: %v", own)
+	}
+	for _, sc := range end.Scopes[1:] {
+		if sc.ElementInstanceKey == second || sc.Iteration {
+			t.Fatalf("a scope listed twice: %+v", end.Scopes)
+		}
+	}
+	// An iteration's inputs are bound before it is activated; before they were
+	// written its scope holds nothing, and it is listed anyway, so "no variables"
+	// is said about this iteration.
+	first := at(1)
+	if len(first.Scopes) != 1 || len(first.Scopes[0].Variables) != 0 {
+		t.Fatalf("variables before the iteration began: %+v", first.Scopes)
+	}
+	for _, v := range end.Scopes[0].Variables {
+		if v.Position > last.Position {
+			t.Fatalf("a change after the step: %+v", v)
+		}
+	}
+
+	var nested BodiesResponse
+	w.get(instPath(pi), url.Values{"parentIteration": {strconv.FormatUint(second, 10)}}, &nested)
+	inner := nested.Bodies[0].BodyElementInstanceKey
+	tests := []struct {
+		name   string
+		path   string
+		query  url.Values
+		status int
+		code   string
+	}{
+		{"no position", varsPath(pi, outer, second), nil, 400, "invalid_parameter"},
+		{"bad position", varsPath(pi, outer, second), url.Values{"at": {"x"}}, 400, "invalid_parameter"},
+		{"iteration of another body", varsPath(pi, inner, second), url.Values{"at": {"1"}}, 404, "not_found"},
+		{"unknown body", varsPath(pi, 424242, second), url.Values{"at": {"1"}}, 404, "not_found"},
+		{"bad iteration key", iterPath(pi, outer) + "/x/variables", url.Values{"at": {"1"}}, 400, "invalid_parameter"},
+		{"bad body key", "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/multi-instances/x/iterations/1/variables", url.Values{"at": {"1"}}, 400, "invalid_parameter"},
+		{"bad instance key", "/api/v1/instances/x/multi-instances/1/iterations/1/variables", url.Values{"at": {"1"}}, 400, "invalid_parameter"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ignored any
+			if status, e := w.get(tt.path, tt.query, &ignored); status != tt.status || e["code"] != tt.code {
+				t.Fatalf("got %d %v, want %d %s", status, e, tt.status, tt.code)
+			}
+		})
+	}
+}
+
+// A large value is cut on a character boundary and says so.
+func TestIterationVariablesCutALargeValue(t *testing.T) {
+	big := strings.Repeat("ä", 3000) // 6,000 bytes
+	w := newWorld(t, `["`+big+`"]`, false)
+	pi := w.start()
+	b := w.onlyBody(pi)
+	var rounds IterationsResponse
+	w.get(iterPath(pi, b.BodyElementInstanceKey), nil, &rounds)
+	it := rounds.Iterations[0].ElementInstanceKey
+	var resp IterationVariablesResponse
+	if code, e := w.get(varsPath(pi, b.BodyElementInstanceKey, it), url.Values{"at": {"999999"}}, &resp); code != 200 {
+		t.Fatalf("variables: %d %v", code, e)
+	}
+	var item *StepVariable
+	for i, v := range resp.Scopes[0].Variables {
+		if v.Name == "item" {
+			item = &resp.Scopes[0].Variables[i]
+		}
+	}
+	if item == nil || !item.ValueTruncated || len(item.Value) > stepValueCap || !utf8.ValidString(item.Value) || !strings.Contains(item.Value, "ää") {
+		t.Fatalf("the large value: %+v", item)
+	}
+}
+
+func TestIterationVariablesOfOlderHistoryAreUnavailable(t *testing.T) {
+	w, pi := legacyWorld(t, "mi_iteration_steps_v1")
+	b := w.onlyBody(pi)
+	var rounds IterationsResponse
+	w.get(iterPath(pi, b.BodyElementInstanceKey), nil, &rounds)
+	var ignored any
+	status, e := w.get(varsPath(pi, b.BodyElementInstanceKey, rounds.Iterations[0].ElementInstanceKey), url.Values{"at": {"1"}}, &ignored)
+	if status != http.StatusConflict || e["code"] != "history_unavailable" {
+		t.Fatalf("variables of older history: %d %v", status, e)
+	}
+}
+
+// A scope running inside the iteration is shown while it runs: a nested body
+// assembling its output collection holds it between its activation and its end,
+// and is gone from the steps after.
+func TestIterationVariablesShowAScopeRunningInsideTheIteration(t *testing.T) {
+	w := newWorld(t, "[1]", false)
+	b := compiler.NewBuilder(1, "mi-vars-nested", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	b.SetMultiInstance(sub, false, "o", "", compileFEEL(t, "[1, 2]"), nil, nil, nil)
+	b.PushScope(sub)
+	is := b.AddStartEvent()
+	inner := b.AddScriptTask(compileFEEL(t, "x * 10"), "r")
+	b.SetMultiInstance(inner, true, "x", "results", compileFEEL(t, "[1, 2, 3]"), nil, compileFEEL(t, "r"), nil)
+	b.SetElementBpmnId(inner, "Calc")
+	ie := b.AddEndEvent()
+	b.Connect(is, inner)
+	b.Connect(inner, ie)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.cp = cp
+	w.p.Deploy(cp)
+	w.p.CreateInstance(cp.Key)
+	w.run()
+	pi := model.NewKey(1, 1) // the partition's first key: the instance, which has completed
+	var top BodiesResponse
+	w.get(instPath(pi), nil, &top)
+	outer := top.Bodies[0].BodyElementInstanceKey
+	var rounds IterationsResponse
+	w.get(iterPath(pi, outer), nil, &rounds)
+	first := rounds.Iterations[0].ElementInstanceKey
+	var steps IterationStepsResponse
+	w.get(iterPath(pi, outer)+"/"+strconv.FormatUint(first, 10)+"/steps", nil, &steps)
+	var bodyKey uint64
+	var bodyEnd uint64
+	for _, s := range steps.Steps {
+		if s.MultiInstanceBody && s.Action == "activated" {
+			bodyKey = s.ElementInstanceKey
+		}
+		if s.MultiInstanceBody && s.Action == "completed" {
+			bodyEnd = s.Position
+		}
+	}
+	if bodyKey == 0 || bodyEnd == 0 {
+		t.Fatalf("no nested body in the window: %+v", steps.Steps)
+	}
+	var during, after IterationVariablesResponse
+	w.get(varsPath(pi, outer, first), url.Values{"at": {strconv.FormatUint(bodyEnd-1, 10)}}, &during)
+	w.get(varsPath(pi, outer, first), url.Values{"at": {strconv.FormatUint(bodyEnd, 10)}}, &after)
+	var nested *StepScope
+	for i, sc := range during.Scopes {
+		if sc.ElementInstanceKey == bodyKey {
+			nested = &during.Scopes[i]
+		}
+	}
+	if nested == nil || nested.ElementID != "Calc" || nested.Iteration || scopeValues(*nested)["results"] == "" {
+		t.Fatalf("the nested body's scope while it ran: %+v", during.Scopes)
+	}
+	for _, sc := range after.Scopes {
+		if sc.ElementInstanceKey == bodyKey {
+			t.Fatalf("the nested body's scope after it ended: %+v", after.Scopes)
+		}
 	}
 }

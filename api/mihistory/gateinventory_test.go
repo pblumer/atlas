@@ -41,6 +41,7 @@ var miHistoryGates = []handlerGate{
 	{"HandleIteration", roleGated, "one iteration's incidents, nested bodies, its own scope's variables and its decisions — what /timeline and /decisions already show an Operator for the same instance"},
 	{"HandleOutline", roleGated, "an instance's steps outside its MI iterations: a subset of the rows /timeline returns"},
 	{"HandleIterationSteps", roleGated, "the steps inside one MI iteration: a subset of the rows /timeline returns for the same instance"},
+	{"HandleIterationVariables", roleGated, "one iteration's own scopes' variables at a step, rendered by the server's one variable renderer: what /timeline shows an Operator at the same step"},
 }
 
 func TestEveryHandlerIsClassified(t *testing.T) {

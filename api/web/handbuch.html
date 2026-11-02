@@ -9855,7 +9855,10 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           zugeklappte Zeile dazwischen, und den Explorer. <b>Diese Iteration wiedergeben</b> im Detail einer
           Iteration spielt ihre Schritte auf dem Diagramm ab – die bisher durchlaufenen Elemente sind markiert, das
           aktuelle hervorgehoben –, schrittweise vor und zurück oder mit <b>Abspielen</b>; eine verschachtelte
-          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Meldet der Explorer, die Historie lasse sich
+          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Unter der Wiedergabe stehen die
+          <b>Variablen bei diesem Schritt</b>: die eigenen Bereiche der Iteration – sie selbst und, was zu diesem
+          Zeitpunkt in ihr lief –, je Variable mit dem letzten Wert bis zu diesem Schritt. Variablen der
+          Multi-Instance-Ausführung und der Instanz sind darin nicht enthalten. Meldet der Explorer, die Historie lasse sich
           noch nicht sicher vollständig anzeigen, wurde sie aufgezeichnet, bevor es den Index dafür gab – das heisst
           nicht, dass keine Iterationen gelaufen sind. Dieselben Daten liefern
           <code>GET /api/v1/instances/{key}/multi-instances</code> und die MCP-Tools
@@ -9877,7 +9880,10 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           as one collapsed row between them, and the explorer. <b>Replay this iteration</b> in an iteration's
           detail plays its steps on the diagram – the elements passed so far are marked, the current one
           highlighted – step by step forward and back or with <b>Play</b>; a nested execution is one step in it,
-          and its iterations have steps of their own. When the explorer says the history
+          and its iterations have steps of their own. Below the replay, <b>Variables at this step</b> shows the
+          iteration's own scopes – the iteration and whatever ran inside it at that moment – each variable with
+          its latest value up to that step. Variables of the multi-instance execution and of the instance are not
+          included. When the explorer says the history
           cannot yet be shown as complete, it was recorded before the index for it existed – that does not mean
           no iterations ran. The same data comes from <code>GET /api/v1/instances/{key}/multi-instances</code> and
           the MCP tools <code>atlas_instance_multi_instances</code> and

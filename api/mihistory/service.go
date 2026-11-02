@@ -24,8 +24,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
@@ -63,7 +65,13 @@ const (
 	// variable changes and decision evaluations.
 	detailVariableCap = 100
 	detailDecisionCap = 20
-	defaultCursorTTL  = time.Hour
+	// stepVariableScopeCap bounds the changes read per scope for the variables at
+	// one step, stepScopeScan the steps read to find the scopes open at it, and
+	// stepValueCap the bytes of one rendered value.
+	stepVariableScopeCap = 200
+	stepScopeScan        = 200
+	stepValueCap         = 4096
+	defaultCursorTTL     = time.Hour
 )
 
 // RenderVariable turns a stored variable into the kind and value an operator
@@ -1033,4 +1041,160 @@ func (s *Service) iterationSteps(r *http.Request) (*IterationStepsResponse, erro
 		return nil
 	})
 	return resp, err
+}
+
+// StepVariable is one variable as it stood at a step: its latest change at or
+// before the step's log position.
+type StepVariable struct {
+	Name     string `json:"name"`
+	Kind     string `json:"kind"`
+	Value    string `json:"value"`
+	Position uint64 `json:"position"` // where this value was written
+	At       int64  `json:"at"`
+	// ValueTruncated means Value holds only the first bytes of a larger value.
+	ValueTruncated bool `json:"valueTruncated,omitempty"`
+}
+
+// StepScope is one scope of an iteration as it stood at a step: the iteration's
+// own scope, or that of an element running inside it then (a subprocess, a
+// nested body, an activity's local inputs).
+type StepScope struct {
+	ElementInstanceKey uint64         `json:"elementInstanceKey"`
+	ElementID          string         `json:"elementId,omitempty"`
+	Iteration          bool           `json:"iteration,omitempty"`
+	Variables          []StepVariable `json:"variables"`
+	// Truncated means the scope holds more changes up to this step than were read,
+	// so a variable unchanged since an early change may be missing.
+	Truncated bool `json:"truncated,omitempty"`
+}
+
+// IterationVariablesResponse answers
+// GET .../iterations/{iterationKey}/variables?at=<position>.
+type IterationVariablesResponse struct {
+	InstanceKey uint64        `json:"instanceKey"`
+	Iteration   IterationView `json:"iteration"`
+	At          uint64        `json:"at"`
+	Scopes      []StepScope   `json:"scopes"`
+	// ScopesTruncated means the iteration ran more steps up to this position than
+	// were read to find the scopes open at it.
+	ScopesTruncated bool `json:"scopesTruncated,omitempty"`
+}
+
+// HandleIterationVariables serves the variables of one iteration as they stood
+// at one log position — a step of its replay window: the iteration's own scope
+// and every scope running inside it then, each folded to the latest change per
+// name at or before that position. The body's and the instance's scopes are not
+// folded: their history grows with the iteration count.
+func (s *Service) HandleIterationVariables(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.iterationVariables(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, resp)
+}
+
+func (s *Service) iterationVariables(r *http.Request) (*IterationVariablesResponse, error) {
+	key, err := pathUint(r, "key")
+	if err != nil {
+		return nil, err
+	}
+	bodyKey, err := pathUint(r, "bodyKey")
+	if err != nil {
+		return nil, err
+	}
+	iterKey, err := pathUint(r, "iterationKey")
+	if err != nil {
+		return nil, err
+	}
+	at, err := queryUint(r, "at")
+	if err != nil {
+		return nil, err
+	}
+	if at == 0 {
+		return nil, badRequest("invalid_parameter", "at (the log position of a step) is required")
+	}
+	resp := &IterationVariablesResponse{InstanceKey: key, At: at, Scopes: []StepScope{}}
+	err = s.read(r, func(rv *state.ReadView, defs Definitions) error {
+		if _, err := loadBody(rv, key, bodyKey); err != nil {
+			return err
+		}
+		e, ok, err := rv.MIIteration(key, iterKey)
+		if err != nil {
+			return err
+		}
+		if !ok || e.BodyElementKey != bodyKey {
+			return errIterNotFound
+		}
+		resp.Iteration = iterationView(*e)
+		// The scopes open at the position: the iteration's own, then each element
+		// inside it activated by then and not yet ended, in activation order.
+		scopes := []StepScope{{ElementInstanceKey: iterKey, Iteration: true}}
+		open := map[uint64]int{}
+		next, err := rv.IterationStepsPage(key, iterKey, nil, at, stepScopeScan, func(o state.OutlineStep) error {
+			if o.ElementInstanceKey == iterKey {
+				return nil
+			}
+			if o.Action != state.ReplayActivated {
+				delete(open, o.ElementInstanceKey)
+				return nil
+			}
+			open[o.ElementInstanceKey] = len(scopes)
+			scopes = append(scopes, StepScope{ElementInstanceKey: o.ElementInstanceKey, ElementID: stepView(o, defs).ElementID})
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		resp.ScopesTruncated = next != nil
+		for i := range scopes {
+			if i > 0 {
+				if _, live := open[scopes[i].ElementInstanceKey]; !live {
+					continue
+				}
+			}
+			sc, err := s.scopeAt(rv, scopes[i], at)
+			if err != nil {
+				return err
+			}
+			if i == 0 || len(sc.Variables) > 0 {
+				resp.Scopes = append(resp.Scopes, sc)
+			}
+		}
+		return nil
+	})
+	return resp, err
+}
+
+// scopeAt folds one scope's changes up to at into the latest value per name,
+// ordered by name.
+func (s *Service) scopeAt(rv *state.ReadView, sc StepScope, at uint64) (StepScope, error) {
+	latest := map[string]StepVariable{}
+	more, err := rv.VariableSnapshotsUpTo(sc.ElementInstanceKey, at, stepVariableScopeCap, func(ts int64, pos uint64, v *model.VariableValue) error {
+		kind, value := s.render(v)
+		sv := StepVariable{Name: v.Name, Kind: kind, Value: value, Position: pos, At: ts}
+		if len(sv.Value) > stepValueCap {
+			cut := stepValueCap
+			for cut > 0 && !utf8.RuneStart(sv.Value[cut]) {
+				cut--
+			}
+			sv.Value, sv.ValueTruncated = sv.Value[:cut], true
+		}
+		latest[v.Name] = sv
+		return nil
+	})
+	if err != nil {
+		return sc, err
+	}
+	sc.Truncated = more
+	names := make([]string, 0, len(latest))
+	for n := range latest {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	sc.Variables = make([]StepVariable, 0, len(names))
+	for _, n := range names {
+		sc.Variables = append(sc.Variables, latest[n])
+	}
+	return sc, nil
 }

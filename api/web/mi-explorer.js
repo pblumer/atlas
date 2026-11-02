@@ -316,6 +316,46 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
     r.at = Math.max(0, Math.min(r.steps.length - 1, at));
     drawReplay();
     if (onReplay) onReplay(replayMarks(r.steps, r.at));
+    loadVars(r, r.steps[r.at].position);
+  }
+
+  // loadVars reads the iteration's variables as they stood at one step, once per
+  // step position: the window keeps what it read, so stepping back costs nothing.
+  async function loadVars(r, pos) {
+    const key = String(pos);
+    r.varsAt = key;
+    if (r.vars.has(key)) { drawReplay(); return; }
+    r.vars.set(key, { loading: true });
+    drawReplay();
+    let entry;
+    try {
+      const data = await api("GET", `${base(instanceKey)}/${encodeURIComponent(String(st.body.bodyElementInstanceKey))}/iterations/${encodeURIComponent(st.selected)}/variables?at=${encodeURIComponent(key)}`);
+      entry = { data };
+    } catch (err) {
+      entry = { error: failureCode(err) === "history_unavailable" ? tr("ops.mi.replay.unavailable") : tr("ops.mi.error", { message: err.message }) };
+    }
+    if (destroyed || st.replay !== r) return;
+    if (entry.error) r.vars.delete(key); else r.vars.set(key, entry);
+    if (r.varsAt === key) { r.varsError = entry.error || ""; drawReplay(); }
+  }
+
+  function varsHTML(r) {
+    const entry = r.vars.get(r.varsAt);
+    if (r.varsError) return `<p class="mi-ex-error mi-rp-vars-error">${esc(r.varsError)}</p>`;
+    if (!entry || entry.loading) return `<p class="muted">${esc(tr("ops.mi.loading"))}</p>`;
+    const d = entry.data;
+    const scopes = (d.scopes || []).map((sc) => {
+      const head = sc.iteration ? tr("ops.mi.replay.vars.own") : label(sc.elementId);
+      const rows = (sc.variables || []).map((v) => `<tr><td class="mono">${esc(v.name)}</td>
+          <td class="mono mi-var-${esc(v.kind)}">${esc(v.value)}${v.valueTruncated ? ` <span class="muted">${esc(tr("ops.mi.replay.vars.cut"))}</span>` : ""}</td>
+          <td class="mono muted">${esc(v.position)}</td></tr>`).join("");
+      return `<div class="mi-rp-scope" data-key="${esc(sc.elementInstanceKey)}"><h6>${esc(head)}</h6>${rows
+        ? `<table class="mi-vars"><tbody>${rows}</tbody></table>`
+        : `<p class="muted">${esc(tr("ops.mi.replay.vars.none"))}</p>`}${
+        sc.truncated ? `<p class="muted">${esc(tr("ops.mi.replay.vars.more"))}</p>` : ""}</div>`;
+    }).join("");
+    return `${scopes}${d.scopesTruncated ? `<p class="muted">${esc(tr("ops.mi.replay.vars.scopes"))}</p>` : ""}
+      <p class="muted mi-rp-vars-note">${esc(tr("ops.mi.replay.vars.note"))}</p>`;
   }
 
   function drawReplay() {
@@ -349,7 +389,8 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
           <span class="mi-rp-act muted">${esc(tr(`ops.mi.replay.action.${s.multiInstanceBody ? "body" : "step"}.${s.action}`))}</span>
           <span class="mi-rp-at mono muted">${esc(s.position)}</span>
         </li>`).join("")}</ol>
-      ${r.next ? `<button type="button" class="btn neutral small mi-rp-more"${r.loading ? " disabled" : ""}>${esc(tr("ops.mi.replay.more"))}</button>` : ""}`;
+      ${r.next ? `<button type="button" class="btn neutral small mi-rp-more"${r.loading ? " disabled" : ""}>${esc(tr("ops.mi.replay.more"))}</button>` : ""}
+      <section class="mi-rp-vars" aria-live="polite"><h5>${esc(tr("ops.mi.replay.vars.title"))}</h5>${varsHTML(r)}</section>`;
     el.querySelector(".mi-rp-prev").addEventListener("click", () => { stopPlay(); show(r.at - 1); });
     el.querySelector(".mi-rp-next").addEventListener("click", () => { stopPlay(); show(r.at + 1); });
     el.querySelector(".mi-rp-play").addEventListener("click", () => {
@@ -373,7 +414,10 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
   async function loadReplay(more = false) {
     const key = st.selected;
     if (!key) return;
-    if (!more) { stopPlay(); st.replay = { steps: [], next: "", at: 0, loading: true, error: null, playing: false }; }
+    if (!more) {
+      stopPlay();
+      st.replay = { steps: [], next: "", at: 0, loading: true, error: null, playing: false, vars: new Map(), varsAt: "", varsError: "" };
+    }
     const r = st.replay;
     r.loading = true; r.error = null;
     drawReplay();

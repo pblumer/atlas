@@ -1125,9 +1125,9 @@ What it takes to run this for real.
   read off the single writer; a 50,000-iteration end-to-end test holds every read to its page
   ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Operations shows a large instance
   without the full timeline and browses its iterations in the Multi-Instance Explorer, which
-  replays one iteration's steps on the diagram (OHS3). Not yet
+  replays one iteration's steps on the diagram with the variables of its own scopes at each step (OHS3). Not yet
   built: per-instance readiness for compacted logs (stores written before the index are rebuilt
-  from the log at startup; a compacted log stays "history unavailable"), variable values per step and
+  from the log at startup; a compacted log stays "history unavailable"),
   job/user-task history per iteration (OHS3), and a
   50,000-iteration acceptance through the HTTP server for a multi-instance *subprocess* (completing its
   iterations is no longer quadratic, [issue #1494](https://github.com/pblumer/atlas/issues/1494)).
