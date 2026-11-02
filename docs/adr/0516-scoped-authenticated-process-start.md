@@ -222,9 +222,9 @@ remains open.
 ### Admin management API checkpoint (2026-11-02)
 
 The administration half is implemented as the per-area service
-`api/startgrant.Service` (ADR-0147) over the store above. It **still authorizes
-no start**: no self-service route exists yet, so a grant issued here lets nobody
-start anything.
+`api/startgrant.Service` (ADR-0147) over the store above. It **authorizes no
+start by itself**: a grant issued here lets nobody start anything until the
+self-service start route exists.
 
 - **Routes**, all declared `admin` in the route table and on the admin allowlist:
   `GET /api/v1/applications/{id}/start-grants` (every scope of one application),
@@ -274,6 +274,41 @@ start anything.
   Requiring that would make a plain deploy without a release withdraw the process
   from field users, and would need a release index so the listing does not read
   every release document on the run loop; it is a one-function change if wanted.
+
+### Self-service list checkpoint (2026-11-02)
+
+`GET /api/v1/me/startable-processes` is implemented (`api/selfservicestart.go`),
+the first of the two approved self-service routes. It lists; it starts nothing.
+
+- **Gate:** role `user` from the route table (admin reaches it too), and the
+  caller must be a person's own signed-in session. An API token or a connected
+  application is refused with 403 even when it carries `user`. A server without
+  authentication answers 404 and keeps its operator Start view. A logged-out or
+  disabled account has no session and gets 401.
+- **What is listed:** every scope whose latest durable change grants the user id
+  or one of the group ids the session carries now — kept current by every
+  membership change (ADR-0185) — resolved to the newest deployed version of the
+  process and offered only when the same `selfServiceBlockers` rule the preview
+  uses finds nothing. So no superseded version, no process whose newest version
+  another application deployed, nothing deactivated, non-executable, trigger-only,
+  missing constants, or in a deleted or protected application. Each item carries
+  the definition key, process id, display name, version, application id and name,
+  and whether and from which form it starts (`startForm.available`, `formId`);
+  never an audience or another person.
+- **Cost on the run loop:** the grants are in memory; the registry is walked once
+  per request and each granted application read once. The answer is sorted by
+  application name, then process name, with ids as tie-breakers, and capped at 200
+  with `total` and `truncated`. While the grant store is uncertain after a failed
+  write the route fails closed with 503 rather than an empty list.
+- The definition key in an item is not a permission; the start route must check
+  everything again.
+
+Tests: `api/startableprocesses_http_test.go` (empty by default, group and user
+grants, redeploy shows only the newest version, sorting, leaving the group,
+revocation, deactivation, non-executable newest version, process id redeployed
+into another application, deleted application, anonymous 401, machine token 403,
+account without the user role 403, logout and disabled account 401, open server
+404), `api/selfservicestart_internal_test.go`, `api/startgrant/store_test.go`.
 
 Tests: `api/startgrant/service_test.go` (deny by default, open server, delegated
 credential, malformed and forged bodies, unknown identities and scopes, competing

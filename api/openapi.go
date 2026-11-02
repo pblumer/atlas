@@ -796,6 +796,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, a time zone the IANA database does not know, or an appearance other than light, dark, system or cockpit is refused rather than stored, because the browser is what formats and draws with it", tag: "Preferences", role: RoleUser,
 			req:  jsonBody("Region, time zone, language and appearance", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString(), "appearance": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
+		// The processes the signed-in person may start themselves (ADR-0516): what an
+		// administrator granted them or a group they are in, newest version only. The
+		// user role is the coarse gate; the handler also demands the person's own
+		// session and reads the grants on every request.
+		{"GET", "/api/v1/me/startable-processes", s.handleMyStartableProcesses, apiOp{
+			summary: "The processes you may start yourself, now (ADR-0516): each one an administrator granted to you or to a group you are in, as its newest deployed version filed under the grant's application, executable, active and startable by hand — with its definition key, process id, name, version, application id and name, and whether it starts from a form (startForm.available, startForm.formId). Never a superseded version, another application's process or anything not granted, and nothing about who else may start it. Sorted by application, then name; at most 200, with total and truncated. Needs your own signed-in session: an API token or connected application is refused with 403 even when it carries the user role. 404 on a server without authentication, 503 while the grants cannot be trusted after a failed write. The key is not a permission: starting checks again", tag: "Tasks", role: RoleUser,
+			resp: jsonBody("The processes you may start", tPage())}},
 		// The processes the signed-in person starred on the Tasks app's Start view
 		// (ADR-0466). Keyed on the principal like the
 		// preferences above; the path names a process, never a person. roleAny rather than

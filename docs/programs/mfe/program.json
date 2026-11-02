@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review and merge the MFE1 admin-only start-grant management API PR #1492 (ADR-0516). Then implement GET /api/v1/me/startable-processes and POST /api/v1/me/processes/{key}/instances with server-side form enforcement, 401/403/404, machine-token and post-fsync replay tests, then the mobile Start UI. Confirm with the owner whether \"published\" must additionally mean membership of the application's latest release. MFE0 physical-device acceptance #1451 remains open; MFE2 PR #1479 is merged.",
+  "next_action": "The MFE1 start-grant admin API (PR #1492) is merged; review and merge the self-service startable-processes list (PR #1495, ADR-0516). Then implement POST /api/v1/me/processes/{key}/instances with server-side form enforcement, 401/403/404, machine-token and post-fsync replay tests, then the mobile Start UI. Confirm with the owner whether \"published\" must additionally mean membership of the application's latest release. MFE0 physical-device acceptance #1451 remains open.",
   "slices": [
     {
       "id": "MFE0",
@@ -49,9 +49,10 @@
         1472,
         1486,
         1489,
-        1492
+        1492,
+        1495
       ],
-      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is implemented in PR #1492; it enables no start by itself. Self-service GET/POST, form validation, durable startedBy/replay tests, the user Start UI and physical-device acceptance remain open. Existing operator rights are unchanged."
+      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is implemented in PR #1495. The self-service POST, server-side form validation, durable startedBy/replay tests, the user Start UI and physical-device acceptance remain open. Existing operator rights are unchanged."
     },
     {
       "id": "MFE2",
