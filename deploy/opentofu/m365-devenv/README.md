@@ -171,6 +171,75 @@ Die SharePoint-Website der gelöschten Gruppe bleibt im Papierkorb der gelöscht
 (SharePoint Admin Center) und wird von Microsoft nach 93 Tagen entfernt. Zum Schluss
 `out/` löschen.
 
+**Falls `tofu destroy` nicht mehr geht** (State verloren oder beschädigt): Das Notfallskript
+findet alles über den Präfix, ohne State. Es entfernt Azure-Ressourcengruppen,
+App-Registrierungen, Benutzer und Gruppen. Erst auflisten, dann löschen:
+
+```bash
+./scripts/emergency-cleanup.sh atlas-test
+```
+
+```bash
+./scripts/emergency-cleanup.sh atlas-test --yes
+```
+
+Danach `purge-deleted.sh` und, im geteilten Tenant, `shared-tenant-cleanup.ps1`. Weil das
+Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` beginnen.
+
+## Geteilter Tenant (`shared_tenant = true`)
+
+Für einen Tenant, der auch produktiv genutzt wird, etwa den eigenen. Anwendungsberechtigungen
+aus Entra gelten immer tenantweit. Deshalb erhalten die Apps, deren Rechte jedes Postfach
+erreichen, in Entra **keine** solchen Rechte, sondern eingegrenzte Rechte in Exchange und
+SharePoint:
+
+| Worker | Ohne Schalter | Mit `shared_tenant = true` |
+|---|---|---|
+| `mail` | `Mail.Send` in Entra (jedes Postfach) | kein `Mail.Send` in Entra; Exchange **RBAC for Applications**: «Application Mail.Send» nur im Management Scope |
+| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
+| `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website |
+| `teamsphone` | Rolle *Teams Administrator* | **nicht erlaubt**: die Rolle lässt sich nicht eingrenzen (`workers = { teamsphone = false }` setzen) |
+| `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
+| Zugangsdaten | `credential_validity_days` frei | höchstens 7 Tage |
+
+Der **Management Scope** umfasst alle Empfänger, deren Alias mit dem Präfix der Umgebung
+beginnt (`Alias -like 'atlas-test-<zufall>*'`): die Testpersonen und alles, was die Worker
+unter diesem Namen anlegen. Ein Testprozess, der ein Funktionspostfach oder eine Verteilerliste
+anlegt, muss deren Alias deshalb mit dem Präfix beginnen lassen; sonst lehnt Exchange die
+Änderung ab. Lesen (*View-Only Recipients*) bleibt organisationsweit möglich; Exchange kennt für
+Leserechte keinen Empfängerbereich.
+
+Die Exchange- und SharePoint-Rechte kann OpenTofu nicht setzen. Sie werden nach `tofu apply`
+einmal mit einem Skript vergeben, angemeldet als Administrator (PowerShell 7 mit den Modulen
+`ExchangeOnlineManagement` und `Microsoft.Graph.Authentication`):
+
+```bash
+tofu output -json shared_tenant > out/shared-tenant.json
+```
+
+```bash
+pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json -Device
+```
+
+Exchange übernimmt Rechte für Anwendungen laut Microsoft erst nach 30 Minuten bis 2 Stunden;
+bis dahin lehnt Exchange den Mail-Worker ab. Beim Abbauen **vor oder nach** `tofu destroy`:
+
+```bash
+pwsh ./scripts/shared-tenant-cleanup.ps1 -Prefix atlas-test -Device -Yes
+```
+
+**Was der Schalter nicht eingrenzt:** Der Entra-Worker behält `User.ReadWrite.All` und
+`Group.ReadWrite.All`, denn Graph-Anwendungsberechtigungen lassen sich nicht auf Objekte
+begrenzen. Er könnte also auch bestehende normale Konten und Gruppen ändern. Konten mit
+Administratorrolle sind davor geschützt; diese Berechtigung allein reicht dafür nicht. Wer
+das nicht will, testet zunächst nur lesend (`entra_graph_permissions = ["User.Read.All",
+"Group.Read.All"]`). Die prozessseitige Sperre auf Testobjekte (Präfix im Modell, wie in
+`examples/account-bestellung`) bleibt die eigentliche Grenze.
+
+Nicht an einem Tenant geprüft: der Filter `Alias -like …` im Management Scope, das Anlegen
+von Objekten innerhalb des Schreibbereichs mit *Mail Recipient Creation* und das Verhalten des
+Exchange-Workers mit einer Rollengruppe statt der Verzeichnisrolle.
+
 ## Atlas-Server
 
 - **Installation:** `atlas_install = "release"` lädt `atlas_version` von den GitHub-Releases
