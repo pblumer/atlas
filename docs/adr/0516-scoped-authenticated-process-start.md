@@ -1,15 +1,17 @@
 # ADR-0516: Scoped authenticated process starts for task users
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Decision accepted:** 2026-10-31 by MFE programme owner pblumer (explicit MFE1 implementation and associated ADR approval)
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
 - **Programme:** [Mobile & Field Experience, MFE1](../planning/mobile-field-experience-program.md)
-- **Open question:** Exact policy persistence and revocation ordering against in-flight
-  instance starts must be validated against the existing application-sidecar and
-  run-loop boundaries before the authorization API is implemented.
-- **Question checked:** 2026-10
+- **Open question:** Whether "the current published process" must additionally be a
+  member of its application's latest release record (ADR-0128), rather than the
+  newest deployed version filed under the application as built; the owner has not
+  decided it. (The earlier question — persistence and revocation ordering against
+  in-flight starts — is settled by the checkpoints below.)
+- **Question checked:** 2026-11
 
 ## Context and problem statement
 
@@ -371,6 +373,44 @@ after a restart that replays the WAL, refusal after revocation with no new
 instance, the started instance still completing; and the guard refusing a
 revocation durable between the first check and the command turn),
 `api/startformcheck_internal_test.go`.
+
+### Start view checkpoint (2026-11-02)
+
+The Tasks app's Start view offers the self-service routes to a task user
+(`viewSelfStart`, `api/web/app.js`). With it every slice this record required is
+built; physical-device acceptance stays with MFE0 #1451.
+
+- **Who sees what:** an operator (or admin) keeps the existing Start view and its
+  operator routes unchanged. A signed-in person without the operator role is
+  offered Start — in the desktop top bar, the phone's More menu and the mobile
+  work switcher — only when `GET /api/v1/me/startable-processes` lists at least
+  one process; the list is asked once per identity and again whenever the view
+  opens. A server without authentication keeps the operator behaviour. The
+  navigation is a convenience: the server decides every list and every start.
+- **What the person meets:** processes by name under their application's name —
+  never a key, a version or a grant. A start form is rendered by the existing
+  form-js viewer and checked by it before anything is sent; a process without a
+  form says it starts without input.
+- **States, each said in words in a live region:** loading, empty (nothing
+  granted), load failed, ready, form, submitting (the button disabled and
+  `aria-busy`, so a double tap sends one start), success (process name and
+  instance reference, a link to My tasks), refused values (400, form and data
+  kept), authorization changed (403/404: nothing was started, reload), version
+  changed (409), session expired (401: sign in again, nothing was started),
+  unavailable (503), and **unknown outcome** for a broken connection or a server
+  error: the view says the process may have started, points to the tasks, and
+  re-enables Start only when the person asks to start again anyway. The view
+  never claims exactly-once; idempotent retry stays MFE5's.
+- **Layout:** the existing responsive Tasks list/detail panes, 44px actions,
+  keyboard-operable list rows (Enter/Space).
+
+Tests: `e2e/mfe1-self-start.spec.mjs` (320/390/768px start through a form with the
+POST body checked and no horizontal overflow, Start offered only with a grant,
+empty state, client-side required field, server refusal keeping the data,
+revocation while the form is open, replaced version, expired session, double tap,
+broken connection, operator view unchanged, desktop top bar and keyboard). Thirteen
+of its fourteen tests fail against the previous `app.js`; the operator regression
+passes on both. Chromium viewport geometry is not device acceptance.
 
 ## Consequences
 
