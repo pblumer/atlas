@@ -199,6 +199,7 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
+   | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor dem UPN eines Partnerkontos und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
 
 ## Installieren
 
@@ -313,11 +314,34 @@ Ersatzgruppe und nicht in einen Incident. Den Entra-Worker spielt der Test selbs
 übernimmt den Job und antwortet mit dem Vorgesetzten, ohne Vorgesetzten oder mit dem
 Fehler.
 
-Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
-Worker gibt es keinen Mock), `get-user-manager` gegen Microsoft Graph,
-die Mail an die genehmigende Person, die Eskalation nach sieben Tagen, die
-Governance-Prüfung gegen echte Daten und `installieren.ps1` (in der Prüfumgebung stand keine
-PowerShell zur Verfügung).
+**Gegen einen echten Tenant geprüft (2026-11-02)**, geteilter Tenant mit `NAME_PREFIX`,
+Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-devenv`,
+`shared_tenant = true`), über die Shop-Oberfläche bestellt:
+
+- **Verteiler** bestellt: Namensregel mit Präfix, `New-DistributionGroup` im Schreibbereich,
+  Herkunftskennzeichnung `CustomAttribute1–4`, «Verwaltet von» aus der Personensuche.
+- **Funktionspostfach** bestellt und zurückgegeben (gelöscht), mit Genehmigung durch die
+  vorgesetzte Person: `get-user-manager` gegen Graph, Atlas-Konto der vorgesetzten Person aus
+  der Entra-Anmeldung, Mail an sie über RBAC for Applications.
+- **Team** bestellt und zurückgegeben (archiviert).
+- **Personensuche** in den Bestellformularen (ADR-0473, Amendment 2026-11-02), fest gefiltert
+  auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
+
+Dabei korrigiert: das Team wartet die Replikation **vor** dem Besitzer ab (`add-group-owner`
+23 s nach `create-group` antwortete 404); der Entra-Worker legt Teams mit `POST /teams` an
+(`PUT /groups/{id}/team` antwortete einer App 403 «StampTenantRegionRequest»); die
+Verteilerliste entsteht ohne `-Type`; der Exchange-Worker liest Antworten unkomprimiert und
+wiederholt ein `Set-`/`Add-`, das ein eben angelegtes Objekt noch nicht findet; Personen werden
+auch über Vor- und Nachname gefunden.
+
+Gefunden, nicht korrigiert: Findet der Server keinen Empfänger für eine Mail (eine Gruppe ohne
+Mitglieder mit Adresse), verschluckt er den Fehler beim Auflösen (`api/handlers.go`,
+`mail.Resolve`) und der Worker meldet irreführend «is this server offloading the mail kind?».
+Die Mailadresse eines Teams ist die Standard-Domain des Tenants, nicht `MAIL_DOMAIN`.
+
+Nicht geprüft: Postfachzugriff, Lizenz, Sitzungszimmer, Partnerzugang, die Aktionen an
+Bestellungen, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
+Teams Phone und `installieren.ps1`.
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind
 
