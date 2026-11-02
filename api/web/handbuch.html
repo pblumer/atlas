@@ -11554,6 +11554,106 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           person who approved it.</p>
       </div>
 
+      <h3 id="verbundene-systeme" data-l="de">Ein anderes System verbinden</h3><h3 data-l="en">Connecting another system</h3>
+      <p data-l="de">Ein System wie ein Wiki, das die Prozesse von atlas zeigt und die Aufgaben der Leute
+        spiegelt, verbindest du mit <b>einer Freigabe</b>. Du startest die Verbindung im anderen System; es schickt
+        dich auf den Zustimmungsdialog von atlas. Dort steht zuoberst die <b>Adresse (Host)</b>, unter der das System
+        sich ausweist, darunter der Name, den es sich selbst gibt &ndash; prüfe die Adresse, denn nur für sie bürgt
+        TLS. Danach wählst du, was das System lesen darf: <code>diagrams</code> (Prozesse und ihre Modelle),
+        <code>tasklist</code> (die offenen Aufgaben) und <code>events</code> (was mit den Aufgaben geschieht), je
+        auf alles oder auf einzelne Projekte begrenzt. Freigeben kann das nur, wer die Rolle <code>admin</code>
+        hat. Kein Token, kein Client-Secret und keine Redirect-URI wird von Hand kopiert.</p>
+      <p data-l="en">A system such as a wiki that shows atlas's processes and mirrors people's tasks is connected
+        with <b>one approval</b>. You start the connection in the other system; it sends you to atlas's consent
+        screen. At the top is the <b>address (host)</b> the system identifies itself by, and below it the name it
+        gives itself &ndash; check the address, because it is the only part TLS vouches for. Then you choose what the
+        system may read: <code>diagrams</code> (processes and their models), <code>tasklist</code> (the open tasks)
+        and <code>events</code> (what happens to the tasks), each for everything or narrowed to projects. Only
+        someone with the <code>admin</code> role can approve it. No token, client secret or redirect URI is copied
+        by hand.</p>
+      <p data-l="de">Die Option <b>«Personen verbinden lassen, ohne jede einzeln zu fragen»</b> erspart den Leuten
+        den eigenen Zustimmungsdialog: Wer bei atlas angemeldet ist, wird ohne Rückfrage verbunden. Jede Person
+        erhält trotzdem ihre eigene Freigabe, arbeitet ihre Aufgaben als sie selbst, und atlas entscheidet weiter,
+        wer welche Aufgabe übernehmen und erledigen darf. Unter
+        <a href="/#/console/connections">Verbundene Konten</a> sieht jede Person die Systeme, die für sie
+        freigegeben sind, und kann ihre Verbindung zurückziehen; dann fragt atlas sie wieder.</p>
+      <p data-l="en">The option <b>"Let people connect their accounts without asking each of them"</b> spares
+        people a consent screen of their own: whoever is signed in to atlas is connected without being asked. Each
+        person still gets their own approval, works their tasks as themselves, and atlas keeps deciding who may
+        take on and complete which task. Under <a href="/#/console/connections">Connected accounts</a> each person
+        sees the systems approved for them and can withdraw; atlas then asks them again.</p>
+      <p data-l="de">Unter <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> siehst du jedes System: wer es wann freigegeben hat, was es liest, ob die Vorab-Zustimmung gilt,
+        wie viele Personen verbunden sind und wann es atlas zuletzt verwendet hat. Dort schaltest du die
+        Vorab-Zustimmung aus oder trennst das System, auf Wunsch samt den Freigaben aller Personen. Was ein System
+        liest, änderst du, indem du es vom System aus erneut verbindest; die neue Freigabe ersetzt die alte. Verliert
+        die Person, die freigegeben hat, die Rolle <code>admin</code>, endet die Verbindung, und die Seite sagt
+        warum.</p>
+      <p data-l="en">Under <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> you see each system: who approved it and when, what it reads, whether pre-consent stands, how
+        many people are connected and when it last used atlas. There you turn pre-consent off or disconnect the
+        system, optionally with every person's approval. To change what a system reads, connect it again from the
+        system; the new approval replaces the old one. If the person who approved it loses the
+        <code>admin</code> role, the connection ends, and the page says why.</p>
+      <div class="note">
+        <div class="lbl" data-l="de">Was ein System umsetzt</div><div class="lbl" data-l="en">What a system implements</div>
+        <ol data-l="de">
+          <li><b>Ein Dokument über sich selbst.</b> Das System veröffentlicht unter einer https-Adresse ein
+            JSON-Dokument (OAuth Client ID Metadata Document); diese Adresse ist seine <code>client_id</code>. Es nennt
+            <code>client_id</code> (gleich der Adresse), <code>client_name</code>, <code>redirect_uris</code> auf
+            derselben Herkunft, <code>token_endpoint_auth_method: "private_key_jwt"</code> und unter
+            <code>jwks</code> mindestens einen Ed25519-Schlüssel. atlas liest es höchstens 64&nbsp;KiB gross, wartet
+            höchstens 5 Sekunden, folgt keiner Umleitung und hält es höchstens eine Stunde. Ein Schlüssel wird
+            gewechselt, indem das Dokument geändert wird.</li>
+          <li><b>Die Systemfreigabe.</b> Code-Flow mit PKCE (S256) an <code>/oauth/authorize</code> mit
+            <code>resource=&lt;atlas&gt;/system</code> und <code>scope</code> aus <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (leer heisst alle drei; alles andere wird mit
+            <code>invalid_scope</code> abgelehnt).</li>
+          <li><b>Die Freigabe einer Person.</b> Derselbe Flow mit <code>resource=&lt;atlas&gt;/tasks</code> und ohne
+            <code>scope</code>. Mit <code>prompt=none</code> zeigt atlas nie eine Seite, sondern antwortet
+            <code>login_required</code> (nicht angemeldet) oder <code>consent_required</code> (keine
+            Vorab-Zustimmung oder abgelehnt).</li>
+          <li><b>Der Token-Endpunkt.</b> <code>/oauth/token</code> mit <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> und einem mit EdDSA signierten JWT
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = der Token-Endpunkt,
+            eine einmalige <code>jti</code>, höchstens fünf Minuten gültig). Ein Fehler heisst
+            <code>401 invalid_client</code>; der Grund steht im Revisionsprotokoll.</li>
+          <li><b>Was es liest.</b> <code>GET /api/v1/auth/me</code> sagt unter <code>system</code>, was freigegeben
+            ist. <code>GET /api/v1/tasks/{key}</code> antwortet für eine beendete Aufgabe, die atlas noch kennt,
+            <code>410 Gone</code> mit <code>ended</code> und <code>endedAt</code>, und <code>404</code> für eine
+            ausserhalb der Reichweite.</li>
+          <li><b>Zurückgeben.</b> <code>POST /oauth/revoke</code> mit derselben Anmeldung beendet die ganze
+            Freigabe.</li>
+        </ol>
+        <ol data-l="en">
+          <li><b>A document about itself.</b> The system publishes a JSON document (OAuth Client ID Metadata
+            Document) at an https address; that address is its <code>client_id</code>. It names
+            <code>client_id</code> (equal to the address), <code>client_name</code>, <code>redirect_uris</code> on the
+            same origin, <code>token_endpoint_auth_method: "private_key_jwt"</code> and, under <code>jwks</code>, at
+            least one Ed25519 key. atlas reads at most 64&nbsp;KiB of it, waits at most 5 seconds, follows no redirect
+            and keeps it at most an hour. A key is rotated by changing the document.</li>
+          <li><b>The system grant.</b> The code flow with PKCE (S256) at <code>/oauth/authorize</code> with
+            <code>resource=&lt;atlas&gt;/system</code> and a <code>scope</code> of <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (empty means all three; anything else is refused with
+            <code>invalid_scope</code>).</li>
+          <li><b>A person's grant.</b> The same flow with <code>resource=&lt;atlas&gt;/tasks</code> and no
+            <code>scope</code>. With <code>prompt=none</code> atlas never shows a page and answers
+            <code>login_required</code> (not signed in) or <code>consent_required</code> (no pre-consent, or
+            declined).</li>
+          <li><b>The token endpoint.</b> <code>/oauth/token</code> with <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> and a JWT signed with EdDSA
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = the token endpoint, a
+            one-time <code>jti</code>, good for five minutes at most). A failure is <code>401 invalid_client</code>;
+            the reason is in the audit log.</li>
+          <li><b>What it reads.</b> <code>GET /api/v1/auth/me</code> says under <code>system</code> what was
+            approved. <code>GET /api/v1/tasks/{key}</code> answers a task that ended while atlas still holds it with
+            <code>410 Gone</code>, <code>ended</code> and <code>endedAt</code>, and one outside its reach with
+            <code>404</code>.</li>
+          <li><b>Giving it back.</b> <code>POST /oauth/revoke</code> with the same client authentication ends the
+            whole grant.</li>
+        </ol>
+      </div>
+
       <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>
       <p data-l="de">Eine Person meldet sich an, eine Maschine legt ein <b>API-Token</b> vor: ein Worker auf einem
         anderen Host, ein CI-Job, ein MCP-Adapter, ein Prometheus-Scraper oder ein anderes Atlas. Erzeugt, angezeigt

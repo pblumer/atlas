@@ -162,6 +162,15 @@ const (
 	// it follows from the resource the person approved. Atlas decides on every route
 	// it reaches exactly as it decides for the person in the Tasks app.
 	apiScopeTasks = "tasks"
+
+	// apiScopeSystem is what a connected system's grant carries on a request none of
+	// its capabilities serves (ADR-0512 §2): who-am-I, which answers what was
+	// approved, and nothing else. On every other request the grant resolves to the
+	// capability that serves it — `diagrams`, `tasklist` or `events`, with its reach —
+	// so the reach of a system grant is the union of those allowlists and this one
+	// line (systemPrincipal). Not mintable: it follows from the resource an
+	// administrator approved.
+	apiScopeSystem = "system"
 )
 
 // apiScopeAllowed is the complete reach of each confined scope. A scope absent
@@ -267,6 +276,10 @@ var apiScopeAllowed = map[string][]string{
 		"POST /api/v1/tasks/{key}/form-data/{field}/query",
 		"GET /api/v1/forms/{id}",
 		"GET /api/v1/instances/{key}/variables",
+	},
+	// Who-am-I, which for a system grant also says what was approved.
+	apiScopeSystem: {
+		"GET /api/v1/auth/me",
 	},
 	// Read-only, and deliberately not the PUT on the same path: a peer reads an
 	// identity, it never sets one.

@@ -977,6 +977,16 @@ type Server struct {
 	// thereafter.
 	dynamicRegistration bool
 
+	// Connected systems (ADR-0512 §1): the client ID metadata documents read for
+	// authorization requests, held in memory only, and the client assertions already
+	// spent at the token and revocation endpoints. clientMetadataPrivate lets the
+	// documents be read from private addresses (WithClientMetadataPrivateAddresses).
+	// Both are built after the options, so the budgets an installation configured are
+	// the ones they hold.
+	clientMetadataPrivate bool
+	clientMetadata        *clientMetadataFetcher
+	assertionReplay       *assertionReplayCache
+
 	// externalURL is the origin this server is reachable under from outside, when an
 	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
 	// documents and the WWW-Authenticate challenge build their absolute URLs from;
@@ -2144,6 +2154,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// ADR-0510). Built after the options, so the budgets an installation configured
 	// are the ones it holds.
 	s.tokenRate = newRateLimiter(float64(s.budgets().TokenEndpointBurst), float64(s.budgets().TokenEndpointRate))
+	s.clientMetadata = s.newClientMetadataFetcher()
+	s.assertionReplay = newAssertionReplayCache(maxAssertionReplay)
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
@@ -3738,6 +3750,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A connected system's own reading of this server, for the system grant an
+	// administrator approves (ADR-0512 §2).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
