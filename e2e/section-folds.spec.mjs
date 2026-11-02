@@ -170,5 +170,6 @@ test("the catalogue list folds every section below the list", async ({ page }) =
     { sel: '[data-fold="mappings"]', body: '[data-fold="mappings"] .card' },
     { sel: '[data-fold="approvers"]', body: '[data-fold="approvers"] p' },
     { sel: '[data-fold="translations"]', body: '[data-fold="translations"] p' },
+    { sel: '[data-fold="delivery"]', body: '[data-fold="delivery"] .dr-period' },
   ]);
 });

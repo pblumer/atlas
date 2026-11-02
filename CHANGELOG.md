@@ -103,7 +103,7 @@ _Changed_ / _Removed_ for each version.
   accounts and Approvals, both topics of Backup (under one page title now), the choices
   of Display settings, both lists of an application's Constants tab, a business object's
   sections, both sides of Planned against built, each type on Data › Instances, and the
-  sections below the catalogue list. A section drawn outside a card asks to fold with
+  sections below the catalogue list, its delivery report among them. A section drawn outside a card asks to fold with
   class `fold-topic`.
 
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
