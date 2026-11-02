@@ -25,7 +25,10 @@ type defMeta struct {
 	Version    int32
 	DeployedAt int64
 	Inactive   bool
-	cp         *compiler.CompiledProcess
+	// ProjectID is the project the deployment was filed under, "" for none — what a
+	// reach of projects is read against off the loop (ADR-0512 §2).
+	ProjectID string
+	cp        *compiler.CompiledProcess
 }
 
 // VersionTag is the tag the definition was deployed under, or "" when it carries
@@ -94,6 +97,7 @@ func (s *Server) defIndexOnLoop() defIndex {
 			Version:    d.Version,
 			DeployedAt: d.DeployedAt,
 			Inactive:   d.inactive,
+			ProjectID:  d.ProjectID,
 			cp:         d.cp,
 		}
 	}

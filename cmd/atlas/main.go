@@ -266,6 +266,7 @@ func runServe(args []string) error {
 	// endpoint that writes durable state, so an operator turns it on deliberately or
 	// not at all; a client that would use it discovers its absence from the metadata
 	// rather than by being refused (ADR-0200).
+	clientMetadataPrivate := fs.Bool("client-metadata-allow-private", envOn(os.Getenv("ATLAS_CLIENT_METADATA_ALLOW_PRIVATE")), "let atlas read a connected system's client ID metadata document from a private, loopback or link-local address (ADR-0512); off by default, because an authorization request that anyone can send makes atlas read the document, so with this on anyone could make atlas send a GET to a host inside its network. For a connected system that runs beside atlas inside one network (or ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on)")
 	oauthRegistration := fs.Bool("oauth-dynamic-registration", os.Getenv("ATLAS_OAUTH_DYNAMIC_REGISTRATION") == "1", "let an OAuth client register itself (RFC 7591), so a hosted MCP worker can be connected with nothing but this server's URL; off by default, because it lets anyone who can reach this port create a client record and appear on your people's consent screen under a name they chose. Each such client is marked as self-registered on that screen, and the number kept is bounded (ADR-0200). Leave it off and register clients with POST /api/v1/oauth-clients instead (or ATLAS_OAUTH_DYNAMIC_REGISTRATION=1)")
 	publicFormsCORS := fs.String("public-forms-cors", os.Getenv("ATLAS_PUBLIC_FORMS_CORS_ORIGINS"), "comma-separated web origins allowed to embed a public start form cross-origin (ADR-0186); empty (default) blocks cross-origin access, \"*\" allows any origin. Opens only the cookieless /public/forms endpoints, never /api/v1 (or ATLAS_PUBLIC_FORMS_CORS_ORIGINS)")
 	userProvisioning := fs.Bool("user-provisioning", true, "enable the user-provisioning worker for the protected system project's processes (create/set-password/disable atlas logins); on by default (opt-out) — disable with --user-provisioning=false. It only ever acts for the protected system project's processes, behind their human approval step, so the boundary it reopens stays gated (ADR-0123)")
@@ -447,7 +448,7 @@ func runServe(args []string) error {
 	// be started and stopped by a test.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return serve(ctx, *addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration, oidc: api.OIDCConfig{
+	return serve(ctx, *addr, *dataDir, *shutdownTimeout, *docs, *auth, oauthConfig{externalURL: *externalURL, dynamicRegistration: *oauthRegistration, clientMetadataPrivate: *clientMetadataPrivate, oidc: api.OIDCConfig{
 		Issuer:       *oidcIssuer,
 		ClientID:     *oidcClientID,
 		ClientSecret: *oidcClientSecret,
@@ -522,6 +523,9 @@ func envSwitch(key string, def bool) (bool, error) {
 type oauthConfig struct {
 	externalURL         string
 	dynamicRegistration bool
+	// clientMetadataPrivate lets a connected system's metadata document be read from
+	// a private address (ADR-0512).
+	clientMetadataPrivate bool
 
 	// oidc is the identity provider people may sign in with, when an operator named
 	// one (ADR-0210). It rides along here because it shares
@@ -863,6 +867,15 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 				"creates an account with the user role and nothing else unless a claim mapping "+
 				"is switched on under Organization",
 			slog.String("issuer", oauth.oidc.Issuer), slog.String("client_id", oauth.oidc.ClientID))
+	}
+	if oauth.clientMetadataPrivate {
+		apiOpts = append(apiOpts, api.WithClientMetadataPrivateAddresses())
+		// Said once at startup, as an open registration is: it widens what an
+		// unauthenticated request can make this server do.
+		logging.Warn(logging.AuthOAuthRegistrationOpen,
+			"connected systems' metadata documents may be read from PRIVATE addresses: anyone who can "+
+				"send this server an authorization request can make it send a GET to a host inside its "+
+				"network. Drop --client-metadata-allow-private unless a connected system runs beside atlas")
 	}
 	if oauth.dynamicRegistration {
 		apiOpts = append(apiOpts, api.WithDynamicClientRegistration())
@@ -2041,4 +2054,15 @@ func runOpenAPITemplate(args []string, out io.Writer) error {
 	fmt.Fprintln(out, "  applying one to a task is ADR-0212, which is not built yet, and a running server's catalog")
 	fmt.Fprintln(out, "  is compiled in — so these are files to commit or to keep, not to install.")
 	return nil
+}
+
+// envOn reads a switch from the environment: "on", "1", "true" or "yes", in any case,
+// turn it on, and anything else leaves it off — the direction a typo should fall in
+// for a switch that widens what a request can make this server do.
+func envOn(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "1", "true", "yes":
+		return true
+	}
+	return false
 }
