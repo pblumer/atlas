@@ -6,9 +6,15 @@
 locals {
   graph_roles = data.azuread_service_principal.msgraph.app_role_ids
 
+  # In a shared tenant the tenant-wide grants are replaced by scoped ones (shared.tf):
+  # no Mail.Send and no Exchange directory role in Entra, Sites.Selected for SharePoint.
+  mail_graph_permissions_effective       = var.shared_tenant ? [] : var.mail_graph_permissions
+  exchange_directory_roles_effective     = var.shared_tenant ? [] : var.exchange_directory_roles
+  sharepoint_graph_permissions_effective = var.shared_tenant ? ["Sites.Selected"] : var.sharepoint_graph_permissions
+
   # A misspelt permission name fails the plan here, naming the key Graph does not know.
   graph_role = {
-    for perm in distinct(concat(var.entra_graph_permissions, var.sharepoint_graph_permissions, var.teamsphone_graph_permissions, var.mail_graph_permissions)) :
+    for perm in distinct(concat(var.entra_graph_permissions, local.sharepoint_graph_permissions_effective, var.teamsphone_graph_permissions, local.mail_graph_permissions_effective)) :
     perm => {
       resource_app_id    = local.msgraph_app_id
       resource_object_id = data.azuread_service_principal.msgraph.object_id
@@ -53,7 +59,7 @@ module "exchange" {
     resource_object_id = data.azuread_service_principal.exchange[0].object_id
     role_id            = data.azuread_service_principal.exchange[0].app_role_ids["Exchange.ManageAsApp"]
   }]
-  directory_role_template_ids = var.exchange_directory_roles
+  directory_role_template_ids = local.exchange_directory_roles_effective
   create_certificate          = true
   validity_days               = var.credential_validity_days
 }
@@ -67,7 +73,7 @@ module "sharepoint" {
   display_name       = "${local.env_id}-worker-sharepoint"
   notes              = local.note
   owners             = local.app_owners
-  app_roles          = [for p in var.sharepoint_graph_permissions : local.graph_role[p]]
+  app_roles          = [for p in local.sharepoint_graph_permissions_effective : local.graph_role[p]]
   create_certificate = var.sharepoint_credential == "certificate"
   create_secret      = var.sharepoint_credential == "secret"
   validity_days      = var.credential_validity_days
@@ -101,7 +107,7 @@ module "mail" {
   display_name       = "${local.env_id}-worker-mail"
   notes              = local.note
   owners             = local.app_owners
-  app_roles          = [for p in var.mail_graph_permissions : local.graph_role[p]]
+  app_roles          = [for p in local.mail_graph_permissions_effective : local.graph_role[p]]
   create_certificate = false
   create_secret      = true
   validity_days      = var.credential_validity_days

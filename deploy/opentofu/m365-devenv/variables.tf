@@ -33,6 +33,12 @@ variable "name_prefix" {
   }
 }
 
+variable "shared_tenant" {
+  description = "The tenant is also used for real work (not a dedicated test tenant). Then the mail and Exchange apps get no tenant-wide rights: they act only on recipients whose alias starts with this environment's prefix, through Exchange RBAC for Applications and a scoped Exchange role group (scripts/shared-tenant-setup.ps1); SharePoint gets Sites.Selected with a grant on the test site only; credentials may live at most 7 days, and the Teams Phone worker (Teams Administrator cannot be scoped) must be off. See README.md, 'Geteilter Tenant'."
+  type        = bool
+  default     = false
+}
+
 variable "usage_location" {
   description = "Usage location of the test users (ISO 3166 alpha-2). Graph assigns no licence to a user without one."
   type        = string
