@@ -79,7 +79,10 @@ variable "test_users" {
   type = map(object({
     given_name = string
     surname    = string
-    department = optional(string, "Atlas Test")
+    # Default: the environment's id (<prefix>-<suffix>), so a directory field's fixed
+    # filter "department eq <id>" offers this environment's test users and nobody else
+    # in a shared tenant (examples/m365-dienste, scripts/install-m365-dienste.py).
+    department = optional(string)
     job_title  = optional(string, "Testperson")
   }))
   default = {
