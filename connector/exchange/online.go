@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/connector/exchange/catalog"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -71,6 +73,31 @@ type OnlineClient struct {
 	httpc        *http.Client
 	// maxPage bounds one response body; a field so a test can lower it.
 	maxPage int64
+	// notFoundWaits are the pauses before a Set- or Add- cmdlet answered 404 is sent
+	// again; a field so a test can shorten them.
+	notFoundWaits []time.Duration
+}
+
+// notFoundWaits is how long a change waits for an object Exchange Online has only just
+// created. Observed against a real tenant: Set-DistributionGroup four seconds after
+// New-DistributionGroup answered 404 NotFound, and found the list a moment later. About
+// a minute in all; what is still missing after that is missing.
+var notFoundWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 15 * time.Second, 30 * time.Second}
+
+// cmdletError is a cmdlet's refusal with its HTTP status, so a caller can tell an object
+// not found from every other failure.
+type cmdletError struct {
+	status int
+	msg    string
+}
+
+func (e *cmdletError) Error() string { return e.msg }
+
+// retriesNotFound reports whether a cmdlet answered 404 may be sent again unchanged: a
+// change to one object — Set- or Add- — that did nothing because it found nothing. A
+// New- or Remove- is not repeated, and a Get- answers 404 as what it is.
+func retriesNotFound(cmdlet string) bool {
+	return strings.HasPrefix(cmdlet, "Set-") || strings.HasPrefix(cmdlet, "Add-")
 }
 
 // NewOnlineClient builds a client for one organization.
@@ -86,6 +113,7 @@ func NewOnlineClient(c OnlineConfig) *OnlineClient {
 	return &OnlineClient{
 		tokens: c.Tokens, baseURL: base, organization: strings.TrimSpace(c.Organization),
 		anchor: strings.TrimSpace(c.AnchorMailbox), httpc: httpc, maxPage: limits.Default().Payload,
+		notFoundWaits: notFoundWaits,
 	}
 }
 
@@ -114,6 +142,20 @@ func (c *OnlineClient) Invoke(ctx context.Context, inv catalog.Invocation, limit
 	items := []any{}
 	for pages := 0; pages < maxPages; pages++ {
 		page, next, err := c.post(ctx, inv.Cmdlet, target, anchor, body)
+		// An object created a moment ago is not yet found everywhere: a change to it
+		// waits and is sent again (notFoundWaits).
+		for wait := 0; pages == 0 && err != nil && wait < len(c.notFoundWaits) && retriesNotFound(inv.Cmdlet); wait++ {
+			var ce *cmdletError
+			if !errors.As(err, &ce) || ce.status != http.StatusNotFound {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return nil, err
+			case <-time.After(c.notFoundWaits[wait]):
+			}
+			page, next, err = c.post(ctx, inv.Cmdlet, target, anchor, body)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -285,11 +327,11 @@ func failure(cmdlet string, status int, raw []byte) error {
 				msg = strings.TrimSpace(msg[end+2:]) + " (" + typ + ")"
 			}
 		}
-		return fmt.Errorf("exchange: %s returned HTTP %d: %s: %s", cmdlet, status, env.Error.Code, msg)
+		return &cmdletError{status: status, msg: fmt.Sprintf("exchange: %s returned HTTP %d: %s: %s", cmdlet, status, env.Error.Code, msg)}
 	}
 	quote := strings.TrimSpace(string(raw))
 	if max := int(limits.Default().ErrorBody); len(quote) > max {
 		quote = quote[:max] + "…"
 	}
-	return fmt.Errorf("exchange: %s returned HTTP %d: %s", cmdlet, status, quote)
+	return &cmdletError{status: status, msg: fmt.Sprintf("exchange: %s returned HTTP %d: %s", cmdlet, status, quote)}
 }
