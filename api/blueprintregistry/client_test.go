@@ -32,7 +32,12 @@ func response(code int, body string) *http.Response {
 func testPublicClient(t *testing.T, index, signature []byte, pkg []byte) *PublicClient {
 	t.Helper()
 	_, key := signIndex(index)
-	c, err := NewPublicClient("https://catalog.example.org/blueprints/index.json", key)
+	return testPublicClientWithKeys(t, index, signature, pkg, key)
+}
+
+func testPublicClientWithKeys(t *testing.T, index, signature []byte, pkg []byte, keys ...ed25519.PublicKey) *PublicClient {
+	t.Helper()
+	c, err := NewPublicClient("https://catalog.example.org/blueprints/index.json", keys...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,5 +227,53 @@ func TestPublicClientDialRefusesPrivateDNSBeforeConnect(t *testing.T) {
 	_, err := dialPublic(context.Background(), "tcp", "catalog.example.org:443", lookup, dial)
 	if err == nil || !lookedUp || dialed {
 		t.Fatalf("mixed public/private DNS was not refused before dialing: lookup=%v, dialed=%v, err=%v", lookedUp, dialed, err)
+	}
+}
+
+// During a key rotation an operator pins the old and the new key: an index
+// signed by either verifies, one signed by any other key does not, and more
+// than two keys, or one key twice, are refused at configuration.
+func TestPublicClientAcceptsEitherOfTwoPinnedKeys(t *testing.T) {
+	index := testIndex(t)
+	oldSeed := sha256.Sum256([]byte("rotation test: old key"))
+	newSeed := sha256.Sum256([]byte("rotation test: new key"))
+	strangerSeed := sha256.Sum256([]byte("rotation test: somebody else"))
+	oldKey, newKey, stranger := ed25519.NewKeyFromSeed(oldSeed[:]), ed25519.NewKeyFromSeed(newSeed[:]), ed25519.NewKeyFromSeed(strangerSeed[:])
+	pinned := []ed25519.PublicKey{oldKey.Public().(ed25519.PublicKey), newKey.Public().(ed25519.PublicKey)}
+	sign := func(k ed25519.PrivateKey) []byte {
+		return []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(k, index)))
+	}
+	for name, signer := range map[string]ed25519.PrivateKey{"old": oldKey, "new": newKey} {
+		c := testPublicClientWithKeys(t, index, sign(signer), nil, pinned...)
+		if _, err := c.LoadIndex(context.Background()); err != nil {
+			t.Errorf("index signed by the %s pinned key refused: %v", name, err)
+		}
+	}
+	c := testPublicClientWithKeys(t, index, sign(stranger), nil, pinned...)
+	if _, err := c.LoadIndex(context.Background()); err == nil {
+		t.Fatal("index signed by an unpinned key accepted")
+	}
+	if got := c.Fingerprints(); len(got) != 2 || got[0] != KeyFingerprint(pinned[0]) || got[1] != KeyFingerprint(pinned[1]) {
+		t.Fatalf("fingerprints = %v", got)
+	}
+
+	_, signedBy, err := VerifySignedIndexWithAny(index, sign(newKey), pinned)
+	if err != nil || string(signedBy) != string(pinned[1]) {
+		t.Fatalf("VerifySignedIndexWithAny = %v, %v; want the new key", signedBy, err)
+	}
+	if _, _, err := VerifySignedIndexWithAny(index, sign(newKey), nil); err == nil {
+		t.Fatal("verified against no key at all")
+	}
+
+	const url = "https://catalog.example.org/blueprints/index.json"
+	three := append(append([]ed25519.PublicKey(nil), pinned...), stranger.Public().(ed25519.PublicKey))
+	if _, err := NewPublicClient(url, three...); err == nil {
+		t.Fatal("three pinned keys accepted")
+	}
+	if _, err := NewPublicClient(url, pinned[0], pinned[0]); err == nil {
+		t.Fatal("one key pinned twice accepted")
+	}
+	if _, err := NewPublicClient(url); err == nil {
+		t.Fatal("no pinned key accepted")
 	}
 }
