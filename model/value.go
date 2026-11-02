@@ -1675,3 +1675,54 @@ type ToolCall struct {
 	CallId    string          // the model's own id for this call, carried into the activation
 	Arguments []VariableValue // written into the activated activity's own scope
 }
+
+// VariableNumberUint reads an encoded VariableValue record — the bytes the state
+// store keeps under a variable key — and returns its value when it is a VarNumber
+// holding a positive decimal integer that fits in a uint64. It decodes nothing
+// else and allocates nothing, so a deterministic projection can read a counter
+// the engine wrote (a multi-instance iteration's loopCounter, ADR-0517) from the
+// apply path without materialising the record's strings (invariant I1).
+//
+// Anything else — a short or malformed record, another kind, a sign, a fraction,
+// an exponent, a leading zero, an overflow — reports ok=false. The caller then
+// records "not known" rather than a guessed number (invariant I6).
+func VariableNumberUint(raw []byte) (uint64, bool) {
+	if len(raw) < 8+4 {
+		return 0, false
+	}
+	rest := raw[8:]
+	nameLen := binary.LittleEndian.Uint32(rest)
+	rest = rest[4:]
+	if uint64(len(rest)) < uint64(nameLen)+2 {
+		return 0, false
+	}
+	rest = rest[nameLen:]
+	if VarKind(rest[0]) != VarNumber {
+		return 0, false
+	}
+	rest = rest[2:]
+	if len(rest) < 4 {
+		return 0, false
+	}
+	textLen := binary.LittleEndian.Uint32(rest)
+	rest = rest[4:]
+	if textLen == 0 || textLen > 20 || uint64(len(rest)) < uint64(textLen) {
+		return 0, false
+	}
+	text := rest[:textLen]
+	if text[0] == '0' {
+		return 0, false
+	}
+	var n uint64
+	for _, c := range text {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		d := uint64(c - '0')
+		if n > (^uint64(0)-d)/10 {
+			return 0, false
+		}
+		n = n*10 + d
+	}
+	return n, true
+}

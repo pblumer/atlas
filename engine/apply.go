@@ -382,12 +382,22 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutIncident(&v.incident); err != nil {
 				return err
 			}
+			// Attribute the incident to the innermost multi-instance iteration or
+			// body its element belongs to, so the MI history can count and filter
+			// iterations that had incidents (ADR-0517). The scope chain is live
+			// state, so live and replay attribute identically (I4).
+			if err := tx.RecordMIIncidentRaised(&v.incident, h.Position); err != nil {
+				return err
+			}
 			return putIncidentFeedRow(tx, h, state.FeedIncidentRaised, &v.incident)
 		case model.IntentIncidentResolved:
 			// The row first: it reads the element the incident parked, which the
 			// resolution leaves in place, and the incident it names is the one the
 			// event carries.
 			if err := putIncidentFeedRow(tx, h, state.FeedIncidentResolved, &v.incident); err != nil {
+				return err
+			}
+			if err := tx.RecordMIIncidentResolved(&v.incident, h.Position); err != nil {
 				return err
 			}
 			return tx.DeleteIncident(v.incident.ElementInstanceKey)
