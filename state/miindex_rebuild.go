@@ -24,10 +24,10 @@ import (
 
 const metaMIRebuildProgress = "mi_history_rebuild_copy"
 
-// miRangeLo and miRangeHi bound every MI index family (cfMIBody … cfMIDecision).
+// miRangeLo and miRangeHi bound every MI index family (cfMIBody … cfOutlineHidden).
 var (
 	miRangeLo = []byte{byte(cfMIBody)}
-	miRangeHi = []byte{byte(cfMIDecision) + 1}
+	miRangeHi = []byte{byte(cfOutlineHidden) + 1}
 )
 
 // MIHistoryRebuildNeeded reports whether any part of the MI history index is not
@@ -41,7 +41,11 @@ func (s *Store) MIHistoryRebuildNeeded() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return !ready || !decisions, nil
+	outline, err := s.OutlineIndexReady()
+	if err != nil {
+		return false, err
+	}
+	return !ready || !decisions || !outline, nil
 }
 
 // AdoptMIHistory replaces this store's MI index families with src's and marks
@@ -114,6 +118,9 @@ func (s *Store) AdoptMIHistory(src *Store, batch int) (int, error) {
 			err = b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil)
 			if err == nil {
 				err = b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil)
+			}
+			if err == nil {
+				err = b.Set(keyMeta(metaOutlineIndex), outlineIndexVersion[:], nil)
 			}
 			if err == nil {
 				err = b.Delete(keyMeta(metaMIRebuildProgress), nil)

@@ -151,6 +151,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, state.ReplayActivated); err != nil {
 				return err
 			}
+			// The same step in the instance outline, unless it runs inside a
+			// multi-instance iteration (ADR-0517): the bounded overview of a large
+			// instance reads the outline instead of every iteration's steps.
+			if err := tx.RecordOutlineStep(h.Key, &v.element, h.Timestamp, h.Position, state.ReplayActivated); err != nil {
+				return err
+			}
 			// Persist MI body/round lineage as a deterministic read projection of
 			// the same activation fact, including body activation position (ADR-0517).
 			if err := tx.RecordMIActivation(h.Key, &v.element, h.Position); err != nil {
@@ -197,6 +203,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				}
 			}
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
+				return err
+			}
+			if err := tx.RecordOutlineStep(h.Key, &v.element, h.Timestamp, h.Position, action); err != nil {
 				return err
 			}
 			// Preserve completed/terminated MI rounds after live element cleanup;

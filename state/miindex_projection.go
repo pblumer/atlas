@@ -468,7 +468,7 @@ var miIndexFamilies = [...]columnFamily{
 	cfMIBody, cfMIIteration, cfMIRoundByElement, cfMIBodyByElement,
 	cfMIRoundOrder, cfMIRoundByState, cfMIRoundIncident,
 	cfMIIncidentByOwner, cfMIIncidentOpen, cfMIBodyByParent, cfMIBodyCounter,
-	cfMIDecision,
+	cfMIDecision, cfOutline, cfOutlineHidden,
 }
 
 // purgeMIIndexHistory drops complete per-instance MI index ranges without a

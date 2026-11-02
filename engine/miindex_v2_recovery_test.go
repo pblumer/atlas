@@ -28,6 +28,7 @@ type miSnapshot struct {
 	ByState    map[uint64]map[string][]uint64
 	WithInc    map[uint64][]uint64
 	Incidents  map[uint64][]state.MIIncidentRecord
+	Outline    []state.OutlineStep
 }
 
 func miReadSnapshot(t *testing.T, s *state.Store, pi uint64) miSnapshot {
@@ -86,6 +87,20 @@ func miReadSnapshot(t *testing.T, s *state.Store, pi uint64) miSnapshot {
 		}
 	}
 	walk(0)
+	var after *state.OutlinePosition
+	for {
+		next, err := s.OutlinePage(pi, after, 0, state.MIMaxPageLimit, func(o state.OutlineStep) error {
+			snap.Outline = append(snap.Outline, o)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next == nil {
+			break
+		}
+		after = next
+	}
 	return snap
 }
 
@@ -362,5 +377,58 @@ func TestMIIterationDetailReplayEqualsLive(t *testing.T) {
 	h.close(t)
 	if got := read(miReplayInto(t, dir, cp)); !reflect.DeepEqual(got, live) {
 		t.Fatalf("iteration detail differs after WAL replay\nlive:   %+v\nreplay: %+v", live, got)
+	}
+}
+
+// The outline of an instance with a nested MI subprocess is its own steps and
+// its top-level body execution — none of the iterations' steps — live and after
+// replay alike.
+func TestOutlineOfANestedMIInstanceIsItsOwnSteps(t *testing.T) {
+	dir := t.TempDir()
+	h := openHarness(t, dir)
+	b := compiler.NewBuilder(1, "outline", 1)
+	start := b.AddStartEvent()
+	sub := b.AddSubProcess()
+	b.SetMultiInstance(sub, false, "o", "", mustCompile(t, "[1, 2, 3]"), nil, nil, nil)
+	b.PushScope(sub)
+	is := b.AddStartEvent()
+	inner := b.AddScriptTask(mustCompile(t, "loopCounter"), "r")
+	b.SetMultiInstance(inner, true, "", "", nil, mustCompile(t, "2"), nil, nil)
+	ie := b.AddEndEvent()
+	b.Connect(is, inner)
+	b.Connect(inner, ie)
+	b.PopScope()
+	end := b.AddEndEvent()
+	b.Connect(start, sub)
+	b.Connect(sub, end)
+	cp, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := engine.New(1, h.log, h.store, &manualClock{})
+	p.Deploy(cp)
+	if err := p.Recover(); err != nil {
+		t.Fatal(err)
+	}
+	p.CreateInstance(cp.Key)
+	miRun(t, p)
+	pi := model.NewKey(1, 1)
+	live := miReadSnapshot(t, h.store, pi)
+	var ids []int32
+	for _, o := range live.Outline {
+		if o.Action == state.ReplayActivated {
+			ids = append(ids, o.ElementID)
+		}
+	}
+	// start, the MI body, end — one activation each.
+	if !reflect.DeepEqual(ids, []int32{start, sub, end}) {
+		t.Fatalf("outline activations %v, want %v", ids, []int32{start, sub, end})
+	}
+	if len(live.Outline) != 6 {
+		t.Fatalf("outline rows: %+v", live.Outline)
+	}
+	h.close(t)
+	if got := miReadSnapshot(t, miReplayInto(t, dir, cp), pi); !reflect.DeepEqual(got, live) {
+		t.Fatalf("outline differs after WAL replay\nlive:   %+v\nreplay: %+v", live.Outline, got.Outline)
 	}
 }
