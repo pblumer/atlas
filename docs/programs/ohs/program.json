@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge the instance outline PR (bounded view of a large instance's own steps); then the iteration replay window (OHS3). Engine quadratic MI-subprocess completion is Issue #1494.",
+  "next_action": "Merge #1507 (bounded view of a large instance's own steps); then the iteration replay window (OHS3). Engine quadratic MI-subprocess completion is Issue #1494.",
   "slices": [
     {
       "id": "OHS1",
@@ -43,9 +43,10 @@
         1488,
         1490,
         1496,
-        1502
+        1502,
+        1507
       ],
-      "note": "#1487 (keys), #1488 (projection), #1490 (fail-closed readiness) #1496 (index v2, bounded API, 50k acceptance) and #1502 (Multi-Instance Explorer, startup rebuild of older stores) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). The instance outline (cfOutline, instance_outline_v1) gives the bounded view the instance's own steps (in review). Open: per-instance readiness for compacted logs, and #1494 (quadratic MI-subprocess completion). Stores that predate the index are rebuilt at startup from the retained log (accepted shadow-replay ADR draft).",
+      "note": "#1487 (keys), #1488 (projection), #1490 (fail-closed readiness) #1496 (index v2, bounded API, 50k acceptance) and #1502 (Multi-Instance Explorer, startup rebuild of older stores) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). The instance outline (cfOutline, instance_outline_v1) gives the bounded view the instance's own steps (#1507, in review). Open: per-instance readiness for compacted logs, and #1494 (quadratic MI-subprocess completion). Stores that predate the index are rebuilt at startup from the retained log (accepted shadow-replay ADR draft).",
       "evidence": [
         "../../../api/mihistory/acceptance_test.go",
         "../../../engine/miindex_v2_recovery_test.go",
