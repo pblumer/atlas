@@ -1129,7 +1129,8 @@ What it takes to run this for real.
   built: per-instance readiness for compacted logs (stores written before the index are rebuilt
   from the log at startup; a compacted log stays "history unavailable"), variable values per step and
   job/user-task history per iteration (OHS3), and a
-  fix for quadratic MI-subprocess completion ([issue #1494](https://github.com/pblumer/atlas/issues/1494)).
+  50,000-iteration acceptance through the HTTP server for a multi-instance *subprocess* (completing its
+  iterations is no longer quadratic, [issue #1494](https://github.com/pblumer/atlas/issues/1494)).
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
 - ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin

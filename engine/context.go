@@ -248,6 +248,27 @@ func (c *ProcessingContext) ForEachElementInstance(procKey uint64, fn func(elKey
 	}
 }
 
+// ForEachScopeTrigger calls fn with the key of every armed event-subprocess
+// trigger of one scope (ADR-0082), through the in-flight transaction like
+// ForEachElementInstance, but from the scope-trigger index: it reads that scope's
+// triggers only, not every live element instance of the process instance. That
+// walk made completing N parallel subprocess iterations O(N²) on the single writer
+// (#1494). Keys come in key order — the order the walk visited them in — and are
+// collected before fn runs, so fn may emit terminations.
+func (c *ProcessingContext) ForEachScopeTrigger(scope uint64, fn func(triggerKey uint64)) {
+	var keys []uint64
+	if err := c.tx.ScopeTriggers(scope, func(k uint64) error {
+		keys = append(keys, k)
+		return nil
+	}); err != nil {
+		c.p.fail(err)
+		return
+	}
+	for _, k := range keys {
+		fn(k)
+	}
+}
+
 // ChildInstancesOf returns the live child process instances a call-activity element
 // instance started, from the committed childByParent index (ADR-0076).
 //
