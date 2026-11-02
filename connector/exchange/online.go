@@ -329,7 +329,8 @@ func failure(cmdlet string, status int, raw []byte) error {
 		}
 		return &cmdletError{status: status, msg: fmt.Sprintf("exchange: %s returned HTTP %d: %s: %s", cmdlet, status, env.Error.Code, msg)}
 	}
-	quote := strings.TrimSpace(string(raw))
+	// Exchange Online was observed answering a 403 with a body of NUL bytes.
+	quote := strings.TrimSpace(strings.Trim(string(raw), "\x00"))
 	if max := int(limits.Default().ErrorBody); len(quote) > max {
 		quote = quote[:max] + "…"
 	}

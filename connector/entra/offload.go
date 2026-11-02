@@ -125,7 +125,7 @@ var Ops = map[string]Op{
 	// carries the team throughout, so no separate team-id field is authored. Removing a
 	// team member is remove-group-member — a team member is a member of its group — so
 	// there is deliberately no remove-team-member that would need a membership id.
-	"create-team":     {Method: "PUT", NeedsGroup: true, Label: "create a team"},
+	"create-team":     {Method: "POST", NeedsGroup: true, Label: "create a team"},
 	"add-team-member": {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team member"},
 	"add-team-owner":  {Method: "POST", NeedsUser: true, NeedsGroup: true, Label: "add a team owner"},
 	"create-channel":  {Method: "POST", NeedsGroup: true, NeedsAttributes: true, Label: "create a channel"},
@@ -362,6 +362,11 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 		return map[string]any{j.ResultVariable: items}, nil
 	}
 	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
+	if err != nil && j.Operation == "create-team" && teamExists(err) {
+		// The group is a team already — a retry after Graph accepted the first
+		// request, or a team somebody made by hand. What the task asks for holds.
+		return nil, nil
+	}
 	if err != nil {
 		return nil, thrown(j, spec, err)
 	}
@@ -788,11 +793,17 @@ func request(j Job, spec Op, baseURL string) Request {
 	case "delete-group":
 		r.Path = "/groups/" + group
 	case "create-team":
-		// A Team is stood up on the group by PUT .../team; the id it gets is the
-		// group's own. The default settings are sent explicitly so a team never depends
-		// on whatever Graph would infer from an empty body.
-		r.Path = "/groups/" + group + "/team"
-		r.Body = defaultTeam()
+		// A Team is stood up on the group by POST /teams with the group bound; the id
+		// it gets is the group's own, and Graph answers 202 while Teams provisions it.
+		// Not PUT /groups/{id}/team: observed against a real tenant, that path refused
+		// an application with 403 "StampTenantRegionRequest" where this one, with the
+		// same permissions, created the team. The default settings are sent explicitly
+		// so a team never depends on whatever Graph would infer.
+		r.Path = "/teams"
+		body := defaultTeam()
+		body["template@odata.bind"] = base + "/teamsTemplates('standard')"
+		body["group@odata.bind"] = base + "/groups('" + group + "')"
+		r.Body = body
 	case "add-team-member":
 		r.Path, r.Body = "/teams/"+group+"/members", teamMember(base, user, nil)
 	case "add-team-owner":
@@ -846,6 +857,12 @@ func withPrincipal(attrs map[string]any, principal string) map[string]any {
 // defaultTeam is the body create-team sends to PUT /groups/{id}/team: a standard team
 // with sane collaboration defaults. It is spelled out rather than left to Graph so the
 // team a process creates is the same team every time, independent of tenant defaults.
+// teamExists reports whether a create-team was refused because the group has a team.
+func teamExists(err error) bool {
+	var ge *GraphError
+	return errors.As(err, &ge) && ge.Status == http.StatusConflict
+}
+
 func defaultTeam() map[string]any {
 	return map[string]any{
 		"memberSettings":    map[string]any{"allowCreateUpdateChannels": true},
