@@ -1832,7 +1832,7 @@ function rnFill(slot, version, lang) {
 
 function rnChangeHTML(c, t) {
   const cat = t.categories[c.category] || c.category || "";
-  return `<details class="rn-change"><summary>` +
+  return `<details class="rn-change fold-sub"><summary>` +
     (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
     `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
     `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
@@ -1857,7 +1857,7 @@ function rnBodyHTML(version, t) {
 
 function rnReleaseHTML(s, t) {
   const name = s.version === "Unreleased" ? t.unreleased : s.version;
-  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+  return `<details class="rn-release fold-sub" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
     `<summary><span class="rn-version">${esc(name)}</span>` +
     (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
     `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
@@ -7959,7 +7959,7 @@ async function viewWorkers() {
     // Variables are shown collapsed: the list is for scanning outcomes, and a row of
     // JSON per job would bury the one that failed.
     const vars = (label, text) => text
-      ? `<details class="wkjob-vars"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
+      ? `<details class="wkjob-vars fold-sub"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
       : `<span class="muted small">${label}: none</span>`;
     body.innerHTML = `<div class="wkjob-list">${jobs.map((j) => {
       const took = j.settledAt && j.leasedAt
@@ -8339,7 +8339,7 @@ async function viewMailOutbox() {
     }
     list.innerHTML = (data.truncated
       ? `<p class="muted" style="margin:10px 12px 0">Older messages have been dropped — the outbox keeps the newest ones.</p>`
-      : "") + msgs.map((m) => `<details class="ob-msg">
+      : "") + msgs.map((m) => `<details class="ob-msg fold-sub">
         <summary>
           <b>${esc(m.subject || "(no subject)")}</b>
           <span class="muted">· to ${esc(addrs(m.to)) || "—"}</span>
@@ -8465,7 +8465,7 @@ async function viewADMockDirectory() {
     // data-k is the entry's identity across renders: what you opened stays open when
     // the view refreshes under you. The DN is unique within a forest, and the forest
     // and worker are prefixed by the callers below.
-    return `<li><details class="admock-entry" data-k="e|${esc(node.entry.dn || "")}">
+    return `<li><details class="admock-entry fold-sub" data-k="e|${esc(node.entry.dn || "")}">
         <summary><span class="admock-node">${esc(node.rdn)}</span>
           <span class="muted">· ${count} attribute${count === 1 ? "" : "s"}</span></summary>
         <div class="admock-detail">
@@ -8514,7 +8514,7 @@ async function viewADMockDirectory() {
         ${forests.length ? forests.map(renderForest).join("")
           : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
              no Active Directory task since it started — the first one creates the forest it names.</p>`}
-        ${ops.length ? `<details class="admock-ops" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
+        ${ops.length ? `<details class="admock-ops fold-sub" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
           <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
             <th>${esc(o.op || "")}</th>
             <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>

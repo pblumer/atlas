@@ -689,15 +689,10 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
 .publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .product-form > .form-group > summary.form-sec {
-  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
   margin: 0; padding: 4px 0; user-select: none;
 }
-.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
-.product-form > .form-group > summary.form-sec::before {
-  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
-}
-.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
 .product-form > .form-group > summary.form-sec:hover { color: var(--text); }
 .product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
 .form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
@@ -3262,6 +3257,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
+/* A fold inside a topic — a release, a list entry, a message, a group of a form, a
+   note — draws the caret the topics draw (.section-toggle above), before its summary,
+   turning when it opens. It is a <details> marked fold-sub; a <details> a library
+   draws (form-js, the API reference) is not marked and keeps its own look. */
+details.fold-sub > summary { cursor: pointer; list-style: none; }
+details.fold-sub > summary::-webkit-details-marker { display: none; }
+details.fold-sub > summary::before {
+  content: ""; display: inline-block; flex: none; width: 0; height: 0; margin-right: 6px;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  vertical-align: middle; transition: transform 0.15s ease;
+}
+details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 /* A folding heading with the count beside it, which is what a folded section still
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
@@ -4938,7 +4945,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }
 .ob-msg:last-child { border-bottom: 0; }
 .ob-msg > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ob-msg > summary::marker { color: var(--muted); }
 .ob-body { padding: 10px 2px 4px; }
 .ob-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
 .ob-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
@@ -4975,7 +4981,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-tree ul { border-left: 1px solid var(--border); }
 .admock-node { font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .admock-entry > summary { cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.admock-entry > summary::marker { color: var(--muted); }
 .admock-detail { padding: 4px 0 8px 14px; }
 .admock-dn { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; }
 /* width:auto against the global table{width:100%}: an attribute list is two narrow
@@ -5014,7 +5019,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    and a journal, drawn as the mock database draws its sequence. */
 .spmock-list { margin-top: 8px; }
 .spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.spmock-list > summary::marker { color: var(--muted); }
 .spmock-table { width: 100%; margin: 4px 0 0; }
 .spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
 .spmock-table td { padding: 2px 12px 2px 0; }
@@ -5064,19 +5068,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 /* One release. The row with its version, date and size is always visible. */
 .release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
 .release-notes .rn-release:first-child { border-top: 0; }
-.release-notes .rn-release > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
-}
-/* A flex summary loses its marker, so a release and a change draw the caret the
-   section header draws: a row that opens should say so before it is clicked. */
-.release-notes .rn-release > summary::-webkit-details-marker,
-.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
-.release-notes .rn-release > summary::before,
-.release-notes .rn-change > summary::before {
-  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
-}
-.release-notes .rn-release[open] > summary::before,
-.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-release > summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .release-notes .rn-version { font-weight: 650; }
 .release-notes .rn-date,
 .release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
@@ -5092,9 +5084,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .release-notes .rn-changes { margin-top: 4px; }
 .release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
 .release-notes .rn-change:first-child { border-top: 0; }
-.release-notes .rn-change > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
-}
+.release-notes .rn-change > summary { display: flex; align-items: baseline; gap: 8px; }
 .release-notes .rn-cat { flex: none; }
 .release-notes .rn-change-title { font-weight: 600; }
 .release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
@@ -5268,10 +5258,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   border: 1px solid var(--border); border-radius: 0; background: var(--surface);
   font-size: 12.5px; line-height: 1.5;
 }
-.wtdoc-more > summary {
-  padding: 6px 10px; cursor: pointer; font-weight: 600; color: var(--accent-text);
-  list-style-position: inside;
-}
+.wtdoc-more > summary { padding: 6px 10px; font-weight: 600; color: var(--accent-text); }
 .wtdoc-more[open] > summary { border-bottom: 1px solid var(--border); }
 .wtdoc-steps { margin: 8px 0; padding: 0 10px 0 26px; }
 .wtdoc-steps li { margin: 0 0 7px; }
