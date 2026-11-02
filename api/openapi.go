@@ -78,6 +78,12 @@ func tString() map[string]any  { return map[string]any{"type": "string"} }
 func tInteger() map[string]any { return map[string]any{"type": "integer"} }
 func tBool() map[string]any    { return map[string]any{"type": "boolean"} }
 func tObject() map[string]any  { return map[string]any{"type": "object"} }
+
+// tStrings is an array of strings — ids, mostly.
+func tStrings() map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
+}
+
 func tArray() map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "object"}}
 }
@@ -1812,6 +1818,30 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The plan and what was set", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
+
+		// Process-scoped start grants (ADR-0516): who besides an operator may start a
+		// process of an application, through the self-service routes that record
+		// approves. Administration is an administrator's alone, from their own
+		// session; none of these routes lets anybody start anything.
+		{"GET", "/api/v1/applications/{id}/start-grants", s.startGrantAdmin.HandleList, apiOp{
+			summary: "Every process of an application that was ever granted for a self-service start, revoked ones included, by process id: the current revision, whether it is granted, and the user and group ids it names (ADR-0516). Admin only; refused with 403 on a server without authentication", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Start grants", schemaObj(map[string]any{"items": tArray()}, "items"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleGet, apiOp{
+			summary: "One process's start grant within an application (ADR-0516). A process never granted answers revision 0 and an empty audience: nobody may start it, which is the default. 404 for an application that does not exist and has no grant record. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant", schemaObj(map[string]any{"applicationId": tString(), "processId": tString(), "revision": tInteger(), "granted": tBool(), "userIds": tStrings(), "groupIds": tStrings(), "changedAt": tInteger(), "changedBy": tString()}, "applicationId", "processId", "revision", "granted", "userIds", "groupIds"))}},
+		{"PUT", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandlePut, apiOp{
+			summary: "Grant, or wholly replace, who may start a process of an application through the self-service routes (ADR-0516): explicit user ids and group ids of this server's directory, never names. expectedRevision is required (0 for a scope never granted) and a stale one answers 409 with currentRevision. The application must exist and not be a protected system application, the newest deployed version of the process must be filed under it, and every id must name an existing account or group; ids are sorted and must not repeat. The actor and the time are the server's: a body naming them is refused. Durable — written and fsynced — before the answer, and audited. Granting exactly the audience already granted writes nothing (changed false). Admin only, from their own signed-in session; 403 on a server without authentication. A grant is not the user role: a person also needs that role and a signed-in session", tag: "Applications", role: RoleAdmin,
+			req:  jsonBody("The audience", schemaObj(map[string]any{"userIds": tStrings(), "groupIds": tStrings(), "expectedRevision": tInteger(), "applicationId": tString(), "processId": tString()}, "expectedRevision")),
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleDelete, apiOp{
+			summary: "Revoke a process's start grant within an application (ADR-0516). ?expectedRevision= is required; a stale one answers 409 with currentRevision. Every authorization check after the durable revocation refuses; a start that passed its check before may still finish. Works whether or not the application and process still exist, and revoking what is already revoked writes nothing (changed false). Admin only, from their own signed-in session", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/history", s.startGrantAdmin.HandleHistory, apiOp{
+			summary: "Every audited change of a process's start grant, newest first: revision, time, the administrator who made it, grant or revoke, and the whole audience it left (ADR-0516). Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Audited changes", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/preview", s.startGrantAdmin.HandlePreview, apiOp{
+			summary: "Whether one account (?userId=) or one group (?groupId=) would be offered a process for a self-service start now, and why not (ADR-0516): granted and matchedBy (user, group:<id>, from the directory's current membership), accountIssues (disabled, missing-user-role), and blockers on the process's newest version (application-missing, application-protected, not-deployed, newest-version-in-other-application, not-executable, inactive, trigger-only, constants-missing). Writes nothing. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The preview", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
 			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,

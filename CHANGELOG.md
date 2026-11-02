@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **Bounded multi-instance history API.** `GET /api/v1/instances/{key}/multi-instances` lists an instance's multi-instance body executions with seeded, active, completed and terminated iterations and their incidents, and `.../{bodyKey}/iterations` pages one execution's iterations by signed cursor — jump to an iteration number, find one element instance, filter by lifecycle state or by iterations that had an incident — from event-derived indexes read off the single writer, so a loop of 50,000 iterations answers in milliseconds with a page, never the whole history (MCP tools `atlas_instance_multi_instances`, `atlas_multi_instance_body`, `atlas_multi_instance_iterations`, `atlas_multi_instance_iteration`). A server whose history predates the index answers "history unavailable" instead of an incomplete list.
+- **Administrators decide who may start a process.** An administrator, signed in with their own session, grants one process of one application to named user and group ids, previews whether a person or group would be offered it and why not, and revokes it, with every change durable and audited (`/api/v1/applications/{id}/start-grants`, ADR-0516). Grants are checked against the directory and the application's newest deployed version; API tokens, application owners and servers without authentication cannot change them. The self-service Start routes that will honour a grant are not available yet, so a grant does not yet let anybody start anything.
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
@@ -95,6 +96,27 @@ _Changed_ / _Removed_ for each version.
   Windows section of `docs/install.md` now lists which start parameters to repeat, which the update
   ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
   TLS update example and names the folder the release archive unpacks to.
+
+- **The last folds of their own fold like every other section.** Console › Events, the
+  cards of Operations › Mockups, Mock directory and Mock database, the dashboard's
+  release notes and key features, and the sections of a catalogue's own page folded with
+  controls of their own, each looking and remembering differently. They now fold with
+  the same caret and are remembered the same way as every other section
+  ([ADR-0505](docs/adr/0505-every-topic-folds.md)): a mockup card stays folded through a
+  refresh and across a visit, and a catalogue's sections still start folded and say what
+  they hold. What those sections were remembered under before is not carried over, so
+  each starts in its default state once.
+
+- **Every page with two or more sections folds each of them.** The sections the
+  folding of [ADR-0505](docs/adr/0505-every-topic-folds.md) did not find now fold under
+  their headings and are remembered like the rest: every card of Operations › Workers
+  (the job types the same way as the others now, still folded at first), the
+  dashboard's notices and storage card, the lists of Connected
+  accounts and Approvals, both topics of Backup (under one page title now), the choices
+  of Display settings, both lists of an application's Constants tab, a business object's
+  sections, both sides of Planned against built, each type on Data › Instances, and the
+  sections below the catalogue list, its delivery report among them. A section drawn outside a card asks to fold with
+  class `fold-topic`.
 
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
   `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and

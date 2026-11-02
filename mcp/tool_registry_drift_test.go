@@ -684,7 +684,15 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/applications/{id}/members/{userId}": "access control is an admin/UI concern",
 	"POST /api/v1/applications/{id}/validate":           "modeler-time validation is a UI concern",
 	"GET /api/v1/applications/{id}/audit":               "access-control history is an admin/UI concern",
-	"GET /api/v1/audit":                                 "global access-control history is an admin/UI concern",
+	// ADR-0516: changing who may start work is an administrator's act from their own
+	// session, which no agent has; reading the grants and their history names people.
+	"GET /api/v1/applications/{id}/start-grants":                     "start grants name who may start work; an admin/UI concern (ADR-0516)",
+	"GET /api/v1/applications/{id}/start-grants/{processId}":         "start grants name who may start work; an admin/UI concern (ADR-0516)",
+	"PUT /api/v1/applications/{id}/start-grants/{processId}":         "granting a start is an administrator's own act from their session (ADR-0516)",
+	"DELETE /api/v1/applications/{id}/start-grants/{processId}":      "revoking a start is an administrator's own act from their session (ADR-0516)",
+	"GET /api/v1/applications/{id}/start-grants/{processId}/history": "the audit trail names administrators and audiences; an admin/UI concern (ADR-0516)",
+	"GET /api/v1/applications/{id}/start-grants/{processId}/preview": "answers who could start work; an admin/UI concern (ADR-0516)",
+	"GET /api/v1/audit": "global access-control history is an admin/UI concern",
 
 	// The directory mirror (ADR-0332). Both routes are
 	// deliberately absent from the tool surface, and not merely unwritten: the pair

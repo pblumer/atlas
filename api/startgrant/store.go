@@ -3,6 +3,7 @@ package startgrant
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pblumer/atlas/api/sidecar"
@@ -231,6 +232,30 @@ func (s *Store) Allowed(applicationID, processID string, principal Principal) bo
 		return false
 	}
 	return Allowed([]Grant{rec.Grant}, applicationID, processID, principal)
+}
+
+// Uncertain reports whether a failed write left the store's durable state
+// unknown. While it does, every positive authorization and every further write is
+// refused until a restart re-reads what actually reached the disk.
+func (s *Store) Uncertain() bool { return s.uncertain }
+
+// ForApplication returns the latest audited change of every process scope filed
+// under one application, revoked scopes included, ordered by process id. It is the
+// administrator's overview; it grants nothing and is unavailable while the store is
+// uncertain, for the reason [Store.Current] is.
+func (s *Store) ForApplication(applicationID string) []Change {
+	out := []Change{}
+	if s.uncertain {
+		return out
+	}
+	for key, d := range s.current {
+		if key.applicationID != applicationID || len(d.History) == 0 {
+			continue
+		}
+		out = append(out, cloneChange(d.History[len(d.History)-1]))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Grant.ProcessID < out[j].Grant.ProcessID })
+	return out
 }
 
 // History returns defensive copies of all audited changes, oldest first.

@@ -219,6 +219,69 @@ form enforcement, end-to-end 401/403/404 and machine-token tests, and a
 post-fsync instance-start/replay test. MFE0 physical-device acceptance #1451
 remains open.
 
+### Admin management API checkpoint (2026-11-02)
+
+The administration half is implemented as the per-area service
+`api/startgrant.Service` (ADR-0147) over the store above. It **still authorizes
+no start**: no self-service route exists yet, so a grant issued here lets nobody
+start anything.
+
+- **Routes**, all declared `admin` in the route table and on the admin allowlist:
+  `GET /api/v1/applications/{id}/start-grants` (every scope of one application),
+  `GET|PUT|DELETE /api/v1/applications/{id}/start-grants/{processId}`,
+  `GET …/{processId}/history` (newest first) and
+  `GET …/{processId}/preview?userId=|groupId=`. The preview is a `GET`, like the
+  existing deletion preview, because it writes nothing.
+- **Who:** an administrator. A change (PUT/DELETE) additionally needs the
+  administrator's own signed-in session (`Principal.Session`), the rule
+  ADR-0475 §10 applies to a person's own acts: an API token never carries admin,
+  and an application a person granted access to acts for them but is not them.
+  An application owner or editor reaches none of these routes. A server without
+  authentication refuses all of them with 403 — nobody could be the audited
+  actor, and the self-service routes are not offered there. None of the routes is
+  an MCP tool.
+- **What is checked, in the loop turn that writes:** the application exists and
+  is not a protected system application (409); the **newest deployed version** of
+  the process id is filed under that application (404 otherwise, so a process id
+  another application deployed last cannot be granted through this one); every
+  user and group id names an existing account or group — by id, never by a name
+  (400 naming every unknown id). The audience is non-empty (DELETE revokes),
+  bounded, without padded or repeated ids, and stored sorted. `expectedRevision`
+  is required; a stale one answers 409 with `currentRevision`. The body is
+  decoded strictly: an unknown field — `actorId`, `at`, `revision` — is refused,
+  so the audit fields are the server's.
+- **Writes** go through `Store.Set` and are answered only after the atomic
+  replacement and its fsync. Granting exactly the current audience, and revoking
+  what is already revoked, write nothing (`changed: false`). Revoking never needs
+  the application or the process to still exist. A failed write answers 500 and
+  leaves the store uncertain; every route of the area then answers 503 until a
+  restart reads back what reached the disk.
+- **Preview** reads the account's group membership from the directory (the same
+  source live sessions are updated from, ADR-0185) and answers `granted` with
+  `matchedBy`, `accountIssues` (`disabled`, `missing-user-role`) and the
+  `blockers` of the process's newest version. The blocker rule is one server
+  function (`selfServiceBlockers`) that the self-service routes are to share:
+  application missing or protected, process not deployed, newest version filed
+  under another application, not executable, deactivated (ADR-0119), only
+  startable by its triggers (ADR-0426), or a bound constant missing (ADR-0453).
+- **Interpretation recorded here, to be confirmed with the owner:** atlas has no
+  runtime "published" state apart from the deployed definition, and the operator
+  and public-link starts both resolve the newest deployed version. This slice
+  therefore reads "the current published process within its application" as the
+  newest deployed version of the process id, filed under the grant's application;
+  a superseded version is never offered. It does **not** additionally require the
+  version to be a member of the application's latest release record (ADR-0128).
+  Requiring that would make a plain deploy without a release withdraw the process
+  from field users, and would need a release index so the listing does not read
+  every release document on the run loop; it is a one-function change if wanted.
+
+Tests: `api/startgrant/service_test.go` (deny by default, open server, delegated
+credential, malformed and forged bodies, unknown identities and scopes, competing
+administrators, idempotent and always-possible revocation, persistence failure and
+recovery, preview), `api/startgrants_http_test.go` (anonymous 401, task user,
+application owner and machine token 403, administrator end to end, group
+membership change, restart over the same data directory).
+
 ## Consequences
 
 - **Positive:** real process starts for field users without handing out

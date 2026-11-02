@@ -134,23 +134,33 @@ export async function renderDisplaySettings(root, { api, toast }) {
         <div id="ds-sample">${sampleHTML(pending)}</div>
       </div>
 
-      <h2 style="margin-top:18px">${esc(t("display.numbers.title"))}</h2>
-      <p class="muted">${t("display.numbers.hint")}</p>
-      <div class="ds-options">${regionRows}</div>
+      <!-- Each choice folds under its heading (fold-topic, fold.js), remembered by its
+           id; the preview above is the form's output, not a topic of its own. -->
+      <section class="fold-topic" id="ds-sec-numbers" style="margin-top:18px">
+        <h2>${esc(t("display.numbers.title"))}</h2>
+        <p class="muted">${t("display.numbers.hint")}</p>
+        <div class="ds-options">${regionRows}</div>
+      </section>
 
-      <h2 style="margin-top:18px">${esc(t("display.zone.title"))}</h2>
-      <p class="muted">${t("display.zone.hint")}</p>
-      <label class="field"><span>${esc(t("display.zone.label"))}</span>
-        <select id="ds-zone">${zoneRows}</select></label>
+      <section class="fold-topic" id="ds-sec-zone" style="margin-top:18px">
+        <h2>${esc(t("display.zone.title"))}</h2>
+        <p class="muted">${t("display.zone.hint")}</p>
+        <label class="field"><span>${esc(t("display.zone.label"))}</span>
+          <select id="ds-zone">${zoneRows}</select></label>
+      </section>
 
-      <h2 style="margin-top:18px">${esc(t("display.language.title"))}</h2>
-      <p class="muted">${t("display.language.hint")}</p>
-      <label class="field"><span>${esc(t("display.language.label"))}</span>
-        <select id="ds-language">${languageRows}</select></label>
+      <section class="fold-topic" id="ds-sec-language" style="margin-top:18px">
+        <h2>${esc(t("display.language.title"))}</h2>
+        <p class="muted">${t("display.language.hint")}</p>
+        <label class="field"><span>${esc(t("display.language.label"))}</span>
+          <select id="ds-language">${languageRows}</select></label>
+      </section>
 
-      <h2 style="margin-top:18px">${esc(t("display.appearance.title"))}</h2>
-      <p class="muted">${t("display.appearance.hint")}</p>
-      <div class="ds-options" id="ds-appearance">${appearanceRows}</div>
+      <section class="fold-topic" id="ds-sec-appearance" style="margin-top:18px">
+        <h2>${esc(t("display.appearance.title"))}</h2>
+        <p class="muted">${t("display.appearance.hint")}</p>
+        <div class="ds-options" id="ds-appearance">${appearanceRows}</div>
+      </section>
 
       <div class="row" style="margin-top:18px; gap:10px; align-items:center">
         <button class="btn" id="ds-save">${esc(t("display.save"))}</button>
