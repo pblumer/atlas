@@ -6,12 +6,6 @@
 - **Date:** 2026-10-31
 - **Deciders:** atlas maintainers; MFE programme owner pblumer
 - **Programme:** [Mobile & Field Experience, MFE1](../planning/mobile-field-experience-program.md)
-- **Open question:** Whether "the current published process" must additionally be a
-  member of its application's latest release record (ADR-0128), rather than the
-  newest deployed version filed under the application as built; the owner has not
-  decided it. (The earlier question — persistence and revocation ordering against
-  in-flight starts — is settled by the checkpoints below.)
-- **Question checked:** 2026-11
 
 ## Context and problem statement
 
@@ -266,16 +260,17 @@ self-service start route exists.
   application missing or protected, process not deployed, newest version filed
   under another application, not executable, deactivated (ADR-0119), only
   startable by its triggers (ADR-0426), or a bound constant missing (ADR-0453).
-- **Interpretation recorded here, to be confirmed with the owner:** atlas has no
-  runtime "published" state apart from the deployed definition, and the operator
-  and public-link starts both resolve the newest deployed version. This slice
-  therefore reads "the current published process within its application" as the
-  newest deployed version of the process id, filed under the grant's application;
-  a superseded version is never offered. It does **not** additionally require the
-  version to be a member of the application's latest release record (ADR-0128).
-  Requiring that would make a plain deploy without a release withdraw the process
-  from field users, and would need a release index so the listing does not read
-  every release document on the run loop; it is a one-function change if wanted.
+- **"Published" means the newest deployed version within the application** —
+  decided by the MFE programme owner pblumer on 2026-11-02. atlas has no runtime
+  "published" state apart from the deployed definition, and the operator and
+  public-link starts both resolve the newest deployed version, so "the current
+  published process within its application" is the newest deployed version of the
+  process id, filed under the grant's application; a superseded version is never
+  offered. Membership of the application's latest release record (ADR-0128) is
+  deliberately **not** required: it would make a plain deploy without a release
+  withdraw the process from field users, and would need a release index so the
+  listing does not read every release document on the run loop. Changing this
+  later is a change to `selfServiceBlockers` and needs a decision of its own.
 
 ### Self-service list checkpoint (2026-11-02)
 
