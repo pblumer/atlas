@@ -97,8 +97,21 @@ diese ID **und** diese Initial-Domain hat.
 tofu init
 ```
 
+Zuerst nur den Zufallssuffix anlegen (lokal im State, nichts in Azure oder im Tenant).
+Sonst bricht der Plan mit «`mail_nickname` is required for mail-enabled groups» ab: Der
+Provider `azuread` hält den beim Planen noch unbekannten Namen der Microsoft-365-Gruppe für
+leer. Die Fehlermeldung zum Output `atlas_ssh` bei diesem Teil-Apply ist harmlos.
+
 ```bash
-tofu apply
+tofu apply -target=random_string.suffix
+```
+
+```bash
+tofu plan -out=plan.tfplan
+```
+
+```bash
+tofu apply plan.tfplan
 ```
 
 `apply` dauert einige Minuten. Danach richtet sich der Server selbst ein (Pakete,
