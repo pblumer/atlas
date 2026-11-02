@@ -7,7 +7,7 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-// Adopting a rebuilt multi-instance history (ADR-draft-mi-history-legacy-rebuild).
+// Adopting a rebuilt multi-instance history (ADR-0518).
 //
 // A store that recorded history before the MI index existed cannot prove the
 // index complete from its own state. The engine proves it by replaying the

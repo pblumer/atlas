@@ -1,4 +1,4 @@
-# ADR-DRAFT: Rebuilding the multi-instance history index for stores that predate it
+# ADR-0518: Rebuilding the multi-instance history index for stores that predate it
 
 - **Status:** Accepted
 - **Implementation:** Landed

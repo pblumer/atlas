@@ -603,6 +603,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
 | [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Landed |
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
+| [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
 
 ## The two states of a record
 

@@ -229,7 +229,7 @@ shown as iteration outputs.
 
 **OHS2-A — rebuilding older stores (2026-11-02).** A store whose history
 predates the index is rebuilt at startup from the retained log, as decided in
-[ADR-draft-mi-history-legacy-rebuild](draft-mi-history-legacy-rebuild.md):
+[ADR-0518](0518-mi-history-legacy-rebuild.md):
 shadow replay through the unchanged `applyToState`, then a resumable swap of the
 MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
 `history_unavailable`.
