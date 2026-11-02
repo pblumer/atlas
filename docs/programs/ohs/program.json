@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge #1513 (the #1494 fix linear MI-subprocess completion); then variable values per step and job/user-task history per iteration (OHS3), and a 50,000-iteration MI-subprocess acceptance through the HTTP server.",
+  "next_action": "Merge #1513 (the #1494 fix: linear MI-subprocess completion); then variable values per step and job/user-task history per iteration (OHS3), and a 50,000-iteration MI-subprocess acceptance through the HTTP server.",
   "slices": [
     {
       "id": "OHS1",
