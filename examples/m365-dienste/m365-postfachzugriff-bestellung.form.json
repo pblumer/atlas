@@ -63,11 +63,31 @@
     },
     {
       "key": "person",
-      "type": "textfield",
-      "label": "Wer erhält den Zugriff (UPN) · Who gets access (UPN)",
+      "type": "select",
+      "label": "Wer erhält den Zugriff · Who gets access",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     },
     {

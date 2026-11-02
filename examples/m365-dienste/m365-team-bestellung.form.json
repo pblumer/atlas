@@ -66,12 +66,32 @@
     },
     {
       "key": "besitzer",
-      "type": "textfield",
-      "label": "Besitzerin oder Besitzer (UPN) · Owner (UPN)",
+      "type": "select",
+      "label": "Besitzerin oder Besitzer · Owner",
       "description": "Verantwortlich für Mitglieder und Inhalt. · Responsible for members and content.",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     }
   ]

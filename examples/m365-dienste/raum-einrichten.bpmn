@@ -16,7 +16,7 @@ Namensregel mit Präfix RM. Die Kennzeichnung trägt in CustomAttribute4 statt e
 
 Worker: ucc_exchange. Konstante MAIL_DOMAIN.</documentation>
     <extensionElements>
-      <atlas:constants><atlas:constant name="NAME_PREFIX" type="string" source="application" value=""/>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
         <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
         <atlas:constant name="MAIL_DOMAIN" type="string" source="application" value="contoso.ch"/>
       </atlas:constants>

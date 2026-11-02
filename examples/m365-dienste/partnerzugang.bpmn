@@ -20,7 +20,7 @@ Personendaten: vorname, nachname, ansprechperson, begruendung, initialpasswort u
 
 Konstanten PARTNER_UPN_DOMAIN und USAGE_LOCATION (Applikation). Worker: ucc_entra.</documentation>
     <extensionElements>
-      <atlas:constants><atlas:constant name="NAME_PREFIX" type="string" source="application" value=""/>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
         <atlas:constant name="PARTNER_UPN_DOMAIN" type="string" source="application" value="contoso.onmicrosoft.com"/>
         <atlas:constant name="USAGE_LOCATION" type="string" source="application" value="CH"/>
       </atlas:constants>

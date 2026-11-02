@@ -24,7 +24,7 @@ Die Hauptnummer wÃ¤hlt das Team M365-Telefonie aus seinem Nummernplan (Aufgabe Â
 
 Worker: ucc_teams und ucc_entra. Konstanten MAIL_DOMAIN und USAGE_LOCATION.</documentation>
     <extensionElements>
-      <atlas:constants><atlas:constant name="NAME_PREFIX" type="string" source="application" value=""/>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
         <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
         <atlas:constant name="MAIL_DOMAIN" type="string" source="application" value="contoso.ch"/>
         <atlas:constant name="USAGE_LOCATION" type="string" source="application" value="CH"/>

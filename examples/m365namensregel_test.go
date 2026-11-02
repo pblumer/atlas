@@ -2,9 +2,11 @@ package examples
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
+	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/dmn"
 )
 
@@ -66,5 +68,47 @@ func TestM365NamingRuleTakesThePrefix(t *testing.T) {
 	}
 	if m, _ := got.(map[string]any); m["erlaubt"] != false || m["alias"] != nil {
 		t.Fatalf("a reserved word with a prefix: got %v, want erlaubt=false and no alias", got)
+	}
+}
+
+// TestM365OrderFormsSearchThePersonTheyName holds the order forms of m365-dienste to
+// the check the server makes when a form is saved (formlookup.Check), and to the one
+// promise the processes rely on: the person a field names arrives as a user principal
+// name, as the text field it replaced submitted it.
+func TestM365OrderFormsSearchThePersonTheyName(t *testing.T) {
+	for form, key := range map[string]string{
+		"m365-person": "upn", "m365-team-bestellung": "besitzer", "m365-funktionspostfach-bestellung": "besitzer",
+		"m365-verteiler-bestellung": "besitzer", "m365-postfachzugriff-bestellung": "person",
+	} {
+		raw, err := os.ReadFile("m365-dienste/" + form + ".form.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct {
+			Schema json.RawMessage `json:"schema"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: %v", form, err)
+		}
+		schema := doc.Schema
+		if len(schema) == 0 {
+			schema = raw
+		}
+		if err := formlookup.Check(schema); err != nil {
+			t.Errorf("%s: the server would refuse the form: %v", form, err)
+			continue
+		}
+		parsed, err := formlookup.Parse(schema)
+		if err != nil {
+			t.Fatalf("%s: %v", form, err)
+		}
+		f, ok := parsed.Field(key)
+		if !ok {
+			t.Errorf("%s: %q is no directory field", form, key)
+			continue
+		}
+		if f.ValueProperty() != "userPrincipalName" {
+			t.Errorf("%s: %q submits %s; the processes address people by user principal name", form, key, f.ValueProperty())
+		}
 	}
 }

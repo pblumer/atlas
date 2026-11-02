@@ -33,12 +33,32 @@
     },
     {
       "key": "besitzer",
-      "type": "textfield",
-      "label": "Verantwortliche Person (UPN) · Responsible person (UPN)",
+      "type": "select",
+      "label": "Verantwortliche Person · Responsible person",
       "description": "Erhält Vollzugriff und «Senden als». · Receives full access and send-as.",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     }
   ]
