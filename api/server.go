@@ -2153,6 +2153,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.formGen.Limits = s.budgets()
 	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.startGrantAdmin.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()

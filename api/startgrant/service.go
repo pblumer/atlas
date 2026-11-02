@@ -27,11 +27,8 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
-
-// maxBody bounds a grant request. The audience is capped at maxAudience ids of at
-// most 256 bytes each; this leaves room for the JSON around them and nothing else.
-const maxBody = 160 << 10
 
 // Account is what the directory says about a person a grant or a preview names.
 type Account struct {
@@ -91,6 +88,11 @@ type Service struct {
 	resolve     func(applicationID, processID string) (Target, error)
 	authEnabled func() bool
 	now         func() int64
+
+	// Limits are the installation's resource budgets. NewService sets them to
+	// [limits.Default]; the server overwrites them with its own once it has read the
+	// environment (ADR-0291). A grant body is one ordinary JSON request.
+	Limits limits.Limits
 }
 
 // NewService builds the administration service over the store. resolve and every
@@ -101,7 +103,8 @@ type Service struct {
 // never the client's.
 func NewService(loop *runloop.Loop, store *Store, dir Directory,
 	resolve func(applicationID, processID string) (Target, error), authEnabled func() bool, now func() int64) *Service {
-	return &Service{loop: loop, store: store, dir: dir, resolve: resolve, authEnabled: authEnabled, now: now}
+	return &Service{loop: loop, store: store, dir: dir, resolve: resolve, authEnabled: authEnabled, now: now,
+		Limits: limits.Default()}
 }
 
 // GrantView is one scope's current state as the administration routes answer it.
@@ -370,15 +373,15 @@ type putRequest struct {
 }
 
 // decodePut reads a grant body strictly: one JSON object, no unknown field, no
-// trailing data, bounded in size.
-func decodePut(r *http.Request) (putRequest, int, string) {
+// trailing data, bounded by the installation's Request budget.
+func decodePut(r *http.Request, limit int64) (putRequest, int, string) {
 	var req putRequest
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		return req, http.StatusBadRequest, "read body: " + err.Error()
 	}
-	if len(body) > maxBody {
-		return req, http.StatusRequestEntityTooLarge, "a start grant body is at most " + strconv.Itoa(maxBody) + " bytes"
+	if int64(len(body)) > limit {
+		return req, http.StatusRequestEntityTooLarge, "a start grant body is at most " + strconv.FormatInt(limit, 10) + " bytes"
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.DisallowUnknownFields()
@@ -450,7 +453,7 @@ func (s *Service) HandlePut(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	req, code, msg := decodePut(r)
+	req, code, msg := decodePut(r, s.Limits.Request)
 	if code != 0 {
 		httpapi.Error(w, code, msg)
 		return

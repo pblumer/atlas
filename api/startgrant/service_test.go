@@ -13,6 +13,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
+	"github.com/pblumer/atlas/limits"
 )
 
 // fixture is a service over a real store and a real run loop, with the directory
@@ -271,7 +272,7 @@ func TestServiceRefusesMalformedGrants(t *testing.T) {
 		"a name, not an id":  {`{"userIds":["alice"],"expectedRevision":0}`, http.StatusBadRequest},
 		"unknown group":      {`{"groupIds":["field-inspectors"],"expectedRevision":0}`, http.StatusBadRequest},
 		"negative revision":  {`{"userIds":["usr_alice"],"expectedRevision":-1}`, http.StatusBadRequest},
-		"oversized body":     {`{"userIds":["` + strings.Repeat("x", maxBody) + `"],"expectedRevision":0}`, http.StatusRequestEntityTooLarge},
+		"oversized body":     {`{"userIds":["` + strings.Repeat("x", int(limits.Default().Request)) + `"],"expectedRevision":0}`, http.StatusRequestEntityTooLarge},
 		"too many ids":       {audienceOf(maxAudience + 1), http.StatusBadRequest},
 		"unknown field":      {`{"userIds":["usr_alice"],"expectedRevision":0,"role":"admin"}`, http.StatusBadRequest},
 		"string for an list": {`{"userIds":"usr_alice","expectedRevision":0}`, http.StatusBadRequest},
