@@ -37,7 +37,7 @@ const pkg = tarGz([["atlas.json", JSON.stringify({
   formatVersion: 1, key: "purchase", name: "Purchase", processes: [], forms: [], decisions: [],
 })]]);
 
-async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview } = {}) {
+async function stubRegistry(page, { status = 200, downloadStatus = 200, previewBody = preview, indexBody = index } = {}) {
   const requests = [];
   await page.route("**/api/v1/blueprints**", async (route) => {
     const request = route.request();
@@ -45,7 +45,7 @@ async function stubRegistry(page, { status = 200, downloadStatus = 200, previewB
     requests.push({ path, ifMatch: request.headers()["if-match"] });
     if (path === "/api/v1/blueprints") {
       await route.fulfill({ status, contentType: "application/json",
-        body: JSON.stringify(status === 200 ? index : { error: "Registry not configured" }) });
+        body: JSON.stringify(status === 200 ? indexBody : { error: "Registry not configured" }) });
     } else if (path.endsWith("/preview")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(previewBody) });
     } else if (path.endsWith("/package")) {
@@ -149,4 +149,33 @@ test("server without an operator registry shows a failure without import", async
   await page.evaluate(() => window.__open());
   await expect(page.locator(".modal-ov")).toContainText("Registry not configured");
   expect(await page.evaluate(() => window.__calls)).toHaveLength(0);
+});
+
+test("signed tags filter the listing without changing which release is previewed", async ({ page }) => {
+  const tagged = {
+    ...index,
+    releases: [
+      { ...release, tags: ["einstieg"] },
+      { ...release, blueprintId: "org.example.directory", title: "Directory samples", tags: ["identitaet", "entra"] },
+      { ...release, blueprintId: "org.example.untagged", title: "Untagged" },
+    ],
+  };
+  const requests = await stubRegistry(page, { indexBody: tagged });
+  await page.evaluate(() => window.__open());
+  const ov = page.locator(".modal-ov");
+  await expect(ov).toContainText("Directory samples");
+  await expect(ov.locator("[data-tag]")).toHaveCount(4); // all + three tags
+  await ov.locator('[data-tag="identitaet"]').click();
+  await expect(ov.locator('[data-tag="identitaet"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(ov).toContainText("Directory samples");
+  await expect(ov).not.toContainText("Purchase approvals");
+  await expect(ov).not.toContainText("Untagged");
+  // The preview button still names the release in the signed index, not its
+  // position in the filtered list.
+  await ov.locator("[data-preview]").first().click();
+  await expect(page.locator("[data-install]")).toBeVisible();
+  expect(requests.map((r) => r.path)).toContain("/api/v1/blueprints/org.example.directory/releases/1.0.0/preview");
+  await ov.locator("[data-back]").click();
+  await ov.locator('[data-tag=""]').click();
+  await expect(ov).toContainText("Untagged");
 });

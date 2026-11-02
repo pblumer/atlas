@@ -176,6 +176,7 @@ async function loadAuth() {
   try {
     const m = await api("GET", "/api/v1/auth/me");
     AUTH = { enabled: !!(m && m.authEnabled), user: (m && m.user) || null, loaded: true };
+    SELF_START = { checked: false, available: false }; // a new identity asks again
   } catch {
     // A 401 from /auth/me means enforcement is on and nobody is signed in.
     AUTH = { enabled: true, user: null, loaded: true };
@@ -259,7 +260,35 @@ function loadLinking(force) {
 // the server serves the part of Atlas the entry opens. One predicate and not a second
 // condition beside each role check, because the next menu would be the one that
 // forgot it.
-const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+const offered = (entry) => (mayUse(entry.role) || (entry.selfStart && selfStartOffered()))
+  && !(entry.feature && FEATURES[entry.feature] === false);
+
+// SELF_START is what GET /api/v1/me/startable-processes said for a signed-in person
+// who does not hold the operator role (ADR-0516): whether an administrator granted
+// them at least one process they may start now. It decides one thing only — whether
+// the Start destination is offered to them. The server checks every list and every
+// start again; a stale answer here can show a link, never a right.
+let SELF_START = { checked: false, available: false };
+
+// selfStartOffered: the self-service Start view is for a signed-in person without the
+// operator role whose list is not empty. Operators (and admins) keep their own Start
+// view, and a server without authentication has no self-service at all.
+const selfStartOffered = () => SELF_START.available && AUTH.enabled && !!AUTH.user && !mayUse("operator");
+
+async function loadSelfStart(force) {
+  if (!AUTH.enabled || !AUTH.user || mayUse("operator") || !mayUse("user")) {
+    SELF_START = { checked: true, available: false };
+    return SELF_START;
+  }
+  if (SELF_START.checked && !force) return SELF_START;
+  try {
+    const page = await api("GET", "/api/v1/me/startable-processes");
+    SELF_START = { checked: true, available: !!(page && Array.isArray(page.items) && page.items.length) };
+  } catch {
+    SELF_START = { checked: true, available: false };
+  }
+  return SELF_START;
+}
 
 // isCatalogueRoute names the Console views of the area the switch removes — the same
 // four the menus mark with feature: "catalogue".
@@ -850,7 +879,9 @@ const TOPNAV = {
     // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
     { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
-    { name: "Start", route: "#/tasks/start", role: "operator" },
+    // Operators start any deployed process; a task user is offered Start only when an
+    // administrator granted them one (ADR-0516, selfStartOffered).
+    { name: "Start", route: "#/tasks/start", role: "operator", selfStart: true },
   ],
   panorama: [
     { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
@@ -1612,7 +1643,7 @@ function paintMobileMenu(appId, route) {
     menu.append(link);
   };
   if (mayUse("user")) addLink({ name: "My tasks", route: "#/tasks", badge: "tasks" });
-  if (mayUse("operator")) addLink({ name: "Start process", route: "#/tasks/start" });
+  if (mayUse("operator") || selfStartOffered()) addLink({ name: "Start process", route: "#/tasks/start" });
   if (mayUse("operator")) addLink({ name: "Incidents", route: "#/operations/incidents", badge: "incidents" });
   for (const entry of (TOPNAV[appId] || [])) {
     if (entry.items) entry.items.forEach(addLink);
@@ -1811,7 +1842,7 @@ function rnFill(slot, version, lang) {
 
 function rnChangeHTML(c, t) {
   const cat = t.categories[c.category] || c.category || "";
-  return `<details class="rn-change"><summary>` +
+  return `<details class="rn-change fold-sub"><summary>` +
     (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
     `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
     `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
@@ -1836,7 +1867,7 @@ function rnBodyHTML(version, t) {
 
 function rnReleaseHTML(s, t) {
   const name = s.version === "Unreleased" ? t.unreleased : s.version;
-  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+  return `<details class="rn-release fold-sub" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
     `<summary><span class="rn-version">${esc(name)}</span>` +
     (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
     `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
@@ -7938,7 +7969,7 @@ async function viewWorkers() {
     // Variables are shown collapsed: the list is for scanning outcomes, and a row of
     // JSON per job would bury the one that failed.
     const vars = (label, text) => text
-      ? `<details class="wkjob-vars"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
+      ? `<details class="wkjob-vars fold-sub"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
       : `<span class="muted small">${label}: none</span>`;
     body.innerHTML = `<div class="wkjob-list">${jobs.map((j) => {
       const took = j.settledAt && j.leasedAt
@@ -8318,7 +8349,7 @@ async function viewMailOutbox() {
     }
     list.innerHTML = (data.truncated
       ? `<p class="muted" style="margin:10px 12px 0">Older messages have been dropped — the outbox keeps the newest ones.</p>`
-      : "") + msgs.map((m) => `<details class="ob-msg">
+      : "") + msgs.map((m) => `<details class="ob-msg fold-sub">
         <summary>
           <b>${esc(m.subject || "(no subject)")}</b>
           <span class="muted">· to ${esc(addrs(m.to)) || "—"}</span>
@@ -8444,7 +8475,7 @@ async function viewADMockDirectory() {
     // data-k is the entry's identity across renders: what you opened stays open when
     // the view refreshes under you. The DN is unique within a forest, and the forest
     // and worker are prefixed by the callers below.
-    return `<li><details class="admock-entry" data-k="e|${esc(node.entry.dn || "")}">
+    return `<li><details class="admock-entry fold-sub" data-k="e|${esc(node.entry.dn || "")}">
         <summary><span class="admock-node">${esc(node.rdn)}</span>
           <span class="muted">· ${count} attribute${count === 1 ? "" : "s"}</span></summary>
         <div class="admock-detail">
@@ -8493,7 +8524,7 @@ async function viewADMockDirectory() {
         ${forests.length ? forests.map(renderForest).join("")
           : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
              no Active Directory task since it started — the first one creates the forest it names.</p>`}
-        ${ops.length ? `<details class="admock-ops" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
+        ${ops.length ? `<details class="admock-ops fold-sub" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
           <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
             <th>${esc(o.op || "")}</th>
             <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
@@ -9091,8 +9122,9 @@ const wizardHistory = {
 const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
 // MFE1: offer both primary work destinations without inventing a mobile router.
-// Start remains operator-only (ADR-0209); mobile navigation must use the same
-// role predicate as the desktop top bar, not a separate authorisation rule.
+// Start is the operator's, or a task user's once something is granted to them
+// (ADR-0516); mobile navigation uses the same predicate as the desktop top bar
+// (offered), never an authorisation rule of its own.
 // On task selection the list pane (and this navigation) hides on narrow screens,
 // so following a Start link cannot silently discard an in-progress form draft.
 function mobileWorkEntryHTML(active) {
@@ -9102,7 +9134,7 @@ function mobileWorkEntryHTML(active) {
     ${offered({ role: "user" })
       ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
       : ""}
-    ${offered({ role: "operator" })
+    ${offered({ role: "operator", selfStart: true })
       ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
       : ""}
   </nav>`;
@@ -10969,6 +11001,217 @@ async function viewStartProcess() {
   await load();
 }
 
+// ---------- Start a granted process yourself (ADR-0516) ----------
+// The task user's Start view. It lists what GET /api/v1/me/startable-processes
+// answers — the processes an administrator granted to this person or their groups —
+// and starts one through POST /api/v1/me/processes/{key}/instances. The person never
+// sees a deployment key, a version or a grant: they pick a process by its name and
+// application, fill its start form, and are told when the server has durably started
+// it. Every state a start can end in is said in words, including the one nobody can
+// know: a broken connection leaves the outcome unknown, and the view says so rather
+// than offering a second start as though the first had failed.
+async function viewSelfStart() {
+  const state = { procs: [], selected: null, form: null, submitting: false, query: "" };
+  view.innerHTML = `
+    <div class="tasks" id="selfstart-grid">
+      <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("start")}
+        <header class="tasks-list-head"><h2>${esc(tr("selfstart.title"))}</h2>
+          <button class="btn ghost small" id="selfstart-refresh">${esc(tr("selfstart.refresh"))}</button></header>
+        <ul class="tasks-list" id="selfstart-list" aria-busy="true"><li class="tasks-empty muted">${esc(tr("selfstart.loading"))}</li></ul>
+      </section>
+      <section class="tasks-detail" id="selfstart-detail"></section>
+    </div>`;
+  const listEl = view.querySelector("#selfstart-list");
+  const detailEl = view.querySelector("#selfstart-detail");
+
+  function destroyForm() {
+    if (state.form) { try { state.form.destroy(); } catch { /* noop */ } state.form = null; }
+  }
+
+  // status writes the one message the detail pane carries, in a live region so a
+  // screen reader hears it. kind is ok, err or info; actions are extra buttons.
+  function status(kind, text, actions = []) {
+    const host = detailEl.querySelector("#selfstart-status");
+    if (!host) return;
+    host.className = "selfstart-status " + kind;
+    host.hidden = !text;
+    host.innerHTML = text ? `<p>${esc(text)}</p>${actions.map((a) =>
+      a.href ? `<a class="btn ghost small" href="${esc(a.href)}">${esc(a.label)}</a>`
+        : `<button class="btn ghost small" data-act="${esc(a.id)}">${esc(a.label)}</button>`).join(" ")}` : "";
+    for (const a of actions) {
+      if (a.run) host.querySelector(`[data-act="${a.id}"]`).addEventListener("click", a.run);
+    }
+  }
+
+  function renderList() {
+    listEl.setAttribute("aria-busy", "false");
+    if (!state.procs.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted" id="selfstart-empty">${esc(tr("selfstart.empty"))}</li>`;
+      return;
+    }
+    let lastApp = null;
+    listEl.innerHTML = state.procs.map((p) => {
+      const head = p.applicationId !== lastApp
+        ? `<li class="start-group"><span class="start-group-head selfstart-app">${esc(p.applicationName || tr("start.group.other"))}</span></li>` : "";
+      lastApp = p.applicationId;
+      const sel = p.key === state.selected ? " selected" : "";
+      return `${head}<li class="tasks-item${sel}" data-key="${p.key}" tabindex="0" role="button"
+          aria-pressed="${p.key === state.selected}">
+        <div class="tasks-item-top"><span class="tasks-item-title">${esc(p.name || p.processId)}</span></div>
+        <div class="tasks-item-sub muted">${esc(p.applicationName || "")}</div></li>`;
+    }).join("");
+    listEl.querySelectorAll(".tasks-item").forEach((li) => {
+      const open = () => { state.selected = Number(li.dataset.key); renderList(); renderDetail(); };
+      li.addEventListener("click", open);
+      li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+    });
+  }
+
+  function renderDetail() {
+    destroyForm();
+    const p = state.procs.find((x) => x.key === state.selected);
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!p);
+    if (!p) {
+      detailEl.innerHTML = `<div class="tasks-detail-empty muted">${esc(tr("selfstart.pick"))}</div>`;
+      return;
+    }
+    detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="selfstart-back">‹ ${esc(tr("selfstart.back"))}</button>
+      <header class="tasks-detail-head">
+        <h1>${esc(p.name || p.processId)}</h1>
+      </header>
+      <p class="muted selfstart-app-line">${esc(p.applicationName || "")}</p>
+      <div class="tasks-form" id="selfstart-form">${p.startForm && p.startForm.available
+        ? `<p class="muted">${esc(tr("selfstart.formLoading"))}</p>`
+        : `<p class="muted">${esc(tr("selfstart.noForm"))}</p>`}</div>
+      <div class="selfstart-status" id="selfstart-status" role="status" aria-live="polite" hidden></div>
+      <div class="selfstart-actions"><button class="btn" id="selfstart-go">${esc(tr("selfstart.start"))}</button></div>`;
+    detailEl.querySelector("#selfstart-back").addEventListener("click", () => {
+      state.selected = null; renderList(); renderDetail();
+    });
+    detailEl.querySelector("#selfstart-go").addEventListener("click", () => submit(p));
+    if (p.startForm && p.startForm.available) mountForm(p);
+  }
+
+  async function mountForm(p) {
+    const host = detailEl.querySelector("#selfstart-form");
+    try {
+      const [{ Form }, def] = await Promise.all([
+        loadFormViewer(),
+        api("GET", "/api/v1/forms/" + encodeURIComponent(p.startForm.formId)),
+      ]);
+      if (state.selected !== p.key || !host.isConnected) return;
+      host.innerHTML = "";
+      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: p.startForm.formId }), atlasLocale: trLocale() });
+      await form.importSchema(def.schema, {});
+      state.form = form;
+    } catch (e) {
+      host.innerHTML = `<p class="muted err">${esc(tr("selfstart.formFailed", { error: e.message }))}</p>`;
+      const go = detailEl.querySelector("#selfstart-go");
+      if (go) go.disabled = true;
+    }
+  }
+
+  // submit starts the selected process once. The button and the in-flight flag stop a
+  // double tap from sending a second start; neither makes the start idempotent, and
+  // nothing here claims it is.
+  async function submit(p) {
+    if (state.submitting) return;
+    const btn = detailEl.querySelector("#selfstart-go");
+    let variables = {};
+    if (p.startForm && p.startForm.available) {
+      if (!state.form) return; // the form has not loaded, or could not
+      const { data, errors } = state.form.submit();
+      if (errors && Object.keys(errors).length > 0) {
+        status("err", formRefusalMessage(state.form, errors));
+        scrollToFirstInvalidField("selfstart-form");
+        return;
+      }
+      variables = data || {};
+    }
+    state.submitting = true;
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    status("info", tr("selfstart.submitting"));
+    let res;
+    try {
+      res = await api("POST", `/api/v1/me/processes/${p.key}/instances`, { variables });
+    } catch (err) {
+      state.submitting = false;
+      btn.removeAttribute("aria-busy");
+      refused(p, err, btn);
+      return;
+    }
+    state.submitting = false;
+    btn.removeAttribute("aria-busy");
+    const wz = res && res.wizard;
+    if (wz && wz.state === "step" && wz.task) { location.hash = "#/tasks/t/" + wz.task.key; return; }
+    destroyForm();
+    const form = detailEl.querySelector("#selfstart-form");
+    if (form) form.hidden = true;
+    btn.hidden = true;
+    status("ok", tr("selfstart.started", { name: p.name || p.processId, ref: String((res && res.instanceKey) || "") }), [
+      { id: "tasks", label: tr("selfstart.toTasks"), href: "#/tasks" },
+      { id: "again", label: tr("selfstart.another"), run: () => { state.selected = null; load(); } },
+    ]);
+  }
+
+  // refused says what an unsuccessful start means for the person. Only a refusal the
+  // server stated is a refusal; anything else — no answer, a broken connection, an
+  // error after the server took the request — may have started the process.
+  function refused(p, err, btn) {
+    const reload = { id: "reload", label: tr("selfstart.reload"), run: () => { state.selected = null; load(); } };
+    switch (err.status) {
+      case 400:
+        btn.disabled = false;
+        status("err", tr("selfstart.invalid", { error: err.message }));
+        return;
+      case 401:
+        status("err", tr("selfstart.session"), [{ id: "login", label: tr("selfstart.signIn"), run: () => location.reload() }]);
+        return;
+      case 403:
+      case 404:
+        status("err", tr("selfstart.revoked"), [reload]);
+        return;
+      case 409:
+        status("err", tr("selfstart.changed"), [reload]);
+        return;
+      case 503:
+        btn.disabled = false;
+        status("err", tr("selfstart.unavailable"));
+        return;
+      default:
+        status("err", tr("selfstart.unknown"), [
+          { id: "tasks", label: tr("selfstart.toTasks"), href: "#/tasks" },
+          { id: "retry", label: tr("selfstart.retryAnyway"), run: () => { btn.disabled = false; status("info", ""); } },
+        ]);
+    }
+  }
+
+  async function load() {
+    listEl.setAttribute("aria-busy", "true");
+    try {
+      const page = await api("GET", "/api/v1/me/startable-processes");
+      state.procs = (page && Array.isArray(page.items)) ? page.items : [];
+      SELF_START = { checked: true, available: state.procs.length > 0 };
+      if (!state.procs.some((p) => p.key === state.selected)) state.selected = null;
+      renderList();
+      renderDetail();
+    } catch (e) {
+      listEl.setAttribute("aria-busy", "false");
+      if (e.status === 401) {
+        listEl.innerHTML = `<li class="tasks-empty err">${esc(tr("selfstart.session"))}</li>`;
+        return;
+      }
+      listEl.innerHTML = `<li class="tasks-empty err">${esc(tr("selfstart.loadFailed", { error: e.message }))}</li>`;
+    }
+  }
+  view.querySelector("#selfstart-refresh").addEventListener("click", load);
+  await load();
+}
+
 // startGroups buckets the Start view's processes by the application each was
 // deployed under, named as the listing names it (applicationName). A process filed
 // under no application, or under one the viewer may not see — the listing then
@@ -12103,6 +12346,8 @@ async function route() {
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   if (AUTH.user) loadLinking(); // not awaited: it only decides one entry of a closed menu
+  // Awaited once per identity: it decides whether Start is in the menus painted next.
+  if (AUTH.user && !SELF_START.checked) await loadSelfStart();
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
@@ -12264,7 +12509,10 @@ async function route() {
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
-    if (path === "#/tasks/start") return await viewStartProcess();
+    // Operators keep their Start view; everybody else gets the processes granted to
+    // them (ADR-0516). Which one is a navigation choice — both views' calls are
+    // authorized by the server on their own.
+    if (path === "#/tasks/start") return mayUse("operator") ? await viewStartProcess() : await viewSelfStart();
     // A single task can be deep-linked (…/t/{jobKey}) — the Operations live view
     // links a running instance's active user task straight to its form here, so an
     // operator jumps from "where is the token" to "work the task" in one click.

@@ -57,34 +57,39 @@ func TestMIHistoryBoundsAndLegacyParent(t *testing.T) {
 	}
 
 	for _, limit := range []int{0, -1, 201} {
-		if err := s.MIBodies(70, limit, func(MIHistoryEntry) error { return nil }); err == nil {
+		if _, err := s.MIBodyPage(70, MIBodyPageQuery{Limit: limit}, func(MIHistoryEntry) error { return nil }); err == nil {
 			t.Fatalf("accepted body page limit %d", limit)
 		}
-		if err := s.MIIterations(70, 100, 10, limit, func(MIHistoryEntry) error { return nil }); err == nil {
+		if _, err := s.MIIterationPage(70, 100, 10, MIIterationQuery{Limit: limit}, func(MIHistoryEntry) error { return nil }); err == nil {
 			t.Fatalf("accepted round page limit %d", limit)
 		}
 	}
 	var bodies []MIHistoryEntry
-	if err := s.MIBodies(70, 2, func(v MIHistoryEntry) error {
+	next, err := s.MIBodyPage(70, MIBodyPageQuery{Limit: 2}, func(v MIHistoryEntry) error {
 		bodies = append(bodies, v)
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if len(bodies) != 2 || bodies[0].ElementInstanceKey != 100 || bodies[1].ElementInstanceKey != 110 {
 		t.Fatalf("body page crossed its bound or changed order: %+v", bodies)
 	}
+	if next == nil || *next != (MIBodyPosition{ActivationPosition: 20, BodyKey: 110}) {
+		t.Fatalf("body page resume position: %+v", next)
+	}
 	var rounds []MIHistoryEntry
-	if err := s.MIIterations(70, 100, 10, 1, func(v MIHistoryEntry) error {
+	page, err := s.MIIterationPage(70, 100, 10, MIIterationQuery{Limit: 1}, func(v MIHistoryEntry) error {
 		rounds = append(rounds, v)
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rounds) != 1 || rounds[0].ElementInstanceKey != 101 {
-		t.Fatalf("iteration page crossed body boundary: %+v", rounds)
+	if len(rounds) != 1 || rounds[0].ElementInstanceKey != 101 || page.Next == nil {
+		t.Fatalf("iteration page crossed body boundary: %+v %+v", rounds, page)
 	}
-	if err := s.MIBodies(71, 200, func(MIHistoryEntry) error {
+	if _, err := s.MIBodyPage(71, MIBodyPageQuery{Limit: 200}, func(MIHistoryEntry) error {
 		t.Fatal("saw another process instance's body")
 		return nil
 	}); err != nil {
@@ -146,9 +151,18 @@ func TestMIHistoryCorruptionCannotReadAsPlausibleLineage(t *testing.T) {
 			}
 		})
 	}
-	value := appendMIHistoryValue(make([]byte, 0, miHistoryValueSize), MIHistoryEntry{State: MIHistoryActive})
-	value[45] = 255
-	if _, err := decodeMIHistoryValue(value); err == nil {
+	value := appendMIRoundValue(nil, &MIHistoryEntry{State: MIHistoryActive})
+	value[46] = 255
+	if _, err := decodeMIRoundValue(value); err == nil {
 		t.Fatal("invalid lifecycle status was accepted")
+	}
+	if _, err := decodeMIBodyValue(appendMIRoundValue(nil, &MIHistoryEntry{State: MIHistoryActive})); err == nil {
+		t.Fatal("an iteration value decoded as a body")
+	}
+	if _, err := decodeMIRoundValue(appendMIBodyValue(nil, &MIHistoryEntry{State: MIHistoryActive})); err == nil {
+		t.Fatal("a body value decoded as an iteration")
+	}
+	if _, err := decodeMIRoundValue(appendMIRoundValue(nil, &MIHistoryEntry{State: MIHistoryActive, IncidentsRaised: 1})); err == nil {
+		t.Fatal("inconsistent iteration incident counters were accepted")
 	}
 }

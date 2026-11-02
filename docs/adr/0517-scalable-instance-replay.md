@@ -137,10 +137,140 @@ a complete timeline. The startup check performs bounded prefix seeks, not
 historical scans. A corrupt marker fails closed. This is a safety gate, **not**
 a historical backfill or a migration-complete flag for old state.
 
-**Still not built:** verified background WAL-based historical backfill for
-legacy stores; exact `loopCounter` search; cursor/high-watermark and indexed
-status/incident filters; API/UI endpoints; 50,000-iteration performance
-evidence. A historical reconstruction must use durable event payloads,
+**OHS2 increment 3 — index schema v2 and the bounded read API (2026-11-02).**
+The index schema moved to v2 (marker `mi_history_index_v2`); a store marked only
+for v1 is treated as legacy and stays unavailable, exactly like a pre-index
+store. Implemented:
+
+- *Iteration number.* Each iteration row records the `loopCounter` the engine
+  bound into the iteration's scope. The variable event precedes the iteration's
+  Activated event in the log, so the fold reads a prior durable fact (I6); an
+  iteration without one records 0 ("not recorded"), never a guess. A new family
+  `cfMIRoundOrder` orders a body activation's iterations by
+  `(loopCounter, iterationKey)`, so "iteration 37,421" is a seek, not a skip.
+- *Lifecycle filter.* `cfMIRoundByState` holds the same order per lifecycle state,
+  moved (delete + set) by the end fact. The state filter is a seek in that family.
+- *Incidents.* `IncidentCreated` is attributed to the innermost MI iteration or
+  body whose live scope chain holds the incident's element (bounded walk);
+  `IncidentResolved` closes the attribution. `cfMIRoundIncident` orders iterations
+  that ever had an incident (historical, monotonic); per-owner records keep raised
+  and resolved positions and a "superseded" outcome. An incident cleared because
+  its element ended (ADR-0061, no event) stays unresolved in the index; readers
+  distinguish *open* from *cleared* with a point read of the current incident
+  table, so "current" and "historical" incidents are never conflated.
+- *Counters.* Seeded, completed, terminated, incidents raised, iterations with
+  incidents and a change count per body activation are write-only Pebble merges
+  (`cfMIBodyCounter`), like the active-children counters: recording an iteration
+  does not read the body. The planned total of a *sequential* body is not a
+  recorded fact and is not reported.
+- *Nesting.* Each body records the innermost enclosing MI iteration
+  (`cfMIBodyByParent`), so the overview lists top-level bodies without visiting a
+  nested body seeded once per outer iteration.
+- *HTTP and MCP.* `api/mihistory` serves
+  `GET /api/v1/instances/{key}/multi-instances`,
+  `.../multi-instances/{bodyKey}`, `.../{bodyKey}/iterations` and
+  `.../iterations/{iterationKey}` (MCP tools `atlas_instance_multi_instances`,
+  `atlas_multi_instance_body`, `atlas_multi_instance_iterations`,
+  `atlas_multi_instance_iteration`), role Operator like the timeline. Reads run on
+  a `state.ReadView` opened off the writer. Pages default to 100, maximum 200; each
+  iteration page examines at most a fixed scan budget of index keys and resumes
+  through its cursor, so no filter combination becomes a walk. The cursor is
+  `base64url(payload ‖ HMAC-SHA-256/128)` under a per-process random key with a
+  one-hour TTL; it binds kind, instance, body activation, a SHA-256 digest of the
+  canonical filter set, the resume position, the frozen high-water log position
+  and the body's change count. A state-filtered page sequence answers
+  `409 cursor_stale` once the body changed; unfiltered and incident-filtered pages
+  hide rows past the high-water mark. An index that is not verified complete
+  answers `409 history_unavailable` with an explanation, never an empty list.
+
+*Measured (2026-11-02, 4-vCPU cloud container, full server over HTTP,
+`api/mihistory/acceptance_test.go`).* A parallel MI of 50,000 iterations with ten
+real incidents: overview 382 bytes in 0.6 ms (396 bytes for a 2,000-iteration
+instance); a 100-row page about 19 KB in 1.4 ms; jump to iteration 37,421 1.4 ms
+and examined exactly 100 index keys; `state=active` examined 10 keys; worst
+start-instance latency 3 ms alone and 7 ms under concurrent page reads; WAL replay
+of the whole log into a fresh store 2.9 s with identical answers. For comparison
+the legacy `/timeline` grows with the square of the iteration count: 139 MB at
+1,000 iterations, 553 MB at 2,000, 2.2 GB and 59 s on the writer at 4,000; at
+50,000 the test process was killed for memory. Hot path
+(`BenchmarkMultiInstanceIterations`, 100 iterations per instance): about +2.8
+allocations per iteration (one additional point read for the loopCounter), time
+within run-to-run noise; `BenchmarkInstanceLifecycle` unchanged at 221 allocations.
+
+**OHS2 increment 4 — Multi-Instance Explorer (2026-11-02).** The Operations
+replay asks the bounded API first. When an execution has more than 500
+iterations (or the top-level listing does not fit one page), it does not load
+the legacy timeline: it shows the diagram, the executions as collapsed groups
+with the server's counters and the Multi-Instance Explorer (`api/web/mi-explorer.js`):
+one page of 100 iterations, jump to an iteration number, state and incident
+filters, keyboard navigation, loading/empty/error/retry states and an
+explanation for an unavailable index. Smaller instances keep the classic replay
+and gain *Explore iterations* on the grouped row. The bodies listing now also
+carries the instance's definition key and state, so the bounded view needs no
+timeline. Playwright specs `e2e/mi-explorer.spec.mjs` and `e2e/mi-history.spec.mjs`
+assert that the bounded view never requests `/timeline` and never holds more
+than one page of rows.
+
+**OHS3 increment 1 — one iteration's recorded facts (2026-11-02).** The
+iteration detail route also returns the iteration's own scope variable changes
+(a bounded prefix read of the existing per-scope snapshot history, ADR-0048,
+rendered by the server's one variable renderer, so a personal value stays
+enciphered) and the DMN evaluations attributed to it. `DecisionEvaluated` is now
+also attributed in `applyToState` to the innermost MI iteration (family
+`cfMIDecision`, a reference to the decision history row, never a copy); the
+inputs and outputs are what the worker froze into the log and are not
+re-evaluated. Decision attribution has its **own** readiness marker
+(`mi_history_decisions_v1`): a store that recorded MI history before it existed
+keeps its iteration listing, and its iteration details say
+`decisionsAvailable: false` rather than "no decisions". Rule traces are returned
+only with `technical=true`. Contributions to the body's output collection are
+recorded on the body's collection (ADR-0296), not per iteration, and are not
+shown as iteration outputs.
+
+**OHS2-A — rebuilding older stores (2026-11-02).** A store whose history
+predates the index is rebuilt at startup from the retained log, as decided in
+[ADR-0518](0518-mi-history-legacy-rebuild.md):
+shadow replay through the unchanged `applyToState`, then a resumable swap of the
+MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
+`history_unavailable`.
+
+**OHS2 increment 5 — the instance outline (2026-11-02).** `applyToState` also
+records every element activation and end outside a multi-instance iteration in
+`cfOutline` (an iteration, and anything whose flow scope is hidden, is carried
+down through `cfOutlineHidden`); a body execution appears as one activation and
+one end. Rows carry the definition key the element ran under. An element
+directly under the process instance costs one write and no read; the MI and
+lifecycle benchmarks show no added allocation. Own readiness marker
+`instance_outline_v1`, covered by the startup rebuild. `GET
+/api/v1/instances/{key}/outline` (MCP `atlas_instance_outline`) pages it; the
+bounded Operations view now shows the instance's own steps around its
+collapsed executions. Measured on the 50,000-iteration instance: 781 bytes,
+0.5 ms.
+
+**OHS3 increment 2 — the replay window of one iteration (2026-11-02).** What
+the outline hides is now recorded as the steps of the iteration it belongs to:
+`applyToState` writes every activation and end inside an iteration to
+`cfIterationStep`, keyed by the owning iteration, and `cfOutlineHidden` carries
+that owner down the flow scopes. An iteration owns itself (its own activation
+and end are its first and last steps); an element inside it belongs to it; a
+nested body inside it is one of its steps, and each of the nested body's
+iterations owns itself in turn. A hidden row written before owners were recorded
+names none: what runs below it stays hidden and records no steps. The family has
+its own readiness marker `mi_iteration_steps_v1` and is covered by the startup
+rebuild (contiguous MI range `0x38`–`0x46`). `GET
+/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps`
+(MCP `atlas_multi_instance_iteration_steps`) pages them; the explorer replays
+them step by step on the diagram (visited and active markers, previous/next,
+play). Measured on the 50,000-iteration instance: 1,110 bytes, 1.2 ms. The
+encoding adds no allocation of its own; the MI benchmark shows about 40 more
+allocations per 100-iteration instance (18,744–18,761 against 18,704–18,714),
+all inside Pebble's read path for the extra rows (`getIter.Next`).
+
+**Still not built:** per-instance readiness for compacted logs; variable values
+at each step of an iteration's replay window (the iteration detail shows its
+scope's changes); marking elements inside a *collapsed* subprocess, which
+bpmn-js draws on a separate plane; job and user-task history per
+iteration. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
 especially for repeated/nested MI bodies and migrations. A history with
@@ -150,6 +280,14 @@ An old live body without an indexed activation does not acquire guessed lineage:
 rounds observed after upgrade are left absent from the new projection until the
 historical backfill has reconstructed their parent activation. Do not expose
 incomplete projections as if they covered a whole instance.
+
+*Known limitation found while measuring:* completing the iterations of a parallel
+multi-instance **subprocess** is quadratic in the engine today, independent of
+this index — every scope completion disarms event-subprocess triggers by walking
+all live element instances of the instance (`disarmEventSubprocesses`). 1,000
+such iterations took 24 s; 50,000 do not finish in reasonable time. The
+acceptance fixture therefore uses a multi-instance script task. Tracked in
+[Issue #1494](https://github.com/pblumer/atlas/issues/1494).
 
 ## Pros and cons of the options
 

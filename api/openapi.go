@@ -78,6 +78,12 @@ func tString() map[string]any  { return map[string]any{"type": "string"} }
 func tInteger() map[string]any { return map[string]any{"type": "integer"} }
 func tBool() map[string]any    { return map[string]any{"type": "boolean"} }
 func tObject() map[string]any  { return map[string]any{"type": "object"} }
+
+// tStrings is an array of strings — ids, mostly.
+func tStrings() map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
+}
+
 func tArray() map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "object"}}
 }
@@ -463,6 +469,24 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/outline", s.miHistory.HandleOutline, apiOp{
+			summary: "Page through a process instance's step history without the steps inside multi-instance iterations — each element activation and end in the order it happened, a multi-instance body execution as one activation and one end — so a client can draw the history of an instance whose full timeline is too large to load. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's outline is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Instance outline page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances", s.miHistory.HandleBodies, apiOp{
+			summary: "List a process instance's multi-instance body executions — each concrete activation of a multi-instance activity, never merged by BPMN element, with its mode, lifecycle state and iteration counters (seeded, active, completed, terminated, historical incidents). Bounded and cursor-paged: query limit (1-200, default 100), cursor, parentIteration (the iteration whose nested bodies to list; omitted lists the bodies no iteration encloses). 409 history_unavailable while this installation's history index is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body executions", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}", s.miHistory.HandleBody, apiOp{
+			summary: "Read one multi-instance body execution with its iteration counters and its currently open incidents, verified against the current incident table within a bounded number of reads (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body execution", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", s.miHistory.HandleIterations, apiOp{
+			summary: "Page through the iterations of one multi-instance body execution in loopCounter order, by indexed seeks whose cost does not grow with the iteration count: query limit (1-200, default 100), cursor (opaque, signed, bound to the instance, body and filters, with a frozen high-water position), state (active, completed, terminated), incidents=true (iterations that had an incident), iteration (exact iteration number), from (start at an iteration number), elementInstanceKey (exact lookup). A state-filtered cursor answers 409 cursor_stale once the body changed (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iterations page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", s.miHistory.HandleIteration, apiOp{
+			summary: "Read one multi-instance iteration: its iteration number, lifecycle state and log positions, the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and the multi-instance bodies nested in it (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration detail", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", s.miHistory.HandleIterationSteps, apiOp{
+			summary: "Page through the replay window of one multi-instance iteration — its own activation, every element that ran inside it (a nested multi-instance body as one step) and its end, in the order they happened — without reading the rest of the instance. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's iteration steps are not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration steps page", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
@@ -790,6 +814,17 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, a time zone the IANA database does not know, or an appearance other than light, dark, system or cockpit is refused rather than stored, because the browser is what formats and draws with it", tag: "Preferences", role: RoleUser,
 			req:  jsonBody("Region, time zone, language and appearance", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString(), "appearance": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
+		// The processes the signed-in person may start themselves (ADR-0516): what an
+		// administrator granted them or a group they are in, newest version only. The
+		// user role is the coarse gate; the handler also demands the person's own
+		// session and reads the grants on every request.
+		{"GET", "/api/v1/me/startable-processes", s.handleMyStartableProcesses, apiOp{
+			summary: "The processes you may start yourself, now (ADR-0516): each one an administrator granted to you or to a group you are in, as its newest deployed version filed under the grant's application, executable, active and startable by hand — with its definition key, process id, name, version, application id and name, and whether it starts from a form (startForm.available, startForm.formId). Never a superseded version, another application's process or anything not granted, and nothing about who else may start it. Sorted by application, then name; at most 200, with total and truncated. Needs your own signed-in session: an API token or connected application is refused with 403 even when it carries the user role. 404 on a server without authentication, 503 while the grants cannot be trusted after a failed write. The key is not a permission: starting checks again", tag: "Tasks", role: RoleUser,
+			resp: jsonBody("The processes you may start", tPage())}},
+		{"POST", "/api/v1/me/processes/{key}/instances", s.handleMyProcessStart, apiOp{
+			summary: "Start one instance of a process you may start yourself (ADR-0516), named by the definition key GET /api/v1/me/startable-processes lists — which is not a permission: every request is checked again. Body {\"variables\": {…}} holding only what the version's start form submits, or nothing for a process without one; any other field, a value the form has no field for, a field it only shows, a missing required value, a wrong type, a number or length outside its bounds or an option not on its list is refused with 400 and nothing is started. 403 for a definition you may not start, 404 for a key no definition has, 409 for a version that is superseded or cannot be started now (deactivated, not executable, start form missing). The grant and the version are checked again in the turn that submits the start, so a revocation already durable then refuses it. Answered after the start is durable — written and fsynced — with the definition key, the instance key and the live counts; the instance records you as its initiator. Needs your own signed-in session: an API token or connected application is refused with 403 even when it carries the user role; 404 on a server without authentication. A timed-out or broken connection leaves the outcome unknown, not failed", tag: "Tasks", role: RoleUser,
+			req:  jsonBody("Start form values", schemaObj(map[string]any{"variables": tObject()})),
+			resp: jsonBody("The started instance", schemaObj(map[string]any{"definitionKey": tInteger(), "instanceKey": tInteger(), "stats": tObject(), "wizard": tObject()}, "definitionKey", "instanceKey"))}},
 		// The processes the signed-in person starred on the Tasks app's Start view
 		// (ADR-0466). Keyed on the principal like the
 		// preferences above; the path names a process, never a person. roleAny rather than
@@ -1800,6 +1835,30 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The plan and what was set", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
+
+		// Process-scoped start grants (ADR-0516): who besides an operator may start a
+		// process of an application, through the self-service routes that record
+		// approves. Administration is an administrator's alone, from their own
+		// session; none of these routes lets anybody start anything.
+		{"GET", "/api/v1/applications/{id}/start-grants", s.startGrantAdmin.HandleList, apiOp{
+			summary: "Every process of an application that was ever granted for a self-service start, revoked ones included, by process id: the current revision, whether it is granted, and the user and group ids it names (ADR-0516). Admin only; refused with 403 on a server without authentication", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Start grants", schemaObj(map[string]any{"items": tArray()}, "items"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleGet, apiOp{
+			summary: "One process's start grant within an application (ADR-0516). A process never granted answers revision 0 and an empty audience: nobody may start it, which is the default. 404 for an application that does not exist and has no grant record. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant", schemaObj(map[string]any{"applicationId": tString(), "processId": tString(), "revision": tInteger(), "granted": tBool(), "userIds": tStrings(), "groupIds": tStrings(), "changedAt": tInteger(), "changedBy": tString()}, "applicationId", "processId", "revision", "granted", "userIds", "groupIds"))}},
+		{"PUT", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandlePut, apiOp{
+			summary: "Grant, or wholly replace, who may start a process of an application through the self-service routes (ADR-0516): explicit user ids and group ids of this server's directory, never names. expectedRevision is required (0 for a scope never granted) and a stale one answers 409 with currentRevision. The application must exist and not be a protected system application, the newest deployed version of the process must be filed under it, and every id must name an existing account or group; ids are sorted and must not repeat. The actor and the time are the server's: a body naming them is refused. Durable — written and fsynced — before the answer, and audited. Granting exactly the audience already granted writes nothing (changed false). Admin only, from their own signed-in session; 403 on a server without authentication. A grant is not the user role: a person also needs that role and a signed-in session", tag: "Applications", role: RoleAdmin,
+			req:  jsonBody("The audience", schemaObj(map[string]any{"userIds": tStrings(), "groupIds": tStrings(), "expectedRevision": tInteger(), "applicationId": tString(), "processId": tString()}, "expectedRevision")),
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleDelete, apiOp{
+			summary: "Revoke a process's start grant within an application (ADR-0516). ?expectedRevision= is required; a stale one answers 409 with currentRevision. Every authorization check after the durable revocation refuses; a start that passed its check before may still finish. Works whether or not the application and process still exist, and revoking what is already revoked writes nothing (changed false). Admin only, from their own signed-in session", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/history", s.startGrantAdmin.HandleHistory, apiOp{
+			summary: "Every audited change of a process's start grant, newest first: revision, time, the administrator who made it, grant or revoke, and the whole audience it left (ADR-0516). Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Audited changes", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/preview", s.startGrantAdmin.HandlePreview, apiOp{
+			summary: "Whether one account (?userId=) or one group (?groupId=) would be offered a process for a self-service start now, and why not (ADR-0516): granted and matchedBy (user, group:<id>, from the directory's current membership), accountIssues (disabled, missing-user-role), and blockers on the process's newest version (application-missing, application-protected, not-deployed, newest-version-in-other-application, not-executable, inactive, trigger-only, constants-missing). Writes nothing. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The preview", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
 			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,

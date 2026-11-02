@@ -109,6 +109,10 @@ func main() {
 		if err := runExport(args, os.Stdout); err != nil {
 			fatal("atlas export", err)
 		}
+	case "hub":
+		if err := runHub(args, os.Stdout); err != nil {
+			fatal("atlas hub", err)
+		}
 	case "check-job-types":
 		if err := runCheckJobTypes(args); err != nil {
 			fatal("atlas check-job-types", err)
@@ -177,6 +181,7 @@ Usage:
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import         [flags] DIR  Install a package (an application, and its shop) into a running atlas
   atlas export         [flags] DIR  Write a package from a running atlas, for atlas import elsewhere
+  atlas hub            STEP [flags] Publish the examples as a signed atlas hub registry (keygen, fingerprint, lock, build)
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker
@@ -733,6 +738,22 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	proc.SetMaxCollection(budgets.Collection)
 	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
+	}
+	// A store that recorded history before the multi-instance history index existed
+	// has it rebuilt here, before the processor accepts commands: the whole retained
+	// log is replayed into a shadow store and the index swapped in (ADR-0517). It
+	// delays this one startup by the replay; a log that cannot prove the index (it
+	// was compacted) leaves the bounded MI history unavailable, which the API says.
+	// A failed rebuild does not stop the server: everything else is unaffected.
+	if res, err := proc.RebuildMIHistory(filepath.Join(dataDir, "mi-history-rebuild")); err != nil {
+		logging.Warn(logging.MIHistoryUnavailable, "rebuilding the multi-instance history index failed; its bounded routes stay unavailable",
+			slog.String("error", err.Error()))
+	} else if res.Rebuilt {
+		logging.Info(logging.MIHistoryRebuilt, "rebuilt the multi-instance history index from the log",
+			slog.Int("replayed", res.Replayed), slog.Int("copied", res.Copied), slog.Float64("seconds", res.Seconds))
+	} else if needed, _ := store.MIHistoryRebuildNeeded(); needed {
+		logging.Info(logging.MIHistoryUnavailable, "the multi-instance history index stays unavailable",
+			slog.String("reason", res.Reason))
 	}
 
 	// This binary links the database drivers (through the worker package), so it can

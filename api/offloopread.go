@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 
+	"github.com/pblumer/atlas/api/mihistory"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/state"
 )
@@ -101,4 +102,17 @@ func (s *Server) defIndexOnLoop() defIndex {
 		}
 	}
 	return defs
+}
+
+// miHistoryView is the read access the MI history service is given
+// (ADR-0517): a read view and the deployment metadata, both taken in one loop
+// turn, with the history reads themselves running after the loop is free.
+func (s *Server) miHistoryView(fn func(rv *state.ReadView, defs mihistory.Definitions) error) error {
+	err := s.readOffLoop(func(rv *state.ReadView, defs defIndex) error {
+		return fn(rv, func(key uint64) *compiler.CompiledProcess { return defs[key].cp })
+	})
+	if errors.Is(err, errLoopClosing) {
+		return mihistory.ErrLoopClosing
+	}
+	return err
 }

@@ -1,0 +1,382 @@
+# M365-Entwicklungsumgebung für Atlas (OpenTofu)
+
+Dieses OpenTofu-Projekt baut mit **einem** `tofu apply` eine schlüsselfertige
+Entwicklungsumgebung für die Microsoft-Worker von Atlas auf und entfernt sie mit
+`tofu destroy` wieder:
+
+- im **Microsoft-365-Testtenant**: Testpersonen, Gruppen, eine Microsoft-365-Gruppe
+  (SharePoint-Website, Teams-Ziel) und je Worker eine eigene App-Registrierung mit
+  minimalen Berechtigungen und kurzlebigem Zertifikat oder Secret;
+- in **Azure**: einen **Atlas-Server** (Ubuntu 24.04), dessen Worker beim ersten Start
+  bereits in der Console eingerichtet sind und von Atlas selbst betrieben werden,
+  Anmeldung der Testpersonen über Entra ID (OpenID Connect);
+- optional einen **Active-Directory-Domänencontroller** im selben Netz.
+
+Das Projekt ist für **Entwicklung und temporäre Tests** gedacht, nicht für den Betrieb.
+
+## Inhalt
+
+| Worker Type | Worker in der Console | Ziel | Berechtigungen der App |
+|---|---|---|---|
+| `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`; Zertifikat |
+| `exchange` ([ADR-0462](../../../docs/adr/0462-exchange-worker.md)) | `ucc_exchange` | Exchange Online | `Exchange.ManageAsApp` + Rolle *Exchange Administrator*; Zertifikat |
+| `sharepoint` ([ADR-0141](../../../docs/adr/0141-sharepoint-connector.md)) | `ucc_sharepoint` | SharePoint Online | `Sites.ReadWrite.All`; Zertifikat |
+| `teamsphone` ([ADR-0463](../../../docs/adr/0463-teams-phone-worker.md)) | `ucc_teams` | Teams Phone (PowerShell) | `User.ReadWrite.All` + Rolle *Teams Administrator*; Zertifikat |
+| `mail` ([ADR-0079](../../../docs/adr/0079-outbound-mail-connector.md)) | `mail` | Versand über Microsoft Graph | `Mail.Send`; Secret (der Mail-Provider kennt kein Zertifikat) |
+| `ad` ([ADR-0166](../../../docs/adr/0166-active-directory-connector.md)) | `ucc_ad` | Active Directory über LDAPS | Bind-Konto mit Vollzugriff nur auf `OU=AtlasTest`; ohne Domänencontroller Mock-Modus |
+
+Die Worker-Namen entsprechen [`examples/m365-dienste`](../../../examples/m365-dienste/); dessen
+Prozesse laufen damit ohne Anpassung. Das API-Token, das diese Prozesse im Vault unter
+`atlas` erwarten, legt das Projekt ebenfalls an.
+
+**Testobjekte im Tenant** (Präfix `atlas-test-<zufall>`): drei Testpersonen und eine
+vorgesetzte Person (als Manager eingetragen), eine Sicherheitsgruppe mit allen
+Testpersonen, eine leere Gruppe und eine Microsoft-365-Gruppe. Zu dieser legt Entra
+automatisch eine SharePoint-Teamwebsite an; die Operation `create-team` des
+Entra-Workers macht sie zum Test-Team.
+
+> **Annahme zu «Graph»:** Einen eigenen Graph-Worker gibt es im Repository nicht.
+> Microsoft Graph wird über `entra`, `sharepoint` und `mail` angesprochen.
+
+### Aufbau
+
+```
+                       Microsoft-365-Testtenant
+        Entra ID · Exchange Online · SharePoint · Teams
+                 ▲  App-Registrierungen je Worker
+                 │
+ Browser ──HTTPS──► Caddy :443 ──► atlas serve 127.0.0.1:8080   (Azure-VM «atlas»)
+                                    └─ überwachte Worker: entra, exchange,
+                                       sharepoint, teamsphone (pwsh), mail, ad
+                                             │ LDAPS 636, nur im VNet
+                                             ▼
+                                   Domänencontroller «dc01» (optional)
+```
+
+## Voraussetzungen
+
+1. **Ein Microsoft-365-Testtenant**, nie ein produktiver (z. B. aus dem Microsoft 365
+   Developer Program oder ein Testabonnement). OpenTofu kann keinen Tenant anlegen.
+2. **Eine Anmeldung mit genügend Rechten** im Testtenant, am einfachsten *Globaler
+   Administrator* (Apps anlegen, Administratorzustimmung erteilen, Verzeichnisrollen
+   zuweisen, Benutzer und Gruppen anlegen).
+3. **Ein Azure-Abonnement** für Server und Domänencontroller (darf in einem anderen Tenant
+   liegen: `azure_tenant_id`), mit dem Recht, eine Ressourcengruppe zu füllen.
+4. **Werkzeuge:** OpenTofu ≥ 1.8, Azure CLI (`az`); für die Warteskripte `curl`, `ssh`
+   und `openssl`.
+5. **Lizenzen** für Postfächer und Teams der Testpersonen (siehe «Lizenzen»). Ohne Lizenz
+   laufen Entra, SharePoint und AD vollständig; Exchange-, Teams- und Mail-Tests brauchen
+   Postfächer bzw. Teams-Benutzer.
+6. Die **eigene öffentliche IP-Adresse** für `atlas_allowed_cidrs` (HTTPS und SSH).
+
+## Ablauf
+
+### 1. Anmelden und konfigurieren
+
+```bash
+az login --tenant <m365-tenant-id> --allow-no-subscriptions
+```
+
+Liegt das Azure-Abonnement in einem anderen Tenant, zusätzlich mit diesem anmelden
+(`az login --tenant <azure-tenant-id>`) und `azure_tenant_id` setzen.
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Mindestens `tenant_id`, `expected_initial_domain`, `azure_subscription_id` und
+`atlas_allowed_cidrs` setzen. Der Plan bricht ab, wenn der angemeldete Tenant nicht genau
+diese ID **und** diese Initial-Domain hat.
+
+### 2. Aufbauen
+
+```bash
+tofu init
+```
+
+```bash
+tofu apply
+```
+
+`apply` dauert einige Minuten. Danach richtet sich der Server selbst ein (Pakete,
+PowerShell und das Modul MicrosoftTeams, Atlas, Worker); das dauert erfahrungsgemäss
+10–20 Minuten:
+
+```bash
+./scripts/wait-atlas.sh
+```
+
+Mit Domänencontroller zusätzlich (Promotion und Neustart, ebenfalls 10–20 Minuten):
+
+```bash
+./scripts/wait-ad.sh
+```
+
+`wait-ad.sh` prüft LDAPS von aussen und braucht deshalb `ad_allowed_cidrs`; ohne diese
+Freigabe zeigt `tofu output atlas_ssh` den Weg auf den Server, wo
+`openssl s_client -connect dc01.atlastest.internal:636` dasselbe prüft.
+
+### 3. Anmelden und arbeiten
+
+```bash
+tofu output atlas_url
+```
+
+```bash
+tofu output -json atlas_admin
+```
+
+- **Lokaler Administrator:** `admin` mit dem ausgegebenen Passwort.
+- **Testpersonen:** Schaltfläche *Sign in with Microsoft (…)*, Passwörter mit
+  `tofu output -json test_user_passwords`. Eine erste Anmeldung legt ein Atlas-Konto mit
+  der Rolle `user` an; weitere Rollen vergibt der Administrator unter *Organization →
+  Users* oder über die Gruppenzuordnung unter *Organization → Single sign-on* (das
+  ID-Token enthält die Objekt-IDs der Sicherheitsgruppen).
+- **Worker:** *Console → Workers* zeigt `ucc_entra`, `ucc_exchange`, `ucc_sharepoint`,
+  `ucc_teams`, `mail` und gegebenenfalls `ucc_ad`; ihre Zugangsdaten liegen im Vault
+  unter `m365-<name>`.
+- Mit `atlas_tls = "internal"` (Vorgabe) stammt das Zertifikat von Caddys eigener CA;
+  der Browser warnt einmal. Ein vertrauenswürdiges Zertifikat liefert
+  `atlas_tls = "letsencrypt"` (siehe «Sicherheit»).
+
+Beispielprozesse einspielen, z. B. `examples/m365-dienste` (Anleitung in dessen README,
+mit `ATLAS_TOKEN` eines Tokens mit Rolle `modeler`):
+
+```bash
+ATLAS_TOKEN=atlasat_... ../../../examples/m365-dienste/installieren.sh "$(tofu output -raw atlas_url)" antworten.json
+```
+
+Mit `atlas_tls = "internal"` lehnt `curl` das Zertifikat ab, solange Caddys
+Stammzertifikat nicht vertraut ist; es liegt auf dem Server unter
+`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`.
+
+### 4. Abbauen
+
+```bash
+tofu destroy
+```
+
+Gelöschte Benutzer, Gruppen und App-Registrierungen liegen danach noch 30 Tage im
+Papierkorb von Entra. Endgültig entfernen (erst auflisten, dann löschen):
+
+```bash
+./scripts/purge-deleted.sh atlas-test
+```
+
+```bash
+./scripts/purge-deleted.sh atlas-test --yes
+```
+
+Die SharePoint-Website der gelöschten Gruppe bleibt im Papierkorb der gelöschten Websites
+(SharePoint Admin Center) und wird von Microsoft nach 93 Tagen entfernt. Zum Schluss
+`out/` löschen.
+
+**Falls `tofu destroy` nicht mehr geht** (State verloren oder beschädigt): Das Notfallskript
+findet alles über den Präfix, ohne State. Es entfernt Azure-Ressourcengruppen,
+App-Registrierungen, Benutzer und Gruppen. Erst auflisten, dann löschen:
+
+```bash
+./scripts/emergency-cleanup.sh atlas-test
+```
+
+```bash
+./scripts/emergency-cleanup.sh atlas-test --yes
+```
+
+Danach `purge-deleted.sh` und, im geteilten Tenant, `shared-tenant-cleanup.ps1`. Weil das
+Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` beginnen.
+
+## Geteilter Tenant (`shared_tenant = true`)
+
+Für einen Tenant, der auch produktiv genutzt wird, etwa den eigenen. Anwendungsberechtigungen
+aus Entra gelten immer tenantweit. Deshalb erhalten die Apps, deren Rechte jedes Postfach
+erreichen, in Entra **keine** solchen Rechte, sondern eingegrenzte Rechte in Exchange und
+SharePoint:
+
+| Worker | Ohne Schalter | Mit `shared_tenant = true` |
+|---|---|---|
+| `mail` | `Mail.Send` in Entra (jedes Postfach) | kein `Mail.Send` in Entra; Exchange **RBAC for Applications**: «Application Mail.Send» nur im Management Scope |
+| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
+| `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website |
+| `teamsphone` | Rolle *Teams Administrator* | **nicht erlaubt**: die Rolle lässt sich nicht eingrenzen (`workers = { teamsphone = false }` setzen) |
+| `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
+| Zugangsdaten | `credential_validity_days` frei | höchstens 7 Tage |
+
+Der **Management Scope** umfasst alle Empfänger, deren Alias mit dem Präfix der Umgebung
+beginnt (`Alias -like 'atlas-test-<zufall>*'`): die Testpersonen und alles, was die Worker
+unter diesem Namen anlegen. Ein Testprozess, der ein Funktionspostfach oder eine Verteilerliste
+anlegt, muss deren Alias deshalb mit dem Präfix beginnen lassen; sonst lehnt Exchange die
+Änderung ab. Lesen (*View-Only Recipients*) bleibt organisationsweit möglich; Exchange kennt für
+Leserechte keinen Empfängerbereich.
+
+Die Exchange- und SharePoint-Rechte kann OpenTofu nicht setzen. Sie werden nach `tofu apply`
+einmal mit einem Skript vergeben, angemeldet als Administrator (PowerShell 7 mit den Modulen
+`ExchangeOnlineManagement` und `Microsoft.Graph.Authentication`):
+
+```bash
+tofu output -json shared_tenant > out/shared-tenant.json
+```
+
+```bash
+pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json -Device
+```
+
+Exchange übernimmt Rechte für Anwendungen laut Microsoft erst nach 30 Minuten bis 2 Stunden;
+bis dahin lehnt Exchange den Mail-Worker ab. Beim Abbauen **vor oder nach** `tofu destroy`:
+
+```bash
+pwsh ./scripts/shared-tenant-cleanup.ps1 -Prefix atlas-test -Device -Yes
+```
+
+**Was der Schalter nicht eingrenzt:** Der Entra-Worker behält `User.ReadWrite.All` und
+`Group.ReadWrite.All`, denn Graph-Anwendungsberechtigungen lassen sich nicht auf Objekte
+begrenzen. Er könnte also auch bestehende normale Konten und Gruppen ändern. Konten mit
+Administratorrolle sind davor geschützt; diese Berechtigung allein reicht dafür nicht. Wer
+das nicht will, testet zunächst nur lesend (`entra_graph_permissions = ["User.Read.All",
+"Group.Read.All"]`). Die prozessseitige Sperre auf Testobjekte (Präfix im Modell, wie in
+`examples/account-bestellung`) bleibt die eigentliche Grenze.
+
+Nicht an einem Tenant geprüft: der Filter `Alias -like …` im Management Scope, das Anlegen
+von Objekten innerhalb des Schreibbereichs mit *Mail Recipient Creation* und das Verhalten des
+Exchange-Workers mit einer Rollengruppe statt der Verzeichnisrolle.
+
+## Atlas-Server
+
+- **Installation:** `atlas_install = "release"` lädt `atlas_version` von den GitHub-Releases
+  und prüft es gegen `SHA256SUMS`. `atlas_install = "source"` baut `atlas_source_ref` aus
+  `atlas_source_repo` auf der VM (Go wird über `GOTOOLCHAIN=auto` passend geladen); so
+  lässt sich ein Branch in der Umgebung testen. Das Repository muss dann ohne Anmeldung
+  klonbar sein.
+- **Dienst:** `atlas serve --addr 127.0.0.1:8080 --auth` als systemd-Dienst nach
+  [`docs/install.md`](../../../docs/install.md), davor Caddy für TLS. Atlas startet und
+  überwacht die Worker selbst; sie erben dessen Umgebung.
+- **Einrichtung der Worker** (`scripts/atlas-bootstrap.py`): meldet sich als
+  Administrator an, legt je Worker das Credential-Bundle im Vault ab
+  (`PUT /api/v1/secrets/m365-<name>`), erstellt den Console-Worker
+  (`POST /api/v1/configured-workers`) und ein API-Token im Vault unter `atlas`. Danach
+  löscht es die Datei mit den Zugangsdaten; sie liegen dann nur noch im Vault von Atlas.
+  Das Skript ist wiederholbar und gegen einen lokal gebauten Atlas-Server aus diesem
+  Repository geprüft.
+- **Protokolle:** `/var/log/atlas-setup.log`, `journalctl -u atlas`, `journalctl -u caddy`.
+- **Automatische Abschaltung** täglich um `atlas_auto_shutdown_time` (Vorgabe 19:00 UTC).
+  Wieder starten mit `az vm start -g <ressourcengruppe> -n <vm>` oder im Azure-Portal.
+
+## Active Directory (optional)
+
+Mit `enable_ad_dc = true` entsteht im selben VNet eine Windows-Server-2022-VM:
+
+- Ein Key Vault stellt ein selbstsigniertes LDAPS-Zertifikat aus (Namen: öffentlicher
+  DNS-Name, `dc01.<ad_domain_name>`, Domänenname) und installiert es bei der
+  Bereitstellung in `LocalMachine\My`.
+- `scripts/ad-setup.ps1` installiert AD DS und die Gesamtstruktur `atlastest.internal`,
+  nach dem Neustart `OU=AtlasService` mit dem Bind-Konto `svc-atlas-<zufall>` (Vollzugriff
+  nur auf `OU=AtlasTest`, dazu *Replicating Directory Changes* für `sync`) sowie
+  `OU=AtlasTest` mit Testpersonen und einer Testgruppe.
+- Der Atlas-Server erreicht den Domänencontroller als `ldaps://dc01.atlastest.internal:636`
+  im VNet und vertraut dessen Zertifikat über den Systemspeicher. Der AD-Worker kennt
+  keine Option, die Zertifikatsprüfung abzuschalten (`connector/ad/client.go`).
+- Von aussen ist der Domänencontroller nur für `ad_allowed_cidrs` erreichbar (LDAPS,
+  mit `ad_allow_rdp` auch RDP).
+
+Ohne Domänencontroller startet der Server den AD-Worker mit `ATLAS_AD_MOCK=1` (ADR-0181).
+
+## Lizenzen
+
+Lizenzen kann OpenTofu nicht kaufen. Mit `license_sku_ids` weist das Projekt freie
+Lizenzen den Testpersonen zu (Skript `scripts/assign-licenses.sh` über `az rest`). Die
+verfügbaren `skuId` zeigt:
+
+```bash
+az rest --method get --url https://graph.microsoft.com/v1.0/subscribedSkus --query "value[].{sku:skuPartNumber,id:skuId,frei:prepaidUnits.enabled}"
+```
+
+Absender des Mail-Workers ist die vorgesetzte Testperson (`mail_sender`); sie braucht
+dafür ein Postfach. Teams-Phone-Ressourcenkonten brauchen die kostenlose Lizenz
+*Microsoft Teams Phone Resource Account*, die im Admin Center bezogen wird.
+
+## Kosten (Schätzung)
+
+**Annahmen:** Region Switzerland North, nutzungsbasierte Preise (Pay-as-you-go) in USD,
+ohne Rabatte und Mehrwertsteuer, Stand der Quellen unbekannt. Die Werte sind
+**Schätzungen**: Der Linux-Preis der VM stammt aus Drittanbieter-Preislisten, der
+Windows-Aufschlag, die Datenträger und die IP-Adressen aus allgemeinen Erfahrungswerten.
+Massgebend ist der [Azure-Preisrechner](https://azure.microsoft.com/pricing/calculator/).
+
+| Posten | Annahme | ca. USD |
+|---|---|---|
+| Atlas-VM `Standard_B2ms` (Linux) | ca. 0.106 pro Stunde | 0.11 / Stunde |
+| Domänencontroller `Standard_B2ms` (Windows) | Linux-Preis + Windows-Lizenz | ca. 0.20 / Stunde |
+| Datenträger Atlas (64 GB Standard SSD) | läuft auch bei gestoppter VM | ca. 5 / Monat |
+| Datenträger DC (127 GB Standard SSD) | läuft auch bei gestoppter VM | ca. 10 / Monat |
+| Öffentliche IP-Adresse (Standard, statisch) | je VM, auch bei gestoppter VM | ca. 3.5–4 / Monat |
+| Key Vault, Datenverkehr | wenige Operationen, wenig Daten | unter 1 / Monat |
+| Entra-Objekte, App-Registrierungen | im Tenant enthalten | 0 |
+
+| Szenario | Laufzeit | ca. USD |
+|---|---|---|
+| Nur Tenant-Objekte (`enable_atlas_server = false`) | – | 0 (Azure) |
+| Atlas-Server, 2 Testtage rund um die Uhr | 48 h | ca. 6 |
+| Atlas-Server + DC, 2 Testtage rund um die Uhr | 48 h | ca. 16 |
+| Atlas-Server, Arbeitstage 8 h (22 Tage, Rest abgeschaltet) | 1 Monat | ca. 28 |
+| Atlas-Server + DC, Arbeitstage 8 h | 1 Monat | ca. 80 |
+| Atlas-Server + DC, durchgehend | 1 Monat | ca. 250 |
+
+**Microsoft-365-Lizenzen** sind nicht eingerechnet. Ein Tenant aus dem Developer Program
+oder ein Testabonnement kostet nichts; gekaufte Lizenzen (z. B. Microsoft 365 E3/E5 je
+Testperson und Monat) übersteigen die Azure-Kosten schnell.
+
+Die automatische Abschaltung (Vorgabe 19:00 UTC) gibt die VMs frei; danach fallen nur
+noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
+
+## Sicherheit
+
+- **Der State enthält alle erzeugten Geheimnisse** (private Schlüssel, Secrets,
+  Passwörter). Er liegt standardmässig lokal in `terraform.tfstate` und gehört nicht in
+  Git (`.gitignore`). Empfohlen ist die eingebaute State-Verschlüsselung von OpenTofu
+  (Umgebungsvariable `TF_ENCRYPTION`, Schlüsselquelle z. B. `pbkdf2`); die genaue Syntax
+  steht in der OpenTofu-Dokumentation unter *State and Plan Encryption*.
+- **Kurze Laufzeit:** Zertifikate, Secrets und das API-Token laufen nach
+  `credential_validity_days` (Vorgabe 14 Tage) ab.
+- **Anwendungsberechtigungen gelten tenantweit** (`Mail.Send` darf als jedes Postfach
+  senden). Die Grenze ist hier allein der Testtenant; deshalb nie gegen einen produktiven
+  Tenant anwenden.
+- **Netz:** SSH und (mit `atlas_tls = "internal"`) HTTPS nur für `atlas_allowed_cidrs`.
+  `atlas_tls = "letsencrypt"` öffnet 80 und 443 für das ganze Internet, weil Let's Encrypt
+  von nicht veröffentlichten Adressen prüft; die Anmeldung bleibt Pflicht. Ob für
+  `*.cloudapp.azure.com` die Ratenlimits von Let's Encrypt greifen, ist nicht geprüft.
+- **Zugangsdaten auf den VMs:** Der Server erhält sie über Cloud-Init (nur für root
+  lesbar, nach dem Bootstrap gelöscht); der Domänencontroller über die geschützten
+  Einstellungen der Custom Script Extension. Für eine Testumgebung vertretbar, für
+  Produktion nicht.
+
+## Prüfung
+
+`tests/environment.tftest.hcl` prüft die Logik ohne Tenant und ohne Azure (alle Provider
+gemockt): Tenant-Sperren, Apps, Console-Worker und Bundles des Bootstraps, die
+Server-Umgebung, Netzfreigaben je TLS-Variante, den AD-Schalter und die Grösse der
+Cloud-Init-Daten.
+
+```bash
+tofu init -backend=false
+```
+
+```bash
+tofu test
+```
+
+## Bekannte Grenzen
+
+- **Noch nie gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen.**
+  Geprüft sind: Syntax und Schemas (`azuread` 3.10, `azurerm` 4.81, mit Terraform 1.16,
+  da OpenTofu in der Erstellungsumgebung nicht verfügbar war), 12 Offline-Tests, das
+  Bootstrap-Skript gegen einen lokalen Atlas-Server. **Nicht** geprüft: `atlas-setup.sh`
+  und `ad-setup.ps1` auf echten VMs, die Wartezeiten von Microsoft, die Lizenzzuweisung
+  über `az rest` und Cloud-Init mit gzip-komprimierten Daten auf Azure.
+- **Exchange Server (on-premises)** ist nicht abgedeckt.
+- **Teams Phone:** Rufnummern, Calling Plans und Direct Routing richtet das Projekt nicht
+  ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
+  verlangt, ist nicht geprüft (`teamsphone_graph_permissions`).
+- **Ein Team** legt erst der Entra-Worker an (`create-team`).
+- **Gruppenmitgliedschaften** ignoriert OpenTofu nach dem ersten Anlegen, damit die
+  Worker sie ändern dürfen.
+- **`.terraform.lock.hcl`** ist nicht eingecheckt; nach dem ersten `tofu init` versionieren.

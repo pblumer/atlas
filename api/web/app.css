@@ -689,15 +689,10 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
 .publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .product-form > .form-group > summary.form-sec {
-  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
   margin: 0; padding: 4px 0; user-select: none;
 }
-.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
-.product-form > .form-group > summary.form-sec::before {
-  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
-}
-.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
 .product-form > .form-group > summary.form-sec:hover { color: var(--text); }
 .product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
 .form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
@@ -2786,6 +2781,86 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   font-size: 11px; font-weight: 500; color: var(--muted);
   background: var(--bg); border: 1px solid var(--border);
 }
+.ops-mi-explore { margin-left: 4px; flex-shrink: 0; font-weight: 500; }
+.ops-hrow.mi-bounded { flex-wrap: wrap; cursor: default; }
+.mi-bounded-hint { font-size: 12px; }
+
+/* The Multi-Instance Explorer (ADR-0517): one page of one body execution's iterations.
+   The list never holds more than a page, so it needs no virtualisation — the server
+   cut it. */
+.mi-explorer-host { overflow: auto; flex: 1; min-height: 0; }
+.mi-bounded-note { padding: 12px 14px; font-size: 13px; }
+.mi-bounded-note h3 { margin: 0 0 6px; font-size: 14px; }
+.mi-explorer { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; font-size: 13px; }
+.mi-ex-head { display: flex; align-items: flex-start; gap: 10px; }
+.mi-ex-titles { flex: 1; min-width: 0; }
+.mi-ex-title { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mi-ex-sub { font-size: 12px; }
+.mi-ex-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.mi-stat {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 2px; background: var(--surface);
+}
+.mi-stat span { font-size: 11px; color: var(--muted); }
+.mi-stat b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mi-stat.incidents b, .mi-stat.open b { color: var(--danger); }
+.mi-ex-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.mi-ex-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.mi-ex-field input, .mi-ex-field select { font-size: 13px; min-width: 7em; }
+.mi-ex-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.mi-ex-notice { font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--warn-soft); color: var(--text); }
+.mi-ex-list { border: 1px solid var(--border); border-radius: 6px; max-height: 340px; overflow: auto; }
+.mi-ex-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mi-ex-list[aria-busy="true"] { opacity: .65; }
+.mi-row {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.mi-row:last-child { border-bottom: 0; }
+.mi-row:hover, .mi-row:focus { background: var(--bg); outline: none; }
+.mi-row.sel { background: var(--accent-soft); }
+.mi-row-n { min-width: 6em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mi-row-state { font-size: 11px; border-radius: 4px; padding: 1px 6px; border: 1px solid var(--border); }
+.mi-row-state.active { color: var(--accent-text); }
+.mi-row-state.terminated { color: var(--warn); }
+.mi-row-inc { margin-left: auto; font-size: 11px; color: var(--muted); }
+.mi-row-inc.open { color: var(--danger); font-weight: 600; }
+.mi-ex-error { color: var(--danger); padding: 8px 10px; }
+.mi-ex-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mi-ex-range { flex: 1; text-align: center; font-size: 12px; }
+.mi-ex-detail h4 { margin: 4px 0 6px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.mi-ex-detail h5 { margin: 10px 0 4px; font-size: 12px; }
+.mi-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+.mi-facts dt { color: var(--muted); }
+.mi-facts dd { margin: 0; }
+.mi-inc-list, .mi-nested { margin: 0; padding-left: 18px; }
+.mi-inc-list li.open b { color: var(--danger); }
+.mi-nested li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0; }
+.mi-summary { font-size: 11px; color: var(--muted); font-weight: 400; }
+.mi-vars { border-collapse: collapse; width: 100%; font-size: 12px; }
+.mi-vars th, .mi-vars td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.mi-vars th { color: var(--muted); font-weight: 500; }
+.mi-dec-list { margin: 0; padding-left: 18px; }
+.mi-dec-list li { margin: 4px 0; }
+.mi-dec-io { font-size: 12px; overflow-wrap: anywhere; }
+.mi-dec-io span { color: var(--muted); }
+.mi-dec-trace { font-size: 11px; max-height: 180px; overflow: auto; background: var(--bg); padding: 6px; border-radius: 4px; }
+.mi-ex-technical { margin-top: 8px; }
+.mi-replay { display: flex; flex-direction: column; gap: 6px; }
+.mi-rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mi-rp-pos { font-size: 11px; }
+.mi-rp-steps { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; max-height: 260px; overflow: auto; }
+.mi-rp-step { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.mi-rp-step:last-child { border-bottom: 0; }
+.mi-rp-step:hover { background: var(--bg); }
+.mi-rp-step.cur { background: var(--accent-soft); }
+.mi-rp-step.terminated .mi-rp-act { color: var(--warn); }
+.mi-rp-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mi-rp-at { font-size: 11px; }
+@media (max-width: 720px) {
+  .mi-ex-controls { flex-direction: column; align-items: stretch; }
+  .mi-ex-list { max-height: 50vh; }
+}
 
 /* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
    a position on the timeline — and ".sel" is the element instance the inspector is
@@ -3262,6 +3337,18 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
+/* A fold inside a topic — a release, a list entry, a message, a group of a form, a
+   note — draws the caret the topics draw (.section-toggle above), before its summary,
+   turning when it opens. It is a <details> marked fold-sub; a <details> a library
+   draws (form-js, the API reference) is not marked and keeps its own look. */
+details.fold-sub > summary { cursor: pointer; list-style: none; }
+details.fold-sub > summary::-webkit-details-marker { display: none; }
+details.fold-sub > summary::before {
+  content: ""; display: inline-block; flex: none; width: 0; height: 0; margin-right: 6px;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  vertical-align: middle; transition: transform 0.15s ease;
+}
+details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 /* A folding heading with the count beside it, which is what a folded section still
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
@@ -3747,6 +3834,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- Public start link (ADR-0029) ---------- */
 .tasks-publish { margin-top: 26px; max-width: 640px; padding-top: 20px; border-top: 1px solid var(--border); }
+/* The task user's Start view (ADR-0516): one status line that says what became of a
+   start, and actions large enough to hit with a thumb. */
+.selfstart-app-line { margin: -6px 0 14px; }
+.selfstart-status { max-width: 640px; margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--border); overflow-wrap: anywhere; }
+.selfstart-status p { margin: 0 0 8px; }
+.selfstart-status p:last-child { margin-bottom: 0; }
+.selfstart-status.err { border-color: var(--danger); }
+.selfstart-status.ok { border-color: var(--ok); background: var(--ok-soft); }
+.selfstart-status .btn, .selfstart-actions .btn { min-height: 44px; }
+.selfstart-actions { margin-top: 16px; max-width: 640px; }
+.selfstart-actions .btn { min-width: 44px; }
+.selfstart-app { cursor: default; }
 .tasks-publish .publish-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tasks-publish .publish-hint { margin: 0 0 12px; max-width: 60ch; font-size: 13px; }
 .tasks-publish .chip.ok { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
@@ -4925,7 +5025,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }
 .ob-msg:last-child { border-bottom: 0; }
 .ob-msg > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ob-msg > summary::marker { color: var(--muted); }
 .ob-body { padding: 10px 2px 4px; }
 .ob-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
 .ob-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
@@ -4962,7 +5061,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-tree ul { border-left: 1px solid var(--border); }
 .admock-node { font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .admock-entry > summary { cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.admock-entry > summary::marker { color: var(--muted); }
 .admock-detail { padding: 4px 0 8px 14px; }
 .admock-dn { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; }
 /* width:auto against the global table{width:100%}: an attribute list is two narrow
@@ -5001,7 +5099,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    and a journal, drawn as the mock database draws its sequence. */
 .spmock-list { margin-top: 8px; }
 .spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.spmock-list > summary::marker { color: var(--muted); }
 .spmock-table { width: 100%; margin: 4px 0 0; }
 .spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
 .spmock-table td { padding: 2px 12px 2px 0; }
@@ -5051,19 +5148,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 /* One release. The row with its version, date and size is always visible. */
 .release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
 .release-notes .rn-release:first-child { border-top: 0; }
-.release-notes .rn-release > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
-}
-/* A flex summary loses its marker, so a release and a change draw the caret the
-   section header draws: a row that opens should say so before it is clicked. */
-.release-notes .rn-release > summary::-webkit-details-marker,
-.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
-.release-notes .rn-release > summary::before,
-.release-notes .rn-change > summary::before {
-  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
-}
-.release-notes .rn-release[open] > summary::before,
-.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-release > summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .release-notes .rn-version { font-weight: 650; }
 .release-notes .rn-date,
 .release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
@@ -5079,9 +5164,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .release-notes .rn-changes { margin-top: 4px; }
 .release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
 .release-notes .rn-change:first-child { border-top: 0; }
-.release-notes .rn-change > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
-}
+.release-notes .rn-change > summary { display: flex; align-items: baseline; gap: 8px; }
 .release-notes .rn-cat { flex: none; }
 .release-notes .rn-change-title { font-weight: 600; }
 .release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
@@ -5255,10 +5338,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   border: 1px solid var(--border); border-radius: 0; background: var(--surface);
   font-size: 12.5px; line-height: 1.5;
 }
-.wtdoc-more > summary {
-  padding: 6px 10px; cursor: pointer; font-weight: 600; color: var(--accent-text);
-  list-style-position: inside;
-}
+.wtdoc-more > summary { padding: 6px 10px; font-weight: 600; color: var(--accent-text); }
 .wtdoc-more[open] > summary { border-bottom: 1px solid var(--border); }
 .wtdoc-steps { margin: 8px 0; padding: 0 10px 0 26px; }
 .wtdoc-steps li { margin: 0 0 7px; }

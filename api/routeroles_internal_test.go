@@ -27,6 +27,16 @@ import (
 // before roles existed, so an account that keeps modeler, operator and user on
 // upgrade can still do exactly what it could yesterday: everything except these.
 var wantAdminRoutes = []string{
+	// Who besides an operator may start a process of an application (ADR-0516). A
+	// grant hands a person a right to put work into the engine; a modeler who owns
+	// the application must not be able to hand it out, and the first slice keeps it
+	// with the administrator.
+	"GET /api/v1/applications/{id}/start-grants",
+	"GET /api/v1/applications/{id}/start-grants/{processId}",
+	"PUT /api/v1/applications/{id}/start-grants/{processId}",
+	"DELETE /api/v1/applications/{id}/start-grants/{processId}",
+	"GET /api/v1/applications/{id}/start-grants/{processId}/history",
+	"GET /api/v1/applications/{id}/start-grants/{processId}/preview",
 	// Who may do what as whom (ADR-0475): the policies
 	// that decide every governed Worker action, the identity a Worker acts as, the
 	// readiness inventory, and the view of what can act as a given person. A modeler

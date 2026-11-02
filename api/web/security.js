@@ -481,7 +481,7 @@ async function showVersions(api, root, id) {
   ed.hidden = false;
   ed.innerHTML = `<h3>${esc(t("security.versions.title", { id }))}</h3>
     <p class="muted">${esc(t("security.versions.immutable"))}</p>
-    ${(full.versions || []).slice().reverse().map((v) => `<details data-version="${esc(v.version)}">
+    ${(full.versions || []).slice().reverse().map((v) => `<details class="fold-sub" data-version="${esc(v.version)}">
       <summary>v${esc(v.version)} · ${esc(when(v.publishedAt))}${v.publishedBy ? ` · ${esc(v.publishedBy)}` : ""}</summary>
       <pre style="white-space:pre-wrap; font-size:12px">${esc(JSON.stringify(v.document, null, 2))}</pre></details>`).join("")}
     <button class="btn ghost" type="button" data-act="close" style="margin-top:10px">${esc(t("security.editor.close"))}</button>`;

@@ -27,6 +27,7 @@ const (
 var (
 	namespacePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\.[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$`)
 	needsPattern     = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9._-]*$`)
+	tagPattern       = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$`)
 	licensePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.+_-]*$`)
 	versionPattern   = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$`)
 )
@@ -51,7 +52,16 @@ type Release struct {
 	Atlas       Compatibility `json:"atlas"`
 	Artifact    Artifact      `json:"artifact"`
 	Needs       Needs         `json:"needs"`
+	// Tags are optional lower-case labels a Console filters the listing by
+	// ("einstieg", "identitaet"). They describe, they never authorize, and an
+	// installation draws no conclusion from them. Amendment 2026-11-02 to
+	// ADR-0499: a server that predates the field refuses an index carrying it,
+	// as it refuses every unknown property.
+	Tags []string `json:"tags,omitempty"`
 }
+
+// MaxTags bounds the labels on one release.
+const MaxTags = 16
 
 // Compatibility uses an inclusive minimum and optional exclusive maximum.
 type Compatibility struct {
@@ -220,8 +230,33 @@ func validateRelease(r Release) error {
 	if err := validateNeeds(r.Needs.ServerConstants); err != nil {
 		return fmt.Errorf("server constants: %w", err)
 	}
+	if err := validateTags(r.Tags); err != nil {
+		return fmt.Errorf("tags: %w", err)
+	}
 	return nil
 }
+
+// validateTags accepts an absent list; a present one is bounded, unique and
+// made of short lower-case labels.
+func validateTags(tags []string) error {
+	if len(tags) > MaxTags {
+		return fmt.Errorf("more than %d tags", MaxTags)
+	}
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if !tagPattern.MatchString(tag) {
+			return fmt.Errorf("invalid tag %q", tag)
+		}
+		if _, found := seen[tag]; found {
+			return fmt.Errorf("duplicate tag %q", tag)
+		}
+		seen[tag] = struct{}{}
+	}
+	return nil
+}
+
+// ValidTag reports whether value is a tag the index accepts.
+func ValidTag(value string) bool { return tagPattern.MatchString(value) }
 
 func validNamespace(value string) bool {
 	return len(value) >= 5 && len(value) <= 180 && namespacePattern.MatchString(value)

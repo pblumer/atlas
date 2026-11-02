@@ -110,6 +110,12 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 **Not yet delivered:** a publicly hosted, independently signed example registry with a real application and product catalogues, durable installed provenance (registry identity and signing key fingerprint, publisher, Blueprint version and package digest, application identity and catalogue IDs), and restart/repeated-import/partial-failure recovery tests. BMP1 remains active, not complete. PR #1420 verified the test-only application-plus-catalogue bundle (it does not replace a hosted registry). Draft PR #1423 extends the signed preview with catalogue/product identities, without changing the native installer. No engine run-loop, WAL or execution changes were required; auto-safe updates and standalone catalogue artifacts remain gated by Proposed ADR-0506.
 
+## Amendment 2026-11-02: optional release tags and the sample registry
+
+**Decision (owner pblumer).** A v1 release may carry an optional `tags` list: at most 16 unique lower-case labels of 1–32 characters (`[a-z0-9]`, inner hyphens). Tags are signed with the rest of the index and only steer presentation — a Console filters the listing by them. They grant nothing, are not trusted as a description of the package's behaviour, and an installation draws no security or entitlement conclusion from them. The field stays in schema version 1 because no registry had been published yet: a server that predates the amendment refuses an index carrying `tags`, as it refuses every unknown property, so an installation must run a build that includes the amendment before it is pointed at a registry that uses them. After a registry is public, a further field needs the same explicit compatibility review rather than a silent schema extension.
+
+**Sample registry.** `atlas hub keygen|lock|build` is the publisher side for the examples of this repository. Small examples are bundled by theme into a few applications and the handbook's flagship examples keep their own application (`examples/hub/bundles.json`); `examples/hub/releases.json` records every `(bundle, version, digest)` so that a version never names two contents. The private key is a CI secret; servers hold only the public key, pinned out of band. Only the latest version of each bundle is listed until BMP2 decides on archive retention.
+
 ## Links
 
 - [ADR-0128](0128-process-applications.md)

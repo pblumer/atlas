@@ -14,13 +14,14 @@ import (
 func miHistoryProjection(t *testing.T, s *state.Store, piKey uint64) []state.MIHistoryEntry {
 	t.Helper()
 	var entries []state.MIHistoryEntry
-	err := s.MIBodies(piKey, 100, func(body state.MIHistoryEntry) error {
+	_, err := s.MIBodyPage(piKey, state.MIBodyPageQuery{Limit: 100}, func(body state.MIHistoryEntry) error {
 		entries = append(entries, body)
-		return s.MIIterations(piKey, body.ElementInstanceKey, body.ActivationPosition, 100,
+		_, err := s.MIIterationPage(piKey, body.ElementInstanceKey, body.ActivationPosition, state.MIIterationQuery{Limit: 100},
 			func(round state.MIHistoryEntry) error {
 				entries = append(entries, round)
 				return nil
 			})
+		return err
 	})
 	if err != nil {
 		t.Fatalf("MI projection: %v", err)

@@ -110,6 +110,15 @@ func TestRegistryV1SchemaRejectsBadShapeAndLimits(t *testing.T) {
 			v["releases"].([]any)[0].(map[string]any)["artifact"].(map[string]any)["path"] = "packages/%2e%2e/p.tar.gz"
 		}},
 		{"blank license", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["license"] = "" }},
+		{"upper-case tag", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["tags"] = []any{"Approval"} }},
+		{"duplicate tag", func(v map[string]any) { v["releases"].([]any)[0].(map[string]any)["tags"] = []any{"a", "a"} }},
+		{"too many tags", func(v map[string]any) {
+			tags := make([]any, 17)
+			for i := range tags {
+				tags[i] = fmt.Sprintf("t%d", i)
+			}
+			v["releases"].([]any)[0].(map[string]any)["tags"] = tags
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var v map[string]any

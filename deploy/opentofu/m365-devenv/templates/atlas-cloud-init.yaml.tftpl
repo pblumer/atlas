@@ -1,0 +1,14 @@
+#cloud-config
+# Rendered by OpenTofu (atlas.tf). Every file is base64-encoded, so no certificate,
+# password or script needs YAML quoting.
+package_update: false
+write_files:
+%{ for f in files ~}
+  - path: ${f.path}
+    owner: root:root
+    permissions: "${f.mode}"
+    encoding: b64
+    content: ${base64encode(f.content)}
+%{ endfor ~}
+runcmd:
+  - [ bash, -c, "/usr/local/sbin/atlas-setup.sh >>/var/log/atlas-setup.log 2>&1" ]

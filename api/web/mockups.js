@@ -70,7 +70,7 @@ function listSection(l) {
   const what = l.library
     ? plural(held, "file or folder", "files and folders")
     : plural(held, "item", "items");
-  return `<details class="spmock-list" data-k="list:${esc(l.title)}" open>
+  return `<details class="spmock-list fold-sub" data-k="list:${esc(l.title)}" open>
     <summary>
       <b>${esc(l.title)}</b>
       <span class="muted">${l.library ? "document library" : "list"} · ${what}${
@@ -119,7 +119,7 @@ function sharePointCard(r) {
         : `<p class="empty">The site is empty. A list or a library appears here the first time a task
            writes to it — create-item, upload-file or create-folder — as it would have been made by a
            person on a real site.</p>`}
-      <details class="admock-ops" data-k="ops" ${refused ? "open" : ""}>
+      <details class="admock-ops fold-sub" data-k="ops" ${refused ? "open" : ""}>
         <summary>Operations (${journal.length}${journal.length >= 200 ? ", the newest 200" : ""})</summary>
         ${journalTable(journal)}
       </details>
