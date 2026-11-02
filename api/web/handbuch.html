@@ -11158,8 +11158,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <td data-l="en">Starting, cancelling and repairing instances, resolving incidents, workers and the
               outbox – running what is deployed.</td></tr>
           <tr><td><b><code>user</code></b></td>
-            <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen.</td>
-            <td data-l="en">Their own task list: seeing, claiming and completing tasks.</td></tr>
+            <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen. Dazu die
+              Prozesse starten, die eine Administratorin der Person ausdrücklich freigegeben hat
+              (<a href="#konten-startfreigaben">Startfreigaben</a>).</td>
+            <td data-l="en">Their own task list: seeing, claiming and completing tasks. Plus starting the processes
+              an administrator has explicitly granted them (<a href="#konten-startfreigaben">start grants</a>).</td></tr>
           <tr><td><b><code>productmanager</code></b></td>
             <td data-l="de">Die Kataloge des Shops und die Produkte darin pflegen, an deployte Prozesse binden und
               veröffentlichen – die App <a href="/#/catalog">Catalogue</a>. Bewusst nicht <code>modeler</code>:
@@ -11211,11 +11214,82 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <p data-l="de">Eine <b>Gruppe</b> ist eine benannte Menge von Konten. Sie ist die zweite Achse neben den
         Rollen: Rollen sagen, <i>welche Art</i> von Endpunkt jemand erreicht, eine Freigabe an eine Gruppe sagt,
         <i>welches Objekt</i> – ein Projekt oder ein Worker wird einmal mit dem Team geteilt statt Person für
-        Person. Eine Änderung an der Mitgliedschaft wirkt bei der nächsten Anmeldung des Mitglieds.</p>
+        Person. Eine Änderung an der Mitgliedschaft wirkt ab der nächsten Anfrage des Mitglieds; es muss sich
+        dafür nicht neu anmelden.</p>
       <p data-l="en">A <b>group</b> is a named set of accounts. It is the second axis beside roles: a role says
         <i>which kind</i> of endpoint somebody reaches, sharing with a group says <i>which object</i> – a project or
-        a worker is shared with the team once instead of person by person. A membership change takes effect at
-        the member's next sign-in.</p>
+        a worker is shared with the team once instead of person by person. A membership change takes effect from
+        the member's next request; they do not have to sign in again.</p>
+
+      <div id="konten-startfreigaben" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Prozesse selbst starten: Startfreigaben</h3><h3 data-l="en">Starting processes yourself: start grants</h3>
+      <p data-l="de">Mit der Rolle <code>user</code> allein startet niemand einen Prozess. Eine <b>Startfreigabe</b>
+        erlaubt bestimmten Konten oder Gruppen, <b>einen</b> Prozess <b>einer</b> Anwendung selbst zu starten – ohne
+        die Rolle <code>operator</code>, die auch Abbrechen und Reparieren erlauben würde. Ohne Freigabe darf niemand
+        starten. Wer eine Anwendung besitzt oder bearbeitet, ihre Aufgaben bearbeitet oder einen Link oder QR-Code
+        zu ihr hat, erhält dadurch keine Freigabe.</p>
+      <p data-l="en">The <code>user</code> role alone starts no process. A <b>start grant</b> lets named accounts or
+        groups start <b>one</b> process of <b>one</b> application themselves – without the <code>operator</code>
+        role, which would also allow cancelling and repairing. Without a grant nobody may start. Owning or editing
+        an application, working its tasks, or holding a link or QR code to it grants nothing.</p>
+      <p data-l="de"><b>Freigeben.</b> Eine Administratorin vergibt Freigaben mit ihrer eigenen Anmeldung; ein
+        API-Token, ein verbundener KI-Assistent oder die Besitzerin einer Anwendung kann es nicht. Die Console hat
+        dafür noch keine eigene Oberfläche, du verwendest die API:</p>
+      <ul data-l="de">
+        <li><code>PUT /api/v1/applications/{id}/start-grants/{processId}</code> mit
+          <code>{"groupIds":["&lt;Gruppen-ID&gt;"],"expectedRevision":0}</code> gibt einer Gruppe frei. Gib IDs an
+          (aus <a href="/#/console/org">Organization</a>), keine Namen. <code>expectedRevision</code> ist die
+          Revision, die du zuletzt gelesen hast – 0 für einen Prozess ohne Freigabe. Hat jemand anderes inzwischen
+          geändert, antwortet der Server mit 409; lies die Freigabe neu und entscheide auf ihrem aktuellen Stand.</li>
+        <li><code>GET …/start-grants/{processId}/preview?userId=&lt;Konto-ID&gt;</code> sagt, ob diese Person den
+          Prozess angeboten bekäme, und wenn nicht, warum: keine Freigabe, Konto deaktiviert, Rolle
+          <code>user</code> fehlt, Prozess deaktiviert oder nicht ausführbar.</li>
+        <li><code>DELETE …/start-grants/{processId}?expectedRevision=&lt;n&gt;</code> entzieht die Freigabe. Jede
+          Prüfung danach verweigert den Start; ein bereits gestarteter Prozess läuft weiter. Entziehen geht auch,
+          wenn die Anwendung oder der Prozess schon gelöscht ist.</li>
+        <li><code>…/history</code> zeigt jede Änderung mit Zeitpunkt und der Administratorin, die sie vorgenommen
+          hat.</li>
+      </ul>
+      <p data-l="en"><b>Granting.</b> An administrator grants from their own sign-in; an API token, a connected AI
+        assistant or an application's owner cannot. The Console has no screen for it yet, so you use the API:</p>
+      <ul data-l="en">
+        <li><code>PUT /api/v1/applications/{id}/start-grants/{processId}</code> with
+          <code>{"groupIds":["&lt;group id&gt;"],"expectedRevision":0}</code> grants a group. Give ids (from
+          <a href="/#/console/org">Organization</a>), not names. <code>expectedRevision</code> is the revision you
+          last read – 0 for a process without a grant. When somebody else changed it meanwhile, the server answers
+          409; read the grant again and decide on its current state.</li>
+        <li><code>GET …/start-grants/{processId}/preview?userId=&lt;account id&gt;</code> says whether this person
+          would be offered the process and, if not, why: no grant, account disabled, <code>user</code> role
+          missing, process deactivated or not executable.</li>
+        <li><code>DELETE …/start-grants/{processId}?expectedRevision=&lt;n&gt;</code> revokes the grant. Every check
+          after that refuses the start; a process already started keeps running. Revoking works even when the
+          application or the process has been deleted.</li>
+        <li><code>…/history</code> lists every change with its time and the administrator who made it.</li>
+      </ul>
+      <p data-l="de"><b>Welche Version gestartet wird.</b> Immer die neueste deployte Version des Prozesses, solange
+        sie zur Anwendung der Freigabe gehört. Eine ältere Version wird nie angeboten und kann auch nicht über ihren
+        Schlüssel gestartet werden. Deployt eine andere Anwendung zuletzt einen Prozess mit derselben ID, gilt die
+        Freigabe für ihn nicht.</p>
+      <p data-l="en"><b>Which version starts.</b> Always the newest deployed version of the process, as long as it
+        belongs to the grant's application. An older version is never offered and cannot be started by its key
+        either. When another application last deployed a process with the same id, the grant does not apply to
+        it.</p>
+      <p data-l="de"><b>Für die Person, die startet.</b> Sobald ihr etwas freigegeben ist, zeigt die App Tasks den
+        Eintrag <b>Prozess starten</b> – am Desktop in der oberen Leiste, am Telefon im Menü. Dort wählt sie den
+        Prozess nach Namen und Anwendung, füllt sein Startformular aus und drückt einmal auf
+        <b>Prozess starten</b>. Der Server prüft Freigabe, Version und Angaben erneut; die Meldung «ist gestartet»
+        mit Referenz erscheint erst, wenn der Start gespeichert ist. Bricht die Verbindung dabei ab, ist offen, ob
+        der Prozess gestartet wurde: Sieh zuerst in deinen Aufgaben nach, bevor du ihn noch einmal startest.</p>
+      <p data-l="en"><b>For the person starting.</b> Once something is granted to them, the Tasks app shows
+        <b>Start process</b> – in the top bar on a desktop, in the menu on a phone. There they pick the process by
+        name and application, fill in its start form and press <b>Start process</b> once. The server checks the
+        grant, the version and the values again; the “has started” message with its reference appears only once
+        the start is saved. If the connection breaks meanwhile, it is unknown whether the process started: look in
+        your tasks first before you start it again.</p>
+      <p data-l="de">Auf einem Server ohne Anmeldung gibt es keine Startfreigaben; dort starten Operatoren wie
+        bisher. Die Einzelheiten stehen in <a href="https://github.com/pblumer/atlas/blob/main/docs/adr/0516-scoped-authenticated-process-start.md">ADR-0516</a>.</p>
+      <p data-l="en">A server without sign-in has no start grants; operators start processes there as before. The
+        details are in <a href="https://github.com/pblumer/atlas/blob/main/docs/adr/0516-scoped-authenticated-process-start.md">ADR-0516</a>.</p>
 
       <h3 data-l="de">Linienvorgesetzte</h3><h3 data-l="en">Line managers</h3>
       <p data-l="de">Ein Konto kann seinen <b>Linienvorgesetzten</b> nennen, als Verweis auf ein anderes Konto. Eine
