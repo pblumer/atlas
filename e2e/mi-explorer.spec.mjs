@@ -18,7 +18,7 @@ const mount = async (page) => {
 test("a 50,000-iteration instance opens as a collapsed group without the timeline", async ({ page }) => {
   await mount(page);
   const group = page.locator("#history-list .ops-hrow.mi-bounded");
-  await expect(group).toContainText("Calc_1");
+  await expect(group).toContainText("Calculate positions"); // the diagram's name, not the element id
   await expect(group.locator(".ops-mi-count")).toContainText("50");
   await expect(group.locator(".mi-summary")).toContainText("3");
   await expect(page.locator(".mi-bounded-note")).toBeVisible();
@@ -132,4 +132,26 @@ test("an iteration shows its own variables and decisions, technical detail on re
   await expect(page.locator(".mi-ex-detail .mi-dec-trace")).toHaveCount(1);
   const asked = await page.evaluate(() => window.__requests.filter((u) => u.includes("technical=true")));
   expect(asked.length).toBe(1);
+});
+
+test("the bounded view shows the instance's own steps around its collapsed loop", async ({ page }) => {
+  await mount(page);
+  const rows = page.locator("#history-list .ops-hrow");
+  await expect(rows).toHaveCount(3); // Start, the loop, End — not 50,000 iterations
+  await expect(rows.nth(0)).toContainText("Start");
+  await expect(rows.nth(1)).toHaveClass(/mi-group/);
+  await expect(rows.nth(1)).toContainText("Calculate positions");
+  await expect(rows.nth(2)).toContainText("End");
+  await rows.nth(2).click();
+  await expect(rows.nth(2)).toHaveClass(/sel/);
+  const asked = await page.evaluate(() => window.__requests);
+  expect(asked.some((u) => u.includes("/outline"))).toBe(true);
+  expect(asked.some((u) => u.includes("/timeline"))).toBe(false);
+});
+
+test("without an outline the bounded view says so and lists the executions", async ({ page }) => {
+  await page.evaluate(() => { window.__scenario.noOutline = true; });
+  await mount(page);
+  await expect(page.locator(".mi-bounded-hint")).toBeVisible();
+  await expect(page.locator("#history-list .mi-outline-step")).toHaveCount(0);
 });

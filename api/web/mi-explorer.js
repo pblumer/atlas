@@ -58,6 +58,20 @@ export async function loadMIBodies(api, key, { parentIteration = 0, cursor = "" 
   }
 }
 
+// loadOutline reads one page of an instance's outline: its steps without those
+// inside multi-instance iterations (ADR-0517). Like loadMIBodies it reports an
+// unavailable outline instead of throwing, because that means "not known".
+export async function loadOutline(api, key, { cursor = "" } = {}) {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  try {
+    const data = await api("GET", `/api/v1/instances/${encodeURIComponent(String(key))}/outline${qs}`);
+    return { available: true, ...data, steps: data.steps || [] };
+  } catch (err) {
+    if (failureCode(err) === "history_unavailable") return { available: false, steps: [] };
+    throw err;
+  }
+}
+
 // largestBody returns the number of iterations of the biggest body in a listing.
 export function largestBody(bodies) {
   return (bodies || []).reduce((max, b) => Math.max(max, Number(b.iterations) || 0), 0);

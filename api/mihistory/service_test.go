@@ -102,6 +102,7 @@ func (w *world) mount(mux *http.ServeMux, svc *Service) {
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}", svc.HandleBody)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", svc.HandleIterations)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", svc.HandleIteration)
+	mux.HandleFunc("GET /api/v1/instances/{key}/outline", svc.HandleOutline)
 }
 
 // view is what the server supplies: a read view of the store, closed after fn.
@@ -933,5 +934,52 @@ func TestACorruptIndexIsAnErrorNeverAPlausibleAnswer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOutlineShowsTheInstanceWithoutItsIterations(t *testing.T) {
+	w := newWorld(t, listIter(250), false)
+	pi := w.start()
+	var page OutlineResponse
+	if code, e := w.get("/api/v1/instances/"+strconv.FormatUint(pi, 10)+"/outline", nil, &page); code != 200 {
+		t.Fatalf("outline: %d %v", code, e)
+	}
+	// start activated+completed, script activated+completed, the MI body
+	// activated — 250 iterations are behind it, not in the outline.
+	var bodies, rows int
+	for _, s := range page.Steps {
+		rows++
+		if s.MultiInstanceBody {
+			bodies++
+		}
+		if s.Type == "" || s.Action == "" {
+			t.Fatalf("step without type or action: %+v", s)
+		}
+	}
+	if bodies != 1 || rows != 5 || page.NextCursor != "" || page.InstanceState != "active" || page.ProcessDefinitionKey != w.cp.Key {
+		t.Fatalf("outline: %+v", page)
+	}
+	var first, second OutlineResponse
+	path := "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/outline"
+	w.get(path, url.Values{"limit": {"2"}}, &first)
+	w.get(path, url.Values{"limit": {"2"}, "cursor": {first.NextCursor}}, &second)
+	if len(first.Steps) != 2 || len(second.Steps) != 2 || second.Steps[0].Position <= first.Steps[1].Position {
+		t.Fatalf("paged outline: %+v / %+v", first.Steps, second.Steps)
+	}
+	var ignored any
+	if status, e := w.get(path, url.Values{"cursor": {bodiesCursor(t, w, pi)}}, &ignored); status != 400 || e["code"] != "cursor_mismatch" {
+		t.Fatalf("a bodies cursor on the outline: %d %v", status, e)
+	}
+	if status, e := w.get("/api/v1/instances/999999/outline", nil, &ignored); status != 404 {
+		t.Fatalf("unknown instance: %d %v", status, e)
+	}
+}
+
+func TestOutlineOfOlderHistoryIsUnavailable(t *testing.T) {
+	w, pi := legacyWorld(t, "instance_outline_v1")
+	var ignored any
+	status, e := w.get("/api/v1/instances/"+strconv.FormatUint(pi, 10)+"/outline", nil, &ignored)
+	if status != http.StatusConflict || e["code"] != "history_unavailable" {
+		t.Fatalf("outline of older history: %d %v", status, e)
 	}
 }

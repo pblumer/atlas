@@ -173,6 +173,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_instance_jobs":                "GET /api/v1/instances/{key}/jobs",
 	"atlas_instance_timeline":            "GET /api/v1/instances/{key}/timeline",
 	"atlas_instance_multi_instances":     "GET /api/v1/instances/{key}/multi-instances",
+	"atlas_instance_outline":             "GET /api/v1/instances/{key}/outline",
 	"atlas_multi_instance_body":          "GET /api/v1/instances/{key}/multi-instances/{bodyKey}",
 	"atlas_multi_instance_iterations":    "GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations",
 	"atlas_multi_instance_iteration":     "GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}",

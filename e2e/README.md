@@ -39,7 +39,8 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   with the server's counts, and the explorer pages iterations (never more than one page
   of rows in the DOM), jumps to iteration 37,421 by asking the server for that position,
   sends state and incident filters to the server, supports keyboard selection, retries a
-  failed page and stays within a narrow screen. The harness computes each page from the
+  failed page and stays within a narrow screen. The bounded view lists the instance's own steps
+  from the outline route around the collapsed loop, and says so when no outline is available. The harness computes each page from the
   iteration number, as the server's index does, instead of holding 50,000 rows.
 
 - **`building-blocks.spec.mjs`**

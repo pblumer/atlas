@@ -234,8 +234,20 @@ shadow replay through the unchanged `applyToState`, then a resumable swap of the
 MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
 `history_unavailable`.
 
-**Still not built:** per-instance readiness for compacted logs; a bounded outline of the *other* steps of a
-large instance (the bounded view shows only its multi-instance executions);
+**OHS2 increment 5 — the instance outline (2026-11-02).** `applyToState` also
+records every element activation and end outside a multi-instance iteration in
+`cfOutline` (an iteration, and anything whose flow scope is hidden, is carried
+down through `cfOutlineHidden`); a body execution appears as one activation and
+one end. Rows carry the definition key the element ran under. An element
+directly under the process instance costs one write and no read; the MI and
+lifecycle benchmarks show no added allocation. Own readiness marker
+`instance_outline_v1`, covered by the startup rebuild. `GET
+/api/v1/instances/{key}/outline` (MCP `atlas_instance_outline`) pages it; the
+bounded Operations view now shows the instance's own steps around its
+collapsed executions. Measured on the 50,000-iteration instance: 781 bytes,
+0.5 ms.
+
+**Still not built:** per-instance readiness for compacted logs;
 the step-by-step replay window of one iteration on the diagram (its inner
 elements' step frames for subprocess iterations); job and user-task history per
 iteration. A historical reconstruction must use durable event payloads,

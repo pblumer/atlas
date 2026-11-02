@@ -483,6 +483,34 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_outline",
+			Description: "Page through one process instance's step history without the steps inside multi-instance " +
+				"iterations (ADR-0517): each element activation and end in order, a multi-instance body execution as one " +
+				"activation and one end (multiInstanceBody: true; its iterations are in atlas_multi_instance_iterations). " +
+				"Bounded and paged: pass the nextCursor back as 'cursor'. Use this instead of atlas_instance_timeline for " +
+				"instances with large loops.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":    integerProp("The instance key (from atlas_list_instances)."),
+					"limit":  integerProp("Optional page size, 1-200 (default 100)."),
+					"cursor": stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "limit")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/outline" + q))
+			},
+		},
+		{
 			Name: "atlas_multi_instance_body",
 			Description: "Read one multi-instance body execution of an instance (ADR-0517): its iteration counters " +
 				"and how many of its incidents are open now.",

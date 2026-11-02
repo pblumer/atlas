@@ -85,9 +85,11 @@ export default {
   "ops.mi.incident.resolved": "Behoben",
   "ops.mi.incident.superseded": "Ersetzt durch einen späteren Incident",
   "ops.mi.incident.cleared": "Beendet ohne Behebung (Element abgebrochen)",
+  "ops.outline.more": "Weitere Schritte laden",
+  "ops.outline.unavailable": "Die übrigen Schritte dieser Instanz lassen sich noch nicht anzeigen: Ihre Historie wurde aufgezeichnet, bevor es die Übersicht dafür gab. Die Multi-Instance-Ausführungen sind unten aufgeführt.",
   "ops.mi.bounded.title": "Grosse Ausführung",
   "ops.mi.bounded.note": "Diese Instanz enthält eine Ausführung mit {count} Iterationen. Damit Operations bedienbar bleibt, wird die vollständige schrittweise Historie nicht geladen. Die Multi-Instance-Ausführungen sind unten zusammengefasst; öffne eine, um ihre Iterationen seitenweise zu durchsuchen.",
-  "ops.mi.bounded.other": "Die übrigen Schritte dieser Instanz und die Wiedergabe auf dem Diagramm sind in dieser Ansicht noch nicht verfügbar.",
+  "ops.mi.bounded.other": "Die schrittweise Wiedergabe auf dem Diagramm ist in dieser Ansicht noch nicht verfügbar.",
   "ops.mi.bounded.none": "Keine Multi-Instance-Ausführung auf oberster Ebene.",
   "ops.mi.bounded.more": "Weitere Ausführungen laden",
 
