@@ -14650,11 +14650,24 @@ async function mountBoundedReplay(root, { api, key, lib, gen, probe }) {
       marked = elementId;
     }
   };
+  // The replay window of one iteration draws on the diagram: the elements it
+  // activated so far as visited, the element of the step shown as active.
+  let replayMarked = [];
+  const replay = ({ visited, current }) => {
+    if (!viewer) return;
+    const canvas = viewer.get("canvas");
+    for (const [id, cls] of replayMarked) { try { canvas.removeMarker(id, cls); } catch { /* gone */ } }
+    replayMarked = [];
+    for (const id of visited) {
+      if (id !== current && registry.get(id)) { canvas.addMarker(id, "atlas-visited"); replayMarked.push([id, "atlas-visited"]); }
+    }
+    if (current && registry.get(current)) { canvas.addMarker(current, "atlas-active"); replayMarked.push([current, "atlas-active"]); }
+  };
   function open(body) {
     if (explorer) explorer.destroy();
     mark(body.elementId);
     explorer = mountMIExplorer(pane, {
-      api, instanceKey: key, body,
+      api, instanceKey: key, body, nameOf, onReplay: replay,
       onOpenBody: (nested) => open(nested),
       onClose: () => { explorer.destroy(); explorer = null; mark(""); pane.innerHTML = noteHTML; },
     });

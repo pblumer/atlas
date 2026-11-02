@@ -88,7 +88,7 @@ func rebuildWorld(t *testing.T) (*Processor, *state.Store, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, m := range []string{"mi_history_index_v2", "mi_history_decisions_v1", "instance_outline_v1"} {
+	for _, m := range []string{"mi_history_index_v2", "mi_history_decisions_v1", "instance_outline_v1", "mi_iteration_steps_v1"} {
 		if err := db.Delete(append([]byte{0x00}, m...), pebble.Sync); err != nil {
 			t.Fatal(err)
 		}

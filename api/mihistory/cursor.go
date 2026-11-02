@@ -25,6 +25,7 @@ const (
 	kindBodies     byte = 1
 	kindIterations byte = 2
 	kindOutline    byte = 3
+	kindSteps      byte = 4
 
 	cursorPayloadSize = 1 + 1 + 8*9
 	cursorMACSize     = 16

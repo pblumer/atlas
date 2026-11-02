@@ -29,6 +29,7 @@ type miSnapshot struct {
 	WithInc    map[uint64][]uint64
 	Incidents  map[uint64][]state.MIIncidentRecord
 	Outline    []state.OutlineStep
+	Steps      map[uint64][]state.OutlineStep // per iteration element-instance key
 }
 
 func miReadSnapshot(t *testing.T, s *state.Store, pi uint64) miSnapshot {
@@ -38,6 +39,7 @@ func miReadSnapshot(t *testing.T, s *state.Store, pi uint64) miSnapshot {
 		ByState:    map[uint64]map[string][]uint64{},
 		WithInc:    map[uint64][]uint64{},
 		Incidents:  map[uint64][]state.MIIncidentRecord{},
+		Steps:      map[uint64][]state.OutlineStep{},
 	}
 	incidents := func(owner uint64) {
 		if _, err := s.MIIncidents(pi, owner, state.MIMaxPageLimit, func(r state.MIIncidentRecord) error {
@@ -87,6 +89,24 @@ func miReadSnapshot(t *testing.T, s *state.Store, pi uint64) miSnapshot {
 		}
 	}
 	walk(0)
+	for _, rows := range snap.Iterations {
+		for _, r := range rows {
+			var after *state.OutlinePosition
+			for {
+				next, err := s.IterationStepsPage(pi, r.ElementInstanceKey, after, 0, state.MIMaxPageLimit, func(o state.OutlineStep) error {
+					snap.Steps[r.ElementInstanceKey] = append(snap.Steps[r.ElementInstanceKey], o)
+					return nil
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if next == nil {
+					break
+				}
+				after = next
+			}
+		}
+	}
 	var after *state.OutlinePosition
 	for {
 		next, err := s.OutlinePage(pi, after, 0, state.MIMaxPageLimit, func(o state.OutlineStep) error {
@@ -426,6 +446,39 @@ func TestOutlineOfANestedMIInstanceIsItsOwnSteps(t *testing.T) {
 	}
 	if len(live.Outline) != 6 {
 		t.Fatalf("outline rows: %+v", live.Outline)
+	}
+	// Each outer iteration's steps are its own activation, its start event, the
+	// nested body as one step, and its end event; each nested iteration's steps
+	// are its own activation and end.
+	outer := live.Bodies[0].ElementInstanceKey
+	if len(live.Iterations[outer]) != 3 {
+		t.Fatalf("outer iterations: %+v", live.Iterations[outer])
+	}
+	for _, it := range live.Iterations[outer] {
+		var acts []int32
+		for _, o := range live.Steps[it.ElementInstanceKey] {
+			if o.Action == state.ReplayActivated {
+				acts = append(acts, o.ElementID)
+			}
+		}
+		if want := []int32{sub, is, inner, ie}; !reflect.DeepEqual(acts, want) || len(live.Steps[it.ElementInstanceKey]) != 8 {
+			t.Fatalf("steps of iteration %d: activations %v (want %v), rows %+v", it.LoopCounter, acts, want, live.Steps[it.ElementInstanceKey])
+		}
+	}
+	nested := 0
+	for body, rows := range live.Iterations {
+		if body == outer {
+			continue
+		}
+		for _, it := range rows {
+			nested++
+			if s := live.Steps[it.ElementInstanceKey]; len(s) != 2 || s[0].ElementID != inner || s[0].MultiInstance != 2 {
+				t.Fatalf("steps of a nested iteration: %+v", s)
+			}
+		}
+	}
+	if nested != 6 {
+		t.Fatalf("nested iterations with steps: %d", nested)
 	}
 	h.close(t)
 	if got := miReadSnapshot(t, miReplayInto(t, dir, cp), pi); !reflect.DeepEqual(got, live) {

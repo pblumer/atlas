@@ -2846,6 +2846,17 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
 .mi-dec-io span { color: var(--muted); }
 .mi-dec-trace { font-size: 11px; max-height: 180px; overflow: auto; background: var(--bg); padding: 6px; border-radius: 4px; }
 .mi-ex-technical { margin-top: 8px; }
+.mi-replay { display: flex; flex-direction: column; gap: 6px; }
+.mi-rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mi-rp-pos { font-size: 11px; }
+.mi-rp-steps { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; max-height: 260px; overflow: auto; }
+.mi-rp-step { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.mi-rp-step:last-child { border-bottom: 0; }
+.mi-rp-step:hover { background: var(--bg); }
+.mi-rp-step.cur { background: var(--accent-soft); }
+.mi-rp-step.terminated .mi-rp-act { color: var(--warn); }
+.mi-rp-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mi-rp-at { font-size: 11px; }
 @media (max-width: 720px) {
   .mi-ex-controls { flex-direction: column; align-items: stretch; }
   .mi-ex-list { max-height: 50vh; }
