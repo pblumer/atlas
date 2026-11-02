@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -827,5 +828,110 @@ func TestACancelledRequestReadsNothing(t *testing.T) {
 	svc.HandleBodies(rec, req)
 	if opened || rec.Code == http.StatusOK {
 		t.Fatalf("cancelled request: status %d, view opened %v", rec.Code, opened)
+	}
+}
+
+// reopenWith closes the world's store, applies edit to its Pebble directory and
+// opens it again — how a test makes an index row corrupt.
+func (w *world) reopenWith(edit func(db *pebble.DB)) {
+	w.t.Helper()
+	statePath := filepath.Join(w.dir, "state")
+	if err := w.store.Close(); err != nil {
+		w.t.Fatal(err)
+	}
+	db, err := pebble.Open(statePath, &pebble.Options{Merger: &pebble.Merger{
+		Name: "atlas.counter.sum.v1",
+		Merge: func(_, v []byte) (pebble.ValueMerger, error) {
+			m := &sumMerger{}
+			return m, m.MergeNewer(v)
+		},
+	}})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	edit(db)
+	if err := db.Close(); err != nil {
+		w.t.Fatal(err)
+	}
+	if w.store, err = state.Open(statePath); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func be64(parts ...uint64) []byte {
+	var out []byte
+	for _, p := range parts {
+		out = binary.BigEndian.AppendUint64(out, p)
+	}
+	return out
+}
+
+// A corrupt MI index is reported as an internal error on every route that
+// reads the damaged row — never as a plausible body, page or detail.
+func TestACorruptIndexIsAnErrorNeverAPlausibleAnswer(t *testing.T) {
+	type fixture struct {
+		pi, body, bodyPos, iter uint64
+	}
+	setup := func(t *testing.T) (*world, fixture) {
+		w := newWorld(t, listIter(2), false)
+		pi := w.start()
+		b := w.onlyBody(pi)
+		k := exactKeyOf(t, w, pi, b.BodyElementInstanceKey, 1)
+		w.p.FailJob(w.jobFor(k), 0, "x", 0)
+		w.run()
+		w.p.CompleteJobWithDecision(w.jobFor(exactKeyOf(t, w, pi, b.BodyElementInstanceKey, 2)),
+			&model.DecisionEvaluationValue{DecisionId: "d", InputsJSON: `{}`, OutputsJSON: `{}`})
+		w.run()
+		return w, fixture{pi, b.BodyElementInstanceKey, b.ActivationPosition, k}
+	}
+	junk := []byte{0xff}
+	for _, tt := range []struct {
+		name  string
+		edit  func(db *pebble.DB, f fixture) error
+		paths func(f fixture) []string
+	}{
+		{"body row", func(db *pebble.DB, f fixture) error {
+			return db.Set(append([]byte{0x38}, be64(f.pi, f.bodyPos, f.body)...), junk, pebble.Sync)
+		}, func(f fixture) []string {
+			return []string{instPath(f.pi), instPath(f.pi) + "/" + strconv.FormatUint(f.body, 10), iterPath(f.pi, f.body),
+				iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10)}
+		}},
+		{"incident record", func(db *pebble.DB, f fixture) error {
+			iter, err := db.NewIter(&pebble.IterOptions{LowerBound: append([]byte{0x3F}, be64(f.pi, f.iter)...),
+				UpperBound: append([]byte{0x3F}, be64(f.pi, f.iter+1)...)})
+			if err != nil {
+				return err
+			}
+			defer iter.Close()
+			if !iter.First() {
+				return errors.New("no incident record to corrupt")
+			}
+			return db.Set(append([]byte(nil), iter.Key()...), junk, pebble.Sync)
+		}, func(f fixture) []string {
+			return []string{instPath(f.pi) + "/" + strconv.FormatUint(f.body, 10), iterPath(f.pi, f.body),
+				iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10)}
+		}},
+		{"decision reference", func(db *pebble.DB, f fixture) error {
+			// A reference naming an evaluation that does not exist.
+			return db.Set(append([]byte{0x43}, be64(f.pi, f.iter, 1<<63, 1)...), nil, pebble.Sync)
+		}, func(f fixture) []string {
+			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10)}
+		}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			w, f := setup(t)
+			w.reopenWith(func(db *pebble.DB) {
+				if err := tt.edit(db, f); err != nil {
+					t.Fatal(err)
+				}
+			})
+			for _, path := range tt.paths(f) {
+				var ignored any
+				status, e := w.get(path, nil, &ignored)
+				if status != http.StatusInternalServerError || e["code"] != "internal" {
+					t.Fatalf("%s: %d %v", path, status, e)
+				}
+			}
+		})
 	}
 }
