@@ -497,6 +497,7 @@ function closeAllMenus() {
   clearTimeout(submenuTimer);
   submenuTimer = null;
   closeSubmenus();
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
   openMenu = openTrigger = null;
 }
 // placeMenu puts an open menu under its trigger, or above it when there is no room
@@ -612,6 +613,16 @@ document.addEventListener("click", (e) => {
   // opens on hover and on keyboard focus, and a click on it should leave the menu
   // standing rather than dismiss the lot.
   if (e.target.closest(".submenu-toggle")) { e.preventDefault(); e.stopPropagation(); return; }
+  const mobileAction = e.target.closest("[data-mobile-action]");
+  if (mobileAction) {
+    e.preventDefault();
+    closeAllMenus();
+    if (mobileAction.dataset.mobileAction === "search") openSearchPalette();
+    if (mobileAction.dataset.mobileAction === "appearance") {
+      document.getElementById("appearance-toggle")?.click();
+    }
+    return;
+  }
   const toggle = e.target.closest(".dropdown-toggle");
   if (toggle) {
     e.preventDefault(); e.stopPropagation();
@@ -619,7 +630,10 @@ document.addEventListener("click", (e) => {
     closeAllMenus();
     if (menu) {
       menu.hidden = wasOpen;
-      if (!menu.hidden) { openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false); }
+      if (!menu.hidden) {
+        toggle.setAttribute("aria-expanded", "true");
+        openMenu = menu; openTrigger = toggle; openAbove = placeMenu(menu, toggle, false);
+      }
     }
     return;
   }
@@ -720,7 +734,7 @@ const APPS = [
   // Where a catalogue is filled. Gated at productmanager (ADR-0315): maintaining a
   // catalogue means choosing from processes already deployed, never deploying one,
   // so it is deliberately not the modeller's role — deploy is code execution.
-  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue" },
+  { id: "catalog", name: "Catalogue", route: "#/catalog", on: true, role: "productmanager", feature: "catalogue", suite: "Marketplace" },
   // The shop is a page of its own, not a view of this app, so its route
   // is a path and not a hash — written without a leading slash, because a route in
   // this table is what the handbook appends to the site root (href="/" + route),
@@ -732,7 +746,7 @@ const APPS = [
   // Without this line the page existed and nothing led to it: it was built, served
   // and reachable only by somebody who already knew the URL. Held by
   // TestBothPortalSurfacesAreReachableFromTheMenu.
-  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue" },
+  { id: "portal", name: "Shop", route: "shop.html", on: true, role: "user", separate: true, feature: "catalogue", suite: "Marketplace" },
 ];
 
 // Secondary (in-app) navigation.
@@ -857,6 +871,14 @@ const TOPNAV = {
     { name: "Model", route: "#/data", role: "modeler" },
     { name: "Business objects", route: "#/data/objects", role: "modeler" },
     { name: "Instances", route: "#/data/instances", role: "operator" },
+  ],
+  // The catalogue app is the product manager's half of tshopper (phase A,
+  // ADR-0515): the catalogues, the wiki's
+  // services to compose them from, and how what they offer is delivered.
+  catalog: [
+    { name: "Catalogues", route: "#/catalog", role: "productmanager", feature: "catalogue" },
+    { name: "Building blocks", route: "#/catalog/building-blocks", role: "productmanager", feature: "catalogue" },
+    { name: "Reporting", route: "#/catalog/reporting", role: "productmanager", feature: "catalogue" },
   ],
 };
 
@@ -1391,52 +1413,137 @@ function openSystemOverview(returnTo = document.activeElement) {
   done.focus();
 }
 
-// ---------- Operations nav incident badge ----------
-// A stuck token is now marked on the live diagram, in the replay and in the lists
-// (ADR-0150/0151) — but each of those only says so once you are already looking at
-// it. The nav badge is the one that finds *you*: while the Operations app is open,
-// the shell polls the live counts and puts the number of parked tokens on the
-// Incidents entry, so "something is stuck" arrives without a view being opened.
-// It polls only in Operations (nowhere else shows the entry) and stops on the way
-// out, so no other app pays for it.
-const INCIDENT_BADGE_INTERVAL = 5000;
+// ---------- Foreground work awareness (MFE1 / ADR-0514) ----------
+// Poll only while this tab is visible and a relevant role/view exists. An incident
+// count is a read-side hint, not a push notification, delivery receipt or human
+// acknowledgement. Task snapshots never mutate an open form or process instance.
+const WORK_POLL_INTERVAL = 10000;
+const LEGACY_OPERATIONS_POLL_INTERVAL = 5000;
 let incidentCount = 0;
-let incidentBadgeTimer = null;
+let taskCount = null;
+let taskCountExact = true;
+let taskFingerprint = null;
+let workPollTimer = null;
+let workPollPeriod = 0;
+let workPollIdentity = "";
+let workPollBusy = false;
+let watchTasks = false;
+let watchIncidents = false;
 
-// paintIncidentBadge writes the current count into whatever badge slot the chrome
-// has right now. setChrome rebuilds the nav on every navigation, so the value is
-// re-applied rather than assumed to survive.
+function paintMobileWorkBadge() {
+  const button = document.getElementById("mobile-more-btn");
+  const badge = document.getElementById("mobile-more-count");
+  if (!button || !badge) return;
+  const incident = watchIncidents && incidentCount > 0;
+  const task = watchTasks && taskCount !== null && taskCount > 0;
+  badge.hidden = !incident && !task;
+  badge.classList.toggle("incident", incident);
+  badge.textContent = incident ? (incidentCount > 99 ? "99+" : String(incidentCount)) :
+    task ? (taskCount > 99 ? "99+" : String(taskCount)) : "";
+  button.setAttribute("aria-label", incident
+    ? "More navigation: " + incidentCount + " unresolved incidents"
+    : task ? "More navigation: " + taskCount + (taskCountExact ? "" : " or more") + " open tasks"
+      : "More navigation");
+}
+
 function paintIncidentBadge() {
-  const slot = document.querySelector('#topnav .nav-badge[data-badge="incidents"]');
-  if (!slot) return;
-  slot.hidden = incidentCount === 0;
-  // A four-digit pill would push the nav around; past 999 the exact number does not
-  // change what an operator does next.
-  slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
-  slot.title = incidentCount === 1
-    ? "1 token is parked behind an unresolved incident"
-    : `${incidentCount} tokens are parked behind unresolved incidents`;
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="incidents"]')) {
+    slot.hidden = incidentCount === 0;
+    slot.textContent = incidentCount > 999 ? "999+" : String(incidentCount);
+    slot.title = incidentCount === 1
+      ? "1 token is parked behind an unresolved incident"
+      : String(incidentCount) + " tokens are parked behind unresolved incidents";
+  }
+  paintMobileWorkBadge();
 }
 
-// refreshIncidentBadge re-reads the count. The incidents table calls it straight
-// after a resolve, so the nav agrees at once instead of waiting out the interval.
+function paintTaskBadge() {
+  for (const slot of document.querySelectorAll('.nav-badge[data-badge="tasks"]')) {
+    slot.hidden = taskCount === null || taskCount === 0;
+    slot.textContent = taskCount > 999 ? "999+" : String(taskCount) + (taskCountExact ? "" : "+");
+    slot.title = taskCountExact ? String(taskCount) + " open tasks" : "At least " + taskCount + " open tasks";
+  }
+  paintMobileWorkBadge();
+}
+
+// An operator may see incident statistics, while a task user may see the inbox.
+// Never request either solely because another role could see it.
 async function refreshIncidentBadge() {
-  let stats;
-  try { stats = await api("GET", "/api/v1/stats"); }
-  catch { return; } // transient; the badge keeps its last value
-  incidentCount = (stats && stats.unresolvedIncidents) || 0;
-  paintIncidentBadge();
+  if (!watchIncidents || document.hidden) return;
+  const generation = navGen;
+  try {
+    const stats = await api("GET", "/api/v1/stats");
+    if (generation !== navGen || !watchIncidents || document.hidden) return;
+    incidentCount = (stats && stats.unresolvedIncidents) || 0;
+    paintIncidentBadge();
+  } catch { /* preserve the last confirmed value across transient errors */ }
 }
 
+async function refreshWorkStatus() {
+  if (document.hidden || workPollBusy || (!watchTasks && !watchIncidents)) return;
+  workPollBusy = true;
+  const generation = navGen;
+  try {
+    const checks = [];
+    if (watchTasks) checks.push(api("GET", "/api/v1/tasks?limit=50").then((page) => {
+      if (generation !== navGen || !watchTasks || document.hidden) return;
+      const items = (page && page.items) || [];
+      const exact = !!(page && page.totalExact);
+      taskCount = exact && Number.isFinite(page.total) ? page.total : items.length;
+      taskCountExact = exact;
+      paintTaskBadge();
+      const fingerprint = JSON.stringify([page && page.total, page && page.truncated,
+        items.map((t) => [t.key, t.assignee, t.candidateGroups, t.name, t.dueDate, t.priority])]);
+      if (taskFingerprint !== null && fingerprint !== taskFingerprint) {
+        document.dispatchEvent(new Event("atlas:tasks-changed"));
+      }
+      taskFingerprint = fingerprint;
+    }).catch(() => { /* a failed read is not proof that tasks disappeared */ }));
+    if (watchIncidents) checks.push(refreshIncidentBadge());
+    await Promise.all(checks);
+  } finally {
+    workPollBusy = false;
+  }
+}
+
+// Called on every route change. A single interval follows the authenticated,
+// role-filtered shell; the foreground event catches tasks arriving while Safari
+// suspended a background tab. On leaving a work surface, stop its reads.
 function syncIncidentBadge(appId) {
-  if (appId !== "operations") {
-    if (incidentBadgeTimer) { clearInterval(incidentBadgeTimer); incidentBadgeTimer = null; }
+  const phone = window.matchMedia("(max-width: 860px)").matches;
+  const identity = AUTH.enabled ? String(AUTH.user?.id || AUTH.user?.username || "") : "auth-off";
+  if (identity !== workPollIdentity) {
+    workPollIdentity = identity;
+    taskCount = null;
+    incidentCount = 0;
+    taskFingerprint = null;
+  }
+  watchTasks = mayUse("user") && (appId === "tasks" || phone);
+  watchIncidents = mayUse("operator") && (appId === "operations" || phone);
+  if (AUTH.enabled && !AUTH.user) { watchTasks = false; watchIncidents = false; }
+  paintIncidentBadge();
+  paintTaskBadge();
+  if (!watchTasks && !watchIncidents) {
+    if (workPollTimer) clearInterval(workPollTimer);
+    workPollTimer = null;
+    workPollPeriod = 0;
     return;
   }
-  paintIncidentBadge(); // the freshly rendered nav starts from what we already know
-  refreshIncidentBadge();
-  if (!incidentBadgeTimer) incidentBadgeTimer = setInterval(refreshIncidentBadge, INCIDENT_BADGE_INTERVAL);
+  const period = phone ? WORK_POLL_INTERVAL :
+    appId === "operations" ? LEGACY_OPERATIONS_POLL_INTERVAL : WORK_POLL_INTERVAL;
+  if (workPollTimer && workPollPeriod !== period) {
+    clearInterval(workPollTimer);
+    workPollTimer = null;
+  }
+  workPollPeriod = period;
+  refreshWorkStatus();
+  if (!workPollTimer) workPollTimer = setInterval(refreshWorkStatus, period);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshWorkStatus();
+});
+window.addEventListener("focus", () => { if (!document.hidden) refreshWorkStatus(); });
 
 // paintApps fills the drawer with the apps this person may use. It runs at boot,
 // before /auth/me has answered — when nothing is known and everything is offered —
@@ -1449,10 +1556,72 @@ function paintApps() {
   // a span here: it is presentation, it must not join the link's accessible name,
   // and a glyph inside the text would change what every test reading this menu
   // sees for a reason that has nothing to do with them.
-  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) =>
-    `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
-    `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`
-  ).join("");
+  // Apps of one suite sit under its name, once, above the first of them: the
+  // catalogue and the shop are the Marketplace (tshopper phase A,
+  // ADR-0515), and saying so in the drawer is
+  // what tells a person the two belong together. The caption is not a link and not
+  // part of any link's name.
+  let suite = "";
+  nav.innerHTML = APPS.filter((a) => offered(a)).map((a) => {
+    const head = a.suite && a.suite !== suite ? `<div class="app-suite" aria-hidden="true">${a.suite}</div>` : "";
+    suite = a.suite || "";
+    return head +
+      `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
+      `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
+  }).join("");
+}
+
+// Phone navigation uses the same role-filtered TOPNAV, not a mobile-only access
+// policy. The work links remain available on every app, and nonessential chrome
+// actions live behind a single thumb-sized control.
+function paintMobileMenu(appId, route) {
+  const wrap = document.getElementById("mobile-more");
+  const menu = document.getElementById("mobile-more-menu");
+  if (!wrap || !menu) return;
+  wrap.hidden = false;
+  menu.hidden = true;
+  document.getElementById("mobile-more-btn")?.setAttribute("aria-expanded", "false");
+  menu.replaceChildren();
+  const seen = new Set();
+  const addLink = (entry) => {
+    if (!entry.route || seen.has(entry.route) || !offered(entry)) return;
+    seen.add(entry.route);
+    const link = document.createElement("a");
+    link.href = entry.route;
+    link.setAttribute("role", "menuitem");
+    if (entry.separate) { link.target = "_blank"; link.rel = "noopener"; }
+    if (route === entry.route) link.setAttribute("aria-current", "page");
+    link.textContent = entry.name;
+    if (entry.badge) {
+      const count = document.createElement("span");
+      count.className = "nav-badge";
+      count.dataset.badge = entry.badge;
+      count.hidden = true;
+      link.append(count);
+    }
+    menu.append(link);
+  };
+  if (mayUse("user")) addLink({ name: "My tasks", route: "#/tasks", badge: "tasks" });
+  if (mayUse("operator")) addLink({ name: "Start process", route: "#/tasks/start" });
+  if (mayUse("operator")) addLink({ name: "Incidents", route: "#/operations/incidents", badge: "incidents" });
+  for (const entry of (TOPNAV[appId] || [])) {
+    if (entry.items) entry.items.forEach(addLink);
+    else addLink(entry);
+  }
+  const separator = document.createElement("div");
+  separator.className = "sep";
+  separator.setAttribute("role", "separator");
+  menu.append(separator);
+  for (const [name, action] of [["Search processes", "search"], ["Switch appearance", "appearance"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "menuitem");
+    button.dataset.mobileAction = action;
+    button.textContent = name;
+    menu.append(button);
+  }
+  addLink({ name: "Display settings", route: "#/console/settings" });
+  addLink({ name: "Help", route: "/handbuch.html" });
 }
 
 function setChrome(appId, route) {
@@ -1490,6 +1659,7 @@ function setChrome(appId, route) {
     const bar = topnav.getBoundingClientRect(), link = current.getBoundingClientRect();
     topnav.scrollLeft += link.left - bar.left - (bar.width - link.width) / 2;
   }
+  paintMobileMenu(appId, route);
   syncIncidentBadge(appId); // the nav says how many tokens are stuck, before anything is opened
   document.querySelectorAll("#drawer-apps a").forEach((a) =>
     a.classList.toggle("active", a.dataset.app === appId));
@@ -1668,12 +1838,15 @@ function paintReleaseNotes(slot, lang) {
   const t = RN_STRINGS[lang] || RN_STRINGS.en;
   const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
   const hidden = rn.index.length - shown.length;
+  // The card folds under its heading like every topic (fold.js), remembered as
+  // "release-notes" whatever the language; each release inside it is a <details> of
+  // its own, opened to load its changes.
   slot.innerHTML =
-    `<div class="card release-notes"><details class="rn-root" open>` +
-    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="card release-notes" data-fold="release-notes">` +
+    `<div class="rn-head"><h2 class="rn-title">${esc(t.title)}</h2></div>` +
     `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
     (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
-    `</details></div>`;
+    `</div>`;
 
   // A release loads its changes the first time it is opened.
   slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
@@ -1750,6 +1923,15 @@ async function viewConsoleDashboard() {
     <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // These slots are filled after the route has folded the view, each when its module's
+  // answer arrives, and the storage card, the release notes and the key features are
+  // redrawn in place (a checkpoint, a language, older releases); a watch on each slot's
+  // own children folds what lands in it (fold.js), whenever it lands.
+  for (const id of ["storage-alert-slot", "catalogue-stranded-slot", "api-tokens-expiring-slot",
+    "approvals-waiting-slot", "storage-card-slot", "release-notes-slot", "key-features-slot"]) {
+    const slot = document.getElementById(id);
+    new MutationObserver(() => foldCards(slot, pageOf(location.hash))).observe(slot, { childList: true });
+  }
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
@@ -2162,9 +2344,12 @@ async function viewConsoleAudit() {
 // authentication enabled both endpoints are admin-only.
 async function viewConsoleBackup() {
   const gen = navGen;
+  // Two topics under one title, each a card headed by its <h2> so it folds (fold.js):
+  // the design-time archive, and the whole-instance snapshot.
   view.innerHTML = `
-    <div class="card">
-      <h1>Backup &amp; restore</h1>
+    <h1>Backup &amp; restore</h1>
+    <div class="card" id="backup-design">
+      <h2>Design-time data</h2>
       <p class="muted">Download a single archive of your design-time data — projects, drafts,
       deployments, forms, decisions, workers — to keep or move to another instance.
       User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
@@ -2183,8 +2368,8 @@ async function viewConsoleBackup() {
       <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
     </div>
 
-    <div class="card" style="margin-top:16px">
-      <h1>Full snapshot</h1>
+    <div class="card" id="backup-full" style="margin-top:16px">
+      <h2>Full snapshot</h2>
       <p class="muted">A whole-instance snapshot for disaster recovery or migration: it also captures the
       <strong>WAL — every running instance</strong> — plus user accounts and the vault key, so a restore
       reconstitutes a complete, immediately-usable engine elsewhere. The derivable state store is rebuilt
@@ -4032,6 +4217,9 @@ function renderAppConstants(id) {
     intro: tr("constants.app.intro"),
     none: tr("constants.app.none"),
     held: tr("constants.app.held"),
+    // The tab's two lists fold under their headings, as the Deployments tab's do; on
+    // Admin → Engine they are parts of a card that folds as a whole.
+    fold: true,
   });
 }
 
@@ -4097,14 +4285,21 @@ async function renderHeldConstants(host, o) {
       <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="${esc(tr("constants.removeTitle"))}" aria-label="${esc(tr("constants.remove"))}">✕</button>` : ""}</td>
     </tr>`;
 
+  // A heading either folds what follows it (sectionHead, closed by the </div> after
+  // the part) or is a plain part heading inside a card that folds as a whole.
+  const partHead = (key, title, count, style) => o.fold
+    ? sectionHead(`${p}-sec-${key}`, esc(title), count) + sectionBody(`${p}-sec-${key}`)
+    : `<h3 style="${style}">${esc(title)}</h3>`;
+  const partEnd = o.fold ? "</div>" : "";
   host.innerHTML = `
     <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
-    <h3 style="margin:6px 0">${esc(tr("constants.required"))}</h3>
+    ${partHead("required", tr("constants.required"), trPlural("constants.count", view.required.length), "margin:6px 0")}
     ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
         <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.processes"))}</th><th>${esc(tr("constants.th.here"))}</th></tr></thead>
         <tbody>${reqRows}</tbody></table></div>`
       : `<p class="muted">${esc(o.none)}</p>`}
-    <h3 style="margin:16px 0 6px">${esc(o.held)}</h3>
+    ${partEnd}
+    ${partHead("held", o.held, trPlural("constants.count", view.constants.length), "margin:16px 0 6px")}
     <div class="card" style="padding:0"><table id="${p}-table">
       <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.value"))}</th><th></th></tr></thead>
       <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
@@ -4116,7 +4311,9 @@ async function renderHeldConstants(host, o) {
       : `<p class="muted" style="margin-top:8px">${esc(tr("constants.adminOnly"))}</p>`}
     ${view.updatedAt ? `<p class="muted" style="font-size:12px">${esc(view.updatedBy
       ? tr("constants.lastChangedBy", { at: fmtTime(view.updatedAt), who: view.updatedByName || view.updatedBy })
-      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}`;
+      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}
+    ${partEnd}`;
+  if (o.fold) wireSections(host);
   if (!canEdit) return;
 
   const tbody = host.querySelector(`#${p}-rows`);
@@ -7489,7 +7686,7 @@ async function viewWorkers() {
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
     <div class="card wk-card" id="wk-breakers" hidden></div>
-    <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
+    <div class="card wk-card" id="wk-types" data-fold-default="closed"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
@@ -7529,16 +7726,6 @@ async function viewWorkers() {
   // lease is five minutes, so anything beyond it has let its work go back on offer.
   const STALE_MS = 5 * 60 * 1000;
   const isStale = (w) => w.lastSeen && Date.now() - w.lastSeen / 1e6 > STALE_MS;
-
-  // Whether the job-type table is unfolded. Default closed: the page's question is
-  // "is anything unserved?", which the summary answers, and the table is the detail
-  // behind it. try/catch because a locked-down browser can make storage throw.
-  const typesOpen = () => {
-    try { return localStorage.getItem("atlas.workers.types") === "1"; } catch { return false; }
-  };
-  const setTypesOpen = (open) => {
-    try { localStorage.setItem("atlas.workers.types", open ? "1" : "0"); } catch { /* not storable */ }
-  };
 
   const servedBy = (row, pullers) => {
     if (row.servedInProcess) {
@@ -7592,16 +7779,18 @@ async function viewWorkers() {
     const unserved = typeRows.filter(
       (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);
 
+    // The job-type table folds like every card here, but starts folded
+    // (data-fold-default): the page's question is "is anything unserved?", which the
+    // heading row answers, and the table is the detail behind it.
     types.innerHTML = `
-      <details class="wk-fold" id="wk-types-fold"${typesOpen() ? " open" : ""}>
-      <summary class="wk-head">
-        <b><span class="wk-caret" aria-hidden="true">&#9656;</span> Job types</b>
+      <div class="wk-head">
+        <h2>Job types</h2>
         <span class="muted small">${typeRows.length} shown${unserved.length
           ? ` &middot; <span class="wk-unserved" title="${esc(`${unserved.length} job type${unserved.length === 1
             ? " has" : "s have"} work queued and nothing pulling it`)}">${unserved.length} unserved</span>` : ""}${
           idleBuiltIns.length ? ` &middot; <a href="#" id="wk-toggle-all">${showAllTypes
             ? "hide" : "show"} ${idleBuiltIns.length} idle built-in${idleBuiltIns.length === 1 ? "" : "s"}</a>` : ""}</span>
-      </summary>
+      </div>
       ${typeRows.length ? `<table data-dt-key="wk-types">
         <thead><tr>
           <th>Type</th><th>Served by</th>
@@ -7628,12 +7817,11 @@ async function viewWorkers() {
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
       <p class="wk-note">An <b>in-process</b> type is worked by atlas itself and cannot be leased from
-        outside; relocating it to a worker means turning that handler off.</p>
-      </details>`;
+        outside; relocating it to a worker means turning that handler off.</p>`;
 
     workers.innerHTML = `
       <div class="wk-head">
-        <b>Workers</b>
+        <h2>Workers</h2>
         <span class="muted small">${workerRows.length} seen this run</span>
       </div>
       ${workerRows.length ? `<table data-dt-key="wk-workers">
@@ -7828,7 +8016,7 @@ async function viewWorkers() {
     if (collided.length) {
       collisions.hidden = false;
       collisions.innerHTML = `
-        <div class="wk-head"><b>Job types on an index a built-in has taken</b>
+        <div class="wk-head"><h2>Job types on an index a built-in has taken</h2>
           <span class="muted small">${collided.length} type${collided.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Job type</th><th class="wk-num">Index</th><th>That index now means</th></tr></thead>
@@ -7857,7 +8045,7 @@ async function viewWorkers() {
     if (held.length) {
       breakers.hidden = false;
       breakers.innerHTML = `
-        <div class="wk-head"><b>Held back</b>
+        <div class="wk-head"><h2>Held back</h2>
           <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
@@ -7912,7 +8100,7 @@ async function viewWorkers() {
     if (missing.length) {
       gaps.hidden = false;
       gaps.innerHTML = `
-        <div class="wk-head"><b>Workers nothing can serve</b>
+        <div class="wk-head"><h2>Workers nothing can serve</h2>
           <span class="muted small">${missing.length} name${missing.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Worker type</th><th>Used by</th></tr></thead>
@@ -7943,7 +8131,7 @@ async function viewWorkers() {
     if (sup.length) {
       supervised.hidden = false;
       supervised.innerHTML = `
-        <div class="wk-head"><b>Supervised by this server</b>
+        <div class="wk-head"><h2>Supervised by this server</h2>
           <span class="muted small">${sup.length} process${sup.length === 1 ? "" : "es"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Serves</th><th>State</th><th class="wk-num">PID</th>
@@ -7985,12 +8173,14 @@ async function viewWorkers() {
 
     const toggle = document.getElementById("wk-toggle-all");
     if (toggle) {
-      // The link sits inside the <summary>, where a click would also fold the card.
-      toggle.onclick = (e) => { e.preventDefault(); e.stopPropagation(); showAllTypes = !showAllTypes; load(); };
+      // The link sits in the card's heading row; on a folded card, fold.js opens the
+      // card before it acts, so the rows it asks for are shown.
+      toggle.onclick = (e) => { e.preventDefault(); showAllTypes = !showAllTypes; load(); };
     }
-    const fold = document.getElementById("wk-types-fold");
-    if (fold) fold.addEventListener("toggle", () => setTypesOpen(fold.open));
     enhanceViewTables();
+    // A card that was empty when the route folded the view (no breaker held, every
+    // name served) gets its heading on a later Refresh, and only this finds it then.
+    foldCards(view, pageOf(location.hash));
   };
 
   document.getElementById("refresh").onclick = load;
@@ -8275,23 +8465,21 @@ async function viewADMockDirectory() {
   const renderWorker = (w) => {
     const forests = w.forests || [];
     const ops = w.operations || [];
-    // The whole worker is one collapsible card: a mockup run against several forests
-    // is a lot of screen, and an operator watching two workers wants to put one away
-    // without losing it. Open by default — a card you have to open to learn there is
-    // anything in it is the state this view exists to end.
-    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="admock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
-            ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
-          </span>
+    // The whole worker is one card that folds under its heading (fold.js), remembered
+    // by the worker's name: a mockup run against several forests is a lot of screen, and
+    // an operator watching two workers wants to put one away without losing it. Open by
+    // default — a card you have to open to learn there is anything in it is the state
+    // this view exists to end.
+    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
+          ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${forests.length ? forests.map(renderForest).join("")
           : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
              no Active Directory task since it started — the first one creates the forest it names.</p>`}
@@ -8300,7 +8488,6 @@ async function viewADMockDirectory() {
             <th>${esc(o.op || "")}</th>
             <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
           </tr>`).reverse().join("")}</tbody></table></details>` : ""}
-      </details>
     </div>`;
   };
 
@@ -8354,6 +8541,8 @@ async function viewADMockDirectory() {
     }
     list.innerHTML = workers.map(renderWorker).join("");
     refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8431,46 +8620,26 @@ async function viewSQLMockJournal() {
   const renderWorker = (w) => {
     const sts = w.statements || [];
     const failed = sts.filter((s) => s.failed).length;
-    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="sqlmock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
-            ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
-              failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
-          </span>
+    // One card per worker, folding under its heading (fold.js) and remembered by the
+    // worker's name, so a refresh does not reopen what somebody closed.
+    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
+          ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
+            failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${w.truncated ? `<p class="muted">Showing the newest ${sts.length} of ${w.held} — a run this
           long is past what this view carries.</p>` : ""}
         ${sts.length
           ? `<table class="admock-attrs sqlmock-table"><tbody>${sts.map(renderStatement).join("")}</tbody></table>`
           : `<p class="empty">Nothing asked yet. This worker is in mockup mode and has served no
              database task since it started.</p>`}
-      </details>
     </div>`;
-  };
-
-  // Which cards the reader has put away, addressed by worker rather than by position —
-  // a refresh must not reopen what somebody closed.
-  const keyOf = (d) => {
-    const w = d.closest("[data-worker]");
-    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
-  };
-  const foldState = () => {
-    const state = new Map();
-    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
-    return state;
-  };
-  const refold = (state) => {
-    for (const d of list.querySelectorAll("details")) {
-      const was = state.get(keyOf(d));
-      if (was !== undefined) d.open = was;
-    }
   };
 
   // The last payload rendered. A poll that brings nothing new leaves the DOM alone: the
@@ -8488,7 +8657,6 @@ async function viewSQLMockJournal() {
     }
     const fresh = JSON.stringify(data);
     if (fresh === rendered) return;
-    const folds = foldState();
     rendered = fresh;
     const workers = (data && data.workers) || [];
     if (!workers.length) {
@@ -8499,7 +8667,8 @@ async function viewSQLMockJournal() {
       return;
     }
     list.innerHTML = workers.map(renderWorker).join("");
-    refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8540,8 +8709,10 @@ async function viewMockups() {
     <div id="spmock-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("spmock-list");
 
-  // Folds are remembered by worker and section, both ways, so a refresh neither reopens
-  // what somebody closed nor closes what they opened.
+  // A card folds under its heading (fold.js), remembered by its worker. The sections
+  // inside it — a list, the operations — are remembered here by worker and section,
+  // both ways, so a refresh neither reopens what somebody closed nor closes what they
+  // opened.
   const keyOf = (d) => {
     const w = d.closest("[data-worker]");
     return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
@@ -8574,12 +8745,14 @@ async function viewMockups() {
     rendered = fresh;
     list.innerHTML = mockupsHTML(data);
     refold(folds);
+    foldCards(list, pageOf(location.hash));
   };
 
   list.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-spmock-clear]");
     if (!btn) return;
-    // The button sits in the card's summary; without this the click would also fold it.
+    // The button sits in the card's heading row; on a folded card fold.js opens the card
+    // before this runs, so what it empties is in view.
     e.preventDefault();
     const worker = btn.dataset.spmockClear;
     if (!confirm(`Empty the mockup site of ${worker}? Its lists, libraries and journal are gone; nothing outside this server is touched.`)) return;
@@ -8907,6 +9080,24 @@ const wizardHistory = {
 // then less often, for about two minutes in all.
 const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
+// MFE1: offer both primary work destinations without inventing a mobile router.
+// Start remains operator-only (ADR-0209); mobile navigation must use the same
+// role predicate as the desktop top bar, not a separate authorisation rule.
+// On task selection the list pane (and this navigation) hides on narrow screens,
+// so following a Start link cannot silently discard an in-progress form draft.
+function mobileWorkEntryHTML(active) {
+  const tasksCurrent = active === "tasks" ? ' aria-current="page"' : "";
+  const startCurrent = active === "start" ? ' aria-current="page"' : "";
+  return `<nav class="mfe-entry" aria-label="${esc(tr("mfe.navigation"))}">
+    ${offered({ role: "user" })
+      ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
+      : ""}
+    ${offered({ role: "operator" })
+      ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
+      : ""}
+  </nav>`;
+}
+
 async function viewTasks(preselectKey) {
   // With auth on, identity is the signed-in user (server-authoritative); with auth
   // off it stays a typed, display-only identity (ADR-0045).
@@ -8944,6 +9135,7 @@ async function viewTasks(preselectKey) {
     mountedForm: null, // the live form-js viewer instance for the selected task, if any
     mountedLookups: null, // the searches attached to its directory fields, if any
     mountedProc: null, // the read-only process-view handle for the selected task, if mounted
+    receipt: null, // mobile-only receipt after a server-confirmed task completion
     detailTab: "form", // which detail tab shows — "form" | "process" (kept across selections)
     query: "", // free-text filter over the visible tasks (name/process/assignee/…)
     sort: localStorage.getItem("atlas.tasks.sort") || "smart", // sort key, see SORTS
@@ -8988,6 +9180,8 @@ async function viewTasks(preselectKey) {
         <nav id="task-folder-nav"></nav>
       </aside>
       <section class="tasks-list-pane">
+        <div class="mfe-completion" role="status" aria-live="polite" tabindex="-1" hidden></div>
+        ${mobileWorkEntryHTML("tasks")}
         <header class="tasks-list-head">
           <h2 id="task-list-title">All tasks</h2>
           <button class="btn ghost small" id="task-select" title="Select multiple tasks to act on them together">Select</button>
@@ -9377,6 +9571,9 @@ async function viewTasks(preselectKey) {
   // into its place (auto-advance), so an operator can clear a queue without
   // reaching for the mouse between tasks. Bound to the button and Ctrl/⌘+Enter.
   async function completeCurrent() {
+    // Ctrl/⌘+Enter invokes this handler independently of the button's disabled
+    // state. A still-pending completion must not send a duplicate command.
+    if (document.getElementById("task-complete")?.disabled) return;
     const t = state.tasks.find((x) => x.key === state.selected);
     if (!t) return;
     if (decidedHere(t)) {
@@ -9461,6 +9658,17 @@ async function viewTasks(preselectKey) {
       // slot of the queue (ADR-0449).
       if (res && res.wizard && followWizard(res.wizard, t)) {
         renderAll();
+        return;
+      }
+      if (window.matchMedia("(max-width: 860px)").matches) {
+        // On a phone auto-advancing to the next detail would hide the confirmation
+        // behind the selected pane. Return to the inbox instead: the server has
+        // acknowledged completion and the person can now choose the next task.
+        // This is an in-memory receipt, not a replacement event or a claim about
+        // an unconfirmed offline action.
+        state.receipt = { name: taskTitle(t) };
+        renderAll();
+        document.querySelector(".mfe-completion")?.focus();
         return;
       }
       const after = visible();
@@ -10053,6 +10261,7 @@ async function viewTasks(preselectKey) {
       state.selected = null;
       renderList();
       renderDetail();
+      if (refreshPending) refreshInboxSafely();
     });
     document.getElementById("task-claim").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -10122,7 +10331,25 @@ async function viewTasks(preselectKey) {
     if (next === "process" && t && !state.mountedProc) mountProc(t);
   }
 
+  function renderMobileReceipt() {
+    const el = document.querySelector(".mfe-completion");
+    if (!el) return;
+    if (!state.receipt) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML = `<span>${esc(tr("mfe.completed", { task: state.receipt.name }))}</span>
+      <button type="button" class="btn ghost small" aria-label="${esc(tr("mfe.dismiss"))}">${esc(tr("mfe.dismiss"))}</button>`;
+    el.querySelector("button").addEventListener("click", () => {
+      state.receipt = null;
+      renderMobileReceipt();
+    });
+  }
+
   function renderAll() {
+    renderMobileReceipt();
     renderFolders();
     renderTrunc();
     renderList();
@@ -10147,7 +10374,7 @@ async function viewTasks(preselectKey) {
     if (older) older.addEventListener("click", loadOlder);
   }
 
-  async function load() {
+  async function load({ passive = false } = {}) {
     try {
       // The list is capped and newest-first; the response says so in `truncated` and
       // hands back `nextCursor` for paging to older tasks (see loadOlder). Reading it
@@ -10155,6 +10382,7 @@ async function viewTasks(preselectKey) {
       // has to know to ask for, and this one went unread for years
       // (ADR-0378).
       const [page, names] = await Promise.all([api("GET", "/api/v1/tasks?content=1"), peopleNames()]);
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       state.names = names;
       state.tasks = (page && page.items) || [];
       state.truncated = !!(page && page.truncated);
@@ -10175,6 +10403,7 @@ async function viewTasks(preselectKey) {
       // Before the first paint, so a row is never drawn unmarked and then relabelled
       // under somebody's eyes.
       await loadApprovalKeys();
+      if (passive && (state.selected != null || state.selectMode || state.picked.size)) return;
       openLinkedApproval();
       renderAll();
       // Every mutation in this view (complete, claim, a bulk action) reloads through
@@ -10400,6 +10629,31 @@ async function viewTasks(preselectKey) {
   };
   document.addEventListener("keydown", onTasksKey, true);
 
+  // Background snapshots can arrive while the user is typing into a form.
+  // Only repaint a list with no selected task; keep the pending update until
+  // Back to the list is pressed. Never re-mount a selected form-js instance.
+  let refreshPending = false;
+  let refreshingInbox = false;
+  async function refreshInboxSafely() {
+    if (!refreshPending || refreshingInbox || document.hidden || state.selected != null ||
+        state.wizardWait || state.selectMode || state.picked.size) return;
+    refreshPending = false;
+    refreshingInbox = true;
+    try { await load({ passive: true }); }
+    finally {
+      refreshingInbox = false;
+      if (refreshPending) refreshInboxSafely();
+    }
+  }
+  const onTasksChanged = () => { refreshPending = true; refreshInboxSafely(); };
+  document.addEventListener("atlas:tasks-changed", onTasksChanged);
+  const existingCleanup = window.__atlasCleanup;
+  window.__atlasCleanup = () => {
+    document.removeEventListener("atlas:tasks-changed", onTasksChanged);
+    document.removeEventListener("keydown", onTasksKey, true);
+    if (existingCleanup) existingCleanup();
+  };
+
   await loadAssignable();
   await load();
   await loadFolderList();
@@ -10418,6 +10672,7 @@ async function viewStartProcess() {
   view.innerHTML = `
     <div class="tasks" id="start-grid">
       <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("start")}
         <header class="tasks-list-head"><h2>Start a process</h2>
           <button class="btn ghost small" id="start-refresh" title="Reload the list of startable processes">Refresh</button></header>
         <div class="tasks-toolbar">
@@ -11058,8 +11313,9 @@ async function viewDataInstances() {
         : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modelled</span>`}`
       : `<span class="do-class none">untyped</span><span class="im-unresolved"
            title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
-    return `<div class="card" style="padding:0; margin-top:16px">
-      <div class="im-group-head">${head}<span class="muted">${items.length}
+    // Each type's card folds under its heading (fold.js), remembered by the type.
+    return `<div class="card" style="padding:0; margin-top:16px" data-fold="${esc(type || "-untyped")}">
+      <div class="im-group-head"><h2>${head}</h2><span class="muted">${items.length}
         ${items.length === 1 ? "object" : "objects"}</span></div>
       <div class="im-groups">${identityBlock(items)}</div>
     </div>`;
@@ -11826,6 +12082,7 @@ async function route() {
     document.getElementById("app-name").textContent = "atlas";
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
+    document.getElementById("mobile-more").hidden = true;
     syncIncidentBadge(""); // the login screen has no nav to badge, and must not poll
     stopPresence(); // and nobody to be present: a logged-out tab reports nothing
     updateAccount();
@@ -11889,6 +12146,15 @@ async function route() {
       const gen = navGen;
       const { viewEvents } = await import("./events.js");
       return await viewEvents({ api, view, isSuperseded: () => superseded(gen) });
+    }
+    if (path === "#/catalog/reporting") {
+      const { viewDeliveryReport } = await import("./deliveryreport.js");
+      return viewDeliveryReport({ api, view });
+    }
+    if (path === "#/catalog/building-blocks") {
+      const gen = navGen;
+      const { viewBuildingBlocks } = await import("./buildingblocks.js");
+      return await viewBuildingBlocks({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/catalog") {
       const gen = navGen;
@@ -11989,7 +12255,20 @@ async function route() {
     const tk = path.match(/^#\/tasks\/t\/(\d+)$/);
     if (tk) return await viewTasks(Number(tk[1]));
     if (path === "#/operations") return await viewInstances();
-    if (path === "#/operations/incidents") return await viewIncidents();
+    if (path === "#/operations/incidents") {
+      // MFE2: a bounded, read-only cause-first view on phones and tablets.
+      // Desktop Operations retains all its existing remediation controls.
+      if (window.matchMedia("(max-width: 800px), (max-width: 1100px) and (pointer: coarse)").matches) {
+        const gen = navGen;
+        const { viewMobileIncidentTriage } = await import("./mfe2-triage.js");
+        if (superseded(gen)) return;
+        return await viewMobileIncidentTriage({
+          api, view, t: tr, fmtRaised, canOperate: mayUse("operator"),
+          isSuperseded: () => superseded(gen),
+        });
+      }
+      return await viewIncidents();
+    }
     if (path === "#/operations/workers") return await viewWorkers();
     if (path === "#/operations/outbox") return await viewMailOutbox();
     if (path === "#/operations/messages") return await viewBufferedMessages();

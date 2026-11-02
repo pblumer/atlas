@@ -140,6 +140,13 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill element-token index: %w", err)
 	}
+	// MI history was introduced after the existing replay trail. Only a
+	// provably empty store may advertise the v1 projection as complete;
+	// an upgraded store retains an absent marker until audited migration.
+	if err := s.initializeMIHistoryIndexReadiness(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: MI history index readiness: %w", err)
+	}
 	return s, nil
 }
 

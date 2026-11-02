@@ -33,7 +33,10 @@ func (t *Tx) readInto(key []byte, dst model.Value) (bool, error) {
 type Tx struct {
 	b       *pebble.Batch
 	store   *Store
-	scratch []byte // reused value-encode buffer; Pebble copies on Set
+	scratch []byte                   // reused value-encode buffer; Pebble copies on Set
+	miKey   [33]byte                 // reusable MI index key, including the longest iteration key
+	miValue [miHistoryValueSize]byte // reusable fixed-width lifecycle projection
+	miRef   [16]byte                 // reusable body and round reverse references
 }
 
 // Commit applies the transaction. It does not fsync: durability is the WAL's
@@ -551,7 +554,9 @@ func (t *Tx) PurgeInstanceHistory(piKey, procDefKey uint64, purgeDueDate int64) 
 	// therefore never reach it, which is an explicit amendment to ADR-0115 and
 	// ADR-0144 (see ADR-0312) and is held by a
 	// test rather than by this comment.
-	return nil
+	// MI history may contain tens of thousands of rounds: range tombstones avoid
+	// one key allocation/delete per iteration on the single writer (ADR-0517).
+	return t.purgeMIIndexHistory(piKey)
 }
 
 // --- MessageSubscription ---

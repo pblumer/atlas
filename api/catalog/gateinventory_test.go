@@ -77,6 +77,8 @@ var catalogGates = []handlerGate{
 		why: "reports only on products whose home the caller maintains, by the same lookup as the listing above; the outsider case is an empty report, proved in TestTheApproverReportFollowsTheHomeCatalogue"},
 	{name: "HandleFulfilmentReport", kind: ungated, method: "GET",
 		why: "reports only on the releases of catalogues the caller may edit, by the same mayEdit the report above uses; the outsider case is an empty report, proved in TestTheFulfilmentReportFollowsTheCatalogueYouMaintain"},
+	{name: "HandleBuildingBlocks", kind: ungated, method: "GET",
+		why: "searches a content source and names only products whose home the caller maintains; others are counted, never named, proved in TestBuildingBlocksAreTheWikiWithWhatUsesIt"},
 	{name: "HandleTranslationGaps", kind: ungated, method: "GET",
 		why: "reports only on catalogues the caller may edit, by the same mayEdit the two reports above use; the outsider case is an empty report, proved in TestTheTranslationReportFollowsTheCatalogueYouMaintain"},
 	{name: "HandleSaveItem", kind: gated, want: http.StatusNotFound, method: "POST",

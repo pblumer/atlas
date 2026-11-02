@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
+	"github.com/pblumer/atlas/api/startgrant"
 	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
@@ -106,6 +107,7 @@ import (
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/releasenotes"
+	"github.com/pblumer/atlas/api/servicereport"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/api/workerquery"
@@ -322,6 +324,7 @@ type Server struct {
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
+	startGrants         *startgrant.Store // ADR-0516, run-loop owned; never accessed by engine
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
@@ -373,6 +376,9 @@ type Server struct {
 	// area service on the ADR-0147 shape: its own store, the run loop for every
 	// access, no engine state anywhere.
 	catalogs *catalog.Service
+	// reports answers the delivery report and the reports that name people
+	// (ADR-0515), reaching the engine through api/shopcontract only.
+	reports *servicereport.Service
 	// orders serves the portal's orders: what somebody asked for, against one
 	// frozen catalogue release.
 	orders *order.Service
@@ -1605,6 +1611,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	startGrants, err := startgrant.NewStore(filepath.Join(dataDir, "start-grants"))
+	if err != nil {
+		return nil, err
+	}
 	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
 	if err != nil {
 		return nil, err
@@ -1791,6 +1801,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
+		startGrants:       startGrants,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
@@ -1917,6 +1928,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// what may start next. Publishing runs the processor, which is a visit to the
 	// loop of its own — so the order service calls this outside its own closure.
 	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.reports = &servicereport.Service{
+		Now: func() int64 { return s.now() }, Catalogs: catalogStore.Catalogs, ReleasesOf: catalogStore.ReleasesOf,
+		MayEdit: s.catalogs.MayEdit, Orders: orderStore.All,
+		Inventory: shopInventory{s}, Directory: shopDirectory{s},
+		NameOf: s.principalNamer, Audit: auditNamesRead,
+	}
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
 		// Which groups the recipient is in, for the eligibility check

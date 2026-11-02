@@ -28,6 +28,8 @@ import (
 var catalogueSegments = map[string]bool{
 	"catalogs":         true,
 	"catalog-products": true,
+	// The wiki's services as building blocks (tshopper phase A, ADR-0515).
+	"catalog-building-blocks": true,
 	// Where a product's content may come from: configuration of the catalogue's,
 	// served only with it (ADR-0491).
 	"content-sources": true,

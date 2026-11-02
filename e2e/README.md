@@ -27,6 +27,33 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`mi-history.spec.mjs`** ([OHS1](../docs/planning/operations-history-at-scale-program.md)):
+  Operations instance replay groups the iterations of one multi-instance body by
+  default, expands them on demand and still selects an exact iteration. The grouping
+  uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
+  accidentally merged. This is a UI/DOM slice only: the timeline payload is not yet
+  bounded (OHS2/OHS3).
+
+- **`building-blocks.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the catalogue app's Building blocks page offers the sources the server names, shows each wiki
+  page with the products using it, turns an unused page into a draft product bound to it, says
+  when no source is configured, and writes product ids as product ids are written.
+
+- **`shop-reports.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the shop draws a My team tab only for a line manager and an Organisation tab only for a customer
+  responsible; each reads its report, names the people with what they hold and their positions,
+  says that every reading is recorded, and asks for and exports a chosen period.
+
+- **`delivery-report.spec.mjs`** and **`service-level-body.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the product manager's Delivery and SLA card draws four tiles and a row per product from the
+  delivery report, fills the period the server chose, asks for and exports a chosen period, and
+  says when the report cannot be read; the product editor sends no service level for empty boxes,
+  a typed one as typed (a half-filled one for the publish to refuse), and keeps names in languages
+  the catalogue does not declare.
+
 - **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
@@ -951,3 +978,115 @@ The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
 The `e2e` job in `.github/workflows/ci.yml` runs this suite on every push and PR, in
 parallel with the Go `check` job.
+
+## MFE0 mobile browser matrix
+
+`tasks-responsive.spec.mjs` now includes a Chromium regression matrix for
+Tasks and Process Start at **320, 360, 390, 600, 768, 1024 and 1280 CSS px**,
+including initial list, selected task/start detail, the ADR-0417 860px pane
+contract and horizontal page overflow. One additional scenario resizes a
+selected Tasks detail from portrait (390×844) to landscape (844×390) and
+back. The same test mocks the API but renders the production web assets.
+
+The additional `form-refusal.spec.mjs` MFE0 browser scenarios exercise **real
+vendored form-js fields**, not placeholder cards: a required-field refusal at
+320px without sending a command, preservation of typed data while crossing the
+ADR-0417 breakpoint, and preservation of a Process Start form across
+portrait/landscape resizing. They also assert the document does not overflow
+horizontally at the measured small sizes.
+
+Further MFE0 regressions exercise a grouped, several-field form-js schema
+(with a required text field, select, date field and a long-label text area)
+inside the actual Tasks and Process Start screens at narrow phone widths.
+The checks cover visible, labelled controls, required-field refusal without
+an outgoing completion command, no document overflow, and preservation of
+select/text values across phone-to-tablet resizing. This covers a **grouped**
+layout, not a proof that any form-js multi-column renderer fits small screens.
+
+Two-column form-js regression tests exercise a full 8+8 row on the
+16-unit Carbon grid in Tasks and Process Start. At 320px the inputs stack without page overflow; at 1024px
+the vendored form-js <=66rem grid breakpoint also stacks the task inputs. At
+1600px the authored row is retained, but it stacks when the Tasks detail pane
+itself is narrowed below 560px (without shrinking the viewport). Typed values
+survive a 320px → 1024px → 1600px → narrow pane → 320px resize without
+remounting the form.
+
+These tests **do not** validate every complex multi-column form-js schema, text zoom,
+iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
+focus or foldable hinges. They are a *browser regression baseline*, not
+evidence that MFE0's real-device exit gate is complete. Record the remaining
+checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
+and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
+
+## MFE1 mobile work destinations (ADR-0514)
+
+`mfe1-mobile-entry.spec.mjs` covers the first bounded MFE1 navigation slice on
+the real Console/Tasks production DOM: a 320px operator can switch between
+My tasks and Start process via equally sized, 44px-minimum direct destinations,
+with the correct current-page semantics; a `user`-only worker is **not**
+offered operator-only Start (ADR-0209); an `operator` without the `user` role is not offered a task inbox shortcut; a selected phone task hides the
+list-level navigation to avoid losing a partially entered form; desktop retains
+the existing top bar without duplicated controls; auth-disabled mode follows
+existing open-server navigation. The normal HTTP task/start routes remain the
+server-side authority.
+
+This is **not** proof that ordinary `user` principals can start processes:
+they cannot under ADR-0209. Scoped self-service process starts need a separate
+decision ([MFE1 issue #1467](https://github.com/pblumer/atlas/issues/1467)).
+Real-device MFE0 checks, screen-reader/zoom evidence, field inspection BPMN,
+and final MFE1 task completion/confirmation journeys are still outstanding.
+
+## MFE1 mobile task completion receipt
+
+`mfe1-mobile-completion.spec.mjs` adds five browser regressions against the
+**real Tasks DOM and vendored form-js**, using a **mocked** safety inspection
+task. At 320–390 CSS px, the UI keeps the editing form in place on validation
+refusal, a server-side 403 and while an HTTP completion command is pending;
+a second Ctrl/Enter during the pending command does not duplicate the POST.
+Only a successful HTTP response provides a dismissible, accessible
+`role=status` receipt naming the completed task. On mobile, completion
+returns to the inbox rather than instantly selecting another task; desktop
+retains the existing auto-advance behaviour. Any wizard continuation still
+takes precedence.
+
+These are **not** real-device tests, a persistently queryable receipt, an
+offline retry protocol, or an end-to-end deployed BPMN safety-inspection
+process. Unknown/lost responses remain failures to confirm and must not be
+reported as successful. Recording those outcomes safely is an MFE5 design
+gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.
+
+## MFE1 compact phone work menu and foreground polling
+
+`mfe1-mobile-work-shell.spec.mjs` is a regression for the first real iPhone
+Safari feedback: a phone shows the app identity and a single **More** menu,
+not a clipped desktop navigation bar with six utility controls. The menu
+reuses role-filtered app destinations; a task-only user never gains the
+operator's Start or Incidents links. One permitted mobile destination no
+longer duplicates the page name in a 44px-tall strip. Desktop navigation is
+unchanged (also covered by `console-menu.spec.mjs`).
+
+While the tab is visible, read-only task and (for operators) incident status
+queries run every ten seconds. Changing task snapshots refresh the inbox only
+when no task, form or bulk selection is active, and the menu shows counts
+without interpreting them as alarm acknowledgements. Polling pauses in hidden
+tabs and refreshes on return; API failures are not an empty inbox. Tests
+include new tasks, incident counts and open-task preservation using a
+controlled clock, on the production DOM with mocked HTTP responses.
+
+The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
+Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
+or field conditions. Record those separately under MFE0 issue #1451.
+
+## MFE2 read-only mobile incident triage (ADR-0514)
+
+`mfe2-mobile-triage.spec.mjs` verifies the first actual MFE2 UI slice at
+320/390/768 CSS pixels and unchanged desktop Operations at 1280 px. It
+mocks the real operator-only summary and bounded incident-list contracts;
+non-operators and 401/403/expired sessions must show no incident metadata.
+Cause selection may request only a specifically scoped `limit=10` read-only
+sample. Long incident messages render as text, not HTML. Truncated summaries
+must disclose ungrouped counts. No incident POST, repair, retry or alarm
+acknowledgement may occur. Physical iOS/Android/screen-reader and foldable
+acceptance remains open in MFE0 #1451; these Chromium tests do not replace it.

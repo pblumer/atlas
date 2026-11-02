@@ -13,7 +13,38 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
+- **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
+- **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
+- **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
 
+- **The shop reaches the engine through one contract.** The delivery report and the reports that
+  name people moved into their own service (`api/servicereport`), which reads the inventory and the
+  directory only through the new `api/shopcontract` interfaces. A test holds that service to the
+  contract and pins how many server files still import the catalogue or order packages directly
+  (37), a number that may only fall — the measurable start of separating tshopper from the engine.
+- **The catalogue app finds the wiki's services and reports on its own page.** The catalogue and
+  the shop are grouped as Marketplace in the app drawer, with the same caption in German and
+  English, and the catalogue app gains a top bar with Catalogues, Building blocks and Reporting. Building blocks searches a content source
+  (`GET /api/v1/catalog-building-blocks`, MCP tool `atlas_catalog_building_blocks`) and shows each
+  wiki page with the products that already use it — named where you maintain them, counted where
+  you do not — and Create product turns an unused page into a draft product bound to it.
+- **Line managers and customer responsibles see what their people hold.** The shop gains a
+  My team tab for line managers — every account naming them as its manager — and an
+  Organisation tab for the members of a catalogue's new customer-responsible groups, covering
+  everybody that catalogue is shown to. Both list per person what they hold and how their
+  positions in a period stand against the delivery promise, by name and as CSV, from
+  `GET /api/v1/shop/team-report` and `GET /api/v1/shop/organisation-report`; every reading writes
+  an `audit.report_names_read` line. Only the catalogue's owner or an administrator sets the
+  groups, and a catalogue document neither exports nor imports them.
+- **A product promises a delivery time, and the catalogue reports how it was kept.** A product
+  may carry a service level — a name and a delivery time in working days — that is frozen into
+  the release and copied onto the order line, so every position is measured against the promise
+  it was ordered under. The Delivery and SLA card on the catalogue page, the route
+  `GET /api/v1/catalog-products/delivery-report` and the MCP tool `atlas_catalog_delivery_report`
+  show per product and period how many positions were ordered, met, missed, overdue and open, the
+  share kept, the median and 90th-percentile lead time from approval to the start of the right
+  (Monday to Friday) and how many hold it now, as a table or CSV and without naming anybody.
 - **A list's filter box empties with one click.** A column filter box with a term in it
   shows a small cross at its trailing edge that clears the term and gives the rows back,
   keeping the caret in the box for the next one; Escape does the same from the keyboard,
@@ -57,6 +88,33 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
+  writes the service configuration from that run's parameters alone, so a parameter left out falls
+  back to its default. A TLS installation then comes back as plain HTTP on `127.0.0.1:8080`. The
+  Windows section of `docs/install.md` now lists which start parameters to repeat, which the update
+  ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
+  TLS update example and names the folder the release archive unpacks to.
+
+- **The last folds of their own fold like every other section.** Console › Events, the
+  cards of Operations › Mockups, Mock directory and Mock database, the dashboard's
+  release notes and key features, and the sections of a catalogue's own page folded with
+  controls of their own, each looking and remembering differently. They now fold with
+  the same caret and are remembered the same way as every other section
+  ([ADR-0505](docs/adr/0505-every-topic-folds.md)): a mockup card stays folded through a
+  refresh and across a visit, and a catalogue's sections still start folded and say what
+  they hold. What those sections were remembered under before is not carried over, so
+  each starts in its default state once.
+
+- **Every page with two or more sections folds each of them.** The sections the
+  folding of [ADR-0505](docs/adr/0505-every-topic-folds.md) did not find now fold under
+  their headings and are remembered like the rest: every card of Operations › Workers
+  (the job types the same way as the others now, still folded at first), the
+  dashboard's notices and storage card, the lists of Connected
+  accounts and Approvals, both topics of Backup (under one page title now), the choices
+  of Display settings, both lists of an application's Constants tab, a business object's
+  sections, both sides of Planned against built, each type on Data › Instances, and the
+  sections below the catalogue list, its delivery report among them. A section drawn outside a card asks to fold with
+  class `fold-topic`.
 
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
   `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and
@@ -68,6 +126,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **Operations Live views identify the process.** A dedicated heading now keeps the full process name and deployed version visible above the BPMN diagram, even with a crowded toolbar or on a narrow screen.
+- **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
+  example in the Modeler saves it in the reader's reusable `atlas-samples` application,
+  creating that application on first use. An existing ungrouped draft is filed there;
+  a draft already in another application is not silently moved. Installing a full
+  example application and running a recipe remain separate actions.
 - **The shop loads in about half the time.** After the sign-in check it read the
   catalogue, its release, the orders, the open tasks, the positions' actions, the
   inventory, the favourites and the directory one after another, so their answers'

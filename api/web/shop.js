@@ -86,6 +86,43 @@ const STRINGS = {
     'nav.catalog': 'Katalog',
     'nav.orders': 'Meine Aufträge',
     'nav.services': 'Meine Leistungen',
+    'nav.team': 'Mein Team',
+    'nav.org': 'Organisation',
+    'report.from': 'Bestellt ab',
+    'report.to': 'Bestellt bis',
+    'report.show': 'Anzeigen',
+    'report.loading': 'Bericht wird berechnet …',
+    'report.failed': 'Der Bericht konnte nicht gelesen werden.',
+    'report.notice': 'Dieser Bericht nennt Personen. Jeder Abruf wird protokolliert.',
+    'report.csvHeld': 'Bezüge als CSV',
+    'report.csvPositions': 'Positionen als CSV',
+    'report.catalog': 'Katalog',
+    'report.kpi.people': 'Personen',
+    'report.kpi.held': 'Aktive Bezüge',
+    'report.kpi.ordered': 'Bestellte Positionen',
+    'report.kpi.met': 'Lieferfrist eingehalten',
+    'report.kpi.overdue': 'Überfällig',
+    'report.people': 'Personen und ihre Bezüge',
+    'report.positions': 'Positionen im Zeitraum',
+    'report.none': 'Keine Positionen in diesem Zeitraum.',
+    'report.col.person': 'Person',
+    'report.col.held': 'Bezieht',
+    'report.col.ordered': 'Bestellt',
+    'report.col.open': 'Offen',
+    'report.col.overdue': 'Überfällig',
+    'report.col.date': 'Bestellt am',
+    'report.col.product': 'Leistung',
+    'report.col.level': 'Servicestufe',
+    'report.col.lead': 'Arbeitstage',
+    'report.col.verdict': 'Stand',
+    'verdict.met': 'eingehalten',
+    'verdict.missed': 'verpasst',
+    'verdict.overdue': 'überfällig',
+    'verdict.open': 'offen',
+    'verdict.awaitingApproval': 'wartet auf Genehmigung',
+    'verdict.failed': 'fehlgeschlagen',
+    'verdict.noPromise': 'ohne Servicestufe',
+    'verdict.unmeasured': 'nicht messbar',
     'nav.help': 'Hilfe',
     'col.category': 'Kategorie',
     'col.group': 'Produktgruppe',
@@ -276,6 +313,43 @@ const STRINGS = {
     'nav.catalog': 'Catalogue',
     'nav.orders': 'My orders',
     'nav.services': 'My services',
+    'nav.team': 'My team',
+    'nav.org': 'Organisation',
+    'report.from': 'Ordered from',
+    'report.to': 'Ordered until',
+    'report.show': 'Show',
+    'report.loading': 'Computing the report …',
+    'report.failed': 'The report could not be read.',
+    'report.notice': 'This report names people. Every reading is recorded.',
+    'report.csvHeld': 'Rights as CSV',
+    'report.csvPositions': 'Positions as CSV',
+    'report.catalog': 'Catalogue',
+    'report.kpi.people': 'People',
+    'report.kpi.held': 'Rights held',
+    'report.kpi.ordered': 'Positions ordered',
+    'report.kpi.met': 'Delivered on time',
+    'report.kpi.overdue': 'Overdue',
+    'report.people': 'People and what they hold',
+    'report.positions': 'Positions in the period',
+    'report.none': 'No positions in this period.',
+    'report.col.person': 'Person',
+    'report.col.held': 'Holds',
+    'report.col.ordered': 'Ordered',
+    'report.col.open': 'Open',
+    'report.col.overdue': 'Overdue',
+    'report.col.date': 'Ordered on',
+    'report.col.product': 'Service',
+    'report.col.level': 'Service level',
+    'report.col.lead': 'Working days',
+    'report.col.verdict': 'State',
+    'verdict.met': 'met',
+    'verdict.missed': 'missed',
+    'verdict.overdue': 'overdue',
+    'verdict.open': 'open',
+    'verdict.awaitingApproval': 'awaiting approval',
+    'verdict.failed': 'failed',
+    'verdict.noPromise': 'no service level',
+    'verdict.unmeasured': 'not measurable',
     'nav.help': 'Help',
     'col.category': 'Category',
     'col.group': 'Product group',
@@ -464,6 +538,43 @@ const STRINGS = {
     'nav.catalog': 'Catalogue',
     'nav.orders': 'Mes commandes',
     'nav.services': 'Mes prestations',
+    'nav.team': 'Mon équipe',
+    'nav.org': 'Organisation',
+    'report.from': 'Commandé dès le',
+    'report.to': 'Commandé jusqu’au',
+    'report.show': 'Afficher',
+    'report.loading': 'Calcul du rapport …',
+    'report.failed': 'Le rapport n’a pas pu être lu.',
+    'report.notice': 'Ce rapport nomme des personnes. Chaque consultation est enregistrée.',
+    'report.csvHeld': 'Prestations en CSV',
+    'report.csvPositions': 'Positions en CSV',
+    'report.catalog': 'Catalogue',
+    'report.kpi.people': 'Personnes',
+    'report.kpi.held': 'Prestations actives',
+    'report.kpi.ordered': 'Positions commandées',
+    'report.kpi.met': 'Délai respecté',
+    'report.kpi.overdue': 'En retard',
+    'report.people': 'Personnes et leurs prestations',
+    'report.positions': 'Positions de la période',
+    'report.none': 'Aucune position dans cette période.',
+    'report.col.person': 'Personne',
+    'report.col.held': 'Prestations',
+    'report.col.ordered': 'Commandé',
+    'report.col.open': 'Ouvert',
+    'report.col.overdue': 'En retard',
+    'report.col.date': 'Commandé le',
+    'report.col.product': 'Prestation',
+    'report.col.level': 'Niveau de service',
+    'report.col.lead': 'Jours ouvrables',
+    'report.col.verdict': 'État',
+    'verdict.met': 'respecté',
+    'verdict.missed': 'manqué',
+    'verdict.overdue': 'en retard',
+    'verdict.open': 'ouvert',
+    'verdict.awaitingApproval': 'en attente d’approbation',
+    'verdict.failed': 'échoué',
+    'verdict.noPromise': 'sans niveau de service',
+    'verdict.unmeasured': 'non mesurable',
     'nav.help': 'Aide',
     'col.category': 'Catégorie',
     'col.group': 'Groupe de produits',
@@ -651,6 +762,43 @@ const STRINGS = {
     'nav.catalog': 'Catalogo',
     'nav.orders': 'I miei ordini',
     'nav.services': 'Le mie prestazioni',
+    'nav.team': 'Il mio team',
+    'nav.org': 'Organizzazione',
+    'report.from': 'Ordinato dal',
+    'report.to': 'Ordinato fino al',
+    'report.show': 'Mostra',
+    'report.loading': 'Calcolo del rapporto …',
+    'report.failed': 'Il rapporto non ha potuto essere letto.',
+    'report.notice': 'Questo rapporto nomina persone. Ogni consultazione viene registrata.',
+    'report.csvHeld': 'Prestazioni in CSV',
+    'report.csvPositions': 'Posizioni in CSV',
+    'report.catalog': 'Catalogo',
+    'report.kpi.people': 'Persone',
+    'report.kpi.held': 'Prestazioni attive',
+    'report.kpi.ordered': 'Posizioni ordinate',
+    'report.kpi.met': 'Termine rispettato',
+    'report.kpi.overdue': 'In ritardo',
+    'report.people': 'Persone e loro prestazioni',
+    'report.positions': 'Posizioni del periodo',
+    'report.none': 'Nessuna posizione in questo periodo.',
+    'report.col.person': 'Persona',
+    'report.col.held': 'Prestazioni',
+    'report.col.ordered': 'Ordinato',
+    'report.col.open': 'Aperto',
+    'report.col.overdue': 'In ritardo',
+    'report.col.date': 'Ordinato il',
+    'report.col.product': 'Prestazione',
+    'report.col.level': 'Livello di servizio',
+    'report.col.lead': 'Giorni lavorativi',
+    'report.col.verdict': 'Stato',
+    'verdict.met': 'rispettato',
+    'verdict.missed': 'mancato',
+    'verdict.overdue': 'in ritardo',
+    'verdict.open': 'aperto',
+    'verdict.awaitingApproval': 'in attesa di approvazione',
+    'verdict.failed': 'fallito',
+    'verdict.noPromise': 'senza livello di servizio',
+    'verdict.unmeasured': 'non misurabile',
     'nav.help': 'Aiuto',
     'col.category': 'Categoria',
     'col.group': 'Gruppo di prodotti',
@@ -1206,6 +1354,13 @@ const state = {
 
   // view is which of the three the nav is on.
   view: 'catalog',
+  // reports says which of the two reports that name people this reader may open
+  // (ADR-0515): team, how many people name
+  // them as line manager, and organisations, the catalogues they are a customer
+  // responsible of. report is the one on screen: its period, its catalogue, what
+  // it answered and whether it is being read.
+  reports: { team: 0, organisations: [] },
+  report: { scope: '', catalog: '', from: '', to: '', data: null, loading: false, failed: false },
   // group and offering are where the cascade stands. A column shows nothing until
   // the one to its left is chosen, which is what makes it a cascade rather than
   // four lists — and it is *selection* rather than filtering, because a
@@ -1724,6 +1879,18 @@ async function loadHeld() {
   state.held = held;
 }
 
+// loadReports asks which reports with names this reader may open. A failure offers
+// none: the tabs are an addition, and a shop that cannot say draws the three it
+// always had.
+async function loadReports() {
+  try {
+    const got = await api('/api/v1/shop/reports');
+    state.reports = { team: (got && got.team) || 0, organisations: (got && got.organisations) || [] };
+  } catch {
+    state.reports = { team: 0, organisations: [] };
+  }
+}
+
 async function loadFavourites() {
   let favourites = new Set();
   try {
@@ -1771,6 +1938,7 @@ async function load() {
     loadHeld(),
     loadFavourites(),
     loadDirectory(),
+    loadReports(),
   ]);
   loadWhoIAm();
   state.loaded = true;
@@ -4418,6 +4586,8 @@ function renderNav() {
     link('catalog', 'nav.catalog'),
     link('orders', 'nav.orders'),
     link('services', 'nav.services'),
+    state.reports.team > 0 ? link('team', 'nav.team') : null,
+    state.reports.organisations.length ? link('org', 'nav.org') : null,
     el('span', { class: 'spacer' }),
     el('span', { class: 'who' },
       // Whoever the order is for, named. A recipient that has been chosen, else
@@ -4627,6 +4797,111 @@ function renderActions() {
 
 // renderLoading stands where a screen will be until the first load has finished. With
 // a failure it stays empty: the error above says what happened and offers the retry.
+// --- Reports that name people (ADR-0515) ---
+
+// reportPath is the route and query of the report on screen.
+function reportPath(scope, extra) {
+  const r = state.report;
+  const q = new URLSearchParams();
+  if (scope === 'org') q.set('catalog', r.catalog);
+  if (r.from) q.set('from', r.from);
+  if (r.to) q.set('to', r.to);
+  q.set('lang', locale);
+  for (const [k, v] of Object.entries(extra || {})) q.set(k, v);
+  return `/api/v1/shop/${scope === 'org' ? 'organisation-report' : 'team-report'}?${q}`;
+}
+
+async function readPeopleReport(scope) {
+  const r = state.report;
+  r.loading = true;
+  r.failed = false;
+  render();
+  try {
+    r.data = await api(reportPath(scope));
+    if (!r.from) r.from = r.data.from;
+    if (!r.to) r.to = r.data.to;
+  } catch {
+    r.data = null;
+    r.failed = true;
+  }
+  r.loading = false;
+  render();
+}
+
+function verdictText(v) { return t(`verdict.${v}`); }
+
+function shareText(v) {
+  return v === null || v === undefined ? '—' : `${Math.round(v * 100)}\u00a0%`;
+}
+
+function renderPeopleReport(scope) {
+  const r = state.report;
+  // Opening the tab, or switching between the two, starts a fresh report.
+  if (r.scope !== scope) {
+    state.report = { scope, catalog: (state.reports.organisations[0] || {}).catalog || '',
+      from: '', to: '', data: null, loading: false, failed: false };
+    readPeopleReport(scope);
+    return el('div', { class: 'empty', role: 'status' }, el('p', {}, t('report.loading')));
+  }
+  const field = (key, name) => el('label', { class: 'rp-field' }, t(key),
+    el('input', { type: 'date', value: r[name] || '', onchange: (e) => { r[name] = e.target.value; } }));
+  const orgPick = scope === 'org' && state.reports.organisations.length > 1
+    ? el('label', { class: 'rp-field' }, t('report.catalog'),
+      el('select', { onchange: (e) => { r.catalog = e.target.value; readPeopleReport(scope); } },
+        state.reports.organisations.map((o) => el('option', {
+          value: o.catalog, ...(o.catalog === r.catalog ? { selected: 'selected' } : {}),
+        }, o.name))))
+    : null;
+  const head = el('div', { class: 'rp-period' },
+    orgPick, field('report.from', 'from'), field('report.to', 'to'),
+    el('button', { onclick: () => readPeopleReport(scope) }, t('report.show')),
+    el('a', { class: 'rp-csv', href: reportPath(scope, { format: 'csv' }), download: '' }, t('report.csvHeld')),
+    el('a', { class: 'rp-csv', href: reportPath(scope, { format: 'csv', kind: 'positions' }), download: '' },
+      t('report.csvPositions')));
+  const notice = el('p', { class: 'muted rp-notice' }, t('report.notice'));
+  if (r.loading && !r.data) return el('div', {}, head, el('p', { class: 'muted' }, t('report.loading')));
+  if (r.failed) return el('div', {}, head, el('p', { class: 'error' }, t('report.failed')));
+  if (!r.data) return el('div', {}, head);
+  const d = r.data;
+  const tot = d.totals || {};
+  const people = d.people || [];
+  const kpi = (key, value, cls) => el('div', { class: 'rp-kpi' },
+    el('div', { class: 'muted' }, t(key)), el('div', { class: `rp-v ${cls || ''}` }, String(value)));
+  const kpis = el('div', { class: 'rp-kpis' },
+    kpi('report.kpi.people', people.length),
+    kpi('report.kpi.held', people.reduce((n, p) => n + (p.holdings || []).length, 0)),
+    kpi('report.kpi.ordered', tot.ordered || 0),
+    kpi('report.kpi.met', shareText(tot.metShare)),
+    kpi('report.kpi.overdue', tot.overdue || 0, tot.overdue ? 'rp-bad' : ''));
+  const peopleTable = el('table', { class: 'rp-table' },
+    el('thead', {}, el('tr', {},
+      el('th', {}, t('report.col.person')), el('th', {}, t('report.col.held')),
+      el('th', { class: 'num' }, t('report.col.ordered')), el('th', { class: 'num' }, t('report.col.open')),
+      el('th', { class: 'num' }, t('report.col.overdue')))),
+    el('tbody', {}, people.map((p) => el('tr', {},
+      el('td', {}, p.name),
+      el('td', {}, (p.holdings || []).map((h) => h.name).join(', ') || '—'),
+      el('td', { class: 'num' }, String(p.ordered)),
+      el('td', { class: 'num' }, String(p.open + p.awaitingApproval)),
+      el('td', { class: `num ${p.overdue ? 'rp-bad' : ''}` }, String(p.overdue))))));
+  const positions = d.positions || [];
+  const day = (ns) => (ns ? new Date(ns / 1e6).toLocaleDateString(locale) : '');
+  const posTable = positions.length ? el('table', { class: 'rp-table' },
+    el('thead', {}, el('tr', {},
+      el('th', {}, t('report.col.date')), el('th', {}, t('report.col.person')),
+      el('th', {}, t('report.col.product')), el('th', {}, t('report.col.level')),
+      el('th', { class: 'num' }, t('report.col.lead')), el('th', {}, t('report.col.verdict')))),
+    el('tbody', {}, positions.map((p) => el('tr', {},
+      el('td', {}, day(p.orderedAt)), el('td', {}, p.recipientName), el('td', {}, p.name),
+      el('td', {}, p.serviceLevel ? `${p.serviceLevel} (${p.deliveryDays})` : '—'),
+      el('td', { class: 'num' }, (Math.round(p.leadDays * 10) / 10).toFixed(1)),
+      el('td', { class: `rp-verdict rp-${p.verdict}` }, verdictText(p.verdict))))))
+    : el('p', { class: 'muted' }, t('report.none'));
+  return el('div', { class: 'rp' }, head, notice, kpis,
+    el('h3', {}, t('report.people')), el('div', { class: 'rp-scroll' }, peopleTable),
+    el('h3', {}, t('report.positions')), el('div', { class: 'rp-scroll' }, posTable));
+}
+
 function renderLoading() {
   if (state.error) return el('div', { class: 'empty' });
   return el('div', { class: 'empty', role: 'status', 'aria-live': 'polite' },
@@ -4637,6 +4912,7 @@ function currentView() {
   if (!state.loaded) return renderLoading();
   if (state.view === 'orders') return renderOrders();
   if (state.view === 'services') return renderServices();
+  if (state.view === 'team' || state.view === 'org') return renderPeopleReport(state.view);
   return state.inBasket ? renderBasket() : renderCatalogue();
 }
 
@@ -4692,7 +4968,9 @@ function render() {
       state.view === 'catalog' ? renderForWhom() : null,
       el('h2', {}, t(state.inBasket ? 'basket.title'
         : state.view === 'orders' ? 'nav.orders'
-          : state.view === 'services' ? 'nav.services' : 'nav.catalog')),
+          : state.view === 'services' ? 'nav.services'
+            : state.view === 'team' ? 'nav.team'
+              : state.view === 'org' ? 'nav.org' : 'nav.catalog')),
       currentView(),
       renderActions(),
     ]));
