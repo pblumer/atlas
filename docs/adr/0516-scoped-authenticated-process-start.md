@@ -91,7 +91,7 @@ operator's runtime-control endpoints or creating a second mobile engine?
 **Accepted option 1:** retain the existing operator start contract; add a
 distinct authenticated, least-privilege path for MFE1 self-service starts.
 
-### Approved API shape (not yet implemented)
+### Approved API shape (implemented; see the checkpoints below)
 
 - `GET /api/v1/me/startable-processes` (role `user`): return a bounded
   list of currently published, executable, startable definitions the
@@ -105,8 +105,8 @@ distinct authenticated, least-privilege path for MFE1 self-service starts.
   Only then delegate to the existing `startInstance` path. A client-supplied
   key, URL, favourite or QR deep link is not a permission.
 
-The URL shape is approved in principle by this decision, **not yet an implemented
-endpoint**. The `user` role is a necessary coarse gate, never sufficient
+The URL shape is approved by this decision and implemented as the self-service
+list and start checkpoints below record. The `user` role is a necessary coarse gate, never sufficient
 authorization; no self-service POST may mutate state before the object
 policy check. Keep both existing operator POST routes and their roles
 unchanged, including the by-process-ID and CSV/trigger paths. The initial
@@ -222,9 +222,9 @@ remains open.
 ### Admin management API checkpoint (2026-11-02)
 
 The administration half is implemented as the per-area service
-`api/startgrant.Service` (ADR-0147) over the store above. It **still authorizes
-no start**: no self-service route exists yet, so a grant issued here lets nobody
-start anything.
+`api/startgrant.Service` (ADR-0147) over the store above. It **authorizes no
+start by itself**: a grant issued here lets nobody start anything until the
+self-service start route exists.
 
 - **Routes**, all declared `admin` in the route table and on the admin allowlist:
   `GET /api/v1/applications/{id}/start-grants` (every scope of one application),
@@ -275,12 +275,102 @@ start anything.
   from field users, and would need a release index so the listing does not read
   every release document on the run loop; it is a one-function change if wanted.
 
+### Self-service list checkpoint (2026-11-02)
+
+`GET /api/v1/me/startable-processes` is implemented (`api/selfservicestart.go`),
+the first of the two approved self-service routes. It lists; it starts nothing.
+
+- **Gate:** role `user` from the route table (admin reaches it too), and the
+  caller must be a person's own signed-in session. An API token or a connected
+  application is refused with 403 even when it carries `user`. A server without
+  authentication answers 404 and keeps its operator Start view. A logged-out or
+  disabled account has no session and gets 401.
+- **What is listed:** every scope whose latest durable change grants the user id
+  or one of the group ids the session carries now — kept current by every
+  membership change (ADR-0185) — resolved to the newest deployed version of the
+  process and offered only when the same `selfServiceBlockers` rule the preview
+  uses finds nothing. So no superseded version, no process whose newest version
+  another application deployed, nothing deactivated, non-executable, trigger-only,
+  missing constants, or in a deleted or protected application. Each item carries
+  the definition key, process id, display name, version, application id and name,
+  and whether and from which form it starts (`startForm.available`, `formId`);
+  never an audience or another person.
+- **Cost on the run loop:** the grants are in memory; the registry is walked once
+  per request and each granted application read once. The answer is sorted by
+  application name, then process name, with ids as tie-breakers, and capped at 200
+  with `total` and `truncated`. While the grant store is uncertain after a failed
+  write the route fails closed with 503 rather than an empty list.
+- The definition key in an item is not a permission; the start route must check
+  everything again.
+
+Tests: `api/startableprocesses_http_test.go` (empty by default, group and user
+grants, redeploy shows only the newest version, sorting, leaving the group,
+revocation, deactivation, non-executable newest version, process id redeployed
+into another application, deleted application, anonymous 401, machine token 403,
+account without the user role 403, logout and disabled account 401, open server
+404), `api/selfservicestart_internal_test.go`, `api/startgrant/store_test.go`.
+
 Tests: `api/startgrant/service_test.go` (deny by default, open server, delegated
 credential, malformed and forged bodies, unknown identities and scopes, competing
 administrators, idempotent and always-possible revocation, persistence failure and
 recovery, preview), `api/startgrants_http_test.go` (anonymous 401, task user,
 application owner and machine token 403, administrator end to end, group
 membership change, restart over the same data directory).
+
+### Self-service start checkpoint (2026-11-02)
+
+`POST /api/v1/me/processes/{key}/instances` is implemented
+(`handleMyProcessStart`, `api/selfservicestart.go`). With it the server side of
+MFE1's scoped start is complete; the mobile and desktop Start UI that calls it is
+the remaining slice.
+
+- **Same gate as the list:** role `user`, a person's own session, 404 on a server
+  without authentication. Nothing a listing said is taken for granted.
+- **Authorization, twice, on the loop:** the key is resolved (404 for an unknown
+  or malformed key), then `selfStartDecisionOnLoop` answers 403 when the person
+  holds no current grant for the definition's application and process, 409 when
+  they hold one but the key is not the newest version or the shared blocker rule
+  refuses it, and 503 while the grant store is uncertain. 403 rather than 404 for
+  an existing definition is no oracle: every signed-in identity already lists the
+  deployed definitions (`definitionReadable`). The **same decision runs again as a
+  `startGuard` inside the turn that submits the start command**, so a revocation
+  that was durable before that turn refuses the start, and one that lands after it
+  finds the start already accepted. That is this record's prospective ordering,
+  now pinned to the command rather than to the first check.
+- **One start path:** `startInstance` became `startInstanceGuarded` with an
+  optional guard; the operator routes pass none and behave as before. Sealing
+  (ADR-0314), `CreateInstanceStartedBy` with the session's user id (ADR-0475 §3),
+  the drive, the read-back and the answer are the existing ones — answered only
+  after the start passed the WAL fsync. No processor, WAL or `applyToState` change.
+- **Values are held to the start form before anything is sealed or started:** the
+  body is strict JSON holding only `variables` (bounded by the Settings budget); a
+  process without a start form takes no values; a missing form refuses the start
+  (409); a directory field refuses it (409), because its value can only be checked
+  through a task's lookup route; decision-field values are checked against the
+  decision (`refuseDecisionValues`); the shape check every public form uses refuses
+  any path the form does not submit, a disabled field included; and the new
+  `startFormProblems` holds the constraints the form declares — required (unless
+  shown under a condition), the type a component submits, minimum and maximum
+  length and value, and a closed list of options. Not checked on the server, and
+  stated so in the code: a `pattern` (JavaScript and Go regular expressions differ),
+  fields inside repeating lists beyond their shape, and options read from a
+  variable or expression. Every other door keeps its existing shape-only rule.
+- **Answer:** the existing `{definitionKey, instanceKey, stats, wizard}`; the
+  counts are the ones `GET /api/v1/stats` gives every signed-in identity. A
+  disconnected or timed-out client has an unknown outcome; nothing here is
+  idempotent, which stays MFE5's.
+
+Tests: `api/selfstart_http_test.go` (granted start with and without a form, every
+constraint and injection case creating nothing, foreign, private, ungranted,
+unknown, malformed, superseded and deactivated keys, revocation without a listing,
+anonymous, machine token, OAuth-connected application, account without the user
+role, operator routes unchanged, open server),
+`api/selfstart_recovery_internal_test.go` (the safety-inspection example granted to
+a group and started by a member, `startedBy`, timeline/variables/tasks identical
+after a restart that replays the WAL, refusal after revocation with no new
+instance, the started instance still completing; and the guard refusing a
+revocation durable between the first check and the command turn),
+`api/startformcheck_internal_test.go`.
 
 ## Consequences
 

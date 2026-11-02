@@ -258,6 +258,35 @@ func (s *Store) ForApplication(applicationID string) []Change {
 	return out
 }
 
+// GrantedTo returns every scope whose latest durable change grants the principal,
+// directly or through one of the groups it carries now, ordered by application and
+// process id. It is the self-service list's starting point and nothing more: the
+// caller must still check the scope's application and process before offering it.
+// Like every positive answer, it is empty while the store is uncertain.
+func (s *Store) GrantedTo(p Principal) []Grant {
+	out := []Grant{}
+	if s.uncertain {
+		return out
+	}
+	for key, d := range s.current {
+		if len(d.History) == 0 {
+			continue
+		}
+		last := d.History[len(d.History)-1]
+		if last.Action != ActionGrant || !Allowed([]Grant{last.Grant}, key.applicationID, key.processID, p) {
+			continue
+		}
+		out = append(out, cloneChange(last).Grant)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ApplicationID != out[j].ApplicationID {
+			return out[i].ApplicationID < out[j].ApplicationID
+		}
+		return out[i].ProcessID < out[j].ProcessID
+	})
+	return out
+}
+
 // History returns defensive copies of all audited changes, oldest first.
 func (s *Store) History(applicationID, processID string) []Change {
 	d, ok := s.current[scope{applicationID, processID}]

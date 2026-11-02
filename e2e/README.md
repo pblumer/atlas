@@ -179,6 +179,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): a
+  terminate end **ends its enclosing scope** — inside a subprocess it takes the message
+  catch waiting beside it along and completes the subprocess, so the outer token continues
+  while a branch outside the subprocess keeps waiting; at the process level it leaves no
+  token behind.
 - **`playground.spec.mjs`** ([ADR-0215](../docs/adr/0215-modeler-playground.md)):
   the **Playground tab** — a mode rather than a level of detail, so it takes the control
   strip and a side panel and gives the properties panel's width back to the diagram;
