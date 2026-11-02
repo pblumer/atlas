@@ -933,7 +933,14 @@ func TestACorruptIndexIsAnErrorNeverAPlausibleAnswer(t *testing.T) {
 		{"iteration step", func(db *pebble.DB, f fixture) error {
 			return db.Set(append([]byte{0x46}, be64(f.pi, f.iter, 1<<63, 1)...), junk, pebble.Sync)
 		}, func(f fixture) []string {
-			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10) + "/steps"}
+			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10) + "/steps",
+				iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10) + "/variables?at=999999"}
+		}},
+		{"variable change", func(db *pebble.DB, f fixture) error {
+			// varSnap:<scope>:<ts>:<pos> of the iteration's own scope.
+			return db.Set(append([]byte{0x0F}, be64(f.iter, 1<<63, 1)...), junk, pebble.Sync)
+		}, func(f fixture) []string {
+			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10) + "/variables?at=999999"}
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1188,7 +1195,7 @@ func TestIterationVariablesAtAStep(t *testing.T) {
 
 // A large value is cut on a character boundary and says so.
 func TestIterationVariablesCutALargeValue(t *testing.T) {
-	big := strings.Repeat("ä", 3000) // 6,000 bytes
+	big := strings.Repeat("€", 2000) // 6,000 bytes of 3-byte characters: the cap falls inside one
 	w := newWorld(t, `["`+big+`"]`, false)
 	pi := w.start()
 	b := w.onlyBody(pi)
@@ -1205,7 +1212,7 @@ func TestIterationVariablesCutALargeValue(t *testing.T) {
 			item = &resp.Scopes[0].Variables[i]
 		}
 	}
-	if item == nil || !item.ValueTruncated || len(item.Value) > stepValueCap || !utf8.ValidString(item.Value) || !strings.Contains(item.Value, "ää") {
+	if item == nil || !item.ValueTruncated || len(item.Value) > stepValueCap || !utf8.ValidString(item.Value) || !strings.Contains(item.Value, "€€") {
 		t.Fatalf("the large value: %+v", item)
 	}
 }

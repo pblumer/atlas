@@ -3,6 +3,7 @@ package state
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/pebble"
@@ -139,5 +140,51 @@ func TestVariableSnapshotPageIsBoundedToOneScope(t *testing.T) {
 	}
 	if _, err := f.s.VariableSnapshotPage(11, 300, nil); err == nil {
 		t.Fatal("an invalid limit was accepted")
+	}
+}
+
+// A scope's changes up to a position stop at the first change past it, and say
+// whether the limit cut off changes still at or before it.
+func TestVariableSnapshotsUpToStopAtThePosition(t *testing.T) {
+	f := newMIFixture(t, 23)
+	for i := 1; i <= 5; i++ {
+		v := model.VariableValue{ScopeKey: 11, Name: "v", Kind: model.VarNumber, Text: strconv.Itoa(i), Index: -1}
+		f.must(f.tx.RecordVariableSnapshot(int64(i), uint64(10*i), &v))
+	}
+	f.commit()
+	read := func(at uint64, limit int) ([]string, bool) {
+		t.Helper()
+		var vals []string
+		more, err := f.s.VariableSnapshotsUpTo(11, at, limit, func(_ int64, _ uint64, v *model.VariableValue) error {
+			vals = append(vals, v.Text)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return vals, more
+	}
+	if vals, more := read(30, 10); strings.Join(vals, ",") != "1,2,3" || more {
+		t.Fatalf("up to 30: %v more=%v", vals, more)
+	}
+	if vals, more := read(30, 3); len(vals) != 3 || more {
+		t.Fatalf("a limit that ends exactly at the position is not a cut: %v more=%v", vals, more)
+	}
+	if vals, more := read(30, 2); strings.Join(vals, ",") != "1,2" || !more {
+		t.Fatalf("a limit before the position: %v more=%v", vals, more)
+	}
+	if vals, _ := read(5, 10); len(vals) != 0 {
+		t.Fatalf("before the first change: %v", vals)
+	}
+	if _, err := f.s.VariableSnapshotsUpTo(11, 30, 0, nil); err == nil {
+		t.Fatal("an invalid limit was accepted")
+	}
+	stop := errors.New("stop")
+	if _, err := f.s.VariableSnapshotsUpTo(11, 30, 10, func(int64, uint64, *model.VariableValue) error { return stop }); !errors.Is(err, stop) {
+		t.Fatalf("a visitor's error: %v", err)
+	}
+	f.must(f.s.db.Set(keyVariableSnapshot(11, 2, 20), []byte{0xff}, pebble.Sync))
+	if _, err := f.s.VariableSnapshotsUpTo(11, 30, 10, func(int64, uint64, *model.VariableValue) error { return nil }); err == nil {
+		t.Fatal("a corrupt change was read")
 	}
 }
