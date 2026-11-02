@@ -1,0 +1,40 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+
+# The TEST tenant - named twice on purpose (id and initial domain).
+tenant_id               = "00000000-0000-0000-0000-000000000000"
+expected_initial_domain = "contoso.onmicrosoft.com"
+
+# name_prefix = "atlas-test"
+# usage_location = "CH"
+
+# Which Worker Types get an app registration (all true by default).
+# workers = {
+#   entra      = true
+#   exchange   = true
+#   sharepoint = true
+#   teamsphone = true
+# }
+
+# Worker names as the models address them (defaults: examples/m365-dienste).
+# worker_names = {
+#   entra      = "ucc_entra"
+#   exchange   = "ucc_exchange"
+#   sharepoint = "ucc_sharepoint"
+#   teamsphone = "ucc_teams"
+#   ad         = "ucc_ad"
+# }
+
+# Licences for the test users (GET https://graph.microsoft.com/v1.0/subscribedSkus),
+# so they get a mailbox and Teams. Needs the Azure CLI signed in to the tenant.
+# license_sku_ids = ["<skuId of e.g. Microsoft 365 E5 (developer)>"]
+
+# credential_validity_days = 14
+
+# --- Optional Active Directory domain controller in Azure -------------------
+# enable_ad_dc          = true
+# azure_subscription_id = "00000000-0000-0000-0000-000000000000"
+# azure_tenant_id       = ""                     # when the subscription is in another tenant
+# azure_location        = "switzerlandnorth"
+# ad_allowed_cidrs      = ["203.0.113.7/32"]     # public IP of the Atlas worker host
+# ad_allow_rdp          = false
+# ad_auto_shutdown_time = "1900"                 # UTC, "" disables
