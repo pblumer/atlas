@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Administrators decide who may start a process.** An administrator, signed in with their own session, grants one process of one application to named user and group ids, previews whether a person or group would be offered it and why not, and revokes it, with every change durable and audited (`/api/v1/applications/{id}/start-grants`, ADR-0516). Grants are checked against the directory and the application's newest deployed version; API tokens, application owners and servers without authentication cannot change them. The self-service Start routes that will honour a grant are not available yet, so a grant does not yet let anybody start anything.
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
