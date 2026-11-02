@@ -81,16 +81,6 @@ func (o *oauthSystem) scopes() string {
 	return strings.Join(out, " ")
 }
 
-// capability is the capability this grant carries for a scope, if it carries it.
-func (o *oauthSystem) capability(scope string) (systemCapability, bool) {
-	for _, c := range o.Capabilities {
-		if c.Scope == scope {
-			return c, true
-		}
-	}
-	return systemCapability{}, false
-}
-
 // systemScopesFrom reads the scope parameter of an authorization request for the
 // system resource: the capabilities the system asks for, in the consent screen's
 // order. Empty asks for all three. Anything that is not one of them is refused — the
