@@ -112,7 +112,13 @@ if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
         $site = $null
         for ($i = 0; $i -lt 20 -and -not $site; $i++) {
             try { $site = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups/$($c.site_group_id)/sites/root" }
-            catch { Step 'test site not provisioned yet; waiting 30 s'; Start-Sleep -Seconds 30 }
+            catch {
+                # Only "not found" means the site is still being provisioned; anything else
+                # (403: the signed-in admin has no access to the private group's site) is final.
+                $code = $_.Exception.Response.StatusCode.value__
+                if ($code -ne 404) { throw "GET sites/root of group $($c.site_group_id): HTTP $code $($_.Exception.Message)" }
+                Step 'test site not provisioned yet; waiting 30 s'; Start-Sleep -Seconds 30
+            }
         }
         if (-not $site) { throw "The test site of group $($c.site_group_id) does not exist yet; run this script again later." }
 
