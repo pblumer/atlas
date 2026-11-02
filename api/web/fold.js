@@ -74,6 +74,11 @@ function setOpen(card, open, persist) {
 
 const watched = new WeakSet();
 
+// keyOf names a topic for the browser's memory: the page, then the card's data-fold,
+// else its id, else its heading's words.
+const keyOf = (card, page, h2) =>
+  page + "/" + (card.dataset.fold || card.id || slug(h2 ? h2.textContent : ""));
+
 function foldCard(card, page) {
   const found = headOf(card);
   if (!found) {
@@ -83,9 +88,7 @@ function foldCard(card, page) {
     return;
   }
   const { head, h2 } = found;
-  if (!card.dataset.foldKey) {
-    card.dataset.foldKey = page + "/" + (card.dataset.fold || card.id || slug(h2.textContent));
-  }
+  if (!card.dataset.foldKey) card.dataset.foldKey = keyOf(card, page, h2);
   head.classList.add("fold-head");
   if (!h2.querySelector("[data-fold-toggle]")) {
     const btn = document.createElement("button");
@@ -127,6 +130,16 @@ function foldCard(card, page) {
     const headNow = card.querySelector(":scope > .fold-head");
     if (headNow && headNow.contains(ctl)) setOpen(card, true, true);
   }, true);
+}
+
+// unfold opens a topic a page is about to show something in, and remembers it open — a
+// link that leads to a row inside a folded topic. It may run before the router has
+// folded the card: the memory is what that pass reads, so the card opens either way.
+export function unfold(card, page) {
+  if (!card) return;
+  if (!card.dataset.foldKey) card.dataset.foldKey = keyOf(card, page, headOf(card)?.h2);
+  remember(card.dataset.foldKey, true);
+  if (card.hasAttribute("data-folded")) setOpen(card, true, false);
 }
 
 // foldCards gives every topic under root its toggle and its remembered state. It is

@@ -1838,12 +1838,15 @@ function paintReleaseNotes(slot, lang) {
   const t = RN_STRINGS[lang] || RN_STRINGS.en;
   const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
   const hidden = rn.index.length - shown.length;
+  // The card folds under its heading like every topic (fold.js), remembered as
+  // "release-notes" whatever the language; each release inside it is a <details> of
+  // its own, opened to load its changes.
   slot.innerHTML =
-    `<div class="card release-notes"><details class="rn-root" open>` +
-    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="card release-notes" data-fold="release-notes">` +
+    `<div class="rn-head"><h2 class="rn-title">${esc(t.title)}</h2></div>` +
     `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
     (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
-    `</details></div>`;
+    `</div>`;
 
   // A release loads its changes the first time it is opened.
   slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
@@ -1921,10 +1924,11 @@ async function viewConsoleDashboard() {
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
   // These slots are filled after the route has folded the view, each when its module's
-  // answer arrives, and the storage card is redrawn in place after a checkpoint; a watch
-  // on each slot's own children folds what lands in it (fold.js), whenever it lands.
+  // answer arrives, and the storage card, the release notes and the key features are
+  // redrawn in place (a checkpoint, a language, older releases); a watch on each slot's
+  // own children folds what lands in it (fold.js), whenever it lands.
   for (const id of ["storage-alert-slot", "catalogue-stranded-slot", "api-tokens-expiring-slot",
-    "approvals-waiting-slot", "storage-card-slot"]) {
+    "approvals-waiting-slot", "storage-card-slot", "release-notes-slot", "key-features-slot"]) {
     const slot = document.getElementById(id);
     new MutationObserver(() => foldCards(slot, pageOf(location.hash))).observe(slot, { childList: true });
   }
@@ -8461,23 +8465,21 @@ async function viewADMockDirectory() {
   const renderWorker = (w) => {
     const forests = w.forests || [];
     const ops = w.operations || [];
-    // The whole worker is one collapsible card: a mockup run against several forests
-    // is a lot of screen, and an operator watching two workers wants to put one away
-    // without losing it. Open by default — a card you have to open to learn there is
-    // anything in it is the state this view exists to end.
-    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="admock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
-            ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
-          </span>
+    // The whole worker is one card that folds under its heading (fold.js), remembered
+    // by the worker's name: a mockup run against several forests is a lot of screen, and
+    // an operator watching two workers wants to put one away without losing it. Open by
+    // default — a card you have to open to learn there is anything in it is the state
+    // this view exists to end.
+    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
+          ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${forests.length ? forests.map(renderForest).join("")
           : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
              no Active Directory task since it started — the first one creates the forest it names.</p>`}
@@ -8486,7 +8488,6 @@ async function viewADMockDirectory() {
             <th>${esc(o.op || "")}</th>
             <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
           </tr>`).reverse().join("")}</tbody></table></details>` : ""}
-      </details>
     </div>`;
   };
 
@@ -8540,6 +8541,8 @@ async function viewADMockDirectory() {
     }
     list.innerHTML = workers.map(renderWorker).join("");
     refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8617,46 +8620,26 @@ async function viewSQLMockJournal() {
   const renderWorker = (w) => {
     const sts = w.statements || [];
     const failed = sts.filter((s) => s.failed).length;
-    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="sqlmock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
-            ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
-              failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
-          </span>
+    // One card per worker, folding under its heading (fold.js) and remembered by the
+    // worker's name, so a refresh does not reopen what somebody closed.
+    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
+          ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
+            failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${w.truncated ? `<p class="muted">Showing the newest ${sts.length} of ${w.held} — a run this
           long is past what this view carries.</p>` : ""}
         ${sts.length
           ? `<table class="admock-attrs sqlmock-table"><tbody>${sts.map(renderStatement).join("")}</tbody></table>`
           : `<p class="empty">Nothing asked yet. This worker is in mockup mode and has served no
              database task since it started.</p>`}
-      </details>
     </div>`;
-  };
-
-  // Which cards the reader has put away, addressed by worker rather than by position —
-  // a refresh must not reopen what somebody closed.
-  const keyOf = (d) => {
-    const w = d.closest("[data-worker]");
-    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
-  };
-  const foldState = () => {
-    const state = new Map();
-    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
-    return state;
-  };
-  const refold = (state) => {
-    for (const d of list.querySelectorAll("details")) {
-      const was = state.get(keyOf(d));
-      if (was !== undefined) d.open = was;
-    }
   };
 
   // The last payload rendered. A poll that brings nothing new leaves the DOM alone: the
@@ -8674,7 +8657,6 @@ async function viewSQLMockJournal() {
     }
     const fresh = JSON.stringify(data);
     if (fresh === rendered) return;
-    const folds = foldState();
     rendered = fresh;
     const workers = (data && data.workers) || [];
     if (!workers.length) {
@@ -8685,7 +8667,8 @@ async function viewSQLMockJournal() {
       return;
     }
     list.innerHTML = workers.map(renderWorker).join("");
-    refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8726,8 +8709,10 @@ async function viewMockups() {
     <div id="spmock-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("spmock-list");
 
-  // Folds are remembered by worker and section, both ways, so a refresh neither reopens
-  // what somebody closed nor closes what they opened.
+  // A card folds under its heading (fold.js), remembered by its worker. The sections
+  // inside it — a list, the operations — are remembered here by worker and section,
+  // both ways, so a refresh neither reopens what somebody closed nor closes what they
+  // opened.
   const keyOf = (d) => {
     const w = d.closest("[data-worker]");
     return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
@@ -8760,12 +8745,14 @@ async function viewMockups() {
     rendered = fresh;
     list.innerHTML = mockupsHTML(data);
     refold(folds);
+    foldCards(list, pageOf(location.hash));
   };
 
   list.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-spmock-clear]");
     if (!btn) return;
-    // The button sits in the card's summary; without this the click would also fold it.
+    // The button sits in the card's heading row; on a folded card fold.js opens the card
+    // before this runs, so what it empties is in view.
     e.preventDefault();
     const worker = btn.dataset.spmockClear;
     if (!confirm(`Empty the mockup site of ${worker}? Its lists, libraries and journal are gone; nothing outside this server is touched.`)) return;

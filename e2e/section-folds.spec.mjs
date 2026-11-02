@@ -1,21 +1,25 @@
 // Every page with two or more headed sections folds each of them (fold.js, ADR-0505):
 // the pages whose sections were shaped so the rule could not find them — a heading
 // outside a card, a card filled after the route had folded the view, two cards headed
-// by <h1>, <h3> headings over lists, a lazily loaded tab. Each test boots the real
-// Console on mocked answers and checks that every section of one page has its toggle
-// and that a click folds it.
+// by <h1>, <h3> headings over lists, a lazily loaded tab — and the pages that folded
+// with <details> of their own. Each test boots the real Console on mocked answers and
+// checks that every section of one page has its toggle and that a click folds it.
 import { test, expect } from "@playwright/test";
 
 const NOW = Date.now();
 
-// answers maps a path to the JSON the mock gives for it; everything else is [].
+// answers maps a path to the JSON the mock gives for it, or to a function that makes
+// it on each call; everything else is [].
 function installMock(page, answers, { auth = null } = {}) {
   page.route("**/api/v1/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/auth/me")) {
       return route.fulfill({ json: auth ? { authEnabled: true, user: auth } : { authEnabled: false, user: null } });
     }
-    if (Object.hasOwn(answers, path)) return route.fulfill({ json: answers[path] });
+    if (Object.hasOwn(answers, path)) {
+      const a = answers[path];
+      return route.fulfill({ json: typeof a === "function" ? a() : a });
+    }
     return route.fulfill({ json: [] });
   });
 }
@@ -172,4 +176,62 @@ test("the catalogue list folds every section below the list", async ({ page }) =
     { sel: '[data-fold="translations"]', body: '[data-fold="translations"] p' },
     { sel: '[data-fold="delivery"]', body: '[data-fold="delivery"] .dr-period' },
   ]);
+});
+
+test("the dashboard's release notes and key features fold, and are remembered", async ({ page }) => {
+  await boot(page, {
+    "/api/v1/release-notes": { releases: [{ version: "0.22.0", date: "2026-11-01", changeCount: 1 }] },
+    "/api/v1/release-notes/0.22.0": { intro: [], changes: [{ title: "A change", category: "changed" }] },
+  }, "#/console");
+  await expect(page.locator('[data-fold="release-notes"] h2')).toBeVisible();
+  await expect(page.locator('[data-fold="key-features"] h2')).toBeVisible();
+  await expectFolds(page, [
+    { sel: '[data-fold="release-notes"]', body: '[data-fold="release-notes"] .rn-list' },
+    { sel: '[data-fold="key-features"]', body: '[data-fold="key-features"] .kf-grid' },
+  ]);
+  // The language buttons stay in the heading row of the folded tile.
+  await expect(page.locator('[data-fold="key-features"] .kf-lang')).toBeVisible();
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector("#view")?.children.length > 0, null, { timeout: 15000 });
+  await expect(page.locator('[data-fold="release-notes"] [data-fold-toggle]')).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-fold="key-features"] [data-fold-toggle]')).toHaveAttribute("aria-expanded", "false");
+});
+
+// The mockup pages redraw their cards on every refresh that brings news; a card folded
+// away stays folded through it, remembered by its worker.
+for (const { name, hash, path, refresh, body } of [
+  { name: "Mock directory", hash: "#/operations/ad-mock", path: "/api/v1/ad/mock-directory",
+    refresh: "#admockdir-refresh", body: ".empty" },
+  { name: "Mock database", hash: "#/operations/sql-mock", path: "/api/v1/sql/mock-journal",
+    refresh: "#sqlmock-refresh", body: ".empty" },
+]) {
+  test(`${name} folds each worker's card, and a refresh keeps it folded`, async ({ page }) => {
+    let at = 1;
+    const worker = (w) => ({ worker: w, seeded: 0, at: at * 1e9, forests: [], operations: [], statements: [] });
+    await boot(page, { [path]: () => ({ workers: [worker("w-1"), worker("w-2")], at: at++ }) }, hash);
+    await expect(page.locator('[data-fold="w-2"] h2')).toBeVisible();
+    await expectFolds(page, [
+      { sel: '[data-fold="w-1"]', body: `[data-fold="w-1"] ${body}` },
+      { sel: '[data-fold="w-2"]', body: `[data-fold="w-2"] ${body}` },
+    ]);
+    await page.click(refresh);
+    await expect(page.locator('[data-fold="w-1"] [data-fold-toggle]')).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator(`[data-fold="w-1"] ${body}`)).toBeHidden();
+  });
+}
+
+test("Mockups folds each mockup's card, and a refresh keeps it folded", async ({ page }) => {
+  let n = 0;
+  const report = (target) => ({ kind: "jira", target, summary: `${n} issues`, data: { n } });
+  await boot(page, { "/api/v1/mocks": () => { n++; return { reports: [report("acme"), report("beta")] }; } },
+    "#/operations/mockups");
+  await expect(page.locator('[data-fold="beta"] h2')).toBeVisible();
+  await expectFolds(page, [
+    { sel: '[data-fold="acme"]', body: '[data-fold="acme"] .mockups-data' },
+    { sel: '[data-fold="beta"]', body: '[data-fold="beta"] .mockups-data' },
+  ]);
+  await page.click("#spmock-refresh");
+  await expect(page.locator('[data-fold="acme"] .admock-head')).toContainText("issues");
+  await expect(page.locator('[data-fold="acme"] [data-fold-toggle]')).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator('[data-fold="acme"] .mockups-data')).toBeHidden();
 });

@@ -371,46 +371,50 @@ test("leaving the page closes the dialog it opened", async ({ page }) => {
 test("each section folds away, says what it holds while folded, and stays folded on the next visit", async ({ page }) => {
   installMock(page, { admin: true, own: true });
   await openEvents(page);
-  const catalogue = page.locator("details#ev-section");
-  const own = page.locator("details#own-section");
-  const isOpen = (d) => d.evaluate((el) => el.open);
-  expect(await isOpen(catalogue)).toBe(true);
-  expect(await isOpen(own)).toBe(true);
-  // What must survive the fold is what the section warns about, so the summary says it.
-  await expect(catalogue.locator("summary")).toContainText("5 events");
-  await expect(catalogue.locator("summary")).toContainText("1 receiver waits for a name atlas never emits");
-  await expect(own.locator("summary")).toContainText("6 names");
-  await expect(own.locator("summary")).toContainText("4 with a finding");
+  // Each section folds like every topic of the Console (fold.js, ADR-0505), and is
+  // remembered under the page and the section's id.
+  const toggle = (id) => page.locator(`#${id} [data-fold-toggle]`);
+  const head = (id) => page.locator(`#${id} .ev-head`);
+  const stored = (id) => page.evaluate((k) => localStorage.getItem(k), `atlas.sec.console/events/${id}`);
+  await expect(toggle("ev-section")).toHaveAttribute("aria-expanded", "true");
+  await expect(toggle("own-section")).toHaveAttribute("aria-expanded", "true");
+  // What must survive the fold is what the section warns about, so the heading row says it.
+  await expect(head("ev-section")).toContainText("5 events");
+  await expect(head("ev-section")).toContainText("1 receiver waits for a name atlas never emits");
+  await expect(head("own-section")).toContainText("6 names");
+  await expect(head("own-section")).toContainText("4 with a finding");
 
-  await own.locator("summary").click();
+  await toggle("own-section").click();
   await expect(page.locator("#own-rows")).toBeHidden();
-  await catalogue.locator("summary").click();
+  await toggle("ev-section").click();
   await expect(page.locator("#ev-rows")).toBeHidden();
-  // The <details> toggle event persists the new state asynchronously.
-  // A reload before that event has run tests a race, not persistence.
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.own"))).toBe("0");
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.catalog"))).toBe("0");
+  await expect(head("ev-section")).toContainText("5 events");
+  expect(await stored("own-section")).toBe("0");
+  expect(await stored("ev-section")).toBe("0");
 
   await page.reload();
-  await expect(page.locator("details#own-section summary")).toContainText("6 names");
-  expect(await isOpen(page.locator("details#ev-section"))).toBe(false);
-  expect(await isOpen(page.locator("details#own-section"))).toBe(false);
+  await expect(head("own-section")).toContainText("6 names");
+  await expect(toggle("ev-section")).toHaveAttribute("aria-expanded", "false");
+  await expect(toggle("own-section")).toHaveAttribute("aria-expanded", "false");
 
-  await page.locator("details#ev-section summary").click();
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.catalog"))).toBe("1");
+  await toggle("ev-section").click();
+  expect(await stored("ev-section")).toBe("1");
   await page.reload();
-  await expect(page.locator("details#ev-section")).toHaveAttribute("open", "");
+  await expect(toggle("ev-section")).toHaveAttribute("aria-expanded", "true");
   await expect(page.locator("#ev-rows tr[data-i]").first()).toBeVisible();
-  expect(await isOpen(page.locator("details#own-section"))).toBe(false);
+  await expect(toggle("own-section")).toHaveAttribute("aria-expanded", "false");
   expect(page.__errors).toEqual([]);
 });
 
 test("a link from the Modeler unfolds the section it names", async ({ page }) => {
   installMock(page, { admin: false, own: true });
-  await page.addInitScript(() => { try { localStorage.setItem("atlas.events.own", "0"); } catch { /* none */ } });
+  await page.addInitScript(() => {
+    try { localStorage.setItem("atlas.sec.console/events/own-section", "0"); } catch { /* none */ }
+  });
   await page.goto("/index.html#/console/events?name=lost.msg&channel=message");
   await expect(page.getByRole("dialog", { name: "lost.msg" })).toBeVisible();
-  expect(await page.locator("details#own-section").evaluate((el) => el.open)).toBe(true);
+  await expect(page.locator("#own-section [data-fold-toggle]")).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator("#own-section")).not.toHaveAttribute("data-folded", "");
   expect(page.__errors).toEqual([]);
 });
 
@@ -452,8 +456,8 @@ test("the page reads in German for a viewer who chose no language", async ({ pag
   installMock(page, { admin: true, own: true, lang: null });
   await openEvents(page);
   await expect(page.locator("h1")).toHaveText("Ereignisse");
-  await expect(page.locator("details#ev-section summary h2")).toHaveText("Ereignisse, die atlas aussendet");
-  await expect(page.locator("details#own-section summary h2")).toHaveText("Signale und Nachrichten dieser Installation");
+  await expect(page.locator("#ev-section .ev-head h2")).toHaveText("Ereignisse, die atlas aussendet");
+  await expect(page.locator("#own-section .ev-head h2")).toHaveText("Signale und Nachrichten dieser Installation");
   await expect(page.locator("#ev-head th")).toHaveText(["Ereignis", "Art", "Kanäle", "Bedeutung", "Seit", "Stabilität", "Zuhörende"]);
   await expect(page.locator('#own-rows').locator("xpath=ancestor::table").locator("thead tr").first().locator("th"))
     .toHaveText(["Name", "Kanal", "Gesendet oder geworfen von", "Empfangen von", "Befunde"]);
@@ -466,10 +470,10 @@ test("the page reads in German for a viewer who chose no language", async ({ pag
   await expect(entry("<message>.<outcome>")).toContainText("Namensmuster");
   await expect(page.locator('#own-rows tr[data-name="typo.sent"]')).toContainText("wird nicht empfangen");
   await expect(page.locator('#own-rows tr[data-name="invoice.ready"]')).toContainText("Watch von Ledger");
-  await expect(page.locator("details#ev-section summary")).toContainText("5 Ereignisse");
-  await expect(page.locator("details#ev-section summary")).toContainText("1 Empfänger wartet auf einen Namen, den atlas nie aussendet");
-  await expect(page.locator("details#own-section summary")).toContainText("6 Namen");
-  await expect(page.locator("details#own-section summary")).toContainText("4 mit Befund");
+  await expect(page.locator("#ev-section .ev-head")).toContainText("5 Ereignisse");
+  await expect(page.locator("#ev-section .ev-head")).toContainText("1 Empfänger wartet auf einen Namen, den atlas nie aussendet");
+  await expect(page.locator("#own-section .ev-head")).toContainText("6 Namen");
+  await expect(page.locator("#own-section .ev-head")).toContainText("4 mit Befund");
   await expect(page.locator("#own-channel option")).toHaveText(["Alle", "Signale", "Nachrichten"]);
   // The page says which language it is in, inside a Console whose document is English.
   await expect(page.locator("#ev-section").locator("xpath=ancestor::*[@lang][1]")).toHaveAttribute("lang", "de");

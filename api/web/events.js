@@ -23,6 +23,7 @@
 // nothing on screen said that the click had done anything.
 
 import { locale, t, plural } from "./i18n.js";
+import { unfold, pageOf } from "./fold.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -48,16 +49,6 @@ function said(text) {
   const lang = [locale(), "en", "de"].find((l) => t[l]);
   return lang ? `<span lang="${lang}">${esc(t[lang])}</span>` : "";
 }
-
-// Whether a section is folded, per browser. Open unless folded here before; a browser
-// whose storage throws keeps both open.
-const FOLD_KEY = { catalog: "atlas.events.catalog", own: "atlas.events.own" };
-const isFolded = (which) => {
-  try { return localStorage.getItem(FOLD_KEY[which]) === "0"; } catch { return false; }
-};
-const rememberFold = (which, open) => {
-  try { localStorage.setItem(FOLD_KEY[which], open ? "1" : "0"); } catch { /* not storable */ }
-};
 
 // closeDetail closes the dialog open now, if one is: there is one at a time.
 let closeDetail = () => {};
@@ -99,11 +90,6 @@ function openDetail({ title, body, cls, from }) {
   ov.querySelector("[data-done]").addEventListener("click", () => close(true));
   closeDetail = () => close(false);
   ov.querySelector(".modal").focus();
-}
-
-// foldable wires a section's <details> to the browser's memory of it.
-function foldable(el, which) {
-  el.addEventListener("toggle", () => rememberFold(which, el.open));
 }
 
 // withheld says the server passes over this entry's events in the feed: a fact of the
@@ -275,8 +261,8 @@ export async function viewEvents({ api, view, isSuperseded }) {
   view.innerHTML = `<div lang="${esc(locale())}">
     <div class="between"><h1>${tx("events.title")}</h1></div>
     <p class="muted">${tx("events.intro")}</p>
-    <details class="ev-section" id="ev-section"${isFolded("catalog") ? "" : " open"}>
-      <summary><h2>${tx("events.catalog.title")}</h2><span class="muted small" id="ev-sum"></span></summary>
+    <section class="ev-section fold-topic" id="ev-section">
+      <div class="ev-head"><h2>${tx("events.catalog.title")}</h2><span class="muted small" id="ev-sum"></span></div>
       <p class="muted">${tx("events.catalog.intro")}</p>
       <div class="card" id="ev-card" style="padding:0">
         <table data-dt-key="events">
@@ -284,9 +270,9 @@ export async function viewEvents({ api, view, isSuperseded }) {
           <tbody id="ev-rows"><tr><td colspan="6" class="empty">${tx("events.loading")}</td></tr></tbody>
         </table>
       </div>
-    </details>
-    <details class="ev-section" id="own-section"${isFolded("own") ? "" : " open"}>
-      <summary><h2 id="own-title">${tx("events.own.title")}</h2><span class="muted small" id="own-sum"></span></summary>
+    </section>
+    <section class="ev-section fold-topic" id="own-section">
+      <div class="ev-head"><h2 id="own-title">${tx("events.own.title")}</h2><span class="muted small" id="own-sum"></span></div>
       <p class="muted">${t("events.own.intro")}</p>
       <div class="row" style="gap:12px;align-items:center;margin-bottom:8px">
         <label>${tx("events.own.channel")} <select id="own-channel"><option value="">${tx("events.own.channel.all")}</option><option value="signal">${tx("events.own.channel.signal")}</option><option value="message">${tx("events.own.channel.message")}</option></select></label>
@@ -298,9 +284,7 @@ export async function viewEvents({ api, view, isSuperseded }) {
           <tbody id="own-rows"><tr><td colspan="5" class="empty">${tx("events.loading")}</td></tr></tbody>
         </table>
       </div>
-    </details></div>`;
-  foldable(view.querySelector("#ev-section"), "catalog");
-  foldable(view.querySelector("#own-section"), "own");
+    </section></div>`;
 
   // The installation's own names are asked for beside the catalogue: neither waits
   // for the other, and a failure of one leaves the other's section standing.
@@ -418,7 +402,7 @@ function renderOwn(view, sig, msg) {
     const i = names.findIndex((n) => n.name === want.name && (!want.channel || n.channel === want.channel));
     if (i >= 0) {
       // The row stays where the dialog closes onto, so its section is unfolded for it.
-      view.querySelector("#own-section").open = true;
+      unfold(view.querySelector("#own-section"), pageOf(location.hash));
       const tr = rowsEl.querySelector(`tr[data-own="${i}"]`);
       if (tr) tr.scrollIntoView({ block: "center" });
       show(i, tr);

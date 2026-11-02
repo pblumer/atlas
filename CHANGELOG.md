@@ -95,6 +95,16 @@ _Changed_ / _Removed_ for each version.
   ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
   TLS update example and names the folder the release archive unpacks to.
 
+- **The last folds of their own fold like every other section.** Console › Events, the
+  cards of Operations › Mockups, Mock directory and Mock database, the dashboard's
+  release notes and key features, and the sections of a catalogue's own page folded with
+  controls of their own, each looking and remembering differently. They now fold with
+  the same caret and are remembered the same way as every other section
+  ([ADR-0505](docs/adr/0505-every-topic-folds.md)): a mockup card stays folded through a
+  refresh and across a visit, and a catalogue's sections still start folded and say what
+  they hold. What those sections were remembered under before is not carried over, so
+  each starts in its default state once.
+
 - **Every page with two or more sections folds each of them.** The sections the
   folding of [ADR-0505](docs/adr/0505-every-topic-folds.md) did not find now fold under
   their headings and are remembered like the rest: every card of Operations › Workers
