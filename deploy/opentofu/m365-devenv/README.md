@@ -212,7 +212,7 @@ SharePoint:
 | Worker | Ohne Schalter | Mit `shared_tenant = true` |
 |---|---|---|
 | `mail` | `Mail.Send` in Entra (jedes Postfach) | kein `Mail.Send` in Entra; Exchange **RBAC for Applications**: «Application Mail.Send» nur im Management Scope |
-| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
+| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Security Group Creation and Membership*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
 | `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website |
 | `teamsphone` | Rolle *Teams Administrator* | **nicht erlaubt**: die Rolle lässt sich nicht eingrenzen (`workers = { teamsphone = false }` setzen) |
 | `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |

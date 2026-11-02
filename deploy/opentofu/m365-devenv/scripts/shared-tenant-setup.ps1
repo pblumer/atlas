@@ -87,6 +87,18 @@ if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
                     -CustomRecipientWriteScope $c.scope_name `
                     -Description "Atlas test environment $($c.prefix): Exchange worker, test recipients only" | Out-Null
             }
+            # A role group from an earlier run keeps its roles; one the configuration now
+            # names is added with the same write scope. View-Only Recipients reads and
+            # takes no write scope.
+            $assigned = @(Get-ManagementRoleAssignment -RoleAssignee $c.exchange_role_group -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Role)" })
+            foreach ($role in $c.exchange_roles) {
+                if ($assigned -notcontains $role) {
+                    Step "role group $($c.exchange_role_group) gains $role, write scope $($c.scope_name)"
+                    $ra = @{ Role = $role; SecurityGroup = $c.exchange_role_group }
+                    if ($role -ne 'View-Only Recipients') { $ra.CustomRecipientWriteScope = $c.scope_name }
+                    New-ManagementRoleAssignment @ra | Out-Null
+                }
+            }
             $members = @(Find { Get-RoleGroupMember -Identity $c.exchange_role_group -ErrorAction Stop })
             if (-not ($members | Where-Object { "$($_.ExternalDirectoryObjectId)$($_.Identity)$($_.Name)" -match [regex]::Escape($c.exchange_sp_object_id) -or $_.Name -eq $c.exchange_display_name })) {
                 Step "$($c.exchange_display_name) joins $($c.exchange_role_group)"
