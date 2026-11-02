@@ -115,6 +115,23 @@
           if (window.__scenario.failNext > 0) { window.__scenario.failNext--; fail(500, "internal", "disk on fire"); }
           return page(u.searchParams);
         }
+        const steps = u.pathname.match(/\/iterations\/(\d+)\/steps$/);
+        if (steps) {
+          if (window.__scenario.noSteps) fail(409, "history_unavailable", "iteration steps unavailable");
+          // An iteration's replay window: its own activation, the task it ran,
+          // and its end. Iteration 37,421 has a second page.
+          const n = Number(steps[1]) - 1_000_000;
+          const eik = steps[1];
+          const st = (pos, action, extra = {}) => ({ position: pos, at: pos, action, elementId: "Calc_1", type: "bpmn:serviceTask",
+            elementInstanceKey: eik, tokenId: "3", parentTokenId: "2", processDefinitionKey: "7", ...extra });
+          const all = [st(100 + n, "activated", { multiInstanceIteration: true }),
+            st(150 + n, "completed"), st(160 + n, "completed"), st(200000 + n, stateOf(n) === "terminated" ? "terminated" : "completed", { multiInstanceIteration: true })];
+          const paged = n === 37421;
+          const from = u.searchParams.get("cursor") ? 3 : 0;
+          const rows = paged ? all.slice(from, from ? 4 : 3) : all;
+          return { instanceKey: KEY, body, iteration: row(n), highWaterPosition: 300100, steps: rows,
+            nextCursor: paged && !from ? "s:3" : undefined };
+        }
         const one = u.pathname.match(/\/iterations\/(\d+)$/);
         if (one) {
           const n = Number(one[1]) - 1_000_000;

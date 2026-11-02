@@ -370,6 +370,18 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 	if *one.Iteration.Iteration != 20000 || len(one.Incidents) != 1 || one.Incidents[0].Status != "open" {
 		t.Fatalf("iteration 20,000: %+v", one)
 	}
+	var window struct {
+		Steps []struct {
+			Action                 string `json:"action"`
+			MultiInstanceIteration bool   `json:"multiInstanceIteration"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	measure("replay window of iteration 37,421", fmt.Sprintf("%s/iterations/%d/steps", base, exact.Iterations[0].ElementInstanceKey), &window)
+	if len(window.Steps) != 2 || window.Steps[0].Action != "activated" || window.Steps[1].Action != "completed" ||
+		!window.Steps[0].MultiInstanceIteration || window.NextCursor != "" {
+		t.Fatalf("replay window of iteration 37,421: %+v", window)
+	}
 
 	// The overview must not grow with the iteration count: against the
 	// 2,000-iteration instance it is the same size, give or take the digits of
@@ -428,6 +440,18 @@ func miAnswers(t *testing.T, s *state.Store, pi, bodyKey uint64) []state.MIHisto
 		t.Fatalf("body: %v %v", ok, err)
 	}
 	out := []state.MIHistoryEntry{*body}
+	// An iteration's steps, as entries: its activation and end positions.
+	for _, n := range []uint64{1, 37421, 50000} {
+		if _, err := s.MIIterationPage(pi, bodyKey, body.ActivationPosition, state.MIIterationQuery{From: n, Limit: 1}, func(e state.MIHistoryEntry) error {
+			_, err := s.IterationStepsPage(pi, e.ElementInstanceKey, nil, 0, state.MIMaxPageLimit, func(o state.OutlineStep) error {
+				out = append(out, state.MIHistoryEntry{ElementInstanceKey: o.ElementInstanceKey, ActivationPosition: o.Position, LoopCounter: uint64(o.Action)})
+				return nil
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, q := range []state.MIIterationQuery{
 		{Limit: 200}, {From: 37421, Limit: 200}, {From: 49901, Limit: 200},
 		{IncidentsOnly: true, Limit: 200}, {State: state.MIHistoryActive, Limit: 200},

@@ -40,6 +40,7 @@ var miHistoryGates = []handlerGate{
 	{"HandleIterations", roleGated, "iteration keys, numbers, states and incident counts of one body; no variable values"},
 	{"HandleIteration", roleGated, "one iteration's incidents, nested bodies, its own scope's variables and its decisions — what /timeline and /decisions already show an Operator for the same instance"},
 	{"HandleOutline", roleGated, "an instance's steps outside its MI iterations: a subset of the rows /timeline returns"},
+	{"HandleIterationSteps", roleGated, "the steps inside one MI iteration: a subset of the rows /timeline returns for the same instance"},
 }
 
 func TestEveryHandlerIsClassified(t *testing.T) {

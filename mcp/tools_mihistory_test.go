@@ -85,6 +85,43 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 	if detail.Iteration.Iteration != 5 || detail.Iteration.State != "completed" {
 		t.Fatalf("detail: %+v", detail)
 	}
+	type stepsPage struct {
+		Steps []struct {
+			ElementID              string `json:"elementId"`
+			Action                 string `json:"action"`
+			MultiInstanceIteration bool   `json:"multiInstanceIteration"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	var s1, s2 stepsPage
+	iterArgs := map[string]any{"key": key, "bodyKey": body, "iterationKey": p2.Iterations[1].ElementInstanceKey, "limit": 1}
+	call(11, "atlas_multi_instance_iteration_steps", iterArgs, &s1)
+	if len(s1.Steps) != 1 || s1.Steps[0].Action != "activated" || !s1.Steps[0].MultiInstanceIteration || s1.Steps[0].ElementID != "calc" || s1.NextCursor == "" {
+		t.Fatalf("first steps page: %+v", s1)
+	}
+	iterArgs["cursor"] = s1.NextCursor
+	call(12, "atlas_multi_instance_iteration_steps", iterArgs, &s2)
+	if len(s2.Steps) != 1 || s2.Steps[0].Action != "completed" || s2.NextCursor != "" {
+		t.Fatalf("second steps page: %+v", s2)
+	}
+	for i, bad := range []struct {
+		tool string
+		args map[string]any
+		says string
+	}{
+		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "iterationKey": 1}, "bodyKey"},
+		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "bodyKey": body}, "iterationKey"},
+		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "bodyKey": body, "iterationKey": 1, "cursor": 7}, "cursor"},
+		{"atlas_multi_instance_iteration", map[string]any{"key": key, "bodyKey": body}, "iterationKey"},
+		{"atlas_multi_instance_iterations", map[string]any{"key": key, "bodyKey": body, "state": 3}, "state"},
+		{"atlas_instance_multi_instances", map[string]any{"key": key, "cursor": 7}, "cursor"},
+		{"atlas_instance_outline", map[string]any{"key": key, "cursor": 7}, "cursor"},
+	} {
+		text, isErr := toolText(t, result(t, run(t, atlas, callTool(20+i, bad.tool, bad.args))[0]))
+		if !isErr || !strings.Contains(text, bad.says) {
+			t.Fatalf("steps with %v: %q %v", bad.args, text, isErr)
+		}
+	}
 	text, isErr := toolText(t, result(t, run(t, atlas, callTool(9, "atlas_multi_instance_iterations", map[string]any{"key": key, "bodyKey": body, "cursor": 7}))[0]))
 	if !isErr || !strings.Contains(text, "cursor") {
 		t.Fatalf("non-string cursor: %q %v", text, isErr)

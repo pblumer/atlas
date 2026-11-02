@@ -38,6 +38,32 @@ const metaOutlineIndex = "instance_outline_v1"
 
 var outlineIndexVersion = [...]byte{1}
 
+// metaIterationStepsIndex marks the steps inside MI iterations (cfIterationStep)
+// complete. Separate from the outline marker: the outline's hidden rows written
+// before it existed name no owning iteration, so such a store keeps its outline
+// and reports iteration steps unavailable.
+const metaIterationStepsIndex = "mi_iteration_steps_v1"
+
+var iterationStepsIndexVersion = [...]byte{1}
+
+// ErrIterationStepsUnavailable means the steps inside MI iterations are not
+// proven complete for this store; a reader must not present a partial replay
+// window as an iteration's history.
+var ErrIterationStepsUnavailable = errors.New("state: MI iteration steps unavailable for history recorded before they existed")
+
+// IterationStepsIndexReady reports whether the steps inside MI iterations cover
+// the whole retained history of this store.
+func (q queries) IterationStepsIndexReady() (bool, error) {
+	value, ok, err := getCopy(q.r, keyMeta(metaIterationStepsIndex))
+	if err != nil || !ok {
+		return false, err
+	}
+	if !bytes.Equal(value, iterationStepsIndexVersion[:]) {
+		return false, fmt.Errorf("state: invalid MI iteration steps version marker %x", value)
+	}
+	return true, nil
+}
+
 // ErrOutlineIndexUnavailable means the instance outline is not proven complete
 // for this store; a reader must not present a partial outline as the history.
 var ErrOutlineIndexUnavailable = errors.New("state: instance outline unavailable for history recorded before it existed")
@@ -120,7 +146,11 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 		return err
 	}
 	outline, err := s.OutlineIndexReady()
-	if err != nil || (ready && decisions && outline) {
+	if err != nil {
+		return err
+	}
+	steps, err := s.IterationStepsIndexReady()
+	if err != nil || (ready && decisions && outline && steps) {
 		return err
 	}
 	position, err := s.LastAppliedPosition()
@@ -177,6 +207,9 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 	}
 	if err == nil && !outline {
 		err = b.Set(keyMeta(metaOutlineIndex), outlineIndexVersion[:], nil)
+	}
+	if err == nil && !steps {
+		err = b.Set(keyMeta(metaIterationStepsIndex), iterationStepsIndexVersion[:], nil)
 	}
 	if err == nil {
 		err = b.Commit(pebble.Sync)

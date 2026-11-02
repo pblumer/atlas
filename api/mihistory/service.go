@@ -292,7 +292,8 @@ func writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &ae):
 		httpapi.JSON(w, ae.status, map[string]string{"error": ae.msg, "code": ae.code})
-	case errors.Is(err, state.ErrMIHistoryIndexUnavailable), errors.Is(err, state.ErrOutlineIndexUnavailable):
+	case errors.Is(err, state.ErrMIHistoryIndexUnavailable), errors.Is(err, state.ErrOutlineIndexUnavailable),
+		errors.Is(err, state.ErrIterationStepsUnavailable):
 		writeError(w, errUnavailable)
 	case errors.Is(err, ErrLoopClosing):
 		httpapi.JSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error(), "code": "shutting_down"})
@@ -850,6 +851,23 @@ type OutlineStepView struct {
 	// MultiInstanceBody marks a body execution: its iterations are behind it,
 	// in the iterations route.
 	MultiInstanceBody bool `json:"multiInstanceBody,omitempty"`
+	// MultiInstanceIteration marks an iteration's own activation or end, the
+	// first and last of its steps.
+	MultiInstanceIteration bool `json:"multiInstanceIteration,omitempty"`
+}
+
+func stepView(o state.OutlineStep, defs Definitions) OutlineStepView {
+	v := OutlineStepView{
+		Position: o.Position, At: o.At, Action: replayActions[o.Action],
+		ElementInstanceKey: o.ElementInstanceKey, TokenID: o.TokenID, ParentTokenID: o.ParentTokenID,
+		ProcessDefinitionKey: o.ProcessDefKey, MultiInstanceBody: o.MultiInstance == 1,
+		MultiInstanceIteration: o.MultiInstance == 2,
+	}
+	if cp := defs(o.ProcessDefKey); cp != nil && o.ElementID >= 0 && int(o.ElementID) < cp.NodeCount() {
+		v.ElementID = cp.ElementBpmnId(o.ElementID)
+		v.Type = cp.Node(o.ElementID).Type.String()
+	}
+	return v
 }
 
 // OutlineResponse answers GET /api/v1/instances/{key}/outline.
@@ -914,16 +932,7 @@ func (s *Service) outline(r *http.Request) (*OutlineResponse, error) {
 			return err
 		}
 		next, err := rv.OutlinePage(key, after, resp.HighWaterPosition, limit, func(o state.OutlineStep) error {
-			v := OutlineStepView{
-				Position: o.Position, At: o.At, Action: replayActions[o.Action],
-				ElementInstanceKey: o.ElementInstanceKey, TokenID: o.TokenID, ParentTokenID: o.ParentTokenID,
-				ProcessDefinitionKey: o.ProcessDefKey, MultiInstanceBody: o.MultiInstance == 1,
-			}
-			if cp := defs(o.ProcessDefKey); cp != nil && o.ElementID >= 0 && int(o.ElementID) < cp.NodeCount() {
-				v.ElementID = cp.ElementBpmnId(o.ElementID)
-				v.Type = cp.Node(o.ElementID).Type.String()
-			}
-			resp.Steps = append(resp.Steps, v)
+			resp.Steps = append(resp.Steps, stepView(o, defs))
 			return nil
 		})
 		if err != nil || next == nil {
@@ -931,6 +940,94 @@ func (s *Service) outline(r *http.Request) (*OutlineResponse, error) {
 		}
 		resp.NextCursor = s.encodeCursor(cursor{
 			kind: kindOutline, instance: key, filter: digest, highWater: resp.HighWaterPosition,
+			afterA: uint64(next.At), afterB: next.Position, issuedAt: s.now().Unix(),
+		})
+		return nil
+	})
+	return resp, err
+}
+
+// IterationStepsResponse answers
+// GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps.
+type IterationStepsResponse struct {
+	InstanceKey       uint64            `json:"instanceKey"`
+	Body              BodyView          `json:"body"`
+	Iteration         IterationView     `json:"iteration"`
+	HighWaterPosition uint64            `json:"highWaterPosition"`
+	Steps             []OutlineStepView `json:"steps"`
+	NextCursor        string            `json:"nextCursor,omitempty"`
+}
+
+// HandleIterationSteps serves the replay window of one iteration: its own
+// activation, every element that ran inside it (a nested body as one step) and
+// its end, in the order they happened, cursor-paged. Nothing else of the
+// instance is read, so its cost does not grow with the iteration count.
+func (s *Service) HandleIterationSteps(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.iterationSteps(r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	httpapi.JSON(w, http.StatusOK, resp)
+}
+
+func (s *Service) iterationSteps(r *http.Request) (*IterationStepsResponse, error) {
+	key, err := pathUint(r, "key")
+	if err != nil {
+		return nil, err
+	}
+	bodyKey, err := pathUint(r, "bodyKey")
+	if err != nil {
+		return nil, err
+	}
+	iterKey, err := pathUint(r, "iterationKey")
+	if err != nil {
+		return nil, err
+	}
+	limit, err := queryLimit(r)
+	if err != nil {
+		return nil, err
+	}
+	digest := filterDigest("steps")
+	var cur *cursor
+	if text := r.URL.Query().Get("cursor"); text != "" {
+		c, err := s.checkCursor(text, kindSteps, key, iterKey, digest)
+		if err != nil {
+			return nil, err
+		}
+		cur = &c
+	}
+	resp := &IterationStepsResponse{InstanceKey: key, Steps: []OutlineStepView{}}
+	err = s.read(r, func(rv *state.ReadView, defs Definitions) error {
+		body, err := loadBody(rv, key, bodyKey)
+		if err != nil {
+			return err
+		}
+		resp.Body = bodyView(*body, defs)
+		e, ok, err := rv.MIIteration(key, iterKey)
+		if err != nil {
+			return err
+		}
+		if !ok || e.BodyElementKey != bodyKey {
+			return errIterNotFound
+		}
+		resp.Iteration = iterationView(*e)
+		var after *state.OutlinePosition
+		if cur != nil {
+			resp.HighWaterPosition = cur.highWater
+			after = &state.OutlinePosition{At: int64(cur.afterA), Position: cur.afterB}
+		} else if resp.HighWaterPosition, err = rv.LastAppliedPosition(); err != nil {
+			return err
+		}
+		next, err := rv.IterationStepsPage(key, iterKey, after, resp.HighWaterPosition, limit, func(o state.OutlineStep) error {
+			resp.Steps = append(resp.Steps, stepView(o, defs))
+			return nil
+		})
+		if err != nil || next == nil {
+			return err
+		}
+		resp.NextCursor = s.encodeCursor(cursor{
+			kind: kindSteps, instance: key, body: iterKey, filter: digest, highWater: resp.HighWaterPosition,
 			afterA: uint64(next.At), afterB: next.Position, issuedAt: s.now().Unix(),
 		})
 		return nil

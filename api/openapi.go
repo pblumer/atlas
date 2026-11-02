@@ -484,6 +484,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", s.miHistory.HandleIteration, apiOp{
 			summary: "Read one multi-instance iteration: its iteration number, lifecycle state and log positions, the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and the multi-instance bodies nested in it (ADR-0517)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Iteration detail", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", s.miHistory.HandleIterationSteps, apiOp{
+			summary: "Page through the replay window of one multi-instance iteration — its own activation, every element that ran inside it (a nested multi-instance body as one step) and its end, in the order they happened — without reading the rest of the instance. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's iteration steps are not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration steps page", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},

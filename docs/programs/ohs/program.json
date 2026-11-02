@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge #1507 (bounded view of a large instance's own steps); then the iteration replay window (OHS3). Engine quadratic MI-subprocess completion is Issue #1494.",
+  "next_action": "Merge #1507 (bounded view of a large instance's own steps), then the iteration replay window PR (OHS3 increment 2); then variable values per step and job/user-task history per iteration. Engine quadratic MI-subprocess completion is Issue #1494.",
   "slices": [
     {
       "id": "OHS1",
@@ -69,10 +69,13 @@
       "prs": [
         1502
       ],
-      "note": "Increment 1 (#1502, merged): one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Open: the step-by-step replay window of one iteration on the diagram, job/user-task history per iteration, 50k acceptance of the detail view and the retention/migration verification.",
+      "note": "Increment 1 (#1502, merged): one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Increment 2: the replay window of one iteration — the steps inside it (cfIterationStep, readiness marker mi_iteration_steps_v1, covered by the startup rebuild), a bounded route and MCP tool, and a step-by-step replay on the diagram in the explorer; 1,110 bytes / 1.2 ms for iteration 37,421 of the 50k acceptance instance. Open: variable values at each step, collapsed-subprocess planes, job/user-task history per iteration, and the retention/migration verification.",
       "evidence": [
         "../../../engine/miindex_v2_recovery_test.go",
-        "../../../api/mihistory/service_test.go"
+        "../../../api/mihistory/service_test.go",
+        "../../../state/outline_test.go",
+        "../../../api/mihistory/acceptance_test.go",
+        "../../../e2e/mi-explorer.spec.mjs"
       ]
     }
   ]

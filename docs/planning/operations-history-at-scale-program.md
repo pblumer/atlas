@@ -35,6 +35,8 @@ Introduce a read-only, cursor-paged API to discover body groups and find iterati
 
 Load the selected iteration's causal replay window and its exact inputs, outputs, decisions, incidents and variables without materializing every frame/snapshot for the full process. Confirm semantics for nested MI, migration, terminated rounds, retention purge, parallel branches, and backwards compatibility. Test with a 50,000-iteration fixture and report memory/latency/writer responsiveness before merge.
 
+*Status 2026-11-02.* Built: one iteration's recorded scope variables and attributed DMN decisions in the iteration detail (increment 1), and its replay window (increment 2): the steps inside one iteration (`cfIterationStep`, own readiness marker, covered by the startup rebuild), `GET …/iterations/{iterationKey}/steps`, MCP `atlas_multi_instance_iteration_steps`, and a step-by-step replay on the diagram in the explorer. Evidence: `state/outline_test.go` (nested, parallel and terminated iterations, purge, older hidden rows), `engine/miindex_v2_recovery_test.go` (identical steps after WAL replay), `api/mihistory/acceptance_test.go` (replay window of iteration 37,421 at 50,000 iterations), `e2e/mi-explorer.spec.mjs`. Open: variable values per step, collapsed-subprocess planes, job/user-task history per iteration, per-instance readiness for compacted logs.
+
 ## Release and gates
 
 Each slice uses TDD, Playwright tests where the UI changes, the mandatory Go checks, review, and programme handoff. An implementation is not complete simply because its PR merges. Do not claim the 50,000-iteration user experience until OHS3 is independently verified.

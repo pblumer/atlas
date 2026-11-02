@@ -594,6 +594,34 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_multi_instance_iteration_steps",
+			Description: "Page through the replay window of one multi-instance iteration (ADR-0517): its own " +
+				"activation and end (multiInstanceIteration: true) and every element that ran inside it in order, a " +
+				"nested multi-instance body as one step (multiInstanceBody: true; its iterations have their own steps). " +
+				"Bounded and paged: pass the nextCursor back as 'cursor'. A 409 history_unavailable means this " +
+				"installation's iteration steps are not verified complete — not that nothing ran.",
+			InputSchema: miBodySchema(map[string]any{
+				"iterationKey": integerProp("The iteration's element-instance key (from atlas_multi_instance_iterations)."),
+				"limit":        integerProp("Optional page size, 1-200 (default 100)."),
+				"cursor":       stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+			}, "iterationKey"),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				it, err := argUint(args, "iterationKey")
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "limit")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10) + "/steps" + q))
+			},
+		},
+		{
 			Name: "atlas_instance_decisions",
 			Description: "Read the DMN decision evaluations one process instance made — each with the decision id, " +
 				"the business rule task that called it, and the inputs, outputs, and evaluation trace. An instance " +
