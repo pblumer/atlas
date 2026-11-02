@@ -452,3 +452,77 @@ run "letsencrypt_opens_80_and_443" {
     error_message = "HTTP-01 validation needs port 80 from anywhere."
   }
 }
+
+run "shared_tenant_scopes_the_mailbox_rights" {
+  command = apply
+
+  variables {
+    shared_tenant            = true
+    workers                  = { teamsphone = false }
+    credential_validity_days = 3
+  }
+
+  assert {
+    condition     = length(local.mail_graph_permissions_effective) == 0
+    error_message = "In a shared tenant the mail app holds no Mail.Send in Entra; an Entra grant would stay unscoped."
+  }
+  assert {
+    condition     = length(local.exchange_directory_roles_effective) == 0
+    error_message = "In a shared tenant the Exchange app holds no Exchange directory role."
+  }
+  assert {
+    condition     = tolist(local.sharepoint_graph_permissions_effective) == tolist(["Sites.Selected"])
+    error_message = "In a shared tenant SharePoint gets Sites.Selected only."
+  }
+  assert {
+    condition     = output.shared_tenant.recipient_filter == "Alias -like 'atlas-test-ab12*'"
+    error_message = "The Exchange scope covers exactly this environment's recipients."
+  }
+  assert {
+    condition     = output.shared_tenant.scope_name == "atlas-test-ab12-scope" && output.shared_tenant.exchange_role_group == "atlas-test-ab12-exchange-worker"
+    error_message = "Everything created in Exchange carries the prefix, so the cleanup finds it without state."
+  }
+  assert {
+    condition     = startswith(output.shared_tenant.mail_sender, "atlas-test-ab12-")
+    error_message = "The mail worker sends from a test mailbox inside the scope."
+  }
+  assert {
+    condition     = length(module.teamsphone) == 0
+    error_message = "No Teams Phone app in a shared tenant."
+  }
+}
+
+run "shared_tenant_refuses_teams_phone" {
+  command = plan
+
+  variables {
+    shared_tenant            = true
+    credential_validity_days = 3
+  }
+
+  expect_failures = [terraform_data.shared_tenant_guard]
+}
+
+run "shared_tenant_refuses_long_lived_credentials" {
+  command = plan
+
+  variables {
+    shared_tenant = true
+    workers       = { teamsphone = false }
+  }
+
+  expect_failures = [terraform_data.shared_tenant_guard]
+}
+
+run "shared_tenant_refuses_a_sender_outside_the_scope" {
+  command = plan
+
+  variables {
+    shared_tenant            = true
+    workers                  = { teamsphone = false }
+    credential_validity_days = 3
+    mail_sender              = "patrick@blumer.net"
+  }
+
+  expect_failures = [terraform_data.shared_tenant_guard]
+}
