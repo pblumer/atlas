@@ -96,12 +96,41 @@
         if (/\/instances\/\d+\/multi-instances/.test(u.pathname) && window.__scenario.unavailable) {
           fail(409, "history_unavailable", "history unavailable");
         }
+        if (/\/instances\/\d+\/outline$/.test(u.pathname)) {
+          if (window.__scenario.noOutline) fail(409, "history_unavailable", "outline unavailable");
+          // Start, the loop's body, and End: the 50,000 iterations are not in it.
+          const step = (pos, id, eik, action, extra = {}) => ({ position: pos, at: (1_722_260_303_000 + pos) * 1e6, action,
+            elementId: id, type: "bpmn:task", elementInstanceKey: eik, tokenId: "1", parentTokenId: "0", processDefinitionKey: "7", ...extra });
+          return { instanceKey: KEY, processDefinitionKey: "7", instanceState: "completed", highWaterPosition: 300100, steps: [
+            step(1, "Start_1", "500", "activated"), step(2, "Start_1", "500", "completed"),
+            step(3, "Calc_1", BODY, "activated", { multiInstanceBody: true }),
+            step(300000, "Calc_1", BODY, "completed", { multiInstanceBody: true }),
+            step(300001, "End_1", "501", "activated"), step(300002, "End_1", "501", "completed"),
+          ] };
+        }
         if (/\/instances\/\d+\/multi-instances$/.test(u.pathname)) {
           return { instanceKey: KEY, processDefinitionKey: "7", instanceState: "completed", highWaterPosition: 300100, bodies: [body] };
         }
         if (/\/multi-instances\/\d+\/iterations$/.test(u.pathname)) {
           if (window.__scenario.failNext > 0) { window.__scenario.failNext--; fail(500, "internal", "disk on fire"); }
           return page(u.searchParams);
+        }
+        const steps = u.pathname.match(/\/iterations\/(\d+)\/steps$/);
+        if (steps) {
+          if (window.__scenario.noSteps) fail(409, "history_unavailable", "iteration steps unavailable");
+          // An iteration's replay window: its own activation, the task it ran,
+          // and its end. Iteration 37,421 has a second page.
+          const n = Number(steps[1]) - 1_000_000;
+          const eik = steps[1];
+          const st = (pos, action, extra = {}) => ({ position: pos, at: pos, action, elementId: "Calc_1", type: "bpmn:serviceTask",
+            elementInstanceKey: eik, tokenId: "3", parentTokenId: "2", processDefinitionKey: "7", ...extra });
+          const all = [st(100 + n, "activated", { multiInstanceIteration: true }),
+            st(150 + n, "completed"), st(160 + n, "completed"), st(200000 + n, stateOf(n) === "terminated" ? "terminated" : "completed", { multiInstanceIteration: true })];
+          const paged = n === 37421;
+          const from = u.searchParams.get("cursor") ? 3 : 0;
+          const rows = paged ? all.slice(from, from ? 4 : 3) : all;
+          return { instanceKey: KEY, body, iteration: row(n), highWaterPosition: 300100, steps: rows,
+            nextCursor: paged && !from ? "s:3" : undefined };
         }
         const one = u.pathname.match(/\/iterations\/(\d+)$/);
         if (one) {

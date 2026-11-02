@@ -18,7 +18,7 @@ const mount = async (page) => {
 test("a 50,000-iteration instance opens as a collapsed group without the timeline", async ({ page }) => {
   await mount(page);
   const group = page.locator("#history-list .ops-hrow.mi-bounded");
-  await expect(group).toContainText("Calc_1");
+  await expect(group).toContainText("Calculate positions"); // the diagram's name, not the element id
   await expect(group.locator(".ops-mi-count")).toContainText("50");
   await expect(group.locator(".mi-summary")).toContainText("3");
   await expect(page.locator(".mi-bounded-note")).toBeVisible();
@@ -132,4 +132,89 @@ test("an iteration shows its own variables and decisions, technical detail on re
   await expect(page.locator(".mi-ex-detail .mi-dec-trace")).toHaveCount(1);
   const asked = await page.evaluate(() => window.__requests.filter((u) => u.includes("technical=true")));
   expect(asked.length).toBe(1);
+});
+
+test("the bounded view shows the instance's own steps around its collapsed loop", async ({ page }) => {
+  await mount(page);
+  const rows = page.locator("#history-list .ops-hrow");
+  await expect(rows).toHaveCount(3); // Start, the loop, End — not 50,000 iterations
+  await expect(rows.nth(0)).toContainText("Start");
+  await expect(rows.nth(1)).toHaveClass(/mi-group/);
+  await expect(rows.nth(1)).toContainText("Calculate positions");
+  await expect(rows.nth(2)).toContainText("End");
+  await rows.nth(2).click();
+  await expect(rows.nth(2)).toHaveClass(/sel/);
+  const asked = await page.evaluate(() => window.__requests);
+  expect(asked.some((u) => u.includes("/outline"))).toBe(true);
+  expect(asked.some((u) => u.includes("/timeline"))).toBe(false);
+});
+
+test("without an outline the bounded view says so and lists the executions", async ({ page }) => {
+  await page.evaluate(() => { window.__scenario.noOutline = true; });
+  await mount(page);
+  await expect(page.locator(".mi-bounded-hint")).toBeVisible();
+  await expect(page.locator("#history-list .mi-outline-step")).toHaveCount(0);
+});
+
+test("an iteration replays step by step on the diagram", async ({ page }) => {
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-explorer .mi-row").first().click();
+  const replay = page.locator(".mi-ex-detail .mi-replay");
+  await replay.locator(".mi-rp-load").click();
+  const steps = replay.locator(".mi-rp-step");
+  await expect(steps).toHaveCount(4);
+  await expect(steps.first()).toHaveClass(/cur/);
+  await expect(steps.first()).toContainText("Calculate positions"); // the diagram's name
+  const calc = page.locator('.djs-element[data-element-id="Calc_1"]');
+  await expect(calc).toHaveClass(/atlas-active/);
+  await replay.locator(".mi-rp-next").click();
+  await expect(steps.nth(1)).toHaveClass(/cur/);
+  await expect(replay.locator(".mi-rp-pos")).toContainText("2");
+  await steps.nth(3).click();
+  await expect(replay.locator(".mi-rp-next")).toBeDisabled();
+  await replay.locator(".mi-rp-prev").click();
+  await expect(steps.nth(2)).toHaveClass(/cur/);
+  // Play runs to the end and stops there.
+  await replay.locator(".mi-rp-play").click();
+  await expect(replay.locator(".mi-rp-play")).toContainText("\u275A"); // ❚❚ while playing
+  await expect(steps.nth(3)).toHaveClass(/cur/, { timeout: 5000 });
+  await expect(replay.locator(".mi-rp-play")).toContainText("\u25B6", { timeout: 5000 }); // ▶ again, not ❚❚
+  const asked = await page.evaluate(() => window.__requests.filter((u) => u.includes("/steps")));
+  expect(asked.length).toBe(1);
+  expect(asked[0]).toContain("/iterations/1000001/steps");
+  // Closing the explorer leaves no replay marks on the diagram.
+  await page.locator(".mi-ex-close").click();
+  await expect(page.locator(".djs-element.atlas-active, .djs-element.atlas-visited")).toHaveCount(0);
+});
+
+test("a long replay window loads its next page, and another iteration starts afresh", async ({ page }) => {
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-ex-jump").fill("37421");
+  await page.locator(".mi-ex-controls button[type=submit]").click();
+  await expect(page.locator(".mi-explorer .mi-row").first()).toContainText("421");
+  await page.locator(".mi-explorer .mi-row").first().click();
+  const replay = page.locator(".mi-ex-detail .mi-replay");
+  await replay.locator(".mi-rp-load").click();
+  await expect(replay.locator(".mi-rp-step")).toHaveCount(3);
+  await expect(replay.locator(".mi-rp-pos")).toContainText("+");
+  await replay.locator(".mi-rp-more").click();
+  await expect(replay.locator(".mi-rp-step")).toHaveCount(4);
+  await expect(replay.locator(".mi-rp-step").last()).toHaveClass(/terminated/);
+  await expect(replay.locator(".mi-rp-more")).toHaveCount(0);
+  await page.locator(".mi-explorer .mi-row").nth(1).click();
+  await expect(page.locator(".mi-ex-detail .mi-rp-load")).toBeVisible();
+  await expect(page.locator(".djs-element.atlas-active")).toHaveCount(0);
+});
+
+test("unavailable iteration steps are explained, not shown as empty", async ({ page }) => {
+  await page.evaluate(() => { window.__scenario.noSteps = true; });
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-explorer .mi-row").first().click();
+  await page.locator(".mi-ex-detail .mi-rp-load").click();
+  // The explanation, in the harness's locale — not an empty list.
+  await expect(page.locator(".mi-ex-detail .mi-replay .mi-ex-error")).toContainText(/Iterationsschritte|iteration steps existed/);
+  await expect(page.locator(".mi-ex-detail .mi-rp-step")).toHaveCount(0);
 });

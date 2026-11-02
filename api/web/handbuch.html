@@ -9850,9 +9850,12 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           Eingaben und dem Ergebnis aus dem Log – nichts davon wird neu berechnet. <b>Technische Details
           anzeigen</b> ergänzt die Regel-Spur einer Entscheidung. Hat eine
           Ausführung mehr als 500 Iterationen, lädt das Replay die vollständige schrittweise Historie nicht, weil
-          sie mit der Zahl der Iterationen quadratisch wächst; du siehst dann das Diagramm, die Ausführungen und
-          den Explorer. Die schrittweise Wiedergabe einer einzelnen Iteration und die übrigen Schritte einer so
-          grossen Instanz sind in dieser Ansicht noch nicht verfügbar. Meldet der Explorer, die Historie lasse sich
+          sie mit der Zahl der Iterationen quadratisch wächst. Du siehst dann das Diagramm und die Schritte der
+          Instanz in ihrer Reihenfolge – Start, Aufgaben, Gateways, Ende –, jede grosse Ausführung als eine
+          zugeklappte Zeile dazwischen, und den Explorer. <b>Diese Iteration wiedergeben</b> im Detail einer
+          Iteration spielt ihre Schritte auf dem Diagramm ab – die bisher durchlaufenen Elemente sind markiert, das
+          aktuelle hervorgehoben –, schrittweise vor und zurück oder mit <b>Abspielen</b>; eine verschachtelte
+          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Meldet der Explorer, die Historie lasse sich
           noch nicht sicher vollständig anzeigen, wurde sie aufgezeichnet, bevor es den Index dafür gab – das heisst
           nicht, dass keine Iterationen gelaufen sind. Dieselben Daten liefern
           <code>GET /api/v1/instances/{key}/multi-instances</code> und die MCP-Tools
@@ -9869,9 +9872,12 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           number, its list item, what the iteration wrote itself) and the DMN decisions it evaluated, with the
           inputs and the result taken from the log; none of it is recomputed. <b>Show technical details</b> adds a
           decision's rule trace. When an execution has more than 500 iterations, the replay does not load the
-          complete step-by-step history, because that grows with the square of the iteration count; you see the
-          diagram, the executions and the explorer instead. A step-by-step replay of one iteration and the other
-          steps of such a large instance are not available in this view yet. When the explorer says the history
+          complete step-by-step history, because that grows with the square of the iteration count. You see the
+          diagram and the instance's steps in their order – start, tasks, gateways, end – with each large execution
+          as one collapsed row between them, and the explorer. <b>Replay this iteration</b> in an iteration's
+          detail plays its steps on the diagram – the elements passed so far are marked, the current one
+          highlighted – step by step forward and back or with <b>Play</b>; a nested execution is one step in it,
+          and its iterations have steps of their own. When the explorer says the history
           cannot yet be shown as complete, it was recorded before the index for it existed – that does not mean
           no iterations ran. The same data comes from <code>GET /api/v1/instances/{key}/multi-instances</code> and
           the MCP tools <code>atlas_instance_multi_instances</code> and

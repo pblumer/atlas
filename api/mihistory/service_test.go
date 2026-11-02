@@ -102,6 +102,8 @@ func (w *world) mount(mux *http.ServeMux, svc *Service) {
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}", svc.HandleBody)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", svc.HandleIterations)
 	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", svc.HandleIteration)
+	mux.HandleFunc("GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", svc.HandleIterationSteps)
+	mux.HandleFunc("GET /api/v1/instances/{key}/outline", svc.HandleOutline)
 }
 
 // view is what the server supplies: a read view of the store, closed after fn.
@@ -374,6 +376,9 @@ func TestIterationRequestsRejectBadParametersAndCursors(t *testing.T) {
 		{"unknown body", iterPath(pi, 424242), nil, 404, "not_found"},
 		{"body of another instance", iterPath(pi, otherBody.BodyElementInstanceKey), nil, 404, "not_found"},
 		{"bad instance key", "/api/v1/instances/abc/multi-instances", nil, 400, "invalid_parameter"},
+		{"from not a number", path, url.Values{"from": {"x"}}, 400, "invalid_parameter"},
+		{"outline of a bad instance key", "/api/v1/instances/abc/outline", nil, 400, "invalid_parameter"},
+		{"outline limit too large", "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/outline", url.Values{"limit": {"201"}}, 400, "invalid_parameter"},
 		{"unknown iteration", path + "/31337", nil, 404, "not_found"},
 	}
 	for _, tt := range tests {
@@ -581,7 +586,10 @@ func TestDecisionsUnavailableOnOlderHistoryIsNotAnEmptyList(t *testing.T) {
 	}
 }
 
-func TestBodiesListTopLevelAndNestedExecutionsSeparately(t *testing.T) {
+// nestedWorld runs an instance of a parallel MI subprocess over three items whose
+// body holds a sequential MI service task over two; its jobs are left open.
+func nestedWorld(t *testing.T) (*world, uint64) {
+	t.Helper()
 	w := newWorld(t, "[1]", false)
 	b := compiler.NewBuilder(1, "mi-nest-api", 1)
 	start := b.AddStartEvent()
@@ -604,8 +612,11 @@ func TestBodiesListTopLevelAndNestedExecutionsSeparately(t *testing.T) {
 	}
 	w.cp = cp
 	w.p.Deploy(cp)
-	pi := w.start()
+	return w, w.start()
+}
 
+func TestBodiesListTopLevelAndNestedExecutionsSeparately(t *testing.T) {
+	w, pi := nestedWorld(t)
 	var top BodiesResponse
 	w.get(instPath(pi), url.Values{"limit": {"1"}}, &top)
 	if len(top.Bodies) != 1 || top.Bodies[0].Iterations != 3 || top.NextCursor != "" {
@@ -917,6 +928,11 @@ func TestACorruptIndexIsAnErrorNeverAPlausibleAnswer(t *testing.T) {
 		}, func(f fixture) []string {
 			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10)}
 		}},
+		{"iteration step", func(db *pebble.DB, f fixture) error {
+			return db.Set(append([]byte{0x46}, be64(f.pi, f.iter, 1<<63, 1)...), junk, pebble.Sync)
+		}, func(f fixture) []string {
+			return []string{iterPath(f.pi, f.body) + "/" + strconv.FormatUint(f.iter, 10) + "/steps"}
+		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			w, f := setup(t)
@@ -933,5 +949,147 @@ func TestACorruptIndexIsAnErrorNeverAPlausibleAnswer(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestOutlineShowsTheInstanceWithoutItsIterations(t *testing.T) {
+	w := newWorld(t, listIter(250), false)
+	pi := w.start()
+	var page OutlineResponse
+	if code, e := w.get("/api/v1/instances/"+strconv.FormatUint(pi, 10)+"/outline", nil, &page); code != 200 {
+		t.Fatalf("outline: %d %v", code, e)
+	}
+	// start activated+completed, script activated+completed, the MI body
+	// activated — 250 iterations are behind it, not in the outline.
+	var bodies, rows int
+	for _, s := range page.Steps {
+		rows++
+		if s.MultiInstanceBody {
+			bodies++
+		}
+		if s.Type == "" || s.Action == "" {
+			t.Fatalf("step without type or action: %+v", s)
+		}
+	}
+	if bodies != 1 || rows != 5 || page.NextCursor != "" || page.InstanceState != "active" || page.ProcessDefinitionKey != w.cp.Key {
+		t.Fatalf("outline: %+v", page)
+	}
+	var first, second OutlineResponse
+	path := "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/outline"
+	w.get(path, url.Values{"limit": {"2"}}, &first)
+	w.get(path, url.Values{"limit": {"2"}, "cursor": {first.NextCursor}}, &second)
+	if len(first.Steps) != 2 || len(second.Steps) != 2 || second.Steps[0].Position <= first.Steps[1].Position {
+		t.Fatalf("paged outline: %+v / %+v", first.Steps, second.Steps)
+	}
+	var ignored any
+	if status, e := w.get(path, url.Values{"cursor": {bodiesCursor(t, w, pi)}}, &ignored); status != 400 || e["code"] != "cursor_mismatch" {
+		t.Fatalf("a bodies cursor on the outline: %d %v", status, e)
+	}
+	if status, e := w.get("/api/v1/instances/999999/outline", nil, &ignored); status != 404 {
+		t.Fatalf("unknown instance: %d %v", status, e)
+	}
+}
+
+func TestOutlineOfOlderHistoryIsUnavailable(t *testing.T) {
+	w, pi := legacyWorld(t, "instance_outline_v1")
+	var ignored any
+	status, e := w.get("/api/v1/instances/"+strconv.FormatUint(pi, 10)+"/outline", nil, &ignored)
+	if status != http.StatusConflict || e["code"] != "history_unavailable" {
+		t.Fatalf("outline of older history: %d %v", status, e)
+	}
+}
+
+// The replay window of one iteration is what ran inside it, in order: its own
+// activation, the subprocess's start event, the nested body as one step — and
+// nothing of the other iterations.
+func TestIterationStepsAreOneIterationsReplayWindow(t *testing.T) {
+	w, pi := nestedWorld(t)
+	var top BodiesResponse
+	w.get(instPath(pi), nil, &top)
+	outer := top.Bodies[0].BodyElementInstanceKey
+	var rounds IterationsResponse
+	w.get(iterPath(pi, outer), nil, &rounds)
+	second := rounds.Iterations[1].ElementInstanceKey
+	path := iterPath(pi, outer) + "/" + strconv.FormatUint(second, 10) + "/steps"
+	var page IterationStepsResponse
+	if code, e := w.get(path, nil, &page); code != 200 {
+		t.Fatalf("steps: %d %v", code, e)
+	}
+	var got []string
+	for _, s := range page.Steps {
+		if s.ElementInstanceKey != second && s.Action == "activated" && s.MultiInstanceIteration {
+			t.Fatalf("another iteration in this one's window: %+v", s)
+		}
+		got = append(got, s.Action+":"+s.Type)
+	}
+	if page.Iteration.ElementInstanceKey != second || page.Iteration.Iteration == nil || *page.Iteration.Iteration != 2 || page.Body.BodyElementInstanceKey != outer ||
+		len(page.Steps) != 4 || !page.Steps[0].MultiInstanceIteration || !page.Steps[3].MultiInstanceBody || page.NextCursor != "" {
+		t.Fatalf("steps %v: %+v", got, page)
+	}
+
+	var first, rest IterationStepsResponse
+	w.get(path, url.Values{"limit": {"3"}}, &first)
+	if code, e := w.get(path, url.Values{"cursor": {first.NextCursor}}, &rest); code != 200 || len(first.Steps) != 3 || len(rest.Steps) != 1 ||
+		rest.Steps[0].Position != page.Steps[3].Position {
+		t.Fatalf("paged: %d %v %+v / %+v", code, e, first.Steps, rest.Steps)
+	}
+
+	var nested BodiesResponse
+	w.get(instPath(pi), url.Values{"parentIteration": {strconv.FormatUint(second, 10)}}, &nested)
+	inner := nested.Bodies[0].BodyElementInstanceKey
+	var innerRounds IterationsResponse
+	w.get(iterPath(pi, inner), nil, &innerRounds)
+	var innerSteps IterationStepsResponse
+	w.get(iterPath(pi, inner)+"/"+strconv.FormatUint(innerRounds.Iterations[0].ElementInstanceKey, 10)+"/steps", nil, &innerSteps)
+	if len(innerSteps.Steps) != 1 || !innerSteps.Steps[0].MultiInstanceIteration || innerSteps.Steps[0].Type != page.Steps[3].Type {
+		t.Fatalf("a nested iteration's own steps: %+v", innerSteps.Steps)
+	}
+
+	third := strconv.FormatUint(rounds.Iterations[2].ElementInstanceKey, 10)
+	tests := []struct {
+		name   string
+		path   string
+		query  url.Values
+		status int
+		code   string
+	}{
+		{"cursor of another iteration", iterPath(pi, outer) + "/" + third + "/steps", url.Values{"cursor": {first.NextCursor}}, 400, "cursor_mismatch"},
+		{"outline cursor", path, url.Values{"cursor": {outlineCursor(t, w, pi)}}, 400, "cursor_mismatch"},
+		{"iteration of another body", iterPath(pi, inner) + "/" + strconv.FormatUint(second, 10) + "/steps", nil, 404, "not_found"},
+		{"unknown body", iterPath(pi, 424242) + "/" + strconv.FormatUint(second, 10) + "/steps", nil, 404, "not_found"},
+		{"bad iteration key", iterPath(pi, outer) + "/x/steps", nil, 400, "invalid_parameter"},
+		{"bad body key", "/api/v1/instances/" + strconv.FormatUint(pi, 10) + "/multi-instances/x/iterations/1/steps", nil, 400, "invalid_parameter"},
+		{"bad instance key", "/api/v1/instances/x/multi-instances/1/iterations/1/steps", nil, 400, "invalid_parameter"},
+		{"limit too large", path, url.Values{"limit": {"201"}}, 400, "invalid_parameter"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ignored any
+			if status, e := w.get(tt.path, tt.query, &ignored); status != tt.status || e["code"] != tt.code {
+				t.Fatalf("got %d %v, want %d %s", status, e, tt.status, tt.code)
+			}
+		})
+	}
+}
+
+func outlineCursor(t *testing.T, w *world, pi uint64) string {
+	t.Helper()
+	var page OutlineResponse
+	w.get("/api/v1/instances/"+strconv.FormatUint(pi, 10)+"/outline", url.Values{"limit": {"1"}}, &page)
+	if page.NextCursor == "" {
+		t.Fatal("no outline cursor")
+	}
+	return page.NextCursor
+}
+
+func TestIterationStepsOfOlderHistoryAreUnavailable(t *testing.T) {
+	w, pi := legacyWorld(t, "mi_iteration_steps_v1")
+	b := w.onlyBody(pi)
+	var rounds IterationsResponse
+	w.get(iterPath(pi, b.BodyElementInstanceKey), nil, &rounds)
+	var ignored any
+	status, e := w.get(iterPath(pi, b.BodyElementInstanceKey)+"/"+strconv.FormatUint(rounds.Iterations[0].ElementInstanceKey, 10)+"/steps", nil, &ignored)
+	if status != http.StatusConflict || e["code"] != "history_unavailable" {
+		t.Fatalf("steps of older history: %d %v", status, e)
 	}
 }
