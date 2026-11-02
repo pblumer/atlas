@@ -716,6 +716,7 @@ var mcpOmittedRoutes = map[string]string{
 	// are omitted. An assistant starts a process by its id and needs no star to find it.
 	"GET /api/v1/me/start-favourites":                "a person's own shortcuts on the Start view, a navigation aid for somebody at a screen that an assistant does not need",
 	"GET /api/v1/me/startable-processes":             "a person's own self-service start list, answered only to their own signed-in session; an agent's credential is refused (ADR-0516)",
+	"POST /api/v1/me/processes/{key}/instances":      "a person starting a granted process from their own signed-in session; an agent's credential is refused, and operators start through the existing tools (ADR-0516)",
 	"PUT /api/v1/me/start-favourites/{processId}":    "starring a process on somebody's behalf sets a preference they did not choose",
 	"DELETE /api/v1/me/start-favourites/{processId}": "as above, and unstarring is the half somebody would notice only by missing it",
 

@@ -83,6 +83,22 @@ func (s *Server) handleCreateInstanceByProcessID(w http.ResponseWriter, r *http.
 // Split out when the by-id route arrived, so the two cannot answer differently
 // about a process that is deployed but not executable.
 func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint64, startVars []model.VariableValue) {
+	s.startInstanceGuarded(w, r, key, startVars, nil)
+}
+
+// startGuard decides, on the run loop and in the very turn that submits the start
+// command, whether this start may happen at all. A non-zero status refuses it with
+// that status and message, and nothing is created. It is how the self-service start
+// (ADR-0516) holds its authorization to the moment of the command: a revocation that
+// was durable before this turn refuses the start, one that lands after it finds the
+// start already accepted — the prospective ordering the record settles on.
+type startGuard func(d *deployment) (status int, msg string)
+
+// startInstanceGuarded is startInstance with a guard. Every start door goes through
+// it, so the self-service start is not a second implementation of creating,
+// driving, sealing, recording startedBy or answering — only a further refusal in
+// front of the one command (ADR-0516).
+func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, key uint64, startVars []model.VariableValue, guard startGuard) {
 	// A start form is where personal data most often enters, so it is sealed here —
 	// before the CreateInstance command, which therefore already holds ciphertext
 	// (ADR-0314). This is the funnel for the JSON start body and the API start; the CSV
@@ -103,6 +119,8 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 		processID   string
 		selfStart   bool
 		ambiguous   string
+		guardCode   int
+		guardMsg    string
 	)
 	s.do(func() {
 		d, ok := s.deployments[key]
@@ -110,6 +128,11 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 			return
 		}
 		found = true
+		if guard != nil {
+			if guardCode, guardMsg = guard(d); guardCode != 0 {
+				return
+			}
+		}
 		// A non-executable process is descriptive-only; refuse to start it (the UI
 		// also hides it, but this guards the API and public start paths directly).
 		if d.cp != nil && !d.cp.IsExecutable() {
@@ -148,6 +171,8 @@ func (s *Server) startInstance(w http.ResponseWriter, r *http.Request, key uint6
 	switch {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no deployment with that key")
+	case guardCode != 0:
+		httpapi.Error(w, guardCode, guardMsg)
 	case notExec:
 		httpapi.Error(w, http.StatusConflict, "process is not executable and cannot be started")
 	case ambiguous != "":
