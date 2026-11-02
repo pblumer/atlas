@@ -801,3 +801,31 @@ func TestTheSystemResourceIsPublished(t *testing.T) {
 		t.Errorf("authorization-server metadata = %v", as)
 	}
 }
+
+// TestATasklistTokenWithAReachListsThoseProjectsTasks: the reach of tasklist by projects
+// is the token's as much as a system grant's (ADR-0512 §2).
+func TestATasklistTokenWithAReachListsThoseProjectsTasks(t *testing.T) {
+	ts, admin := connectedAtlas(t)
+	inside := createProjectAs(t, admin, ts.URL, "Inside")
+	outside := createProjectAs(t, admin, ts.URL, "Outside")
+	in := projectTask(t, admin, ts, inside, "inside-task")
+	out := projectTask(t, admin, ts, outside, "outside-task")
+	secret, _ := mint(t, admin, ts, `{"name":"narrow","scope":"tasklist","expiresInDays":30,"reach":["`+inside+`"]}`)
+	code, body := bearerJSON(t, ts.URL, "GET", "/api/v1/tasks", secret)
+	var tasks []struct {
+		Key uint64 `json:"key"`
+	}
+	if code != http.StatusOK || json.Unmarshal(listRows(t, body), &tasks) != nil || len(tasks) != 1 || tasks[0].Key != in {
+		t.Fatalf("the token lists %d %s, want task %d alone", code, body, in)
+	}
+	if code, _ := bearerJSON(t, ts.URL, "GET", fmt.Sprintf("/api/v1/tasks/%d", out), secret); code != http.StatusNotFound {
+		t.Errorf("the outside task by key = %d, want 404", code)
+	}
+	// An ended task is a 404 to a token, as before: the 410 is a connected system's.
+	if code, body := cReq(t, admin, ts, "POST", fmt.Sprintf("/api/v1/tasks/%d/complete", in), `{"variables":{}}`); code >= 300 {
+		t.Fatalf("complete = %d %s", code, body)
+	}
+	if code, _ := bearerJSON(t, ts.URL, "GET", fmt.Sprintf("/api/v1/tasks/%d", in), secret); code != http.StatusNotFound {
+		t.Errorf("the ended task to a token = %d, want 404", code)
+	}
+}
