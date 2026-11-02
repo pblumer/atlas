@@ -257,9 +257,11 @@ das nicht will, testet zunächst nur lesend (`entra_graph_permissions = ["User.R
 "Group.Read.All"]`). Die prozessseitige Sperre auf Testobjekte (Präfix im Modell, wie in
 `examples/account-bestellung`) bleibt die eigentliche Grenze.
 
-Nicht an einem Tenant geprüft: der Filter `Alias -like …` im Management Scope, das Anlegen
-von Objekten innerhalb des Schreibbereichs mit *Mail Recipient Creation* und das Verhalten des
-Exchange-Workers mit einer Rollengruppe statt der Verzeichnisrolle.
+Am 2026-11-02 an einem echten Tenant geprüft (siehe «Erfahrungen mit einem echten Tenant»):
+der Filter `Alias -like …`, das Anlegen von Verteilerlisten und Funktionspostfächern im
+Schreibbereich, der Exchange-Worker mit der Rollengruppe statt der Verzeichnisrolle und der
+Gegentest mit `Test-ServicePrincipalAuthorization` (die Mail-App darf als Testpostfach senden,
+als echtes Postfach nicht).
 
 ## Atlas-Server
 
@@ -392,14 +394,64 @@ Werte, die eine echte Konfiguration üblicherweise setzt, selbst (vor allem
 `scripts/assign-licenses.sh` würde sonst mit der Anmeldung von `az` den echten Graph aufrufen.
 Wer neue Variablen mit Wirkung nach aussen ergänzt, setzt sie dort ebenfalls.
 
+## Erfahrungen mit einem echten Tenant (2026-11-02)
+
+Ein vollständiger Durchlauf im geteilten Tenant (`shared_tenant = true`, Business Basic,
+Domänencontroller an), mit `examples/m365-dienste` installiert und über den Shop bestellt.
+Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «Von Hand».
+
+**Korrigiert im Projekt**
+
+| Befund | Ursache | Lösung |
+|---|---|---|
+| `tofu test` mit OpenTofu: jeder Lauf übersprungen | Mock von `azuread_domains` ohne Pflichtattribute | Mock vollständig |
+| `tofu test` rief mit echter `az`-Anmeldung `assignLicense` gegen Graph auf | `tofu test` liest `terraform.tfvars`; Provisioner laufen auch mit gemockten Providern | Testfile setzt alle Werte selbst (`license_sku_ids = []` …) |
+| `ifconfig.me` lieferte IPv6, `/32` darauf wäre ein riesiger Bereich | CIDR-Prüfung nahm IPv6 und `::/0` an | nur IPv4-CIDR, `/0` abgelehnt; README: `curl -4` |
+| Plan bricht ab: «`mail_nickname` is required for mail-enabled groups» | `azuread` hält den beim Planen unbekannten Namen für leer | zuerst `tofu apply -target=random_string.suffix` (Ablauf) |
+| Atlas-Server richtet sich nicht ein | `AD_HOSTS_LINE=10.42.0.10 dc01…` ohne Anführungszeichen in `setup.env` | alle Werte in `'…'`, Test prüft die Form |
+| Zertifikate und DC-Extension bei jedem Plan «geändert» | `end_date` lokal vs. UTC; Tag-Format von Azure | `ignore_changes` |
+| LDAPS antwortet nicht (Ereignis 1220, Schannel 36886) | selbstsigniertes Zertifikat nicht in `LocalMachine\Root` | `ad-setup.ps1` legt es dort ab |
+| `wait-atlas.sh` meldete Erfolg nach Zeitüberschreitung | `break` mit Exit 0 | Exit 1 mit Protokollauszug |
+| `wait-ad.sh` gab das Bind-Passwort auf der Kommandozeile mit | `ldapwhoami -w` | Datei mit `-y` |
+| `New-ManagementScope` abgelehnt | Exchange-Organisation «dehydrated» | Skript prüft `IsDehydrated`, README nennt `Enable-OrganizationCustomization` |
+| SharePoint-Recht: Schleife «not provisioned yet» | 403 auf die private Gruppen-Website wurde als 404 behandelt; delegiert fehlt der Admin der Zugriff | Admin wird kurz Besitzer der Testgruppe, im `finally` wieder entfernt; echte Fehler werden gemeldet |
+| `GET /me` 403 | `User.Read` nicht angefordert | Scope ergänzt |
+| Verteiler entfernen, Mitglieder ändern: 403 | `BypassSecurityGroupManagerCheck` (und `-Type`) kommen mit *Security Group Creation and Membership* | Rolle in der Rollengruppe, gleicher Schreibbereich; Skript ergänzt fehlende Rollen |
+| Personensuche im Bestellformular: 403 | der Entra-Worker war nicht für Formulare geöffnet | Bootstrap setzt `formLookups` |
+| Suche im geteilten Tenant zeigte alle echten Konten | kein fester Filter möglich auf den Präfix | Testpersonen erhalten `department = <Umgebungs-ID>`, das Installationsskript filtert darauf |
+
+**Von Hand (noch nicht automatisiert)**
+
+- `Enable-OrganizationCustomization` einmal als Exchange-Administrator; danach brauchte die
+  Delegierung von «Application Mail.Send» rund eine Stunde, bis `New-ManagementRoleAssignment`
+  gelang («keine Delegierungsrollenzuweisung»).
+- `Connect-MgGraph -UseDeviceCode` (SharePoint-Teil) braucht ein echtes Terminal; ohne eins
+  meldet es nach 120 s «timed out», obwohl die Anmeldung im Browser gelang. `-Part SharePoint`
+  wiederholt nur diesen Teil.
+- Neue Rollen einer App wirken in Exchange erst nach 30 min bis 2 h; `Test-ServicePrincipalAuthorization`
+  zeigt die Zuweisung sofort.
+- Testpersonen, die sich nach der Installation zum ersten Mal anmelden, sind in keiner
+  Zielgruppe. Besser wäre die Gruppenzuordnung bei der SSO-Anmeldung
+  (Sicherheitsgruppe der Umgebung → Zielgruppe).
+- Teams: ein erstes Team wurde von Hand angelegt; ob das nötig war, ist offen, denn danach
+  schlug `PUT /groups/{id}/team` weiter fehl, und erst `POST /teams` (Entra-Worker) gelang.
+
+**Noch offen**
+
+- Ein normaler `tofu apply` nach Änderungen an `atlas-bootstrap.py` oder `atlas-setup.sh`
+  ersetzt die Atlas-VM (Cloud-Init-Daten); `ignore_changes` wäre zu erwägen.
+- M365-Gruppen (Teams) erhalten die Standard-Domain des Tenants (`…@blumer.net`), nicht
+  `MAIL_DOMAIN`.
+- Ungetestet: Postfachzugriff, Lizenz, Sitzungszimmer, Aktionen an Bestellungen,
+  Governance-Prüfung, Teams Phone.
+
 ## Bekannte Grenzen
 
-- **Noch nie gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen.**
-  Geprüft sind: Syntax und Schemas (`azuread` 3.10, `azurerm` 4.81, mit Terraform 1.16),
-  die Offline-Tests (auch mit OpenTofu 1.13), das
-  Bootstrap-Skript gegen einen lokalen Atlas-Server. **Nicht** geprüft: `atlas-setup.sh`
-  und `ad-setup.ps1` auf echten VMs, die Wartezeiten von Microsoft, die Lizenzzuweisung
-  über `az rest` und Cloud-Init mit gzip-komprimierten Daten auf Azure.
+- **Einmal gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen**
+  (2026-11-02, geteilter Tenant, OpenTofu 1.13.2, `azuread` 3.10.0): `atlas-setup.sh`,
+  `ad-setup.ps1`, Cloud-Init mit gzip, die Lizenzzuweisung über `az rest`, die Warteskripte
+  und `shared-tenant-setup.ps1` laufen nach den Korrekturen im Abschnitt «Erfahrungen mit
+  einem echten Tenant». Ein zweiter Durchlauf von Grund auf mit diesen Korrekturen steht aus.
 - **Exchange Server (on-premises)** ist nicht abgedeckt.
 - **Teams Phone:** Rufnummern, Calling Plans und Direct Routing richtet das Projekt nicht
   ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
