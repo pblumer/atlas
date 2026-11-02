@@ -281,13 +281,15 @@ rounds observed after upgrade are left absent from the new projection until the
 historical backfill has reconstructed their parent activation. Do not expose
 incomplete projections as if they covered a whole instance.
 
-*Known limitation found while measuring:* completing the iterations of a parallel
-multi-instance **subprocess** is quadratic in the engine today, independent of
-this index — every scope completion disarms event-subprocess triggers by walking
-all live element instances of the instance (`disarmEventSubprocesses`). 1,000
-such iterations took 24 s; 50,000 do not finish in reasonable time. The
-acceptance fixture therefore uses a multi-instance script task. Tracked in
-[Issue #1494](https://github.com/pblumer/atlas/issues/1494).
+*Limitation found while measuring, since fixed:* completing the iterations of a
+parallel multi-instance **subprocess** was quadratic in the engine, independent
+of this index — every scope completion disarmed event-subprocess triggers by
+walking all live element instances of the instance (`disarmEventSubprocesses`).
+1,000 such iterations took 24 s; 50,000 did not finish in reasonable time. The
+acceptance fixture therefore uses a multi-instance script task.
+[Issue #1494](https://github.com/pblumer/atlas/issues/1494) replaced the walk
+with a per-scope trigger index (ADR-0082 amendment): 50,000 subprocess
+iterations now complete in 76 s in the engine harness.
 
 ## Pros and cons of the options
 
