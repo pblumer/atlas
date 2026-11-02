@@ -82,7 +82,18 @@
 
       const TIMELINE = { processDefKey: "7", processId: "looper", version: 1, state: "completed", steps, frames };
 
+      // The bounded history knows the same body (ADR-0517): a small instance keeps
+      // its classic replay and gains the explorer on the grouped row.
+      const BODY = { bodyElementInstanceKey: "1001", elementId: "Rechne_1", processDefinitionKey: "7", mode: "parallel",
+        state: "completed", activationPosition: 2, endPosition: 6, tokenId: "1", parentTokenId: "0",
+        iterations: 3, active: 0, completed: 3, terminated: 0, incidentsRaised: 0, iterationsWithIncidents: 0 };
+      const ROUNDS = [1, 2, 3].map((n) => ({ elementInstanceKey: String(1001 + n), iteration: n, state: "completed",
+        activationPosition: 2 + n, endPosition: 6, incidentsRaised: 0, openIncidents: 0, openIncidentsExact: true }));
       const api = async (method, url) => {
+        if (/\/multi-instances$/.test(url)) return { instanceKey: "281474976723211", processDefinitionKey: "7", instanceState: "completed", bodies: [BODY] };
+        if (/\/multi-instances\/1001\/iterations\?/.test(url)) return { body: BODY, iterations: ROUNDS };
+        const one = url.match(/\/multi-instances\/1001\/iterations\/(\d+)$/);
+        if (one) return { body: BODY, iteration: ROUNDS.find((r) => r.elementInstanceKey === one[1]), incidents: [], nestedBodies: [], incidentsTruncated: false };
         if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
         if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
         // The engine counts a looping activity once as its body and once per round, so the

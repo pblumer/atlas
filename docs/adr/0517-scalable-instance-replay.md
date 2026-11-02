@@ -197,10 +197,24 @@ the legacy `/timeline` grows with the square of the iteration count: 139 MB at
 allocations per iteration (one additional point read for the loopCounter), time
 within run-to-run noise; `BenchmarkInstanceLifecycle` unchanged at 221 allocations.
 
+**OHS2 increment 4 — Multi-Instance Explorer (2026-11-02).** The Operations
+replay asks the bounded API first. When an execution has more than 500
+iterations (or the top-level listing does not fit one page), it does not load
+the legacy timeline: it shows the diagram, the executions as collapsed groups
+with the server's counters and the Multi-Instance Explorer (`api/web/mi-explorer.js`):
+one page of 100 iterations, jump to an iteration number, state and incident
+filters, keyboard navigation, loading/empty/error/retry states and an
+explanation for an unavailable index. Smaller instances keep the classic replay
+and gain *Explore iterations* on the grouped row. The bodies listing now also
+carries the instance's definition key and state, so the bounded view needs no
+timeline. Playwright specs `e2e/mi-explorer.spec.mjs` and `e2e/mi-history.spec.mjs`
+assert that the bounded view never requests `/timeline` and never holds more
+than one page of rows.
+
 **Still not built:** a verified historical rebuild for legacy (pre-v2) stores —
-they stay `history_unavailable`; the bounded instance overview that replaces the
-full timeline in Operations and the Multi-Instance Explorer UI; OHS3's scoped
-detail replay. A historical reconstruction must use durable event payloads,
+they stay `history_unavailable`; a bounded outline of the *other* steps of a
+large instance (the bounded view shows only its multi-instance executions);
+OHS3's scoped detail replay of one iteration (variables, decisions, step frames). A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
 especially for repeated/nested MI bodies and migrations. A history with

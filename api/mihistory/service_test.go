@@ -233,6 +233,11 @@ func TestIterationsPageStablyAndJumpByIterationNumber(t *testing.T) {
 	if body.Mode != "parallel" || body.Iterations != 250 || body.Active != 250 || body.State != "active" {
 		t.Fatalf("body summary: %+v", body)
 	}
+	var listing BodiesResponse
+	w.get(instPath(pi), nil, &listing)
+	if listing.ProcessDefinitionKey != w.cp.Key || listing.InstanceState != "active" {
+		t.Fatalf("instance facts on the listing: %+v", listing)
+	}
 
 	seen := map[uint64]bool{}
 	q := url.Values{}

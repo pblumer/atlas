@@ -28,6 +28,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -140,11 +141,15 @@ type IncidentView struct {
 
 // BodiesResponse answers GET /api/v1/instances/{key}/multi-instances.
 type BodiesResponse struct {
-	InstanceKey        uint64     `json:"instanceKey"`
-	ParentIterationKey uint64     `json:"parentIterationKey,omitempty"`
-	HighWaterPosition  uint64     `json:"highWaterPosition"`
-	Bodies             []BodyView `json:"bodies"`
-	NextCursor         string     `json:"nextCursor,omitempty"`
+	InstanceKey uint64 `json:"instanceKey"`
+	// ProcessDefinitionKey and InstanceState describe the instance itself, so a
+	// client can draw its diagram and state without the full timeline.
+	ProcessDefinitionKey uint64     `json:"processDefinitionKey"`
+	InstanceState        string     `json:"instanceState"`
+	ParentIterationKey   uint64     `json:"parentIterationKey,omitempty"`
+	HighWaterPosition    uint64     `json:"highWaterPosition"`
+	Bodies               []BodyView `json:"bodies"`
+	NextCursor           string     `json:"nextCursor,omitempty"`
 }
 
 // BodyResponse answers GET /api/v1/instances/{key}/multi-instances/{bodyKey}.
@@ -276,14 +281,19 @@ func queryLimit(r *http.Request) (int, error) {
 // requireInstance answers not-found for an instance that does not exist or
 // whose history was purged; purge also removes its MI index ranges.
 func requireInstance(rv *state.ReadView, key uint64) error {
-	_, ok, err := rv.ProcessInstance(key)
+	_, err := readInstance(rv, key)
+	return err
+}
+
+func readInstance(rv *state.ReadView, key uint64) (*model.ProcessInstanceValue, error) {
+	pi, ok, err := rv.ProcessInstance(key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ok {
-		return errInstanceNotFound
+		return nil, errInstanceNotFound
 	}
-	return nil
+	return pi, nil
 }
 
 func bodyView(e state.MIHistoryEntry, defs Definitions) BodyView {
@@ -395,9 +405,11 @@ func (s *Service) bodies(r *http.Request) (*BodiesResponse, error) {
 	}
 	resp := &BodiesResponse{InstanceKey: key, ParentIterationKey: parent, Bodies: []BodyView{}}
 	err = s.read(r, func(rv *state.ReadView, defs Definitions) error {
-		if err := requireInstance(rv, key); err != nil {
+		pi, err := readInstance(rv, key)
+		if err != nil {
 			return err
 		}
+		resp.ProcessDefinitionKey, resp.InstanceState = pi.ProcessDefKey, pi.State.String()
 		q := state.MIBodyPageQuery{ParentIteration: parent, Limit: limit}
 		if cur != nil {
 			q.HighWater = cur.highWater

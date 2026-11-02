@@ -1123,8 +1123,9 @@ What it takes to run this for real.
   and its body/iteration routes (MCP tools alike) page iterations by signed cursor, jump to an
   iteration number, filter by lifecycle state and incident through event-derived indexes, and
   read off the single writer; a 50,000-iteration end-to-end test holds every read to its page
-  ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Not yet built: the Operations
-  Multi-Instance Explorer and a bounded overview (Milestone S), a verified rebuild for stores
+  ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Operations shows a large instance
+  without the full timeline and browses its iterations in the Multi-Instance Explorer. Not yet
+  built: a bounded outline of the other steps of such an instance, a verified rebuild for stores
   written before the index (they answer "history unavailable"), OHS3 scoped detail replay, and a
   fix for quadratic MI-subprocess completion ([issue #1494](https://github.com/pblumer/atlas/issues/1494)).
 

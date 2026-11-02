@@ -42,3 +42,19 @@ test("grouping requires real recorded parent token lineage", async ({ page }) =>
   });
   expect(result).toEqual({ first: [1], second: [4], orphan: false });
 });
+
+test("a small instance keeps its replay and opens the explorer from the grouped row", async ({ page }) => {
+  const explore = page.locator("#history-list .ops-mi-explore");
+  await expect(explore).toHaveCount(1);
+  await explore.click();
+  const rows = page.locator(".mi-explorer .mi-row");
+  await expect(rows).toHaveCount(3);
+  await expect(page.locator("#rp-tabs")).toBeHidden();
+  await rows.nth(1).click();
+  // The iteration chosen in the explorer is the replay's selected element instance.
+  await expect(page.locator('#history-list .ops-hrow[data-eik="1003"]')).toHaveClass(/sel/);
+  await page.locator(".mi-ex-close").click();
+  await expect(page.locator(".mi-explorer")).toHaveCount(0);
+  await expect(page.locator("#rp-tabs")).toBeVisible();
+  await expect(page.locator("#tab-details")).toBeVisible();
+});

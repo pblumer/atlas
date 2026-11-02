@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge the OHS2 index-v2 and bounded-API PR (loopCounter, state and incident indexes, signed cursor, 50k acceptance); then the Operations Multi-Instance Explorer and a bounded instance overview that no longer loads the full timeline; then the verified legacy-store rebuild and OHS3 detail replay. Engine quadratic MI-subprocess completion is Issue #1494.",
+  "next_action": "Merge #1496 (index v2 + bounded API) and the Multi-Instance Explorer PR; then a bounded outline of the non-MI steps of a large instance, OHS3 detail replay of one iteration (scope variables, decisions, step window), and the verified legacy-store rebuild. Engine quadratic MI-subprocess completion is Issue #1494.",
   "slices": [
     {
       "id": "OHS1",
@@ -43,11 +43,12 @@
         1488,
         1490
       ],
-      "note": "#1487 (keys), #1488 (projection) and #1490 (fail-closed readiness) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. Open: Operations Explorer UI, a bounded instance overview, verified rebuild for legacy (pre-v2) stores, and #1494 (quadratic MI-subprocess completion).",
+      "note": "#1487 (keys), #1488 (projection) and #1490 (fail-closed readiness) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). Open: a bounded outline of the other steps of a large instance, verified rebuild for legacy (pre-v2) stores, and #1494 (quadratic MI-subprocess completion).",
       "evidence": [
         "../../../api/mihistory/acceptance_test.go",
         "../../../engine/miindex_v2_recovery_test.go",
-        "../../adr/0517-scalable-instance-replay.md"
+        "../../adr/0517-scalable-instance-replay.md",
+        "../../../e2e/mi-explorer.spec.mjs"
       ]
     },
     {

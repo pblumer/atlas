@@ -2786,6 +2786,66 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   font-size: 11px; font-weight: 500; color: var(--muted);
   background: var(--bg); border: 1px solid var(--border);
 }
+.ops-mi-explore { margin-left: 4px; flex-shrink: 0; font-weight: 500; }
+.ops-hrow.mi-bounded { flex-wrap: wrap; cursor: default; }
+.mi-bounded-hint { font-size: 12px; }
+
+/* The Multi-Instance Explorer (ADR-0517): one page of one body execution's iterations.
+   The list never holds more than a page, so it needs no virtualisation — the server
+   cut it. */
+.mi-explorer-host { overflow: auto; flex: 1; min-height: 0; }
+.mi-bounded-note { padding: 12px 14px; font-size: 13px; }
+.mi-bounded-note h3 { margin: 0 0 6px; font-size: 14px; }
+.mi-explorer { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; font-size: 13px; }
+.mi-ex-head { display: flex; align-items: flex-start; gap: 10px; }
+.mi-ex-titles { flex: 1; min-width: 0; }
+.mi-ex-title { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mi-ex-sub { font-size: 12px; }
+.mi-ex-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.mi-stat {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 2px; background: var(--surface);
+}
+.mi-stat span { font-size: 11px; color: var(--muted); }
+.mi-stat b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mi-stat.incidents b, .mi-stat.open b { color: var(--danger); }
+.mi-ex-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.mi-ex-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.mi-ex-field input, .mi-ex-field select { font-size: 13px; min-width: 7em; }
+.mi-ex-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.mi-ex-notice { font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--warn-soft); color: var(--text); }
+.mi-ex-list { border: 1px solid var(--border); border-radius: 6px; max-height: 340px; overflow: auto; }
+.mi-ex-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mi-ex-list[aria-busy="true"] { opacity: .65; }
+.mi-row {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.mi-row:last-child { border-bottom: 0; }
+.mi-row:hover, .mi-row:focus { background: var(--bg); outline: none; }
+.mi-row.sel { background: var(--accent-soft); }
+.mi-row-n { min-width: 6em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mi-row-state { font-size: 11px; border-radius: 4px; padding: 1px 6px; border: 1px solid var(--border); }
+.mi-row-state.active { color: var(--accent-text); }
+.mi-row-state.terminated { color: var(--warn); }
+.mi-row-inc { margin-left: auto; font-size: 11px; color: var(--muted); }
+.mi-row-inc.open { color: var(--danger); font-weight: 600; }
+.mi-ex-error { color: var(--danger); padding: 8px 10px; }
+.mi-ex-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mi-ex-range { flex: 1; text-align: center; font-size: 12px; }
+.mi-ex-detail h4 { margin: 4px 0 6px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.mi-ex-detail h5 { margin: 10px 0 4px; font-size: 12px; }
+.mi-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+.mi-facts dt { color: var(--muted); }
+.mi-facts dd { margin: 0; }
+.mi-inc-list, .mi-nested { margin: 0; padding-left: 18px; }
+.mi-inc-list li.open b { color: var(--danger); }
+.mi-nested li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0; }
+.mi-summary { font-size: 11px; color: var(--muted); font-weight: 400; }
+@media (max-width: 720px) {
+  .mi-ex-controls { flex-direction: column; align-items: stretch; }
+  .mi-ex-list { max-height: 50vh; }
+}
 
 /* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
    a position on the timeline — and ".sel" is the element instance the inspector is
