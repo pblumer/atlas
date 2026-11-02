@@ -382,8 +382,12 @@ run "ad_domain_controller" {
     error_message = "The Atlas server's AD worker should reach the domain controller inside the network."
   }
   assert {
-    condition     = strcontains(local.atlas_setup_env, "AD_HOSTS_LINE=10.42.0.10 dc01.atlastest.internal")
+    condition     = strcontains(local.atlas_setup_env, "AD_HOSTS_LINE='10.42.0.10 dc01.atlastest.internal'")
     error_message = "The Atlas server should resolve the domain controller's private name."
+  }
+  assert {
+    condition     = alltrue([for l in compact(split("\n", local.atlas_setup_env)) : can(regex("^[A-Z_]+='[^']*'$", l))])
+    error_message = "Every line of setup.env must be NAME='value': atlas-setup.sh sources it, and an unquoted space aborts the setup."
   }
   assert {
     condition     = !strcontains(local.atlas_env, "ATLAS_AD_MOCK")
