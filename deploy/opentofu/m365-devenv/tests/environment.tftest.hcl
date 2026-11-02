@@ -27,6 +27,12 @@ mock_provider "azuread" {
         "Sites.ReadWrite.All"        = "9492366f-7969-46a4-8d15-ed1a20078fff"
         "Sites.Selected"             = "883ea226-0bf2-4a8f-9f9d-92c9162a727d"
         "Exchange.ManageAsApp"       = "dc50a0fb-09a3-484d-be87-e023b12c6440"
+        "Mail.Send"                  = "b633e1c5-b582-4048-a93e-9f11b44c7e96"
+      }
+      oauth2_permission_scope_ids = {
+        "openid"  = "37f7f235-527c-4136-accd-4a02d197296e"
+        "profile" = "14dad69e-099b-42c9-810b-d002981feec1"
+        "email"   = "64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0"
       }
     }
   }
@@ -60,27 +66,27 @@ mock_provider "azurerm" {
   }
   mock_resource "azurerm_subnet" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.Network/virtualNetworks/atlas-test-ab12-vnet/subnets/dc"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Network/virtualNetworks/atlas-test-ab12-vnet/subnets/dc"
     }
   }
   mock_resource "azurerm_public_ip" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.Network/publicIPAddresses/atlas-test-ab12-dc-pip"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Network/publicIPAddresses/atlas-test-ab12-dc-pip"
     }
   }
   mock_resource "azurerm_network_interface" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.Network/networkInterfaces/atlas-test-ab12-dc-nic"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Network/networkInterfaces/atlas-test-ab12-dc-nic"
     }
   }
   mock_resource "azurerm_network_security_group" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.Network/networkSecurityGroups/atlas-test-ab12-dc-nsg"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Network/networkSecurityGroups/atlas-test-ab12-dc-nsg"
     }
   }
   mock_resource "azurerm_key_vault" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.KeyVault/vaults/atlaskvab12ab12ab"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.KeyVault/vaults/atlaskvab12ab12ab"
     }
   }
   mock_resource "azurerm_key_vault_certificate" {
@@ -89,9 +95,14 @@ mock_provider "azurerm" {
       certificate_data_base64 = "TU9DSy1DRVJUSUZJQ0FURS1EQVRBLVRIQVQtSVMtTE9OR0VSLVRIQU4tU0lYVFktRk9VUi1DSEFSQUNURVJTLUZPUi1DSFVOS0lORw=="
     }
   }
+  mock_resource "azurerm_linux_virtual_machine" {
+    defaults = {
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Compute/virtualMachines/atlas-test-ab12-atlas"
+    }
+  }
   mock_resource "azurerm_windows_virtual_machine" {
     defaults = {
-      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-ad/providers/Microsoft.Compute/virtualMachines/atlas-test-ab12-dc"
+      id = "/subscriptions/33333333-0000-0000-0000-000000000000/resourceGroups/atlas-test-ab12-rg/providers/Microsoft.Compute/virtualMachines/atlas-test-ab12-dc"
     }
   }
 }
@@ -107,6 +118,8 @@ mock_provider "tls" {
     defaults = {
       private_key_pem       = "-----BEGIN RSA PRIVATE KEY-----\nTU9DSw==\n-----END RSA PRIVATE KEY-----\n"
       private_key_pem_pkcs8 = "-----BEGIN PRIVATE KEY-----\nTU9DSw==\n-----END PRIVATE KEY-----\n"
+      # A syntactically valid, otherwise meaningless key: azurerm checks the format.
+      public_key_openssh = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDNGpEy5RDBHBTDWBQkZmnTRAZeRmPrfG8vCJqbg4PQ9oT2piD86FmSfGM3z7eO0W6kwHAK/LORjEOR72cvbCGBjJcXyATShkpqBNtoN9fcc8pLorqBqIYjGHMy9qk/pOmmEVim5+3V3niASLQuYkuknzRvhcJoHkkM3kUrOYSGSB3uZHtqEGy0YhmgS2wBiIhhgmXlPmkL0C3KqUTTsdWNHbdZ8igN1GGqh1Q1KhvqFWvZhxNog1mnZ22i0Ksvp+ls+M2WjF5MYB7BU1ia52ejSlQXOg/ioRnm3P/eH1QtfN8OesqcOvZQUk+NgPFcNa6B2C6L/vGlPSSSCj5jx+oX mock"
     }
   }
 }
@@ -142,6 +155,8 @@ mock_provider "time" {
 variables {
   tenant_id               = "11111111-2222-3333-4444-555555555555"
   expected_initial_domain = "contoso.onmicrosoft.com"
+  azure_subscription_id   = "33333333-0000-0000-0000-000000000000"
+  atlas_allowed_cidrs     = ["198.51.100.4/32"]
 }
 
 run "defaults_build_every_worker_app_and_an_ad_mock" {
@@ -253,24 +268,61 @@ run "secrets_and_custom_worker_names" {
   }
 }
 
-run "ad_needs_allowed_cidrs" {
+run "ad_without_server_needs_allowed_cidrs" {
   command = plan
 
   variables {
-    enable_ad_dc          = true
-    azure_subscription_id = "33333333-0000-0000-0000-000000000000"
+    enable_ad_dc        = true
+    enable_atlas_server = false
   }
 
-  expect_failures = [azurerm_resource_group.ad]
+  expect_failures = [terraform_data.ad_guard]
+}
+
+run "server_needs_allowed_cidrs" {
+  command = plan
+
+  variables {
+    atlas_allowed_cidrs = []
+  }
+
+  expect_failures = [terraform_data.atlas_guard]
+}
+
+run "server_needs_a_subscription" {
+  command = plan
+
+  variables {
+    azure_subscription_id = ""
+  }
+
+  expect_failures = [azurerm_resource_group.env]
+}
+
+run "entra_only_needs_no_azure" {
+  command = apply
+
+  variables {
+    enable_atlas_server   = false
+    azure_subscription_id = ""
+  }
+
+  assert {
+    condition     = length(azurerm_resource_group.env) == 0 && length(azurerm_linux_virtual_machine.atlas) == 0
+    error_message = "Without server and domain controller nothing is built in Azure."
+  }
+  assert {
+    condition     = strcontains(local_sensitive_file.worker_env.content, "ATLAS_ENTRA_CONNECTORS='ucc_entra'")
+    error_message = "The worker environment file is still written."
+  }
 }
 
 run "ad_domain_controller" {
   command = apply
 
   variables {
-    enable_ad_dc          = true
-    azure_subscription_id = "33333333-0000-0000-0000-000000000000"
-    ad_allowed_cidrs      = ["203.0.113.7/32"]
+    enable_ad_dc     = true
+    ad_allowed_cidrs = ["203.0.113.7/32"]
   }
 
   assert {
@@ -294,6 +346,18 @@ run "ad_domain_controller" {
     error_message = "Only LDAPS is opened by default (no RDP)."
   }
   assert {
+    condition     = strcontains(local.atlas_bootstrap, "\"endpoint\":\"ldaps://dc01.atlastest.internal:636\"")
+    error_message = "The Atlas server's AD worker should reach the domain controller inside the network."
+  }
+  assert {
+    condition     = strcontains(local.atlas_setup_env, "AD_HOSTS_LINE=10.42.0.10 dc01.atlastest.internal")
+    error_message = "The Atlas server should resolve the domain controller's private name."
+  }
+  assert {
+    condition     = !strcontains(local.atlas_env, "ATLAS_AD_MOCK")
+    error_message = "With a domain controller the server's AD worker is not a mock."
+  }
+  assert {
     condition     = startswith(local_file.ad_ldaps_cert[0].content, "-----BEGIN CERTIFICATE-----\n")
     error_message = "The LDAPS certificate should be written as PEM."
   }
@@ -310,5 +374,81 @@ run "licences_are_assigned_per_user" {
   assert {
     condition     = length(terraform_data.licenses) == length(var.test_users) + 1
     error_message = "Every test user and the manager should get the licences."
+  }
+}
+
+run "atlas_server_is_configured_through_its_console" {
+  command = apply
+
+  assert {
+    condition     = length(azurerm_linux_virtual_machine.atlas) == 1
+    error_message = "The Atlas server is built by default."
+  }
+  assert {
+    condition = alltrue([for k in ["ucc_entra", "ucc_exchange", "ucc_sharepoint", "ucc_teams", "mail"] :
+    contains([for w in jsondecode(local.atlas_bootstrap).workers : w.name], k)])
+    error_message = "The bootstrap should create every Microsoft worker in the Console."
+  }
+  assert {
+    condition = alltrue([for w in jsondecode(local.atlas_bootstrap).workers :
+    w.secretName == "m365-${w.name}" && can(jsondecode(w.secret))])
+    error_message = "Every worker's credential is a JSON bundle stored under m365-<name>."
+  }
+  assert {
+    condition     = one([for w in jsondecode(local.atlas_bootstrap).workers : w if w.kind == "mail"]).provider == "microsoft"
+    error_message = "The mail worker sends through Microsoft Graph."
+  }
+  assert {
+    condition     = jsondecode(local.atlas_bootstrap).apiToken.vaultSecret == "atlas"
+    error_message = "The processes' API token is sealed as the vault secret 'atlas' (examples/m365-dienste)."
+  }
+  assert {
+    condition     = strcontains(local.atlas_env, "ATLAS_AD_MOCK=1")
+    error_message = "Without a domain controller the server's AD worker is a mock."
+  }
+  assert {
+    condition     = strcontains(local.atlas_env, "ATLAS_OIDC_ISSUER=https://login.microsoftonline.com/11111111-2222-3333-4444-555555555555/v2.0")
+    error_message = "The server signs people in with the test tenant."
+  }
+  assert {
+    condition     = azuread_application.atlas_sso[0].web[0].redirect_uris == toset(["https://atlas-test-ab12-atlas.switzerlandnorth.cloudapp.azure.com/auth/oidc/callback"])
+    error_message = "The sign-in app's redirect URI must be the server's callback."
+  }
+  assert {
+    condition     = strcontains(local.caddyfile, "tls internal")
+    error_message = "By default Caddy uses its own CA."
+  }
+  assert {
+    condition     = one([for r in azurerm_network_security_group.atlas[0].security_rule : r if r.destination_port_range == "443"]).source_address_prefixes == toset(["198.51.100.4/32"])
+    error_message = "With internal TLS, HTTPS is open only to the allowed addresses."
+  }
+  assert {
+    condition     = length([for r in azurerm_network_security_group.atlas[0].security_rule : r if r.destination_port_range == "80"]) == 0
+    error_message = "Port 80 stays closed with internal TLS."
+  }
+  assert {
+    condition     = length(base64gzip(local.atlas_cloud_init)) < 65535
+    error_message = "cloud-init must stay inside Azure's custom data limit."
+  }
+  assert {
+    condition     = startswith(local.atlas_cloud_init, "#cloud-config")
+    error_message = "The custom data must be a cloud-config document."
+  }
+}
+
+run "letsencrypt_opens_80_and_443" {
+  command = plan
+
+  variables {
+    atlas_tls = "letsencrypt"
+  }
+
+  assert {
+    condition     = !strcontains(local.caddyfile, "tls internal")
+    error_message = "Let's Encrypt is Caddy's default; no tls line."
+  }
+  assert {
+    condition     = length([for r in azurerm_network_security_group.atlas[0].security_rule : r if r.destination_port_range == "80" && r.source_address_prefix == "*"]) == 1
+    error_message = "HTTP-01 validation needs port 80 from anywhere."
   }
 }

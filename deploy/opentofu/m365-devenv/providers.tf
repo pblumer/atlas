@@ -12,10 +12,10 @@ provider "azuread" {
   tenant_id = var.tenant_id
 }
 
-# azurerm is configured even when no domain controller is wanted, because a provider
-# block cannot be conditional. With enable_ad_dc = false no azurerm resource exists,
-# the all-zero subscription id is never used for a call, and no resource provider is
-# registered.
+# azurerm is configured even when nothing runs in Azure, because a provider block
+# cannot be conditional. With enable_atlas_server = false and enable_ad_dc = false no
+# azurerm resource exists, the all-zero subscription id is never used for a call, and
+# no resource provider is registered.
 provider "azurerm" {
   features {
     key_vault {
@@ -38,7 +38,7 @@ provider "azurerm" {
     }
   }
 
-  subscription_id                 = var.enable_ad_dc ? var.azure_subscription_id : "00000000-0000-0000-0000-000000000000"
+  subscription_id                 = (var.enable_atlas_server || var.enable_ad_dc) && var.azure_subscription_id != "" ? var.azure_subscription_id : "00000000-0000-0000-0000-000000000000"
   tenant_id                       = coalesce(var.azure_tenant_id, var.tenant_id)
   resource_provider_registrations = "none"
 }

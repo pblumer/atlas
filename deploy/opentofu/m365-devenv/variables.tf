@@ -44,12 +44,13 @@ variable "usage_location" {
 # ---------------------------------------------------------------------------
 
 variable "workers" {
-  description = "Which Atlas Worker Types get an app registration. Each gets its own, as docs/entra-permissions.md recommends."
+  description = "Which Atlas Worker Types get an app registration. Each gets its own, as docs/entra-permissions.md recommends. mail sends through Microsoft Graph (Mail.Send) from mail_sender."
   type = object({
     entra      = optional(bool, true)
     exchange   = optional(bool, true)
     sharepoint = optional(bool, true)
     teamsphone = optional(bool, true)
+    mail       = optional(bool, true)
   })
   default = {}
 }
@@ -62,6 +63,7 @@ variable "worker_names" {
     sharepoint = optional(string, "ucc_sharepoint")
     teamsphone = optional(string, "ucc_teams")
     ad         = optional(string, "ucc_ad")
+    mail       = optional(string, "mail")
   })
   default = {}
 }
@@ -145,6 +147,18 @@ variable "teamsphone_graph_permissions" {
   default     = ["User.ReadWrite.All"]
 }
 
+variable "mail_graph_permissions" {
+  description = "Microsoft Graph application permissions of the mail worker app. Mail.Send lets the app send as ANY mailbox of the tenant; acceptable in a test tenant, scoped in production with an Exchange application access policy or RBAC for Applications."
+  type        = list(string)
+  default     = ["Mail.Send"]
+}
+
+variable "mail_sender" {
+  description = "Sender (From) address of the mail worker. Empty uses the manager test user, which then needs a licence with a mailbox (license_sku_ids)."
+  type        = string
+  default     = ""
+}
+
 variable "credential_validity_days" {
   description = "Lifetime of the generated app certificates and secrets. Short on purpose: a forgotten environment stops working on its own."
   type        = number
@@ -163,6 +177,95 @@ variable "output_dir" {
 }
 
 # ---------------------------------------------------------------------------
+# Atlas server in Azure
+# ---------------------------------------------------------------------------
+
+variable "enable_atlas_server" {
+  description = "Build an Atlas server (Ubuntu 24.04 VM) whose supervised workers are already configured in the Console for this tenant. Costs money while it exists."
+  type        = bool
+  default     = true
+}
+
+variable "atlas_install" {
+  description = "How the server gets Atlas: release (a published release, checked against its SHA256SUMS) or source (built on the VM from atlas_source_repo at atlas_source_ref)."
+  type        = string
+  default     = "release"
+
+  validation {
+    condition     = contains(["release", "source"], var.atlas_install)
+    error_message = "atlas_install must be release or source."
+  }
+}
+
+variable "atlas_version" {
+  description = "Release to install when atlas_install = release (without the leading v)."
+  type        = string
+  default     = "0.21.0"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$", var.atlas_version))
+    error_message = "atlas_version must look like 0.21.0."
+  }
+}
+
+variable "atlas_source_repo" {
+  description = "Git repository to build from when atlas_install = source. It must be reachable from the VM without credentials."
+  type        = string
+  default     = "https://github.com/pblumer/atlas.git"
+}
+
+variable "atlas_source_ref" {
+  description = "Branch or tag to build when atlas_install = source."
+  type        = string
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._/-]+$", var.atlas_source_ref))
+    error_message = "atlas_source_ref: a branch or tag name."
+  }
+}
+
+variable "atlas_vm_size" {
+  description = "VM size of the Atlas server. Building from source wants 8 GB of memory."
+  type        = string
+  default     = "Standard_B2ms"
+}
+
+variable "atlas_tls" {
+  description = "TLS in front of Atlas (Caddy): internal (Caddy's own CA, browser warning, port 443 only for atlas_allowed_cidrs) or letsencrypt (a trusted certificate; ports 80 and 443 are then open to the whole Internet, because Let's Encrypt validates from addresses it does not publish)."
+  type        = string
+  default     = "internal"
+
+  validation {
+    condition     = contains(["internal", "letsencrypt"], var.atlas_tls)
+    error_message = "atlas_tls must be internal or letsencrypt."
+  }
+}
+
+variable "atlas_allowed_cidrs" {
+  description = "Source addresses allowed to reach the Atlas server over HTTPS (with atlas_tls = internal) and SSH - your own public address. Required with enable_atlas_server; 0.0.0.0/0 is refused."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for c in var.atlas_allowed_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
+    error_message = "atlas_allowed_cidrs must be CIDR ranges, and 0.0.0.0/0 is not accepted."
+  }
+}
+
+variable "atlas_sso" {
+  description = "Register Atlas as an OpenID Connect app in the test tenant, so the test users sign in to Atlas with their Entra accounts (the local admin stays)."
+  type        = bool
+  default     = true
+}
+
+variable "atlas_auto_shutdown_time" {
+  description = "Daily auto-shutdown of the Atlas server (HHMM, UTC). Empty disables it."
+  type        = string
+  default     = "1900"
+}
+
+# ---------------------------------------------------------------------------
 # Optional: Active Directory domain controller in Azure
 # ---------------------------------------------------------------------------
 
@@ -173,7 +276,7 @@ variable "enable_ad_dc" {
 }
 
 variable "azure_subscription_id" {
-  description = "Azure subscription for the domain controller. Required when enable_ad_dc = true."
+  description = "Azure subscription for the Atlas server and the domain controller. Required when either is enabled."
   type        = string
   default     = ""
 }
@@ -185,7 +288,7 @@ variable "azure_tenant_id" {
 }
 
 variable "azure_location" {
-  description = "Azure region of the domain controller, as its short name (switzerlandnorth, westeurope). The public DNS name <label>.<region>.cloudapp.azure.com is derived from it."
+  description = "Azure region of the Atlas server and the domain controller, as its short name (switzerlandnorth, westeurope). The public DNS name <label>.<region>.cloudapp.azure.com is derived from it."
   type        = string
   default     = "switzerlandnorth"
 
@@ -214,7 +317,7 @@ variable "ad_netbios_name" {
 }
 
 variable "ad_allowed_cidrs" {
-  description = "Source addresses allowed to reach LDAPS (636) and, if enabled, RDP (3389) - the public address of the Atlas worker host and of the operator. Required when enable_ad_dc = true; 0.0.0.0/0 is refused."
+  description = "Source addresses allowed to reach the domain controller from outside: LDAPS (636) and, if enabled, RDP (3389). Not needed for the Atlas server, which reaches it inside the virtual network; required when enable_ad_dc = true without the server. 0.0.0.0/0 is refused."
   type        = list(string)
   default     = []
 

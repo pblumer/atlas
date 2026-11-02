@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds the Atlas AD test forest on a fresh Windows Server VM (deploy/opentofu/m365-testenv).
+  Builds the Atlas AD test forest on a fresh Windows Server VM (deploy/opentofu/m365-devenv).
 
 .DESCRIPTION
   Phase 1 (run once by the Custom Script Extension):

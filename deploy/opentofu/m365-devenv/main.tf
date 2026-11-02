@@ -38,7 +38,7 @@ locals {
   initial_domain = lower(data.azuread_domains.initial.domains[0].domain_name)
   # contoso.onmicrosoft.com -> contoso, the host part of contoso.sharepoint.com.
   tenant_name = split(".", local.initial_domain)[0]
-  note        = "Atlas worker test environment ${local.env_id}, created ${time_static.created.rfc3339} by OpenTofu (deploy/opentofu/m365-testenv). Remove with tofu destroy."
+  note        = "Atlas M365 development environment ${local.env_id}, created ${time_static.created.rfc3339} by OpenTofu (deploy/opentofu/m365-devenv). Remove with tofu destroy."
 
   # Well-known first-party application ids.
   msgraph_app_id  = "00000003-0000-0000-c000-000000000000"

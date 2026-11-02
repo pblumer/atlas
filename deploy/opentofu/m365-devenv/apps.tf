@@ -8,7 +8,7 @@ locals {
 
   # A misspelt permission name fails the plan here, naming the key Graph does not know.
   graph_role = {
-    for perm in distinct(concat(var.entra_graph_permissions, var.sharepoint_graph_permissions, var.teamsphone_graph_permissions)) :
+    for perm in distinct(concat(var.entra_graph_permissions, var.sharepoint_graph_permissions, var.teamsphone_graph_permissions, var.mail_graph_permissions)) :
     perm => {
       resource_app_id    = local.msgraph_app_id
       resource_object_id = data.azuread_service_principal.msgraph.object_id
@@ -89,4 +89,21 @@ module "teamsphone" {
   directory_role_template_ids = [local.role_teams_administrator]
   create_certificate          = true
   validity_days               = var.credential_validity_days
+}
+
+# --- Mail worker over Microsoft Graph (ADR-0079) ----------------------------
+# The mail provider "microsoft" authenticates with a client secret only.
+
+module "mail" {
+  source = "./modules/worker-app"
+  count  = var.workers.mail ? 1 : 0
+
+  display_name       = "${local.env_id}-worker-mail"
+  notes              = local.note
+  owners             = local.app_owners
+  app_roles          = [for p in var.mail_graph_permissions : local.graph_role[p]]
+  create_certificate = false
+  create_secret      = true
+  validity_days      = var.credential_validity_days
+  secret_end_date    = time_offset.credential_expiry.rfc3339
 }
