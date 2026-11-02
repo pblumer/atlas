@@ -1,10 +1,11 @@
 # ADR-DRAFT: Rebuilding the multi-instance history index for stores that predate it
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-11-02
 - **Deciders:** atlas maintainers, Operations History at Scale programme owner
-- **Open question:** whether a rebuild that has to replay the whole retained log may delay startup, or must run beside a serving engine and pay a short swap pause on the writer instead
+- **Approved by:** programme owner, 2026-11-02 (shadow replay; the swap may delay a startup)
+- **Open question:** whether compacted logs get per-instance readiness (option 2) or stay unavailable (option 3)
 - **Question checked:** 2026-11
 
 ## Context and problem statement
@@ -62,8 +63,9 @@ What the retained state can and cannot prove (verified 2026-11-02):
 
 ## Decision outcome
 
-Proposed: **option 1, with option 2 as its extension for compacted logs**, and
-option 3 as the explicit answer wherever neither applies.
+Chosen: **option 1**, with the swap at startup; option 3 remains the explicit
+answer wherever option 1's precondition fails. Option 2 for compacted logs is
+not decided and stays an open question.
 
 Shadow replay, in detail:
 
@@ -80,8 +82,8 @@ Shadow replay, in detail:
   moved on (an ended iteration's variables are gone). So the temporary store
   keeps replaying to the live position, and the swap happens where the writer is
   not serving: at the next startup, after `Recover` and before the processor
-  accepts commands (or on an explicit operator action that pauses the writer for
-  it). The temporary store catches up the last records, the live MI families are
+  accepts commands. The programme owner accepted that this delays that startup
+  by the time the copy takes. The temporary store catches up the last records, the live MI families are
   deleted by range tombstones, the temporary store's MI families are copied in
   batches with a durable "copied through key K" marker, and the readiness
   markers are written in the batch that completes the copy. The MI families are
