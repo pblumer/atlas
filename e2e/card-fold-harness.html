@@ -8,9 +8,10 @@
          heading shares a row with its actions in a card with no padding of its own,
          and the cards that are not topics — a page title (<h1>), a form (<h3>), a
          section that folds itself (sectionHead), a card that opts out, and a heading
-         with nothing under it. Whether a folded card hides its body and keeps its
-         heading row is a question of what app.css displays, which only a browser can
-         answer. -->
+         with nothing under it — and a topic drawn outside a card, which asks to fold
+         with .fold-topic, beside one that does not ask. Whether a folded card hides
+         its body and keeps its heading row is a question of what app.css displays,
+         which only a browser can answer. -->
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
@@ -38,6 +39,14 @@
       <div class="card no-fold" id="c-optout"><h2>Opted out</h2><p id="c-optout-body">stays</p></div>
 
       <div class="card" id="c-alone"><h2>Nothing under me</h2></div>
+
+      <section class="fold-topic" id="c-topic"><h2>Connections</h2>
+        <div id="c-topic-body"><div class="card" id="c-topic-item"><b>One connection</b><p>a list item</p></div></div></section>
+
+      <section id="c-unasked"><h2>Not asked</h2><p id="c-unasked-body">stays</p></section>
+
+      <div class="card" id="c-closed" data-fold-default="closed"><h2>Starts folded</h2>
+        <p id="c-closed-body">the detail behind its heading row</p></div>
     </main>
     <script type="module">
       import { foldCards, pageOf } from "/fold.js";

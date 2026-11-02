@@ -427,6 +427,8 @@ export default {
   "constants.state.typeMismatch": "type differs",
   "constants.state.typeMismatchTitle": "Held here with another type than a process declares; instances get the type held here",
   "constants.required": "Required by the deployed processes",
+  "constants.count.one": "{n} constant",
+  "constants.count.other": "{n} constants",
   "constants.th.name": "Name",
   "constants.th.type": "Type",
   "constants.th.processes": "Processes",
