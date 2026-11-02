@@ -1080,6 +1080,17 @@ controlled clock, on the production DOM with mocked HTTP responses.
 
 The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
 
+`mfe1-self-start.spec.mjs` ([ADR-0516](../docs/adr/0516-scoped-authenticated-process-start.md))
+holds the task user's Start view against a mocked server: Start is offered only when
+`GET /api/v1/me/startable-processes` lists something, a process is picked by name and
+application, its start form is filled and sent once (the POST body is checked), and the
+answer is said — started with its reference, refused values with the data kept, a grant
+revoked while the form is open, a replaced version, an expired session, a double tap that
+sends one start, and a broken connection whose outcome is unknown. It runs at 320, 390 and
+768px and on desktop, and checks that an operator keeps the operator Start view. What the
+server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
+acceptance either.
+
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
 or field conditions. Record those separately under MFE0 issue #1451.
