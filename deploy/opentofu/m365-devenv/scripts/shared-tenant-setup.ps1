@@ -102,9 +102,10 @@ if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
 # ---------------------------------------------------------------- SharePoint
 if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
     $mg = @{ Scopes = 'Sites.FullControl.All'; NoWelcome = $true }
-    # Connect-MgGraph gives up on a device code after 120 s by default; allow 15 minutes,
-    # as Exchange does.
-    if ($Device) { $mg.UseDeviceCode = $true; $mg.ClientTimeout = 900 }
+    # Connect-MgGraph gives up on a device code after 120 s (unlike Exchange, ~15 min), and
+    # -ClientTimeout does not change that: enter the code at once, or repeat this part
+    # alone with -Part SharePoint.
+    if ($Device) { $mg.UseDeviceCode = $true }
     Connect-MgGraph @mg
     try {
         # The group's site is provisioned some minutes after the group.
