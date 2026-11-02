@@ -46,6 +46,8 @@
         "resource": "users",
         "searchFields": [
           "displayName",
+          "givenName",
+          "surname",
           "mail",
           "userPrincipalName"
         ],
