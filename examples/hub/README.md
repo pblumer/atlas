@@ -144,52 +144,69 @@ this public repository.
 
 ## Rotating the signing key
 
-Every installation pins exactly one public key (`ATLAS_BLUEPRINT_REGISTRY_KEY`). ADR-0499
-deliberately has no automatic key distribution: a key that arrives with the registry
-would prove nothing. A rotation is therefore always an operator action on every
-installation, and there is a window in which a not yet reconfigured installation refuses
-the new index.
+ADR-0499 deliberately has no automatic key distribution: a key that arrives with the
+registry would prove nothing. Every key an installation trusts is pinned by its operator
+in `ATLAS_BLUEPRINT_REGISTRY_KEY`, one key or, during a rotation, two separated by a
+comma:
 
-What that window affects: only the hub dialog. It shows "trusted Blueprint registry is
-unavailable or invalid". Applications that are already imported and deployed keep
-running. Instances are not affected, and nothing is uninstalled.
+```bash
+ATLAS_BLUEPRINT_REGISTRY_KEY=<old publicKey>,<new publicKey>
+```
 
-### Planned rotation
+An index signed by either key is accepted. More than two keys, or one key twice, stop the
+server at startup. At startup the server logs the pinned fingerprints as event
+`hub.registry_keys_pinned`: as INFO for one key, and as a WARN for two, so a rotation that
+was never finished does not go unnoticed.
+
+### Planned rotation, without interruption
 
 Reasons for a planned rotation: the key holder changes, or you want regular rotation.
 
-1. Create the new key with `atlas hub keygen` and back it up as described above.
+1. Create the new key with `atlas hub keygen` and back it up as described above. Check
+   the backups with `atlas hub fingerprint`. Before step 4, `releases.json` still records
+   the old key, so the check reports a mismatch. Compare the fingerprint it prints with
+   the one `keygen` printed instead.
 2. **Announce** the new public key and its fingerprint to the operators of all
-   installations, together with the time of the switch. Use a channel that is not the
-   Pages site, for example a signed release note in this repository or a direct message.
-3. At that time: replace `"publicKey"` in `releases.json` (one commit, merged), then
-   replace the secret `ATLAS_HUB_SIGNING_KEY` and run the **Pages** workflow.
-4. Operators set the new `ATLAS_BLUEPRINT_REGISTRY_KEY` and restart their installation.
-   Each checks that the hub dialog lists the bundles again.
-5. Destroy the old key's backups once every installation has switched. Record the date
+   installations. Use a channel that is not the Pages site, for example a release note in
+   this repository or a direct message.
+3. **Operators pin both keys**: `ATLAS_BLUEPRINT_REGISTRY_KEY=<old>,<new>`, then restart.
+   The hub keeps working, because the registry is still signed with the old key. Wait
+   until every installation confirms this step.
+4. **Switch the signing key.** Replace `"publicKey"` in `releases.json` with the new key
+   (one commit, merged), replace the secret `ATLAS_HUB_SIGNING_KEY`, and run the
+   **Pages** workflow. Installations that pin both keys accept the new index without a
+   gap.
+5. **Operators remove the old key**: `ATLAS_BLUEPRINT_REGISTRY_KEY=<new>`, then restart.
+   The startup WARN disappears.
+6. Destroy the old key's backups once every installation has done step 5. Record the date
    and both fingerprints.
+
+An installation that skipped step 3 refuses the new index after step 4. Only its hub
+dialog is affected ("trusted Blueprint registry is unavailable or invalid"). Applications
+that are already imported and deployed keep running, and nothing is uninstalled. It
+recovers by pinning the new key.
 
 ### Compromised or lost key
 
 If the key is compromised, someone else can sign an index. To reach an installation,
 they also need to serve it under the pinned URL. Act anyway, immediately:
 
-1. **Tell the operators to stop using the hub now.** Each removes both
-   `ATLAS_BLUEPRINT_REGISTRY_*` variables and restarts. The hub dialog is then disabled.
-   Nothing that is already installed changes.
+1. **Tell the operators to stop trusting the compromised key now.** Each removes both
+   `ATLAS_BLUEPRINT_REGISTRY_*` variables and restarts, which disables the hub dialog.
+   Nothing that is already installed changes. **Never** pin a compromised key next to the
+   new one: the two-key form exists for planned rotations only.
 2. Delete the secret `ATLAS_HUB_SIGNING_KEY`, check who had access to it, and review the
    repository's recent workflow runs and Pages deployments.
 3. Check what the operators may have imported since the suspected compromise. The import
    plan and the application releases show what came in. Compare it with the signed
    packages you built yourself (`atlas hub build` locally).
-4. Carry out a planned rotation (above) with a new key. Then the operators set the URL
-   and the new key again.
+4. Create a new key, record it in `releases.json`, set the secret, and publish. The
+   operators then set the URL and **only** the new key.
 
-A lost key without suspected misuse follows the planned rotation.
-
-**Not built (yet):** pinning two keys at once, which would let installations accept the
-old and the new key during a rotation and remove the window. That would be a server
-change to ADR-0499's trust profile and needs its own decision.
+A lost key without suspected misuse cannot sign any more, so the two-key overlap of a
+planned rotation does not help: the registry can only be re-signed with the new key.
+Announce the new key, switch (step 4 above), and have the operators replace the key
+directly.
 
 ## Connecting an installation
 
@@ -201,7 +218,8 @@ ATLAS_BLUEPRINT_REGISTRY_KEY=<publicKey from releases.json>
 ```
 
 Take the key from this repository (out of band), never from the Pages site, because the
-registry host is not its own trust root. The installation must run a build that knows
+registry host is not its own trust root. During a rotation the variable holds two keys
+(see above). The installation must run a build that knows
 release tags (this change, ADR-0499 amendment 2026-11-02). An older build refuses the
 index.
 
