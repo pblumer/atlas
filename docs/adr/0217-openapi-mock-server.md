@@ -2,6 +2,22 @@
 
 - **Status:** Accepted (amended 2026-09-03 — see the amendment below: what published documents taught it, and reading one made of many files)
 - **Implementation:** Landed
+
+> **Follow-up status (2026-11-02).** Two of this record's three follow-ups are settled.
+> The **Console-managed mock** is built — ADR-draft-console-managed-openapi-mock serves an
+> uploaded document from the engine's own HTTP surface, so the path the AD mockup took
+> (ADR-0193/0202) has now been taken here too. **Posting the report** turned out not to be
+> needed for it: a mock the server holds itself is collected at read time, so
+> `GET /api/v1/mocks` renders it beside the SharePoint mockup and `POST /api/v1/mocks` is
+> still owed only by the mockups a worker holds. **Request validation** is untouched and
+> remains the first follow-up.
+>
+> One decision of this record was deliberately narrowed rather than inherited: the journal.
+> Here it is served to anyone who can reach the port, and that was accepted because a
+> standalone mock is bound where only its caller can reach it. On the engine's address that
+> reasoning does not carry, so the Console-managed mock refuses `/__mock/calls` and
+> `/__mock/report` on its public route and serves them through the authenticated Mockups
+> view instead.
 - **Date:** 2026-09-01
 - **Deciders:** Atlas maintainers
 

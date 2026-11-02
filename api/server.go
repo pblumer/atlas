@@ -50,6 +50,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/identity"
 	"github.com/pblumer/atlas/api/infomodel"
+	"github.com/pblumer/atlas/api/openapimocks"
 	"github.com/pblumer/atlas/api/panorama"
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
@@ -355,6 +356,12 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// openAPIMocks serves the mock REST APIs an operator uploaded and switched on
+	// (ADR-draft-console-managed-openapi-mock). Like the documentation services it
+	// owns its store and reaches shared state only through the run loop — except on
+	// the serving path, which reads an atomic pointer and takes no loop at all, so a
+	// mocked call can never queue behind the processor.
+	openAPIMocks *openapimocks.Service
 	// identity holds linked external accounts and delegated connections and brokers
 	// their credentials; policies is the policy administration point; governed is the
 	// in-memory view of which Workers carry an identity policy, read by the
@@ -1549,6 +1556,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	openAPIMockStore, err := openapimocks.NewStore(filepath.Join(dataDir, "openapi-mocks"))
+	if err != nil {
+		return nil, err
+	}
 	decisionDocStore, err := decisiondoc.NewStore(filepath.Join(dataDir, "decision-docs"))
 	if err != nil {
 		return nil, err
@@ -1893,6 +1904,18 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		},
 		token.New,
 	)
+	// The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock). Compiling
+	// every enabled document happens here, at startup and off the run loop; a document
+	// that has rotted since it was switched on is named in the log and skipped, because
+	// refusing to start over a dev aid would be the worse failure.
+	// Unix seconds, not the engine clock's nanoseconds: these are design-time record
+	// timestamps, the same shape a connector record's CreatedAt carries.
+	s.openAPIMocks = openapimocks.New(s.runLoop, openAPIMockStore, func() int64 { return time.Now().Unix() })
+	for _, problem := range s.openAPIMocks.Reload() {
+		logging.Warn(logging.OpenAPIMockUnservable,
+			"a mock API is switched on but its document cannot be served; it answers 404 until the document is replaced",
+			slog.String("error", problem.Error()))
+	}
 	// Decision documentation is the same area service for a second artifact kind
 	// (ADR-0324). It takes no deployment lookup: a decision
 	// document is a sign-off artifact and is usually published before the decision
@@ -2145,6 +2168,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.formGen.Limits = s.budgets()
 	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.openAPIMocks.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
@@ -3824,6 +3848,15 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// limit them.
 	mountFunc(accessPublic, roleAny, "GET "+processdoc.PublicPath+"{token}", s.processDocs.HandlePublic)
 	mountFunc(accessPublic, roleAny, "GET "+decisiondoc.PublicPath+"{token}", s.decisionDocs.HandlePublic)
+	// The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock). Public
+	// because a mock must authenticate nobody: a model carrying an Atlas credential to
+	// reach its mock is a model that changes between a mockup run and a real one, which
+	// ADR-0181 forbids. It serves only documents an authenticated operator uploaded and
+	// switched on, answers 404 for every other name, and withholds the journal — the
+	// request bodies a run recorded are read through the authenticated Mockups view.
+	// Registered as a prefix, for every method, because what it serves is somebody
+	// else's path template and not a route of ours.
+	mountFunc(accessPublic, roleAny, openapimocks.MockPath, s.openAPIMocks.HandleMock)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}", s.handlePublicFormPage)
 	mountFunc(accessPublic, roleAny, "GET /public/forms/{token}/schema", s.handlePublicFormSchema)
 	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/start", s.handlePublicFormStart)

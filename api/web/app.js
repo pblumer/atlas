@@ -2966,6 +2966,83 @@ async function viewConsoleWorkers() {
       </div>
     </div>`;
 
+  // The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock). It sits
+  // with the AD and SQL switches because it answers the same question for the systems
+  // that have no Worker Type of their own: a REST task names its URL in the model, so
+  // there is nowhere to point a draft except at the real API. Upload the document and
+  // this serves it; the task's URL changes by its base and nothing else.
+  let mockAPIs = null;
+  try {
+    mockAPIs = (await api("GET", "/api/v1/mock-apis")).mocks || [];
+  } catch (e) {
+    mockAPIs = null; // an older server, or unreachable: leave the card out entirely
+  }
+  const mockAPIRow = (m) => `
+    <tr data-mockapi="${esc(m.id)}">
+      <td><b>${esc(m.name)}</b>${m.title ? `<div class="muted" style="font-size:12px">${
+        esc(m.title)}${m.version ? ` ${esc(m.version)}` : ""}</div>` : ""}</td>
+      <td><code>${esc(location.origin + m.baseUrl)}</code>
+        <button class="btn ghost" data-mockapi-copy="${esc(location.origin + m.baseUrl)}"
+          title="Copy this base URL" style="padding:1px 6px; font-size:11px">Copy</button>${m.serverUrl
+        ? `<div class="muted" style="font-size:12px">stands in for <code>${esc(m.serverUrl)}</code></div>` : ""}</td>
+      <td style="text-align:right">${m.operations || 0}${(m.skipped || []).length
+        ? `<div class="muted" style="font-size:12px" title="${esc((m.skipped || []).join("\n"))}">${
+            m.skipped.length} without a body</div>` : ""}</td>
+      <td style="text-align:right">
+        <span class="pill ${m.serving ? "warn" : "ok"}"><span class="dot"></span>${
+          m.serving ? "serving" : m.enabled ? "cannot be served" : "off"}</span></td>
+      <td style="text-align:right; white-space:nowrap">
+        <button class="btn ghost" data-mockapi-toggle="${esc(m.id)}">${m.enabled ? "Switch off" : "Switch on"}</button>
+        <a class="btn ghost" href="/api/v1/mock-apis/${esc(m.id)}/document" download="${esc(m.name)}.openapi" title="Download the document Atlas holds">Document</a>
+        <button class="btn ghost danger" data-mockapi-delete="${esc(m.id)}">Delete</button>
+      </td>
+    </tr>`;
+  const mockAPICard = mockAPIs === null ? "" : `
+    <div class="card" style="margin-top:18px">
+      <div class="between"><h2>Mock REST APIs</h2>
+        <span class="pill ${mockAPIs.some((m) => m.serving) ? "warn" : "ok"}"><span class="dot"></span>${
+          mockAPIs.some((m) => m.serving)
+            ? `${mockAPIs.filter((m) => m.serving).length} serving`
+            : "none serving"}</span></div>
+      <p class="muted" style="margin:6px 0 12px">A REST task names its URL in the model, so there is
+      nowhere to point a draft while the real API is still being built. Upload that API's
+      <b>OpenAPI document</b> and atlas serves it here: the paths, the statuses and the example
+      responses the document states, generated from the schema where it states none. Nothing in a
+      model changes — only the <i>base</i> of the task's URL — so what a run exercises is the real
+      task, with its headers, its authentication and its result mapping. Atlas keeps the document,
+      so there is no file to place on a host and no port to open. It does not validate what you send
+      it and it has no memory: a POST followed by a GET returns what the document says, not what was
+      posted. A response the document describes only in a media type atlas cannot generate — XML,
+      commonly — is counted as <i>without a body</i> and answers 406 naming what it does have; hover
+      the count to see which. What a run actually called is under
+      <a href="#/operations/mockups">Operations &rsaquo; Diagnostics &rsaquo; Mockups</a>.</p>
+      ${!mockAPIs.length ? `<p class="empty">No mock APIs yet.</p>` : `
+      <table>
+        <thead><tr><th>Name</th><th>Call this instead</th><th style="text-align:right">Operations</th>
+          <th style="text-align:right">State</th><th></th></tr></thead>
+        <tbody>${mockAPIs.map(mockAPIRow).join("")}</tbody>
+      </table>`}
+      <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:12px">
+        <div class="between" style="gap:10px; flex-wrap:wrap">
+          <input id="mockapi-name" placeholder="name, as in petstore" style="max-width:260px"
+                 title="The mock's address: it becomes /mock-api/<name>">
+          <span style="white-space:nowrap">
+            <input type="file" id="mockapi-file" accept=".yaml,.yml,.json,.openapi,text/plain" style="display:none">
+            <button class="btn ghost" id="mockapi-pick" title="Read an OpenAPI document from this computer">Choose a document…</button>
+            <button class="btn ghost" id="mockapi-paste" title="Paste the document directly">Paste or edit</button>
+            <button class="btn" id="mockapi-add">Serve it</button>
+          </span>
+        </div>
+        <textarea id="mockapi-doc" rows="10" spellcheck="false" placeholder="openapi: 3.0.0&#10;info: {title: …, version: …}&#10;paths: …"
+                  style="display:none; width:100%; margin-top:8px;
+                  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px"></textarea>
+        <div class="muted" id="mockapi-note" style="font-size:13px; margin-top:8px">A document that
+        cannot be served is refused here, with the reason — rather than mocked badly and found out in
+        the middle of a demo. The base URL above is this browser's view of atlas; a worker on another
+        host reaches it under whatever name <i>it</i> can use.</div>
+      </div>
+    </div>`;
+
   if (superseded(gen)) return; // navigated away while the workers loaded
   view.innerHTML = `
     <div class="card" style="padding:0">
@@ -2986,11 +3063,13 @@ async function viewConsoleWorkers() {
     </div>
     ${managedCard}
     ${adMockCard}
-    ${sqlMockCard}`;
+    ${sqlMockCard}
+    ${mockAPICard}`;
   wireSections(view);
   wireWorkerManagement(workers);
   wireADMock();
   wireSQLMock();
+  wireMockAPIs();
   // Editing, enabling or deleting a worker re-renders this page without going through
   // route(), whose enhanceViewTables would otherwise be the only one to give the new
   // tables their sorting and filter row back.
@@ -6249,6 +6328,122 @@ function wireSQLMock() {
       save.disabled = false;
     }
   });
+}
+
+// wireMockAPIs binds the mock REST API panel
+// (ADR-draft-console-managed-openapi-mock): upload an OpenAPI document and it is
+// served, switch one off and it stops, delete one and it is gone.
+//
+// Like the AD and SQL seeds, a document chosen here is read *in the browser* and posted
+// as text, because Atlas holds the document rather than a path to it (ADR-0202): what an
+// author picks is what Atlas stores, and there is no filesystem on the server for a
+// filename to mean anything against.
+function wireMockAPIs() {
+  const add = document.getElementById("mockapi-add");
+  if (!add) return;
+  const name = document.getElementById("mockapi-name");
+  const box = document.getElementById("mockapi-doc");
+  const note = document.getElementById("mockapi-note");
+  const file = document.getElementById("mockapi-file");
+  let filename = "";
+
+  const pick = document.getElementById("mockapi-pick");
+  if (pick && file) {
+    pick.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      try {
+        box.value = await f.text();
+        filename = f.name;
+        box.style.display = "";
+        // A name nobody typed is taken from the file, lower-cased the way the server
+        // will take it anyway — one less field to fill for the common case.
+        if (name && !name.value.trim()) {
+          name.value = f.name.replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+        }
+        if (note) note.textContent = `${f.name} — ${f.size} bytes read, not saved yet.`;
+      } catch (e) {
+        if (note) note.textContent = e.message;
+      }
+    });
+  }
+
+  const paste = document.getElementById("mockapi-paste");
+  if (paste) {
+    paste.addEventListener("click", () => {
+      box.style.display = box.style.display === "none" ? "" : "none";
+      if (box.style.display === "") box.focus();
+    });
+  }
+
+  add.addEventListener("click", async () => {
+    const document_ = box.value.trim();
+    if (!document_) {
+      box.style.display = "";
+      if (note) note.textContent = "Choose or paste an OpenAPI document first — Atlas serves what you give it.";
+      return;
+    }
+    add.disabled = true;
+    try {
+      const made = await api("POST", "/api/v1/mock-apis",
+        { name: (name && name.value) || "", document: document_, filename });
+      toast(`Serving ${made.name} at ${made.baseUrl} — point the task's URL there.`);
+      await viewConsoleWorkers();
+    } catch (e) {
+      if (note) note.textContent = e.message;
+      add.disabled = false;
+    }
+  });
+
+  for (const btn of document.querySelectorAll("[data-mockapi-toggle]")) {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.mockapiToggle;
+      const on = btn.textContent.trim() === "Switch on";
+      btn.disabled = true;
+      try {
+        await api("PUT", `/api/v1/mock-apis/${encodeURIComponent(id)}`, { enabled: on });
+        toast(on ? "Switched on — it is answering now." : "Switched off — it answers nothing until you switch it back on.");
+        await viewConsoleWorkers();
+      } catch (e) {
+        if (note) note.textContent = e.message;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  for (const btn of document.querySelectorAll("[data-mockapi-copy]")) {
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.mockapiCopy);
+        toast("Base URL copied — paste it into the REST task's URL, keeping the path below it.");
+      } catch (e) {
+        // No clipboard permission (or no secure context): say so rather than
+        // appearing to have copied nothing.
+        if (note) note.textContent = `Copy it by hand: ${btn.dataset.mockapiCopy}`;
+      }
+    });
+  }
+
+  for (const btn of document.querySelectorAll("[data-mockapi-delete]")) {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.mockapiDelete;
+      const row = btn.closest("[data-mockapi]");
+      const label = row ? row.querySelector("b").textContent : "this mock API";
+      // The document is the only copy — Atlas holds it rather than pointing at one —
+      // so the confirmation says so rather than asking a generic "are you sure".
+      if (!confirm(`Delete ${label}? The OpenAPI document Atlas holds goes with it; download it first if it is the only copy.`)) return;
+      btn.disabled = true;
+      try {
+        await api("DELETE", `/api/v1/mock-apis/${encodeURIComponent(id)}`);
+        toast(`${label} deleted.`);
+        await viewConsoleWorkers();
+      } catch (e) {
+        if (note) note.textContent = e.message;
+        btn.disabled = false;
+      }
+    });
+  }
 }
 
 // wireSecretsManagement binds the encrypted-vault panel (ADR-0069): a "New secret"

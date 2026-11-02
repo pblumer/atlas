@@ -456,7 +456,11 @@ var (
 	// JobTypeIndexCollision reports a stored job-type assignment whose index the
 	// reserved range has since grown over. Warned at startup rather than swallowed:
 	// jobs already on disk carry the old index, so the drop is not cosmetic.
-	JobTypeIndexCollision        = newEvent("jobtype.index_collision")
+	JobTypeIndexCollision = newEvent("jobtype.index_collision")
+	// OpenAPIMockUnservable reports a stored mock API that is switched on but whose
+	// document no longer compiles. Warned at startup rather than fatal: a dev aid
+	// somebody left on months ago must not be able to stop the engine.
+	OpenAPIMockUnservable        = newEvent("openapi_mock.unservable")
 	AuthAdminSeeded              = newEvent("auth.admin_seeded")
 	AuthPasswordReset            = newEvent("auth.password_reset")
 	UserProvisioningUserCreated  = newEvent("user_provisioning.user_created")

@@ -13,6 +13,20 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A mock REST API in one click.** A REST task names its URL in the model, so a draft had
+  nowhere to point while the real API was still being built: `atlas mock-openapi` needed a
+  shell, a host, a free port and the document placed on that host. Organization › Workers
+  now has **Mock REST APIs** — upload the API's OpenAPI document and atlas serves it at
+  `/mock-api/<name>`, with the paths, statuses and example responses the document states
+  and values generated from the schema where it states none. Atlas keeps the document, so
+  there is no file to place and no path to type; a document that cannot be served is
+  refused on upload with the reason rather than mocked badly. Nothing in a model changes —
+  only the base of the task's URL — so a run exercises the real task with its headers, its
+  authentication and its result mapping. Switching one off is inert and switching it back
+  on recompiles what is stored. What a run actually called is under Operations ›
+  Diagnostics › Mockups, which is the *only* place it is readable: unlike the standalone
+  mock, the served route refuses `/__mock/calls`, because a recorded request body comes
+  from a real instance.
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.

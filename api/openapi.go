@@ -2103,13 +2103,36 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("Mock journal", tObject()), status: http.StatusNoContent}},
 
 		{"GET", "/api/v1/mocks", s.handleMockReports, apiOp{
-			summary: "Show the mockups this server can see, one report each — kind, holder, target, summary and the kind's own data (today the SharePoint mockups: their sites and the operations each was asked). Admin-gated: what a process writes into a mockup is shaped like the real thing", tag: "Workers", role: RoleAdmin,
+			summary: "Show the mockups this server can see, one report each — kind, holder, target, summary and the kind's own data: the SharePoint mockups (their sites and the operations each was asked) and the mock REST APIs (their operation table and the calls a run made). Admin-gated: what a process writes into a mockup is shaped like the real thing, and a mock API's journal holds the request bodies real instances sent", tag: "Workers", role: RoleAdmin,
 			resp: jsonBody("Mock reports", schemaObj(map[string]any{"reports": tArray()}))}},
 		{"POST", "/api/v1/sharepoint/mock-sites/{worker}", s.handleSharePointMockOperation, apiOp{
 			summary: "Perform one SharePoint operation against a mockup Worker's site (used by a SharePoint worker running in mockup mode); a refusal answers 422 with the site's reason", tag: "Workers", role: RoleOperator,
 			req: jsonBody("SharePoint operation", tObject()), resp: jsonBody("What the site answered", schemaObj(map[string]any{"answer": tObject()}))}},
 		{"DELETE", "/api/v1/sharepoint/mock-sites/{worker}", s.handleClearSharePointMockSite, apiOp{
 			summary: "Empty a mockup Worker's site and its journal", tag: "Workers", role: RoleAdmin, status: http.StatusNoContent}},
+
+		// The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock). The
+		// management surface is Modeler-gated because the person who needs it is the
+		// author of the model, not an operator — which is ADR-0193's whole finding — and
+		// what it exposes is a document that author uploaded and invented data generated
+		// from it. The served mock itself is public and lives under /mock-api/.
+		{"GET", "/api/v1/mock-apis", s.openAPIMocks.HandleList, apiOp{
+			summary: "List the mock REST APIs this server holds: each with the document it was given (title, version, operation count), whether it is switched on, whether it is actually being served, and `baseUrl` — the path to point a REST task at instead of the real API", tag: "Workers", role: RoleModeler,
+			resp: jsonBody("Mock APIs", schemaObj(map[string]any{"mocks": tArray()}))}},
+		{"POST", "/api/v1/mock-apis", s.openAPIMocks.HandleCreate, apiOp{
+			summary: "Upload an OpenAPI 3 document (JSON or YAML, as the `document` string) and serve it as a mock at /mock-api/{name}. Atlas keeps the document, so there is no file path to give it and nothing to place on a host. The document is compiled first: one that cannot be served is refused with the reason, rather than mocked badly. Omitting `enabled` switches it on", tag: "Workers", role: RoleModeler,
+			req:  jsonBody("Mock API", schemaObj(map[string]any{"name": tString(), "document": tString(), "filename": tString(), "enabled": tBool()})),
+			resp: jsonBody("Created mock API", tObject()), status: http.StatusCreated}},
+		{"PUT", "/api/v1/mock-apis/{id}", s.openAPIMocks.HandleUpdate, apiOp{
+			summary: "Rename a mock API, switch it on or off, or replace its document. An omitted `document` leaves the stored one alone; switching one back on recompiles what is stored and answers 400 if that no longer compiles", tag: "Workers", role: RoleModeler,
+			req:  jsonBody("Mock API", schemaObj(map[string]any{"name": tString(), "document": tString(), "filename": tString(), "enabled": tBool()})),
+			resp: jsonBody("Updated mock API", tObject())}},
+		{"DELETE", "/api/v1/mock-apis/{id}", s.openAPIMocks.HandleDelete, apiOp{
+			summary: "Delete a mock API and stop serving it", tag: "Workers", role: RoleModeler,
+			resp: jsonBody("Deleted mock API", tObject())}},
+		{"GET", "/api/v1/mock-apis/{id}/document", s.openAPIMocks.HandleDocument, apiOp{
+			summary: "Download the OpenAPI document Atlas holds for a mock API, verbatim as it was uploaded", tag: "Workers", role: RoleModeler,
+			resp: &bodySpec{mediaType: "text/plain", schema: tString(), desc: "The OpenAPI document, verbatim"}}},
 
 		{"GET", "/api/v1/connectors/{id}/inbound-subscriptions", s.handleListInboundSubscriptions, apiOp{
 			summary: "List a worker's inbound event watches — clio, Jira, Google, Discord and mail Workers carry them — each with `lastError` and `failingSince` (unix seconds) while it cannot read its source", tag: "Workers", role: RoleModeler, resp: jsonBody("Subscriptions", tArray())}},

@@ -16,6 +16,20 @@
 > pages into this view (Mock directory and Mock database still have their own entries),
 > and the Jira mock.
 >
+> **Second kind (2026-11-02): `openapi`.** The Console-managed mock REST APIs
+> (ADR-draft-console-managed-openapi-mock) report here, with a renderer of their own:
+> the operation table the document describes with a call count per row, and the journal
+> underneath. Like the SharePoint one it is held in this server's memory and collected at
+> read time, so it still needs no `POST /api/v1/mocks` — the two kinds that exist are both
+> the server's own. That route and the report store remain owed for the mockups a *worker*
+> holds, which is what they were designed for.
+>
+> The new kind also moved a line this record did not anticipate: the mock's journal is
+> **only** readable here. ADR-0217's standalone mock serves its own `/__mock/calls`, and the
+> Console-managed one refuses it, because a request body on the engine's public address is
+> data from a real instance. So for this kind the view is not merely the tidier place to
+> look — it is the only authenticated one.
+>
 > **Earlier status (2026-10-11).** Not started. There is no `MockReport` store, no
 > `/api/v1/mocks`, no Operations › Mockups view and no Jira mock; the Console still has one
 > page per kind (Mock directory, Mock database), the option this record rejected. The only

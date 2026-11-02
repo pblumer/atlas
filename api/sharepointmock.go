@@ -59,6 +59,19 @@ func (s *Server) handleMockReports(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 	}
+	// The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock) report the
+	// same way and for the same reason: they are in this server's memory, so the report
+	// is collected here rather than posted, and `openapimock.Server.Report` already
+	// produces this envelope — it was written against ADR-0216 with nowhere to send it.
+	if s.openAPIMocks != nil {
+		at := s.now()
+		for _, rep := range s.openAPIMocks.Reports() {
+			reports = append(reports, mockReport{
+				Kind: rep.Kind, Source: rep.Source, Target: rep.Target,
+				At: at, Summary: rep.Summary, Data: rep.Data,
+			})
+		}
+	}
 	httpapi.JSON(w, http.StatusOK, map[string]any{"reports": reports})
 }
 

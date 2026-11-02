@@ -55,6 +55,14 @@ var wantPublicRoutes = []string{
 	"POST /public/wizard/steps/{taskKey}/fields/{field}/options",
 	"OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options",
 
+	// The Console-managed mock APIs (ADR-draft-console-managed-openapi-mock). A mock
+	// must authenticate nobody, or the model would carry a credential to reach it and
+	// then differ between a mockup run and a real one (ADR-0181). Registered as a
+	// prefix for every method, because what it serves is somebody else's path
+	// template. It serves only a document an operator uploaded and switched on, and
+	// the journal — the part that holds what real instances sent — is refused here.
+	"/mock-api/",
+
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// These are read *after* a refusal, to find out what did the refusing — behind
 	// the credential they help you obtain, nobody who needs them could read them.

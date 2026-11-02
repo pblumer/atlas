@@ -126,6 +126,64 @@ function sharePointCard(r) {
   </div>`;
 }
 
+// openAPICard draws one mock REST API (ADR-draft-console-managed-openapi-mock): the
+// operation table the document describes, with how often each was actually called, and
+// the journal of calls underneath.
+//
+// This card is where the journal lives, and that is deliberate rather than incidental.
+// The served mock refuses /__mock/calls because a request body comes from a real
+// instance of a real draft; it is read here, behind the login, instead. So the column
+// an author comes for is "Calls" at zero — the operation they thought they were
+// calling and were not.
+function openAPICard(r) {
+  const d = r.data || {};
+  const ops = d.operations || [];
+  const calls = d.calls || [];
+  const uncalled = ops.filter((o) => !o.calls).length;
+  const opsTable = !ops.length
+    ? `<p class="empty">The document describes no operation this mock can serve.</p>`
+    : `<table class="admock-attrs spmock-table">
+        <thead><tr><th>Operation</th><th>Path</th><th style="text-align:right">Calls</th></tr></thead>
+        <tbody>${ops.map((o) => `<tr class="${o.calls ? "" : "muted"}">
+          <td><b>${esc(o.method)}</b>${o.id ? ` <span class="muted">${esc(o.id)}</span>` : ""}</td>
+          <td><code>${esc(o.path)}</code></td>
+          <td style="text-align:right">${o.calls ? esc(o.calls) : "—"}</td>
+        </tr>`).join("")}</tbody>
+      </table>`;
+  const callsTable = !calls.length
+    ? `<p class="empty">Nothing called it yet. A REST task reaches it once its URL names this
+       mock's base path instead of the real API's.</p>`
+    : `<table class="admock-attrs sqlmock-table spmock-journal"><tbody>${calls.map((c) => `
+        <tr class="${c.status >= 400 ? "sqlmock-failed" : ""}">
+          <td class="sqlmock-seq muted">${esc(c.seq)}</td>
+          <td><b>${esc(c.method)}</b> <code>${esc(c.path)}</code>
+            <span class="muted">&rarr; ${esc(c.status)}${
+              c.operation ? ` · ${esc(c.operation)}` : ""}${
+              c.requestId ? ` · job ${esc(c.requestId)}` : ""}</span>
+            ${c.body !== undefined && c.body !== null
+              ? `<div class="sqlmock-detail"><code>${esc(JSON.stringify(c.body))}</code></div>` : ""}</td>
+        </tr>`).join("")}</tbody></table>`;
+  const title = d.title || r.target || "an untitled API";
+  return `<div class="card admock-worker" data-worker="${esc(r.source || "")}" data-kind="openapi" data-fold="${esc(r.source || title)}">
+      <div class="admock-head">
+        <h2>${esc(r.source || title)}</h2>
+        <span class="tag">OpenAPI</span>
+        <span class="muted">${esc(title)}${d.version ? ` ${esc(d.version)}` : ""} ·
+        ${plural(ops.length, "operation", "operations")} · ${plural(calls.length, "call", "calls")}${
+          uncalled ? ` · <b>${uncalled}</b> never called` : ""}</span>
+        <span class="admock-card-state"><span class="pill warn"><span class="dot"></span>mockup</span></span>
+      </div>
+      <details class="admock-ops" data-k="openapi-ops" open>
+        <summary>Operations (${ops.length})</summary>
+        ${opsTable}
+      </details>
+      <details class="admock-ops" data-k="openapi-calls" ${calls.length ? "open" : ""}>
+        <summary>Calls (${calls.length}${calls.length >= 200 ? ", the newest 200" : ""})</summary>
+        ${callsTable}
+      </details>
+  </div>`;
+}
+
 // genericCard draws a mockup of a kind with no renderer of its own: its summary, and its
 // data as the server served it. Plainer than a written card, which is the honest sign
 // that nobody has written one yet (ADR-0216).
@@ -142,7 +200,7 @@ function genericCard(r) {
 }
 
 // RENDERERS maps a mocked kind to the card that draws it.
-const RENDERERS = { sharepoint: sharePointCard };
+const RENDERERS = { sharepoint: sharePointCard, openapi: openAPICard };
 
 // mockupsHTML renders the view's list from GET /api/v1/mocks.
 export function mockupsHTML(data) {
@@ -150,7 +208,9 @@ export function mockupsHTML(data) {
   if (!reports.length) {
     return `<div class="card"><p class="empty">No mockup is running. A SharePoint Worker becomes one
       with the provider <b>Mockup</b> under Organization &rsaquo; Workers; every SharePoint task that
-      names it then runs against a site shown here.</p></div>`;
+      names it then runs against a site shown here. A <b>mock REST API</b> becomes one on the same
+      page: upload the API's OpenAPI document under Mock REST APIs, and every call a task makes to it
+      is listed here.</p></div>`;
   }
   return reports.map((r) => (RENDERERS[r.kind] || genericCard)(r)).join("");
 }
