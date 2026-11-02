@@ -128,6 +128,15 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A terminate end event ends its scope in the token simulation.** The Design view's
+  simulation treated a terminate end like a plain end: only the token that reached it
+  stopped. A token still waiting beside it — a message catch on a parallel branch, say —
+  kept its subprocess running, so the outer token never continued and the walk-through
+  stalled on "An event is waiting". A terminate now tears down every other token in its
+  enclosing scope, as the engine does (ADR-0116): inside a subprocess the subprocess then
+  completes and the flow continues on its outgoing flow; at the top it ends the process,
+  and in a pool only that pool. Cancelling a subprocess through an interrupting boundary
+  no longer stops the dots still travelling elsewhere in the diagram either.
 - **Operations Live views identify the process.** A dedicated heading now keeps the full process name and deployed version visible above the BPMN diagram, even with a crowded toolbar or on a narrow screen.
 - **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
   example in the Modeler saves it in the reader's reusable `atlas-samples` application,
