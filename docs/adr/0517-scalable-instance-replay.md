@@ -227,8 +227,14 @@ only with `technical=true`. Contributions to the body's output collection are
 recorded on the body's collection (ADR-0296), not per iteration, and are not
 shown as iteration outputs.
 
-**Still not built:** a verified historical rebuild for legacy (pre-v2) stores —
-they stay `history_unavailable`; a bounded outline of the *other* steps of a
+**OHS2-A — rebuilding older stores (2026-11-02).** A store whose history
+predates the index is rebuilt at startup from the retained log, as decided in
+[ADR-draft-mi-history-legacy-rebuild](draft-mi-history-legacy-rebuild.md):
+shadow replay through the unchanged `applyToState`, then a resumable swap of the
+MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
+`history_unavailable`.
+
+**Still not built:** per-instance readiness for compacted logs; a bounded outline of the *other* steps of a
 large instance (the bounded view shows only its multi-instance executions);
 the step-by-step replay window of one iteration on the diagram (its inner
 elements' step frames for subprocess iterations); job and user-task history per

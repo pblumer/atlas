@@ -1,7 +1,7 @@
 # ADR-DRAFT: Rebuilding the multi-instance history index for stores that predate it
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Landed
 - **Date:** 2026-11-02
 - **Deciders:** atlas maintainers, Operations History at Scale programme owner
 - **Approved by:** programme owner, 2026-11-02 (shadow replay; the swap may delay a startup)
@@ -72,11 +72,13 @@ Shadow replay, in detail:
 - Precondition, checked before any work: the WAL's first retained record is
   position 1 and there is no gap up to the live store's last applied position
   *P*. Otherwise the store stays unavailable and says why.
-- Phase 1, off the writer: replay records 1..P through a second processor's
-  `Recover` into a temporary store under the data directory. The WAL segments
-  are immutable below the live tail, so this reads, never writes, the log.
+- Phase 1: replay records 1..P through the unchanged `applyToState` into a
+  temporary store under the data directory (`mi-history-rebuild`), committing
+  every 50,000 events with the applied position. This only reads the log.
   Progress is the temporary store's own last-applied position: a restart resumes
-  it.
+  it. As built, phase 1 also runs at startup, before the processor accepts
+  commands — the programme owner accepted the startup delay — so the live store
+  does not move while it runs.
 - Phase 2, the swap. The live store's MI families cannot simply be re-folded for
   positions after *P*: the fold reads state as of each event, and live state has
   moved on (an ended iteration's variables are gone). So the temporary store
@@ -108,6 +110,23 @@ Shadow replay, in detail:
   store; an operator-visible progress indicator; a test matrix for interruption
   in every phase, a compacted log, a checkpoint restore, purge during the copy,
   and live MI activity during the copy.
+
+### As built (2026-11-02)
+
+`engine.(*Processor).RebuildMIHistory` (called by `atlas serve` after recovery),
+`state.(*Store).AdoptMIHistory` and `MIHistoryRebuildNeeded`. All MI families
+lie in one contiguous key range (`0x38`–`0x43`, guarded by a test), so the swap
+is one range tombstone and one ordered walk, committed with `fsync` every 10,000
+keys under the progress marker `mi_history_rebuild_copy`. Tests: the rebuilt
+index of a store stripped of its MI families and markers equals the live index
+(bodies, iterations, state and incident pages, incident records); a compacted
+log is refused with a reason; an interrupted copy resumes to the same keys; a
+shadow store at another position or without its own markers is refused.
+Startup logs `server.mi_history_rebuilt` or `server.mi_history_unavailable`.
+
+Not built: an operator-visible progress indicator; a disk-reserve check before
+the shadow store is written (it holds a full copy of the state, ADR-0481);
+per-instance readiness for compacted logs (open question).
 
 ## Pros and cons of the options
 
