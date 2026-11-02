@@ -8,7 +8,7 @@ into a real BPMN model and form-js schema, without changing the engine or HTTP A
 1. An authorised operator starts `proc_mfe1_safety_inspection` on a mobile or desktop
    Tasks > Start page — or a task user starts it through the self-service routes
    after an administrator granted it to them or their group (ADR-0516; the Start
-   view does not offer this to task users yet).
+   view offers it to them once it is granted).
 2. A permitted task user opens/claims the unassigned "Sicherheitskontrolle
    durchführen" task in My Tasks, enters the required site, asset, inspector and
    result, and submits. No automatic assignment is assumed.

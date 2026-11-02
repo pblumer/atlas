@@ -14,7 +14,7 @@ The foreground UI polls for task and incident updates on an approximately 10-sec
 
 ## Operational checks
 
-Verify signed-in and signed-out navigation, role-limited Process Start, completion receipts, polling after a new task or incident, transient API errors, offline/reconnect, tablet landscape and 200% zoom. Ordinary users start only what an administrator granted them (below), through `GET /api/v1/me/startable-processes` and `POST /api/v1/me/processes/{key}/instances`; the Start view does not offer this to them yet.
+Verify signed-in and signed-out navigation, role-limited Process Start, completion receipts, polling after a new task or incident, transient API errors, offline/reconnect, tablet landscape and 200% zoom. Ordinary users start only what an administrator granted them (below), through `GET /api/v1/me/startable-processes` and `POST /api/v1/me/processes/{key}/instances`; the Start view offers these processes to them as soon as one is granted.
 
 Automated browser evidence: `e2e/mfe1-mobile-entry.spec.mjs`, `e2e/mfe1-mobile-work-shell.spec.mjs`, and `e2e/console-menu.spec.mjs`. Browser CI does not replace physical-device tests. Record actual iOS Safari and Android browser versions, orientation, input/keyboard behaviour, form-js validation, accessibility and screenshots in #1451.
 
@@ -38,5 +38,6 @@ An administrator decides which people or groups may later start one process of o
 - **List:** `GET /api/v1/me/startable-processes` answers the processes you may start now, newest version only, sorted by application and name. It is empty when nothing is granted to you or your groups.
 - **Start:** `POST /api/v1/me/processes/{key}/instances` with `{"variables": {…}}` — only the fields of the process's start form, or nothing for a process without one. The server checks the grant and the version again, then the values against the form: required fields, types, lengths, number bounds and listed options. A refused start creates nothing.
 - **Answers:** 401 not signed in; 403 not granted (or no longer granted), or an API token or connected application; 404 unknown key; 409 replaced or currently not startable version — reload the list; 400 values the form does not accept; 503 grants temporarily untrusted after a failed write. A success names the instance (`instanceKey`) and is durable.
+- **In the Start view:** Start appears in the menus once something is granted to you. Pick a process by its name, fill its form and press Start process once; the button stays disabled while the start is sent. The view tells you when the process has started and gives its reference, or says why nothing was started.
 - **Unknown outcome:** if the connection breaks or times out during a start, the instance may or may not exist. Check the Tasks inbox or ask an operator before starting again; automatic deduplication is not part of MFE1 (MFE5).
 
