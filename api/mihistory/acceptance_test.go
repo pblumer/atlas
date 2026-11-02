@@ -351,10 +351,12 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 		t.Fatalf("iteration 20,000: %+v", one)
 	}
 
-	// The overview and a page must not grow with the iteration count: the same
-	// reads against the 2,000-iteration instance are the same size, give or take
-	// the digits of larger numbers.
-	if d := runs[0].bytes - runs[1].bytes; d < -16 || d > 16 {
+	// The overview must not grow with the iteration count: against the
+	// 2,000-iteration instance it is the same size, give or take the digits of
+	// larger numbers and the words for different states (one instance is still
+	// active, the other completed). 25 times the iterations may not cost more
+	// than those few bytes, and neither overview may approach a kilobyte.
+	if d := runs[0].bytes - runs[1].bytes; d < -64 || d > 64 || runs[0].bytes > 1024 {
 		t.Fatalf("overview size depends on the iteration count: %d vs %d bytes", runs[0].bytes, runs[1].bytes)
 	}
 	for _, r := range runs {
