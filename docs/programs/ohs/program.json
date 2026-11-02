@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Merge #1513 (the #1494 fix: linear MI-subprocess completion); then variable values per step and job/user-task history per iteration (OHS3), and a 50,000-iteration MI-subprocess acceptance through the HTTP server.",
+  "next_action": "Merge #1514 (variables at a step, OHS3 increment 3); then job/user-task history per iteration (OHS3) and a 50,000-iteration MI-subprocess acceptance through the HTTP server.",
   "slices": [
     {
       "id": "OHS1",
@@ -47,7 +47,7 @@
         1507,
         1513
       ],
-      "note": "#1487 (keys), #1488 (projection), #1490 (fail-closed readiness) #1496 (index v2, bounded API, 50k acceptance) and #1502 (Multi-Instance Explorer, startup rebuild of older stores) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). The instance outline (cfOutline, instance_outline_v1) gives the bounded view the instance's own steps (#1507, merged). Open: per-instance readiness for compacted logs, and the HTTP-level 50k acceptance for an MI subprocess; #1494 (quadratic MI-subprocess completion) is fixed by a per-scope trigger index (#1513, in review). Stores that predate the index are rebuilt at startup from the retained log (accepted shadow-replay ADR draft).",
+      "note": "#1487 (keys), #1488 (projection), #1490 (fail-closed readiness) #1496 (index v2, bounded API, 50k acceptance) and #1502 (Multi-Instance Explorer, startup rebuild of older stores) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. The Operations Multi-Instance Explorer and a timeline-free view for large instances are built (e2e/mi-explorer.spec.mjs). The instance outline (cfOutline, instance_outline_v1) gives the bounded view the instance's own steps (#1507, merged). Open: per-instance readiness for compacted logs, and the HTTP-level 50k acceptance for an MI subprocess; #1494 (quadratic MI-subprocess completion) is fixed by a per-scope trigger index (#1513, merged). Stores that predate the index are rebuilt at startup from the retained log (accepted shadow-replay ADR draft).",
       "evidence": [
         "../../../api/mihistory/acceptance_test.go",
         "../../../engine/miindex_v2_recovery_test.go",
@@ -69,9 +69,10 @@
       ],
       "prs": [
         1502,
-        1508
+        1508,
+        1514
       ],
-      "note": "Increment 1 (#1502, merged): one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Increment 2 (#1508, merged): the replay window of one iteration — the steps inside it (cfIterationStep, readiness marker mi_iteration_steps_v1, covered by the startup rebuild), a bounded route and MCP tool, and a step-by-step replay on the diagram in the explorer; 1,110 bytes / 1.2 ms for iteration 37,421 of the 50k acceptance instance. Open: variable values at each step, collapsed-subprocess planes, job/user-task history per iteration, and the retention/migration verification.",
+      "note": "Increment 1 (#1502, merged): one iteration's recorded scope variables and its attributed DMN decisions (cfMIDecision, own readiness marker), in the API and the explorer. Increment 2 (#1508, merged): the replay window of one iteration — the steps inside it (cfIterationStep, readiness marker mi_iteration_steps_v1, covered by the startup rebuild), a bounded route and MCP tool, and a step-by-step replay on the diagram in the explorer; 1,110 bytes / 1.2 ms for iteration 37,421 of the 50k acceptance instance. Increment 3 (#1514, in review): the variables of the iteration's own scopes as they stood at each step (bounded fold of the existing per-scope snapshot history; 519 bytes / 0.9 ms at 50k), in the API, MCP and under the replay window. Open: the body's and the instance's variables at a step, collapsed-subprocess planes, job/user-task history per iteration, and the retention/migration verification.",
       "evidence": [
         "../../../engine/miindex_v2_recovery_test.go",
         "../../../api/mihistory/service_test.go",

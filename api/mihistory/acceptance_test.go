@@ -374,6 +374,7 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 		Steps []struct {
 			Action                 string `json:"action"`
 			MultiInstanceIteration bool   `json:"multiInstanceIteration"`
+			Position               uint64 `json:"position"`
 		} `json:"steps"`
 		NextCursor string `json:"nextCursor"`
 	}
@@ -381,6 +382,20 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 	if len(window.Steps) != 2 || window.Steps[0].Action != "activated" || window.Steps[1].Action != "completed" ||
 		!window.Steps[0].MultiInstanceIteration || window.NextCursor != "" {
 		t.Fatalf("replay window of iteration 37,421: %+v", window)
+	}
+	var atEnd struct {
+		Scopes []struct {
+			Iteration bool `json:"iteration"`
+			Variables []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"variables"`
+		} `json:"scopes"`
+	}
+	measure("variables of iteration 37,421 at its last step", fmt.Sprintf("%s/iterations/%d/variables?at=%d",
+		base, exact.Iterations[0].ElementInstanceKey, window.Steps[1].Position), &atEnd)
+	if len(atEnd.Scopes) != 1 || !atEnd.Scopes[0].Iteration || !strings.Contains(fmt.Sprint(atEnd.Scopes[0].Variables), "loopCounter 37421") {
+		t.Fatalf("variables of iteration 37,421: %+v", atEnd)
 	}
 
 	// The overview must not grow with the iteration count: against the
