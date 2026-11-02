@@ -181,7 +181,7 @@ Usage:
   atlas reset-password [flags] USER Reset a local user's password from the shell
   atlas import         [flags] DIR  Install a package (an application, and its shop) into a running atlas
   atlas export         [flags] DIR  Write a package from a running atlas, for atlas import elsewhere
-  atlas hub            STEP [flags] Publish the examples as a signed atlas hub registry (keygen, lock, build)
+  atlas hub            STEP [flags] Publish the examples as a signed atlas hub registry (keygen, fingerprint, lock, build)
   atlas import-mim     [flags] FILE Convert a MIM/FIM XOML workflow to BPMN 2.0
   atlas check-job-types [flags]     Check a data directory's job-type table for index collisions
   atlas mock-remedy    [flags]      Run a mock BMC Remedy AR System for the Remedy worker

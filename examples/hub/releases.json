@@ -5,259 +5,61 @@
   "publicKey": "",
   "releases": [
     {
-      "sample": "abgleich",
+      "bundle": "auftrag-finanzen",
       "version": "1.0.0",
-      "digest": "sha256:ee5fc9547336e3c0d00a45eabc4c25c67c7613965976f715781a6c14bd122393",
+      "digest": "sha256:38b9b6c485b3a47b1871af35d59076ac56799d92fe11e7cbd2e5874bdcadfb82",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "account-bestellung",
-      "version": "1.0.0",
-      "digest": "sha256:e64d70eccf42a9644a1b73a65b300a7dc0eac122b98a674f95ff3a2aec15b28a",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "ad-gruppenzuweisung",
-      "version": "1.0.0",
-      "digest": "sha256:27667e1266637c82c5680f20e9be9aa767c5d2f1d7ef31c108a0a3afc8fe4ee6",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "arbeitsplatz",
-      "version": "1.0.0",
-      "digest": "sha256:47017059724b254956c679ed55c6f86e7d521cf1f15ff847104c0c1a2ce8190c",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "befristung",
-      "version": "1.0.0",
-      "digest": "sha256:d72b023a8e1a72991695dd1ceda9d4f20c77be23e0ffbe2b7850f6dd9c02540e",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "bestandsaufnahme",
-      "version": "1.0.0",
-      "digest": "sha256:4495f66342144b57a6ec7ac9c7d91a2f13528ed17f04c9d5e51a4948fd9cf486",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "bewerbermanagement",
+      "bundle": "bewerbermanagement",
       "version": "1.0.0",
       "digest": "sha256:4b45bad479c6c269e57abc4e5ddec08f6d78365a5aa2a9a66038632b540abfa4",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "blick-schlagzeilen",
+      "bundle": "einstieg",
       "version": "1.0.0",
-      "digest": "sha256:57f0869f4c767c38e4004b40ce0e67cef708ef58bb41e9695a39299430d6f1c0",
+      "digest": "sha256:5c8789000765542f528646c3ccf2e51b24934989ccdcce349dd404da3547da0a",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "bonitaet-mockup",
+      "bundle": "identitaet",
       "version": "1.0.0",
-      "digest": "sha256:cb9c6b7a9f5039fa7b2589d142a05fc997366a683326a48bea4a59b6d2b4dc6b",
+      "digest": "sha256:cd90b7de3ab88d02ed4716986480f850763599a359c4d42f2521fb9d7d0956bf",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "cart-total",
-      "version": "1.0.0",
-      "digest": "sha256:826607f40457228c0f3e26ca3bc9691a45b019cd2979d09d6277b3ea2467d91b",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-benutzerauswahl",
-      "version": "1.0.0",
-      "digest": "sha256:ccf364ea979ded002d27195a32f47bbb5ef4d31c5342d784d719985537b41529",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-delta-sync",
-      "version": "1.0.0",
-      "digest": "sha256:6411754bb3efb51dc7641f6c322f161e74b3d3733afa9b5af330246a184a5294",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-onboarding-selfservice",
-      "version": "1.0.0",
-      "digest": "sha256:87be3372f6db4eb8d27ae39df2d07e554f4d8e3c096913d9890b9218f0657176",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-rezertifizierung",
-      "version": "1.0.0",
-      "digest": "sha256:dbb006bf2e33b7d95679981c242dc08568d45a5a21d84151a26ddcf57b791d8a",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-team-onboarding",
-      "version": "1.0.0",
-      "digest": "sha256:62df9e5b2a9b011e8440e532393d064a3a012e154d8e83131f4a14f8c6d992be",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "entra-verzeichnis-abgleich",
-      "version": "1.0.0",
-      "digest": "sha256:5b373d71d8e057fc7af10cbe48b74468dc77731af30ba3d916f2e05ea8283e6b",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "erinnerung",
-      "version": "1.0.0",
-      "digest": "sha256:3022d9bd88ad5666bfc0663313ff62c45b462963a6a9d4cd70dce8a4c8b3334d",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "exchange-austritt",
-      "version": "1.0.0",
-      "digest": "sha256:70bb537f87c68610ef4b08d375e7b998407aea5c14ff1fa8b28560140806c1c8",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "galsync",
-      "version": "1.0.0",
-      "digest": "sha256:b5ce50a6a8c7bb036606e71d9171e6b39a3b64cbffd2149645f253f1b175b944",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "google-sheets-antragseingang",
-      "version": "1.0.0",
-      "digest": "sha256:c258b6552008a4af017411f2c7f641b001c29cb3242644611ba76a311a9a4243",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "hypothekarzinsen",
-      "version": "1.0.0",
-      "digest": "sha256:4786e0fe02fe206643d0c08de0d9ccc25a2aa1194e383f0e7d24e0bb0504cc6f",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "identitaet-lebenszyklus",
-      "version": "1.0.0",
-      "digest": "sha256:b5b29aa35bc4f8186cff795bd0f0b8ce553e4363f36fb80b7d138174415c2f07",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "jira-ticket-eingang",
-      "version": "1.0.0",
-      "digest": "sha256:586659a2b3801a489e8a9e0acfc337601d614c2b669c008f81d9a369bac592cb",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "jira-zugangsantrag",
-      "version": "1.0.0",
-      "digest": "sha256:fab63eaed54aa1399babc1f62a085a19e35b28b8921f18364426f248588c681d",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "lehrgang",
-      "version": "1.0.0",
-      "digest": "sha256:49569e0484e01ec3eb0c563ebe9cd07f383d4c22adb55a14c1aca4d473147078",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "m365-dienste",
+      "bundle": "m365-dienste",
       "version": "1.0.0",
       "digest": "sha256:824762f98d6fb5fc4cd80678a9ab0b6b2fe64d60d70c54af220e096eb18ea216",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "mahnwesen",
+      "bundle": "mitarbeitereintritt",
       "version": "1.0.0",
-      "digest": "sha256:8ea8b99a87b00aee97d236cc5d18dc8eb9d8e9ff1e6ee65333cc356eb476fdba",
+      "digest": "sha256:49569e0484e01ec3eb0c563ebe9cd07f383d4c22adb55a14c1aca4d473147078",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "mssql-eintrittsmeldung",
-      "version": "1.0.0",
-      "digest": "sha256:173dabd2818af4483916d3585b13b7d4192e6108675171f8b5d48c095b35ed2c",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "onboarding",
+      "bundle": "onboarding-tutorial",
       "version": "1.0.0",
       "digest": "sha256:0fdc85d468516fa65a931846e41a3675388caa5d25bfcbe6d8ced1aa4755ea0c",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "order-fulfillment",
+      "bundle": "personal",
       "version": "1.0.0",
-      "digest": "sha256:df589d5d1637921b9dc822c69f23bc33f7d2f0308a524bc8ba6e04cb9d9acdb2",
+      "digest": "sha256:af7311e149737e6232f96d0f0c64ed6aca0a081bae1c2c5d2c20430c482b8564",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "order-to-cash",
+      "bundle": "umsysteme",
       "version": "1.0.0",
-      "digest": "sha256:fe699faf82038ddd12335552f4ede7bcf8718db24f061511ad7c215a378cbde4",
+      "digest": "sha256:514b3c87610de8f0c845a1f9adb72c1a44f28b22e82c79c9cfba2469477f86a7",
       "minAtlas": "0.21.0-0"
     },
     {
-      "sample": "preisaenderung",
-      "version": "1.0.0",
-      "digest": "sha256:3a4d14d2b46f3eae7da59ddf4ccd2b4c3508afd65299a79e94b605b443ede7ea",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "produkt-erfassung",
-      "version": "1.0.0",
-      "digest": "sha256:b2dc0bdf5e3a2e57f6781f19c20c1cc4bd6e4476b132e143d90fce8e973fed74",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "pruefe-auftrag",
-      "version": "1.0.0",
-      "digest": "sha256:df845557625705efbadde3eeeba2522e9fde09a24e55467678eeb48b83c728a1",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "pruefe-datensaetze",
-      "version": "1.0.0",
-      "digest": "sha256:551610d09dba0c623fc84dafe2e0570353cf05a275981f8bf935bc21ebc5f931",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "pruefung",
-      "version": "1.0.0",
-      "digest": "sha256:6902c2057d374c85b437213dfddd384c74ef8567b9d8980f09c68601f7ddd5be",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "reisebuchung",
-      "version": "1.0.0",
-      "digest": "sha256:f3ded82c6d662252ef10843dd626704c89b28142288c86c46fae322516f693d2",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "reisestorno",
-      "version": "1.0.0",
-      "digest": "sha256:dd288a66891627f3e4d51aa0aefed82aa39debf25fa66b11ffc75a774063d272",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "rezertifizierung",
-      "version": "1.0.0",
-      "digest": "sha256:a76215aadb3d8f93cdb3e5235be3d36fd87755ab7cf835c997c99d5132f2ec52",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "sharepoint-fallakte",
-      "version": "1.0.0",
-      "digest": "sha256:320a4bafcedaebba80e6c9cb2c6198c7730c60b8507e93bea2a376706d230b12",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "umzug",
-      "version": "1.0.0",
-      "digest": "sha256:4dffa1596bfe9915e5200d620bebde525009f0881f04d7f202ff4886156c0235",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "unvereinbarkeit",
-      "version": "1.0.0",
-      "digest": "sha256:245a776145e3ecfd64fb4f2c850e0b648474ad376453fc96b945300b077f9131",
-      "minAtlas": "0.21.0-0"
-    },
-    {
-      "sample": "verwaltung-dienstleistungen",
+      "bundle": "verwaltung-dienstleistungen",
       "version": "1.0.0",
       "digest": "sha256:ed1bbf13f03ec0d9d8b41207cc289bbc58f8591159270ceca8caa69409650861",
       "minAtlas": "0.21.0-0"

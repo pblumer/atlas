@@ -23,25 +23,27 @@ func ProcessNeeds(processes map[string][]byte) (workerTypes, serverConstants, un
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	sources := make([]needSource, 0, len(ids))
-	for _, id := range ids {
-		sources = append(sources, needSource{ID: id, XML: processes[id]})
-	}
-	needs, unread := needsOf(sources)
+	// One process at a time: needsOf merges workers by name, and two processes
+	// of one package may name the same worker as different Worker Types — a
+	// conflict the import plan reports, but both types are still needed.
 	workerTypes, serverConstants = []string{}, []string{}
-	seen := map[string]bool{}
-	for _, n := range needs {
-		switch n.Kind {
-		case needWorker:
-			if !seen[n.Type] {
-				seen[n.Type] = true
+	seenType, seenConstant := map[string]bool{}, map[string]bool{}
+	for _, id := range ids {
+		needs, bad := needsOf([]needSource{{ID: id, XML: processes[id]}})
+		unread = append(unread, bad...)
+		for _, n := range needs {
+			switch {
+			case n.Kind == needWorker && !seenType[n.Type]:
+				seenType[n.Type] = true
 				workerTypes = append(workerTypes, n.Type)
+			case n.Kind == needServerConstant && !seenConstant[n.Name]:
+				seenConstant[n.Name] = true
+				serverConstants = append(serverConstants, n.Name)
 			}
-		case needServerConstant:
-			serverConstants = append(serverConstants, n.Name)
 		}
 	}
 	sort.Strings(workerTypes)
 	sort.Strings(serverConstants)
+	sort.Strings(unread)
 	return workerTypes, serverConstants, unread
 }

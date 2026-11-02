@@ -30,6 +30,7 @@ The signed index records `sha256:<64 lowercase hex>` of **the exact compressed a
 - Unique releases use the tuple (`blueprintId`, `version`) inside one index. Duplicated tuples and duplicate JSON object keys MUST be rejected, regardless of the schema's limits.
 - Compatibility uses inclusive `atlas.minVersion` and optional **exclusive** `atlas.maxVersionExclusive`. Inverted or empty version ranges MUST be rejected. A rejected compatibility check MUST not silently fall back to a newer/older package.
 - `needs` lists *references*, not credential values. The installer must verify the actual needs from imported models (ADR-0467): signed metadata can be incomplete or misleading.
+- `tags` (optional, amendment 2026-11-02) are at most 16 unique lower-case labels a Console filters by. They describe, they never authorize; a server that predates the field refuses an index carrying it.
 - An atlas application has its own local key and deployment releases. A Blueprint release does not deploy itself or migrate existing instances.
 
 ## Source boundary and security

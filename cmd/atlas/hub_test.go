@@ -23,6 +23,7 @@ const (
 	hubExamples    = "../../examples"
 	hubCatalogFile = "../../api/web/examples-catalog.json"
 	hubReleases    = "../../examples/hub/releases.json"
+	hubBundles     = "../../examples/hub/bundles.json"
 )
 
 func hubTestKey() ed25519.PrivateKey {
@@ -39,12 +40,12 @@ func TestHubReleasesAreCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	samples, err := loadHubSamples(hubExamples, hubCatalogFile)
+	samples, err := loadHubSamples(hubExamples, hubCatalogFile, hubBundles)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(samples) < 40 {
-		t.Fatalf("only %d samples composed; the catalogue offers more", len(samples))
+	if len(samples) != 10 {
+		t.Fatalf("%d bundles composed, want the 10 of bundles.json", len(samples))
 	}
 	if _, _, err := hubIndex(lock, samples); err != nil {
 		t.Fatalf("%v\n\nAfter changing an example, regenerate the catalogue and record its new version:\n"+
@@ -72,12 +73,12 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 	}
 	dir := filepath.Join(t.TempDir(), "hub")
 	var out bytes.Buffer
-	args := []string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--releases", releases, "--key-file", keyFile, dir}
+	args := []string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--bundles", hubBundles, "--releases", releases, "--key-file", keyFile, dir}
 	if err := runHub(args, &out); err != nil {
 		t.Fatalf("build: %v\n%s", err, out.String())
 	}
 	index := readBuiltIndex(t, dir, public)
-	if len(index.Releases) < 40 || index.RegistryID != "io.github.pblumer.atlas.hub" {
+	if len(index.Releases) != 10 || index.RegistryID != "io.github.pblumer.atlas.hub" {
 		t.Fatalf("index = %s with %d releases", index.RegistryID, len(index.Releases))
 	}
 	for _, r := range index.Releases {
@@ -93,6 +94,9 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 		if inspected.ApplicationKey == "" {
 			t.Errorf("%s carries no application key", r.BlueprintID)
 		}
+		if len(r.Tags) == 0 {
+			t.Errorf("%s carries no tags", r.BlueprintID)
+		}
 	}
 
 	// A second build into the same directory is refused rather than mixed in.
@@ -104,12 +108,12 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 	if err := os.WriteFile(other, []byte(blueprintregistry.EncodeSigningKey(ed25519.NewKeyFromSeed(make([]byte, 32)))), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	err := runHub([]string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--releases", releases, "--key-file", other, filepath.Join(t.TempDir(), "x")}, &out)
+	err := runHub([]string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--bundles", hubBundles, "--releases", releases, "--key-file", other, filepath.Join(t.TempDir(), "x")}, &out)
 	if err == nil || !strings.Contains(err.Error(), "is not the publicKey") {
 		t.Fatalf("a build with another key = %v", err)
 	}
 	// Without a recorded public key operators would have nothing to pin.
-	err = runHub([]string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--releases", hubReleasesWithKey(t, ""), "--key-file", keyFile, filepath.Join(t.TempDir(), "y")}, &out)
+	err = runHub([]string{"build", "--examples", hubExamples, "--catalog", hubCatalogFile, "--bundles", hubBundles, "--releases", hubReleasesWithKey(t, ""), "--key-file", keyFile, filepath.Join(t.TempDir(), "y")}, &out)
 	if err == nil || !strings.Contains(err.Error(), "records no publicKey") {
 		t.Fatalf("a build without a recorded key = %v", err)
 	}
@@ -123,9 +127,9 @@ func TestHubLockRecordsANewVersionForChangedContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Pretend pruefe-auftrag@1.0.0 was published with other bytes.
+	// Pretend einstieg@1.0.0 was published with other bytes.
 	for i := range lock.Releases {
-		if lock.Releases[i].Sample == "pruefe-auftrag" {
+		if lock.Releases[i].Bundle == "einstieg" {
 			lock.Releases[i].Digest = "sha256:" + strings.Repeat("0", 64)
 		}
 	}
@@ -134,17 +138,17 @@ func TestHubLockRecordsANewVersionForChangedContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := runHub([]string{"lock", "--examples", hubExamples, "--catalog", hubCatalogFile, "--releases", file}, &out); err != nil {
+	if err := runHub([]string{"lock", "--examples", hubExamples, "--catalog", hubCatalogFile, "--bundles", hubBundles, "--releases", file}, &out); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
-	if !strings.Contains(out.String(), "pruefe-auftrag: ") || !strings.Contains(out.String(), "1 new versions recorded") {
+	if !strings.Contains(out.String(), "einstieg: ") || !strings.Contains(out.String(), "1 new versions recorded") {
 		t.Fatalf("lock output:\n%s", out.String())
 	}
 	after, err := readHubReleases(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	latest, _ := after.latest("pruefe-auftrag")
+	latest, _ := after.latest("einstieg")
 	if latest.Version == "1.0.0" || latest.Digest == "sha256:"+strings.Repeat("0", 64) {
 		t.Fatalf("latest = %+v", latest)
 	}
@@ -162,7 +166,7 @@ func TestEverySampleInstallsFromItsHubPackage(t *testing.T) {
 	if testing.Short() {
 		t.Skip("installs every sample")
 	}
-	samples, err := loadHubSamples(hubExamples, hubCatalogFile)
+	samples, err := loadHubSamples(hubExamples, hubCatalogFile, hubBundles)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,4 +300,82 @@ func readBuiltIndex(t *testing.T, dir string, public ed25519.PublicKey) blueprin
 		t.Fatalf("the built index does not verify: %v", err)
 	}
 	return index
+}
+
+// TestHubBundlesHoldEveryExampleOnce: a theme becomes one application, every
+// installable example travels in exactly one bundle, and the shapes the import
+// could not install as one application are refused before anything is built.
+func TestHubBundlesHoldEveryExampleOnce(t *testing.T) {
+	samples, err := loadHubSamples(hubExamples, hubCatalogFile, hubBundles)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]string{}
+	for _, s := range samples {
+		var man struct {
+			Key  string `json:"key"`
+			Name string `json:"name"`
+		}
+		for _, f := range s.Files {
+			if f.Path == "atlas.json" {
+				if err := json.Unmarshal(f.Data, &man); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		if other, dup := keys[man.Key]; dup {
+			t.Errorf("bundles %s and %s become the same application %s", other, s.ID, man.Key)
+		}
+		keys[man.Key] = s.ID
+	}
+	// The theme bundles take the bundle's name; a flagship keeps the handbook's.
+	for id, want := range map[string]string{
+		"einstieg": "beispiele-einstieg", "identitaet": "beispiele-identitaet-verzeichnis",
+		"bewerbermanagement": "bewerbermanagement", "verwaltung-dienstleistungen": "beispiel-dienstleistungen-der-verwaltung",
+	} {
+		if keys[want] != id {
+			t.Errorf("bundle %s is not the application %s (keys %v)", id, want, keys)
+		}
+	}
+
+	for name, bundles := range map[string]string{
+		"an example left out":       `{"bundles":[{"id":"x","tags":[],"examples":["pruefe-auftrag"]}]}`,
+		"an example twice":          `{"bundles":[{"id":"x","name":"X","tags":[],"examples":["pruefe-auftrag","cart-total"]},{"id":"y","tags":[],"examples":["cart-total"]}]}`,
+		"a study":                   `{"bundles":[{"id":"x","tags":[],"examples":["ad-objektmodell"]}]}`,
+		"a shop with others":        `{"bundles":[{"id":"x","name":"X","tags":[],"examples":["m365-dienste","cart-total"]}]}`,
+		"several without a name":    `{"bundles":[{"id":"x","tags":[],"examples":["pruefe-auftrag","cart-total"]}]}`,
+		"a bad tag":                 `{"bundles":[{"id":"x","tags":["Grosses Tag"],"examples":["pruefe-auftrag"]}]}`,
+		"an unknown field":          `{"bundles":[{"id":"x","tags":[],"category":"y","examples":["pruefe-auftrag"]}]}`,
+		"an id that is not a label": `{"bundles":[{"id":"X.y","tags":[],"examples":["pruefe-auftrag"]}]}`,
+	} {
+		file := filepath.Join(t.TempDir(), "bundles.json")
+		if err := os.WriteFile(file, []byte(bundles), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := loadHubSamples(hubExamples, hubCatalogFile, file); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
+// TestHubFingerprintChecksABackupAgainstTheRecordedKey: a restored backup or a
+// rotated secret is compared with releases.json before it signs anything.
+func TestHubFingerprintChecksABackupAgainstTheRecordedKey(t *testing.T) {
+	key := hubTestKey()
+	keyFile := filepath.Join(t.TempDir(), "hub.key")
+	if err := os.WriteFile(keyFile, []byte(blueprintregistry.EncodeSigningKey(key)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	public := blueprintregistry.EncodePublicKey(key.Public().(ed25519.PublicKey))
+	var out bytes.Buffer
+	if err := runHub([]string{"fingerprint", "--key-file", keyFile, "--releases", hubReleasesWithKey(t, public)}, &out); err != nil {
+		t.Fatalf("matching key: %v", err)
+	}
+	if !strings.Contains(out.String(), "matches") || strings.Contains(out.String(), blueprintregistry.EncodeSigningKey(key)) {
+		t.Fatalf("output = %q (it must never print the private key)", out.String())
+	}
+	other := blueprintregistry.EncodePublicKey(ed25519.NewKeyFromSeed(make([]byte, 32)).Public().(ed25519.PublicKey))
+	if err := runHub([]string{"fingerprint", "--key-file", keyFile, "--releases", hubReleasesWithKey(t, other)}, &out); err == nil {
+		t.Fatal("a key that is not the recorded one passed")
+	}
 }

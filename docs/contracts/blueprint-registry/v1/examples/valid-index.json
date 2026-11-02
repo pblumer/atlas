@@ -20,7 +20,8 @@
       "needs": {
         "workerTypes": [],
         "serverConstants": []
-      }
+      },
+      "tags": ["approval", "no-worker"]
     }
   ]
 }

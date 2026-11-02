@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -25,20 +26,25 @@ import (
 // samples reach an installation the way any other Blueprint does — listed,
 // previewed, verified, and imported through the ordinary package import.
 //
-//	atlas hub keygen --out FILE     a new registry signing key; prints its public half
-//	atlas hub lock                  record a new version for every sample that changed
-//	atlas hub build --key-file FILE DIR
-//	                                write index.json, index.json.sig and packages/ to DIR
+//	atlas hub keygen --out FILE        a new registry signing key; prints its public half
+//	atlas hub fingerprint --key-file F which public key a key file (a backup) belongs to
+//	atlas hub lock                     record a new version for every bundle that changed
+//	atlas hub build --key-file F DIR   write index.json, index.json.sig and packages/ to DIR
 //
-// Versions are immutable. A sample's package is a deterministic function of its
+// examples/hub/bundles.json says which examples travel together: small examples
+// by theme, one application per theme, so trying them out leaves a handful of
+// applications rather than one per model; the handbook's flagships and the shop
+// packages keep their own.
+//
+// Versions are immutable. A bundle's package is a deterministic function of its
 // files, and examples/hub/releases.json records every (version, digest) it was
 // ever given: `lock` adds a version when the digest moved, `build` refuses to
-// publish a sample whose files no longer match its latest recorded version. A
+// publish a bundle whose files no longer match its latest recorded version. A
 // version therefore never names two contents, which is what lets an installation
 // pin one (BMP2).
 //
 // Nothing here runs in a server. The private key lives with whoever publishes —
-// a CI secret — and a server only ever holds the public key.
+// a CI secret and an offline backup — and a server only ever holds the public key.
 
 // hubReleasesFile is the release lock: the registry's identity and every version
 // each sample was published under.
@@ -54,7 +60,7 @@ type hubReleasesFile struct {
 }
 
 type hubLockedEntry struct {
-	Sample  string `json:"sample"`
+	Bundle  string `json:"bundle"`
 	Version string `json:"version"`
 	Digest  string `json:"digest"`
 	// MinAtlas is the oldest atlas the version is offered to, fixed when the
@@ -70,35 +76,7 @@ type hubSample struct {
 	Files           []blueprintregistry.SourceFile
 	WorkerTypes     []string
 	ServerConstants []string
-}
-
-// hubCatalog is the part of api/web/examples-catalog.json a package is composed
-// from: which files make up each example, and the identities the handbook's
-// installer gives them. The content is read from the files themselves.
-type hubCatalog struct {
-	Examples []struct {
-		ID        string `json:"id"`
-		Path      string `json:"path"`
-		App       string `json:"app"`
-		Processes []struct {
-			ProcessID string `json:"processId"`
-			Name      string `json:"name"`
-			File      string `json:"file"`
-		} `json:"processes"`
-		Decisions []struct {
-			Name   string `json:"name"`
-			Handle string `json:"handle"`
-			File   string `json:"file"`
-		} `json:"decisions"`
-		Forms []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-			File string `json:"file"`
-		} `json:"forms"`
-		Shop *struct {
-			App string `json:"app"`
-		} `json:"shop"`
-	} `json:"examples"`
+	Tags            []string
 }
 
 // hubManifest mirrors the server's atlas.json (api/appsource.go, sourceManifest)
@@ -127,17 +105,19 @@ type hubManifestDecided struct {
 
 func runHub(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("name a step: atlas hub keygen|lock|build [flags]")
+		return errors.New("name a step: atlas hub keygen|fingerprint|lock|build [flags]")
 	}
 	switch args[0] {
 	case "keygen":
 		return runHubKeygen(args[1:], out)
+	case "fingerprint":
+		return runHubFingerprint(args[1:], out)
 	case "lock":
 		return runHubLock(args[1:], out)
 	case "build":
 		return runHubBuild(args[1:], out)
 	default:
-		return fmt.Errorf("unknown step %q: atlas hub keygen|lock|build [flags]", args[0])
+		return fmt.Errorf("unknown step %q: atlas hub keygen|fingerprint|lock|build [flags]", args[0])
 	}
 }
 
@@ -173,15 +153,51 @@ func runHubKeygen(args []string, out io.Writer) error {
 	return nil
 }
 
+// runHubFingerprint says which public key a signing key file belongs to, and
+// whether that is the key releases.json records — the check a restored backup
+// or a rotated secret has to pass before anything is signed with it. It prints
+// the public half only.
+func runHubFingerprint(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("hub fingerprint", flag.ContinueOnError)
+	keyFile := fs.String("key-file", "", "the private signing key (or ATLAS_HUB_SIGNING_KEY)")
+	releases := fs.String("releases", filepath.Join("examples", "hub", "releases.json"), "the release lock whose publicKey the key is compared with")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("atlas hub fingerprint takes no arguments")
+	}
+	key, err := hubSigningKey(*keyFile)
+	if err != nil {
+		return err
+	}
+	public := key.Public().(ed25519.PublicKey)
+	fmt.Fprintf(out, "public key: %s\nfingerprint: %s\n", blueprintregistry.EncodePublicKey(public), blueprintregistry.KeyFingerprint(public))
+	lock, err := readHubReleases(*releases)
+	if err != nil {
+		return err
+	}
+	switch lock.PublicKey {
+	case "":
+		return fmt.Errorf("%s records no publicKey yet", *releases)
+	case blueprintregistry.EncodePublicKey(public):
+		fmt.Fprintf(out, "matches the publicKey %s records\n", *releases)
+		return nil
+	default:
+		return fmt.Errorf("does NOT match the publicKey %s records (%s)", *releases, lock.PublicKey)
+	}
+}
+
 // hubSourceFlags are the inputs lock and build share.
 type hubSourceFlags struct {
-	examples, catalog, releases *string
+	examples, catalog, bundles, releases *string
 }
 
 func addHubSourceFlags(fs *flag.FlagSet) hubSourceFlags {
 	return hubSourceFlags{
 		examples: fs.String("examples", "examples", "the examples directory"),
 		catalog:  fs.String("catalog", filepath.Join("api", "web", "examples-catalog.json"), "the examples catalogue that says which files make up each example"),
+		bundles:  fs.String("bundles", filepath.Join("examples", "hub", "bundles.json"), "which examples travel together as one application"),
 		releases: fs.String("releases", filepath.Join("examples", "hub", "releases.json"), "the release lock"),
 	}
 }
@@ -203,7 +219,7 @@ func runHubLock(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	samples, err := loadHubSamples(*src.examples, *src.catalog)
+	samples, err := loadHubSamples(*src.examples, *src.catalog, *src.bundles)
 	if err != nil {
 		return err
 	}
@@ -224,18 +240,18 @@ func runHubLock(args []string, out io.Writer) error {
 				return fmt.Errorf("sample %s: %w", s.ID, err)
 			}
 		}
-		lock.Releases = append(lock.Releases, hubLockedEntry{Sample: s.ID, Version: version, Digest: digest, MinAtlas: *minAtlas})
+		lock.Releases = append(lock.Releases, hubLockedEntry{Bundle: s.ID, Version: version, Digest: digest, MinAtlas: *minAtlas})
 		fmt.Fprintf(out, "%s: %s\n", s.ID, version)
 		changed++
 	}
 	if changed == 0 {
-		fmt.Fprintf(out, "%d samples, none changed\n", len(samples))
+		fmt.Fprintf(out, "%d bundles, none changed\n", len(samples))
 		return nil
 	}
 	if err := writeHubReleases(*src.releases, lock); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%d samples, %d new versions recorded in %s\n", len(samples), changed, *src.releases)
+	fmt.Fprintf(out, "%d bundles, %d new versions recorded in %s\n", len(samples), changed, *src.releases)
 	return nil
 }
 
@@ -264,7 +280,7 @@ func runHubBuild(args []string, out io.Writer) error {
 	if got := blueprintregistry.EncodePublicKey(key.Public().(ed25519.PublicKey)); got != lock.PublicKey {
 		return fmt.Errorf("the signing key's public half %s is not the publicKey %s records; installations pinned to that key would refuse this index", got, *src.releases)
 	}
-	samples, err := loadHubSamples(*src.examples, *src.catalog)
+	samples, err := loadHubSamples(*src.examples, *src.catalog, *src.bundles)
 	if err != nil {
 		return err
 	}
@@ -294,7 +310,7 @@ func runHubBuild(args []string, out io.Writer) error {
 	if err := os.WriteFile(filepath.Join(dir, "index.json.sig"), sig, 0o644); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "registry %s: %d samples signed by %s\nwrote %s\n",
+	fmt.Fprintf(out, "registry %s: %d bundles signed by %s\nwrote %s\n",
 		index.RegistryID, len(index.Releases), blueprintregistry.KeyFingerprint(key.Public().(ed25519.PublicKey)), dir)
 	return nil
 }
@@ -326,10 +342,11 @@ func hubIndex(lock hubReleasesFile, samples []hubSample) (blueprintregistry.Inde
 			Atlas:    blueprintregistry.Compatibility{MinVersion: latest.MinAtlas},
 			Artifact: artifact,
 			Needs:    blueprintregistry.Needs{WorkerTypes: s.WorkerTypes, ServerConstants: s.ServerConstants},
+			Tags:     s.Tags,
 		})
 	}
 	if len(stale) > 0 {
-		return index, nil, fmt.Errorf("samples changed since their recorded version: %s — run `atlas hub lock` and commit releases.json",
+		return index, nil, fmt.Errorf("bundles changed since their recorded version: %s — run `atlas hub lock` and commit releases.json",
 			strings.Join(stale, ", "))
 	}
 	return index, archives, nil
@@ -403,9 +420,9 @@ func readHubReleases(file string) (hubReleasesFile, error) {
 	seen := map[string]string{}
 	for _, e := range lock.Releases {
 		if !blueprintregistry.ValidVersion(e.Version) || !blueprintregistry.ValidVersion(e.MinAtlas) {
-			return lock, fmt.Errorf("%s: %s has an invalid version or minAtlas", file, e.Sample)
+			return lock, fmt.Errorf("%s: %s has an invalid version or minAtlas", file, e.Bundle)
 		}
-		k := e.Sample + "@" + e.Version
+		k := e.Bundle + "@" + e.Version
 		if d, dup := seen[k]; dup && d != e.Digest {
 			return lock, fmt.Errorf("%s: %s names two digests", file, k)
 		} else if dup {
@@ -430,68 +447,209 @@ func writeHubReleases(file string, lock hubReleasesFile) error {
 // latest is the last version recorded for a sample: the lock only ever appends.
 func (l hubReleasesFile) latest(sample string) (hubLockedEntry, bool) {
 	for i := len(l.Releases) - 1; i >= 0; i-- {
-		if l.Releases[i].Sample == sample {
+		if l.Releases[i].Bundle == sample {
 			return l.Releases[i], true
 		}
 	}
 	return hubLockedEntry{}, false
 }
 
-// loadHubSamples composes one package per installable example. An example that
-// ships a shop is already a package directory (atlas.json, katalog.json,
-// fragen.json) and travels as `atlas import` reads it; any other example is
-// filed into an application exactly as the handbook's install button files it —
-// same application name, so the same portable key, the same process, form and
-// decision identities. A study or system-process example has no application and
-// is not offered.
-func loadHubSamples(examplesDir, catalogFile string) ([]hubSample, error) {
+// hubBundlesFile is examples/hub/bundles.json: which examples travel together as
+// one application. A bundle of several examples is filed into one application
+// named after the bundle, so trying a theme leaves one application behind, not
+// one per model; a bundle of one example keeps that example's own application —
+// the handbook's flagships and the shop packages, whose key and catalogues are
+// their own.
+type hubBundlesFile struct {
+	Bundles []hubBundleSpec `json:"bundles"`
+}
+
+type hubBundleSpec struct {
+	ID string `json:"id"`
+	// Name is the application a bundle of several examples becomes. A bundle of
+	// one example takes that example's name and must not set one.
+	Name     string   `json:"name,omitempty"`
+	Tags     []string `json:"tags"`
+	Examples []string `json:"examples"`
+}
+
+// hubExample is one catalogue entry, as the bundle composer reads it.
+type hubExample struct {
+	ID        string `json:"id"`
+	Path      string `json:"path"`
+	App       string `json:"app"`
+	Processes []struct {
+		ProcessID string `json:"processId"`
+		Name      string `json:"name"`
+		File      string `json:"file"`
+	} `json:"processes"`
+	Decisions []struct {
+		Name   string `json:"name"`
+		Handle string `json:"handle"`
+		File   string `json:"file"`
+	} `json:"decisions"`
+	Forms []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		File string `json:"file"`
+	} `json:"forms"`
+	Shop *struct {
+		App string `json:"app"`
+	} `json:"shop"`
+}
+
+// installable says the handbook offers the example for installation: it has an
+// application, or it is a shop package.
+func (e hubExample) installable() bool { return e.App != "" || e.Shop != nil }
+
+// loadHubSamples composes one package per bundle and checks the bundles against
+// the catalogue: every installable example in exactly one bundle, nothing
+// listed that the catalogue does not offer. A study or system-process example,
+// which the handbook does not install, cannot be bundled.
+func loadHubSamples(examplesDir, catalogFile, bundlesFile string) ([]hubSample, error) {
 	raw, err := os.ReadFile(catalogFile)
 	if err != nil {
 		return nil, fmt.Errorf("read the examples catalogue: %w", err)
 	}
-	var cat hubCatalog
+	var cat struct {
+		Examples []hubExample `json:"examples"`
+	}
 	if err := json.Unmarshal(raw, &cat); err != nil {
 		return nil, fmt.Errorf("%s: %w", catalogFile, err)
 	}
-	var samples []hubSample
+	byID := map[string]hubExample{}
 	for _, ex := range cat.Examples {
-		var s hubSample
-		switch {
-		case ex.Shop != nil:
-			if s, err = shopSample(examplesDir, ex.Path); err != nil {
-				return nil, fmt.Errorf("example %s: %w", ex.ID, err)
+		byID[ex.ID] = ex
+	}
+	raw, err = os.ReadFile(bundlesFile)
+	if err != nil {
+		return nil, fmt.Errorf("read the bundles: %w", err)
+	}
+	var spec hubBundlesFile
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&spec); err != nil {
+		return nil, fmt.Errorf("%s: %w", bundlesFile, err)
+	}
+	claimed := map[string]string{}
+	bundleIDs := map[string]bool{}
+	var samples []hubSample
+	for _, b := range spec.Bundles {
+		if !hubBundleID.MatchString(b.ID) || bundleIDs[b.ID] {
+			return nil, fmt.Errorf("%s: bundle id %q is invalid or given twice", bundlesFile, b.ID)
+		}
+		bundleIDs[b.ID] = true
+		if len(b.Examples) == 0 {
+			return nil, fmt.Errorf("bundle %s names no example", b.ID)
+		}
+		var members []hubExample
+		for _, id := range b.Examples {
+			ex, ok := byID[id]
+			if !ok || !ex.installable() {
+				return nil, fmt.Errorf("bundle %s names %q, which the catalogue does not offer for installation", b.ID, id)
 			}
-		case ex.App != "":
-			s = hubSample{Title: ex.App}
-			man := hubManifest{
-				FormatVersion: 1, Key: api.PortableApplicationKey(ex.App), Name: ex.App,
-				Processes: []hubManifestEntry{}, Forms: []hubManifestEntry{}, Decisions: []hubManifestDecided{},
+			if other, dup := claimed[id]; dup {
+				return nil, fmt.Errorf("example %s is in bundle %s and in bundle %s", id, other, b.ID)
 			}
-			taken := map[string]bool{"atlas.json": true}
-			add := func(dir, file string) (string, error) {
-				p := dir + "/" + path.Base(file)
-				if taken[p] {
-					return "", fmt.Errorf("two files would be %s", p)
-				}
-				taken[p] = true
-				data, err := os.ReadFile(filepath.Join(examplesDir, filepath.FromSlash(file)))
-				if err != nil {
-					return "", err
-				}
-				s.Files = append(s.Files, blueprintregistry.SourceFile{Path: p, Data: data})
-				return p, nil
+			claimed[id] = b.ID
+			members = append(members, ex)
+		}
+		s, err := composeBundle(examplesDir, b, members)
+		if err != nil {
+			return nil, fmt.Errorf("bundle %s: %w", b.ID, err)
+		}
+		samples = append(samples, s)
+	}
+	var unclaimed []string
+	for _, ex := range cat.Examples {
+		if ex.installable() && claimed[ex.ID] == "" {
+			unclaimed = append(unclaimed, ex.ID)
+		}
+	}
+	if len(unclaimed) > 0 {
+		return nil, fmt.Errorf("%s does not bundle %s: give every installable example a bundle", bundlesFile, strings.Join(unclaimed, ", "))
+	}
+	sort.Slice(samples, func(i, j int) bool { return samples[i].ID < samples[j].ID })
+	return samples, nil
+}
+
+// hubBundleID is the last label of a Blueprint id: lower case, inner hyphens.
+var hubBundleID = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+
+// composeBundle builds one bundle's package. A shop example travels as its own
+// package directory and only alone; any other example is filed as the
+// handbook's install button files it — the same process, form and decision
+// identities — into the bundle's application.
+func composeBundle(examplesDir string, b hubBundleSpec, members []hubExample) (hubSample, error) {
+	var s hubSample
+	single := len(members) == 1
+	switch {
+	case single && b.Name != "":
+		return s, errors.New("a bundle of one example keeps that example's application; drop its name")
+	case !single && strings.TrimSpace(b.Name) == "":
+		return s, errors.New("a bundle of several examples needs the name of the application they become")
+	}
+	if members[0].Shop != nil {
+		if !single {
+			return s, fmt.Errorf("%s ships a shop, which travels only as its own package", members[0].ID)
+		}
+		var err error
+		if s, err = shopSample(examplesDir, members[0].Path); err != nil {
+			return s, err
+		}
+	} else {
+		name := b.Name
+		if single {
+			name = members[0].App
+		}
+		s = hubSample{Title: name}
+		man := hubManifest{
+			FormatVersion: 1, Key: api.PortableApplicationKey(name), Name: name,
+			Processes: []hubManifestEntry{}, Forms: []hubManifestEntry{}, Decisions: []hubManifestDecided{},
+		}
+		taken := map[string]bool{"atlas.json": true}
+		ids := map[string]string{}
+		add := func(dir, file string) (string, error) {
+			p := dir + "/" + path.Base(file)
+			if taken[p] {
+				return "", fmt.Errorf("two files would be %s", p)
+			}
+			taken[p] = true
+			data, err := os.ReadFile(filepath.Join(examplesDir, filepath.FromSlash(file)))
+			if err != nil {
+				return "", err
+			}
+			s.Files = append(s.Files, blueprintregistry.SourceFile{Path: p, Data: data})
+			return p, nil
+		}
+		claim := func(kind, id, example string) error {
+			if other, dup := ids[kind+":"+id]; dup {
+				return fmt.Errorf("%s %s is in %s and in %s", kind, id, other, example)
+			}
+			ids[kind+":"+id] = example
+			return nil
+		}
+		for _, ex := range members {
+			if ex.Shop != nil {
+				return s, fmt.Errorf("%s ships a shop, which travels only as its own package", ex.ID)
 			}
 			for _, pr := range ex.Processes {
+				if err := claim("process", pr.ProcessID, ex.ID); err != nil {
+					return s, err
+				}
 				p, err := add("processes", pr.File)
 				if err != nil {
-					return nil, fmt.Errorf("example %s: %w", ex.ID, err)
+					return s, err
 				}
 				man.Processes = append(man.Processes, hubManifestEntry{ID: pr.ProcessID, Name: pr.Name, Path: p})
 			}
 			for _, d := range ex.Decisions {
+				if err := claim("decision", d.Handle, ex.ID); err != nil {
+					return s, err
+				}
 				p, err := add("decisions", d.File)
 				if err != nil {
-					return nil, fmt.Errorf("example %s: %w", ex.ID, err)
+					return s, err
 				}
 				// The handle is the reference's id and its model's: one per model,
 				// the shape the handbook installs.
@@ -499,28 +657,27 @@ func loadHubSamples(examplesDir, catalogFile string) ([]hubSample, error) {
 				man.FormatVersion = 2
 			}
 			for _, f := range ex.Forms {
+				if err := claim("form", f.ID, ex.ID); err != nil {
+					return s, err
+				}
 				p, err := add("forms", f.File)
 				if err != nil {
-					return nil, fmt.Errorf("example %s: %w", ex.ID, err)
+					return s, err
 				}
 				man.Forms = append(man.Forms, hubManifestEntry{ID: f.ID, Name: f.Name, Path: p})
 			}
-			data, err := json.MarshalIndent(man, "", "  ")
-			if err != nil {
-				return nil, err
-			}
-			s.Files = append(s.Files, blueprintregistry.SourceFile{Path: "atlas.json", Data: append(data, '\n')})
-		default:
-			continue
 		}
-		s.ID = ex.ID
-		if err := describeSample(&s, ex.Path); err != nil {
-			return nil, fmt.Errorf("example %s: %w", ex.ID, err)
+		data, err := json.MarshalIndent(man, "", "  ")
+		if err != nil {
+			return s, err
 		}
-		samples = append(samples, s)
+		s.Files = append(s.Files, blueprintregistry.SourceFile{Path: "atlas.json", Data: append(data, '\n')})
 	}
-	sort.Slice(samples, func(i, j int) bool { return samples[i].ID < samples[j].ID })
-	return samples, nil
+	s.ID = b.ID
+	if err := describeSample(&s, members, b.Tags); err != nil {
+		return s, err
+	}
+	return s, nil
 }
 
 // shopSample reads a package directory the way `atlas import` does: the manifest,
@@ -586,9 +743,9 @@ func shopSample(examplesDir, dir string) (hubSample, error) {
 	return s, nil
 }
 
-// describeSample fills in what the index says about a sample: the needs its
-// processes name, and a description an operator can choose by.
-func describeSample(s *hubSample, where string) error {
+// describeSample fills in what the index says about a bundle: the needs its
+// processes name, its tags, and a description an operator can choose by.
+func describeSample(s *hubSample, members []hubExample, bundleTags []string) error {
 	processes := map[string][]byte{}
 	forms, decisions, shop := 0, 0, false
 	for _, f := range s.Files {
@@ -608,7 +765,44 @@ func describeSample(s *hubSample, where string) error {
 	if len(unread) > 0 {
 		return fmt.Errorf("processes that do not compile are not published: %s", strings.Join(unread, ", "))
 	}
-	desc := fmt.Sprintf("Beispiel aus examples/%s: %d %s, %d %s, %d %s", where,
+
+	// The bundle's own tags, then what can be read off the package: each Worker
+	// Type it names, and "shop" when it brings a catalogue.
+	tags := map[string]bool{}
+	for _, t := range bundleTags {
+		if !blueprintregistry.ValidTag(t) {
+			return fmt.Errorf("tag %q is not a lower-case label", t)
+		}
+		tags[t] = true
+	}
+	for _, w := range s.WorkerTypes {
+		if blueprintregistry.ValidTag(w) {
+			tags[w] = true
+		}
+	}
+	if shop {
+		tags["shop"] = true
+	}
+	s.Tags = make([]string, 0, len(tags))
+	for t := range tags {
+		s.Tags = append(s.Tags, t)
+	}
+	sort.Strings(s.Tags)
+	if len(s.Tags) > blueprintregistry.MaxTags {
+		return fmt.Errorf("%d tags, more than the index allows", len(s.Tags))
+	}
+
+	var desc string
+	if len(members) == 1 {
+		desc = "Beispiel aus examples/" + members[0].Path + ": "
+	} else {
+		names := make([]string, 0, len(members))
+		for _, m := range members {
+			names = append(names, strings.TrimPrefix(m.App, "Beispiel: "))
+		}
+		desc = fmt.Sprintf("%d Beispiele in einer Applikation: %s. Zusammen ", len(members), strings.Join(names, ", "))
+	}
+	desc += fmt.Sprintf("%d %s, %d %s, %d %s",
 		len(processes), plural2(len(processes), "Prozess", "Prozesse"),
 		decisions, plural2(decisions, "Entscheidung", "Entscheidungen"),
 		forms, plural2(forms, "Formular", "Formulare"))
@@ -621,8 +815,8 @@ func describeSample(s *hubSample, where string) error {
 		desc += "; Worker-Typen: " + strings.Join(s.WorkerTypes, ", ")
 	}
 	s.Description = desc + "."
-	if len(s.Title) > 120 {
-		return fmt.Errorf("title %q is longer than the index allows", s.Title)
+	if len(s.Title) > 120 || len(s.Description) > 1000 {
+		return fmt.Errorf("title or description is longer than the index allows")
 	}
 	return nil
 }

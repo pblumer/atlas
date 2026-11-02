@@ -17,11 +17,12 @@ against a live atlas server (`0.1.0-dev`).
 > when an example has no card, when a card names an example that does not exist,
 > or when two examples would ship the same form id.
 >
-> **atlas hub.** Every installable example is also published as a signed package in the
-> atlas hub sample registry ([`hub/`](hub/README.md)), so an installation imports it from
-> the Console without a binary upgrade. Versions there are immutable: after changing an
-> example, regenerate the catalogue as above and run `go run ./cmd/atlas hub lock`, or
-> `go test ./cmd/atlas` fails.
+> **atlas hub.** Every installable example is also published in the atlas hub sample
+> registry ([`hub/`](hub/README.md)), bundled by theme into a few applications, so an
+> installation imports them from the Console without a binary upgrade. A new installable
+> example needs a bundle in `hub/bundles.json`. Versions there are immutable: after
+> changing an example, regenerate the catalogue as above and run
+> `go run ./cmd/atlas hub lock`, or `go test ./cmd/atlas` fails.
 
 | File | What it is |
 |------|-----------|
