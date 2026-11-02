@@ -343,13 +343,15 @@ func (f *clientMetadataFetcher) read(ctx context.Context, u *url.URL) (clientMet
 		return clientMetadata{}, 0, errors.New("the client's metadata document is not served as JSON")
 	}
 	// One byte past the budget, so a document that is too large is named as such
-	// rather than cut off and then reported as malformed.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, f.maxBytes+1))
+	// rather than cut off and then reported as malformed. The budget is
+	// limits.ClientMetadata, read through Server.budgets when the fetcher was built.
+	limit := f.maxBytes
+	body, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return clientMetadata{}, 0, fmt.Errorf("the client's metadata document could not be read: %w", err)
 	}
-	if int64(len(body)) > f.maxBytes {
-		return clientMetadata{}, 0, fmt.Errorf("the client's metadata document is larger than %d bytes", f.maxBytes)
+	if int64(len(body)) > limit {
+		return clientMetadata{}, 0, fmt.Errorf("the client's metadata document is larger than %d bytes", limit)
 	}
 	md, err := parseClientMetadata(u, body)
 	if err != nil {
