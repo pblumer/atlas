@@ -69,6 +69,13 @@ const (
 	cfMIIteration            columnFamily = 0x39 // miRound:<piKey>:<bodyElKey>:<activationPosition>:<roundElKey> (ADR-0517)
 	cfMIRoundByElement       columnFamily = 0x3A // miRoundByEl:<piKey>:<roundElKey> (ADR-0517)
 	cfMIBodyByElement        columnFamily = 0x3B // miBodyByEl:<piKey>:<bodyElKey> → activationPosition(8) (ADR-0517)
+	cfMIRoundOrder           columnFamily = 0x3C // miOrder:<piKey>:<bodyElKey>:<activationPosition>:<loopCounter>:<roundElKey> → empty (ADR-0517 v2)
+	cfMIRoundByState         columnFamily = 0x3D // miState:<piKey>:<bodyElKey>:<activationPosition>:<state>:<loopCounter>:<roundElKey> → empty (ADR-0517 v2)
+	cfMIRoundIncident        columnFamily = 0x3E // miInc:<piKey>:<bodyElKey>:<activationPosition>:<loopCounter>:<roundElKey> → firstIncidentPosition(8) (ADR-0517 v2)
+	cfMIIncidentByOwner      columnFamily = 0x3F // miIncOwner:<piKey>:<ownerElKey>:<raisedPosition> → incidentElKey(8) endPosition(8) outcome(1) (ADR-0517 v2)
+	cfMIIncidentOpen         columnFamily = 0x40 // miIncOpen:<piKey>:<incidentElKey> → ownerElKey(8) raisedPosition(8) (ADR-0517 v2)
+	cfMIBodyByParent         columnFamily = 0x41 // miBodyParent:<piKey>:<parentRoundElKey>:<activationPosition>:<bodyElKey> → empty (ADR-0517 v2)
+	cfMIBodyCounter          columnFamily = 0x42 // miBodyCount:<piKey>:<bodyElKey>:<kind> → int64 merge (ADR-0517 v2)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 

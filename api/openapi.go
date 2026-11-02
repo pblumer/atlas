@@ -469,6 +469,18 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances", s.miHistory.HandleBodies, apiOp{
+			summary: "List a process instance's multi-instance body executions — each concrete activation of a multi-instance activity, never merged by BPMN element, with its mode, lifecycle state and iteration counters (seeded, active, completed, terminated, historical incidents). Bounded and cursor-paged: query limit (1-200, default 100), cursor, parentIteration (the iteration whose nested bodies to list; omitted lists the bodies no iteration encloses). 409 history_unavailable while this installation's history index is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body executions", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}", s.miHistory.HandleBody, apiOp{
+			summary: "Read one multi-instance body execution with its iteration counters and its currently open incidents, verified against the current incident table within a bounded number of reads (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body execution", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", s.miHistory.HandleIterations, apiOp{
+			summary: "Page through the iterations of one multi-instance body execution in loopCounter order, by indexed seeks whose cost does not grow with the iteration count: query limit (1-200, default 100), cursor (opaque, signed, bound to the instance, body and filters, with a frozen high-water position), state (active, completed, terminated), incidents=true (iterations that had an incident), iteration (exact iteration number), from (start at an iteration number), elementInstanceKey (exact lookup). A state-filtered cursor answers 409 cursor_stale once the body changed (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iterations page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", s.miHistory.HandleIteration, apiOp{
+			summary: "Read one multi-instance iteration: its iteration number, lifecycle state and log positions, the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and the multi-instance bodies nested in it (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration detail", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},

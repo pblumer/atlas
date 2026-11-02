@@ -33,10 +33,12 @@ func (t *Tx) readInto(key []byte, dst model.Value) (bool, error) {
 type Tx struct {
 	b       *pebble.Batch
 	store   *Store
-	scratch []byte                   // reused value-encode buffer; Pebble copies on Set
-	miKey   [33]byte                 // reusable MI index key, including the longest iteration key
-	miValue [miHistoryValueSize]byte // reusable fixed-width lifecycle projection
-	miRef   [16]byte                 // reusable body and round reverse references
+	scratch []byte                               // reused value-encode buffer; Pebble copies on Set
+	miKey   [miMaxKeySize]byte                   // reusable MI index key, including the longest (state) key
+	miValue [miMaxValueSize]byte                 // reusable fixed-width body/round value encoding
+	miRead  [miMaxValueSize]byte                 // reusable copy of a read MI value (read-modify-write)
+	miRef   [17]byte                             // reusable reverse references and incident records
+	miVar   [9 + len(MILoopCounterVariable)]byte // reusable loopCounter variable key
 }
 
 // Commit applies the transaction. It does not fsync: durability is the WAL's

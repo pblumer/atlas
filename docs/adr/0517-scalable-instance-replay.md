@@ -137,10 +137,70 @@ a complete timeline. The startup check performs bounded prefix seeks, not
 historical scans. A corrupt marker fails closed. This is a safety gate, **not**
 a historical backfill or a migration-complete flag for old state.
 
-**Still not built:** verified background WAL-based historical backfill for
-legacy stores; exact `loopCounter` search; cursor/high-watermark and indexed
-status/incident filters; API/UI endpoints; 50,000-iteration performance
-evidence. A historical reconstruction must use durable event payloads,
+**OHS2 increment 3 — index schema v2 and the bounded read API (2026-11-02).**
+The index schema moved to v2 (marker `mi_history_index_v2`); a store marked only
+for v1 is treated as legacy and stays unavailable, exactly like a pre-index
+store. Implemented:
+
+- *Iteration number.* Each iteration row records the `loopCounter` the engine
+  bound into the iteration's scope. The variable event precedes the iteration's
+  Activated event in the log, so the fold reads a prior durable fact (I6); an
+  iteration without one records 0 ("not recorded"), never a guess. A new family
+  `cfMIRoundOrder` orders a body activation's iterations by
+  `(loopCounter, iterationKey)`, so "iteration 37,421" is a seek, not a skip.
+- *Lifecycle filter.* `cfMIRoundByState` holds the same order per lifecycle state,
+  moved (delete + set) by the end fact. The state filter is a seek in that family.
+- *Incidents.* `IncidentCreated` is attributed to the innermost MI iteration or
+  body whose live scope chain holds the incident's element (bounded walk);
+  `IncidentResolved` closes the attribution. `cfMIRoundIncident` orders iterations
+  that ever had an incident (historical, monotonic); per-owner records keep raised
+  and resolved positions and a "superseded" outcome. An incident cleared because
+  its element ended (ADR-0061, no event) stays unresolved in the index; readers
+  distinguish *open* from *cleared* with a point read of the current incident
+  table, so "current" and "historical" incidents are never conflated.
+- *Counters.* Seeded, completed, terminated, incidents raised, iterations with
+  incidents and a change count per body activation are write-only Pebble merges
+  (`cfMIBodyCounter`), like the active-children counters: recording an iteration
+  does not read the body. The planned total of a *sequential* body is not a
+  recorded fact and is not reported.
+- *Nesting.* Each body records the innermost enclosing MI iteration
+  (`cfMIBodyByParent`), so the overview lists top-level bodies without visiting a
+  nested body seeded once per outer iteration.
+- *HTTP and MCP.* `api/mihistory` serves
+  `GET /api/v1/instances/{key}/multi-instances`,
+  `.../multi-instances/{bodyKey}`, `.../{bodyKey}/iterations` and
+  `.../iterations/{iterationKey}` (MCP tools `atlas_instance_multi_instances`,
+  `atlas_multi_instance_body`, `atlas_multi_instance_iterations`,
+  `atlas_multi_instance_iteration`), role Operator like the timeline. Reads run on
+  a `state.ReadView` opened off the writer. Pages default to 100, maximum 200; each
+  iteration page examines at most a fixed scan budget of index keys and resumes
+  through its cursor, so no filter combination becomes a walk. The cursor is
+  `base64url(payload ‖ HMAC-SHA-256/128)` under a per-process random key with a
+  one-hour TTL; it binds kind, instance, body activation, a SHA-256 digest of the
+  canonical filter set, the resume position, the frozen high-water log position
+  and the body's change count. A state-filtered page sequence answers
+  `409 cursor_stale` once the body changed; unfiltered and incident-filtered pages
+  hide rows past the high-water mark. An index that is not verified complete
+  answers `409 history_unavailable` with an explanation, never an empty list.
+
+*Measured (2026-11-02, 4-vCPU cloud container, full server over HTTP,
+`api/mihistory/acceptance_test.go`).* A parallel MI of 50,000 iterations with ten
+real incidents: overview 382 bytes in 0.6 ms (396 bytes for a 2,000-iteration
+instance); a 100-row page about 19 KB in 1.4 ms; jump to iteration 37,421 1.4 ms
+and examined exactly 100 index keys; `state=active` examined 10 keys; worst
+start-instance latency 3 ms alone and 7 ms under concurrent page reads; WAL replay
+of the whole log into a fresh store 2.9 s with identical answers. For comparison
+the legacy `/timeline` grows with the square of the iteration count: 139 MB at
+1,000 iterations, 553 MB at 2,000, 2.2 GB and 59 s on the writer at 4,000; at
+50,000 the test process was killed for memory. Hot path
+(`BenchmarkMultiInstanceIterations`, 100 iterations per instance): about +2.8
+allocations per iteration (one additional point read for the loopCounter), time
+within run-to-run noise; `BenchmarkInstanceLifecycle` unchanged at 221 allocations.
+
+**Still not built:** a verified historical rebuild for legacy (pre-v2) stores —
+they stay `history_unavailable`; the bounded instance overview that replaces the
+full timeline in Operations and the Multi-Instance Explorer UI; OHS3's scoped
+detail replay. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
 especially for repeated/nested MI bodies and migrations. A history with
@@ -150,6 +210,14 @@ An old live body without an indexed activation does not acquire guessed lineage:
 rounds observed after upgrade are left absent from the new projection until the
 historical backfill has reconstructed their parent activation. Do not expose
 incomplete projections as if they covered a whole instance.
+
+*Known limitation found while measuring:* completing the iterations of a parallel
+multi-instance **subprocess** is quadratic in the engine today, independent of
+this index — every scope completion disarms event-subprocess triggers by walking
+all live element instances of the instance (`disarmEventSubprocesses`). 1,000
+such iterations took 24 s; 50,000 do not finish in reasonable time. The
+acceptance fixture therefore uses a multi-instance script task. Tracked in
+[Issue #1494](https://github.com/pblumer/atlas/issues/1494).
 
 ## Pros and cons of the options
 

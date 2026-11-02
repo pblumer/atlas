@@ -4,10 +4,10 @@
   "summary": "Keep instance replay intelligible and responsive with grouped multi-instance execution, bounded iteration discovery and exact causal drill-down at 50,000 iterations.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-01",
+  "last_reviewed": "2026-11-02",
   "plan": "../../planning/operations-history-at-scale-program.md",
   "milestone": "../../../ROADMAP.md#milestone-4--operability-",
-  "next_action": "Verify OHS2 PR #1490 readiness barrier (CI, recovery, coverage); then design audited bounded WAL-event backfill for legacy stores before paginated API and UI (Issue #1481).",
+  "next_action": "Merge the OHS2 index-v2 and bounded-API PR (loopCounter, state and incident indexes, signed cursor, 50k acceptance); then the Operations Multi-Instance Explorer and a bounded instance overview that no longer loads the full timeline; then the verified legacy-store rebuild and OHS3 detail replay. Engine quadratic MI-subprocess completion is Issue #1494.",
   "slices": [
     {
       "id": "OHS1",
@@ -35,14 +35,20 @@
         "OHS1"
       ],
       "issues": [
-        1481
+        1481,
+        1494
       ],
       "prs": [
         1487,
         1488,
         1490
       ],
-      "note": "PR #1487 (keys) and PR #1488 (durable projection) merged. PR #1490 adds fail-closed readiness/version marker and legacy-store regression tests. Audited WAL backfill, exact round-number search, cursor-paged API, UI and 50k acceptance remain open."
+      "note": "#1487 (keys), #1488 (projection) and #1490 (fail-closed readiness) merged. Index schema v2 adds loopCounter order, lifecycle-state and incident families, write-only body counters and nested-body parents; api/mihistory serves the cursor-paged, off-writer, HMAC-cursor API and MCP tools with a 50,000-iteration end-to-end acceptance. Open: Operations Explorer UI, a bounded instance overview, verified rebuild for legacy (pre-v2) stores, and #1494 (quadratic MI-subprocess completion).",
+      "evidence": [
+        "../../../api/mihistory/acceptance_test.go",
+        "../../../engine/miindex_v2_recovery_test.go",
+        "../../adr/0517-scalable-instance-replay.md"
+      ]
     },
     {
       "id": "OHS3",

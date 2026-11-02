@@ -103,6 +103,7 @@ import (
 	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/formlookup"
+	"github.com/pblumer/atlas/api/mihistory"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
@@ -355,6 +356,9 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// miHistory serves the bounded multi-instance history (ADR-0517). It reads
+	// only through read views taken off the run loop (miHistoryView).
+	miHistory *mihistory.Service
 	// identity holds linked external accounts and delegated connections and brokers
 	// their credentials; policies is the policy administration point; governed is the
 	// in-memory view of which Workers carry an identity policy, read by the
@@ -1883,6 +1887,9 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
 	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
+	if s.miHistory, err = mihistory.New(s.miHistoryView, time.Now); err != nil {
+		return nil, err
+	}
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,
