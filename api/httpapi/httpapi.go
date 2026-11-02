@@ -102,6 +102,12 @@ type Principal struct {
 	// nothing is narrowed, which is what keeps every credential already in the field
 	// working; a credential that must state one is refused at minting instead.
 	Reach []string
+	// FeedProjects narrows the event feed to the task facts of processes deployed from
+	// these projects (ADR-0512 §2). Only a connected system's grant sets it, on a request
+	// to the feed, from the reach its approver chose for `events`: the feed's own Reach
+	// names catalogues (ADR-0432), so a reach of projects travels apart and cannot be
+	// mistaken for one. Empty narrows nothing.
+	FeedProjects []string
 	// Session is true when the principal is a person signed in with their own
 	// session, not a bearer credential: an API token, the internal token, or an
 	// application the person granted access to (an OAuth grant resolves to their id,

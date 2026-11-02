@@ -211,6 +211,14 @@ var (
 	// A setting that widens what an unauthenticated caller may do is one nobody
 	// should be able to inherit without being told (ADR-0200).
 	AuthOAuthRegistrationOpen = newEvent("auth.oauth_registration_open")
+	// A connected system (ADR-0512): an administrator approved a system grant for the
+	// first time, approved one again or changed it, or the grant ended — withdrawn in
+	// the Console, given back by the system, or ended with its approver's administrator
+	// role. Each carries the approver, the capabilities and their reach, because "what
+	// could that system read, and since when" is the question an audit of it asks.
+	SystemConnect    = newEvent("system.connect")
+	SystemChange     = newEvent("system.change")
+	SystemDisconnect = newEvent("system.disconnect")
 	// Worker ownership (ADR-0205). Who may reach a worker's configuration —
 	// its endpoint, its credential reference and its inbound subscriptions — is now
 	// somebody's decision rather than everybody's, so the decision is recorded.

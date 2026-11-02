@@ -889,13 +889,18 @@ var mcpOmittedRoutes = map[string]string{
 	// in front of a human. The two read-only ones are omitted with it: a listing of
 	// who approved what is an operator's view, and the consent context is a screen's
 	// backing call, not a capability.
-	"POST /api/v1/oauth-clients":          "registering an application that may ask for access is admin-only, not an agent action",
-	"GET /api/v1/oauth-clients":           "client listing is admin-only, not an agent action",
-	"DELETE /api/v1/oauth-clients/{id}":   "removing a client and its grants is admin-only, not an agent action",
-	"GET /api/v1/oauth-grants":            "who approved which application is an operator's view, not an agent capability",
-	"DELETE /api/v1/oauth-grants/{id}":    "withdrawing a person's approval is theirs or an administrator's to do",
-	"GET /api/v1/oauth/authorize-context": "backs the consent screen in a browser; nothing for an agent to call",
-	"POST /api/v1/oauth/authorize":        "a person's consent decision, made on a screen — an agent must never record one",
+	"POST /api/v1/oauth-clients":                    "registering an application that may ask for access is admin-only, not an agent action",
+	"GET /api/v1/oauth-clients":                     "client listing is admin-only, not an agent action",
+	"DELETE /api/v1/oauth-clients/{id}":             "removing a client and its grants is admin-only, not an agent action",
+	"GET /api/v1/oauth-grants":                      "who approved which application is an operator's view, not an agent capability",
+	"DELETE /api/v1/oauth-grants/{id}":              "withdrawing a person's approval is theirs or an administrator's to do",
+	"GET /api/v1/oauth/authorize-context":           "backs the consent screen in a browser; nothing for an agent to call",
+	"GET /api/v1/connected-systems":                 "which systems an administrator connected, and what they reach, is credential administration, not an agent capability",
+	"PUT /api/v1/connected-systems/{id}/preconsent": "changing whom a connected system may connect without asking is an administrator's decision about credentials",
+	"DELETE /api/v1/connected-systems/{id}":         "disconnecting a system and its people's grants is admin-only credential management, not an agent action",
+	"GET /api/v1/me/connected-systems":              "a person's connected systems and their consent: theirs to manage, not an agent's",
+	"POST /api/v1/me/connected-systems/withdraw":    "withdrawing and declining is a person's consent decision; an agent must never make one",
+	"POST /api/v1/oauth/authorize":                  "a person's consent decision, made on a screen — an agent must never record one",
 	// Worker ownership (ADR-0205). Who may reach a worker's configuration is a
 	// person's decision about their own thing, made on a screen by whoever owns it.
 	// An agent acting as them could make it, which is the argument for exposing it —

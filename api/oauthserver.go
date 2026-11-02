@@ -68,12 +68,12 @@ const (
 func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *http.Request) {
 	base := s.externalBase(r)
 	doc := map[string]any{
-		"issuer":                                base,
-		"authorization_endpoint":                base + oauthAuthorizePath,
-		"token_endpoint":                        base + oauthTokenPath,
-		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"code_challenge_methods_supported":      []string{"S256"},
+		"issuer":                           base,
+		"authorization_endpoint":           base + oauthAuthorizePath,
+		"token_endpoint":                   base + oauthTokenPath,
+		"response_types_supported":         []string{"code"},
+		"grant_types_supported":            []string{"authorization_code", "refresh_token"},
+		"code_challenge_methods_supported": []string{"S256"},
 		// A client entered here holds a secret; a connected system named by its
 		// metadata document signs an assertion instead (RFC 7523, ADR-0512 §1).
 		"token_endpoint_auth_methods_supported":            []string{"client_secret_post", privateKeyJWT},
@@ -104,6 +104,13 @@ type oauthRequest struct {
 	state       string
 	challenge   string
 	resource    string
+
+	// scopes are the capabilities a request for the system resource asks for
+	// (ADR-0512 §2); empty for every other resource, where `scope` is not read.
+	scopes []string
+	// scopeParam is the request's scope parameter as it came, so the consent page can
+	// repeat it with the decision.
+	scopeParam string
 }
 
 // parseAuthorizeRequest validates the query of an authorization request.
@@ -155,6 +162,16 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values, fresh bool
 	if !s.isCanonicalResource(r, req.resource) {
 		return req, "invalid_target", ""
 	}
+	// A system asks for its capabilities in the standard scope parameter, and only for
+	// the narrow ones a system reads with (ADR-0512 §2).
+	if isSystemResource(req.resource) {
+		req.scopeParam = q.Get("scope")
+		scopes, ok := systemScopesFrom(req.scopeParam)
+		if !ok {
+			return req, "invalid_scope", ""
+		}
+		req.scopes = scopes
+	}
 	return req, "", ""
 }
 
@@ -163,9 +180,9 @@ func (s *Server) parseAuthorizeRequest(r *http.Request, q url.Values, fresh bool
 // else (ADR-0510 §3).
 const oauthTasksResource = "/tasks"
 
-// isCanonicalResource reports whether uri is one of the three this server publishes
-// protected-resource metadata for: the server itself, the MCP transport, and a
-// person's tasks.
+// isCanonicalResource reports whether uri is one of the four this server publishes
+// protected-resource metadata for: the server itself, the MCP transport, a person's
+// tasks, and a connected system's own reading of this server (ADR-0512 §2).
 //
 // The origin comes from externalBase, so it is the configured one when an operator
 // stated it and the request's otherwise — the same answer the discovery documents
@@ -176,7 +193,7 @@ func (s *Server) isCanonicalResource(r *http.Request, uri string) bool {
 	if uri == "" || base == "" {
 		return false
 	}
-	if uri == base || uri == base+oauthTasksResource {
+	if uri == base || uri == base+oauthTasksResource || uri == base+oauthSystemResource {
 		return true
 	}
 	return s.mcpHandler != nil && uri == base+"/mcp"
@@ -188,7 +205,14 @@ func (s *Server) isCanonicalResource(r *http.Request, uri string) bool {
 // be told to sign in — a 401 is not an answer a person can act on. The page itself
 // reveals nothing until it asks the API below, and what it then reveals is the name
 // of a client the person was already being sent to.
+//
+// Two requests are answered without it (authorizeWithoutPage): a person's request from
+// a system an administrator pre-consented for, once they are signed in, and any request
+// sent with prompt=none, which is answered by a redirect whatever happens (ADR-0512 §3).
 func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	if s.authorizeWithoutPage(w, r) {
+		return
+	}
 	page, err := webFS.ReadFile("web/oauth-consent.html")
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "consent page missing")
@@ -228,17 +252,33 @@ func (s *Server) handleAuthorizeContext(w http.ResponseWriter, r *http.Request) 
 		// for when the document was read, and the name is only what the document says.
 		"metadataDocument": req.client.Metadata,
 	}
-	if req.client.Metadata {
-		if u, err := url.Parse(req.client.ID); err == nil {
-			out["clientHost"] = u.Host
-		}
+	if host := clientHostOf(req.client); host != "" {
+		out["clientHost"] = host
 	}
 	if clientErr != "" {
 		out["error"] = "the client's request is not valid (" + clientErr + ")"
 		out["redirect"] = errorRedirect(req.redirectURI, clientErr, req.state)
 	}
-	if p := httpapi.PrincipalFrom(r.Context()); p != nil {
+	p := httpapi.PrincipalFrom(r.Context())
+	if p != nil {
 		out["signedInAs"] = p.Username
+	}
+	if isSystemResource(req.resource) && clientErr == "" {
+		// What the system asks for, and whether the person deciding may give it: only
+		// an administrator connects a system (ADR-0512 §2). The projects a reach may
+		// name are listed to that administrator alone.
+		sys := map[string]any{"scopes": req.scopes, "scope": req.scopeParam, "mayApprove": false}
+		if p != nil && s.principalIsAdmin(p) {
+			sys["mayApprove"] = true
+			var projs map[string]project
+			s.do(func() { projs, _ = s.projectsByID() })
+			sys["projects"] = systemProjectsFor(projs)
+		}
+		if g, ok := s.oauthGrants.systemOf(req.client.ID); ok {
+			// Approving again replaces this one, which the screen says.
+			sys["current"] = s.systemView(g)
+		}
+		out["system"] = sys
 	}
 	httpapi.JSON(w, http.StatusOK, out)
 }
@@ -264,6 +304,13 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		Resource     string `json:"resource"`
 		ResponseType string `json:"responseType"`
 		Approve      bool   `json:"approve"`
+
+		// For the system resource (ADR-0512 §2): the request's scope parameter,
+		// repeated, the capabilities the administrator kept with their reach, and
+		// whether the system's people may connect without being asked.
+		Scope        string             `json:"scope"`
+		Capabilities []systemCapability `json:"capabilities"`
+		Preconsent   bool               `json:"preconsent"`
 	}
 	if !s.decodeJSONBody(w, r, &payload) {
 		return
@@ -276,6 +323,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		"code_challenge_method": {"S256"},
 		"resource":              {payload.Resource},
 		"response_type":         {"code"},
+		"scope":                 {payload.Scope},
 	}
 	req, clientErr, fatal := s.parseAuthorizeRequest(r, q, true)
 	if fatal != "" {
@@ -287,6 +335,26 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var system *oauthSystem
+	if isSystemResource(req.resource) && payload.Approve {
+		if !s.principalIsAdmin(p) {
+			auditRefusal(r, logging.AuthOAuthDenied, "oauth: a system grant was refused: the approver is not an administrator",
+				slog.String("client_id", req.client.ID))
+			httpapi.Error(w, http.StatusForbidden, errOnlyAdmins.Error())
+			return
+		}
+		caps, refusal, err := s.chooseSystemCapabilities(req.scopes, payload.Capabilities)
+		switch {
+		case err != nil:
+			httpapi.Error(w, http.StatusInternalServerError, "read projects: "+err.Error())
+			return
+		case refusal != "":
+			httpapi.Error(w, http.StatusBadRequest, refusal)
+			return
+		}
+		system = &oauthSystem{Capabilities: caps, Preconsent: payload.Preconsent}
+	}
+
 	if !payload.Approve {
 		auditRefusal(r, logging.AuthOAuthDenied, "oauth: the person declined",
 			slog.String("client_id", req.client.ID), slog.String("resource", req.resource))
@@ -296,10 +364,29 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secret, err := randomHex(32)
+	redirect, err := s.issueCode(req, p, system)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "generate code: "+err.Error())
 		return
+	}
+	if system == nil {
+		// A person who declined a pre-consented system and now approves it on this
+		// screen themselves is asked no longer (ADR-0512 §3).
+		s.do(func() { s.clearDeclined(req.client.ID, p.UserID) })
+	}
+	audit(r, logging.AuthOAuthGranted, "oauth: the person approved a client",
+		slog.String("client_id", req.client.ID), slog.String("client_name", req.client.Name),
+		slog.String("resource", req.resource))
+	httpapi.JSON(w, http.StatusOK, map[string]any{"redirect": redirect})
+}
+
+// issueCode mints the authorization code a person's approval turns into, and returns
+// the redirect that carries it back to the client. The approval on the consent page and
+// the one pre-consent gives without it (ADR-0512 §3) are this same act.
+func (s *Server) issueCode(req oauthRequest, p *httpapi.Principal, system *oauthSystem) (string, error) {
+	secret, err := randomHex(32)
+	if err != nil {
+		return "", err
 	}
 	code := oauthCodePrefix + secret
 	s.oauthCodes.issue(oauthCode{
@@ -312,12 +399,9 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		redirectURI: req.redirectURI,
 		challenge:   req.challenge,
 		resource:    req.resource,
+		system:      system,
 		expires:     time.Now().Add(oauthCodeLifetime),
 	})
-	audit(r, logging.AuthOAuthGranted, "oauth: the person approved a client",
-		slog.String("client_id", req.client.ID), slog.String("client_name", req.client.Name),
-		slog.String("resource", req.resource))
-
 	target, _ := url.Parse(req.redirectURI)
 	rq := target.Query()
 	rq.Set("code", code)
@@ -325,7 +409,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		rq.Set("state", req.state)
 	}
 	target.RawQuery = rq.Encode()
-	httpapi.JSON(w, http.StatusOK, map[string]any{"redirect": target.String()})
+	return target.String(), nil
 }
 
 // oauthCodePrefix marks an authorization code, so one in a log or a bug report is
@@ -423,6 +507,11 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request, client oau
 		Roles: rec.roles, GroupIDs: rec.groupIDs,
 		Resource: rec.resource, CreatedAt: time.Now().Unix(),
 	}
+	if rec.system != nil {
+		sys := *rec.system
+		sys.ApprovedAt = grant.CreatedAt
+		grant.System = &sys
+	}
 	s.issueTokens(w, r, grant, "authorization_code", client)
 }
 
@@ -468,11 +557,30 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauth
 	grant.AccessExpires = time.Now().Add(oauthAccessLifetime).Unix()
 	grant.RefreshHash = hashAPIToken(refresh)
 
-	var saveErr error
+	var (
+		saveErr  error
+		replaced []oauthGrant
+	)
+	newSystem := grant.System != nil && how == "authorization_code"
 	s.do(func() {
 		if client.Metadata {
 			if saveErr = s.rememberMetadataClient(client, grant.UserID); saveErr != nil {
 				return
+			}
+		}
+		if newSystem {
+			// One system grant per client: the approval just exchanged replaces the
+			// standing one in this same turn (ADR-0512 §2), and the record of an earlier
+			// disconnect is cleared by it.
+			if replaced, saveErr = s.replaceSystemGrants(grant.ClientID, grant.ID); saveErr != nil {
+				return
+			}
+			if rec, ok := s.oauthClients.lookup(grant.ClientID); ok && rec.DisconnectedAt != 0 {
+				rec.DisconnectedAt, rec.DisconnectReason = 0, ""
+				if saveErr = s.oauthClientStore.Save(rec); saveErr != nil {
+					return
+				}
+				s.oauthClients.add(rec)
 			}
 		}
 		if saveErr = s.oauthGrantStore.Save(grant); saveErr != nil {
@@ -484,18 +592,32 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, grant oauth
 		oauthError(w, http.StatusInternalServerError, "server_error", "save grant")
 		return
 	}
+	if newSystem {
+		if len(replaced) == 0 {
+			auditSystem(r, logging.SystemConnect, "connected system connected", grant)
+		} else {
+			auditSystem(r, logging.SystemChange, "connected system approved again: the new grant replaces the standing one", grant,
+				slog.String("replaced", replaced[0].ID))
+		}
+	}
 	audit(r, logging.AuthOAuthTokenIssued, "oauth: token issued",
 		slog.String("grant_id", grant.ID), slog.String("client_id", grant.ClientID),
 		slog.String("subject", grant.Username), slog.String("resource", grant.Resource),
 		slog.String("how", how))
 
-	w.Header().Set("Cache-Control", "no-store")
-	httpapi.JSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"access_token":  access,
 		"token_type":    "Bearer",
 		"expires_in":    int(oauthAccessLifetime.Seconds()),
 		"refresh_token": refresh,
-	})
+	}
+	// A system grant says which capabilities it was given, which may be fewer than it
+	// asked for (RFC 6749 §5.1, ADR-0512 §2).
+	if grant.System != nil {
+		out["scope"] = grant.System.scopes()
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // handleRevoke is the revocation endpoint (RFC 7009): a client gives back a grant it

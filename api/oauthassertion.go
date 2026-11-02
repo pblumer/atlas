@@ -61,13 +61,13 @@ var errAssertionKey = errors.New("the assertion is not signed by a key the clien
 
 // assertionClaims is the wire shape of a client assertion's claim set.
 type assertionClaims struct {
-	Issuer   string   `json:"iss"`
-	Subject  string   `json:"sub"`
-	Audience audience `json:"aud"`
-	Expiry   int64    `json:"exp"`
-	IssuedAt int64    `json:"iat"`
-	NotBefore int64   `json:"nbf"`
-	ID       string   `json:"jti"`
+	Issuer    string   `json:"iss"`
+	Subject   string   `json:"sub"`
+	Audience  audience `json:"aud"`
+	Expiry    int64    `json:"exp"`
+	IssuedAt  int64    `json:"iat"`
+	NotBefore int64    `json:"nbf"`
+	ID        string   `json:"jti"`
 }
 
 // unverifiedIssuer reads the iss of an assertion without checking anything, for the

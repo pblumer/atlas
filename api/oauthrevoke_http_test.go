@@ -245,7 +245,8 @@ func TestRevocationJudgesTheClientOutLoud(t *testing.T) {
 }
 
 // TestTheMetadataAdvertisesRevocation: a client finds the endpoint where it finds the
-// others, with the one way it authenticates there.
+// others, with the two ways it authenticates there — a secret for a client entered
+// here, a signed assertion for one named by its metadata document (ADR-0512 §1).
 func TestTheMetadataAdvertisesRevocation(t *testing.T) {
 	ts := newMCPServer(t)
 	status, _, doc := getJSON(t, ts.URL+"/.well-known/oauth-authorization-server")
@@ -256,8 +257,8 @@ func TestTheMetadataAdvertisesRevocation(t *testing.T) {
 		t.Errorf("revocation_endpoint = %v, want %q", doc["revocation_endpoint"], ts.URL+oauthRevokeTestPath)
 	}
 	methods, _ := doc["revocation_endpoint_auth_methods_supported"].([]any)
-	if len(methods) != 1 || methods[0] != "client_secret_post" {
-		t.Errorf("revocation_endpoint_auth_methods_supported = %v, want [client_secret_post]",
+	if len(methods) != 2 || methods[0] != "client_secret_post" || methods[1] != "private_key_jwt" {
+		t.Errorf("revocation_endpoint_auth_methods_supported = %v, want [client_secret_post private_key_jwt]",
 			doc["revocation_endpoint_auth_methods_supported"])
 	}
 }

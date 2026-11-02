@@ -76,6 +76,20 @@ type oauthClient struct {
 	// (oauthassertion.go). Its name and redirect URIs here are the document's as of
 	// that save; the document, not this record, is what a request is checked against.
 	Metadata bool `json:"metadata,omitempty"`
+
+	// DisconnectedAt and DisconnectReason say when and why this client's system grant
+	// ended (ADR-0512 §4), so the Console can tell an administrator that a system is no
+	// longer connected — its approver stopped being an administrator, somebody
+	// disconnected it — instead of the row simply disappearing. Cleared by the next
+	// approval.
+	DisconnectedAt   int64  `json:"disconnectedAt,omitempty"`
+	DisconnectReason string `json:"disconnectReason,omitempty"`
+
+	// Declined holds the ids of the people who withdrew their grant of this client
+	// while its system grant let people connect without asking them (ADR-0512 §3).
+	// Pre-consent no longer applies to them: the consent screen asks them again, and
+	// approving there themselves takes them off this list.
+	Declined []string `json:"declined,omitempty"`
 }
 
 // allowsRedirect reports whether uri is one this client registered. Exact string

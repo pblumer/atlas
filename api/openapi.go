@@ -1886,6 +1886,23 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
 			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
 			status: http.StatusNoContent}},
+		{"GET", "/api/v1/connected-systems", s.handleListConnectedSystems, apiOp{
+			summary: "List the connected systems (ADR-0512): per system its host and name, who approved it and when, its capabilities with their reach of projects, whether its people may connect without being asked (pre-consent), how many people are connected, when it last used Atlas, and for one no longer connected when and why it was disconnected (admin-only)", tag: "OAuth", role: RoleAdmin,
+			resp: jsonBody("Connected systems", tArray())}},
+		{"PUT", "/api/v1/connected-systems/{id}/preconsent", s.handleSetSystemPreconsent, apiOp{
+			summary: "Turn a connected system's pre-consent off, so its people are asked on the consent screen before they connect; only {\"preconsent\": false} is accepted — pre-consent is given by approving the system (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			req:    jsonBody("Pre-consent", schemaObj(map[string]any{"preconsent": tBool()}, "preconsent")),
+			status: http.StatusNoContent}},
+		{"DELETE", "/api/v1/connected-systems/{id}", s.handleDisconnectSystem, apiOp{
+			summary: "Disconnect a connected system: its system grant is withdrawn, and with ?people=withdraw every person's grant of the same client too (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/me/connected-systems", s.handleMyConnectedSystems, apiOp{
+			summary: "The connected systems you are connected to, and those an administrator pre-approved for you, with whether you declined them (ADR-0512)", tag: "OAuth", role: roleAny,
+			resp: jsonBody("Your connected systems", tArray())}},
+		{"POST", "/api/v1/me/connected-systems/withdraw", s.handleWithdrawFromSystem, apiOp{
+			summary: "Withdraw your own grants of a connected system and decline it, so pre-consent does not connect you to it again without your asking (ADR-0512)", tag: "OAuth", role: roleAny,
+			req:    jsonBody("The system's client id", schemaObj(map[string]any{"clientId": tString()}, "clientId")),
+			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
 			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth", role: roleAny,
 			resp: jsonBody("Consent context", tObject())}},

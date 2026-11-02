@@ -3731,6 +3731,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A connected system's own reading of this server, for the system grant an
+	// administrator approves (ADR-0512 §2).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
