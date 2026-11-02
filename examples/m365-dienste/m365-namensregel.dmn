@@ -6,6 +6,10 @@
             slug       (die normalisierte Bezeichnung; der Prozess bildet sie im Input-Mapping)
             laenge     (berechnet: Länge von slug und bereich zusammen)
             bereich, bezeichnung (Formularantworten; die Ausgaben lesen sie)
+            praefix    (Applikationskonstante NAME_PREFIX, leer oder null = kein Präfix): steht vor
+                       Anzeigename und Alias, z.B. «atlas-test-58o4-», damit in einem geteilten
+                       Tenant alles, was der Katalog anlegt, im Exchange-Scope der Testumgebung
+                       liegt und von deren Abbauskripten gefunden wird
   Ausgaben: erlaubt (Wahrheitswert), grund (Begründung, wird bei einer Ablehnung der bestellenden
             Person gezeigt), anzeigename, alias
 
@@ -23,11 +27,13 @@
   <inputData id="id_slug" name="slug"/>
   <inputData id="id_bereich" name="bereich"/>
   <inputData id="id_bezeichnung" name="bezeichnung"/>
+  <inputData id="id_praefix" name="praefix"/>
   <decision id="M365Namensregel" name="M365Namensregel">
     <informationRequirement id="ir_objekttyp"><requiredInput href="#id_objekttyp"/></informationRequirement>
     <informationRequirement id="ir_slug"><requiredInput href="#id_slug"/></informationRequirement>
     <informationRequirement id="ir_bereich"><requiredInput href="#id_bereich"/></informationRequirement>
     <informationRequirement id="ir_bezeichnung"><requiredInput href="#id_bezeichnung"/></informationRequirement>
+    <informationRequirement id="ir_praefix"><requiredInput href="#id_praefix"/></informationRequirement>
     <decisionTable id="dt_M365Namensregel" hitPolicy="FIRST">
       <input id="in_objekttyp" label="objekttyp"><inputExpression id="ie_objekttyp" typeRef="string"><text>objekttyp</text></inputExpression></input>
       <input id="in_slug" label="slug"><inputExpression id="ie_slug" typeRef="string"><text>slug</text></inputExpression></input>
@@ -73,8 +79,8 @@
         <inputEntry id="r4_i2"><text>-</text></inputEntry>
         <outputEntry id="r4_o0"><text>true</text></outputEntry>
         <outputEntry id="r4_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r4_o2"><text>"TM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r4_o3"><text>"tm-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r4_o2"><text>(if praefix = null then "" else praefix) + "TM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r4_o3"><text>(if praefix = null then "" else praefix) + "tm-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r5">
         <description>Objekttyp funktionspostfach: Präfix FP</description>
@@ -83,8 +89,8 @@
         <inputEntry id="r5_i2"><text>-</text></inputEntry>
         <outputEntry id="r5_o0"><text>true</text></outputEntry>
         <outputEntry id="r5_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r5_o2"><text>"FP-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r5_o3"><text>"fp-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r5_o2"><text>(if praefix = null then "" else praefix) + "FP-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r5_o3"><text>(if praefix = null then "" else praefix) + "fp-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r6">
         <description>Objekttyp verteiler: Präfix VL</description>
@@ -93,8 +99,8 @@
         <inputEntry id="r6_i2"><text>-</text></inputEntry>
         <outputEntry id="r6_o0"><text>true</text></outputEntry>
         <outputEntry id="r6_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r6_o2"><text>"VL-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r6_o3"><text>"vl-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r6_o2"><text>(if praefix = null then "" else praefix) + "VL-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r6_o3"><text>(if praefix = null then "" else praefix) + "vl-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r7">
         <description>Objekttyp raum: Präfix RM</description>
@@ -103,8 +109,8 @@
         <inputEntry id="r7_i2"><text>-</text></inputEntry>
         <outputEntry id="r7_o0"><text>true</text></outputEntry>
         <outputEntry id="r7_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r7_o2"><text>"RM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r7_o3"><text>"rm-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r7_o2"><text>(if praefix = null then "" else praefix) + "RM-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r7_o3"><text>(if praefix = null then "" else praefix) + "rm-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r8">
         <description>Objekttyp warteschlange: Präfix CQ</description>
@@ -113,8 +119,8 @@
         <inputEntry id="r8_i2"><text>-</text></inputEntry>
         <outputEntry id="r8_o0"><text>true</text></outputEntry>
         <outputEntry id="r8_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r8_o2"><text>"CQ-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r8_o3"><text>"cq-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r8_o2"><text>(if praefix = null then "" else praefix) + "CQ-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r8_o3"><text>(if praefix = null then "" else praefix) + "cq-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r9">
         <description>Objekttyp telefonzentrale: Präfix AA</description>
@@ -123,8 +129,8 @@
         <inputEntry id="r9_i2"><text>-</text></inputEntry>
         <outputEntry id="r9_o0"><text>true</text></outputEntry>
         <outputEntry id="r9_o1"><text>"Namensregel erfüllt"</text></outputEntry>
-        <outputEntry id="r9_o2"><text>"AA-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
-        <outputEntry id="r9_o3"><text>"aa-" + lower case(bereich) + "-" + slug</text></outputEntry>
+        <outputEntry id="r9_o2"><text>(if praefix = null then "" else praefix) + "AA-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r9_o3"><text>(if praefix = null then "" else praefix) + "aa-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r10">
         <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>
