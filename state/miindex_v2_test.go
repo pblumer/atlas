@@ -382,6 +382,9 @@ func TestMIIndexKeyLayoutsAgree(t *testing.T) {
 // and two per end (iteration reference, iteration row); the body's counters are
 // write-only merges. The bound is exactly those four reads.
 func TestMIIndexV2IterationFoldAllocatesOnlyInPointReads(t *testing.T) {
+	if raceEnabled {
+		t.Skip("allocation counts under -race measure the detector's instrumentation; the plain test run asserts them")
+	}
 	f := newMIFixture(t, 13)
 	f.body(10, 13, 1)
 	f.commit()
