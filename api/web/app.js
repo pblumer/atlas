@@ -239,12 +239,18 @@ function loadLinking(force) {
   if (!who) return Promise.resolve();
   if (!force && LINKING.user === who && linkingAsked) return linkingAsked;
   LINKING.user = who;
+  // A connected system pre-approved for the person, or one they are connected to,
+  // is on the same page (ADR-0512 §4), so it offers the entry too — vault or not.
+  const systems = api("GET", "/api/v1/me/connected-systems")
+    .then((l) => Array.isArray(l) && l.length > 0, () => false);
   linkingAsked = api("GET", "/api/v1/me/connections").then((m) => {
     LINKING.offered = !!(m && ((m.linkable || []).length || (m.identities || []).length || (m.connections || []).length));
   }, (e) => {
     // Anything but 503 is no answer: keep the entry and ask on the next navigation.
     if (e && e.status === 503) LINKING.offered = false;
     else LINKING.user = null;
+  }).then(() => systems).then((any) => {
+    if (any) LINKING.offered = true;
   }).then(() => updateAccount());
   return linkingAsked;
 }
@@ -777,6 +783,9 @@ const TOPNAV = {
       // The credentials machines sign in with (ADR-0194). Admin, like the three routes
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      // The systems an administrator connected, what they read, and their people
+      // (ADR-0512 §4): beside the tokens they replace.
+      { name: "Connected systems", route: "#/console/connected-systems", role: "admin" },
       // The vault (ADR-0069): the credentials atlas signs in elsewhere with, where API
       // tokens are the ones machines sign in to atlas with. Admin, like every vault route.
       { name: "Secrets", route: "#/console/secrets", role: "admin" },
@@ -1296,6 +1305,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
+  if (path.startsWith("#/console/connected-systems")) return H("konten", "Connected systems");
   if (path.startsWith("#/console/approvals")) return H("konten", "Approving an action");
   if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
@@ -12008,6 +12018,7 @@ function routeTitle(path) {
     [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
+    [/^#\/console\/connected-systems/, "Connected systems · Console"],
     [/^#\/console\/approvals$/, "Approvals · Console"],
     [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
@@ -12122,6 +12133,11 @@ async function route() {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
       return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen), canConfigure: mayUse("admin") });
+    }
+    if (path === "#/console/connected-systems") {
+      const gen = navGen;
+      const { viewConnectedSystems } = await import("./connectedsystems.js");
+      return await viewConnectedSystems({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;
