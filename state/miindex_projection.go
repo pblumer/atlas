@@ -130,6 +130,9 @@ func (t *Tx) miLoadBody(piKey, pos, bodyKey uint64) (MIHistoryEntry, error) {
 	if !ok {
 		return MIHistoryEntry{}, errors.New("state: MI body reference points to missing row")
 	}
+	if isMIV1Value(raw) {
+		return MIHistoryEntry{}, errMIV1Row
+	}
 	return decodeMIBodyValue(raw)
 }
 
@@ -156,7 +159,36 @@ func (t *Tx) miLoadRound(piKey, bodyKey, bodyPos, roundKey uint64) (MIHistoryEnt
 	if !ok {
 		return MIHistoryEntry{}, errors.New("state: MI iteration reference points to missing row")
 	}
+	if isMIV1Value(raw) {
+		return MIHistoryEntry{}, errMIV1Row
+	}
 	return decodeMIRoundValue(raw)
+}
+
+// miV1ValueSize is the width of a schema v1 MI row (PR #1487-#1490): a version
+// byte of 1 and no role, loopCounter or incident fields.
+const miV1ValueSize = 46
+
+// errMIV1Row means a reference led to a row a schema v1 build wrote. v1 and v2
+// share the body, iteration and reverse-reference families, so an execution that
+// started under v1 and ends, or raises an incident, under v2 meets its v1 row in
+// the apply path — in WAL replay too, where failing would stop the server from
+// starting over a read projection. Such a store carries no v2 readiness marker,
+// so its MI reads already fail closed until a verified rebuild (ADR-0518); the
+// apply path therefore leaves the v1 row alone, exactly as it leaves a pre-index
+// activation alone, instead of guessing the fields v1 never recorded.
+var errMIV1Row = errors.New("state: MI row written by schema v1")
+
+func isMIV1Value(raw []byte) bool {
+	return len(raw) == miV1ValueSize && raw[0] == 1
+}
+
+// miSkipV1 turns errMIV1Row into "nothing to record", keeping every other error.
+func miSkipV1(err error) error {
+	if errors.Is(err, errMIV1Row) {
+		return nil
+	}
+	return err
 }
 
 func (t *Tx) miStoreRound(piKey, bodyKey, bodyPos, roundKey uint64, v *MIHistoryEntry) error {
@@ -291,7 +323,7 @@ func (t *Tx) RecordMIEnd(elementKey uint64, v *model.ElementInstanceValue, pos u
 		}
 		body, err := t.miLoadBody(pi, bodyPos, elementKey)
 		if err != nil {
-			return err
+			return miSkipV1(err)
 		}
 		body.EndPosition, body.State = pos, st
 		return t.miStoreBody(pi, elementKey, &body)
@@ -302,7 +334,7 @@ func (t *Tx) RecordMIEnd(elementKey uint64, v *model.ElementInstanceValue, pos u
 	}
 	round, err := t.miLoadRound(pi, bodyKey, bodyPos, elementKey)
 	if err != nil {
-		return err
+		return miSkipV1(err)
 	}
 	if round.State != MIHistoryActive {
 		// An element instance ends once. Should a second end fact ever be folded,
@@ -392,7 +424,9 @@ func (t *Tx) RecordMIIncidentRaised(inc *model.IncidentValue, pos uint64) error 
 	var round MIHistoryEntry
 	if isRound {
 		if round, err = t.miLoadRound(pi, bodyKey, bodyPos, owner); err != nil {
-			return err
+			// A v1 iteration is not attributed, like an incident raised before
+			// the index existed: RecordMIIncidentResolved then finds nothing open.
+			return miSkipV1(err)
 		}
 	}
 	// From here on only batch writes follow; the chain stops at the first that
