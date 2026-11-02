@@ -3816,6 +3816,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- Public start link (ADR-0029) ---------- */
 .tasks-publish { margin-top: 26px; max-width: 640px; padding-top: 20px; border-top: 1px solid var(--border); }
+/* The task user's Start view (ADR-0516): one status line that says what became of a
+   start, and actions large enough to hit with a thumb. */
+.selfstart-app-line { margin: -6px 0 14px; }
+.selfstart-status { max-width: 640px; margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--border); overflow-wrap: anywhere; }
+.selfstart-status p { margin: 0 0 8px; }
+.selfstart-status p:last-child { margin-bottom: 0; }
+.selfstart-status.err { border-color: var(--danger); }
+.selfstart-status.ok { border-color: var(--ok); background: var(--ok-soft); }
+.selfstart-status .btn, .selfstart-actions .btn { min-height: 44px; }
+.selfstart-actions { margin-top: 16px; max-width: 640px; }
+.selfstart-actions .btn { min-width: 44px; }
+.selfstart-app { cursor: default; }
 .tasks-publish .publish-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tasks-publish .publish-hint { margin: 0 0 12px; max-width: 60ch; font-size: 13px; }
 .tasks-publish .chip.ok { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
