@@ -4,6 +4,12 @@
 tenant_id               = "00000000-0000-0000-0000-000000000000"
 expected_initial_domain = "contoso.onmicrosoft.com"
 
+# The tenant is also used for real work: scope the mail, Exchange and SharePoint apps
+# to the test objects (README.md, "Geteilter Tenant"). Needs teamsphone = false and
+# credential_validity_days <= 7.
+# shared_tenant            = true
+# credential_validity_days = 3
+
 # name_prefix = "atlas-test"
 # usage_location = "CH"
 
