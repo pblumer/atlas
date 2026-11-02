@@ -3239,6 +3239,9 @@ function renderBasket() {
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
+          // What a directory field in the form searches through: this release's item.
+          'data-release': rel && rel.id,
+          'data-item': x.id,
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
       : null,
     // What the "i" on a basket row opens. The button was drawn here from the
@@ -3383,12 +3386,13 @@ async function mountConfigForms() {
   mounted.clear();
   if (!hosts.length) return;
 
-  let Form, decisionOptions;
+  let Form, decisionOptions, remote;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
     ({ decisionOptions } = mod);
+    remote = await import('./remote-select.js');
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3404,7 +3408,17 @@ async function mountConfigForms() {
       }
       const schema = schemas.get(formID);
       if (!schema) throw new Error('no schema');
-      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: formID }) });
+      // A directory field searches through the context the server authorizes: the
+      // release's item for an order form, the task for a task's (ADR-0473). A form
+      // with no such context — an action's — gets no search, as before.
+      let transport = null;
+      if (host.dataset.task) transport = remote.taskTransport(host.dataset.task);
+      else if (host.dataset.release && host.dataset.item) {
+        transport = remote.orderFormTransport(host.dataset.release, host.dataset.item);
+      }
+      const opts = { container: host, atlasDecisions: decisionOptions({ formId: formID }) };
+      if (transport) opts.atlasRemote = remote.remoteAdapter({ transport, data: state.config[itemID] || {} });
+      const form = new Form(opts);
       // Handed back what was typed before the last redraw, which is what makes the
       // basket survivable: adding a second product must not empty the first's form.
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
@@ -4066,7 +4080,7 @@ function taskPanel(task) {
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.taskError ? el('p', { class: 'error' }, state.taskError) : null,
     task.formId
-      ? el('div', { 'data-configkey': key, 'data-formid': task.formId },
+      ? el('div', { 'data-configkey': key, 'data-formid': task.formId, 'data-task': task.key },
         el('p', { class: 'note' }, t('cfg.loading')))
       : el('p', { class: 'note' }, t('task.noForm')),
     el('div', { class: 'row', style: 'margin-top:10px' },
@@ -4202,8 +4216,10 @@ function detailsPanel(order, line) {
   if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
-    el('div', { 'data-configkey': key, 'data-formid': line.configForm },
-      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', {
+      'data-configkey': key, 'data-formid': line.configForm,
+      'data-release': order.releaseId, 'data-item': line.itemId,
+    }, el('p', { class: 'note' }, t('cfg.loading'))),
     el('div', { class: 'row', style: 'margin-top:10px' },
       el('button', {
         class: 'primary', disabled: state.busy,
