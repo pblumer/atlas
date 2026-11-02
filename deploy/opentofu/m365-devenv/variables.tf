@@ -249,13 +249,13 @@ variable "atlas_tls" {
 }
 
 variable "atlas_allowed_cidrs" {
-  description = "Source addresses allowed to reach the Atlas server over HTTPS (with atlas_tls = internal) and SSH - your own public address. Required with enable_atlas_server; 0.0.0.0/0 is refused."
+  description = "Source addresses allowed to reach the Atlas server over HTTPS (with atlas_tls = internal) and SSH - your own public IPv4 address (curl -4). Required with enable_atlas_server; IPv6 ranges and 0.0.0.0/0 are refused."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.atlas_allowed_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
-    error_message = "atlas_allowed_cidrs must be CIDR ranges, and 0.0.0.0/0 is not accepted."
+    condition     = alltrue([for c in var.atlas_allowed_cidrs : can(cidrhost(c, 0)) && can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/([1-9]|[12][0-9]|3[0-2])$", c))])
+    error_message = "atlas_allowed_cidrs must be IPv4 CIDR ranges (the public IP addresses are IPv4 only; find yours with curl -4 -s https://ifconfig.me), and a /0 range is not accepted."
   }
 }
 
@@ -323,13 +323,13 @@ variable "ad_netbios_name" {
 }
 
 variable "ad_allowed_cidrs" {
-  description = "Source addresses allowed to reach the domain controller from outside: LDAPS (636) and, if enabled, RDP (3389). Not needed for the Atlas server, which reaches it inside the virtual network; required when enable_ad_dc = true without the server. 0.0.0.0/0 is refused."
+  description = "Source addresses allowed to reach the domain controller from outside: LDAPS (636) and, if enabled, RDP (3389). Not needed for the Atlas server, which reaches it inside the virtual network; required when enable_ad_dc = true without the server. IPv4 only; 0.0.0.0/0 is refused."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.ad_allowed_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
-    error_message = "ad_allowed_cidrs must be CIDR ranges, and 0.0.0.0/0 is not accepted."
+    condition     = alltrue([for c in var.ad_allowed_cidrs : can(cidrhost(c, 0)) && can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/([1-9]|[12][0-9]|3[0-2])$", c))])
+    error_message = "ad_allowed_cidrs must be IPv4 CIDR ranges (the public IP addresses are IPv4 only; find yours with curl -4 -s https://ifconfig.me), and a /0 range is not accepted."
   }
 }
 

@@ -55,8 +55,9 @@ Entra-Workers macht sie zum Test-Team.
 
 ## Voraussetzungen
 
-1. **Ein Microsoft-365-Testtenant**, nie ein produktiver (z. B. aus dem Microsoft 365
-   Developer Program oder ein Testabonnement). OpenTofu kann keinen Tenant anlegen.
+1. **Ein Microsoft-365-Testtenant** (z. B. aus dem Microsoft 365 Developer Program oder ein
+   Testabonnement). OpenTofu kann keinen Tenant anlegen. Ein auch produktiv genutzter
+   Tenant nur mit `shared_tenant = true` (siehe «Geteilter Tenant»).
 2. **Eine Anmeldung mit genügend Rechten** im Testtenant, am einfachsten *Globaler
    Administrator* (Apps anlegen, Administratorzustimmung erteilen, Verzeichnisrollen
    zuweisen, Benutzer und Gruppen anlegen).
@@ -67,7 +68,9 @@ Entra-Workers macht sie zum Test-Team.
 5. **Lizenzen** für Postfächer und Teams der Testpersonen (siehe «Lizenzen»). Ohne Lizenz
    laufen Entra, SharePoint und AD vollständig; Exchange-, Teams- und Mail-Tests brauchen
    Postfächer bzw. Teams-Benutzer.
-6. Die **eigene öffentliche IP-Adresse** für `atlas_allowed_cidrs` (HTTPS und SSH).
+6. Die **eigene öffentliche IPv4-Adresse** für `atlas_allowed_cidrs` (HTTPS und SSH):
+   `curl -4 -s https://ifconfig.me`. Ohne `-4` liefert der Dienst bei IPv6-Anschlüssen eine
+   IPv6-Adresse; die öffentlichen Adressen der VMs sind nur IPv4, IPv6-Bereiche lehnt der Plan ab.
 
 ## Ablauf
 
@@ -338,8 +341,9 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 - **Kurze Laufzeit:** Zertifikate, Secrets und das API-Token laufen nach
   `credential_validity_days` (Vorgabe 14 Tage) ab.
 - **Anwendungsberechtigungen gelten tenantweit** (`Mail.Send` darf als jedes Postfach
-  senden). Die Grenze ist hier allein der Testtenant; deshalb nie gegen einen produktiven
-  Tenant anwenden.
+  senden). Ohne `shared_tenant` ist die Grenze allein der Testtenant; deshalb gegen einen
+  auch produktiv genutzten Tenant nur mit `shared_tenant = true` anwenden, und auch dann
+  bleibt der Entra-Worker tenantweit (siehe «Geteilter Tenant»).
 - **Netz:** SSH und (mit `atlas_tls = "internal"`) HTTPS nur für `atlas_allowed_cidrs`.
   `atlas_tls = "letsencrypt"` öffnet 80 und 443 für das ganze Internet, weil Let's Encrypt
   von nicht veröffentlichten Adressen prüft; die Anmeldung bleibt Pflicht. Ob für
@@ -364,11 +368,17 @@ tofu init -backend=false
 tofu test
 ```
 
+`tofu test` liest eine vorhandene `terraform.tfvars` mit ein. Das Testfile setzt deshalb alle
+Werte, die eine echte Konfiguration üblicherweise setzt, selbst (vor allem
+`license_sku_ids = []`): Provisioner laufen auch mit gemockten Providern, und
+`scripts/assign-licenses.sh` würde sonst mit der Anmeldung von `az` den echten Graph aufrufen.
+Wer neue Variablen mit Wirkung nach aussen ergänzt, setzt sie dort ebenfalls.
+
 ## Bekannte Grenzen
 
 - **Noch nie gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen.**
-  Geprüft sind: Syntax und Schemas (`azuread` 3.10, `azurerm` 4.81, mit Terraform 1.16,
-  da OpenTofu in der Erstellungsumgebung nicht verfügbar war), 12 Offline-Tests, das
+  Geprüft sind: Syntax und Schemas (`azuread` 3.10, `azurerm` 4.81, mit Terraform 1.16),
+  die Offline-Tests (auch mit OpenTofu 1.13), das
   Bootstrap-Skript gegen einen lokalen Atlas-Server. **Nicht** geprüft: `atlas-setup.sh`
   und `ad-setup.ps1` auf echten VMs, die Wartezeiten von Microsoft, die Lizenzzuweisung
   über `az rest` und Cloud-Init mit gzip-komprimierten Daten auf Azure.
@@ -379,4 +389,3 @@ tofu test
 - **Ein Team** legt erst der Entra-Worker an (`create-team`).
 - **Gruppenmitgliedschaften** ignoriert OpenTofu nach dem ersten Anlegen, damit die
   Worker sie ändern dürfen.
-- **`.terraform.lock.hcl`** ist nicht eingecheckt; nach dem ersten `tofu init` versionieren.

@@ -12,7 +12,17 @@ mock_provider "azuread" {
   }
   mock_data "azuread_domains" {
     defaults = {
-      domains = [{ domain_name = "contoso.onmicrosoft.com", initial = true }]
+      # OpenTofu requires every attribute of a nested mock object, not only the ones read.
+      domains = [{
+        domain_name         = "contoso.onmicrosoft.com"
+        initial             = true
+        admin_managed       = true
+        authentication_type = "Managed"
+        default             = false
+        root                = true
+        supported_services  = []
+        verified            = true
+      }]
     }
   }
   mock_data "azuread_service_principal" {
@@ -157,6 +167,17 @@ variables {
   expected_initial_domain = "contoso.onmicrosoft.com"
   azure_subscription_id   = "33333333-0000-0000-0000-000000000000"
   atlas_allowed_cidrs     = ["198.51.100.4/32"]
+
+  # tofu test also reads terraform.tfvars. Pin everything a real configuration sets, so
+  # the tests check the defaults and never reach a real tenant: with license_sku_ids set,
+  # an apply run would start scripts/assign-licenses.sh against Graph despite the mocks.
+  license_sku_ids          = []
+  shared_tenant            = false
+  credential_validity_days = 14
+  workers                  = {}
+  enable_ad_dc             = false
+  ad_allowed_cidrs         = []
+  mail_sender              = ""
 }
 
 run "defaults_build_every_worker_app_and_an_ad_mock" {
@@ -277,6 +298,17 @@ run "ad_without_server_needs_allowed_cidrs" {
   }
 
   expect_failures = [terraform_data.ad_guard]
+}
+
+run "ipv6_and_open_ranges_are_refused" {
+  command = plan
+
+  variables {
+    atlas_allowed_cidrs = ["2a02:1210::/32", "::/0"]
+    ad_allowed_cidrs    = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.atlas_allowed_cidrs, var.ad_allowed_cidrs]
 }
 
 run "server_needs_allowed_cidrs" {
