@@ -20,6 +20,7 @@ package mihistory
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
 )
 
@@ -57,30 +59,58 @@ const (
 	// bodyOpenIncidentRounds bounds the iterations whose incidents a body
 	// detail verifies when it counts open incidents.
 	bodyOpenIncidentRounds = 100
-	defaultCursorTTL       = time.Hour
+	// detailVariableCap and detailDecisionCap bound one iteration detail's
+	// variable changes and decision evaluations.
+	detailVariableCap = 100
+	detailDecisionCap = 20
+	defaultCursorTTL  = time.Hour
 )
+
+// RenderVariable turns a stored variable into the kind and value an operator
+// reads, exactly as the instance's other variable views render it — an
+// enciphered personal value is named as such, never shown as ciphertext. The
+// server supplies its own renderer so there is one definition of that rule.
+type RenderVariable func(v *model.VariableValue) (kind, value string)
 
 // Service serves the MI history routes. Build it with [New].
 type Service struct {
 	view      View
 	key       []byte
 	now       func() time.Time
+	render    RenderVariable
 	cursorTTL time.Duration
 	sem       chan struct{}
 }
 
 // New builds the service with a fresh random cursor key. now is the wall clock
 // cursor expiry is measured against; it never reaches engine state.
-func New(view View, now func() time.Time) (*Service, error) {
+func New(view View, now func() time.Time, render RenderVariable) (*Service, error) {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		return nil, fmt.Errorf("mihistory: cursor key: %w", err)
 	}
-	return newService(view, key, now), nil
+	s := newService(view, key, now)
+	s.render = render
+	return s, nil
 }
 
 func newService(view View, key []byte, now func() time.Time) *Service {
-	return &Service{view: view, key: key, now: now, cursorTTL: defaultCursorTTL, sem: make(chan struct{}, maxConcurrentReads)}
+	return &Service{view: view, key: key, now: now, render: plainVariable, cursorTTL: defaultCursorTTL, sem: make(chan struct{}, maxConcurrentReads)}
+}
+
+// plainVariable is the renderer a test service uses when none is supplied.
+func plainVariable(v *model.VariableValue) (string, string) {
+	switch v.Kind {
+	case model.VarBool:
+		return "boolean", strconv.FormatBool(v.Bool)
+	case model.VarNumber:
+		return "number", v.Text
+	case model.VarString:
+		return "string", v.Text
+	case model.VarJSON:
+		return "json", v.Text
+	}
+	return "null", "null"
 }
 
 // BodyView is one multi-instance body execution.
@@ -140,11 +170,15 @@ type IncidentView struct {
 
 // BodiesResponse answers GET /api/v1/instances/{key}/multi-instances.
 type BodiesResponse struct {
-	InstanceKey        uint64     `json:"instanceKey"`
-	ParentIterationKey uint64     `json:"parentIterationKey,omitempty"`
-	HighWaterPosition  uint64     `json:"highWaterPosition"`
-	Bodies             []BodyView `json:"bodies"`
-	NextCursor         string     `json:"nextCursor,omitempty"`
+	InstanceKey uint64 `json:"instanceKey"`
+	// ProcessDefinitionKey and InstanceState describe the instance itself, so a
+	// client can draw its diagram and state without the full timeline.
+	ProcessDefinitionKey uint64     `json:"processDefinitionKey"`
+	InstanceState        string     `json:"instanceState"`
+	ParentIterationKey   uint64     `json:"parentIterationKey,omitempty"`
+	HighWaterPosition    uint64     `json:"highWaterPosition"`
+	Bodies               []BodyView `json:"bodies"`
+	NextCursor           string     `json:"nextCursor,omitempty"`
 }
 
 // BodyResponse answers GET /api/v1/instances/{key}/multi-instances/{bodyKey}.
@@ -174,6 +208,56 @@ type IterationResponse struct {
 	IncidentsTruncated bool           `json:"incidentsTruncated"`
 	NestedBodies       []BodyView     `json:"nestedBodies"`
 	NestedTruncated    bool           `json:"nestedBodiesTruncated"`
+	// Variables are the recorded changes of the iteration's own scope, oldest
+	// first: its loopCounter and input item as the engine bound them, and what it
+	// wrote locally. A contribution to the body's output collection is recorded
+	// on the body's collection, not per iteration, and does not appear here.
+	Variables          []VariableChange `json:"variables"`
+	VariablesTruncated bool             `json:"variablesTruncated"`
+	// Decisions are the DMN evaluations attributed to the iteration, with the
+	// inputs and outputs the worker froze into the log — never re-evaluated.
+	// DecisionsAvailable is false when this store's history predates decision
+	// attribution: then an empty list means "not known", not "none".
+	Decisions          []DecisionView `json:"decisions"`
+	DecisionsAvailable bool           `json:"decisionsAvailable"`
+	DecisionsTruncated bool           `json:"decisionsTruncated"`
+}
+
+// VariableChange is one recorded change of a variable in an iteration's scope.
+type VariableChange struct {
+	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	Value       string `json:"value"`
+	Position    uint64 `json:"position"`
+	At          int64  `json:"at"`
+	ProducerKey uint64 `json:"producerKey,omitempty"`
+}
+
+// DecisionView is one decision evaluation attributed to an iteration.
+type DecisionView struct {
+	DecisionID         string          `json:"decisionId"`
+	ElementInstanceKey uint64          `json:"elementInstanceKey"`
+	Position           uint64          `json:"position"`
+	At                 int64           `json:"at"`
+	DecisionKey        uint64          `json:"decisionKey,omitempty"`
+	Inputs             json.RawMessage `json:"inputs"`
+	Outputs            json.RawMessage `json:"outputs"`
+	// Trace is the rule trace, only with ?technical=true: it is detail for the
+	// person who asks for it, not the default reading.
+	Trace json.RawMessage `json:"trace,omitempty"`
+}
+
+// rawJSON passes a stored canonical JSON text through, and quotes anything that
+// is not valid JSON so the response stays well-formed.
+func rawJSON(text string) json.RawMessage {
+	if text == "" {
+		return json.RawMessage("null")
+	}
+	if json.Valid([]byte(text)) {
+		return json.RawMessage(text)
+	}
+	quoted, _ := json.Marshal(text)
+	return quoted
 }
 
 // apiError is a request the service answers with a non-2xx status. The body
@@ -276,14 +360,19 @@ func queryLimit(r *http.Request) (int, error) {
 // requireInstance answers not-found for an instance that does not exist or
 // whose history was purged; purge also removes its MI index ranges.
 func requireInstance(rv *state.ReadView, key uint64) error {
-	_, ok, err := rv.ProcessInstance(key)
+	_, err := readInstance(rv, key)
+	return err
+}
+
+func readInstance(rv *state.ReadView, key uint64) (*model.ProcessInstanceValue, error) {
+	pi, ok, err := rv.ProcessInstance(key)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !ok {
-		return errInstanceNotFound
+		return nil, errInstanceNotFound
 	}
-	return nil
+	return pi, nil
 }
 
 func bodyView(e state.MIHistoryEntry, defs Definitions) BodyView {
@@ -395,9 +484,11 @@ func (s *Service) bodies(r *http.Request) (*BodiesResponse, error) {
 	}
 	resp := &BodiesResponse{InstanceKey: key, ParentIterationKey: parent, Bodies: []BodyView{}}
 	err = s.read(r, func(rv *state.ReadView, defs Definitions) error {
-		if err := requireInstance(rv, key); err != nil {
+		pi, err := readInstance(rv, key)
+		if err != nil {
 			return err
 		}
+		resp.ProcessDefinitionKey, resp.InstanceState = pi.ProcessDefKey, pi.State.String()
 		q := state.MIBodyPageQuery{ParentIteration: parent, Limit: limit}
 		if cur != nil {
 			q.HighWater = cur.highWater
@@ -671,7 +762,9 @@ func (s *Service) iteration(r *http.Request) (*IterationResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp := &IterationResponse{InstanceKey: key, Incidents: []IncidentView{}, NestedBodies: []BodyView{}}
+	technical := r.URL.Query().Get("technical") == "true"
+	resp := &IterationResponse{InstanceKey: key, Incidents: []IncidentView{}, NestedBodies: []BodyView{},
+		Variables: []VariableChange{}, Decisions: []DecisionView{}}
 	err = s.read(r, func(rv *state.ReadView, defs Definitions) error {
 		body, err := loadBody(rv, key, bodyKey)
 		if err != nil {
@@ -708,6 +801,33 @@ func (s *Service) iteration(r *http.Request) (*IterationResponse, error) {
 			return nil
 		})
 		resp.NestedTruncated = next != nil
+		if err != nil {
+			return err
+		}
+		if resp.VariablesTruncated, err = rv.VariableSnapshotPage(iterKey, detailVariableCap, func(at int64, pos uint64, v *model.VariableValue) error {
+			kind, value := s.render(v)
+			resp.Variables = append(resp.Variables, VariableChange{
+				Name: v.Name, Kind: kind, Value: value, Position: pos, At: at, ProducerKey: v.ProducerKey,
+			})
+			return nil
+		}); err != nil {
+			return err
+		}
+		resp.DecisionsAvailable = true
+		resp.DecisionsTruncated, err = rv.MIDecisions(key, iterKey, detailDecisionCap, func(at int64, pos uint64, d *model.DecisionEvaluationValue) error {
+			dv := DecisionView{
+				DecisionID: d.DecisionId, ElementInstanceKey: d.ElementInstanceKey, Position: pos, At: at,
+				DecisionKey: d.DecisionKey, Inputs: rawJSON(d.InputsJSON), Outputs: rawJSON(d.OutputsJSON),
+			}
+			if technical && d.TraceJSON != "" {
+				dv.Trace = rawJSON(d.TraceJSON)
+			}
+			resp.Decisions = append(resp.Decisions, dv)
+			return nil
+		})
+		if errors.Is(err, state.ErrMIDecisionIndexUnavailable) {
+			resp.DecisionsAvailable, err = false, nil
+		}
 		return err
 	})
 	return resp, err

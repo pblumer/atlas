@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/pblumer/atlas/model"
 )
 
 // MILoopCounterVariable is the variable a multi-instance iteration's 1-based
@@ -584,3 +585,78 @@ func (q queries) IncidentOpen(elKey uint64) (bool, error) {
 }
 
 var errMIPageComplete = errors.New("mi page complete")
+
+// MIDecisions visits up to limit decision evaluations attributed to one MI
+// iteration (or body), in evaluation order, and reports whether more exist.
+// Each is a point read of the instance's decision history row the attribution
+// names; nothing else of the instance's decisions is read.
+func (q queries) MIDecisions(piKey, ownerKey uint64, limit int, fn func(ts int64, pos uint64, v *model.DecisionEvaluationValue) error) (bool, error) {
+	if err := validateMILimit(limit); err != nil {
+		return false, err
+	}
+	if err := q.requireMIHistoryIndex(); err != nil {
+		return false, err
+	}
+	ready, err := q.MIDecisionIndexReady()
+	if err != nil {
+		return false, err
+	}
+	if !ready {
+		return false, ErrMIDecisionIndexUnavailable
+	}
+	prefix := appendBE64(appendBE64([]byte{byte(cfMIDecision)}, piKey), ownerKey)
+	count := 0
+	err = q.scanPrefix(prefix, func(k, _ []byte) error {
+		if count == limit {
+			return errMIPageComplete
+		}
+		if len(k) != len(prefix)+16 {
+			return fmt.Errorf("state: corrupt MI decision key (%d bytes)", len(k))
+		}
+		ts := int64(binary.BigEndian.Uint64(k[len(prefix):]) ^ (1 << 63))
+		pos := binary.BigEndian.Uint64(k[len(prefix)+8:])
+		raw, ok, err := getCopy(q.r, keyDecisionEvaluation(piKey, ts, pos))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("state: MI decision reference points to a missing evaluation")
+		}
+		v, err := model.DecodeValue(model.VTDecisionEvaluation, raw)
+		if err != nil {
+			return err
+		}
+		count++
+		return fn(ts, pos, v.(*model.DecisionEvaluationValue))
+	})
+	if errors.Is(err, errMIPageComplete) {
+		return true, nil
+	}
+	return false, err
+}
+
+// VariableSnapshotPage visits up to limit retained variable changes of one scope
+// in change order (ADR-0048) and reports whether more exist. A multi-instance
+// iteration's own scope is a scope, so this is how one iteration's inputs and
+// local outputs are read without the instance's other variables.
+func (q queries) VariableSnapshotPage(scopeKey uint64, limit int, fn func(ts int64, pos uint64, v *model.VariableValue) error) (bool, error) {
+	if err := validateMILimit(limit); err != nil {
+		return false, err
+	}
+	count := 0
+	err := q.scanPrefix(variableSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+		if count == limit {
+			return errMIPageComplete
+		}
+		v, err := model.DecodeValue(model.VTVariable, raw)
+		if err != nil {
+			return err
+		}
+		count++
+		return fn(timestampFromVarSnapKey(k), positionFromVarSnapKey(k), v.(*model.VariableValue))
+	})
+	if errors.Is(err, errMIPageComplete) {
+		return true, nil
+	}
+	return false, err
+}

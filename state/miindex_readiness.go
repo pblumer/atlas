@@ -23,6 +23,32 @@ const metaMIHistoryIndex = "mi_history_index_v2"
 
 var miHistoryIndexVersion = [...]byte{2}
 
+// metaMIDecisionIndex marks the decision attribution family (cfMIDecision) as
+// complete. It is separate from the v2 marker on purpose: a store that recorded
+// MI history before decisions were attributed keeps its iteration listing, and
+// only the per-iteration decision list reports itself unavailable.
+const metaMIDecisionIndex = "mi_history_decisions_v1"
+
+var miDecisionIndexVersion = [...]byte{1}
+
+// ErrMIDecisionIndexUnavailable means the decision attribution of the MI history
+// is not proven complete for this store; a reader must not present an empty
+// decision list for an iteration as "no decisions".
+var ErrMIDecisionIndexUnavailable = errors.New("state: multi-instance decision attribution unavailable for history recorded before it existed")
+
+// MIDecisionIndexReady reports whether decisions are attributed to MI iterations
+// for the whole retained history of this store.
+func (q queries) MIDecisionIndexReady() (bool, error) {
+	value, ok, err := getCopy(q.r, keyMeta(metaMIDecisionIndex))
+	if err != nil || !ok {
+		return false, err
+	}
+	if !bytes.Equal(value, miDecisionIndexVersion[:]) {
+		return false, fmt.Errorf("state: invalid MI decision index version marker %x", value)
+	}
+	return true, nil
+}
+
 // MIHistoryIndexReady reports whether this store or read snapshot has a
 // verified, versioned MI projection. It intentionally performs one metadata
 // point read rather than walking the history or guessing from the presence of
@@ -62,7 +88,11 @@ func (q queries) requireMIHistoryIndex() error {
 // The probe uses at most one Seek per family and never scans historical rows.
 func (s *Store) initializeMIHistoryIndexReadiness() error {
 	ready, err := s.MIHistoryIndexReady()
-	if err != nil || ready {
+	if err != nil {
+		return err
+	}
+	decisions, err := s.MIDecisionIndexReady()
+	if err != nil || (ready && decisions) {
 		return err
 	}
 	position, err := s.LastAppliedPosition()
@@ -107,6 +137,19 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 
 	// A durable marker written at initialisation distinguishes a genuinely
 	// empty instance history from a partially upgraded running instance.
-	// It does not alter the event stream or recovery's apply order.
-	return s.db.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], pebble.Sync)
+	// It does not alter the event stream or recovery's apply order. Each
+	// marker is written only for the part of the index it names.
+	b := s.db.NewBatch()
+	defer b.Close()
+	if !ready {
+		if err := b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil); err != nil {
+			return err
+		}
+	}
+	if !decisions {
+		if err := b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil); err != nil {
+			return err
+		}
+	}
+	return b.Commit(pebble.Sync)
 }

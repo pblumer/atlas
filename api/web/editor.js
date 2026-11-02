@@ -4,6 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { groupReplayHistory } from "./replay-history.js";
+import { loadMIBodies, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -14570,6 +14571,118 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // offering a reference as a link; left out, every link is offered — the answer the
 // Console gives when nothing is enforced, and the server refuses a page the caller
 // may not open either way.
+// needsBoundedHistory decides, from one page of the bounded history, whether the
+// full replay timeline would be too large to load (ADR-0517). It errs towards the
+// bounded view: more top-level bodies than one page also counts, because their sum
+// is then unknown. A probe that failed or found the index unavailable keeps the
+// classic replay, which is what every instance used before.
+function needsBoundedHistory(probe) {
+  if (!probe || !probe.available) return false;
+  const total = probe.bodies.reduce((n, b) => n + (Number(b.iterations) || 0), 0);
+  return largestBody(probe.bodies) > BOUNDED_HISTORY_THRESHOLD ||
+    total > 4 * BOUNDED_HISTORY_THRESHOLD || !!probe.nextCursor;
+}
+
+// mountBoundedReplay is the replay of an instance too large for the timeline: the
+// diagram, the instance's multi-instance executions as collapsed groups with the
+// server's counts, and the Multi-Instance Explorer. Nothing here grows with the
+// iteration count — the browser holds one page of bodies and one page of
+// iterations at a time.
+async function mountBoundedReplay(root, { api, key, lib, gen, probe }) {
+  const largest = largestBody(probe.bodies);
+  root.querySelector(".replay-bar").hidden = true;
+  root.querySelector("#rp-migrate").hidden = true;
+  root.querySelector("#rp-live").href = `#/operations/p/${probe.processDefinitionKey}/i/${key}`;
+  root.querySelector("#rp-instances").href = `#/operations/p/${probe.processDefinitionKey}`;
+  const stateEl = root.querySelector("#rp-state");
+  stateEl.textContent = probe.instanceState || "—";
+  const historyEl = root.querySelector("#history-list");
+  const detail = root.querySelector(".ops-detail");
+  root.querySelector("#rp-tabs").hidden = true;
+  detail.querySelectorAll(".ops-tab-body").forEach((el) => { el.hidden = true; });
+  const pane = document.createElement("div");
+  pane.className = "mi-explorer-host";
+  detail.appendChild(pane);
+  const noteHTML = `<div class="mi-bounded-note"><h3>${esc(tr("ops.mi.bounded.title"))}</h3>
+      <p>${esc(tr("ops.mi.bounded.note", { count: fmtCount(largest) }))}</p>
+      <p class="muted">${esc(tr("ops.mi.bounded.other"))}</p></div>`;
+  pane.innerHTML = noteHTML;
+
+  let viewer = null;
+  try {
+    viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+    current = viewer;
+    const xml = await api("GET", `/api/v1/processes/${probe.processDefinitionKey}/xml`);
+    if (gen !== generation) return;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (gen !== generation) return;
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>Could not render this instance's diagram.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
+    viewer = null;
+  }
+  if (gen !== generation) return;
+
+  let bodies = probe.bodies.slice();
+  let next = probe.nextCursor || "";
+  let explorer = null;
+  let marked = "";
+  const mark = (elementId) => {
+    if (!viewer) return;
+    const canvas = viewer.get("canvas");
+    if (marked) { try { canvas.removeMarker(marked, "atlas-selected"); } catch { /* gone */ } }
+    marked = "";
+    if (elementId && viewer.get("elementRegistry").get(elementId)) {
+      canvas.addMarker(elementId, "atlas-selected");
+      marked = elementId;
+    }
+  };
+  function open(body) {
+    if (explorer) explorer.destroy();
+    mark(body.elementId);
+    explorer = mountMIExplorer(pane, {
+      api, instanceKey: key, body,
+      onOpenBody: (nested) => open(nested),
+      onClose: () => { explorer.destroy(); explorer = null; mark(""); pane.innerHTML = noteHTML; },
+    });
+  }
+  function draw() {
+    const rows = bodies.map((b) => `
+      <div class="ops-hrow mi-group mi-bounded" data-body-key="${esc(b.bodyElementInstanceKey)}">
+        <span class="ops-hicon ${b.state === "active" ? "live" : "done"}">${b.state === "active" ? "&#9679;" : "&#10003;"}</span>
+        <span class="ops-hname">${esc(b.elementId || b.bodyElementInstanceKey)}</span>
+        <span class="ops-mi-count">${esc(tr("ops.mi.count", { count: fmtCount(b.iterations) }))}</span>
+        ${bodySummaryHTML(b)}
+        <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(b.bodyElementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>
+      </div>`).join("");
+    historyEl.innerHTML = `<p class="ops-empty mi-bounded-hint">${esc(tr("ops.mi.bounded.other"))}</p>${
+      rows || `<p class="ops-empty">${esc(tr("ops.mi.bounded.none"))}</p>`}${
+      next ? `<button type="button" class="btn neutral small mi-bodies-more">${esc(tr("ops.mi.bounded.more"))}</button>` : ""}`;
+    historyEl.querySelectorAll(".ops-mi-explore").forEach((btn) => btn.addEventListener("click", () => {
+      const b = bodies.find((x) => String(x.bodyElementInstanceKey) === btn.dataset.bodyKey);
+      if (b) open(b);
+    }));
+    const more = historyEl.querySelector(".mi-bodies-more");
+    if (more) more.addEventListener("click", async () => {
+      more.disabled = true;
+      try {
+        const page = await loadMIBodies(api, key, { cursor: next });
+        if (gen !== generation) return;
+        bodies = bodies.concat(page.bodies);
+        next = page.nextCursor || "";
+      } catch (e) {
+        more.disabled = false;
+        more.title = e.message;
+        return;
+      }
+      draw();
+    });
+  }
+  draw();
+}
+
 export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -14654,6 +14767,18 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     return;
   }
   if (gen !== generation) return; // a newer navigation took over while assets loaded
+
+  // Ask the bounded multi-instance history first (ADR-0517): it costs one page
+  // whatever the instance's size, and it says whether the full timeline is safe to
+  // load at all. The legacy timeline grows with the square of the iteration count,
+  // so an instance with a large loop is shown through the bounded view instead.
+  // A failure here is not fatal: the replay falls back to the timeline as before.
+  let miProbe = null;
+  try { miProbe = await loadMIBodies(api, key); } catch { miProbe = null; }
+  if (gen !== generation) return;
+  if (needsBoundedHistory(miProbe)) {
+    return mountBoundedReplay(root, { api, key, lib, gen, probe: miProbe });
+  }
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -14756,6 +14881,45 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let frames = [];   // complete logical token states, oldest first
   const expandedHistory = new Set(); // collapsed by default, scoped to this replay view
   let historyParents = new Map();
+  // The bounded history's bodies by element-instance key: which grouped rows can
+  // open the Multi-Instance Explorer. Empty when the index is unavailable.
+  const miBodyByKey = new Map(
+    (miProbe && miProbe.available ? miProbe.bodies : []).map((b) => [String(b.bodyElementInstanceKey), b]));
+  let explorer = null;
+  // openExplorer shows one body's iterations in the detail panel, in place of the
+  // tabs, until it is closed. It reads pages from the server; the timeline already
+  // loaded is not consulted, so the two can never disagree about what is shown.
+  function openExplorer(body) {
+    const host = root.querySelector(".ops-detail");
+    const tabs = root.querySelector("#rp-tabs");
+    let pane = host.querySelector(".mi-explorer-host");
+    if (!pane) {
+      pane = document.createElement("div");
+      pane.className = "mi-explorer-host";
+      host.appendChild(pane);
+    }
+    if (explorer) explorer.destroy();
+    tabs.hidden = true;
+    host.querySelectorAll(".ops-tab-body").forEach((el) => { el.dataset.miHidden = el.hidden ? "1" : ""; el.hidden = true; });
+    explorer = mountMIExplorer(pane, {
+      api, instanceKey: key, body,
+      onSelect: (d) => {
+        const at = steps.findIndex((st) => String(st.elementInstanceKey) === String(d.iteration.elementInstanceKey));
+        if (at >= 0) {
+          expandedHistory.add(groupReplayHistory(steps).parents.get(at));
+          renderHistory();
+          selectElement(steps[at].elementId, steps[at].elementInstanceKey);
+        }
+      },
+      onOpenBody: (nested) => openExplorer(nested),
+      onClose: () => {
+        explorer.destroy(); explorer = null;
+        pane.remove();
+        tabs.hidden = false;
+        host.querySelectorAll(".ops-tab-body").forEach((el) => { el.hidden = el.dataset.miHidden === "1"; });
+      },
+    });
+  }
   // Whether this instance's history records which element wrote each variable
   // (ADR-0219). False for an instance that ran before it
   // did — there the "out" side falls back to the old inference, and says so.
@@ -16536,6 +16700,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const button = isGroup
         ? `<button type="button" class="ops-mi-toggle" data-body="${i}" aria-expanded="${opened}" aria-label="${esc(toggleLabel)}" title="${esc(toggleLabel)}">${opened ? "&#9662;" : "&#9656;"}</button>`
         : "";
+      // The explorer pages this body's iterations from the bounded history, so it
+      // is offered wherever the server has the body indexed (ADR-0517).
+      const explore = isGroup && miBodyByKey.has(String(s.elementInstanceKey))
+        ? ` <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(s.elementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>`
+        : "";
       const summary = isGroup
         ? ` <span class="ops-mi-count" title="${esc(tr("ops.mi.summary", {
             completed: children.filter((idx) => steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
@@ -16547,7 +16716,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
         ${button}
         <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}
+        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}${explore}
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");
@@ -16576,6 +16745,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
+    }));
+    historyEl.querySelectorAll(".ops-mi-explore").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation(); // opening the explorer never moves the replay
+      const body = miBodyByKey.get(button.dataset.bodyKey);
+      if (body) openExplorer(body);
     }));
     historyEl.querySelectorAll(".ops-mi-toggle").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation(); // toggling a group never changes the replay position

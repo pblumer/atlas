@@ -730,6 +730,22 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if err := proc.RecoverFrom(checkpoint.Dir(dataDir)); err != nil {
 		return err
 	}
+	// A store that recorded history before the multi-instance history index existed
+	// has it rebuilt here, before the processor accepts commands: the whole retained
+	// log is replayed into a shadow store and the index swapped in (ADR-0517). It
+	// delays this one startup by the replay; a log that cannot prove the index (it
+	// was compacted) leaves the bounded MI history unavailable, which the API says.
+	// A failed rebuild does not stop the server: everything else is unaffected.
+	if res, err := proc.RebuildMIHistory(filepath.Join(dataDir, "mi-history-rebuild")); err != nil {
+		logging.Warn(logging.MIHistoryUnavailable, "rebuilding the multi-instance history index failed; its bounded routes stay unavailable",
+			slog.String("error", err.Error()))
+	} else if res.Rebuilt {
+		logging.Info(logging.MIHistoryRebuilt, "rebuilt the multi-instance history index from the log",
+			slog.Int("replayed", res.Replayed), slog.Int("copied", res.Copied), slog.Float64("seconds", res.Seconds))
+	} else if needed, _ := store.MIHistoryRebuildNeeded(); needed {
+		logging.Info(logging.MIHistoryUnavailable, "the multi-instance history index stays unavailable",
+			slog.String("reason", res.Reason))
+	}
 
 	// This binary links the database drivers (through the worker package), so it can
 	// hand the server a way to check a SQL worker's connection string. The api

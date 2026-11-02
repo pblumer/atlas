@@ -117,6 +117,12 @@ var (
 	// later can see whose word it was taken on (ADR-0448).
 	ServerTrustedProxies = newEvent("server.trusted_proxies")
 	DataDirOpened        = newEvent("server.data_dir_opened")
+	// MIHistoryRebuilt is the multi-instance history index of a store that
+	// predates it, rebuilt at startup by replaying the whole log (ADR-0517);
+	// MIHistoryUnavailable is the same index left unavailable, with the reason
+	// (a compacted log, a log that ends early, or a failed rebuild).
+	MIHistoryRebuilt     = newEvent("server.mi_history_rebuilt")
+	MIHistoryUnavailable = newEvent("server.mi_history_unavailable")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is

@@ -197,10 +197,48 @@ the legacy `/timeline` grows with the square of the iteration count: 139 MB at
 allocations per iteration (one additional point read for the loopCounter), time
 within run-to-run noise; `BenchmarkInstanceLifecycle` unchanged at 221 allocations.
 
-**Still not built:** a verified historical rebuild for legacy (pre-v2) stores —
-they stay `history_unavailable`; the bounded instance overview that replaces the
-full timeline in Operations and the Multi-Instance Explorer UI; OHS3's scoped
-detail replay. A historical reconstruction must use durable event payloads,
+**OHS2 increment 4 — Multi-Instance Explorer (2026-11-02).** The Operations
+replay asks the bounded API first. When an execution has more than 500
+iterations (or the top-level listing does not fit one page), it does not load
+the legacy timeline: it shows the diagram, the executions as collapsed groups
+with the server's counters and the Multi-Instance Explorer (`api/web/mi-explorer.js`):
+one page of 100 iterations, jump to an iteration number, state and incident
+filters, keyboard navigation, loading/empty/error/retry states and an
+explanation for an unavailable index. Smaller instances keep the classic replay
+and gain *Explore iterations* on the grouped row. The bodies listing now also
+carries the instance's definition key and state, so the bounded view needs no
+timeline. Playwright specs `e2e/mi-explorer.spec.mjs` and `e2e/mi-history.spec.mjs`
+assert that the bounded view never requests `/timeline` and never holds more
+than one page of rows.
+
+**OHS3 increment 1 — one iteration's recorded facts (2026-11-02).** The
+iteration detail route also returns the iteration's own scope variable changes
+(a bounded prefix read of the existing per-scope snapshot history, ADR-0048,
+rendered by the server's one variable renderer, so a personal value stays
+enciphered) and the DMN evaluations attributed to it. `DecisionEvaluated` is now
+also attributed in `applyToState` to the innermost MI iteration (family
+`cfMIDecision`, a reference to the decision history row, never a copy); the
+inputs and outputs are what the worker froze into the log and are not
+re-evaluated. Decision attribution has its **own** readiness marker
+(`mi_history_decisions_v1`): a store that recorded MI history before it existed
+keeps its iteration listing, and its iteration details say
+`decisionsAvailable: false` rather than "no decisions". Rule traces are returned
+only with `technical=true`. Contributions to the body's output collection are
+recorded on the body's collection (ADR-0296), not per iteration, and are not
+shown as iteration outputs.
+
+**OHS2-A — rebuilding older stores (2026-11-02).** A store whose history
+predates the index is rebuilt at startup from the retained log, as decided in
+[ADR-draft-mi-history-legacy-rebuild](draft-mi-history-legacy-rebuild.md):
+shadow replay through the unchanged `applyToState`, then a resumable swap of the
+MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
+`history_unavailable`.
+
+**Still not built:** per-instance readiness for compacted logs; a bounded outline of the *other* steps of a
+large instance (the bounded view shows only its multi-instance executions);
+the step-by-step replay window of one iteration on the diagram (its inner
+elements' step frames for subprocess iterations); job and user-task history per
+iteration. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
 especially for repeated/nested MI bodies and migrations. A history with

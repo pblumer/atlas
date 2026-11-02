@@ -76,6 +76,7 @@ const (
 	cfMIIncidentOpen         columnFamily = 0x40 // miIncOpen:<piKey>:<incidentElKey> → ownerElKey(8) raisedPosition(8) (ADR-0517 v2)
 	cfMIBodyByParent         columnFamily = 0x41 // miBodyParent:<piKey>:<parentRoundElKey>:<activationPosition>:<bodyElKey> → empty (ADR-0517 v2)
 	cfMIBodyCounter          columnFamily = 0x42 // miBodyCount:<piKey>:<bodyElKey>:<kind> → int64 merge (ADR-0517 v2)
+	cfMIDecision             columnFamily = 0x43 // miDec:<piKey>:<ownerElKey>:<ts>:<pos> → empty; names a decEval row (ADR-0517, OHS3)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
