@@ -72,6 +72,11 @@ jobs:
             exit 0
           fi
           go run ./cmd/atlas hub build _site/hub
+          # An announced key rotation travels beside the index it concerns. Its own
+          # signature, by the current key, is what operators check, not this host.
+          if [ -f examples/hub/key-rotation.json ]; then
+            cp examples/hub/key-rotation.json examples/hub/key-rotation.json.sig _site/hub/
+          fi
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/api/apppkg"
@@ -28,6 +30,9 @@ import (
 //
 //	atlas hub keygen --out FILE        a new registry signing key; prints its public half
 //	atlas hub fingerprint --key-file F which public key a key file (a backup) belongs to
+//	atlas hub announce --key-file F --new-public-key K
+//	                                   a key rotation statement, signed with the current key
+//	atlas hub verify-announcement      check a rotation statement against the pinned key(s)
 //	atlas hub lock                     record a new version for every bundle that changed
 //	atlas hub build --key-file F DIR   write index.json, index.json.sig and packages/ to DIR
 //
@@ -105,19 +110,23 @@ type hubManifestDecided struct {
 
 func runHub(args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("name a step: atlas hub keygen|fingerprint|lock|build [flags]")
+		return errors.New("name a step: atlas hub keygen|fingerprint|announce|verify-announcement|lock|build [flags]")
 	}
 	switch args[0] {
 	case "keygen":
 		return runHubKeygen(args[1:], out)
 	case "fingerprint":
 		return runHubFingerprint(args[1:], out)
+	case "announce":
+		return runHubAnnounce(args[1:], out)
+	case "verify-announcement":
+		return runHubVerifyAnnouncement(args[1:], out)
 	case "lock":
 		return runHubLock(args[1:], out)
 	case "build":
 		return runHubBuild(args[1:], out)
 	default:
-		return fmt.Errorf("unknown step %q: atlas hub keygen|fingerprint|lock|build [flags]", args[0])
+		return fmt.Errorf("unknown step %q: atlas hub keygen|fingerprint|announce|verify-announcement|lock|build [flags]", args[0])
 	}
 }
 
@@ -186,6 +195,121 @@ func runHubFingerprint(args []string, out io.Writer) error {
 	default:
 		return fmt.Errorf("does NOT match the publicKey %s records (%s)", *releases, lock.PublicKey)
 	}
+}
+
+// The fixed place a key rotation statement is published at, in the repository:
+// behind the same review as releases.json, and copied to the Pages site beside
+// the index. Operators accept a statement from here, not one that was mailed.
+var (
+	hubRotationFile = filepath.Join("examples", "hub", "key-rotation.json")
+	hubRotationDays = 14
+)
+
+// runHubAnnounce writes the statement that announces the registry's next
+// signing key, signed with the current one (ADR-0499 amendment 2026-11-02 c).
+// The current key must be the one releases.json records, so the statement is
+// verifiable by every installation that pins it.
+func runHubAnnounce(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("hub announce", flag.ContinueOnError)
+	keyFile := fs.String("key-file", "", "the CURRENT private signing key (or ATLAS_HUB_SIGNING_KEY)")
+	newKey := fs.String("new-public-key", "", "the successor's public key, as atlas hub keygen printed it")
+	days := fs.Int("days", hubRotationDays, "days between today and the earliest switch to the new key")
+	releases := fs.String("releases", filepath.Join("examples", "hub", "releases.json"), "the release lock whose publicKey is the current key")
+	outFile := fs.String("out", hubRotationFile, "where the statement is written; its signature goes beside it with .sig")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("atlas hub announce takes no arguments")
+	}
+	current, err := hubSigningKey(*keyFile)
+	if err != nil {
+		return err
+	}
+	lock, err := readHubReleases(*releases)
+	if err != nil {
+		return err
+	}
+	currentPublic := current.Public().(ed25519.PublicKey)
+	if lock.PublicKey != blueprintregistry.EncodePublicKey(currentPublic) {
+		return fmt.Errorf("the signing key is not the publicKey %s records; a rotation is announced with the current key", *releases)
+	}
+	next, err := parsePublicKey(*newKey)
+	if err != nil {
+		return fmt.Errorf("--new-public-key: %w", err)
+	}
+	now := time.Now().UTC()
+	stmt := blueprintregistry.NewKeyRotation(lock.RegistryID, currentPublic, next, now, now.AddDate(0, 0, *days))
+	raw, sig, err := blueprintregistry.SignKeyRotation(stmt, current)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(*outFile, raw, 0o644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(*outFile+".sig", sig, 0o644); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "rotation from %s to %s announced, switch not before %s\nwrote %s and %s.sig — commit both to main; operators verify them with atlas hub verify-announcement\n",
+		stmt.OldFingerprint, stmt.NewFingerprint, stmt.SwitchNotBefore, *outFile, *outFile)
+	return nil
+}
+
+// runHubVerifyAnnouncement is the operator's check: is this statement signed by
+// a key this installation already pins, and which key does it announce? It
+// prints the variable to set for the overlap, never anything secret.
+func runHubVerifyAnnouncement(args []string, out io.Writer) error {
+	fs := flag.NewFlagSet("hub verify-announcement", flag.ContinueOnError)
+	pinned := fs.String("pinned", os.Getenv("ATLAS_BLUEPRINT_REGISTRY_KEY"), "the key(s) this installation pins, as in ATLAS_BLUEPRINT_REGISTRY_KEY (the default)")
+	statement := fs.String("statement", hubRotationFile, "the rotation statement; its signature is the same path with .sig")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("atlas hub verify-announcement takes no arguments")
+	}
+	if strings.TrimSpace(*pinned) == "" {
+		return errors.New("name the pinned key(s): --pinned, or ATLAS_BLUEPRINT_REGISTRY_KEY")
+	}
+	var keys []ed25519.PublicKey
+	for _, part := range strings.Split(*pinned, ",") {
+		k, err := parsePublicKey(part)
+		if err != nil {
+			return fmt.Errorf("--pinned: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	raw, err := os.ReadFile(*statement)
+	if err != nil {
+		return err
+	}
+	sig, err := os.ReadFile(*statement + ".sig")
+	if err != nil {
+		return err
+	}
+	r, err := blueprintregistry.VerifyKeyRotation(raw, []byte(strings.TrimSpace(string(sig))), keys)
+	if err != nil {
+		return fmt.Errorf("NOT a valid announcement — do not pin its key: %w", err)
+	}
+	old := ""
+	for _, k := range keys {
+		if blueprintregistry.KeyFingerprint(k) == r.OldFingerprint {
+			old = blueprintregistry.EncodePublicKey(k)
+		}
+	}
+	fmt.Fprintf(out, "valid announcement for registry %s, signed by the pinned key %s\n", r.RegistryID, r.OldFingerprint)
+	fmt.Fprintf(out, "new key: %s\nnew fingerprint: %s\nannounced %s, switch not before %s\n", r.NewPublicKey, r.NewFingerprint, r.Announced, r.SwitchNotBefore)
+	fmt.Fprintf(out, "pin both until the switch is done:\n  ATLAS_BLUEPRINT_REGISTRY_KEY=%s,%s\n", old, r.NewPublicKey)
+	return nil
+}
+
+// parsePublicKey reads one base64 32-byte Ed25519 public key.
+func parsePublicKey(text string) (ed25519.PublicKey, error) {
+	raw, err := base64.StdEncoding.Strict().DecodeString(strings.TrimSpace(text))
+	if err != nil || len(raw) != ed25519.PublicKeySize {
+		return nil, errors.New("not a base64 32-byte Ed25519 public key")
+	}
+	return ed25519.PublicKey(raw), nil
 }
 
 // hubSourceFlags are the inputs lock and build share.
