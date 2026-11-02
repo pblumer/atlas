@@ -123,6 +123,10 @@ var (
 	// (a compacted log, a log that ends early, or a failed rebuild).
 	MIHistoryRebuilt     = newEvent("server.mi_history_rebuilt")
 	MIHistoryUnavailable = newEvent("server.mi_history_unavailable")
+	// HubRegistryKeysPinned names, at startup, the fingerprints of the atlas hub
+	// registry keys the operator pinned (ADR-0499). One key is INFO; two are a
+	// WARN, because two are meant only for the length of a key rotation.
+	HubRegistryKeysPinned = newEvent("hub.registry_keys_pinned")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is

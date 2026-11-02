@@ -116,6 +116,10 @@ The wire-shape proposal and deliberately invalid fixtures live at [Blueprint Reg
 
 **Sample registry.** `atlas hub keygen|lock|build` is the publisher side for the examples of this repository. Small examples are bundled by theme into a few applications and the handbook's flagship examples keep their own application (`examples/hub/bundles.json`); `examples/hub/releases.json` records every `(bundle, version, digest)` so that a version never names two contents. The private key is a CI secret; servers hold only the public key, pinned out of band. Only the latest version of each bundle is listed until BMP2 decides on archive retention.
 
+## Amendment 2026-11-02 (b): two pinned keys for a rotation
+
+**Decision (owner pblumer).** `ATLAS_BLUEPRINT_REGISTRY_KEY` pins one Ed25519 public key or two, separated by a comma, and an index signed by either is accepted. Both are explicitly configured by the operator, out of band, exactly as one key is; nothing is learnt from the registry, so the profile's "no trust-on-first-use, no key from downloaded content" rule stands. Two is the limit: the second key exists for the length of a planned rotation — pin old and new, switch the signer, unpin the old — and a server pinning two logs a WARN (`hub.registry_keys_pinned`) at every start until one is removed. More keys, a key twice or a malformed one fail startup closed. A compromised key is never pinned beside its successor; that procedure replaces the key outright. Considered and rejected: a key list or successor key inside the signed index (a compromised key could then name the attacker's successor), and an unbounded list (a standing set of trust roots v1 does not have). The operator runbook is [examples/hub/README.md](../../examples/hub/README.md#rotating-the-signing-key).
+
 ## Links
 
 - [ADR-0128](0128-process-applications.md)

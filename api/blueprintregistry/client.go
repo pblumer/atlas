@@ -20,24 +20,38 @@ import (
 
 const maxSignatureBytes = 88 // RFC 4648 base64 encoding of an Ed25519 signature
 
-// PublicClient retrieves a preconfigured public HTTPS registry using a pinned
-// Ed25519 key. Configuration must be restricted to an administrator before
-// this client is exposed through any API or Console control.
+// PublicClient retrieves a preconfigured public HTTPS registry using one or,
+// during a key rotation, two pinned Ed25519 keys. Configuration must be
+// restricted to an administrator before this client is exposed through any API
+// or Console control.
 type PublicClient struct {
 	indexURL   *url.URL
-	publicKey  ed25519.PublicKey
+	publicKeys []ed25519.PublicKey
 	httpClient *http.Client
 }
 
-// NewPublicClient validates a static registry URL and a trusted public key.
-// It never accepts an unauthenticated publisher key from the registry index.
-func NewPublicClient(indexURL string, publicKey ed25519.PublicKey) (*PublicClient, error) {
+// NewPublicClient validates a static registry URL and the trusted public keys:
+// at least one, at most MaxPinnedKeys, each 32 bytes and none twice. It never
+// accepts an unauthenticated publisher key from the registry index.
+func NewPublicClient(indexURL string, publicKeys ...ed25519.PublicKey) (*PublicClient, error) {
 	u, err := parsePublicIndexURL(indexURL)
 	if err != nil {
 		return nil, err
 	}
-	if len(publicKey) != ed25519.PublicKeySize {
-		return nil, errors.New("registry requires a pinned 32-byte Ed25519 public key")
+	if len(publicKeys) == 0 || len(publicKeys) > MaxPinnedKeys {
+		return nil, fmt.Errorf("registry requires 1..%d pinned Ed25519 public keys", MaxPinnedKeys)
+	}
+	keys := make([]ed25519.PublicKey, 0, len(publicKeys))
+	for _, key := range publicKeys {
+		if len(key) != ed25519.PublicKeySize {
+			return nil, errors.New("registry requires a pinned 32-byte Ed25519 public key")
+		}
+		for _, other := range keys {
+			if string(other) == string(key) {
+				return nil, errors.New("registry key is pinned twice")
+			}
+		}
+		keys = append(keys, append(ed25519.PublicKey(nil), key...))
 	}
 	transport := &http.Transport{
 		Proxy:               nil,  // never forward public registry requests via ambient proxy
@@ -51,8 +65,8 @@ func NewPublicClient(indexURL string, publicKey ed25519.PublicKey) (*PublicClien
 		return dialPublic(ctx, network, address, net.DefaultResolver.LookupIPAddr, dialer.DialContext)
 	}
 	return &PublicClient{
-		indexURL:  u,
-		publicKey: append(ed25519.PublicKey(nil), publicKey...),
+		indexURL:   u,
+		publicKeys: keys,
 		httpClient: &http.Client{
 			Transport: transport,
 			Timeout:   25 * time.Second,
@@ -79,11 +93,20 @@ func (c *PublicClient) LoadIndex(ctx context.Context) (Index, error) {
 	if err != nil {
 		return Index{}, fmt.Errorf("load registry signature: %w", err)
 	}
-	index, err := VerifySignedIndex(raw, signature, c.publicKey)
+	index, _, err := VerifySignedIndexWithAny(raw, signature, c.publicKeys)
 	if err != nil {
 		return Index{}, fmt.Errorf("verify registry: %w", err)
 	}
 	return index, nil
+}
+
+// Fingerprints names the pinned keys, in the order the operator gave them.
+func (c *PublicClient) Fingerprints() []string {
+	out := make([]string, 0, len(c.publicKeys))
+	for _, key := range c.publicKeys {
+		out = append(out, KeyFingerprint(key))
+	}
+	return out
 }
 
 // Download verifies the current signed index before resolving a listed,
