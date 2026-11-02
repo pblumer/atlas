@@ -3,10 +3,13 @@ package api
 import (
 	"encoding/json"
 	"maps"
+	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/pblumer/atlas/api/catalog"
+	"github.com/pblumer/atlas/api/formlookup"
+	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
 	"github.com/pblumer/atlas/model"
 )
@@ -171,4 +174,82 @@ func formFieldsOf(schema []byte) []formField {
 	}
 	walk(doc)
 	return out
+}
+
+// The order form's directory fields (ADR-0473, amended) live here rather than in
+// formlookups.go, beside the other readers of an order's answers, so the lookup area
+// itself stays outside the shop (ADR-0515).
+
+// lookupOrderForm asks the question placing an order asks — may this caller order from
+// the release's catalogue — and returns the order form the release's item names, as the
+// form store holds it now: the form the shop renders.
+func (s *Server) lookupOrderForm(r *http.Request, releaseID, itemID string) (formlookup.Task, error) {
+	rel, ok, err := s.catalogStore.Release(releaseID)
+	if err != nil {
+		return formlookup.Task{}, err
+	}
+	if !ok {
+		return formlookup.Task{}, formlookup.ErrNoTask
+	}
+	allowed, err := s.catalogs.MayOrderFrom(httpapi.PrincipalFrom(r.Context()), rel.CatalogID)
+	if err != nil {
+		return formlookup.Task{}, err
+	}
+	if !allowed {
+		return formlookup.Task{}, formlookup.ErrForbidden
+	}
+	schema, found, err := s.orderFormSchema(rel, itemID)
+	if err != nil {
+		return formlookup.Task{}, err
+	}
+	if !found {
+		return formlookup.Task{}, formlookup.ErrNoTask
+	}
+	return formlookup.Task{Schema: schema}, nil
+}
+
+// orderFormSchema reads the order form a release's item names. found is false for an
+// item the release does not hold, one without a form, or a form since deleted.
+func (s *Server) orderFormSchema(rel catalog.Release, itemID string) (schema []byte, found bool, err error) {
+	for _, it := range rel.Items {
+		if it.ID != itemID {
+			continue
+		}
+		formID := strings.TrimSpace(it.ConfigForm)
+		if formID == "" {
+			return nil, false, nil
+		}
+		rec, ok, err := s.forms.Get(formID)
+		if err != nil || !ok {
+			return nil, false, err
+		}
+		return []byte(rec.Schema), true, nil
+	}
+	return nil, false, nil
+}
+
+// checkOrderAnswers holds a basket's — or one corrected position's — answers to the
+// directory fields of the order forms they answer, the check a task completion makes
+// (checkTaskSubmission). The answers arrive as text; a directory field's value is text.
+// It answers true when it wrote a refusal.
+func (s *Server) checkOrderAnswers(w http.ResponseWriter, r *http.Request, rel catalog.Release, config map[string]map[string]string) bool {
+	for itemID, answers := range config {
+		schema, found, err := s.orderFormSchema(rel, itemID)
+		if err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "read order form: "+err.Error())
+			return true
+		}
+		if !found || !strings.Contains(string(schema), formlookup.DataSourceMember) {
+			continue
+		}
+		vars := make(map[string]any, len(answers))
+		for k, v := range answers {
+			vars[k] = v
+		}
+		if refusal := s.formLookup.CheckSubmission(r.Context(), schema, vars); refusal != nil {
+			refusal.Write(w)
+			return true
+		}
+	}
+	return false
 }

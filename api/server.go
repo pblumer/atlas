@@ -2191,6 +2191,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.OnChange(s.contentRunner.Reload)
 	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
+	s.orders.CheckAnswers = s.checkOrderAnswers
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
 	// (ADR-0429 §3).

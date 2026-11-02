@@ -766,6 +766,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
 			})),
 			resp: jsonBody("Options and the cursor of the next page", tObject())}},
+		{"POST", "/api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query", s.formLookup.HandleOrderFormQuery, apiOp{
+			summary: "Search the remote data source of one directory field of a product's order form while the basket is filled in: the task form's search (ADR-0473), for a caller who may order from the release's catalogue, against the form the release's item names. A person chosen here is looked up again when the order is placed or its details are corrected, so a value the search would not have offered is refused there (ADR-0473, amended)", tag: "Order", role: RoleUser,
+			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
+				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Options and the cursor of the next page", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
 			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),

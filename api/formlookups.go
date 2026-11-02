@@ -39,11 +39,12 @@ func (s *Server) newFormLookups() {
 	s.workerQueries = workerquery.NewService(s.queryBroker, s.budgets().Request)
 	s.lookupRate = newRateLimiter(lookupBurst, lookupRatePerSecond)
 	s.formLookup = formlookup.New(formlookup.Config{
-		Task:    s.lookupTask,
-		Worker:  s.lookupWorker,
-		Workers: s.lookupWorkers,
-		Ask:     s.queryBroker.Ask,
-		Allow:   s.lookupRate.allow,
+		Task:      s.lookupTask,
+		OrderForm: s.lookupOrderForm,
+		Worker:    s.lookupWorker,
+		Workers:   s.lookupWorkers,
+		Ask:       s.queryBroker.Ask,
+		Allow:     s.lookupRate.allow,
 		Principal: func(r *http.Request) string {
 			if p := httpapi.PrincipalFrom(r.Context()); p != nil {
 				return p.UserID
