@@ -41,17 +41,22 @@ func (s *Server) startGrantTarget(applicationID, processID string) (startgrant.T
 	if err != nil {
 		return startgrant.Target{}, err
 	}
-	t := startgrant.Target{ApplicationFound: found, ApplicationProtected: found && app.Protected}
 	if processID == "" {
-		return t, nil
+		return startgrant.Target{ApplicationFound: found, ApplicationProtected: found && app.Protected}, nil
 	}
-	d := s.latestDeploymentByProcessID(processID)
+	return s.targetFor(applicationID, app, found, s.latestDeploymentByProcessID(processID)), nil
+}
+
+// targetFor is startGrantTarget once the application has been read and the newest
+// deployed version of the process found (nil when none is deployed).
+func (s *Server) targetFor(applicationID string, app project, found bool, d *deployment) startgrant.Target {
+	t := startgrant.Target{ApplicationFound: found, ApplicationProtected: found && app.Protected}
 	if d != nil {
 		t.DefinitionKey, t.Version = d.Key, d.Version
 	}
 	t.ProcessInApplication = found && d != nil && d.ProjectID == applicationID
 	t.Blockers = s.selfServiceBlockers(applicationID, t, d)
-	return t, nil
+	return t
 }
 
 // selfServiceBlockers says why the newest deployed version of a process would not

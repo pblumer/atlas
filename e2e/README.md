@@ -171,6 +171,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): a
+  terminate end **ends its enclosing scope** — inside a subprocess it takes the message
+  catch waiting beside it along and completes the subprocess, so the outer token continues
+  while a branch outside the subprocess keeps waiting; at the process level it leaves no
+  token behind.
 - **`playground.spec.mjs`** ([ADR-0215](../docs/adr/0215-modeler-playground.md)):
   the **Playground tab** — a mode rather than a level of detail, so it takes the control
   strip and a side panel and gives the properties panel's width back to the diagram;
@@ -1074,6 +1079,17 @@ include new tasks, incident counts and open-task preservation using a
 controlled clock, on the production DOM with mocked HTTP responses.
 
 The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+`mfe1-self-start.spec.mjs` ([ADR-0516](../docs/adr/0516-scoped-authenticated-process-start.md))
+holds the task user's Start view against a mocked server: Start is offered only when
+`GET /api/v1/me/startable-processes` lists something, a process is picked by name and
+application, its start form is filled and sent once (the POST body is checked), and the
+answer is said — started with its reference, refused values with the data kept, a grant
+revoked while the form is open, a replaced version, an expired session, a double tap that
+sends one start, and a broken connection whose outcome is unknown. It runs at 320, 390 and
+768px and on desktop, and checks that an operator keeps the operator Start view. What the
+server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
+acceptance either.
 
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom

@@ -1,6 +1,7 @@
 // MFE1 / ADR-0514: a single prominent mobile path between the two existing
-// human-work screens. The Start route remains operator-only under ADR-0209;
-// these links never grant permission or introduce another command path.
+// human-work screens. Start is offered to operators, and to a task user only when
+// something is granted to them (ADR-0516, mfe1-self-start.spec.mjs); these links
+// never grant permission or introduce another command path.
 import { test, expect } from "@playwright/test";
 
 const TASK = {
