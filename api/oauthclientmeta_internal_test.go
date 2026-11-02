@@ -487,3 +487,34 @@ func TestAServerWithoutAReaderSaysSo(t *testing.T) {
 		t.Errorf("lookupClient(unknown) = %v", err)
 	}
 }
+
+// TestADialThatCannotBeJudgedIsRefused: an address without a port, a name that does
+// not resolve and an answer that is no address are refused before anything is dialled.
+func TestADialThatCannotBeJudgedIsRefused(t *testing.T) {
+	dial := func(context.Context, string, string) (net.Conn, error) {
+		t.Fatal("dialled")
+		return nil, nil
+	}
+	ok := func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}
+	if _, err := dialMetadataHost(context.Background(), "tcp", "no-port", false, ok, dial); err == nil {
+		t.Error("an address without a port was accepted")
+	}
+	fails := func(context.Context, string) ([]net.IPAddr, error) { return nil, errors.New("no such host") }
+	if _, err := dialMetadataHost(context.Background(), "tcp", "wiki.example.org:443", false, fails, dial); err == nil ||
+		!strings.Contains(err.Error(), "resolve wiki.example.org") {
+		t.Errorf("a name that does not resolve = %v", err)
+	}
+	garbled := func(context.Context, string) ([]net.IPAddr, error) { return []net.IPAddr{{IP: net.IP{1, 2, 3}}}, nil }
+	if _, err := dialMetadataHost(context.Background(), "tcp", "wiki.example.org:443", false, garbled, dial); err == nil {
+		t.Error("an address that cannot be read was dialled")
+	}
+	if publicAddress(netip.Addr{}) {
+		t.Error("the zero address is public")
+	}
+	f := fetcherFor(t, false)
+	if _, err := f.get(context.Background(), "ftp://wiki.example.org/doc", false); err == nil {
+		t.Error("a client_id that is no https URL was read")
+	}
+}
