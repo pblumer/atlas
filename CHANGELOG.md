@@ -12,6 +12,114 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-11-02
+
+**A multi-instance execution of 50,000 iterations is explored a page at a time.**
+Operations' Multi-Instance Explorer pages an execution's iterations by number, state and
+incident, opens one with the variables and decisions it recorded, replays it step by step
+on the diagram with its variables as they stood at each step, and lists the instance's own
+course with each loop collapsed to one row — every answer bounded, from indexes the single
+writer keeps as it applies the log
+([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). A history recorded before those
+indexes is rebuilt once at startup or said to be unavailable, never shown as empty
+([ADR-0518](docs/adr/0518-mi-history-legacy-rebuild.md)). Completing the iterations of a
+parallel multi-instance subprocess now costs linear instead of quadratic time on the
+single writer: 50,000 iterations finish in about 76 seconds, where they did not finish
+before.
+
+**Another system connects with one approval, and task users start what they are granted.**
+A system such as a wiki names itself by the URL of a client ID metadata document and signs
+its token requests, an administrator approves it once on the consent screen for the
+capabilities and projects chosen, and Console → Administration → Connected systems lists
+it, turns its pre-consent off and disconnects it
+([ADR-0512](docs/adr/0512-connected-systems.md)); an application can give its grant back
+(`POST /oauth/revoke`), somebody who signs in only through single sign-on can approve one,
+and the token endpoint has a throttle of its own. An administrator grants one process of
+one application to named people and groups, who then find Start in the Tasks app and
+start its newest version with values the server holds to its start form
+([ADR-0516](docs/adr/0516-scoped-authenticated-process-start.md)). Phones get a compact
+work menu and read-only incident triage, and multi-column forms stack at narrow widths
+([ADR-0514](docs/adr/0514-mobile-first-tasks-start-and-incident-triage.md)).
+
+**Forms take their options from a decision, the shop reports on its promise, and the
+examples ship through atlas hub.** A select, radio group, checklist or tag list shows what
+the newest version of a deployed decision answers, bound to the form's other fields, and
+the decision editor edits a DMN boxed list
+([ADR-0511](docs/adr/0511-form-options-from-a-decision.md)). A product promises a delivery
+time that is frozen into the order line and reported on per period, line managers and a
+catalogue's customer responsibles see what their people hold, and the catalogue app finds
+the wiki's pages as building blocks
+([ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md)). `atlas hub build`
+publishes the examples as ten signed packages by theme, a registry key rotates with two
+keys pinned at once and a new key is announced through one verifiable channel
+([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment). An OpenTofu
+project builds a Microsoft 365 development environment for the Microsoft workers; it has
+not been applied to a real tenant yet.
+
+**Read this before upgrading from 0.21.0.** These act on an existing installation as soon
+as it runs 0.22.0:
+
+- The first start rebuilds the multi-instance history index before the server serves: it
+  replays the whole retained log from position 1 into a shadow store under
+  `<data-dir>/mi-history-rebuild`, swaps the index into the state store and deletes the
+  shadow store ([ADR-0518](docs/adr/0518-mi-history-legacy-rebuild.md)). That start takes
+  about as long as a recovery from genesis, and needs free disk space for a second state
+  store while it runs. An interrupted rebuild resumes at the next start. A log that was
+  compacted cannot prove the index: the server starts, the bounded multi-instance routes
+  answer that the history is unavailable, and the log line `server.mi_history_unavailable`
+  says why. A failed rebuild does not stop the server either; `server.mi_history_rebuilt`
+  reports a successful one.
+- The same start also seeds the new index of armed event-subprocess triggers once, from
+  one scan of the live element instances, before the processor reads it (#1494).
+- `POST /oauth/token` no longer shares the public forms' budget: it and the new
+  `POST /oauth/revoke` allow 300 requests at once and 10 a second per address. A proxy or
+  firewall rule that relied on the old, lower budget to slow token requests should be
+  checked; `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` and `_RATE` move it.
+- An authorization request whose `client_id` is an https URL now makes atlas fetch that
+  document, from public addresses only and within the new `ATLAS_LIMIT_CLIENT_METADATA*`
+  budgets. Anyone who can reach `/oauth/authorize` can trigger such a fetch; nothing is
+  saved before an administrator approved. An installation without outbound access sees
+  the consent screen say that the document could not be read.
+- `ATLAS_BLUEPRINT_REGISTRY_KEY` accepts two keys separated by a comma. A value with three
+  keys, the same key twice or a malformed key stops the server at startup, as a malformed
+  single key already did.
+
+What changes on disk, and going back:
+
+- 0.22.0 reads the data directory 0.21.0 wrote. The directory gains one store,
+  `start-grants`, classified as a credential: it travels with a snapshot of this
+  installation and never with a portable export, so an import confers no permission. The
+  OAuth client and grant stores gain the fields of a connected system. The state store
+  gains the multi-instance history families, the instance outline, the steps inside
+  iterations, the index of armed event-subprocess triggers and an index from an ended user
+  task to the feed row that ended it, each with its marker. The log gains no record type
+  and no intent, and no record it had changed. No system process and no event type
+  changed, so the first start deploys nothing new and `GET /api/v1/event-catalog` answers
+  as before.
+- New settings, all optional: `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`), and the limits
+  `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST`, `_RATE`, `ATLAS_LIMIT_CLIENT_METADATA`, `_SECONDS`,
+  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 176
+  (`atlas_catalog_building_blocks`, `atlas_catalog_delivery_report`,
+  `atlas_instance_multi_instances`, `atlas_instance_outline`, `atlas_multi_instance_body`,
+  `atlas_multi_instance_iteration`, `atlas_multi_instance_iteration_steps`,
+  `atlas_multi_instance_iteration_variables`, `atlas_multi_instance_iterations`).
+  `/metrics`, the event catalog and the Helm chart's values are unchanged.
+- Going back to 0.21.0 has not been tested end to end. By its code:
+  - 0.21.0 knows no system grant. It reads a connected system's grant as a grant without
+    confinement, so the system's tokens would reach everything the administrator who
+    approved it may. Disconnect every connected system under Console → Administration →
+    Connected systems before going back.
+  - 0.21.0 does not open `start-grants`: task users lose Start, and the grants come back
+    with 0.22.0.
+  - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
+    same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
+    event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
+    index: it is not disarmed when its scope completes, and an error or escalation it
+    should catch is not found there. Multi-instance executions that ran under 0.21.0 are
+    missing from the bounded history. To upgrade again after going back, restore the
+    snapshot taken before the first upgrade, or do not go back.
+
 ### Added
 - **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
 - **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
@@ -47,16 +155,15 @@ _Changed_ / _Removed_ for each version.
 - **atlas hub releases carry tags, and the Console filters by them.** A signed registry index may give each release up to 16 lower-case tags (ADR-0499 amendment); the Console's atlas hub dialog shows them and filters the listing by one. Tags only steer the listing. A server from before this change refuses an index that carries them.
 - **Older histories become explorable after one restart.** A server whose history was recorded before the multi-instance index existed rebuilds the index at startup by replaying its whole retained log into a shadow store and swapping the result in; the startup takes as long as that replay, and an interrupted rebuild resumes. A log that was compacted cannot prove the index, so its bounded multi-instance history stays unavailable and the startup log says why.
 - **What one iteration saw and decided.** Opening an iteration in the Multi-Instance Explorer shows the variables of its own scope as they were recorded — its iteration number, its item and what it wrote — and the DMN decisions it evaluated with the inputs and result frozen in the log, rule traces on request (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}`, `technical=true`). History recorded before decisions were attributed to iterations says so instead of showing an empty list.
-- **Multi-Instance Explorer in Operations.** A grouped multi-instance row in the replay offers *Explore iterations*: one page of 100 iterations in iteration-number order, a jump to a number such as 37421, filters by state and by iterations that had an incident, and each iteration's element instance, log positions and incidents (open, resolved, replaced, or ended without resolution). An instance with an execution of more than 500 iterations opens without loading the full step-by-step timeline, which grows with the square of the iteration count, and shows its executions as collapsed groups with the server's counts instead; its other steps and the diagram replay are not shown in that view yet. A history recorded before the index is explained as not yet verifiable, never shown as empty.
+- **Multi-Instance Explorer in Operations.** A grouped multi-instance row in the replay offers *Explore iterations*: one page of 100 iterations in iteration-number order, a jump to a number such as 37421, filters by state and by iterations that had an incident, and each iteration's element instance, log positions and incidents (open, resolved, replaced, or ended without resolution). An instance with an execution of more than 500 iterations opens without loading the full step-by-step timeline, which grows with the square of the iteration count, and shows its executions as collapsed groups with the server's counts instead; its own steps come from the instance outline, and the diagram replay of the whole instance is not shown in that view. A history recorded before the index is explained as not yet verifiable, never shown as empty.
 - **The M365 development environment can share a tenant used for real work.** With `shared_tenant = true`, `deploy/opentofu/m365-devenv` grants the mail and Exchange worker apps no tenant-wide rights in Entra: Exchange RBAC for Applications limits Mail.Send, and a role group with a write scope limits the Exchange worker, to recipients whose alias carries the environment's prefix; SharePoint gets Sites.Selected on the test site only. Teams Phone, whose administrator role cannot be scoped, is refused, and credentials live at most seven days. A setup script makes the Exchange and SharePoint grants, a cleanup script removes them by prefix, and an emergency script finds and deletes the environment's Entra objects and Azure resource groups without the OpenTofu state. The Entra worker's Graph permissions stay tenant-wide, which the README states. Not yet run against a tenant.
 - **A turnkey Microsoft 365 development environment.** `deploy/opentofu/m365-devenv` is an OpenTofu project that builds, with one `tofu apply`, everything the Microsoft workers need in a Microsoft 365 test tenant - one least-privilege app registration each for the Entra, Exchange, SharePoint, Teams Phone and mail workers, test users with a manager, groups and a Microsoft 365 group - and an Atlas server in Azure behind Caddy, whose supervised workers are already created in its Console with their bundles in the vault, test users signing in through Entra ID, and optionally an Active Directory domain controller reached over LDAPS inside the same network. `tofu destroy` removes it again. It refuses to run unless the signed-in tenant matches both the configured tenant id and initial domain; its offline tests run with every provider mocked, and its bootstrap is checked against a locally built server. It has not yet been applied to a real tenant.
 - **Bounded multi-instance history API.** `GET /api/v1/instances/{key}/multi-instances` lists an instance's multi-instance body executions with seeded, active, completed and terminated iterations and their incidents, and `.../{bodyKey}/iterations` pages one execution's iterations by signed cursor — jump to an iteration number, find one element instance, filter by lifecycle state or by iterations that had an incident — from event-derived indexes read off the single writer, so a loop of 50,000 iterations answers in milliseconds with a page, never the whole history (MCP tools `atlas_instance_multi_instances`, `atlas_multi_instance_body`, `atlas_multi_instance_iterations`, `atlas_multi_instance_iteration`). A server whose history predates the index answers "history unavailable" instead of an incomplete list.
-- **Administrators decide who may start a process.** An administrator, signed in with their own session, grants one process of one application to named user and group ids, previews whether a person or group would be offered it and why not, and revokes it, with every change durable and audited (`/api/v1/applications/{id}/start-grants`, ADR-0516). Grants are checked against the directory and the application's newest deployed version; API tokens, application owners and servers without authentication cannot change them. The self-service Start routes that will honour a grant are not available yet, so a grant does not yet let anybody start anything.
 - **The Start view offers task users what they may start.** A signed-in person without the operator role now finds Start in the Tasks app — top bar, phone menu and mobile switcher — as soon as an administrator granted them a process, picks it by name and application, fills its start form and is told when the process has durably started, with its reference (ADR-0516). Refused values, a revoked grant, a replaced version, an expired session and a broken connection each say what happened; a broken connection says the outcome is unknown instead of offering a second start. Operators keep their Start view unchanged.
 - **Task users start the processes granted to them.** `POST /api/v1/me/processes/{key}/instances` starts the newest version of a process an administrator granted to the signed-in person, through the same engine start the operator routes use: it checks the grant and the version again in the turn that submits the start, refuses superseded, deactivated and foreign keys, holds the values to the start form on the server — only its fields, required values, types, bounds and listed options — and answers after the start is durable, with the person recorded as its initiator (ADR-0516). API tokens and connected applications are refused. The operator start routes are unchanged.
 - **Task users see the processes they may start.** `GET /api/v1/me/startable-processes` lists, for a person signed in with their own session, exactly the processes an administrator granted to them or to one of their groups — only the newest deployed version, only in the grant's application, and only while it can be started — sorted by application and name (ADR-0516). API tokens are refused and a server without authentication offers no such list. The Start view shows it.
 - **Administrators decide who may start a process.** An administrator, signed in with their own session, grants one process of one application to named user and group ids, previews whether a person or group would be offered it and why not, and revokes it, with every change durable and audited (`/api/v1/applications/{id}/start-grants`, ADR-0516). Grants are checked against the directory and the application's newest deployed version; API tokens, application owners and servers without authentication cannot change them. A grant is what the self-service start honours; nothing else confers it.
-- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
+- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. A large execution opens in the Multi-Instance Explorer instead.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
 - **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
@@ -177,7 +284,7 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 - **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
-- **A server that recorded multi-instance history before its schema v2 starts again.** A multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.
+- **A server that recorded multi-instance history before its schema v2 starts again.** On a server that ran a build of `main` between 0.21.0 and 0.22.0, a multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.
 - **A terminate end event ends its scope in the token simulation.** The Design view's
   simulation treated a terminate end like a plain end: only the token that reached it
   stopped. A token still waiting beside it — a message catch on a parallel branch, say —
@@ -17444,7 +17551,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0
