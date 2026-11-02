@@ -594,3 +594,24 @@ func TestMIIndexV2MalformedLoopCounterIsUnknown(t *testing.T) {
 		t.Fatalf("malformed loopCounter: %+v %v %v", r, ok, err)
 	}
 }
+
+// The highest possible instance key has no successor to end its range at; its
+// purge ends at the next family instead, and leaves its neighbour alone.
+func TestMIIndexV2PurgeOfTheLastInstanceKey(t *testing.T) {
+	const last = ^uint64(0)
+	f := newMIFixture(t, last)
+	f.body(10, last, 1)
+	f.round(11, 10, 2, 1)
+	f.commit()
+	other := model.ElementInstanceValue{ProcessInstanceKey: last - 1, MultiInstance: 1}
+	f.must(f.tx.RecordMIActivation(20, &other, 3))
+	f.commit()
+	f.must(f.tx.PurgeInstanceHistory(last, 9, 0))
+	f.commit()
+	if _, ok, err := f.s.MIBody(last, 10); err != nil || ok {
+		t.Fatalf("last instance survived purge: %v %v", ok, err)
+	}
+	if _, ok, err := f.s.MIBody(last-1, 20); err != nil || !ok {
+		t.Fatalf("neighbour purged with it: %v %v", ok, err)
+	}
+}

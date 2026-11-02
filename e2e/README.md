@@ -31,8 +31,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Operations instance replay groups the iterations of one multi-instance body by
   default, expands them on demand and still selects an exact iteration. The grouping
   uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
-  accidentally merged. This is a UI/DOM slice only: the timeline payload is not yet
-  bounded (OHS2/OHS3).
+  accidentally merged. A small instance keeps this classic replay and opens the
+  Multi-Instance Explorer from the grouped row.
+- **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
+  [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
+  iterations opens without requesting `/timeline`, shows its loop as one collapsed group
+  with the server's counts, and the explorer pages iterations (never more than one page
+  of rows in the DOM), jumps to iteration 37,421 by asking the server for that position,
+  sends state and incident filters to the server, supports keyboard selection, retries a
+  failed page and stays within a narrow screen. The harness computes each page from the
+  iteration number, as the server's index does, instead of holding 50,000 rows.
 
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):

@@ -9836,6 +9836,46 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         the count, the message and the worker it hangs on. You repair that worker from the line and clear
         everything behind it with <b>Resolve all</b>; individual rows below can be ticked and resolved
         together. Mind that retrying without fixing the cause parks the same tokens again straight away.</li>
+        <li data-l="de" id="mi-explorer"><b>Grosse Multi-Instance-Ausführungen</b> – im <b>Replay</b> erscheint
+          eine Multi-Instance-Aktivität als <i>eine</i> zugeklappte Zeile je Ausführung, mit den Zahlen, die der
+          Server führt: wie viele Iterationen gestartet, abgeschlossen, abgebrochen und aktiv sind und wie viele
+          Incidents ihnen zugeordnet wurden. <b>Iterationen erkunden</b> öffnet den Multi-Instance-Explorer: Er
+          zeigt immer nur eine Seite von 100 Iterationen in der Reihenfolge ihrer Nummer (<code>loopCounter</code>),
+          blättert vor und zurück, springt direkt zu einer Nummer wie 37421, filtert nach Zustand und zeigt auf
+          Wunsch nur Iterationen mit Incidents. Wählst du eine Iteration, siehst du ihre Elementinstanz, ihre
+          Log-Positionen und jeden zugeordneten Incident – <b>offen</b>, <b>behoben</b>, durch einen späteren
+          <b>ersetzt</b> oder <b>ohne Behebung beendet</b>, weil das Element abgebrochen wurde. Dazu kommen die
+          Variablen ihres eigenen Bereichs, so wie sie aufgezeichnet wurden (Nummer, Element der Liste, was die
+          Iteration selbst geschrieben hat), und die DMN-Entscheidungen, die sie ausgewertet hat, mit den
+          Eingaben und dem Ergebnis aus dem Log – nichts davon wird neu berechnet. <b>Technische Details
+          anzeigen</b> ergänzt die Regel-Spur einer Entscheidung. Hat eine
+          Ausführung mehr als 500 Iterationen, lädt das Replay die vollständige schrittweise Historie nicht, weil
+          sie mit der Zahl der Iterationen quadratisch wächst; du siehst dann das Diagramm, die Ausführungen und
+          den Explorer. Die schrittweise Wiedergabe einer einzelnen Iteration und die übrigen Schritte einer so
+          grossen Instanz sind in dieser Ansicht noch nicht verfügbar. Meldet der Explorer, die Historie lasse sich
+          noch nicht sicher vollständig anzeigen, wurde sie aufgezeichnet, bevor es den Index dafür gab – das heisst
+          nicht, dass keine Iterationen gelaufen sind. Dieselben Daten liefern
+          <code>GET /api/v1/instances/{key}/multi-instances</code> und die MCP-Tools
+          <code>atlas_instance_multi_instances</code> und <code>atlas_multi_instance_iterations</code>.</li>
+        <li data-l="en"><b>Large multi-instance executions</b> – in the <b>replay</b>, a multi-instance activity
+          appears as <i>one</i> collapsed row per execution, with the numbers the server keeps: how many iterations
+          were started, completed, terminated and are active, and how many incidents were attributed to them.
+          <b>Explore iterations</b> opens the Multi-Instance Explorer. It always shows a single page of 100
+          iterations in the order of their number (<code>loopCounter</code>), pages forward and back, jumps straight
+          to a number such as 37421, filters by state and, if you ask, shows only iterations that had an incident.
+          Choose an iteration to see its element instance, its log positions and every incident attributed to it –
+          <b>open</b>, <b>resolved</b>, <b>replaced</b> by a later one, or <b>ended without resolution</b> because
+          its element was terminated – together with the variables of its own scope as they were recorded (its
+          number, its list item, what the iteration wrote itself) and the DMN decisions it evaluated, with the
+          inputs and the result taken from the log; none of it is recomputed. <b>Show technical details</b> adds a
+          decision's rule trace. When an execution has more than 500 iterations, the replay does not load the
+          complete step-by-step history, because that grows with the square of the iteration count; you see the
+          diagram, the executions and the explorer instead. A step-by-step replay of one iteration and the other
+          steps of such a large instance are not available in this view yet. When the explorer says the history
+          cannot yet be shown as complete, it was recorded before the index for it existed – that does not mean
+          no iterations ran. The same data comes from <code>GET /api/v1/instances/{key}/multi-instances</code> and
+          the MCP tools <code>atlas_instance_multi_instances</code> and
+          <code>atlas_multi_instance_iterations</code>.</li>
         <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
           mit Ein- und Ausgaben.</li>
         <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with
