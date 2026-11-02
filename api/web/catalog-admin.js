@@ -2274,7 +2274,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
   // form is long — every field explains itself, which is right the first time and a
   // scroll every time after — so a section somebody has closed stays closed on the
   // next product they open (sectionOpen). The body keeps the form's two-column grid.
-  const group = (key, title, hint, body) => `<details class="form-group" data-sec="${esc(key)}"${
+  const group = (key, title, hint, body) => `<details class="form-group fold-sub" data-sec="${esc(key)}"${
     sectionOpen(key) ? " open" : ""}>
       <summary class="form-sec">${esc(title)}</summary>
       ${hint ? `<p class="form-sec-hint">${hint}</p>` : ""}

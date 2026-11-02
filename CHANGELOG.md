@@ -101,6 +101,12 @@ _Changed_ / _Removed_ for each version.
   ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
   TLS update example and names the folder the release archive unpacks to.
 
+- **A fold inside a section draws the same caret as the section.** A release and a
+  change in the release notes, a group of the product form, an outbox message, an entry
+  or the operations of a mockup, a policy's versions and the other folds inside a
+  section open as before, and now show the caret every section shows, turning the same
+  way when they open.
+
 - **The last folds of their own fold like every other section.** Console › Events, the
   cards of Operations › Mockups, Mock directory and Mock database, the dashboard's
   release notes and key features, and the sections of a catalogue's own page folded with

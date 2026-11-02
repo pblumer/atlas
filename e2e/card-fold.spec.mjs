@@ -93,6 +93,28 @@ test("a topic may start folded, and is remembered once opened", async ({ page })
   expect(page.__errors).toEqual([]);
 });
 
+// A fold inside a topic — a release, an entry, a group of a form — stays a <details>,
+// but draws the caret a topic draws, and turns it the same way when it opens. A
+// <details> a library draws is not marked and keeps its own marker.
+test("a fold inside a topic draws the topics' caret", async ({ page }) => {
+  await open(page);
+  const caret = (sel) => page.evaluate((s) => {
+    const before = getComputedStyle(document.querySelector(s), "::before");
+    return { width: before.borderLeftWidth, transform: before.transform };
+  }, sel);
+  const topic = await caret("#c-plain [data-fold-toggle]");
+  const sub = await caret("#c-sub > summary");
+  expect(sub.width).toBe(topic.width);
+  expect(sub.transform).toBe("none");
+  await page.locator("#c-sub > summary").click();
+  // The caret turns over a short transition; what is compared is where it comes to rest.
+  await expect.poll(async () => (await caret("#c-sub > summary")).transform).toBe(topic.transform);
+  // The unmarked one keeps the browser's own marker.
+  const lib = await page.locator("#c-lib > summary").evaluate((el) => getComputedStyle(el).listStyleType);
+  expect(lib).not.toBe("none");
+  expect(page.__errors).toEqual([]);
+});
+
 test("the browser remembers each topic, per page", async ({ page }) => {
   await open(page);
   await toggle(page, "c-plain").click();
