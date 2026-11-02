@@ -100,29 +100,46 @@ if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
 }
 
 # ---------------------------------------------------------------- SharePoint
+# A delegated grant reaches only as far as the signed-in admin's own access, and a Global
+# Administrator has none on a private group's site (GET sites/root answers 403). The admin
+# is therefore made an owner of the test group for the grant only, and removed again in
+# finally - also when a step fails. Nothing outside the test group changes.
 if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
-    $mg = @{ Scopes = 'Sites.FullControl.All'; NoWelcome = $true }
-    # Connect-MgGraph gives up on a device code after 120 s (unlike Exchange, ~15 min), and
-    # -ClientTimeout does not change that: enter the code at once, or repeat this part
-    # alone with -Part SharePoint.
+    $mg = @{ Scopes = 'Sites.FullControl.All', 'Group.ReadWrite.All'; NoWelcome = $true }
+    # Connect-MgGraph's device code sign-in needs a real terminal: started without one (in
+    # the background), it reports "timed out after 120 seconds" although the browser
+    # sign-in succeeded. -ClientTimeout does not change that.
     if ($Device) { $mg.UseDeviceCode = $true }
     Connect-MgGraph @mg
+    $graph = 'https://graph.microsoft.com/v1.0'
+    $ownerAdded = $false
+    $me = $null
     try {
-        # The group's site is provisioned some minutes after the group.
+        $me = (Invoke-MgGraphRequest -Method GET -Uri "$graph/me?`$select=id,userPrincipalName")
+        $owners = (Invoke-MgGraphRequest -Method GET -Uri "$graph/groups/$($c.site_group_id)/owners?`$select=id").value.id
+        if ($owners -notcontains $me.id) {
+            Step "$($me.userPrincipalName) becomes owner of the test group for the grant"
+            $ref = @{ '@odata.id' = "$graph/directoryObjects/$($me.id)" } | ConvertTo-Json
+            Invoke-MgGraphRequest -Method POST -Uri "$graph/groups/$($c.site_group_id)/owners/`$ref" -Body $ref -ContentType 'application/json' | Out-Null
+            $ownerAdded = $true
+        }
+
+        # 404: the site is still being provisioned. 403 right after the owner was added:
+        # SharePoint has not seen the new owner yet. Both pass within minutes.
         $site = $null
-        for ($i = 0; $i -lt 20 -and -not $site; $i++) {
-            try { $site = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups/$($c.site_group_id)/sites/root" }
+        $last = $null
+        for ($i = 0; $i -lt 30 -and -not $site; $i++) {
+            try { $site = Invoke-MgGraphRequest -Method GET -Uri "$graph/groups/$($c.site_group_id)/sites/root" }
             catch {
-                # Only "not found" means the site is still being provisioned; anything else
-                # (403: the signed-in admin has no access to the private group's site) is final.
                 $code = $_.Exception.Response.StatusCode.value__
-                if ($code -ne 404) { throw "GET sites/root of group $($c.site_group_id): HTTP $code $($_.Exception.Message)" }
-                Step 'test site not provisioned yet; waiting 30 s'; Start-Sleep -Seconds 30
+                $last = "HTTP $code $($_.Exception.Message)"
+                if ($code -ne 404 -and -not ($code -eq 403 -and $ownerAdded)) { throw "GET sites/root of group $($c.site_group_id): $last" }
+                Step "test site not reachable yet ($last); waiting 30 s"; Start-Sleep -Seconds 30
             }
         }
-        if (-not $site) { throw "The test site of group $($c.site_group_id) does not exist yet; run this script again later." }
+        if (-not $site) { throw "The test site of group $($c.site_group_id) is not reachable ($last); run this part again later (-Part SharePoint)." }
 
-        $uri = "https://graph.microsoft.com/v1.0/sites/$($site.id)/permissions"
+        $uri = "$graph/sites/$($site.id)/permissions"
         $granted = (Invoke-MgGraphRequest -Method GET -Uri $uri).value | Where-Object {
             ($_.grantedToIdentitiesV2.application.id + $_.grantedToIdentities.application.id) -match [regex]::Escape($c.sharepoint_app_id)
         }
@@ -134,9 +151,17 @@ if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
             } | ConvertTo-Json -Depth 5
             Invoke-MgGraphRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' | Out-Null
         }
+        Step "check: site permissions for the SharePoint app"
+        (Invoke-MgGraphRequest -Method GET -Uri $uri).value | Where-Object {
+            ($_.grantedToIdentitiesV2.application.id + $_.grantedToIdentities.application.id) -match [regex]::Escape($c.sharepoint_app_id)
+        } | ForEach-Object { Write-Host "   roles: $($_.roles -join ', ')" }
     }
     finally {
-        Disconnect-MgGraph | Out-Null
+        if ($ownerAdded) {
+            Step "$($me.userPrincipalName) is removed as owner of the test group"
+            Invoke-MgGraphRequest -Method DELETE -Uri "$graph/groups/$($c.site_group_id)/owners/$($me.id)/`$ref" | Out-Null
+        }
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
     }
 }
 
