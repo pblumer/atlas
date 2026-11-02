@@ -13,6 +13,31 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Another system is connected with one approval.** A system such as a wiki that shows
+  atlas's processes and mirrors people's tasks names itself by the https URL of a client
+  ID metadata document it publishes and signs its token requests with a key from it
+  (`private_key_jwt`, EdDSA or ES256), so no token, client secret or redirect URI is
+  copied by hand. An administrator starts the connection in the system and approves it
+  on the consent screen, which shows the system's host above the name it claims, for the
+  new resource `<origin>/system`: the capabilities `diagrams`, `tasklist` and `events`,
+  each optionally narrowed to projects — `tasklist` then lists only those projects' tasks
+  and `events` carries only their task facts — and, if chosen, pre-consent, which
+  connects the system's people to their own `…/tasks` grants without a consent page once
+  they are signed in; `prompt=none` answers `login_required` or `consent_required`. A
+  person who withdraws such a grant declines the system until they approve it
+  themselves. `GET /api/v1/auth/me` tells a system what was approved, and
+  `GET /api/v1/tasks/{key}` answers it `410 Gone` for a task that ended while the feed
+  still holds its end. Console → Administration → Connected systems lists each system
+  with its approver, reach, people and last use, turns pre-consent off and disconnects
+  it; Connected accounts lists each person's systems. Atlas reads such a document from
+  public addresses only unless `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`) is set, within the new budgets
+  `ATLAS_LIMIT_CLIENT_METADATA*`, and saves nothing before an administrator approved.
+  New routes `GET /api/v1/connected-systems`,
+  `PUT /api/v1/connected-systems/{id}/preconsent`, `DELETE /api/v1/connected-systems/{id}`,
+  `GET /api/v1/me/connected-systems` and `POST /api/v1/me/connected-systems/withdraw`;
+  audit events `system.connect`, `system.change` and `system.disconnect`
+  (ADR-0512).
 - **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.

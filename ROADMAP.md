@@ -1347,6 +1347,15 @@ Adoption and polish.
   provider conformance evidence; **T2** projects verified built-in operation claims
   without copying operation tables (see
   [implementation plan](docs/planning/technical-capability-contract.md)).
+- ✅ **Connected systems** ([ADR-0512](docs/adr/0512-connected-systems.md)): another
+  system — first Orbithek, formerly wikiwikibangbang — is connected with one
+  administrator's approval, naming itself by a client ID metadata document and signing
+  its token requests (`private_key_jwt`), with the capabilities `diagrams`, `tasklist` and
+  `events` narrowed to projects on the consent screen, pre-consent for its people's own
+  task grants, `prompt=none`, and Console → Administration → Connected systems. What a
+  system implements is in [`docs/integrations/connected-systems.md`](docs/integrations/connected-systems.md).
+  Still open: the draft the document follows may change (the record's open question), and
+  the other direction — a credential for a process writing into the system (§6).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Model independence and third-party provenance (MIP):** verify licence/origin of vendored BPMN/DMN assets and implementation references; propose native `atlas:` authoring while preserving existing Zeebe BPMN import, stored-definition reload and deterministic recovery. Current stage MIP0 is **documentation/provenance and architecture review only**; native authoring and Camunda-specific DMN removal are not implemented. [Programme](docs/planning/model-independence-and-provenance-program.md) · [Proposed ADR](docs/adr/0513-native-model-dialect-and-vendor-compatibility.md) · [Initial audit](docs/legal/PROVENANCE_AUDIT.md). Milestone A owns the Modeler slice; Milestone 1 owns compiler compatibility; Milestone 6 owns interoperability and release evidence.
