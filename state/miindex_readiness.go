@@ -14,16 +14,21 @@ import (
 // historical backfill before its MI discovery endpoints may be enabled.
 var ErrMIHistoryIndexUnavailable = errors.New("state: multi-instance history index unavailable until verified backfill")
 
-const metaMIHistoryIndexV1 = "mi_history_index_v1"
+// metaMIHistoryIndex names the readiness marker of the current index schema.
+// Schema v1 (PR #1487-#1490) carried no loopCounter, counters, state or
+// incident families; a store marked only for v1 is therefore a legacy store for
+// v2 and stays unavailable until a verified rebuild, exactly like a store that
+// predates the index altogether.
+const metaMIHistoryIndex = "mi_history_index_v2"
 
-var miHistoryIndexVersion = [...]byte{1}
+var miHistoryIndexVersion = [...]byte{2}
 
 // MIHistoryIndexReady reports whether this store or read snapshot has a
 // verified, versioned MI projection. It intentionally performs one metadata
 // point read rather than walking the history or guessing from the presence of
 // some newer MI entries.
 func (q queries) MIHistoryIndexReady() (bool, error) {
-	value, ok, err := getCopy(q.r, keyMeta(metaMIHistoryIndexV1))
+	value, ok, err := getCopy(q.r, keyMeta(metaMIHistoryIndex))
 	if err != nil || !ok {
 		return false, err
 	}
@@ -71,17 +76,14 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 	// A legacy store may lack its last-applied position (e.g. an old
 	// checkpoint or a store assembled before position tracking). Guard all
 	// retained lifecycle and MI index families, not just active instances.
-	for _, family := range [...]columnFamily{
+	families := append([]columnFamily{
 		cfProcessInstance,
 		cfProcessInstanceHistory,
 		cfElementInstance,
 		cfElementStep,
 		cfElementReplay,
-		cfMIBody,
-		cfMIIteration,
-		cfMIRoundByElement,
-		cfMIBodyByElement,
-	} {
+	}, miIndexFamilies[:]...)
+	for _, family := range families {
 		prefix := []byte{byte(family)}
 		iter, err := s.db.NewIter(&pebble.IterOptions{
 			LowerBound: prefix,
@@ -106,5 +108,5 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 	// A durable marker written at initialisation distinguishes a genuinely
 	// empty instance history from a partially upgraded running instance.
 	// It does not alter the event stream or recovery's apply order.
-	return s.db.Set(keyMeta(metaMIHistoryIndexV1), miHistoryIndexVersion[:], pebble.Sync)
+	return s.db.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], pebble.Sync)
 }

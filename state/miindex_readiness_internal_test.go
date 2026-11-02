@@ -19,7 +19,7 @@ func TestMIHistoryReadinessFreshStoreSurvivesReopen(t *testing.T) {
 		if err != nil || !ready {
 			t.Fatalf("open %d: MI index ready=%v, err=%v", i, ready, err)
 		}
-		if _, ok, err := getCopy(s.db, keyMeta(metaMIHistoryIndexV1)); err != nil || !ok {
+		if _, ok, err := getCopy(s.db, keyMeta(metaMIHistoryIndex)); err != nil || !ok {
 			t.Fatalf("open %d: missing durable schema marker: ok=%v, err=%v", i, ok, err)
 		}
 		if err := s.Close(); err != nil {
@@ -56,7 +56,7 @@ func TestMIHistoryReadinessLegacyIndexRejectsPartialHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Simulate upgrading an already populated state store from an older build.
-	if err := s.db.Delete(keyMeta(metaMIHistoryIndexV1), pebble.Sync); err != nil {
+	if err := s.db.Delete(keyMeta(metaMIHistoryIndex), pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -78,17 +78,23 @@ func TestMIHistoryReadinessLegacyIndexRejectsPartialHistory(t *testing.T) {
 	if _, _, err := s.MIIteration(40, 101); !errors.Is(err, ErrMIHistoryIndexUnavailable) {
 		t.Fatalf("exact round lookup exposed incomplete history: %v", err)
 	}
-	if err := s.MIBodies(40, 100, func(MIHistoryEntry) error {
+	if _, err := s.MIBodyPage(40, MIBodyPageQuery{Limit: 100}, func(MIHistoryEntry) error {
 		t.Fatal("visited incomplete body history")
 		return nil
 	}); !errors.Is(err, ErrMIHistoryIndexUnavailable) {
 		t.Fatalf("body scan exposed incomplete history: %v", err)
 	}
-	if err := s.MIIterations(40, 100, 10, 100, func(MIHistoryEntry) error {
+	if _, err := s.MIIterationPage(40, 100, 10, MIIterationQuery{Limit: 100}, func(MIHistoryEntry) error {
 		t.Fatal("visited incomplete round history")
 		return nil
 	}); !errors.Is(err, ErrMIHistoryIndexUnavailable) {
 		t.Fatalf("round scan exposed incomplete history: %v", err)
+	}
+	if _, err := s.MIIncidents(40, 101, 10, func(MIIncidentRecord) error {
+		t.Fatal("visited incomplete incident history")
+		return nil
+	}); !errors.Is(err, ErrMIHistoryIndexUnavailable) {
+		t.Fatalf("incident scan exposed incomplete history: %v", err)
 	}
 	v := s.ReadView()
 	defer v.Close()
@@ -131,7 +137,7 @@ func TestMIHistoryReadinessDetectsOldDataWithoutAppliedPosition(t *testing.T) {
 	if err := tx.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.Delete(keyMeta(metaMIHistoryIndexV1), pebble.Sync); err != nil {
+	if err := s.db.Delete(keyMeta(metaMIHistoryIndex), pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -153,7 +159,7 @@ func TestMIHistoryReadinessRejectsCorruptMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.Set(keyMeta(metaMIHistoryIndexV1), []byte{255}, pebble.Sync); err != nil {
+	if err := s.db.Set(keyMeta(metaMIHistoryIndex), []byte{255}, pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.MIHistoryIndexReady(); err == nil {
@@ -173,7 +179,7 @@ func TestMIHistoryReadinessEmptyLegacyStoreCanInitialize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.db.Delete(keyMeta(metaMIHistoryIndexV1), pebble.Sync); err != nil {
+	if err := s.db.Delete(keyMeta(metaMIHistoryIndex), pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Close(); err != nil {
@@ -186,5 +192,44 @@ func TestMIHistoryReadinessEmptyLegacyStoreCanInitialize(t *testing.T) {
 	defer s.Close()
 	if ready, err := s.MIHistoryIndexReady(); err != nil || !ready {
 		t.Fatalf("empty old store not ready: %v, %v", ready, err)
+	}
+}
+
+// A store whose index was marked complete under schema v1 has rows without
+// loopCounters, counters, state or incident families. It must read as legacy
+// for v2, not as complete.
+func TestMIHistoryReadinessSchemaV1StoreIsLegacy(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := s.NewTransaction()
+	if err := tx.RecordElementReplay(40, 1, 10, 3, 100, 0, 0, -1, ReplayActivated); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.SetLastAppliedPosition(10); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	_ = tx.Close()
+	if err := s.db.Delete(keyMeta(metaMIHistoryIndex), pebble.Sync); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.Set(keyMeta("mi_history_index_v1"), []byte{1}, pebble.Sync); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if ready, err := s.MIHistoryIndexReady(); err != nil || ready {
+		t.Fatalf("schema v1 store read as v2-complete: ready=%v err=%v", ready, err)
 	}
 }
