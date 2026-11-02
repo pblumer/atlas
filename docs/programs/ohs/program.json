@@ -1,0 +1,62 @@
+{
+  "id": "ohs",
+  "name": "Operations History at Scale",
+  "summary": "Keep instance replay intelligible and responsive with grouped multi-instance execution, bounded iteration discovery and exact causal drill-down at 50,000 iterations.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-01",
+  "plan": "../../planning/operations-history-at-scale-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-4--operability-",
+  "next_action": "Verify OHS2 PR #1490 readiness barrier (CI, recovery, coverage); then design audited bounded WAL-event backfill for legacy stores before paginated API and UI (Issue #1481).",
+  "slices": [
+    {
+      "id": "OHS1",
+      "title": "Default grouped multi-instance history",
+      "status": "complete",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [
+        1481
+      ],
+      "prs": [
+        1483
+      ],
+      "note": "PR #1483 merged: grouped history is available in Operations, while legacy timeline loading remains unbounded until OHS2/OHS3.",
+      "evidence": [
+        "../../planning/operations-history-at-scale-program.md"
+      ]
+    },
+    {
+      "id": "OHS2",
+      "title": "Bounded iteration lookup and filtering",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "OHS1"
+      ],
+      "issues": [
+        1481
+      ],
+      "prs": [
+        1487,
+        1488,
+        1490
+      ],
+      "note": "PR #1487 (keys) and PR #1488 (durable projection) merged. PR #1490 adds fail-closed readiness/version marker and legacy-store regression tests. Audited WAL backfill, exact round-number search, cursor-paged API, UI and 50k acceptance remain open."
+    },
+    {
+      "id": "OHS3",
+      "title": "Scalable iteration detail replay",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "OHS2"
+      ],
+      "issues": [
+        1481
+      ],
+      "prs": [],
+      "note": "Bounded causal frame and variable/incident/decision drill-down, 50k performance evidence and full replay/retention compatibility."
+    }
+  ]
+}

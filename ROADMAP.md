@@ -1114,6 +1114,15 @@ Composition and reuse.
 
 What it takes to run this for real.
 
+- 🚧 **Operations History at Scale (OHS programme)** ([plan](docs/planning/operations-history-at-scale-program.md),
+  [issue #1481](https://github.com/pblumer/atlas/issues/1481)): default-collapsed
+  Multi-Instance bodies in Operations Instance History are being delivered in OHS1
+  (PR #1483), using durable parent-token lineage. OHS1 still receives the complete
+  timeline and is **not** a 50,000-iteration performance solution. OHS2 adds bounded
+  server-side iteration discovery, OHS3 scoped detail replay after an accepted
+  [query ADR](docs/adr/0517-scalable-instance-replay.md), recovery tests and 50k
+  memory/latency/writer-responsiveness evidence. UI integration is on Milestone S.
+
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
 - ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
   only): the roles a token will carry are shown before it is minted, the secret once, and an
@@ -1340,6 +1349,7 @@ Adoption and polish.
   [implementation plan](docs/planning/technical-capability-contract.md)).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
+- 🚧 **Model independence and third-party provenance (MIP):** verify licence/origin of vendored BPMN/DMN assets and implementation references; propose native `atlas:` authoring while preserving existing Zeebe BPMN import, stored-definition reload and deterministic recovery. Current stage MIP0 is **documentation/provenance and architecture review only**; native authoring and Camunda-specific DMN removal are not implemented. [Programme](docs/planning/model-independence-and-provenance-program.md) · [Proposed ADR](docs/adr/0513-native-model-dialect-and-vendor-compatibility.md) · [Initial audit](docs/legal/PROVENANCE_AUDIT.md). Milestone A owns the Modeler slice; Milestone 1 owns compiler compatibility; Milestone 6 owns interoperability and release evidence.
 - 🚧 **Benchmark suite and published performance numbers** (v0.2.0 programme B):
   a reproducible harness landed in [`benchmarks/`](benchmarks/) — durable-profile
   (real WAL `fsync` per batch) steady-state benchmarks for the minimal
@@ -1367,6 +1377,8 @@ Adoption and polish.
 A parallel track (not strictly sequential with the engine milestones): make Atlas
 something you *start*, not only something you *import*. Everything ships in one
 self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
+
+**Mobile & Field Experience (MFE) programme — active (MFE0 architecture and device baseline)** ([programme plan](docs/planning/mobile-field-experience-program.md), [manifest](docs/programs/mfe/program.json)). Mobile is a **Tasks and Process Start first** surface, not a miniature admin Console. After an architecture and real-device baseline (MFE0), deliver accessible adaptive Tasks/Start (MFE1), operator-scoped mobile incident triage (MFE2), and modelled, deduplicated alerting and human acknowledgement/escalation from the existing incident CloudEvents feed (MFE3). Follow with field capture/evidence outside WAL variables (MFE4), safe offline drafts and idempotent completion reconciliation (MFE5), and optional bpmn-js authoring on large tablets (MFE6). **Proposed adaptive-workplace extension (MFE7):** Make atlas a coherent, role-aware personal workplace from desktop through tablet and phone, with an optional later watchOS/Wear OS companion limited to privacy-safe urgent status and authenticated phone handoff. This [cross-device product target](docs/planning/mfe-cross-device-workplace.md) is not shipped, does not imply full Watch/phone Modeler or administration, and requires a separate security/notification ADR after MFE1/MFE3 (unsent draft continuity requires MFE5). MFE0 must review the existing narrow-screen ADR-0417, incident ADR-0061/0169/0337, notification ADR-0343/0433/0435, security/roles and loss-of-response durability semantics. **MFE0's source audit and Chromium Tasks/Start/form-js regression checks are merged (PRs #1449, #1453, #1454), and ADR-0514 is Accepted (PR #1452). Real-device iOS/Android, complex-form/accessibility and handoff evidence remain open in issue #1451; MFE0 stays active. MFE1 navigation (#1468), server-confirmed completion (#1469), safety-inspection example (#1470) and compact mobile work shell (#1472) are merged. MFE0 iOS/Android hardware, accessibility and zoom acceptance remain open (#1451); no mobile release is claimed. Ordinary task users still cannot start processes under ADR-0209's operator-only rule; the [scoped authenticated process-start ADR](docs/adr/0516-scoped-authenticated-process-start.md) was accepted by the MFE owner on 2026-10-31 (PR #1471 / issue #1467). Least-privilege grants, new self-service routes, audit and revocation handling remain unimplemented pending sidecar design and security/recovery tests. MFE2 implementation contract PR #1477 is merged; the operator-only mobile incident cause triage UI is under review (draft PR #1479), preserving the existing desktop Operations remediation. The programme owner approved a limited three-slice parallel MFE0/MFE1/MFE2 exception; physical device/security acceptance and MFE3 alerting remain open.**
 
 - ✅ `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
   serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
@@ -2779,6 +2791,20 @@ actions with closed effects, each a command whose outcome is a fact published be
     message.
   - 🔲 The remaining entries: user created and rejected, offboarding, access review,
     deployments.
+**tshopper — phase A** ([programme TSH](docs/planning/tshopper-program.md),
+[ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md))
+- ✅ **A delivery promise on every product.** A service level and its delivery time in working days, frozen
+  into the release, copied onto the order line and measured from approval to the start of the right.
+- ✅ **Delivery and consumption report for product managers.** Lead time, met, missed and overdue per
+  product and period, CSV, no names.
+- ✅ **A line manager's team view and a customer responsible's organisation dashboard.** Names, CSV, every
+  read audited.
+- ✅ **The tshopper shell.** The shop page as an application of its own in the same binary, with its
+  dashboards and the wiki's building blocks.
+- 🚧 **One contract between shop and engine,** mapped to TMF620/622/637. `api/shopcontract` exists and
+  the report service uses only it; 37 server files still import the shop's packages directly, a count a
+  test lets only fall.
+
 - 🔲 **Not in any slice yet:** an operator action for every held position of a product.
 - 🔲 **Not in any slice yet:** a suspended entitlement state.
 - 🔲 **Not in any slice yet:** measuring the run loop before a per-position product goes

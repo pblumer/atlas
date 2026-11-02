@@ -33,7 +33,7 @@ import (
 var serverStoreDirs = []string{
 	"deployments", "decisions", "keyspace", "jobtypes", "drafts", "playground-scenarios", "forms",
 	"public-links", "projects", "process-docs", "decision-docs", "panorama-models",
-	"information-models", "releases", "grant-audit", "api-tokens", "deploy-tokens",
+	"information-models", "releases", "grant-audit", "start-grants", "api-tokens", "deploy-tokens",
 	"oauth-clients", "oauth-grants", "targets", "dmnrefs", "dmn-drafts", "users", "groups",
 	"connectors", "call-overrides", "repository", "inbound-subscriptions", "settings",
 }

@@ -598,6 +598,11 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0510](0510-tasks-for-a-connected-system.md) | Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups | Proposed | Partial |
 | [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
 | [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Proposed | Not started |
+| [0513](0513-native-model-dialect-and-vendor-compatibility.md) | Native atlas authoring with versioned vendor-format compatibility | Proposed | Not started |
+| [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
+| [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
+| [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Partial |
+| [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 
 ## The two states of a record
 

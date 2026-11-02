@@ -81,6 +81,9 @@ th{color:var(--muted);font-weight:600}
   <a href="#prozesse"><span data-l="de">Die Prozesse zum Produkt</span><span data-l="en">The product's processes</span></a>
   <a href="#wiki-inhalt"><span data-l="de">Inhalt aus dem Wiki</span><span data-l="en">Content from the wiki</span></a>
   <a href="#betrieb"><span data-l="de">Im Betrieb</span><span data-l="en">In operation</span></a>
+  <a href="#lieferung"><span data-l="de">Lieferfristen und Lieferbericht</span><span data-l="en">Delivery times and the delivery report</span></a>
+  <a href="#bausteine"><span data-l="de">Bausteine aus dem Wiki</span><span data-l="en">Building blocks from the wiki</span></a>
+  <a href="#kundensicht"><span data-l="de">Team und Organisation</span><span data-l="en">Team and organisation</span></a>
   <a href="#dokument"><span data-l="de">Ein Shop als Dokument</span><span data-l="en">A shop as a document</span></a>
   <a href="#loeschen"><span data-l="de">Ausprobieren und wieder löschen</span><span data-l="en">Trying out and deleting again</span></a>
   <a href="#beispiel"><span data-l="de">Das Beispiel installieren</span><span data-l="en">Installing the example</span></a>
@@ -397,6 +400,77 @@ th{color:var(--muted);font-weight:600}
     <li data-l="de"><b>Agenten.</b> Über MCP lassen sich Kataloge pflegen, importieren und veröffentlichen.</li>
     <li data-l="en"><b>Agents.</b> Over MCP, catalogues can be maintained, imported and published.</li>
   </ul>
+</section>
+
+<section id="lieferung">
+  <h2 data-l="de">Lieferfristen und Lieferbericht</h2><h2 data-l="en">Delivery times and the delivery report</h2>
+  <p data-l="de">Ein Produkt kann eine <b>Servicestufe</b> tragen: einen Namen, den der Shop zeigt (z.&nbsp;B.
+    «Standard»), und eine <b>Lieferfrist in Arbeitstagen</b>. Sie steht im Produkt unter «Was angeboten wird», wird mit
+    dem Release eingefroren und auf jede Bestellposition kopiert. Eine spätere Änderung macht also keine frühere
+    Lieferung nachträglich zu spät.</p>
+  <p data-l="en">A product can carry a <b>service level</b>: a name the shop shows (for example "Standard") and a
+    <b>delivery time in working days</b>. It sits in the product under "What is offered", is frozen with the release
+    and copied onto every order line. A later change therefore never makes an earlier delivery late after the
+    fact.</p>
+  <p data-l="de">Gemessen wird von der Genehmigung bis zum Beginn des Bezugs. Ist keine Genehmigung nötig, beginnt die
+    Messung bei der Bestellung. Gezählt werden Montag bis Freitag; Feiertage werden noch mitgezählt. Die Wartezeit auf die
+    Genehmigung zählt nicht zur Lieferfrist, weil die Organisation des Kunden sie bestimmt. Der Bericht weist sie aber
+    getrennt aus.</p>
+  <p data-l="en">The clock runs from the approval to the start of the right; where no approval is owed, it starts at
+    the order. Monday to Friday count; public holidays still count as working days. The wait for the approval is not
+    part of the delivery time, because the customer's organisation decides it, but the report shows it
+    separately.</p>
+  <p data-l="de">Die Karte <b>Lieferung und SLA</b> in der Katalogpflege zeigt pro Produkt für einen wählbaren Zeitraum:
+    bestellt, eingehalten, verpasst, überfällig, offen, die Quote der eingehaltenen Lieferfristen, Median und
+    90-%-Wert der Lieferzeit sowie die Zahl der aktiven Bezüge. Der Bericht nennt keine Personen und lässt sich als CSV
+    herunterladen (<code>GET /api/v1/catalog-products/delivery-report</code>, MCP-Werkzeug
+    <code>atlas_catalog_delivery_report</code>).</p>
+  <p data-l="en">The <b>Delivery and SLA</b> card on the catalogue page shows, per product and for a period you
+    choose: ordered, met, missed, overdue, open, the share of promises kept, the median and 90th-percentile lead time,
+    and how many hold it now. It names nobody and downloads as CSV
+    (<code>GET /api/v1/catalog-products/delivery-report</code>, MCP tool
+    <code>atlas_catalog_delivery_report</code>).</p>
+</section>
+
+<section id="bausteine">
+  <h2 data-l="de">Bausteine aus dem Wiki</h2><h2 data-l="en">Building blocks from the wiki</h2>
+  <p data-l="de">Unter <b>Katalog → Bausteine</b> durchsuchen Sie eine Inhaltsquelle (wikiwikibangbang) nach den
+    Services, die die Product Owner beschreiben. Zu jeder Seite steht, welche Ihrer Produkte sie bereits nutzen und
+    wie viele Produkte anderer Kataloge. Eine Seite, die noch niemand nutzt, ist ein beschriebener, aber noch nicht
+    angebotener Service: <b>Produkt anlegen</b> erstellt daraus ein Produkt im Entwurf im gewählten Katalog und
+    verknüpft die Seite. Name, Preis, Genehmigung und Prozesse ergänzen Sie danach wie gewohnt.</p>
+  <p data-l="en">Under <b>Catalogue → Building blocks</b> you search a content source (wikiwikibangbang) for the
+    services the product owners describe. Each page says which of your products already use it and how many products
+    of other catalogues do. A page nobody uses yet is a service described and not yet offered: <b>Create product</b>
+    makes a draft product from it in the chosen catalogue and binds the page. Name, price, approval and processes are
+    then completed as usual.</p>
+</section>
+
+<section id="kundensicht">
+  <h2 data-l="de">Team und Organisation: Berichte mit Namen</h2><h2 data-l="en">Team and organisation: reports with names</h2>
+  <p data-l="de">Zwei Berichte nennen Personen. Beide stehen im Shop als eigener Reiter, und nur für die Personen,
+    die sie lesen dürfen:</p>
+  <p data-l="en">Two reports name people. Both appear in the shop as a tab of their own, and only for those who may
+    read them:</p>
+  <ul>
+    <li data-l="de"><b>Mein Team</b> für Linienvorgesetzte: alle Konten, die die Person im Feld «Vorgesetzte Person»
+      nennen (eine Stufe). Pro Person: was sie bezieht und wie ihre Positionen im Zeitraum stehen.</li>
+    <li data-l="en"><b>My team</b> for line managers: every account that names them as its line manager (one level).
+      Per person: what they hold and how their positions in the period stand.</li>
+    <li data-l="de"><b>Organisation</b> für Kundenverantwortliche: Mitglieder der Gruppen, die der Katalog unter
+      «Kundenverantwortliche» nennt. Sie sehen die ganze Zielgruppe des Katalogs, also alle, denen dieser Katalog
+      angezeigt wird. Die Gruppen legen nur die Eigentümerin bzw. der Eigentümer des Katalogs oder Administratoren
+      fest; ein Export oder Import überträgt sie nicht.</li>
+    <li data-l="en"><b>Organisation</b> for customer responsibles: members of the groups the catalogue names under
+      "Customer responsibles". They see the catalogue's whole audience, everybody this catalogue is shown to. Only
+      the catalogue's owner or an administrator sets the groups; an export or import does not carry them.</li>
+  </ul>
+  <p data-l="de">Beide Berichte lassen sich als CSV herunterladen (Bezüge oder Positionen). <b>Jeder Abruf wird im
+    Audit-Log protokolliert</b> (Ereignis <code>audit.report_names_read</code>), mit lesender Person, Bericht, Katalog
+    und Anzahl Personen. Der Bericht für Product Manager nennt weiterhin niemanden.</p>
+  <p data-l="en">Both reports download as CSV (rights held or positions). <b>Every reading is recorded in the audit
+    log</b> (event <code>audit.report_names_read</code>) with the reader, the report, the catalogue and the number of
+    people. The product manager's report still names nobody.</p>
 </section>
 
 <section id="dokument">

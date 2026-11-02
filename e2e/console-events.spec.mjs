@@ -386,6 +386,10 @@ test("each section folds away, says what it holds while folded, and stays folded
   await expect(page.locator("#own-rows")).toBeHidden();
   await catalogue.locator("summary").click();
   await expect(page.locator("#ev-rows")).toBeHidden();
+  // The <details> toggle event persists the new state asynchronously.
+  // A reload before that event has run tests a race, not persistence.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.own"))).toBe("0");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.catalog"))).toBe("0");
 
   await page.reload();
   await expect(page.locator("details#own-section summary")).toContainText("6 names");
@@ -393,7 +397,9 @@ test("each section folds away, says what it holds while folded, and stays folded
   expect(await isOpen(page.locator("details#own-section"))).toBe(false);
 
   await page.locator("details#ev-section summary").click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("atlas.events.catalog"))).toBe("1");
   await page.reload();
+  await expect(page.locator("details#ev-section")).toHaveAttribute("open", "");
   await expect(page.locator("#ev-rows tr[data-i]").first()).toBeVisible();
   expect(await isOpen(page.locator("details#own-section"))).toBe(false);
   expect(page.__errors).toEqual([]);

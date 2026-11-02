@@ -2372,6 +2372,29 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 /* The replay's Details tab renders the very same block (ADR-0151) — one incident
    vocabulary across both diagrams — so it needs no rules of its own. */
+/* A Live view's process identity is context, not a toolbar action. The shared
+   editor breadcrumb deliberately yields its width to controls; the name must not.
+   Keep it readable at tablet/phone widths and let a long name wrap instead of
+   disappearing behind an ellipsis (issue #1480). */
+.editor.live .live-process-heading {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.editor.live .live-process-identity {
+  display: flex; align-items: baseline; flex: 1 1 360px;
+  flex-wrap: wrap; gap: 4px 10px; min-width: 0;
+}
+.editor.live .live-process-label {
+  color: var(--muted); font-size: 12px; flex: none;
+}
+.editor.live .live-process-name {
+  margin: 0; min-width: 0; font-size: 18px; line-height: 1.35;
+  font-weight: 650; overflow-wrap: anywhere;
+}
+.editor.live .live-process-version {
+  color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
@@ -2746,6 +2769,24 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   border-left: 3px solid transparent;
 }
 .ops-hrow:hover { background: var(--bg); }
+/* A multi-instance body is one row by default. Its rounds are added to the DOM
+   only on expansion; this is a presentation index, not a replacement for paging. */
+.ops-hrow.mi-child { padding-left: 38px; }
+.ops-hrow.mi-group { font-weight: 600; }
+.ops-mi-toggle {
+  flex: 0 0 20px; height: 22px; padding: 0;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.ops-mi-toggle:hover, .ops-mi-toggle:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.ops-mi-count {
+  flex-shrink: 0; border-radius: 5px; padding: 2px 5px;
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border);
+}
+
 /* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
    a position on the timeline — and ".sel" is the element instance the inspector is
    showing. They used to be filled in the same colour, differing only by a 3px bar, so
@@ -3413,6 +3454,21 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Detail pane */
 .tasks-detail { padding: 22px; overflow-y: auto; }
+/* MFE0 / ADR-0514: form-js renders authored grid rows as .cds--row and
+   .fjs-layout-column (not the editor's .fjs-columns). Its vendored Carbon
+   breakpoint follows the viewport (66rem), not the Tasks/Start pane. A user
+   can narrow a task pane on a wide screen; keep its fields readable without
+   mutating the authored form schema or re-mounting the viewer. */
+#task-form, #start-form { container: atlas-form-host / inline-size; }
+@container atlas-form-host (max-width: 560px) {
+  #task-form .fjs-layout-row > .fjs-layout-column,
+  #start-form .fjs-layout-row > .fjs-layout-column {
+    flex: 0 0 100% !important;
+    max-inline-size: 100% !important;
+    min-inline-size: 0;
+  }
+}
+
 .tasks-detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
@@ -7679,6 +7735,73 @@ button.im-problem:hover { background: var(--accent-soft); }
 .estate-table td[data-tone="unknown"] { color: var(--muted); }
 .estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
 
+/* MFE1: an explicit, local receipt only after an acknowledged server completion.
+   Do not let a toast or another task's auto-advance hide the outcome on a phone. */
+.mfe-completion { display: none; }
+.mfe-completion[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .mfe-completion:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin: 10px 12px 0;
+    min-width: 0;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .mfe-completion > span { min-width: 0; }
+  .mfe-completion button { flex: 0 0 auto; min-height: 44px; }
+  .mfe-completion:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+/* MFE1: one shared work destination switcher inside the two existing lists.
+   It is hidden on desktop and naturally disappears with the list on a selected
+   mobile task. Server roles still decide whether Start can actually be offered. */
+.mfe-entry { display: none; }
+
+@media (max-width: 860px) {
+  .mfe-entry {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px 0;
+  }
+  .mfe-entry-link {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 10px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+  }
+  .mfe-entry-link.active {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .mfe-entry-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
 /* ---------- Tasks and the top bar on a narrow screen ----------
    (ADR-0417) The shop's breakpoint,
    860px, so a phone reads the shop and the inbox the same way: one column.
@@ -7692,9 +7815,18 @@ button.im-problem:hover { background: var(--accent-soft); }
    list's resizer writes the column widths inline — a width dragged on a desktop
    is not a width for this screen. */
 @media (max-width: 1180px) and (min-width: 861px) {
-  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  /* Keep folder navigation accessible without spending a whole column on it.
+     The remaining width belongs to the task list and the actual task form. */
+  .tasks:not(#start-grid) { grid-template-columns: minmax(240px, 35%) minmax(0, 1fr) !important; }
+  .tasks:not(#start-grid) > .tasks-folders { grid-column: 1 / -1; padding: 8px 12px; }
+  .tasks:not(#start-grid) > .tasks-folders nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .tasks:not(#start-grid) > .tasks-folders nav .tasks-folder { white-space: nowrap; }
+  .tasks:not(#start-grid) > .tasks-list-pane,
+  .tasks:not(#start-grid) > .tasks-detail { min-width: 0; }
+  .tasks:not(#start-grid) .tasks-col-resizer { display: none; }
   .tasks-detail { padding: 16px; }
-  .tasks-field { grid-template-columns: 120px 1fr; }
+  .tasks-detail-head h1 { overflow-wrap: break-word; }
+  .tasks-field { grid-template-columns: 120px minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
@@ -8017,3 +8149,118 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
    row's text, so it reads as a note on the verb rather than as a second headline. */
 .el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }
+
+/* ---------- Delivery and SLA (ADR-0515) ---------- */
+.dr-period { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0 0 12px; }
+.dr-period .field { margin: 0; }
+.dr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.dr-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.dr-v { font-size: 22px; font-weight: 700; }
+.dr-ok { color: var(--ok, #2d8a4e); }
+.dr-warn { color: #b26a00; }
+.dr-bad { color: var(--danger); }
+.dr-scroll { overflow-x: auto; }
+.dr-table td.num, .dr-table th.num { text-align: right; white-space: nowrap; }
+.sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.sl-row .field { margin: 0; min-width: 180px; }
+
+/* A suite's name above its apps in the drawer: Marketplace is the catalogue and the shop. */
+.app-suite { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 14px 2px; }
+
+/* MFE1: phone-first shell. Keep the desktop nav unchanged; a phone gives its
+   limited width to the current app and two touch targets, not clipped tabs,
+   an inactive notifications bell, or diagram/modeler utilities. */
+#mobile-more { display: none; }
+#mobile-more[hidden] { display: none !important; }
+
+@media (max-width: 860px) {
+  /* A single destination is not a switcher: the same title is already on screen.
+     Two permitted destinations stay equally prominent as in ADR-0514. */
+  .mfe-entry:has(> .mfe-entry-link:only-child) { display: none; }
+}
+
+@media (max-width: 520px) {
+  .topbar { gap: 4px; padding: 0 8px; }
+  .topbar > .topbrand { flex: 1 1 auto !important; min-width: 0; }
+  .topbar #app-name {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .topbar #topnav,
+  .topbar #feel-assistant-btn,
+  .topbar #shortcuts-dropdown,
+  .topbar #appearance-toggle,
+  .topbar #global-search,
+  .topbar #help-btn,
+  .topbar #help-btn + .dropdown-menu,
+  .topbar .icon-btn[aria-label="Notifications"] {
+    display: none !important;
+  }
+  .topbar > #mobile-more { display: inline-flex; flex: 0 0 auto; }
+  .topbar #app-switcher, .topbar #mobile-more-btn, .topbar .avatar {
+    width: 44px; height: 44px;
+  }
+  .topbar .avatar { width: 38px; height: 38px; }
+  .topbar #mobile-more-btn { font-size: 27px; font-weight: 600; line-height: 1; position: relative; }
+  .topbar #mobile-more-btn .mobile-more-count {
+    position: absolute; top: -3px; right: -4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box;
+    border-radius: 99px; font: 700 10px/1 system-ui, sans-serif;
+    color: var(--status-ink); background: var(--accent);
+    border: 2px solid var(--surface);
+  }
+  .topbar #mobile-more-btn .mobile-more-count.incident { background: var(--danger); }
+  .topbar #mobile-more-btn .mobile-more-count[hidden] { display: none; }
+
+  #mobile-more-menu {
+    max-height: min(72dvh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-width: min(272px, calc(100vw - 16px));
+  }
+  #mobile-more-menu [role="menuitem"] { min-height: 44px; white-space: normal; }
+  #mobile-more-menu a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
+  #mobile-more-menu .nav-badge {
+    display: inline-flex; min-width: 20px; border-radius: 999px; margin-left: auto;
+    padding: 2px 6px; justify-content: center;
+    background: var(--danger); color: var(--status-ink); font-size: 11px; font-weight: 700;
+  }
+  #mobile-more-menu .nav-badge[hidden] { display: none; }
+}
+
+// ---------- MFE2: bounded, read-only incident triage on mobile / tablet ----------
+// Summary and selected detail have different reading widths. Never scale down
+// the desktop incident tables or expose remediation actions on this surface.
+.mfe2-shell { width: 100%; max-width: 1120px; margin: 0 auto; min-width: 0; }
+.mfe2-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mfe2-header h1 { margin: 0; }
+.mfe2-lead { margin: 7px 0 14px; }
+.mfe2-state { margin: 8px 0 12px; }
+.mfe2-state:empty { display: none; }
+.mfe2-warning { color: var(--warn); overflow-wrap: anywhere; margin: 8px 0; }
+.mfe2-workspace { display: grid; grid-template-columns: minmax(270px, 0.9fr) minmax(0, 1.1fr); gap: 14px; min-width: 0; }
+.mfe2-cause-pane, .mfe2-detail-pane { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 14px; }
+.mfe2-cause-pane h2, .mfe2-detail-pane h2 { margin: 0 0 12px; font-size: 16px; }
+.mfe2-causes { display: grid; gap: 7px; }
+.mfe2-cause { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; width: 100%; min-height: 52px; padding: 10px 12px;
+  text-align: left; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg); color: var(--text); cursor: pointer; }
+.mfe2-cause > strong { flex: 1 1 100%; overflow-wrap: anywhere; }
+.mfe2-cause-element { overflow-wrap: anywhere; font-family: var(--font-mono); }
+.mfe2-cause-meta { margin-left: auto; font-size: 12px; color: var(--muted); }
+.mfe2-cause:hover, .mfe2-cause[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.mfe2-cause:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.mfe2-fields { display: grid; gap: 10px; margin: 0 0 12px; }
+.mfe2-field { min-width: 0; }
+.mfe2-field dt { color: var(--muted); font-size: 12px; }
+.mfe2-field dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mfe2-readonly { padding: 8px 10px; background: var(--accent-soft); border-radius: 6px; font-size: 12px; }
+.mfe2-examples { padding-left: 21px; }
+.mfe2-examples li { margin-bottom: 10px; overflow-wrap: anywhere; }
+.mfe2-incident-message { margin: 3px 0 0; overflow-wrap: anywhere; }
+.mfe2-samples { min-width: 0; }
+.mfe2-samples h3 { font-size: 14px; margin: 16px 0 8px; }
+@media (max-width: 700px) {
+  .mfe2-workspace { grid-template-columns: minmax(0, 1fr); }
+  .mfe2-cause-pane, .mfe2-detail-pane { padding: 12px; }
+}

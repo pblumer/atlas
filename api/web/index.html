@@ -88,6 +88,12 @@
       <button id="help-btn" class="icon-btn dropdown-toggle" title="Help" aria-label="Help" aria-haspopup="menu"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 013.9-2c1.3.9 1.1 2.3 0 3.2-.7.6-1.4 1-1.4 2M12 17h.01"/></svg></button>
       <div id="help-menu" class="dropdown-menu" role="menu" hidden></div>
     </div>
+    <!-- Phone chrome: app destinations and secondary tools in one accessible menu.
+         Populated from the same role-filtered navigation as the desktop bar. -->
+    <div id="mobile-more" class="dropdown" hidden>
+      <button id="mobile-more-btn" class="icon-btn dropdown-toggle" type="button" aria-label="More navigation" aria-haspopup="menu" aria-controls="mobile-more-menu" aria-expanded="false">⋯<span id="mobile-more-count" class="mobile-more-count" aria-hidden="true" hidden></span></button>
+      <div id="mobile-more-menu" class="dropdown-menu" role="menu" hidden></div>
+    </div>
     <button class="icon-btn avatar" title="Account" aria-label="Account">PB</button>
   </header>
 
