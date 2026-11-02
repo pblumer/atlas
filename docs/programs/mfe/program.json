@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-02",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "MFE1 server slices #1492, #1495 and #1497 are merged; review and merge the Tasks Start view for task users (ADR-0516). Then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 and decide whether \"published\" must also mean membership of the latest application release (ADR-0516 open question).",
+  "next_action": "MFE1 server slices #1492, #1495 and #1497 are merged; review and merge the Tasks Start view for task users, PR #1498 (ADR-0516). Then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 and decide whether \"published\" must also mean membership of the latest application release (ADR-0516 open question).",
   "slices": [
     {
       "id": "MFE0",
@@ -51,9 +51,10 @@
         1489,
         1492,
         1495,
-        1497
+        1497,
+        1498
       ],
-      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is merged (PR #1495). POST /api/v1/me/processes/{key}/instances (grant and version re-checked as a guard in the command turn, server-side start-form constraints, reuse of the operator start path, startedBy and WAL-replay recovery test over the safety-inspection example) is merged (PR #1497). The Tasks Start view for task users (offered only with a grant, all outcome states including unknown outcome, 320/390/768px Playwright E2E) completes ADR-0516's slices in the follow-up PR. MFE1 stays active: the issue #1456 acceptance list still needs real iOS/Android evidence (MFE0 #1451), and the owner has not decided whether \"published\" must also mean membership of the latest application release. Existing operator rights are unchanged."
+      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is merged (PR #1495). POST /api/v1/me/processes/{key}/instances (grant and version re-checked as a guard in the command turn, server-side start-form constraints, reuse of the operator start path, startedBy and WAL-replay recovery test over the safety-inspection example) is merged (PR #1497). The Tasks Start view for task users (offered only with a grant, all outcome states including unknown outcome, 320/390/768px Playwright E2E) completes ADR-0516's slices in PR #1498. MFE1 stays active: the issue #1456 acceptance list still needs real iOS/Android evidence (MFE0 #1451), and the owner has not decided whether \"published\" must also mean membership of the latest application release. Existing operator rights are unchanged."
     },
     {
       "id": "MFE2",
