@@ -2,7 +2,7 @@
   "registryId": "io.github.pblumer.atlas.hub",
   "publisherId": "io.github.pblumer.atlas",
   "license": "AGPL-3.0-only",
-  "publicKey": "",
+  "publicKey": "Sn9QiwlWXjJK9AJFypBjYEljRHgQMaME4dmSspQbP4w=",
   "releases": [
     {
       "bundle": "auftrag-finanzen",
