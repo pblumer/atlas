@@ -105,7 +105,7 @@ if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
 # is therefore made an owner of the test group for the grant only, and removed again in
 # finally - also when a step fails. Nothing outside the test group changes.
 if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
-    $mg = @{ Scopes = 'Sites.FullControl.All', 'Group.ReadWrite.All'; NoWelcome = $true }
+    $mg = @{ Scopes = 'Sites.FullControl.All', 'Group.ReadWrite.All', 'User.Read'; NoWelcome = $true }
     # Connect-MgGraph's device code sign-in needs a real terminal: started without one (in
     # the background), it reports "timed out after 120 seconds" although the browser
     # sign-in succeeded. -ClientTimeout does not change that.
