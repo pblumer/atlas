@@ -47,6 +47,10 @@
 
       <div class="card" id="c-closed" data-fold-default="closed"><h2>Starts folded</h2>
         <p id="c-closed-body">the detail behind its heading row</p></div>
+
+      <div class="card" id="c-subs"><h2>Holds folds of its own</h2>
+        <details class="fold-sub" id="c-sub"><summary>One entry</summary><p>its detail</p></details>
+        <details id="c-lib"><summary>A library's own</summary><p>left alone</p></details></div>
     </main>
     <script type="module">
       import { foldCards, pageOf } from "/fold.js";

@@ -250,7 +250,7 @@ function driftHTML(drift, item) {
     ${elsewhere ? `<p class="muted">${elsewhere} other recorded change(s) in this model.</p>` : ""}
     ${drift.since ? `<p class="muted">Recorded since ${esc(fmtDateTime(drift.since * 1000))}.</p>` : ""}
     ${drift.truncated ? `<p class="muted">Older changes were dropped to stay inside the journal's bound.</p>` : ""}
-    <details class="panorama-drift-limits"><summary>What this history cannot see</summary>
+    <details class="panorama-drift-limits fold-sub"><summary>What this history cannot see</summary>
       <ul>${limits}</ul></details>
   </section>`;
 }
@@ -357,7 +357,7 @@ function contextHTML(ctx, loading) {
     ${ctx.truncated ? `<p class="muted">Some answers were dropped to keep this bounded.</p>` : ""}
     <p class="muted">Window ${esc(window.window || "")}, read at
       ${esc(fmtTime((ctx.observedAt || 0) * 1000))}. Nothing here is stored.</p>
-    <details class="panorama-ctx-limits"><summary>What this history cannot do</summary>
+    <details class="panorama-ctx-limits fold-sub"><summary>What this history cannot do</summary>
       <ul>${limits}</ul></details>
   </section>`;
 }
@@ -392,7 +392,7 @@ function paletteHTML(subset, canEdit) {
   const limits = (subset.limits || []).map((l) =>
     `<li><b>${esc(l.limit)}</b> — ${esc(l.reason)}</li>`).join("");
   return `<h3>Add</h3>${groups}
-    <details class="panorama-subset-limits"><summary>What can be authored</summary>
+    <details class="panorama-subset-limits fold-sub"><summary>What can be authored</summary>
       <ul>${limits}</ul></details>`;
 }
 
