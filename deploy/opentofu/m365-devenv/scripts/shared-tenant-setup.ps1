@@ -48,6 +48,11 @@ if ($c.mail_app_id -or $c.exchange_app_id) {
     if ($Device) { $exo.Device = $true }
     Connect-ExchangeOnline @exo
     try {
+        # Small tenants start "dehydrated": custom scopes and role groups are refused until
+        # the one-time, irreversible Enable-OrganizationCustomization has run.
+        if ((Get-OrganizationConfig).IsDehydrated) {
+            throw 'Exchange Online is not customised yet (IsDehydrated). Run Enable-OrganizationCustomization once as an Exchange administrator (it cannot be undone, and may take a while to finish), then run this script again. See README.md, "Geteilter Tenant".'
+        }
         if (-not (Find { Get-ManagementScope -Identity $c.scope_name -ErrorAction Stop })) {
             Step "management scope $($c.scope_name): $($c.recipient_filter)"
             New-ManagementScope -Name $c.scope_name -RecipientRestrictionFilter $c.recipient_filter | Out-Null

@@ -225,6 +225,11 @@ anlegt, muss deren Alias deshalb mit dem Präfix beginnen lassen; sonst lehnt Ex
 Änderung ab. Lesen (*View-Only Recipients*) bleibt organisationsweit möglich; Exchange kennt für
 Leserechte keinen Empfängerbereich.
 
+**Voraussetzung in Exchange:** Kleine Tenants sind anfangs «dehydrated»; Management Scopes
+und Rollengruppen lehnt Exchange dann ab. Einmalig als Exchange-Administrator
+`Enable-OrganizationCustomization` ausführen (nicht umkehrbar, ändert sonst nichts am Betrieb;
+kann einige Zeit brauchen, bis es wirkt). Das Skript prüft das vorab (`IsDehydrated`).
+
 Die Exchange- und SharePoint-Rechte kann OpenTofu nicht setzen. Sie werden nach `tofu apply`
 einmal mit einem Skript vergeben, angemeldet als Administrator (PowerShell 7 mit den Modulen
 `ExchangeOnlineManagement` und `Microsoft.Graph.Authentication`):
