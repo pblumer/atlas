@@ -94,3 +94,32 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 		t.Fatalf("non-boolean incidents: %q %v", text, isErr)
 	}
 }
+
+func TestInstanceOutlineViaTool(t *testing.T) {
+	atlas := newAtlas(t)
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(1, "atlas_deploy", map[string]any{"xml": miToolBPMN}))[0])); isErr {
+		t.Fatalf("deploy: %s", text)
+	}
+	if text, isErr := toolText(t, result(t, run(t, atlas, callTool(2, "atlas_create_instance", map[string]any{"key": 1}))[0])); isErr {
+		t.Fatalf("create: %s", text)
+	}
+	key := firstInstanceKey(t, atlas, 3, map[string]any{"state": "finished"})
+	text, isErr := toolText(t, result(t, run(t, atlas, callTool(4, "atlas_instance_outline", map[string]any{"key": key, "limit": 3}))[0]))
+	if isErr {
+		t.Fatalf("outline: %s", text)
+	}
+	var page struct {
+		Steps []struct {
+			ElementID         string `json:"elementId"`
+			MultiInstanceBody bool   `json:"multiInstanceBody"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	if err := json.Unmarshal([]byte(text), &page); err != nil || len(page.Steps) != 3 || page.NextCursor == "" {
+		t.Fatalf("outline page: %v %s", err, text)
+	}
+	text, isErr = toolText(t, result(t, run(t, atlas, callTool(5, "atlas_instance_outline", map[string]any{"key": key, "cursor": page.NextCursor}))[0]))
+	if isErr || !strings.Contains(text, `"elementId":"e"`) {
+		t.Fatalf("second page: %v %s", isErr, text)
+	}
+}

@@ -47,10 +47,10 @@ func makeLegacy(t *testing.T, statePath string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.DeleteRange([]byte{0x38}, []byte{0x44}, pebble.Sync); err != nil {
+	if err := db.DeleteRange([]byte{0x38}, []byte{0x46}, pebble.Sync); err != nil {
 		t.Fatal(err)
 	}
-	for _, m := range []string{"mi_history_index_v2", "mi_history_decisions_v1"} {
+	for _, m := range []string{"mi_history_index_v2", "mi_history_decisions_v1", "instance_outline_v1"} {
 		if err := db.Delete(append([]byte{0x00}, m...), pebble.Sync); err != nil {
 			t.Fatal(err)
 		}

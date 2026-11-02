@@ -31,6 +31,30 @@ const metaMIDecisionIndex = "mi_history_decisions_v1"
 
 var miDecisionIndexVersion = [...]byte{1}
 
+// metaOutlineIndex marks the instance outline (cfOutline) complete: every step
+// outside an MI iteration of every retained instance is in it. Separate from
+// the MI markers for the reason the decision marker is.
+const metaOutlineIndex = "instance_outline_v1"
+
+var outlineIndexVersion = [...]byte{1}
+
+// ErrOutlineIndexUnavailable means the instance outline is not proven complete
+// for this store; a reader must not present a partial outline as the history.
+var ErrOutlineIndexUnavailable = errors.New("state: instance outline unavailable for history recorded before it existed")
+
+// OutlineIndexReady reports whether the instance outline covers the whole
+// retained history of this store.
+func (q queries) OutlineIndexReady() (bool, error) {
+	value, ok, err := getCopy(q.r, keyMeta(metaOutlineIndex))
+	if err != nil || !ok {
+		return false, err
+	}
+	if !bytes.Equal(value, outlineIndexVersion[:]) {
+		return false, fmt.Errorf("state: invalid instance outline version marker %x", value)
+	}
+	return true, nil
+}
+
 // ErrMIDecisionIndexUnavailable means the decision attribution of the MI history
 // is not proven complete for this store; a reader must not present an empty
 // decision list for an iteration as "no decisions".
@@ -92,7 +116,11 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 		return err
 	}
 	decisions, err := s.MIDecisionIndexReady()
-	if err != nil || (ready && decisions) {
+	if err != nil {
+		return err
+	}
+	outline, err := s.OutlineIndexReady()
+	if err != nil || (ready && decisions && outline) {
 		return err
 	}
 	position, err := s.LastAppliedPosition()
@@ -142,14 +170,16 @@ func (s *Store) initializeMIHistoryIndexReadiness() error {
 	b := s.db.NewBatch()
 	defer b.Close()
 	if !ready {
-		if err := b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil); err != nil {
-			return err
-		}
+		err = b.Set(keyMeta(metaMIHistoryIndex), miHistoryIndexVersion[:], nil)
 	}
-	if !decisions {
-		if err := b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil); err != nil {
-			return err
-		}
+	if err == nil && !decisions {
+		err = b.Set(keyMeta(metaMIDecisionIndex), miDecisionIndexVersion[:], nil)
 	}
-	return b.Commit(pebble.Sync)
+	if err == nil && !outline {
+		err = b.Set(keyMeta(metaOutlineIndex), outlineIndexVersion[:], nil)
+	}
+	if err == nil {
+		err = b.Commit(pebble.Sync)
+	}
+	return err
 }

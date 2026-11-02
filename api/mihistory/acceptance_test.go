@@ -271,6 +271,26 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 		b.Active != 10 || b.Terminated != 0 || b.IncidentsRaised != 10 || b.IterationsWithIncidents != 10 {
 		t.Fatalf("body summary: %+v", b)
 	}
+	var outline struct {
+		Steps []struct {
+			ElementID         string `json:"elementId"`
+			MultiInstanceBody bool   `json:"multiInstanceBody"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	measure("overview: outline of the 50k instance", fmt.Sprintf("/api/v1/instances/%d/outline", pi), &outline)
+	if len(outline.Steps) > 10 || outline.NextCursor != "" {
+		t.Fatalf("outline of the 50k instance holds %d steps", len(outline.Steps))
+	}
+	bodyRows := 0
+	for _, st := range outline.Steps {
+		if st.MultiInstanceBody {
+			bodyRows++
+		}
+	}
+	if bodyRows != 1 {
+		t.Fatalf("outline body rows: %+v", outline.Steps)
+	}
 	var smallBodies struct {
 		Bodies []body `json:"bodies"`
 	}
@@ -356,8 +376,8 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 	// larger numbers and the words for different states (one instance is still
 	// active, the other completed). 25 times the iterations may not cost more
 	// than those few bytes, and neither overview may approach a kilobyte.
-	if d := runs[0].bytes - runs[1].bytes; d < -64 || d > 64 || runs[0].bytes > 1024 {
-		t.Fatalf("overview size depends on the iteration count: %d vs %d bytes", runs[0].bytes, runs[1].bytes)
+	if d := runs[0].bytes - runs[2].bytes; d < -64 || d > 64 || runs[0].bytes > 1024 {
+		t.Fatalf("overview size depends on the iteration count: %d vs %d bytes", runs[0].bytes, runs[2].bytes)
 	}
 	for _, r := range runs {
 		if r.bytes > 64<<10 {

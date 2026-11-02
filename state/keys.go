@@ -77,6 +77,8 @@ const (
 	cfMIBodyByParent         columnFamily = 0x41 // miBodyParent:<piKey>:<parentRoundElKey>:<activationPosition>:<bodyElKey> → empty (ADR-0517 v2)
 	cfMIBodyCounter          columnFamily = 0x42 // miBodyCount:<piKey>:<bodyElKey>:<kind> → int64 merge (ADR-0517 v2)
 	cfMIDecision             columnFamily = 0x43 // miDec:<piKey>:<ownerElKey>:<ts>:<pos> → empty; names a decEval row (ADR-0517, OHS3)
+	cfOutline                columnFamily = 0x44 // outline:<piKey>:<ts>:<pos> → step outside every MI iteration (ADR-0517, bounded overview)
+	cfOutlineHidden          columnFamily = 0x45 // outlineHidden:<piKey>:<elKey> → empty; an element inside an MI iteration (ADR-0517)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 

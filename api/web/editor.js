@@ -4,7 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { groupReplayHistory } from "./replay-history.js";
-import { loadMIBodies, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
+import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -14625,16 +14625,27 @@ async function mountBoundedReplay(root, { api, key, lib, gen, probe }) {
   }
   if (gen !== generation) return;
 
-  let bodies = probe.bodies.slice();
-  let next = probe.nextCursor || "";
+  // The bodies the overview already knows, by key: a body step in the outline
+  // takes its counters from here, or from its own route when it is not.
+  const bodyByKey = new Map(probe.bodies.map((b) => [String(b.bodyElementInstanceKey), b]));
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
+  let bodiesNext = probe.nextCursor || "";
+  let steps = [];        // outline steps loaded so far, in the order they happened
+  let stepsNext = "";    // cursor of the next outline page, "" when none
+  let outlineAvailable = true;
   let explorer = null;
   let marked = "";
+  const registry = viewer ? viewer.get("elementRegistry") : null;
+  const nameOf = (elementId) => {
+    const el = registry && elementId ? registry.get(elementId) : null;
+    return (el && el.businessObject && el.businessObject.name) || elementId || "—";
+  };
   const mark = (elementId) => {
     if (!viewer) return;
     const canvas = viewer.get("canvas");
     if (marked) { try { canvas.removeMarker(marked, "atlas-selected"); } catch { /* gone */ } }
     marked = "";
-    if (elementId && viewer.get("elementRegistry").get(elementId)) {
+    if (elementId && registry.get(elementId)) {
       canvas.addMarker(elementId, "atlas-selected");
       marked = elementId;
     }
@@ -14648,38 +14659,97 @@ async function mountBoundedReplay(root, { api, key, lib, gen, probe }) {
       onClose: () => { explorer.destroy(); explorer = null; mark(""); pane.innerHTML = noteHTML; },
     });
   }
-  function draw() {
-    const rows = bodies.map((b) => `
-      <div class="ops-hrow mi-group mi-bounded" data-body-key="${esc(b.bodyElementInstanceKey)}">
+  async function bodyFor(bodyKey) {
+    const known = bodyByKey.get(String(bodyKey));
+    if (known) return known;
+    const data = await api("GET", `/api/v1/instances/${key}/multi-instances/${bodyKey}`);
+    bodyByKey.set(String(bodyKey), data.body);
+    return data.body;
+  }
+  async function loadSteps() {
+    const page = await loadOutline(api, key, { cursor: stepsNext });
+    if (gen !== generation) return;
+    outlineAvailable = page.available;
+    steps = steps.concat(page.steps);
+    stepsNext = page.nextCursor || "";
+  }
+  function bodyRow(b) {
+    return `<div class="ops-hrow mi-group mi-bounded" data-body-key="${esc(b.bodyElementInstanceKey)}">
         <span class="ops-hicon ${b.state === "active" ? "live" : "done"}">${b.state === "active" ? "&#9679;" : "&#10003;"}</span>
-        <span class="ops-hname">${esc(b.elementId || b.bodyElementInstanceKey)}</span>
+        <span class="ops-hname">${esc(nameOf(b.elementId))}</span>
         <span class="ops-mi-count">${esc(tr("ops.mi.count", { count: fmtCount(b.iterations) }))}</span>
         ${bodySummaryHTML(b)}
         <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(b.bodyElementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>
-      </div>`).join("");
-    historyEl.innerHTML = `<p class="ops-empty mi-bounded-hint">${esc(tr("ops.mi.bounded.other"))}</p>${
-      rows || `<p class="ops-empty">${esc(tr("ops.mi.bounded.none"))}</p>`}${
-      next ? `<button type="button" class="btn neutral small mi-bodies-more">${esc(tr("ops.mi.bounded.more"))}</button>` : ""}`;
+      </div>`;
+  }
+  function draw() {
+    let rows;
+    if (outlineAvailable) {
+      // One row per activation, in the order they happened; its end is a later
+      // step of the same element instance, wherever it has been loaded.
+      const ended = new Map();
+      for (const st of steps) if (st.action !== "activated") ended.set(String(st.elementInstanceKey), st.action);
+      rows = steps.filter((st) => st.action === "activated").map((st) => {
+        const k = String(st.elementInstanceKey);
+        if (st.multiInstanceBody) {
+          const b = bodyByKey.get(k);
+          return b ? bodyRow(b)
+            : `<div class="ops-hrow mi-group mi-bounded" data-pending-body="${esc(k)}"><span class="ops-hicon live">&#9679;</span>
+                <span class="ops-hname">${esc(nameOf(st.elementId))}</span></div>`;
+        }
+        const end = ended.get(k);
+        const icon = end === "terminated" ? "&#10005;" : end ? "&#10003;" : "&#9679;";
+        return `<div class="ops-hrow mi-outline-step" data-eik="${esc(k)}">
+            <span class="ops-hicon ${end ? "done" : "live"}">${icon}</span>
+            <span class="ops-hname">${esc(nameOf(st.elementId))}</span>
+            <span class="ops-htime">${esc(fmtClock(st.at))}</span>
+          </div>`;
+      }).join("");
+    } else {
+      rows = [...bodyByKey.values()].map(bodyRow).join("") || `<p class="ops-empty">${esc(tr("ops.mi.bounded.none"))}</p>`;
+    }
+    const more = outlineAvailable
+      ? (stepsNext ? `<button type="button" class="btn neutral small mi-outline-more">${esc(tr("ops.outline.more"))}</button>` : "")
+      : (bodiesNext ? `<button type="button" class="btn neutral small mi-bodies-more">${esc(tr("ops.mi.bounded.more"))}</button>` : "");
+    historyEl.innerHTML = `${outlineAvailable ? "" : `<p class="ops-empty mi-bounded-hint">${esc(tr("ops.outline.unavailable"))}</p>`}${rows}${more}`;
     historyEl.querySelectorAll(".ops-mi-explore").forEach((btn) => btn.addEventListener("click", () => {
-      const b = bodies.find((x) => String(x.bodyElementInstanceKey) === btn.dataset.bodyKey);
+      const b = bodyByKey.get(btn.dataset.bodyKey);
       if (b) open(b);
     }));
-    const more = historyEl.querySelector(".mi-bodies-more");
-    if (more) more.addEventListener("click", async () => {
-      more.disabled = true;
+    historyEl.querySelectorAll(".mi-outline-step").forEach((row) => row.addEventListener("click", () => {
+      const st = steps.find((x) => String(x.elementInstanceKey) === row.dataset.eik);
+      historyEl.querySelectorAll(".mi-outline-step.sel").forEach((r) => r.classList.remove("sel"));
+      row.classList.add("sel");
+      if (st) mark(st.elementId);
+    }));
+    // A body the first page of the listing did not include is read on its own.
+    historyEl.querySelectorAll("[data-pending-body]").forEach((row) => {
+      bodyFor(row.dataset.pendingBody).then(() => { if (gen === generation) draw(); }).catch(() => {});
+    });
+    const moreSteps = historyEl.querySelector(".mi-outline-more");
+    if (moreSteps) moreSteps.addEventListener("click", async () => {
+      moreSteps.disabled = true;
+      try { await loadSteps(); } catch (e) { moreSteps.disabled = false; moreSteps.title = e.message; return; }
+      draw();
+    });
+    const moreBodies = historyEl.querySelector(".mi-bodies-more");
+    if (moreBodies) moreBodies.addEventListener("click", async () => {
+      moreBodies.disabled = true;
       try {
-        const page = await loadMIBodies(api, key, { cursor: next });
+        const page = await loadMIBodies(api, key, { cursor: bodiesNext });
         if (gen !== generation) return;
-        bodies = bodies.concat(page.bodies);
-        next = page.nextCursor || "";
+        page.bodies.forEach((b) => bodyByKey.set(String(b.bodyElementInstanceKey), b));
+        bodiesNext = page.nextCursor || "";
       } catch (e) {
-        more.disabled = false;
-        more.title = e.message;
+        moreBodies.disabled = false;
+        moreBodies.title = e.message;
         return;
       }
       draw();
     });
   }
+  try { await loadSteps(); } catch { outlineAvailable = false; }
+  if (gen !== generation) return;
   draw();
 }
 

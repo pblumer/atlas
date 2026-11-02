@@ -1125,8 +1125,8 @@ What it takes to run this for real.
   read off the single writer; a 50,000-iteration end-to-end test holds every read to its page
   ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Operations shows a large instance
   without the full timeline and browses its iterations in the Multi-Instance Explorer. Not yet
-  built: a bounded outline of the other steps of such an instance (stores written before the
-  index are rebuilt from the log at startup; a compacted log stays "history unavailable"), OHS3 scoped detail replay, and a
+  built: per-instance readiness for compacted logs (stores written before the index are rebuilt
+  from the log at startup; a compacted log stays "history unavailable"), OHS3 scoped detail replay, and a
   fix for quadratic MI-subprocess completion ([issue #1494](https://github.com/pblumer/atlas/issues/1494)).
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))

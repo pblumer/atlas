@@ -79,9 +79,11 @@ export default {
   "ops.mi.incident.resolved": "Resolved",
   "ops.mi.incident.superseded": "Replaced by a later incident",
   "ops.mi.incident.cleared": "Ended without resolution (element terminated)",
+  "ops.outline.more": "Load more steps",
+  "ops.outline.unavailable": "The other steps of this instance cannot be shown yet: its history was recorded before the overview for it existed. The multi-instance executions are listed below.",
   "ops.mi.bounded.title": "Large execution",
   "ops.mi.bounded.note": "This instance contains an execution with {count} iterations. To keep Operations responsive, the complete step-by-step history is not loaded. The multi-instance executions are summarised below; open one to browse its iterations page by page.",
-  "ops.mi.bounded.other": "The other steps of this instance and the replay on the diagram are not available in this view yet.",
+  "ops.mi.bounded.other": "The step-by-step replay on the diagram is not available in this view yet.",
   "ops.mi.bounded.none": "No top-level multi-instance execution.",
   "ops.mi.bounded.more": "Load more executions",
 
