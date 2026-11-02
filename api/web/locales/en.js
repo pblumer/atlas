@@ -302,6 +302,8 @@ export default {
   "blueprint.intro": "Browse trusted applications and their product catalogues in atlas hub. Today the hub imports verified application packages; standalone catalogues and other offer types remain planned.",
   "blueprint.preview": "Preview",
   "blueprint.empty": "No application Blueprints available.",
+  "blueprint.tags": "Filter by tag",
+  "blueprint.allTags": "All",
   "blueprint.failed": "Could not load Blueprint",
   "blueprint.back": "Back to catalog",
   "blueprint.digest": "SHA-256",

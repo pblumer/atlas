@@ -56,21 +56,46 @@ export function openBlueprintMarketplace({ call, reload, notify }) {
     body.querySelector("[data-back]")?.addEventListener("click", () => { void list(); });
   };
 
+  // The tag a person filters the listing by, kept while the dialog is open.
+  // Tags only steer what is shown; they are signed with the index, and the
+  // server decides nothing by them.
+  let activeTag = "";
+  const chips = (tags) => (tags || []).map((tag) =>
+    `<span class="chip small" data-tag-chip="${esc(tag)}">${esc(tag)}</span>`).join(" ");
+
   const list = async () => {
     body.innerHTML = `<p class="muted">${esc(t("blueprint.loading"))}</p>`;
     try {
       const index = await trustedJSON("/api/v1/blueprints");
       if (closed) return;
       const releases = index.releases || [];
+      const allTags = [...new Set(releases.flatMap((r) => r.tags || []))].sort();
+      if (activeTag && !allTags.includes(activeTag)) activeTag = "";
+      const shown = releases
+        .map((r, i) => ({ r, i }))
+        .filter(({ r }) => !activeTag || (r.tags || []).includes(activeTag));
+      const filter = allTags.length ? `<div class="blueprint-tags" role="group" aria-label="${esc(t("blueprint.tags"))}"
+          style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">
+          <button type="button" class="btn ghost small toggle" data-tag="" aria-pressed="${activeTag === ""}">${esc(t("blueprint.allTags"))}</button>
+          ${allTags.map((tag) => `<button type="button" class="btn ghost small toggle" data-tag="${esc(tag)}" aria-pressed="${activeTag === tag}">${esc(tag)}</button>`).join("")}
+        </div>` : "";
       body.innerHTML = `<p class="muted">${esc(t("blueprint.registry"))}: ${esc(index.registryId)}</p>
         <p>${esc(t("blueprint.intro"))}</p>
-        ${releases.length ? `<div class="package-list">${releases.map((r, i) => `
+        ${filter}
+        ${shown.length ? `<div class="package-list">${shown.map(({ r, i }) => `
           <div class="between" style="padding:9px 0;border-bottom:1px solid var(--border)">
             <div><b>${esc(r.title)}</b> <span class="muted">v${esc(r.version)}</span>
               <div class="muted small">${esc(r.publisherId)} · ${esc(r.license)}</div>
-              <div class="small">${esc(r.description)}</div></div>
+              <div class="small">${esc(r.description)}</div>
+              ${(r.tags || []).length ? `<div class="small" style="margin-top:4px">${chips(r.tags)}</div>` : ""}</div>
             <button class="btn ghost" type="button" data-preview="${i}">${esc(t("blueprint.preview"))}</button>
           </div>`).join("")}</div>` : `<p class="muted">${esc(t("blueprint.empty"))}</p>`}`;
+      body.querySelectorAll("[data-tag]").forEach((b) => {
+        b.addEventListener("click", () => {
+          activeTag = b.dataset.tag || "";
+          void list();
+        });
+      });
       body.querySelectorAll("[data-preview]").forEach((b) => {
         b.addEventListener("click", () => {
           const r = releases[Number(b.dataset.preview)];

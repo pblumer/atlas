@@ -276,6 +276,8 @@ export default {
   "blueprint.intro": "Entdecke vertrauenswürdige Anwendungen und ihre Produktkataloge im atlas hub. Aktuell werden geprüfte Anwendungspakete importiert; eigenständige Kataloge und weitere Angebotsarten sind geplant.",
   "blueprint.preview": "Vorschau",
   "blueprint.empty": "Keine Anwendungs-Blueprints verfügbar.",
+  "blueprint.tags": "Nach Tag filtern",
+  "blueprint.allTags": "Alle",
   "blueprint.failed": "Blueprint konnte nicht geladen werden",
   "blueprint.back": "Zurück zur Übersicht",
   "blueprint.digest": "SHA-256",

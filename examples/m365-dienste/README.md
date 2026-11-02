@@ -14,7 +14,7 @@ verwendet, ersetzt sie in den `.bpmn`-Dateien (Attribut `connector`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 15 Prozesse, 21 Formulare, 5 Entscheidungsreferenzen |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 15 Prozesse, 21 Formulare, 5 Entscheidungen samt ihren Modellen (Format 2) |
 | `katalog.json` | Das Katalogdokument: zwei Kataloge, neun Produkte, eine Beziehung |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -216,8 +216,9 @@ $env:ATLAS_TOKEN = 'atlasat_…'
 Das Skript
 
 1. lädt die fünf Entscheidungsmodelle unter ihren Handles hoch
-   (`POST /api/v1/dmn-models?handle=…`). Die Applikation trägt nur Referenzen auf sie, und
-   das Veröffentlichen prüft, dass es sie gibt;
+   (`POST /api/v1/dmn-models?handle=…`). Der Quellbaum trägt die Modelle ebenfalls
+   (`atlas.json` im Format 2), sodass `atlas import` und atlas hub ohne diesen Schritt
+   auskommen; das Skript behält ihn, und der Import findet die Modelle dann unverändert vor;
 2. importiert die Applikation als Quellbaum (`POST /api/v1/applications/source`);
 3. veröffentlicht sie (`POST /api/v1/applications/{id}/publish`);
 4. füllt die Platzhalter des Katalogdokuments mit den Gruppen-IDs der Instanz und

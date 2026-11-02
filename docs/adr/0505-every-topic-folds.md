@@ -175,6 +175,15 @@ and the panels of the canvases, which are not stacked topics. Such a fold is mar
 one; a `<details>` a library draws (form-js, the API reference) is not marked and keeps
 its own marker.
 
+Two guards hold the next page to this, so that "no page has to ask" does not depend on
+anybody remembering. `e2e/fold-coverage.spec.mjs` opens every page of the menu, read from
+`app.js` when it runs, with every answer empty, and fails on a page with two or more
+section headings that do not all fold, on a card headed by a bold word or an `<h3>`
+(unless it holds a form), and on a `<details>` not marked `fold-sub`; a heading that
+must not fold says so with `no-fold`. `TestEveryFoldInsideATopicDrawsTheTopicsCaret`
+holds every `<details>` in the Console's modules to `fold-sub` in the source, which
+reaches the ones a page draws only around data.
+
 ## Links
 
 - relates to [ADR-0286](0286-a-list-carries-its-own-search.md) (the same pass for lists)

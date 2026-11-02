@@ -138,6 +138,16 @@ func TestVerifySignedIndexRejectsInvalidReleaseMetadata(t *testing.T) {
 		{"bad registry", func(v map[string]any) { v["registryId"] = "UNTRUSTED" }},
 		{"wrong publisher", func(v map[string]any) { releaseFields(v)["publisherId"] = "com.attacker" }},
 		{"bad blueprint id", func(v map[string]any) { releaseFields(v)["blueprintId"] = "a" }},
+		{"upper-case tag", func(v map[string]any) { releaseFields(v)["tags"] = []any{"Einstieg"} }},
+		{"tag with space", func(v map[string]any) { releaseFields(v)["tags"] = []any{"two words"} }},
+		{"duplicate tag", func(v map[string]any) { releaseFields(v)["tags"] = []any{"hr", "hr"} }},
+		{"too many tags", func(v map[string]any) {
+			tags := make([]any, MaxTags+1)
+			for i := range tags {
+				tags[i] = "t" + strings.Repeat("x", i+1)
+			}
+			releaseFields(v)["tags"] = tags
+		}},
 		{"empty title", func(v map[string]any) { releaseFields(v)["title"] = "" }},
 		{"invalid release", func(v map[string]any) { releaseFields(v)["version"] = "01.2.3" }},
 		{"invalid prerelease", func(v map[string]any) { releaseFields(v)["version"] = "1.0.0-01" }},
@@ -221,4 +231,24 @@ func fmtHex(data []byte) string {
 		builder.WriteByte(digits[b&15])
 	}
 	return builder.String()
+}
+
+// Tags are optional: an index without them verifies as before, one with them
+// keeps them in order.
+func TestVerifySignedIndexKeepsOptionalTags(t *testing.T) {
+	without := mutateTestIndex(t, func(v map[string]any) { delete(releaseFields(v), "tags") })
+	sig, key := signIndex(without)
+	index, err := VerifySignedIndex(without, sig, key)
+	if err != nil || index.Releases[0].Tags != nil {
+		t.Fatalf("index without tags = %v, %v", index.Releases, err)
+	}
+	raw := testIndex(t)
+	sig, key = signIndex(raw)
+	index, err = VerifySignedIndex(raw, sig, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(index.Releases[0].Tags, ","); got != "approval,no-worker" {
+		t.Fatalf("tags = %q", got)
+	}
 }

@@ -30,7 +30,7 @@ var miRebuildCommitEvery = 50_000
 const miRebuildCopyBatch = 10_000
 
 // RebuildMIHistory proves the multi-instance history index of a store that
-// recorded history before the index existed (ADR-draft-mi-history-legacy-rebuild).
+// recorded history before the index existed (ADR-0518).
 //
 // It runs at startup, after Recover and before the processor accepts commands.
 // The retained log is replayed from genesis through the one applyToState into a
