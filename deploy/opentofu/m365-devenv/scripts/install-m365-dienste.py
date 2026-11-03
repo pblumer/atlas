@@ -166,6 +166,109 @@ def adapt(src, dst, sku, with_telephony, department, sharepoint_host, with_site)
     log("products left out here: " + ", ".join(sorted(drop)))
 
 
+# The on-premises variant (exchange.tf): the Exchange products once more, in a catalogue
+# of their own, served by the Exchange worker on the Exchange server.
+ONPREM_PRODUCTS = ["m365-funktionspostfach", "m365-verteiler", "m365-postfachzugriff", "m365-raum", "m365-geraet"]
+ONPREM_WORKER = "ucc_exchange_onprem"
+
+
+def build_onprem(pkg, dst):
+    """Writes the on-premises variant of the adapted package pkg into dst.
+
+    Every process the Exchange products run, every form they show and every message
+    they start by is copied under a name of its own (process ids and form ids get
+    _onprem / -onprem, messages m365onprem.*), so the variant neither replaces the
+    online catalogue's definitions nor starts its processes; the copies name the
+    on-premises worker. The approval stays the online one (proc_m365_genehmigung_
+    vorgesetzter, which reads the manager in Entra), and so do the decisions, which belong
+    to the online application.
+    The people the forms find in Entra are the same people to Exchange Server because
+    the test domain's users carry the tenant's UPN (exchange-setup.ps1, phase 4).
+    """
+    os.makedirs(dst)
+    man = json.load(open(os.path.join(pkg, "atlas.json"), encoding="utf-8"))
+    cat = json.load(open(os.path.join(pkg, "katalog.json"), encoding="utf-8"))
+    path_of = {x["id"]: x["path"] for x in man["processes"]}
+    form_path = {x["id"]: x["path"] for x in man["forms"]}
+    products = [x for x in cat["products"] if x["id"] in ONPREM_PRODUCTS]
+    procs, forms, messages = set(), set(), set()
+    for x in products:
+        for k in ("lifecycleProcess", "provisionProcess", "deprovisionProcess"):
+            if x.get(k):
+                procs.add(x[k])
+        forms.add(x.get("configForm"))
+        for a in x.get("actions", []):
+            if a.get("form"):
+                forms.add(a["form"])
+            if a.get("message"):
+                messages.add(a["message"])
+    for pid in procs:
+        forms |= set(re.findall(r'formId="([^"]+)"', open(os.path.join(pkg, path_of[pid]), encoding="utf-8").read()))
+    forms.discard(None)
+
+    def proc(i): return i + "_onprem"
+    def form(i): return i + "-onprem"
+    def message(m): return m.replace("m365.", "m365onprem.", 1)
+
+    out_procs = []
+    for pid in sorted(procs):
+        src = open(os.path.join(pkg, path_of[pid]), encoding="utf-8").read()
+        src = src.replace('connector="ucc_exchange"', f'connector="{ONPREM_WORKER}"')
+        # The process id is an attribute value wherever it occurs (the process, its
+        # diagram plane): replaced as a whole quoted value.
+        src = src.replace(f'"{pid}"', f'"{proc(pid)}"')
+        src = re.sub(r'(<process id="[^"]+" name=")([^"]*)"', r'\g<1>\g<2> (Exchange Server)"', src, count=1)
+        for m in messages:
+            src = src.replace(f'name="{m}"', f'name="{message(m)}"')
+        for f in forms:
+            src = src.replace(f'formId="{f}"', f'formId="{form(f)}"')
+        name = path_of[pid].replace(".bpmn", "-onprem.bpmn")
+        open(os.path.join(dst, name), "w", encoding="utf-8").write(src)
+        out_procs.append({"id": proc(pid), "name": proc(pid), "path": name})
+    out_forms = []
+    for fid in sorted(forms):
+        doc = json.load(open(os.path.join(pkg, form_path[fid]), encoding="utf-8"))
+        doc["id"] = form(fid)
+        name = form_path[fid].replace(".form.json", "-onprem.form.json")
+        json.dump(doc, open(os.path.join(dst, name), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        out_forms.append({"id": form(fid), "name": form(fid), "path": name})
+    for m in MODELS:
+        shutil.copy(os.path.join(pkg, m + ".dmn"), os.path.join(dst, m + ".dmn"))
+    shutil.copy(os.path.join(pkg, "fragen.json"), os.path.join(dst, "fragen.json"))
+    json.dump({"formatVersion": man["formatVersion"], "key": APP_KEY + "-onprem",
+               "name": man["name"] + " (Exchange Server)", "processes": out_procs, "forms": out_forms,
+               # A decision belongs to one application: the variant's business rule
+               # tasks call the online application's M365Namensregel and
+               # M365PostfachzugriffFreigabe by their decision ids.
+               "decisions": []},
+              open(os.path.join(dst, "atlas.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+    out_products = []
+    for x in products:
+        y = json.loads(json.dumps(x))
+        y["id"] = x["id"] + "-onprem"
+        y["homeCatalog"] = "cat-m365-onprem"
+        for k in ("lifecycleProcess", "provisionProcess", "deprovisionProcess"):
+            if y.get(k):
+                y[k] = proc(y[k])
+        if y.get("configForm"):
+            y["configForm"] = form(y["configForm"])
+        for a in y.get("actions", []):
+            if a.get("form"):
+                a["form"] = form(a["form"])
+            if a.get("message"):
+                a["message"] = message(a["message"])
+        y["texts"] = {k: v + " (Exchange Server)" for k, v in x["texts"].items()}
+        out_products.append(y)
+    doc = {"publish": cat.get("publish", True),
+           "catalogs": [{"id": "cat-m365-onprem",
+                         "texts": {"de": "Exchange Server (OnPrem)", "en": "Exchange Server (on-premises)"},
+                         "rank": 400, "languages": ["de", "en"], "items": [y["id"] for y in out_products],
+                         "groups": ["{{zielgruppe}}"], "edges": []}],
+           "products": out_products}
+    json.dump(doc, open(os.path.join(dst, "katalog.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+
+
 APP_KEY = "beispiel-m365-dienste"
 MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachkontingent", "m365-postfachzugriff",
           "m365-site-kontingent", "m365-telefonie", "m365-verteiler-zuordnung"]
@@ -219,6 +322,8 @@ def main():
     ap.add_argument("--cafile", help="Caddy's root certificate (atlas_tls = internal)")
     ap.add_argument("--sku", help="licence for the mailbox variants (default: first of license_sku_ids)")
     ap.add_argument("--mail-domain", help="domain of the catalogue's addresses (default: the initial domain)")
+    ap.add_argument("--no-onprem", action="store_true",
+                    help="leave out the Exchange Server variant even when exchange_onprem is built")
     ap.add_argument("--site-inventory", help="SITE_INVENTAR, the site carrying the list «Site-Inventar» "
                     "(host:/sites/path); without it the SharePoint team site is left out")
     args = ap.parse_args()
@@ -294,6 +399,30 @@ def main():
         constants.append({"name": "SITE_INVENTAR", "type": "string", "value": args.site_inventory})
     atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": constants})
     log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}")
+
+    onprem = tofu_output(tofu_dir, "exchange_onprem")
+    if onprem and not args.no_onprem:
+        work = tempfile.mkdtemp(prefix="m365-dienste-onprem-")
+        try:
+            pkg = os.path.join(work, "m365-dienste")
+            adapt(os.path.abspath(args.example), pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "",
+                  sharepoint_host, bool(args.site_inventory))
+            var = os.path.join(work, "onprem")
+            build_onprem(pkg, var)
+            install(atlas, var)
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        _, apps = atlas.call("GET", "/api/v1/applications")
+        app = next((a for a in items(apps, "applications") if a.get("key") == APP_KEY + "-onprem"), None)
+        if not app:
+            sys.exit(f"the application {APP_KEY}-onprem is not listed after the import")
+        onprem_domain = onprem["fqdn"].split(".", 1)[1]
+        atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": [
+            {"name": "NAME_PREFIX", "type": "json", "value": json.dumps(prefix)},
+            {"name": "MAIL_DOMAIN", "type": "string", "value": onprem_domain},
+            {"name": "ATLAS_API_BASE", "type": "string", "value": "http://127.0.0.1:8080"},
+        ]})
+        log(f"on-premises variant installed: catalogue cat-m365-onprem, worker {ONPREM_WORKER}, MAIL_DOMAIN={onprem_domain}")
     log("done")
 
 
