@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/pblumer/atlas/api/blueprintregistry"
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/importplan"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -217,4 +219,84 @@ func (s *Server) handleBlueprintPackage(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(compressed)
+}
+
+// blueprintImportResult is a hub import's answer: the release it installed and the
+// import result, field for field what POST /api/v1/applications/source answers.
+type blueprintImportResult struct {
+	BlueprintID string `json:"blueprintId"`
+	Version     string `json:"version"`
+	Digest      string `json:"digest"`
+	// CataloguesNotImported names the catalogues the package offers that this route
+	// does not install: their questions ask for this installation's groups and people,
+	// which a person answers, in the Console's atlas hub dialog.
+	CataloguesNotImported []string `json:"cataloguesNotImported"`
+	sourceImportResult
+}
+
+// handleBlueprintImport installs the application of a verified atlas hub release
+// through the same source import an uploaded package takes (importSourceFiles): the
+// server fetches the release from its operator-pinned registry, checks it against
+// the digest the caller previewed, inspects it and imports it. The plan, the
+// decisions (?dryRun, ?overwrite, ?keep), the editor rule and the needs are the
+// source import's own. It installs the application only; a package's catalogues
+// are named, not imported.
+//
+// It exists so that a client that cannot move package bytes itself — an agent over
+// MCP — installs exactly what the Console does, with nothing it could alter between
+// the registry and the import.
+func (s *Server) handleBlueprintImport(w http.ResponseWriter, r *http.Request) {
+	if !s.requireBlueprints(w) {
+		return
+	}
+	digest := r.URL.Query().Get("digest")
+	if digest == "" {
+		httpapi.Error(w, http.StatusPreconditionRequired, "preview the Blueprint release first and pass the digest it reported as ?digest=")
+		return
+	}
+	decide, err := importplan.Parse(r.URL.Query())
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	release, compressed, ok := s.selectedBlueprint(w, r)
+	if !ok {
+		return
+	}
+	if release.Artifact.Digest != digest {
+		httpapi.Error(w, http.StatusPreconditionFailed, "Blueprint digest changed since preview; review again")
+		return
+	}
+	if int64(len(compressed)) > s.budgets().AppBundle {
+		httpapi.Error(w, http.StatusRequestEntityTooLarge, "Blueprint package exceeds this server's application bundle limit")
+		return
+	}
+	inspection, err := blueprintregistry.InspectPackage(release, compressed)
+	if err != nil {
+		httpapi.Error(w, http.StatusBadGateway, "Blueprint package failed safe archive inspection")
+		return
+	}
+	files, err := s.readSourceArchive(bytes.NewReader(compressed))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadGateway, "Blueprint package is not a readable source tree: "+err.Error())
+		return
+	}
+	catalogues := make([]string, 0, len(inspection.Catalogues))
+	for _, c := range inspection.Catalogues {
+		catalogues = append(catalogues, c.ID)
+	}
+	status, body := s.importSourceFiles(r, files, decide)
+	switch v := body.(type) {
+	case sourceImportResult:
+		httpapi.JSON(w, status, blueprintImportResult{
+			BlueprintID: release.BlueprintID, Version: release.Version, Digest: release.Artifact.Digest,
+			CataloguesNotImported: catalogues, sourceImportResult: v,
+		})
+	case map[string]any:
+		// The error envelope stays the envelope: "error" at the top, the release beside it.
+		v["blueprintId"], v["version"], v["digest"] = release.BlueprintID, release.Version, release.Artifact.Digest
+		httpapi.JSON(w, status, v)
+	default:
+		httpapi.JSON(w, status, body)
+	}
 }

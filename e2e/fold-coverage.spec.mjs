@@ -12,8 +12,9 @@
 // with every answer empty: what a page draws only around data is held by its own spec
 // (section-folds.spec.mjs and the like), and a <details> inside a list by the source
 // guard in api/foldsub_internal_test.go. A heading that must not fold says so with
-// class no-fold on itself or on what holds it; a page's title is its <h1>, or on a page
-// with none, its first heading.
+// class no-fold on itself or on what holds it, with the reason in a comment beside it
+// (`no-fold: <the reason>`, which that Go test requires); a page's title is its <h1>,
+// or on a page with none, its first heading.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 

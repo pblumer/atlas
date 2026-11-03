@@ -26,6 +26,7 @@ _Changed_ / _Removed_ for each version.
   Modeler's AD panel offers all three, and `examples/ad-dienste` now seals logon names,
   names, addresses and found DNs and names external accounts `ext-<vorname>.<nachname>`
   again (ADR-0166, amended 2026-11-03).
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
 - **A process commands what a person holds without reading what they hold.** A shop
   send task in mode `command` may name a `recipient` instead of an order and a position;
   the server finds that person's position of the product in the inventory and commands
@@ -33,7 +34,7 @@ _Changed_ / _Removed_ for each version.
   naming the person — the inventory stays the administrators' to read. Holding nothing
   completes the task with an empty result, and a refused command, in either shape, is
   thrown as `SHOP_COMMAND_REFUSED` when the process catches it
-  (ADR-draft-command-by-recipient).
+  (ADR-0521).
 - **A process orders a product for somebody in the name of its application.** A shop
   send task in the new mode `order` names a catalogue and a product, the recipient's
   account id and the answers to the products' forms, and places the order through the
@@ -246,6 +247,7 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
 - **A provisioning that reports at once keeps its report.** A provisioning process
   that reported its position done (or failed) before the order's start came back to
   mark the line running had its report overwritten with running, and the position
