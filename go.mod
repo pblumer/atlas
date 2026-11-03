@@ -65,3 +65,5 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/pblumer/feel => ../feel

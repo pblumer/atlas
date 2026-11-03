@@ -14,6 +14,7 @@
 package expr
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -33,7 +34,9 @@ type Compiled struct {
 	fn     feel.CompiledExpr
 	env    *feel.Env
 	inputs []string
-	src    string
+	// filterOnly are the inputs CompileAuto found only inside a filter (sorted).
+	filterOnly []string
+	src        string
 }
 
 // Compile parses, type-checks and lowers src into a reusable form. vars declares
@@ -57,14 +60,35 @@ func Compile(src string, vars ...string) (*Compiled, error) {
 // what is a genuine free variable (bound loop/quantifier names, path members and
 // built-ins never surface as unknown). A syntax or type error (not a missing
 // declaration) is returned as-is.
+//
+// A name read only inside a filter never surfaces as unknown: there it may be a
+// key of the element (people[age > 18]). The compiler reports such names as open,
+// and they are declared too, so a process variable read only inside a filter
+// (groups[starts with(alias, application.PREFIX)]) is bound like any other
+// instead of reading null. The element's key still takes precedence over the
+// variable of the same name, so a declared key name changes nothing where the
+// elements carry it.
 func CompileAuto(src string) (*Compiled, error) {
-	var declared []string
+	var declared, filterOnly []string
 	seen := map[string]bool{}
 	for {
 		env := feel.NewEnv(declared...)
-		fn, refs, err := feel.CompileStringRefs(src, env)
+		fn, refs, open, err := feel.CompileStringOpen(src, env)
 		if err == nil {
-			return &Compiled{fn: fn, env: env, inputs: refs, src: src}, nil
+			progress := false
+			for _, name := range open {
+				if !seen[name] {
+					seen[name] = true
+					declared = append(declared, name)
+					filterOnly = append(filterOnly, name)
+					progress = true
+				}
+			}
+			if !progress {
+				sort.Strings(filterOnly)
+				return &Compiled{fn: fn, env: env, inputs: refs, filterOnly: filterOnly, src: src}, nil
+			}
+			continue
 		}
 		name, ok := unknownVariable(err)
 		if !ok || seen[name] {
@@ -93,8 +117,17 @@ func unknownVariable(err error) (string, bool) {
 }
 
 // Inputs returns the variable names the expression actually reads (sorted,
-// unique) — a subset of the names passed to Compile.
+// unique) — a subset of the names passed to Compile. It is what a caller binds.
+// From CompileAuto it includes the names read only inside a filter
+// ([Compiled.FilterOnly]), which may as well be keys of the filtered elements.
 func (c *Compiled) Inputs() []string { return c.inputs }
+
+// FilterOnly returns the inputs CompileAuto found only inside a filter predicate
+// (sorted, unique): a variable bound outside the filter or a key of the elements,
+// which one is known only at runtime, element by element. Bind them like any other
+// input; but do not count one as missing when the caller has no such variable —
+// people[age > 18] needs no variable age.
+func (c *Compiled) FilterOnly() []string { return c.filterOnly }
 
 // Source returns the expression as it was written. A compiled expression is
 // otherwise opaque, so an explanation of what the engine decided — a loop's

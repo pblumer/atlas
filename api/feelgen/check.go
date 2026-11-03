@@ -3,6 +3,7 @@ package feelgen
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -80,8 +81,8 @@ func Evaluate(expression string, vars map[string]any, expected any, hasExpected 
 		bindings[name] = expr.FromJSON(raw)
 	}
 	for _, in := range c.Inputs {
-		if _, ok := vars[in]; !ok {
-			c.Missing = append(c.Missing, in)
+		if _, ok := vars[in]; !ok && !slices.Contains(compiled.FilterOnly(), in) {
+			c.Missing = append(c.Missing, in) // a name only a filter reads may be the elements' key
 		}
 	}
 	v, err := compiled.Eval(bindings)
