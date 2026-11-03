@@ -1,0 +1,81 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-kontingent-pruefung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Kontingent prüfen und setzen · Review and set the quota**\n\nGesetzt wird das Kontingent im SharePoint Admin Center (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota; Microsoft Graph hat dafür keine Schnittstelle. «Gesetzt» erst wählen, wenn es gesetzt ist. · The quota is set in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota; Microsoft Graph has no API for it. Choose “set” only once it is set."
+    },
+    {
+      "key": "pruefhinweis",
+      "type": "textfield",
+      "label": "Hinweis der Regel · Rule note",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "alias",
+      "type": "textfield",
+      "label": "URL (/sites/…) · Url (/sites/…)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "belegtGB",
+      "type": "number",
+      "label": "Belegt (GB) · Used (GB)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neuesKontingent",
+      "type": "textfield",
+      "label": "Gewünschtes Kontingent (GB) · Requested quota (GB)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingentBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "disabled": true
+    },
+    {
+      "key": "kontingentEntscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Gesetzt · Set",
+          "value": "gesetzt"
+        },
+        {
+          "label": "Abgelehnt · Refused",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "pruefkommentar",
+      "type": "textarea",
+      "label": "Kommentar · Comment",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

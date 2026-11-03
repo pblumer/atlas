@@ -265,6 +265,12 @@ func (s *Server) fireAction(h heldLine, id, key, commandID, reason string, extra
 		// What the process reports the outcome against (ADR-0429 §4).
 		{Name: commandIDVar, Kind: model.VarString, Text: commandID},
 	}
+	// The shape the right was ordered in, as the provision and the return are given it:
+	// an action that starts its own instance has no other way to know which licence it
+	// is changing, and a decision over it would see null.
+	if v := strings.TrimSpace(line.VariantID); v != "" {
+		vars = append(vars, model.VariableValue{Name: "variantId", Kind: model.VarString, Text: v})
+	}
 	if reason := strings.TrimSpace(reason); reason != "" {
 		vars = append(vars, model.VariableValue{Name: "reason", Kind: model.VarString, Text: reason})
 	}

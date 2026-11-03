@@ -11,16 +11,16 @@ Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkt
              id="defs_proc_m365_genehmigung_vorgesetzter" targetNamespace="http://atlas/beispiel/m365-dienste">
   <error id="Err_PersonUnbekannt" name="Person in Entra ID unbekannt" errorCode="ENTRA_USER_NOT_FOUND"/>
 
-  <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,person,postfach,anlass" atlas:dataSubject="recipient">
+  <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,stellvertretung,person,postfach,anlass" atlas:dataSubject="recipient">
     <documentation>Holt die Genehmigung für eine Microsoft-365-Position bei der vorgesetzten Person der betroffenen Person ein und meldet das Ergebnis an den Auftrag.
 
 Ersetzt für die Produkte dieser Applikation die Genehmigungsart «superior» (Systemprozess «Shop: Genehmigung (Linienvorgesetzter)»). Das Produkt nennt diesen Prozess als Genehmigungsart (approval.kind = proc_m365_genehmigung_vorgesetzter). Als eigener Prozess der Installation erhält er die Antworten des Bestellformulars und kennt damit die betroffene Person; der Systemprozess kennt nur das Atlas-Konto der bestellenden Person und nimmt deren Linienvorgesetzten aus diesem Konto (managerId, ADR-0470).
 
-Betroffene Person: upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff), in dieser Reihenfolge.
+Betroffene Person: upn (Lizenz), besitzer (Team, SharePoint-Site, Funktionspostfach) oder person (Postfachzugriff), in dieser Reihenfolge.
 
 Ablauf: Vorgesetzten in Entra ID lesen (Entra-Worker ucc_entra, Operation get-user-manager), sein Atlas-Konto suchen, Aufgabe an ihn. Gibt es keinen Vorgesetzten, ist die Person unbekannt oder hat der Vorgesetzte kein Atlas-Konto, entscheidet die Ersatzgruppe: approval.ref des Produkts, sonst die Gruppe M365-Administration (über ihren Namen).
 
-Personendaten: upn, besitzer, person, postfach und anlass sind die Antworten der Bestellformulare, die eine Person nennen; sie sind als Personendaten der empfangenden Person deklariert und im Verlauf verschlüsselt. Kein Ausdruck, den die Engine auswertet, liest sie: die betroffene Person wählt der userId-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker ausgewertet wird, und die Nachricht nennt sie im Mail-Worker. Beide erhalten den Klartext. Die übrigen Antworten (Bereich, Bezeichnung, Zugriffsart und so weiter) nennen niemanden. Der Vorgesetzte (vorgesetzter, naechster) ist nicht deklariert: er ist nicht die empfangende Person, und Gateway und Kontosuche müssen ihn lesen.
+Personendaten: upn, besitzer, stellvertretung (SharePoint-Site), person, postfach und anlass sind die Antworten der Bestellformulare, die eine Person nennen; sie sind als Personendaten der empfangenden Person deklariert und im Verlauf verschlüsselt. Kein Ausdruck, den die Engine auswertet, liest sie: die betroffene Person wählt der userId-Ausdruck der Entra-Aufgabe, der erst bei der Übergabe des Jobs an den Worker ausgewertet wird, und die Nachricht nennt sie im Mail-Worker. Beide erhalten den Klartext. Die übrigen Antworten (Bereich, Bezeichnung, Zugriffsart und so weiter) nennen niemanden. Der Vorgesetzte (vorgesetzter, naechster) ist nicht deklariert: er ist nicht die empfangende Person, und Gateway und Kontosuche müssen ihn lesen.
 
 Voraussetzungen beim Betreiber:
 - Der Entra-Worker ucc_entra, den auch Lizenz, Team und Partnerzugang verwenden. Seine App-Registrierung braucht dafür User.Read.All, das in User.ReadWrite.All enthalten ist.
@@ -49,7 +49,7 @@ Atlas-Konto: gesucht wird ein Konto, dessen Benutzername gleich der UPN oder der
     </scriptTask>
 
     <serviceTask id="Graph" name="Vorgesetzten lesen (Entra ID)">
-      <documentation>get-user-manager im Entra-Worker ucc_entra: der Vorgesetzte der betroffenen Person, die upn (Lizenz), besitzer (Team, Funktionspostfach) oder person (Postfachzugriff) nennt, in dieser Reihenfolge.
+      <documentation>get-user-manager im Entra-Worker ucc_entra: der Vorgesetzte der betroffenen Person, die upn (Lizenz), besitzer (Team, SharePoint-Site, Funktionspostfach) oder person (Postfachzugriff) nennt, in dieser Reihenfolge.
 
 Der Ausdruck in userId liest Personendaten und darf es: Die Engine wertet ihn nicht aus. Er wird erst bei der Übergabe des Jobs an den Worker ausgewertet, wo die Angaben im Klartext vorliegen (ADR-0314). In den Prozess kommt nur der Vorgesetzte zurück.
 

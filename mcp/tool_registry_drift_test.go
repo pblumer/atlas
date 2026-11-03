@@ -1016,6 +1016,7 @@ var mcpOmittedRoutes = map[string]string{
 	"GET /api/v1/form-data/decisions":                       "the form editor's picker feed for a field whose options come from a decision; an agent lists decisions with atlas_deployed_decisions and authors the form's atlasDecision, which the save checks",
 	"POST /api/v1/form-data/decisions/{decisionId}/options": "the form editor's preview of a decision against an author's inputs; an agent evaluates a model with atlas_try_decision",
 	"POST /api/v1/forms/{id}/fields/{field}/options":        "what a rendered form asks for a field as a person chooses in the fields it is bound to; an agent reads the form and the deployed model, and completion checks the submitted value",
+	"POST /api/v1/forms/{id}/fields/{field}/availability":   "what a rendered form asks while a person types a name; it needs a signed-in person, and the provisioning process an agent starts checks the name again",
 
 	// Decision drafts (ADR-0321): the Modeler's holding place for a
 	// decision an author has not finished. Its whole purpose is that nothing else

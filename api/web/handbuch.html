@@ -5633,27 +5633,37 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Was eine IT-Abteilung mit Microsoft 365 anbietet, als Shop: Lizenz mit Postfach, Teams-Telefonie,
-              Teams, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, Anrufwarteschlangen und
-              Telefonzentralen, in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
+              Teams, Communities in Viva Engage, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, buchbare Geräte,
+              Anrufwarteschlangen, Telefonzentralen und die Aufbewahrung eines Postfachs (Litigation Hold), in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
               Dazu zwei öffentliche Formulare: Externe beantragen einen Partnerzugang oder melden sich bei einem
-              Verteiler an und ab.</p>
+              Verteiler an und ab. Und ein Eintritt aus dem HR-System: Meldet es eine neue Person, legt ein Prozess
+              ihr Konto in Entra ID an, wartet auf ihr Atlas-Konto und bestellt in seinem eigenen Namen das
+              Eintrittspaket mit Lizenz und den Mitgliedschaften ihrer Organisationseinheit; beim Austritt gibt er es
+              zurück.</p>
             <p data-l="en">What an IT department offers with Microsoft 365, as a shop: licence with mailbox, Teams
-              telephony, teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call queues
-              and auto attendants, in two catalogues for staff and for the people in charge of communication. Plus two
-              public forms: externals request partner access, or subscribe to and leave a distribution list.</p>
+              telephony, teams, Viva Engage communities, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, bookable
+              equipment, call queues, auto attendants and a litigation hold on a mailbox, in two catalogues for staff and for the people in charge of communication. Plus two
+              public forms: externals request partner access, or subscribe to and leave a distribution list. And a
+              joiner from the HR system: when it reports a new person, a process creates their account in Entra ID,
+              waits for their Atlas account and orders the joiner package with the licence and their organisational
+              unit's memberships in its own name; when they leave, it returns it.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Fünfzehn Prozesse über die Worker-Typen Entra, Exchange und Teams Phone, fünf
-              Entscheidungstabellen und 21 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
-              zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
-              <code>ucc_exchange</code> und <code>ucc_teams</code>. Lizenz, Team, Funktionspostfach und Postfachzugriff
-              genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
+            <p data-l="de">Dreiundzwanzig Prozesse über die Worker-Typen Entra, Exchange, SharePoint und Teams Phone,
+              acht Entscheidungstabellen und 48 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              zu, Abwesenheitsnotiz, Kontingent, Weiterleitung, Mailadressen und Kalenderstellvertretung am selben Produkt
+              setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
+              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>. Das Bestellformular der
+              SharePoint-Teamwebsite prüft schon während der Eingabe, ob die URL noch frei ist. Lizenz, Team, SharePoint-Teamwebsite, Community,
+              Funktionspostfach und Postfachzugriff genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
               sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
-            <p data-l="en">Fifteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
-              and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
-              reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
-              <code>ucc_teams</code>. Licence, team, shared mailbox and mailbox access are approved by the line manager
+            <p data-l="en">Twenty-three processes over the Entra, Exchange, SharePoint and Teams Phone Worker Types, eight
+              decision tables and 48 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
+              automatic reply, the quota, forwarding, e-mail addresses and calendar delegates on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code>,
+              <code>ucc_sharepoint</code> and <code>ucc_teams</code>. The SharePoint team site's order form checks
+              while the URL is typed whether it is still free. Licence, team, SharePoint team site, community, shared mailbox and mailbox access
+              are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
               <code>get-user-manager</code> through the <code>ucc_entra</code> Worker.</p>
           </div>
@@ -5673,11 +5683,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           needs information security's approval as well, depending on the access type, and ends after a year.</p>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die fünf Entscheidungsmodelle
+        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die acht Entscheidungsmodelle
           hochgeladen sind; die Schritte, die Antworten auf die Fragen des Katalogs und die Konstanten der Applikation
           stehen in <code>examples/m365-dienste/README.md</code>. Die öffentlichen Links erzeugst du danach bewusst
           selbst.</p>
-        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the five decision models are uploaded; the
+        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the eight decision models are uploaded; the
           steps, the answers to the catalogue's questions and the application's constants are in
           <code>examples/m365-dienste/README.md</code>. You create the public links yourself afterwards, deliberately.</p>
       </div>
@@ -7062,14 +7072,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             beobachtender Delta-Sync)? Dann die <code>*.Read.All</code>-Varianten.
             <b>Entferne <code>Directory.ReadWrite.All</code>, falls vorhanden</b> – das ist der
             Alles-lesen-und-schreiben-Grant, den dieser Worker nie braucht. Teams-Operationen und Rollenzuweisung sind
-            opt-in.</li>
+            opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
+            Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
+            <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
+            sein).</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
             <code>GroupMember.ReadWrite.All</code> replaces the second. Read-only (a report, an export, an observing
             delta sync)? Then the <code>*.Read.All</code> variants. <b>Remove
             <code>Directory.ReadWrite.All</code> if present</b> – that is the read-and-write-everything grant this
-            worker never needs. Teams operations and role assignment are opt-in.</li>
+            worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
+            (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
+            communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
+            documents that the Engage network must be in native mode for it).</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the

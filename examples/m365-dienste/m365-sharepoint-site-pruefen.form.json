@@ -1,0 +1,51 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-site-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Site-Erstellung prüfen · Check the site's creation**\n\nDie Microsoft-365-Gruppe besteht, aber ihre Site war nach rund 20 Minuten noch nicht da. Bitte im SharePoint Admin Center nachsehen und diese Aufgabe erst abschliessen, wenn die Site besteht. · The Microsoft 365 group exists, but its site was still missing after about 20 minutes. Please check in the SharePoint admin centre and complete this task only once the site exists."
+    },
+    {
+      "key": "alias",
+      "type": "textfield",
+      "label": "URL (/sites/…) · Url (/sites/…)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "titel",
+      "type": "textfield",
+      "label": "Titel · Title",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "siteUrlTatsaechlich",
+      "type": "textfield",
+      "label": "Tatsächliche Adresse, falls abweichend · Actual URL, if different",
+      "description": "Leer lassen, wenn die Site unter /sites/<URL> besteht. Die Aktionen des Produkts erwarten sie dort. · Leave empty if the site exists at /sites/<URL>. The product's actions expect it there.",
+      "validate": {
+        "pattern": "^https://\\S+$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "siteBesteht",
+      "type": "checkbox",
+      "label": "Die Site besteht · The site exists",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

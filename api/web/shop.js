@@ -150,6 +150,12 @@ const STRINGS = {
     'cfg.title': 'Angaben zu dieser Leistung',
     'cfg.loading': 'Formular wird geladen …',
     'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
+    'cfg.taken': 'Ein Name in diesem Formular ist bereits vergeben. Bitte wählen Sie einen anderen.',
+    'avail.checking': '{label}: «{value}» wird geprüft …',
+    'avail.free': '{label}: «{value}» ist noch frei.',
+    'avail.taken': '{label}: «{value}» ist bereits vergeben. Bitte wählen Sie einen anderen Namen.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: Ob «{value}» frei ist, lässt sich gerade nicht prüfen. Bestellen ist möglich; die Bereitstellung prüft es erneut.',
     'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
     'line.withdraw': 'Position zurückziehen',
     'line.withdrawing': 'Wird zurückgezogen …',
@@ -377,6 +383,12 @@ const STRINGS = {
     'cfg.title': 'Details for this service',
     'cfg.loading': 'Loading the form …',
     'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
+    'cfg.taken': 'A name in this form is already taken. Please choose another one.',
+    'avail.checking': '{label}: checking “{value}” …',
+    'avail.free': '{label}: “{value}” is still free.',
+    'avail.taken': '{label}: “{value}” is already taken. Please choose another name.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: whether “{value}” is free cannot be checked right now. You can still order; provisioning checks it again.',
     'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
     'line.withdraw': 'Withdraw this position',
     'line.withdrawing': 'Withdrawing …',
@@ -602,6 +614,12 @@ const STRINGS = {
     'cfg.title': 'Informations sur cette prestation',
     'cfg.loading': 'Chargement du formulaire …',
     'cfg.failed': 'Ce formulaire ne peut pas être chargé. La commande reste possible ; les informations manqueront.',
+    'cfg.taken': 'Un nom de ce formulaire est déjà pris. Veuillez en choisir un autre.',
+    'avail.checking': '{label} : vérification de « {value} » …',
+    'avail.free': '{label} : « {value} » est encore libre.',
+    'avail.taken': '{label} : « {value} » est déjà pris. Veuillez choisir un autre nom.',
+    'avail.invalid': '{label} : {message}',
+    'avail.unknown': '{label} : impossible de vérifier pour l’instant si « {value} » est libre. La commande reste possible ; la mise à disposition le vérifie à nouveau.',
     'cfg.invalid': 'Certaines informations sont incomplètes. Veuillez les corriger avant de commander.',
     'line.withdraw': 'Retirer cette position',
     'line.withdrawing': 'Retrait en cours …',
@@ -826,6 +844,12 @@ const STRINGS = {
     'cfg.title': 'Indicazioni su questa prestazione',
     'cfg.loading': 'Caricamento del modulo …',
     'cfg.failed': 'Questo modulo non può essere caricato. È comunque possibile ordinare; le indicazioni mancheranno.',
+    'cfg.taken': 'Un nome di questo modulo è già in uso. Sceglierne un altro.',
+    'avail.checking': '{label}: verifica di «{value}» …',
+    'avail.free': '{label}: «{value}» è ancora libero.',
+    'avail.taken': '{label}: «{value}» è già in uso. Scegliere un altro nome.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: al momento non è possibile verificare se «{value}» è libero. È comunque possibile ordinare; la fornitura lo verifica di nuovo.',
     'cfg.invalid': 'Alcune indicazioni non sono complete. La preghiamo di correggerle prima di ordinare.',
     'line.withdraw': 'Ritirare questa posizione',
     'line.withdrawing': 'Ritiro in corso …',
@@ -1468,8 +1492,10 @@ const state = {
   // survive its container being replaced. What was typed is captured back into here
   // before each redraw and handed to the form again as its prefill.
   config: {},
-  // configError names the product whose form is not valid yet, empty for none.
+  // configError names the product whose form is not valid yet, empty for none;
+  // configTaken says the reason is a name already taken (ADR-0519).
   configError: '',
+  configTaken: false,
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
@@ -2152,6 +2178,18 @@ async function order() {
     try { ({ errors } = form.submit()); } catch { continue; }
     if (errors && Object.keys(errors).length) {
       state.configError = itemID;
+      state.configTaken = false;
+      render();
+      return;
+    }
+  }
+  // And whether a name somebody is about to take is known to be taken already. Only a
+  // definite "taken" stops the order: a check that could not run is the provisioning
+  // process's to repeat, not a reason to refuse.
+  for (const [itemID, watch] of availability) {
+    if (watch.taken().length) {
+      state.configError = itemID;
+      state.configTaken = true;
       render();
       return;
     }
@@ -3235,7 +3273,7 @@ function renderBasket() {
       ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
         el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
         state.configError === x.id
-          ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+          ? el('p', { class: 'error' }, t(state.configTaken ? 'cfg.taken' : 'cfg.invalid')) : null,
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
@@ -3285,6 +3323,20 @@ const mounted = new Map();
 // schemas caches a form definition per id, so redrawing the basket does not refetch
 // what has not changed.
 const schemas = new Map();
+// availability holds the live name checks of the mounted forms, by the same key.
+const availability = new Map();
+
+// availabilitySay words one name field's state (formviewer.js, ADR-0519).
+function availabilitySay(status, { label, value, message }) {
+  const fill = (key) => t(key).replace('{label}', label).replace('{value}', value).replace('{message}', message);
+  switch (status) {
+    case 'checking': return fill('avail.checking');
+    case 'free': return fill('avail.free');
+    case 'taken': return fill('avail.taken');
+    case 'invalid': return fill('avail.invalid');
+    default: return fill('avail.unknown');
+  }
+}
 
 // harvest reads what is currently typed into every mounted form back into state.
 // Called before the page is redrawn, because a form does not survive its container
@@ -3381,14 +3433,16 @@ async function mountConfigForms() {
     try { form.destroy(); } catch { /* already gone with its container */ }
   }
   mounted.clear();
+  for (const [, watch] of availability) watch.destroy();
+  availability.clear();
   if (!hosts.length) return;
 
-  let Form, decisionOptions;
+  let Form, decisionOptions, attachAvailabilityChecks;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
-    ({ decisionOptions } = mod);
+    ({ decisionOptions, attachAvailabilityChecks } = mod);
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3410,6 +3464,11 @@ async function mountConfigForms() {
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
       await form.importSchema(parsed, fromText(parsed, state.config[itemID] || {}));
       mounted.set(itemID, form);
+      // A name field says while it is typed whether the name is still free
+      // (ADR-0519); one known to be taken stops the order below.
+      availability.set(itemID, attachAvailabilityChecks({
+        form, host, schema: parsed, formId: formID, say: availabilitySay,
+      }));
     } catch {
       // A form id that no longer resolves is a stale binding in the catalogue, not
       // a broken basket. Say so and leave the order possible: refusing it here

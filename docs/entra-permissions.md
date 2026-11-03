@@ -41,6 +41,11 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `create-channel` | `POST /teams/{id}/channels` | `Channel.Create` |
 | `archive-team` | `POST /teams/{id}/archive` | `TeamSettings.ReadWrite.All` |
 | `assign-role` | `POST /roleManagement/directory/roleAssignments` | `RoleManagement.ReadWrite.Directory` |
+| `invite-guest` | `POST /invitations` | **`User.Invite.All`** (`User.ReadWrite.All` also suffices, but grants far more) |
+| `restore-group` | `POST /directory/deletedItems/{id}/restore` | `Group.ReadWrite.All` |
+| `list-deleted-groups` | `GET /directory/deletedItems/microsoft.graph.group` | `Group.Read.All` (or `Directory.Read.All`) |
+| `create-community` | `POST /employeeExperience/communities`, then `GET` on the `engagementAsyncOperation` its `202` names and `GET /employeeExperience/communities/{id}` | **`Community.ReadWrite.All`** — and, as Microsoft documents it, the tenant's Viva Engage network must be in **native mode**, the precondition for the communities API. Members and admins are then `add-group-member` / `add-group-owner` on the community's `groupId` |
+| A form's group-alias check (value lookup on `groups` / `deletedGroups`, not an operation) | `GET /groups?$filter=mailNickname eq '…'&$select=…&$top=1`, and the same on `/directory/deletedItems/microsoft.graph.group` | `Group.Read.All` |
 
 Read-only deployments (a re-certification report, a directory export, a delta sync that
 only observes) need only the `*.Read.All` variants — grant the `ReadWrite` ones only for
@@ -57,7 +62,7 @@ assign licences — is covered by exactly two permissions:
 
 If such a process never creates or deletes groups but only manages membership, tighten
 `Group.ReadWrite.All` to **`GroupMember.ReadWrite.All`**. Everything else in the table —
-Teams operations, directory-role assignment — is opt-in: grant those permissions only
+Teams operations, Viva Engage communities, directory-role assignment — is opt-in: grant those permissions only
 when a process actually uses those operations, and drop them otherwise.
 
 ## Applying it in the Entra admin center

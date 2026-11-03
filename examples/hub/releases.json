@@ -63,6 +63,18 @@
       "version": "1.0.0",
       "digest": "sha256:ed1bbf13f03ec0d9d8b41207cc289bbc58f8591159270ceca8caa69409650861",
       "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.1",
+      "digest": "sha256:5274dd07669a276d56122ba87620dd6aa4a6af2a6514c044d1448da8f0c7d006",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.2",
+      "digest": "sha256:2c2554528b260f8a9ae21868e0277356822ee8b88ad751ca19c8c14c14a55aa4",
+      "minAtlas": "0.21.0-0"
     }
   ]
 }

@@ -434,7 +434,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
 | [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
 | [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
-| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
+| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted (amended) | Landed |
 | [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
 | [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
 | [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
@@ -547,7 +547,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 | [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
-| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
+| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted (amended) | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
@@ -604,6 +604,8 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Landed |
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 | [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
+| [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
+| [0520](0520-process-places-an-order.md) | A process places an order in the name of its application | Accepted | Landed |
 
 ## The two states of a record
 
