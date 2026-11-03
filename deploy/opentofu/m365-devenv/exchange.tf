@@ -155,6 +155,10 @@ locals {
     servicePassword = random_password.exchange_service[0].result
     serviceOu       = "OU=AtlasService,${local.ad_domain_dn}"
     testOu          = local.ad_test_ou_dn
+    # A hybrid organization signs its people in with one UPN in both directories (AD
+    # Connect). The test users get the tenant's, so a person the order form finds in
+    # Entra is the same person to Exchange Server.
+    tenantDomain = local.initial_domain
   })) : ""
 }
 

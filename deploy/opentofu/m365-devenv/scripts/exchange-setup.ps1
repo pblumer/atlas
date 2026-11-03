@@ -198,6 +198,19 @@ try {
             # Remote PowerShell for the account (on by default; stated so it is checked).
             Set-User -Identity $sam -RemotePowerShellEnabled $true
 
+            # One UPN in both directories, as AD Connect makes it: the person an order
+            # form finds in Entra is the same person to Exchange Server.
+            if ($cfg.tenantDomain) {
+                $forest = Get-ADForest
+                if ($forest.UPNSuffixes -notcontains $cfg.tenantDomain) {
+                    Set-ADForest -Identity $forest -UPNSuffixes @{ Add = $cfg.tenantDomain }
+                }
+                Get-ADUser -SearchBase $cfg.testOu -Filter * | ForEach-Object {
+                    $local = ($_.UserPrincipalName -split '@')[0]
+                    Set-ADUser $_ -UserPrincipalName "$local@$($cfg.tenantDomain)"
+                }
+            }
+
             Get-ADUser -SearchBase $cfg.testOu -Filter * | ForEach-Object {
                 if (-not (Get-Recipient -Identity $_.DistinguishedName -ErrorAction SilentlyContinue)) {
                     Enable-Mailbox -Identity $_.DistinguishedName | Out-Null
