@@ -14,6 +14,9 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
          SKU of license_sku_ids (a test tenant rarely holds E3, E5 and F3);
        - without the Teams Phone worker (workers.teamsphone = false) the products
          m365-telefonie, m365-warteschlange and m365-telefonzentrale leave both catalogues;
+       - m365-engage and m365-aufbewahrung always leave them (see UNSERVED), and
+         m365-sharepoint-site unless --site-inventory names the inventory site;
+       - the site order form's SharePoint host becomes the tenant's;
   4. does what the package's installieren.sh does (decision models, application, release,
      catalogue), in the administrator's session rather than with a token (see install());
   5. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
@@ -45,12 +48,19 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TELEPHONY = {"m365-telefonie", "m365-warteschlange", "m365-telefonzentrale"}
+# Products this environment cannot serve, whatever is configured: a Viva Engage community
+# needs Community.ReadWrite.All on the whole tenant and a network in native mode, which a
+# shared tenant should not grant to a test app; Litigation Hold needs Exchange Online
+# Plan 2, which Business Basic does not include.
+UNSERVED = {"m365-engage", "m365-aufbewahrung"}
+SITE = "m365-sharepoint-site"
 GROUPS = {
     # answer in fragen.json -> Atlas group
     "zielgruppe": "M365-Mitarbeitende",
     "zielgruppe-ucc": "M365-UCC",
     "telefonie-team": "M365-Telefonie",
     "facility-management": "M365-Facility",
+    "compliance": "Informationssicherheit",
 }
 NAMED_GROUPS = ["M365-Administration", "M365-Telefonie", "Informationssicherheit"]
 
@@ -97,7 +107,7 @@ def items(listing, key):
     return listing or []
 
 
-def adapt(src, dst, sku, with_telephony, department):
+def adapt(src, dst, sku, with_telephony, department, sharepoint_host, with_site):
     shutil.copytree(src, dst)
     # Directory fields: in a shared tenant a search must offer this environment's test
     # users and nobody else, so every field gets a fixed filter on their department
@@ -134,18 +144,31 @@ def adapt(src, dst, sku, with_telephony, department):
         s = s.replace(f'"{name}"', f'"{name} (Testumgebung: {sku})"')
     open(p, "w", encoding="utf-8").write(s)
 
+    # The site's order form checks the URL against the tenant's SharePoint host, which
+    # the package names as contoso.sharepoint.com (README, Voraussetzungen 7).
+    p = os.path.join(dst, "m365-sharepoint-site-bestellung.form.json")
+    if os.path.exists(p):
+        s = open(p, encoding="utf-8").read()
+        open(p, "w", encoding="utf-8").write(s.replace("contoso.sharepoint.com", sharepoint_host))
+
+    drop = set(UNSERVED)
     if not with_telephony:
-        p = os.path.join(dst, "katalog.json")
-        doc = json.load(open(p, encoding="utf-8"))
-        doc["products"] = [x for x in doc["products"] if x["id"] not in TELEPHONY]
-        for c in doc["catalogs"]:
-            c["items"] = [i for i in c["items"] if i not in TELEPHONY]
-            c["edges"] = [e for e in c.get("edges", []) if e["from"] not in TELEPHONY and e["to"] not in TELEPHONY]
-        json.dump(doc, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        drop |= TELEPHONY
+    if not with_site:
+        drop.add(SITE)
+    p = os.path.join(dst, "katalog.json")
+    doc = json.load(open(p, encoding="utf-8"))
+    doc["products"] = [x for x in doc["products"] if x["id"] not in drop]
+    for c in doc["catalogs"]:
+        c["items"] = [i for i in c["items"] if i not in drop]
+        c["edges"] = [e for e in c.get("edges", []) if e["from"] not in drop and e["to"] not in drop]
+    json.dump(doc, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+    log("products left out here: " + ", ".join(sorted(drop)))
 
 
 APP_KEY = "beispiel-m365-dienste"
-MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachzugriff", "m365-telefonie", "m365-verteiler-zuordnung"]
+MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachkontingent", "m365-postfachzugriff",
+          "m365-site-kontingent", "m365-telefonie", "m365-verteiler-zuordnung"]
 
 
 def install(atlas, pkg):
@@ -196,6 +219,8 @@ def main():
     ap.add_argument("--cafile", help="Caddy's root certificate (atlas_tls = internal)")
     ap.add_argument("--sku", help="licence for the mailbox variants (default: first of license_sku_ids)")
     ap.add_argument("--mail-domain", help="domain of the catalogue's addresses (default: the initial domain)")
+    ap.add_argument("--site-inventory", help="SITE_INVENTAR, the site carrying the list «Site-Inventar» "
+                    "(host:/sites/path); without it the SharePoint team site is left out")
     args = ap.parse_args()
     tofu_dir = os.path.abspath(args.tofu_dir)
 
@@ -214,6 +239,10 @@ def main():
     prefix = prefix + "-" if prefix else ""
     domain = args.mail_domain or tofu_output(tofu_dir, "tenant")["initial_domain"]
     with_telephony = bool({"teams", "teamsphone"} & set(tofu_output(tofu_dir, "atlas_workers").values()))
+    # The tenant's SharePoint host follows its initial domain: <name>.onmicrosoft.com
+    # serves <name>.sharepoint.com.
+    initial = tofu_output(tofu_dir, "tenant")["initial_domain"]
+    sharepoint_host = initial.split(".", 1)[0] + ".sharepoint.com"
 
     atlas = Atlas(url, args.cafile)
     atlas.call("POST", "/api/v1/auth/login", {"username": admin["username"], "password": admin["password"]})
@@ -240,7 +269,8 @@ def main():
     work = tempfile.mkdtemp(prefix="m365-dienste-")
     try:
         pkg = os.path.join(work, "m365-dienste")
-        adapt(os.path.abspath(args.example), pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "")
+        adapt(os.path.abspath(args.example), pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "",
+              sharepoint_host, bool(args.site_inventory))
         install(atlas, pkg)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -258,7 +288,10 @@ def main():
         {"name": "USAGE_LOCATION", "type": "string", "value": os.environ.get("M365_USAGE_LOCATION", "CH")},
         {"name": "PARTNER_UPN_DOMAIN", "type": "string", "value": domain},
         {"name": "ATLAS_API_BASE", "type": "string", "value": "http://127.0.0.1:8080"},
+        {"name": "SHAREPOINT_HOST", "type": "string", "value": sharepoint_host},
     ]
+    if args.site_inventory:
+        constants.append({"name": "SITE_INVENTAR", "type": "string", "value": args.site_inventory})
     atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": constants})
     log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}")
     log("done")
