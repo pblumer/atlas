@@ -12,6 +12,13 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+- **An older version is migrated straight from the live view's heading.** Each version the heading lists as still running instances carries a *Migrate…* button that opens the batch migration with that version as the source and the newest as the target, its picker counting what every version holds from the per-version reading the view already has; after the move the diagram and the counts are read again at once, so the drained version leaves the list.
+- **The version picker says which versions still hold work.** In an Operations live view the *Version* dropdown labels every version with what it still holds — running instances, tokens parked behind an incident, finished instances, and whether it is inactive — and the heading names the other versions that still run instances, each a link to its live view, so the versions with work left no longer have to be found by opening one after another. The counts come from `GET /api/v1/processes/{key}/versions`, which answers for every deployed version of a definition's process from the maintained counters and the shared incident reading, never an instance scan; agents read the same through the new MCP tool `atlas_process_versions`.
+
+### Changed
+- **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
+
 ### Fixed
 
 - **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
