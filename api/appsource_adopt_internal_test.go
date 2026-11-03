@@ -163,3 +163,49 @@ func TestAdoptIsNamedArtifactByArtifact(t *testing.T) {
 		t.Fatalf("adopt = %+v, %v", d.Adopt, err)
 	}
 }
+
+// A form and a decision move like a process: adopted and kept, each joins the
+// importing application with this server's content; from a protected application
+// neither is given up.
+func TestAdoptMovesFormsAndDecisionsAndRefusesTheSystemsToo(t *testing.T) {
+	setup := func(t *testing.T, holder project) (*Server, sourceManifest, map[string][]byte) {
+		t.Helper()
+		s := storesFor(t)
+		if err := s.projects.Save(holder); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.forms.Save(form{ID: "f1", Name: "F", ProjectID: holder.ID, Schema: `{"local":true}`}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.dmnrefs.Save(dmnRef{ID: "d1", Name: "Here", ModelRef: "m1", ProjectID: holder.ID}); err != nil {
+			t.Fatal(err)
+		}
+		man := sourceManifest{FormatVersion: 1, Key: "taker", Name: "Taker",
+			Forms:     []sourceForm{{ID: "f1", Name: "F", Path: "f.json"}},
+			Decisions: []sourceDecision{{ID: "d1", Name: "There", ModelRef: "m1"}}}
+		return s, man, map[string][]byte{"f.json": []byte(`{"tree":true}`)}
+	}
+
+	s, man, byPath := setup(t, holderApp)
+	res, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allowEverything},
+		decisions(t, "adopt=form:f1,decision:d1&keep=form:f1,decision:d1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, _, _ := s.forms.Get("f1"); f.ProjectID != res.ApplicationID || f.Schema != `{"local":true}` {
+		t.Fatalf("adopted, kept form = %+v", f)
+	}
+	if d, _, _ := s.dmnrefs.Get("d1"); d.ProjectID != res.ApplicationID || d.Name != "Here" {
+		t.Fatalf("adopted, kept decision = %+v", d)
+	}
+
+	system := project{ID: "system", Name: "Atlas System", Key: "atlas-system", Protected: true}
+	for _, ref := range []string{"form:f1", "decision:d1"} {
+		s, man, byPath := setup(t, system)
+		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allowEverything}, decisions(t, "adopt="+ref))
+		var refusal sourceRefusal
+		if !errors.As(err, &refusal) || refusal.status != http.StatusForbidden {
+			t.Fatalf("adopt %s from the system application = %v", ref, err)
+		}
+	}
+}
