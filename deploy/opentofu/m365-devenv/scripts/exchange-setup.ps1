@@ -93,6 +93,8 @@ function Mount-Image {
 try {
     switch ($Phase) {
         '1' {
+            # Run again (the extension re-applied): the server joined and moved on already.
+            if (Test-Path (Join-Path $root 'exchange-phase1.done')) { Write-Output 'phase 1 done before; nothing to do'; return }
             if (-not $ConfigB64) { throw 'Phase 1 needs -ConfigB64.' }
             $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ConfigB64))
             Set-Content -Path $configFile -Value $json -Encoding UTF8
@@ -115,7 +117,9 @@ try {
             Register-Next '2' $cfg
             New-Item -ItemType File -Force -Path (Join-Path $root 'exchange-phase1.done') | Out-Null
             Stop-Transcript | Out-Null
-            Restart-Computer -Force
+            # Restart after a delay, so the extension reports success before the reboot.
+            & shutdown.exe /r /t 30 /c 'Atlas Exchange setup, phase 2'
+            exit 0
             return
         }
         '2' {
@@ -208,5 +212,8 @@ catch {
     throw
 }
 finally {
-    Stop-Transcript -ErrorAction SilentlyContinue | Out-Null
+    # A phase that reboots has ended its transcript already; Stop-Transcript then throws
+    # whatever -ErrorAction says, and the Custom Script Extension would report phase 1
+    # as failed although it did its work.
+    try { Stop-Transcript | Out-Null } catch { }
 }

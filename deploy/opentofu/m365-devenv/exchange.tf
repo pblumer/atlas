@@ -134,6 +134,12 @@ resource "azurerm_windows_virtual_machine" "exchange" {
   }
 
   depends_on = [azurerm_virtual_machine_extension.ad_setup]
+
+  # The script runs once, from the first boot on; a later change to it must not replace
+  # a server that took two hours to install.
+  lifecycle {
+    ignore_changes = [custom_data]
+  }
 }
 
 locals {

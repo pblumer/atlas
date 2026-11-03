@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Rauchtest des Exchange-Workers gegen Exchange Server (deploy/opentofu/m365-devenv, exchange.tf):
+jede Operation, die Funktionspostfach, Postfachzugriff und Verteiler brauchen, einmal hin und zurück.
+Start mit den Variablen name, alias, domain und person (UPN einer Testperson aus OU=AtlasTest);
+der Worker heisst ucc_exchange_onprem. Hinterlässt nichts.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:atlas="http://atlas/schema/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC" xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI" id="defs_exchange_onprem_smoke" targetNamespace="http://atlas/m365-devenv">
+  <process id="proc_exchange_onprem_smoke" name="Exchange OnPrem: Rauchtest" isExecutable="true">
+    <startEvent id="s" name="Start"><outgoing>f_s</outgoing></startEvent>
+    <serviceTask id="st_fp_neu" name="Funktionspostfach anlegen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="create-shared-mailbox" parameters='{"Name": "=name", "DisplayName": "=name", "Alias": "=alias", "PrimarySmtpAddress": "=alias + \"@\" + domain"}' resultVariable="postfach"/></extensionElements><incoming>f_s</incoming><outgoing>f_st_fp_neu</outgoing></serviceTask>
+    <serviceTask id="st_fp_tag" name="Kennzeichnen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="update-mailbox" parameters='{"Identity": "=alias + \"@\" + domain", "CustomAttribute1": "atlas-smoke"}'/></extensionElements><incoming>f_st_fp_neu</incoming><outgoing>f_st_fp_tag</outgoing></serviceTask>
+    <serviceTask id="st_voll" name="Vollzugriff erteilen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="add-full-access" parameters='{"Identity": "=alias + \"@\" + domain", "User": "=person", "AutoMapping": true}'/></extensionElements><incoming>f_st_fp_tag</incoming><outgoing>f_st_voll</outgoing></serviceTask>
+    <serviceTask id="st_sendas" name="Senden als erteilen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="add-send-as" parameters='{"Identity": "=alias + \"@\" + domain", "User": "=person"}'/></extensionElements><incoming>f_st_voll</incoming><outgoing>f_st_sendas</outgoing></serviceTask>
+    <serviceTask id="st_finden" name="Postfach finden"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="list-mailboxes" parameters="{&quot;Filter&quot;: &quot;CustomAttribute1 -eq 'atlas-smoke'&quot;, &quot;RecipientTypeDetails&quot;: &quot;SharedMailbox&quot;}" maxResults="5" resultVariable="treffer"/></extensionElements><incoming>f_st_sendas</incoming><outgoing>f_st_finden</outgoing></serviceTask>
+    <serviceTask id="st_vl_neu" name="Verteiler anlegen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="create-distribution-group" parameters='{"Name": "=name + \" VL\"", "DisplayName": "=name + \" VL\"", "Alias": "=alias + \"-vl\"", "PrimarySmtpAddress": "=alias + \"-vl@\" + domain", "ManagedBy": "=person", "MemberJoinRestriction": "Closed", "MemberDepartRestriction": "Closed", "RequireSenderAuthenticationEnabled": true}'/></extensionElements><incoming>f_st_finden</incoming><outgoing>f_st_vl_neu</outgoing></serviceTask>
+    <serviceTask id="st_vl_plus" name="Mitglied aufnehmen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="add-distribution-group-member" parameters='{"Identity": "=alias + \"-vl@\" + domain", "Member": "=person", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_st_vl_neu</incoming><outgoing>f_st_vl_plus</outgoing></serviceTask>
+    <serviceTask id="st_vl_minus" name="Mitglied entfernen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="remove-distribution-group-member" parameters='{"Identity": "=alias + \"-vl@\" + domain", "Member": "=person", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_st_vl_plus</incoming><outgoing>f_st_vl_minus</outgoing></serviceTask>
+    <serviceTask id="st_vl_weg" name="Verteiler entfernen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="remove-distribution-group" parameters='{"Identity": "=alias + \"-vl@\" + domain", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_st_vl_minus</incoming><outgoing>f_st_vl_weg</outgoing></serviceTask>
+    <serviceTask id="st_sendas_weg" name="Senden als entziehen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="remove-send-as" parameters='{"Identity": "=alias + \"@\" + domain", "User": "=person"}'/></extensionElements><incoming>f_st_vl_weg</incoming><outgoing>f_st_sendas_weg</outgoing></serviceTask>
+    <serviceTask id="st_voll_weg" name="Vollzugriff entziehen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="remove-full-access" parameters='{"Identity": "=alias + \"@\" + domain", "User": "=person"}'/></extensionElements><incoming>f_st_sendas_weg</incoming><outgoing>f_st_voll_weg</outgoing></serviceTask>
+    <serviceTask id="st_fp_weg" name="Funktionspostfach entfernen"><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="remove-mailbox" parameters='{"Identity": "=alias + \"@\" + domain"}'/></extensionElements><incoming>f_st_voll_weg</incoming><outgoing>f_st_fp_weg</outgoing></serviceTask>
+    <endEvent id="e" name="Ende"><incoming>f_st_fp_weg</incoming></endEvent>
+    <sequenceFlow id="f_s" sourceRef="s" targetRef="st_fp_neu"/>
+    <sequenceFlow id="f_st_fp_neu" sourceRef="st_fp_neu" targetRef="st_fp_tag"/>
+    <sequenceFlow id="f_st_fp_tag" sourceRef="st_fp_tag" targetRef="st_voll"/>
+    <sequenceFlow id="f_st_voll" sourceRef="st_voll" targetRef="st_sendas"/>
+    <sequenceFlow id="f_st_sendas" sourceRef="st_sendas" targetRef="st_finden"/>
+    <sequenceFlow id="f_st_finden" sourceRef="st_finden" targetRef="st_vl_neu"/>
+    <sequenceFlow id="f_st_vl_neu" sourceRef="st_vl_neu" targetRef="st_vl_plus"/>
+    <sequenceFlow id="f_st_vl_plus" sourceRef="st_vl_plus" targetRef="st_vl_minus"/>
+    <sequenceFlow id="f_st_vl_minus" sourceRef="st_vl_minus" targetRef="st_vl_weg"/>
+    <sequenceFlow id="f_st_vl_weg" sourceRef="st_vl_weg" targetRef="st_sendas_weg"/>
+    <sequenceFlow id="f_st_sendas_weg" sourceRef="st_sendas_weg" targetRef="st_voll_weg"/>
+    <sequenceFlow id="f_st_voll_weg" sourceRef="st_voll_weg" targetRef="st_fp_weg"/>
+    <sequenceFlow id="f_st_fp_weg" sourceRef="st_fp_weg" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="d"><bpmndi:BPMNPlane id="p" bpmnElement="proc_exchange_onprem_smoke">
+    <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="0" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_fp_neu_di" bpmnElement="st_fp_neu"><omgdc:Bounds x="86" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_fp_tag_di" bpmnElement="st_fp_tag"><omgdc:Bounds x="236" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_voll_di" bpmnElement="st_voll"><omgdc:Bounds x="386" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_sendas_di" bpmnElement="st_sendas"><omgdc:Bounds x="536" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_finden_di" bpmnElement="st_finden"><omgdc:Bounds x="686" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_vl_neu_di" bpmnElement="st_vl_neu"><omgdc:Bounds x="836" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_vl_plus_di" bpmnElement="st_vl_plus"><omgdc:Bounds x="986" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_vl_minus_di" bpmnElement="st_vl_minus"><omgdc:Bounds x="1136" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_vl_weg_di" bpmnElement="st_vl_weg"><omgdc:Bounds x="1286" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_sendas_weg_di" bpmnElement="st_sendas_weg"><omgdc:Bounds x="1436" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_voll_weg_di" bpmnElement="st_voll_weg"><omgdc:Bounds x="1586" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="st_fp_weg_di" bpmnElement="st_fp_weg"><omgdc:Bounds x="1736" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1886" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_s_di" bpmnElement="f_s"><omgdi:waypoint x="36" y="140"/><omgdi:waypoint x="86" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_fp_neu_di" bpmnElement="f_st_fp_neu"><omgdi:waypoint x="186" y="140"/><omgdi:waypoint x="236" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_fp_tag_di" bpmnElement="f_st_fp_tag"><omgdi:waypoint x="336" y="140"/><omgdi:waypoint x="386" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_voll_di" bpmnElement="f_st_voll"><omgdi:waypoint x="486" y="140"/><omgdi:waypoint x="536" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_sendas_di" bpmnElement="f_st_sendas"><omgdi:waypoint x="636" y="140"/><omgdi:waypoint x="686" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_finden_di" bpmnElement="f_st_finden"><omgdi:waypoint x="786" y="140"/><omgdi:waypoint x="836" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_vl_neu_di" bpmnElement="f_st_vl_neu"><omgdi:waypoint x="936" y="140"/><omgdi:waypoint x="986" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_vl_plus_di" bpmnElement="f_st_vl_plus"><omgdi:waypoint x="1086" y="140"/><omgdi:waypoint x="1136" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_vl_minus_di" bpmnElement="f_st_vl_minus"><omgdi:waypoint x="1236" y="140"/><omgdi:waypoint x="1286" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_vl_weg_di" bpmnElement="f_st_vl_weg"><omgdi:waypoint x="1386" y="140"/><omgdi:waypoint x="1436" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_sendas_weg_di" bpmnElement="f_st_sendas_weg"><omgdi:waypoint x="1536" y="140"/><omgdi:waypoint x="1586" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_voll_weg_di" bpmnElement="f_st_voll_weg"><omgdi:waypoint x="1686" y="140"/><omgdi:waypoint x="1736" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_st_fp_weg_di" bpmnElement="f_st_fp_weg"><omgdi:waypoint x="1836" y="140"/><omgdi:waypoint x="1886" y="140"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>

@@ -334,6 +334,13 @@ für das On-Premises-Backend des Exchange-Workers (ADR-0462, `"target": "onprem"
   (Kerberos) und das Dienstkonto; das Passwort gibt `tofu output -raw exchange_service_password`.
 - Abschaltung täglich um `exchange_auto_shutdown_time` (Vorgabe 19:00 UTC).
 
+Danach startet `onprem/install-worker.sh` den Exchange-Worker `ucc_exchange_onprem` auf `exch01`
+selbst, als Dienstkonto (Kerberos ohne Passwort in Atlas): Es baut `atlas.exe`, bietet es zehn
+Minuten lang nur im VNet von der Atlas-VM an, erzeugt ein Worker-Token und führt
+`onprem/exchange-worker.ps1` über den Run Command aus (Token und Passwort als geschützte
+Parameter). `onprem/exchange-onprem-smoke.bpmn` prüft jede Operation von Funktionspostfach,
+Postfachzugriff und Verteiler einmal hin und zurück und hinterlässt nichts.
+
 Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, gezielt:
 `tofu apply -target=azurerm_virtual_machine_extension.exchange_setup
 -target=azurerm_dev_test_global_vm_shutdown_schedule.exchange
