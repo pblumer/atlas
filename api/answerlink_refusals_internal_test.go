@@ -270,3 +270,21 @@ func TestAnAnswerLinkNeedsTheVaultAndAnOrigin(t *testing.T) {
 		t.Errorf("a link without an origin: %v, want an error naming the external URL", err)
 	}
 }
+
+// TestAnAnswerLinkRefusesAFormWithADirectoryField: a directory field can only be answered
+// by a signed-in person (ADR-0473), and the holder of a link is nobody the directory
+// knows, so the answer fails closed — as through every public link.
+func TestAnAnswerLinkRefusesAFormWithADirectoryField(t *testing.T) {
+	f := newAnswerRefusalFixture(t)
+	if rec := f.do(t, "POST", "/api/v1/forms", "", `{"id":"al-refusals","name":"Antwort","schema":{"type":"default","components":[
+	  {"type":"textfield","key":"bemerkung","label":"Bemerkung"},
+	  {"type":"textfield","key":"kontakt","label":"Kontakt",
+	   "atlasDataSource":{"version":1,"workerType":"entra","worker":"ucc_entra","resource":"users"}}]}}`); rec.Code != http.StatusOK {
+		t.Fatalf("save the form with a directory field: %d %s", rec.Code, rec.Body)
+	}
+	rec := f.do(t, "POST", "/public/answer/task/"+strconv.FormatUint(f.taskKey, 10)+"/complete", f.token,
+		`{"variables":{"kontakt":"someone"}}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "directory field") {
+		t.Errorf("an answer to a form with a directory field: %d %s, want 400 naming the directory field", rec.Code, rec.Body)
+	}
+}
