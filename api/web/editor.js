@@ -12661,6 +12661,35 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const otherVersions = root.querySelector("#other-versions");
   const versionCountsEvery = 10000;
   let versionCountsAt = 0;
+  // The last counts read, by definition key — what the migration dialog's picker says
+  // each version holds. Null until a reading arrived; the dialog then asks the summary.
+  let versionCounts = null;
+  // Migrating needs somewhere to move to; the deployed versions are fixed for the life
+  // of this view.
+  const canMigrate = !!(processId && versions.length > 1);
+
+  // openMigration drains one version — the one on screen from the toolbar, another one
+  // from the heading's list — onto another, by default the newest (ADR-0162). The
+  // picker's counts come from the reading this view already holds; only without one is
+  // the summary read, and a failed read leaves the picker without counts rather than
+  // with wrong ones.
+  async function openMigration(fromKey) {
+    let runningOf;
+    if (versionCounts) {
+      runningOf = (v) => (versionCounts.get(String(v.key)) || {}).running || 0;
+    } else {
+      try {
+        const running = runningByDefinition(await api("GET", "/api/v1/instances/summary"));
+        runningOf = (v) => running.get(String(v.key)) || 0;
+      } catch { /* best-effort: no counts rather than wrong ones */ }
+    }
+    await migrateProcessFlow({
+      api, toast, processId, processName: procName, versions, fromKey, runningOf,
+      // The moved instances leave one version's counts and arrive in another's, so both
+      // the diagram and the per-version counts are re-read now rather than on the next tick.
+      onDone: async () => { await poll(); await refreshVersionCounts(); },
+    });
+  }
   const versionCountParts = (v) => {
     const parts = [];
     if (v.running) parts.push(trPlural("ops.versions.running", v.running));
@@ -12678,6 +12707,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (!versionSel.isConnected) return; // navigated away mid-flight
     const listed = Array.isArray(res && res.versions) ? res.versions : [];
     const byKey = new Map(listed.map((v) => [String(v.key), v]));
+    if (listed.length) versionCounts = byKey;
     // Only the text of an option that changed is touched, so a refresh while the
     // operator has the dropdown open does not rebuild it under the pointer.
     for (const opt of versionSel.options) {
@@ -12692,11 +12722,21 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       ? `${esc(tr("ops.versions.othersRunning"))} ` + others.map((v) => {
         const counts = [trPlural("ops.versions.running", v.running)];
         if (v.incidents) counts.push(trPlural("ops.versions.incidents", v.incidents));
+        const migrate = canMigrate
+          ? ` <button type="button" class="btn ghost live-migrate-other" data-mig-from="${v.key}" title="${
+            esc(trPlural("ops.versions.migrateTitle", v.running, { version: v.version }))}">${esc(tr("ops.versions.migrate"))}</button>`
+          : "";
         return `<a href="#/operations/p/${v.key}" title="${esc(tr("ops.versions.otherTitle", { version: v.version }))}">v${v.version}</a>` +
-          ` <span class="${v.incidents ? "err" : ""}">(${esc(counts.join(", "))})</span>`;
+          ` <span class="${v.incidents ? "err" : ""}">(${esc(counts.join(", "))})</span>${migrate}`;
       }).join(", ")
       : "";
   }
+  // Delegated once: the list is rewritten on every reading, and a handler bound to the
+  // buttons it held would die with them.
+  otherVersions.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-mig-from]");
+    if (btn && otherVersions.contains(btn)) openMigration(Number(btn.dataset.migFrom));
+  });
   refreshVersionCounts();
 
   // The legend's three count badges are switches as well as a key: each one takes its
@@ -13942,23 +13982,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // running count is not, and the dialog says per version what it holds (ADR-0162).
   const migrateBtn = root.querySelector("#migrate-version");
   const thisVersion = versions.find((v) => v.key === key);
-  if (processId && thisVersion && versions.length > 1) {
+  if (canMigrate && thisVersion) {
     migrateBtn.hidden = false;
     migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
-    migrateBtn.addEventListener("click", async () => {
-      // This view counts its own version only, and the picker has to say which of the
-      // others hold instances too. The summary is one row per definition, not a scan.
-      let running = null;
-      try { running = runningByDefinition(await api("GET", "/api/v1/instances/summary")); }
-      catch { /* best-effort: the picker then states no counts rather than wrong ones */ }
-      await migrateProcessFlow({
-        api, toast, processId, processName: procName, versions, fromKey: key,
-        runningOf: running ? (v) => running.get(String(v.key)) || 0 : undefined,
-        // The moved instances leave this version's counts and diagram, so re-read now
-        // rather than on the next tick.
-        onDone: poll,
-      });
-    });
+    migrateBtn.addEventListener("click", () => openMigration(key));
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
