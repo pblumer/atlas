@@ -190,6 +190,7 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-draft-several-catalogues-per-person).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
