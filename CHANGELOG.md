@@ -61,7 +61,8 @@ catalogue's customer responsibles see what their people hold, and the catalogue 
 the wiki's pages as building blocks
 ([ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md)). `atlas hub build`
 publishes the examples as ten signed packages by theme, a registry key rotates with two
-keys pinned at once and a new key is announced through one verifiable channel
+keys pinned at once, a new key is announced through one verifiable channel, and an
+agent installs a release over MCP as the Console does
 ([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment). An OpenTofu
 project builds a Microsoft 365 development environment for the Microsoft workers; it has
 not been applied to a real tenant yet.
@@ -117,8 +118,9 @@ What changes on disk, and going back:
 - New settings, all optional: `--client-metadata-allow-private`
   (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`), and the limits
   `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST`, `_RATE`, `ATLAS_LIMIT_CLIENT_METADATA`, `_SECONDS`,
-  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 176
+  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 179
   (`atlas_catalog_building_blocks`, `atlas_catalog_delivery_report`,
+  `atlas_hub_import_release`, `atlas_hub_list_releases`, `atlas_hub_preview_release`,
   `atlas_instance_multi_instances`, `atlas_instance_outline`, `atlas_multi_instance_body`,
   `atlas_multi_instance_iteration`, `atlas_multi_instance_iteration_steps`,
   `atlas_multi_instance_iteration_variables`, `atlas_multi_instance_iterations`).
@@ -144,6 +146,7 @@ What changes on disk, and going back:
     snapshot taken before the first upgrade, or do not go back.
 
 ### Added
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
 - **A process commands what a person holds without reading what they hold.** A shop
   send task in mode `command` may name a `recipient` instead of an order and a position;
   the server finds that person's position of the product in the inventory and commands
@@ -363,6 +366,7 @@ What changes on disk, and going back:
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
 - **A provisioning that reports at once keeps its report.** A provisioning process
   that reported its position done (or failed) before the order's start came back to
   mark the line running had its report overwritten with running, and the position
