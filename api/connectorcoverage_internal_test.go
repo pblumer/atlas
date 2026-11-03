@@ -64,8 +64,9 @@ func TestAWorkerReportsTheConnectorNamesItHolds(t *testing.T) {
 // processes that use it, so an operator can go and configure it somewhere.
 func TestTheViewNamesAConnectorNoWorkerHolds(t *testing.T) {
 	srv := mailPullSrv(t)
-	// A worker that serves mail, but not the provider this model asks for.
-	pullMail(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+	// A worker that serves mail, but not the provider this model asks for. It polls and
+	// is leased nothing: the job names a worker it does not hold.
+	pollWorker(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
 
 	got := coverage(t, srv)
 	if len(got.Unserved) != 1 {
@@ -174,7 +175,7 @@ func TestAVersionPinnedAsACallTargetIsReported(t *testing.T) {
 // reader guessing which of a process's versions it means.
 func TestTheReportCarriesTheVersionThatNamesTheConnector(t *testing.T) {
 	srv := mailPullSrv(t)
-	pullMail(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
+	pollWorker(t, srv, `{"type":"io.atlas.mail.send","worker":"mailer-1","connectors":["internal-relay"]}`)
 
 	got := coverage(t, srv)
 	if len(got.Unserved) != 1 || len(got.Unserved[0].Processes) != 1 {

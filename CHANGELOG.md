@@ -225,6 +225,7 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
 - **A provisioning that reports at once keeps its report.** A provisioning process
   that reported its position done (or failed) before the order's start came back to
   mark the line running had its report overwritten with running, and the position

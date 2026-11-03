@@ -186,6 +186,27 @@ per-kind switch, listed there as a follow-up and never built. It comes first.
 - Good: nothing to build.
 - Bad: makes ADR-0164 a rule about a minority of service tasks.
 
+## Amendment (2026-11-03): a worker is leased the jobs of the names it holds
+
+A worker reports the worker names it holds on every poll (`connectors`), and until now
+that report fed only the Workers view. The lease itself went by job type: a job went to
+whichever worker of its type polled first. With one worker per type that is the same
+thing. With two — Exchange Online and an Exchange Server, each serving its own name, as
+ADR-0462 means a hybrid organization to run — a job for one was leased to the other and
+failed there with "no worker registered as …". Found against a real tenant with an
+Exchange Server beside it.
+
+A poll that names workers is now leased only jobs whose task names one of them, names
+none, or names one by a FEEL expression the engine cannot resolve at lease time (those
+go out as before, and the worker checks). The filter runs while the activatable index
+is scanned, newest first, within `job.GatedScanBudget` candidates a round and resuming
+per job type and worker where the last round stopped, as the breaker's gated scan does
+(ADR-0340) — so a page full of another worker's jobs, or a backlog for a name nobody
+serves, never hides this worker's jobs. A breaker's probe slot is asked only for a job
+the worker would take. A poll that names nothing — a job worker serving a plain type,
+an older worker — is leased as before, so the change needs no worker upgrade to keep
+working, and a worker that wants the old behaviour simply reports nothing.
+
 ## Links
 
 - closes the gap [ADR-0164](0164-no-in-process-service-tasks.md) recorded, and which [ADR-0157](0157-worker-processes-supervision-and-console.md) named as "the connector detail travelling with the job"
