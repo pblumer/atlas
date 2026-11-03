@@ -231,7 +231,7 @@ func compileShopCommand(b *Builder, id, action string, st *xmlShopTask) (int32, 
 	case byPerson:
 		// The server finds the recipient's position of the product in the inventory, so
 		// a process commands what a person holds without reading what they hold
-		// (ADR-draft-command-by-recipient).
+		// (ADR-0521).
 		recipient, err := connectorValue(b.gate(), id, "shop task", "recipient", st.Recipient)
 		if err != nil {
 			return 0, err

@@ -571,7 +571,7 @@ als Produkt `ad-admin-konto` mit der Aktion `deprovision`. Der Austritt gibt sie
 ```
 
 - **Adressiert über die Person**, nicht über Auftrag und Position
-  ([ADR-draft-command-by-recipient](../../docs/adr/draft-command-by-recipient.md)): Der Prozess
+  ([ADR-0521](../../docs/adr/0521-command-by-recipient.md)): Der Prozess
   kennt das Atlas-Konto der Person aus dem Eintritt, aber nicht den Auftrag, aus dem ihr Adminkonto
   stammt, und den Bestand einer anderen Person darf nur lesen, wer `admin` ist (ADR-0312; ein
   API-Token ist das nie). Der Server sucht die Position im Bestand selbst. Der Bestand führt je

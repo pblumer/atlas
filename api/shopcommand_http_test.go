@@ -205,7 +205,7 @@ func byRecipientBPMN(id, action string, catch bool) string {
 </definitions>`
 }
 
-// TestAProcessCommandsWhatARecipientHolds (ADR-draft-command-by-recipient): a leaver
+// TestAProcessCommandsWhatARecipientHolds (ADR-0521): a leaver
 // process names the person and the product, not an order it cannot read; the server
 // finds the position. Holding nothing is an answer (`asked` is ""), and a refusal is
 // the model's path when it catches SHOP_COMMAND_REFUSED.

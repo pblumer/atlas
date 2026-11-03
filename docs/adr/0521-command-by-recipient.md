@@ -1,4 +1,4 @@
-# ADR-DRAFT: A process commands what a person holds, without reading what they hold
+# ADR-0521: A process commands what a person holds, without reading what they hold
 
 - **Status:** Accepted
 - **Implementation:** Landed

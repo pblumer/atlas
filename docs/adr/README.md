@@ -606,6 +606,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
 | [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
 | [0520](0520-process-places-an-order.md) | A process places an order in the name of its application | Accepted | Landed |
+| [0521](0521-command-by-recipient.md) | A process commands what a person holds, without reading what they hold | Accepted | Landed |
 
 ## The two states of a record
 

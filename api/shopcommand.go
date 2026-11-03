@@ -74,7 +74,7 @@ func (s *Server) shopCommandHandler(rd state.Reader) job.CompletingHandler {
 		if shopAddressesPerson(detail) {
 			// The position is the recipient's, found here and never shown to the
 			// process: a process may command what a person holds without being able
-			// to read what they hold (ADR-0312, ADR-draft-command-by-recipient).
+			// to read what they hold (ADR-0312, ADR-0521).
 			recipient := strings.TrimSpace(userResolve(detail.ShopRecipient, ei.ProcessInstanceKey, scope))
 			var held bool
 			if orderID, ref, held, err = s.heldPosition(recipient, detail.ShopProduct); err != nil {
@@ -99,7 +99,7 @@ func (s *Server) shopCommandHandler(rd state.Reader) job.CompletingHandler {
 }
 
 // ShopCommandRefused is the BPMN error code a refused command is thrown as when the
-// process catches it (ADR-draft-command-by-recipient): the product does not list the
+// process catches it (ADR-0521): the product does not list the
 // application, the action is not an operator's or a system's, the position is not
 // held. Uncaught it stays the failure it always was.
 const ShopCommandRefused = "SHOP_COMMAND_REFUSED"
