@@ -9799,6 +9799,26 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           version with a different declaration brings the index along; for instances migrated before
           that was true, <code>POST /api/v1/processes/{key}/reindex-instances</code> repairs a
           version's instances in bounded batches.</li>
+        <li data-l="de"><b>In welcher Version läuft noch etwas?</b> – die Auswahl <b>Version</b> der
+          Live-Ansicht nennt zu jeder Version, was sie noch enthält: wie viele Instanzen laufen, wie viele Tokens
+          an einem Incident hängen, wie viele abgeschlossen sind und ob die Version inaktiv ist. Eine Version ohne
+          Instanzen steht als «keine Instanzen» da. Unter dem Prozessnamen stehen zudem die anderen Versionen, in
+          denen noch Instanzen laufen; ein Klick öffnet deren Live-Ansicht. Mit <b>Migrieren…</b> daneben ziehst du
+          alle laufenden Instanzen einer solchen Version auf eine andere um – vorgeschlagen ist die neueste, und
+          wie bei jeder Migration bleibt eine Instanz, die nicht umziehen kann, unverändert stehen und wird danach
+          aufgelistet. Die Zahlen stammen aus den Zählern der
+          Engine, nicht aus einer Durchsicht der Instanzen, und werden alle zehn Sekunden neu gelesen. Für eine
+          Integration oder einen KI-Assistenten liefert <code>GET /api/v1/processes/{key}/versions</code>
+          (MCP: <code>atlas_process_versions</code>) dieselben Zahlen.</li>
+        <li data-l="en"><b>Which versions still have work in them?</b> – the live view's <b>Version</b> picker
+          says what each version still holds: how many instances are running, how many tokens are parked behind
+          an incident, how many have finished, and whether the version is inactive. A version with no instances
+          reads "no instances". Below the process name, the other versions that still run instances are listed,
+          each a link to its live view. <b>Migrate…</b> beside one moves all of its running instances onto another
+          version – the newest is proposed – and, as with every migration, an instance that cannot move stays
+          exactly as it was and is listed afterwards. The numbers come from the engine's counters rather than a pass over the
+          instances, and are read again every ten seconds. An integration or an AI assistant reads the same from
+          <code>GET /api/v1/processes/{key}/versions</code> (MCP: <code>atlas_process_versions</code>).</li>
         <li data-l="de"><b>Wer sitzt hier?</b> – in der <b>Live-Ansicht</b> einer Version ist das Diagramm
           selbst die Abfrage: <b>klicke auf ein Element</b>, und die Liste rechts zeigt genau die Instanzen,
           deren Token gerade dort steht. Ein Klick auf ein anderes Element wechselt, ein Klick daneben – auf
