@@ -436,7 +436,7 @@ type Server struct {
 	// loop: formdecisions.go is its whole reach into this server.
 	formDecision *formdecision.Service
 	// formAvailability answers a name field's live check whether a name is still free
-	// (ADR-draft-name-availability-check), through the same broker as the form lookups. It owns no state;
+	// (ADR-0519), through the same broker as the form lookups. It owns no state;
 	// formavailability.go is its whole reach into this server.
 	formAvailability *formavailability.Service
 	// feelGen writes a FEEL expression from a conversation with the author

@@ -604,6 +604,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Landed |
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 | [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
+| [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
 
 ## The two states of a record
 

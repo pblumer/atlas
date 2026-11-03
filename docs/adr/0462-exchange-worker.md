@@ -1,6 +1,6 @@
 # ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
-- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-draft-name-availability-check)
+- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -193,7 +193,7 @@ way in, so that backend starts PowerShell for each call (`connector/exchange/onp
 ## Amendment 2026-11-03: whether an alias is still free
 
 A name field of an order form asks, while a name is typed, whether it is still free
-(ADR-draft-name-availability-check). A Microsoft 365 group takes the address
+(ADR-0519). A Microsoft 365 group takes the address
 `<alias>@<domain>`, and a shared mailbox or a distribution list made by hand may already
 hold it — so Exchange is one of the places asked.
 

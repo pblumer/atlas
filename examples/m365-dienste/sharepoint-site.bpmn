@@ -22,7 +22,7 @@ SharePoint: Team Site. Lebenszyklus-Prozess (anlegen, Gast, Besitzer, Kontingent
 Eine gruppenverbundene moderne Teamwebsite ist eine Microsoft-365-Gruppe (groupTypes Unified, ohne Team), deren Alias (mailNickname) die URL der Site ist: /sites/&lt;alias&gt;. Der Prozess legt deshalb die Gruppe an und wartet, bis Microsoft die Site dazu bereitgestellt hat.
 
 Governance:
-- URL: Die bestellende Person wählt die URL; das Formular prüft live, ob sie frei ist (ADR-draft-name-availability-check). Diese Prüfung ist eine Gefälligkeit. Verbindlich prüft die Bereitstellung noch einmal: bestehende Gruppen, gelöschte Gruppen im Papierkorb, eine Site unter derselben Adresse und Exchange-Empfänger (Funktionspostfächer, Verteiler, Kontakte), deren Alias oder Adresse die URL schon trägt.
+- URL: Die bestellende Person wählt die URL; das Formular prüft live, ob sie frei ist (ADR-0519). Diese Prüfung ist eine Gefälligkeit. Verbindlich prüft die Bereitstellung noch einmal: bestehende Gruppen, gelöschte Gruppen im Papierkorb, eine Site unter derselben Adresse und Exchange-Empfänger (Funktionspostfächer, Verteiler, Kontakte), deren Alias oder Adresse die URL schon trägt.
 - Namensregel: M365Namensregel mit dem Objekttyp site prüft die Form der URL und die reservierten Namen.
 - Besitz: Jede Site hat zwei Besitzer (Besitzer und Stellvertretung).
 - Inventar: Die Liste «Site-Inventar» auf der Site der Konstante SITE_INVENTAR führt jede Site mit Alias, Adresse, Gruppe, Sprache, Kontingent, Status und Katalog-Position, ohne Personendaten.

@@ -1,4 +1,4 @@
-# ADR-DRAFT: A name field checks live whether a name is still free
+# ADR-0519: A name field checks live whether a name is still free
 
 - **Status:** Accepted
 - **Implementation:** Landed

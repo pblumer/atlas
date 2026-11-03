@@ -139,7 +139,7 @@ export function decisionOptions({ formId = "", url = null, headers = {}, ttlMs =
   };
 }
 
-// ---------- A name field's live availability check (ADR-draft-name-availability-check) ----------------
+// ---------- A name field's live availability check (ADR-0519) ----------------
 //
 // A textfield carrying an atlasAvailability block is a name somebody is about to take —
 // a SharePoint site, a Microsoft 365 group. While it is typed, the stored form's route

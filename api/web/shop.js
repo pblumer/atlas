@@ -1493,7 +1493,7 @@ const state = {
   // before each redraw and handed to the form again as its prefill.
   config: {},
   // configError names the product whose form is not valid yet, empty for none;
-  // configTaken says the reason is a name already taken (ADR-draft-name-availability-check).
+  // configTaken says the reason is a name already taken (ADR-0519).
   configError: '',
   configTaken: false,
   // editing names the position whose details are open for correction, as
@@ -3326,7 +3326,7 @@ const schemas = new Map();
 // availability holds the live name checks of the mounted forms, by the same key.
 const availability = new Map();
 
-// availabilitySay words one name field's state (formviewer.js, ADR-draft-name-availability-check).
+// availabilitySay words one name field's state (formviewer.js, ADR-0519).
 function availabilitySay(status, { label, value, message }) {
   const fill = (key) => t(key).replace('{label}', label).replace('{value}', value).replace('{message}', message);
   switch (status) {
@@ -3465,7 +3465,7 @@ async function mountConfigForms() {
       await form.importSchema(parsed, fromText(parsed, state.config[itemID] || {}));
       mounted.set(itemID, form);
       // A name field says while it is typed whether the name is still free
-      // (ADR-draft-name-availability-check); one known to be taken stops the order below.
+      // (ADR-0519); one known to be taken stops the order below.
       availability.set(itemID, attachAvailabilityChecks({
         form, host, schema: parsed, formId: formID, say: availabilitySay,
       }));

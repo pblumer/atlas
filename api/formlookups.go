@@ -173,7 +173,7 @@ func refuseFormLookups(kind string) string {
 }
 
 // lookupKinds are the Worker Types a form can ask through: those a directory field
-// searches (ADR-0473) and those a name field's availability check asks (ADR-draft-name-availability-check),
+// searches (ADR-0473) and those a name field's availability check asks (ADR-0519),
 // each once and in that order.
 func lookupKinds() []string {
 	var out []string

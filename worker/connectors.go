@@ -380,7 +380,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				})
 			}
 			// The sites the Worker's own credential reaches answer an order form's
-			// question whether a site name is free (ADR-draft-name-availability-check), on the operations job
+			// question whether a site name is free (ADR-0519), on the operations job
 			// type, which every worker that knows get-site leases. A brokered Worker is
 			// not in reg and answers worker_unconfigured: a lookup has no job to
 			// authorize a person's token for.
@@ -492,7 +492,7 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				return RunExchangeJob(ctx, j, reg)
 			})
 			// The same organizations answer a name field's question whether an alias is
-			// still free (ADR-draft-name-availability-check), with the same credential.
+			// still free (ADR-0519), with the same credential.
 			built.Queries[compiler.ExchangeJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
 				return exchange.RunLookup(ctx, connector, q, reg)
 			}

@@ -1,6 +1,6 @@
 // Package formavailability serves the live check behind a name field: a person types
 // the name of something they are ordering — a SharePoint site, a Microsoft 365 group —
-// and the form says at once whether that name is still free (ADR-draft-name-availability-check).
+// and the form says at once whether that name is still free (ADR-0519).
 //
 // It is ADR-0473's ephemeral worker query asked a narrower question. A directory field
 // searches and offers a page; an availability field asks one value lookup per source

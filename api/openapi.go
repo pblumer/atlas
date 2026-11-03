@@ -978,9 +978,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		// of its fields offers. Which decision and which inputs is the stored form's; the
 		// request carries only the values of the fields it binds.
 		// roleAny, like the options route above, but only for a signed-in person: the
-		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-draft-name-availability-check).
+		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-0519).
 		{"POST", "/api/v1/forms/{id}/fields/{field}/availability", s.handleFormFieldAvailability, apiOp{
-			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-draft-name-availability-check)", tag: "Forms", role: roleAny,
+			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-0519)", tag: "Forms", role: roleAny,
 			req:  jsonBody("The typed value", schemaObj(map[string]any{"value": tString()})),
 			resp: jsonBody("Availability", tObject())}},
 		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{

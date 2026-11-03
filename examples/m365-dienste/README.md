@@ -136,7 +136,7 @@ selbst an; der Prozess legt deshalb die Gruppe an und wartet auf die Site.
 
 **Bestellformular** (`m365-sharepoint-site-bestellung`): Titel, URL, Sprache, anfängliches
 Kontingent (1, 5, 10 oder 25 GB), Zweck, Sichtbarkeit, Besitzer und Stellvertretung (UPN). Das
-Feld URL prüft beim Tippen, ob die URL noch frei ist (ADR-draft-name-availability-check): bei
+Feld URL prüft beim Tippen, ob die URL noch frei ist (ADR-0519): bei
 den Gruppen in Entra ID, bei den gelöschten Gruppen, die ihren Alias 30 Tage lang behalten,
 bei SharePoint selbst unter `https://contoso.sharepoint.com/sites/<url>` und bei den
 Exchange-Empfängern. Die Gruppe erhält die Mailadresse `<url>@<Domain>`, und ein

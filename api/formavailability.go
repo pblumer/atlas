@@ -7,7 +7,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// What a name field's live availability check may reach (ADR-draft-name-availability-check).
+// What a name field's live availability check may reach (ADR-0519).
 //
 // Like the form lookups (formlookups.go) it is a query through the broker and nothing
 // on the job path: these closures are its whole reach into this server, so the single

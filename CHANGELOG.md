@@ -26,7 +26,7 @@ _Changed_ / _Removed_ for each version.
   signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
   Worker whose editors switched on `formLookups`, which the Console now offers for
   SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
-  (ADR-draft-name-availability-check).
+  (ADR-0519).
 - **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
   sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
   https://myapps.microsoft.com, which Graph requires) and answers the invitation with the

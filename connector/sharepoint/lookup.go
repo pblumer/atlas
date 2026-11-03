@@ -10,7 +10,7 @@ import (
 )
 
 // A site lookup answers the one question an order form asks before somebody takes a
-// name: is there already a site at this address (ADR-draft-name-availability-check)? It rides the form-lookup
+// name: is there already a site at this address (ADR-0519)? It rides the form-lookup
 // protocol of ADR-0473 — an ephemeral query a Worker Instance answers with the
 // Worker's own credential, never a job — and is a value lookup and nothing else: no
 // search, no listing, no continuation. A person typing a site name learns whether the

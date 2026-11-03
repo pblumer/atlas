@@ -180,7 +180,7 @@ export function workerShape(kind, provider) {
     // Worker because it puts this Worker's credential behind every such form, and that
     // is its editors' decision, not the form author's.
     // A SharePoint or Exchange Worker can let an order form ask whether a site name or an
-    // alias is still free (ADR-draft-name-availability-check), under the same switch for
+    // alias is still free (ADR-0519), under the same switch for
     // the same reason.
     formLookups: entra || sharepoint || kind === "exchange",
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the

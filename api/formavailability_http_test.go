@@ -17,7 +17,7 @@ import (
 	"github.com/pblumer/atlas/worker"
 )
 
-// A name field's live check (ADR-draft-name-availability-check), end to end: a stored form names an Entra and a
+// A name field's live check (ADR-0519), end to end: a stored form names an Entra and a
 // SharePoint Worker, a Worker Instance holding both answers through a fake Graph and the
 // SharePoint mockup, and a signed-in person typing a name learns whether any of the
 // three sources holds it — and nothing else.

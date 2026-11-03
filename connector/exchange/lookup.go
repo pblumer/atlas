@@ -11,7 +11,7 @@ import (
 )
 
 // A recipient lookup answers the one question a name field asks of Exchange: does a
-// recipient already hold this alias (ADR-draft-name-availability-check)? A Microsoft
+// recipient already hold this alias (ADR-0519)? A Microsoft
 // 365 group, a shared mailbox and a distribution list all take their address from their
 // alias, so a name that Entra reports free can still collide with a mailbox an
 // administrator created by hand — Exchange is the third place to ask.
