@@ -43,7 +43,8 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   from the outline route around the collapsed loop, and says so when no outline is available. One
   iteration's steps replay on the diagram (visited and active markers, previous/next, play to the end,
   a second page of steps, a fresh start for another iteration) and an unavailable replay window is
-  explained. The harness computes each page from the
+  explained. Each step shows the iteration's variables as they stood then, read once per step position,
+  and a failed read is shown as an error at its step. The harness computes each page from the
   iteration number, as the server's index does, instead of holding 50,000 rows.
 
 - **`building-blocks.spec.mjs`**

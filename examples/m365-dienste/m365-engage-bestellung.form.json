@@ -1,0 +1,80 @@
+{
+  "type": "default",
+  "id": "m365-engage-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Viva Engage: Community · Viva Engage: community**\n\nDer Name entsteht nach der Namensregel: EC-<BEREICH> <Bezeichnung>. Die Besitzerin oder der Besitzer wird erste Admin der Community. · The name follows the naming rule: EC-<DEPT> <name>. The owner becomes the community's first admin."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Präfix und Bereich setzt die Namensregel davor. · The prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "beschreibung",
+      "type": "textarea",
+      "label": "Beschreibung · Description",
+      "description": "Wofür die Community da ist. Erscheint in Viva Engage. · What the community is for. Shown in Viva Engage.",
+      "validate": {
+        "required": true,
+        "maxLength": 900
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sichtbarkeit",
+      "type": "radio",
+      "label": "Sichtbarkeit · Visibility",
+      "values": [
+        {
+          "label": "Privat: nur Mitglieder · Private: members only",
+          "value": "private"
+        },
+        {
+          "label": "Öffentlich in der Organisation · Public within the organisation",
+          "value": "public"
+        }
+      ],
+      "defaultValue": "private",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Besitzerin oder Besitzer (UPN) · Owner (UPN)",
+      "description": "Verantwortlich für Mitglieder und Inhalt; genehmigt wird von der vorgesetzten Person. · Responsible for members and content; approved by their line manager.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

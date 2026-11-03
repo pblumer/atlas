@@ -523,3 +523,58 @@ func TestAnActionIsAvailableWhereverTheStrandListensForIt(t *testing.T) {
 		t.Fatalf("after the audit: %d (%s), want the receive task still listening", code, body)
 	}
 }
+
+// TestAnActionOfAPerOperationProductIsToldItsVariant: an action that starts its own
+// instance is given the variant the position was ordered in, as the provision and the
+// return are — so a decision over the licence tier it changes does not see null.
+func TestAnActionOfAPerOperationProductIsToldItsVariant(t *testing.T) {
+	ts, admin, _, cat := aLifecycleOrder(t)
+	if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments", "application/xml", repairingLaptopBPMN); code != http.StatusOK {
+		t.Fatalf("deploy: %d (%s)", code, b)
+	}
+	repair := `,{"key":"repair","message":"laptop.repair","effect":"service","triggers":["customer"],"labels":{"de":"Reparieren"}}`
+	product := strings.Replace(laptopActions(cat, repair), `"texts":{"de":"Laptop"},`,
+		`"texts":{"de":"Laptop"},"variants":[{"id":"gross","texts":{"de":"Gross"}},{"id":"klein","texts":{"de":"Klein"}}],`, 1)
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/catalog-products", product); code != http.StatusOK {
+		t.Fatalf("save product: %d (%s)", code, b)
+	}
+	code, body := cReq(t, admin, ts, "POST", "/api/v1/catalogs/"+cat+"/releases", "")
+	if code != http.StatusCreated {
+		t.Fatalf("publish: %d (%s)", code, body)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders",
+		`{"releaseId":"`+idOf(t, body)+`","items":["laptop"],"variants":{"laptop":["gross"]}}`)
+	if code != http.StatusCreated {
+		t.Fatalf("order: %d (%s)", code, body)
+	}
+	ord := idOf(t, body)
+	var o struct {
+		Lines []struct {
+			ItemID, VariantID string
+			Key               string `json:"key"`
+		}
+	}
+	_ = json.Unmarshal(body, &o)
+	position := "laptop"
+	for _, l := range o.Lines {
+		if l.ItemID == "laptop" && l.Key != "" {
+			position = l.Key
+		}
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/"+position+"/start", `{"operation":"provision"}`); code != http.StatusOK {
+		t.Fatalf("start: %d (%s)", code, b)
+	}
+	if code, b := cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/"+position, `{"status":"done"}`); code != http.StatusOK {
+		t.Fatalf("report done: %d (%s)", code, b)
+	}
+	code, body = cReq(t, admin, ts, "POST", "/api/v1/orders/"+ord+"/lines/"+position+"/actions/repair", `{"commandId":"v-1","reason":"x"}`)
+	var took struct {
+		InstanceKey uint64 `json:"instanceKey"`
+	}
+	if code != http.StatusOK || json.Unmarshal(body, &took) != nil || took.InstanceKey == 0 {
+		t.Fatalf("repair: %d (%s)", code, body)
+	}
+	if vars := variablesOf(t, admin, ts, took.InstanceKey); !strings.Contains(vars, `"variantId"`) || !strings.Contains(vars, `gross`) {
+		t.Fatalf("the repair instance was not told its variant: %s", vars)
+	}
+}

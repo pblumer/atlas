@@ -1,0 +1,73 @@
+{
+  "type": "default",
+  "id": "m365-geraet-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Gerät · Equipment**\n\nEin buchbares Gerät: Beamer, Fahrzeug oder Leihgerät. Name und Adresse entstehen nach der Namensregel: GE-<BEREICH> <Bezeichnung>. · A bookable piece of equipment: projector, vehicle or loan device. Name and address follow the naming rule: GE-<DEPT> <name>."
+    },
+    {
+      "key": "geraeteart",
+      "type": "radio",
+      "label": "Geräteart · Kind of equipment",
+      "values": [
+        {
+          "label": "Beamer · Projector",
+          "value": "beamer"
+        },
+        {
+          "label": "Fahrzeug · Vehicle",
+          "value": "fahrzeug"
+        },
+        {
+          "label": "Leihgerät · Loan device",
+          "value": "leihgeraet"
+        }
+      ],
+      "defaultValue": "beamer",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. Bestimmt den Namen mit. · 2 to 5 letters; part of the name.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens, z.B. «Beamer 3. OG» oder «VW ID.3 ZH 12345». Präfix und Bereich setzt die Namensregel davor. · The rest of the name; the prefix and department are added by the naming rule.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "standort",
+      "type": "textfield",
+      "label": "Standort · Location",
+      "description": "Wo das Gerät abgeholt wird. · Where the equipment is picked up.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

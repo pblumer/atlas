@@ -60,6 +60,7 @@ func defaultTools() []Tool {
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
 	tools = append(tools, catalogTools()...)
+	tools = append(tools, hubTools()...)
 	return append(tools, contentTools()...)
 }
 
@@ -619,6 +620,33 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10) + "/steps" + q))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_iteration_variables",
+			Description: "Read one multi-instance iteration's variables as they stood at a log position (ADR-0517) — " +
+				"pass a step's position from atlas_multi_instance_iteration_steps as 'at': the iteration's own scope and " +
+				"every scope running inside it then, each folded to the latest value per name at or before that position. " +
+				"The body's and the instance's scopes are not included. 'truncated' and 'valueTruncated' say when not all " +
+				"was read.",
+			InputSchema: miBodySchema(map[string]any{
+				"iterationKey": integerProp("The iteration's element-instance key (from atlas_multi_instance_iterations)."),
+				"at":           integerProp("The log position of the step (from atlas_multi_instance_iteration_steps)."),
+			}, "iterationKey", "at"),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				it, err := argUint(args, "iterationKey")
+				if err != nil {
+					return "", err
+				}
+				at, err := argUint(args, "at")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10) + "/variables?at=" + strconv.FormatUint(at, 10)))
 			},
 		},
 		{

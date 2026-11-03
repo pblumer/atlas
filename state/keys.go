@@ -80,6 +80,7 @@ const (
 	cfOutline                columnFamily = 0x44 // outline:<piKey>:<ts>:<pos> → step outside every MI iteration (ADR-0517, bounded overview)
 	cfOutlineHidden          columnFamily = 0x45 // outlineHidden:<piKey>:<elKey> → owning iteration elKey(8); an element inside an MI iteration (ADR-0517)
 	cfIterationStep          columnFamily = 0x46 // iterStep:<piKey>:<iterationElKey>:<ts>:<pos> → step inside one MI iteration (ADR-0517, OHS3 replay window)
+	cfScopeTrigger           columnFamily = 0x47 // scopeTrig:<scopeKey>:<triggerElKey> → nil; an armed event-subprocess trigger of a scope (ADR-0082, #1494)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
@@ -799,4 +800,11 @@ func keyEntitlementHistory(principal string, endedAt int64, itemID string) []byt
 // two — which is a per-variant key and a migration, named as such in the record.
 func keyEntitlement(principal, itemID string) []byte {
 	return append(entitlementPrefix(principal), itemID...)
+}
+
+// keyScopeTrigger keys one armed event-subprocess trigger under the scope it is
+// armed in, so the scope's triggers are a prefix read instead of a walk of every
+// live element instance of the process instance (#1494).
+func keyScopeTrigger(scopeKey, triggerKey uint64) []byte {
+	return appendBE64(appendBE64([]byte{byte(cfScopeTrigger)}, scopeKey), triggerKey)
 }

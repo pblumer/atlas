@@ -16,6 +16,8 @@
         "m365-lizenz",
         "m365-telefonie",
         "m365-team",
+        "m365-sharepoint-site",
+        "m365-engage",
         "m365-funktionspostfach",
         "m365-verteiler",
         "m365-postfachzugriff"
@@ -46,12 +48,16 @@
         "m365-lizenz",
         "m365-telefonie",
         "m365-team",
+        "m365-sharepoint-site",
+        "m365-engage",
         "m365-funktionspostfach",
         "m365-verteiler",
         "m365-postfachzugriff",
         "m365-raum",
+        "m365-geraet",
         "m365-warteschlange",
-        "m365-telefonzentrale"
+        "m365-telefonzentrale",
+        "m365-aufbewahrung"
       ],
       "groups": [
         "{{zielgruppe-ucc}}"
@@ -60,6 +66,40 @@
         {
           "from": "m365-telefonie",
           "to": "m365-lizenz",
+          "kind": "requires"
+        }
+      ]
+    },
+    {
+      "id": "cat-m365-hr",
+      "texts": {
+        "de": "Microsoft 365: HR-Eintritte",
+        "en": "Microsoft 365: HR joiners"
+      },
+      "rank": 520,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "m365-eintritt",
+        "m365-eintritt-lizenz",
+        "m365-oe-mitgliedschaften"
+      ],
+      "edges": [
+        {
+          "from": "m365-eintritt",
+          "to": "m365-eintritt-lizenz",
+          "kind": "composition"
+        },
+        {
+          "from": "m365-eintritt",
+          "to": "m365-oe-mitgliedschaften",
+          "kind": "composition"
+        },
+        {
+          "from": "m365-oe-mitgliedschaften",
+          "to": "m365-eintritt-lizenz",
           "kind": "requires"
         }
       ]
@@ -75,8 +115,8 @@
         "en": "Microsoft 365: licence with mailbox"
       },
       "descriptions": {
-        "de": "Die Microsoft-365-Lizenz einer Person mit Office, Teams und dem Postfach in Exchange Online. Die Variante bestimmt die Lizenzstufe.",
-        "en": "A person's Microsoft 365 licence with Office, Teams and the mailbox in Exchange Online. The variant sets the licence tier."
+        "de": "Die Microsoft-365-Lizenz einer Person mit Office, Teams und dem Postfach in Exchange Online. Die Variante bestimmt die Lizenzstufe. Danach: Abwesenheitsnotiz, Postfachkontingent, Weiterleitung in die eigene Domain, zusätzliche Mailadressen und Kalenderstellvertretung.",
+        "en": "A person's Microsoft 365 licence with Office, Teams and the mailbox in Exchange Online. The variant sets the licence tier. Afterwards: automatic reply, mailbox quota, forwarding within the own domain, additional e-mail addresses and calendar delegates."
       },
       "variants": [
         {
@@ -149,6 +189,103 @@
             "de": "Abwesenheitsnotiz beenden",
             "en": "End the automatic reply"
           }
+        },
+        {
+          "key": "kontingent",
+          "message": "m365.postfach.kontingent",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Postfachkontingent erhöhen",
+            "en": "Increase the mailbox quota"
+          },
+          "form": "m365-postfach-kontingent"
+        },
+        {
+          "key": "weiterleitung",
+          "message": "m365.postfach.weiterleitung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Weiterleitung setzen",
+            "en": "Set mail forwarding"
+          },
+          "form": "m365-postfach-weiterleitung"
+        },
+        {
+          "key": "weiterleitung-aus",
+          "message": "m365.postfach.weiterleitung-aus",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Weiterleitung aufheben",
+            "en": "Stop mail forwarding"
+          }
+        },
+        {
+          "key": "alias",
+          "message": "m365.postfach.adresse",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zusätzliche Mailadresse",
+            "en": "Add an e-mail address"
+          },
+          "form": "m365-postfach-adresse"
+        },
+        {
+          "key": "alias-weg",
+          "message": "m365.postfach.adresse-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mailadresse entfernen",
+            "en": "Remove an e-mail address"
+          },
+          "form": "m365-postfach-adresse"
+        },
+        {
+          "key": "stellvertretung",
+          "message": "m365.postfach.stellvertretung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kalenderstellvertretung erteilen",
+            "en": "Grant a calendar delegate"
+          },
+          "form": "m365-postfach-stellvertretung"
+        },
+        {
+          "key": "stellvertretung-weg",
+          "message": "m365.postfach.stellvertretung-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kalenderstellvertretung entziehen",
+            "en": "Remove a calendar delegate"
+          },
+          "form": "m365-postfach-stellvertretung"
         }
       ],
       "keywords": [
@@ -160,7 +297,14 @@
         "E5",
         "F3",
         "Postfach",
-        "Mailbox"
+        "Mailbox",
+        "Weiterleitung",
+        "Forwarding",
+        "Alias",
+        "Stellvertretung",
+        "Delegate",
+        "Kontingent",
+        "Quota"
       ],
       "category": "identitaet",
       "categoryTexts": {
@@ -290,6 +434,203 @@
         "Team",
         "Gruppe",
         "Group",
+        "Zusammenarbeit"
+      ],
+      "category": "zusammenarbeit",
+      "categoryTexts": {
+        "de": "Zusammenarbeit",
+        "en": "Collaboration"
+      }
+    },
+    {
+      "id": "m365-sharepoint-site",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "SharePoint: Teamwebsite",
+        "en": "SharePoint: team site"
+      },
+      "descriptions": {
+        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, löschen und innert 30 Tagen wiederherstellen.",
+        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, delete and restore within 30 days."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_sharepoint_site",
+      "configForm": "m365-sharepoint-site-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.site.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.site.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site endgültig zurückgeben",
+            "en": "Return the site for good"
+          }
+        },
+        {
+          "key": "gast",
+          "message": "m365.site.gast",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externe Person einladen",
+            "en": "Invite an external person"
+          },
+          "form": "m365-sharepoint-gast"
+        },
+        {
+          "key": "besitzer",
+          "message": "m365.site.besitzer",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-Besitzer ändern",
+            "en": "Change the site owner"
+          },
+          "form": "m365-sharepoint-besitzer"
+        },
+        {
+          "key": "kontingent",
+          "message": "m365.site.kontingent",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherkontingent erhöhen",
+            "en": "Increase the storage quota"
+          },
+          "form": "m365-sharepoint-kontingent"
+        },
+        {
+          "key": "loeschen",
+          "message": "m365.site.loeschen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site löschen",
+            "en": "Delete the site"
+          }
+        },
+        {
+          "key": "wiederherstellen",
+          "message": "m365.site.wiederherstellen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Gelöschte Site wiederherstellen",
+            "en": "Restore the deleted site"
+          }
+        }
+      ],
+      "keywords": [
+        "SharePoint",
+        "Site",
+        "Teamwebsite",
+        "Team Site",
+        "Zusammenarbeit"
+      ],
+      "category": "zusammenarbeit",
+      "categoryTexts": {
+        "de": "Zusammenarbeit",
+        "en": "Collaboration"
+      }
+    },
+    {
+      "id": "m365-engage",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Viva Engage: Community",
+        "en": "Viva Engage: community"
+      },
+      "descriptions": {
+        "de": "Eine Community in Viva Engage für ein Thema oder einen Bereich, benannt nach der Namensregel (EC-<BEREICH> …), mit einer verantwortlichen Person als erster Admin. Danach: Personen aufnehmen und entfernen.",
+        "en": "A Viva Engage community for a topic or a department, named by the naming rule (EC-<DEPT> …), with a responsible person as its first admin. Afterwards: add and remove people."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_engage_community",
+      "configForm": "m365-engage-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.community.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.community.loeschen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Community löschen",
+            "en": "Delete the community"
+          }
+        },
+        {
+          "key": "mitglied",
+          "message": "m365.community.mitglied",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Person aufnehmen",
+            "en": "Add a person"
+          },
+          "form": "m365-engage-person"
+        },
+        {
+          "key": "mitglied-weg",
+          "message": "m365.community.mitglied-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Person entfernen",
+            "en": "Remove a person"
+          },
+          "form": "m365-engage-person-weg"
+        }
+      ],
+      "keywords": [
+        "Viva Engage",
+        "Yammer",
+        "Community",
         "Zusammenarbeit"
       ],
       "category": "zusammenarbeit",
@@ -522,6 +863,40 @@
       }
     },
     {
+      "id": "m365-geraet",
+      "homeCatalog": "cat-m365-ucc",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Gerät (Gerätepostfach)",
+        "en": "Equipment (equipment mailbox)"
+      },
+      "descriptions": {
+        "de": "Ein in Outlook und Teams buchbares Gerät: Beamer, Fahrzeug oder Leihgerät. Buchungen werden automatisch angenommen. Name nach der Namensregel (GE-…).",
+        "en": "Equipment bookable in Outlook and Teams: a projector, a vehicle or a loan device. Bookings are accepted automatically. Named by the naming rule (GE-…)."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{facility-management}}"
+      },
+      "provisionProcess": "proc_m365_geraet_einrichten",
+      "deprovisionProcess": "proc_m365_geraet_entfernen",
+      "configForm": "m365-geraet-bestellung",
+      "keywords": [
+        "Gerät",
+        "Equipment",
+        "Beamer",
+        "Fahrzeug",
+        "Leihgerät",
+        "Kalender"
+      ],
+      "category": "mail",
+      "categoryTexts": {
+        "de": "E-Mail und Kalender",
+        "en": "Mail and calendar"
+      }
+    },
+    {
       "id": "m365-warteschlange",
       "homeCatalog": "cat-m365-ucc",
       "state": "active",
@@ -635,6 +1010,342 @@
       "categoryTexts": {
         "de": "Telefonie",
         "en": "Telephony"
+      }
+    },
+    {
+      "id": "m365-aufbewahrung",
+      "homeCatalog": "cat-m365-ucc",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Aufbewahrung eines Postfachs (Litigation Hold)",
+        "en": "Mailbox litigation hold"
+      },
+      "descriptions": {
+        "de": "Exchange Online bewahrt jede Nachricht des Postfachs einer Person auf, auch was sie löscht, für eine bestimmte Zahl Tage oder unbegrenzt. Genehmigt durch die Compliance.",
+        "en": "Exchange Online keeps every message of a person's mailbox, including what they delete, for a number of days or without limit. Approved by compliance."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{compliance}}"
+      },
+      "lifecycleProcess": "proc_m365_aufbewahrung",
+      "configForm": "m365-aufbewahrung-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.aufbewahrung.einrichten",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.aufbewahrung.aufheben",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Aufbewahrung aufheben",
+            "en": "Release the hold"
+          }
+        }
+      ],
+      "keywords": [
+        "Litigation Hold",
+        "Aufbewahrung",
+        "Compliance",
+        "eDiscovery",
+        "Postfach"
+      ],
+      "category": "compliance",
+      "categoryTexts": {
+        "de": "Compliance",
+        "en": "Compliance"
+      }
+    },
+    {
+      "id": "m365-eintritt",
+      "homeCatalog": "cat-m365-hr",
+      "state": "active",
+      "texts": {
+        "de": "Eintrittspaket Microsoft 365",
+        "en": "Microsoft 365 joiner package"
+      },
+      "descriptions": {
+        "de": "Was eine Person am ersten Tag braucht: die Lizenz mit Postfach und die Mitgliedschaften ihrer Organisationseinheit. Bestellt wird es vom Eintrittsprozess, wenn das HR-System einen Eintritt meldet, und zurückgegeben beim Austritt; im Shop steht es nicht.",
+        "en": "What a person needs on their first day: the licence with mailbox and the memberships of their organisational unit. The joiner process orders it when the HR system reports a joiner, and returns it when they leave; it is not on offer in the shop."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_eintritt_paket",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.eintritt.bereitstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.eintritt.zurueckgeben",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Eintrittspaket zurückgeben",
+            "en": "Return the joiner package"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-m365-dienste"
+      ],
+      "orderableBy": [
+        "beispiel-m365-dienste"
+      ],
+      "keywords": [
+        "Eintritt",
+        "Joiner",
+        "Onboarding",
+        "HR"
+      ],
+      "category": "identitaet",
+      "categoryTexts": {
+        "de": "Identität und Lizenzen",
+        "en": "Identity and licences"
+      }
+    },
+    {
+      "id": "m365-eintritt-lizenz",
+      "homeCatalog": "cat-m365-hr",
+      "state": "active",
+      "texts": {
+        "de": "Microsoft 365: Lizenz mit Postfach (Eintritt)",
+        "en": "Microsoft 365: licence with mailbox (joiner)"
+      },
+      "descriptions": {
+        "de": "Die Lizenz mit Postfach als Teil des Eintrittspakets: dasselbe wie «Microsoft 365: Lizenz mit Postfach», ohne Varianten und ohne Genehmigung. Die Lizenzstufe kommt aus der Meldung des HR-Systems. Danach dieselben Aktionen am Postfach.",
+        "en": "The licence with mailbox as part of the joiner package: the same as “Microsoft 365: licence with mailbox”, without variants and without approval. The tier comes from the HR system's report. Afterwards the same mailbox actions."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_lizenz",
+      "configForm": "m365-eintritt-lizenz-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.lizenz.zuweisen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.lizenz.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Lizenz zurückgeben",
+            "en": "Return the licence"
+          }
+        },
+        {
+          "key": "abwesenheit",
+          "message": "m365.postfach.abwesenheit",
+          "effect": "service",
+          "triggers": [
+            "customer"
+          ],
+          "labels": {
+            "de": "Abwesenheitsnotiz setzen",
+            "en": "Set an automatic reply"
+          },
+          "form": "m365-abwesenheit"
+        },
+        {
+          "key": "abwesenheit-beenden",
+          "message": "m365.postfach.anwesend",
+          "effect": "service",
+          "triggers": [
+            "customer"
+          ],
+          "labels": {
+            "de": "Abwesenheitsnotiz beenden",
+            "en": "End the automatic reply"
+          }
+        },
+        {
+          "key": "kontingent",
+          "message": "m365.postfach.kontingent",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Postfachkontingent erhöhen",
+            "en": "Increase the mailbox quota"
+          },
+          "form": "m365-postfach-kontingent"
+        },
+        {
+          "key": "weiterleitung",
+          "message": "m365.postfach.weiterleitung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Weiterleitung setzen",
+            "en": "Set mail forwarding"
+          },
+          "form": "m365-postfach-weiterleitung"
+        },
+        {
+          "key": "weiterleitung-aus",
+          "message": "m365.postfach.weiterleitung-aus",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Weiterleitung aufheben",
+            "en": "Stop mail forwarding"
+          }
+        },
+        {
+          "key": "alias",
+          "message": "m365.postfach.adresse",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Zusätzliche Mailadresse",
+            "en": "Add an e-mail address"
+          },
+          "form": "m365-postfach-adresse"
+        },
+        {
+          "key": "alias-weg",
+          "message": "m365.postfach.adresse-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mailadresse entfernen",
+            "en": "Remove an e-mail address"
+          },
+          "form": "m365-postfach-adresse"
+        },
+        {
+          "key": "stellvertretung",
+          "message": "m365.postfach.stellvertretung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kalenderstellvertretung erteilen",
+            "en": "Grant a calendar delegate"
+          },
+          "form": "m365-postfach-stellvertretung"
+        },
+        {
+          "key": "stellvertretung-weg",
+          "message": "m365.postfach.stellvertretung-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kalenderstellvertretung entziehen",
+            "en": "Remove a calendar delegate"
+          },
+          "form": "m365-postfach-stellvertretung"
+        }
+      ],
+      "commandedBy": [
+        "beispiel-m365-dienste"
+      ],
+      "keywords": [
+        "M365",
+        "Lizenz",
+        "Licence",
+        "Eintritt",
+        "Joiner",
+        "Postfach",
+        "Mailbox"
+      ],
+      "category": "identitaet",
+      "categoryTexts": {
+        "de": "Identität und Lizenzen",
+        "en": "Identity and licences"
+      }
+    },
+    {
+      "id": "m365-oe-mitgliedschaften",
+      "homeCatalog": "cat-m365-hr",
+      "state": "active",
+      "texts": {
+        "de": "Mitgliedschaften der Organisationseinheit",
+        "en": "Memberships of the organisational unit"
+      },
+      "descriptions": {
+        "de": "Die Teams, Microsoft-365-Gruppen und Verteiler, in die eine Person ihrer Organisationseinheit wegen gehört, nach der Entscheidung M365OeMitgliedschaften. Teil des Eintrittspakets; setzt die Lizenz voraus.",
+        "en": "The teams, Microsoft 365 groups and distribution lists a person belongs to because of their organisational unit, as the decision M365OeMitgliedschaften says. Part of the joiner package; needs the licence first."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_oe_mitgliedschaften",
+      "configForm": "m365-oe-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.oe.zuweisen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.oe.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Mitgliedschaften entfernen",
+            "en": "Remove the memberships"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-m365-dienste"
+      ],
+      "keywords": [
+        "Organisationseinheit",
+        "Abteilung",
+        "Department",
+        "Teams",
+        "Gruppe",
+        "Group",
+        "Verteiler",
+        "Eintritt"
+      ],
+      "category": "zusammenarbeit",
+      "categoryTexts": {
+        "de": "Zusammenarbeit",
+        "en": "Collaboration"
       }
     }
   ]

@@ -13,6 +13,92 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
+- **A process commands what a person holds without reading what they hold.** A shop
+  send task in mode `command` may name a `recipient` instead of an order and a position;
+  the server finds that person's position of the product in the inventory and commands
+  it under the product's `commandedBy`, so a leaver process returns an admin account by
+  naming the person — the inventory stays the administrators' to read. Holding nothing
+  completes the task with an empty result, and a refused command, in either shape, is
+  thrown as `SHOP_COMMAND_REFUSED` when the process catches it
+  (ADR-0521).
+- **A process orders a product for somebody in the name of its application.** A shop
+  send task in the new mode `order` names a catalogue and a product, the recipient's
+  account id and the answers to the products' forms, and places the order through the
+  same checks a person's order meets — eligibility, conflicts, the orderable window,
+  answers, variants and the approval rule. Only a product whose new field `orderableBy`
+  lists the process's application may be ordered so; the list is read from the newest
+  release, so taking an application off it stops it at once, and the Console edits it
+  beside `commandedBy`. The order names `system:application:<key>` as its orderer, its
+  id comes from the task, so a retry finds the order instead of placing a second one,
+  and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
+  HR joiner process can order the starter package for a person who joins
+  (ADR-0520).
+- **An order form says while a name is typed whether it is still free.** A textfield
+  carrying an `atlasAvailability` block names up to four sources — Entra groups and
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
+  `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
+  and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
+  stops the order, a check that could not run does not. Each source is a value lookup
+  over the form-lookup worker query, answered by a Worker Instance with the Worker's own
+  credential, so nothing is written and the engine holds no Microsoft credential. Only a
+  signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
+  Worker whose editors switched on `formLookups`, which the Console now offers for
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
+  (ADR-0519).
+- **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
+  sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
+  https://myapps.microsoft.com, which Graph requires) and answers the invitation with the
+  new guest's id; `restore-group` restores a Microsoft 365 group deleted less than 30
+  days ago, and with it its SharePoint site; `list-deleted-groups` lists deleted groups
+  like `list-groups` lists live ones. Two lookup resources, `groups` and
+  `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
+  availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
+- **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
+  id, name, display name and web URL with its default library's quota (`used`, `total`,
+  `remaining` in bytes), and `exists=false` for an address where there is no site, so a
+  process can show a site's usage before somebody asks for more room. The mockup answers
+  it too (ADR-0141, amended).
+- **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
+- **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
+- **Another system is connected with one approval.** A system such as a wiki that shows
+  atlas's processes and mirrors people's tasks names itself by the https URL of a client
+  ID metadata document it publishes and signs its token requests with a key from it
+  (`private_key_jwt`, EdDSA or ES256), so no token, client secret or redirect URI is
+  copied by hand. An administrator starts the connection in the system and approves it
+  on the consent screen, which shows the system's host above the name it claims, for the
+  new resource `<origin>/system`: the capabilities `diagrams`, `tasklist` and `events`,
+  each optionally narrowed to projects — `tasklist` then lists only those projects' tasks
+  and `events` carries only their task facts — and, if chosen, pre-consent, which
+  connects the system's people to their own `…/tasks` grants without a consent page once
+  they are signed in; `prompt=none` answers `login_required` or `consent_required`. A
+  person who withdraws such a grant declines the system until they approve it
+  themselves. `GET /api/v1/auth/me` tells a system what was approved, and
+  `GET /api/v1/tasks/{key}` answers it `410 Gone` for a task that ended while the feed
+  still holds its end. Console → Administration → Connected systems lists each system
+  with its approver, reach, people and last use, turns pre-consent off and disconnects
+  it; Connected accounts lists each person's systems. Atlas reads such a document from
+  public addresses only unless `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`) is set, within the new budgets
+  `ATLAS_LIMIT_CLIENT_METADATA*`, and saves nothing before an administrator approved.
+  New routes `GET /api/v1/connected-systems`,
+  `PUT /api/v1/connected-systems/{id}/preconsent`, `DELETE /api/v1/connected-systems/{id}`,
+  `GET /api/v1/me/connected-systems` and `POST /api/v1/me/connected-systems/withdraw`;
+  audit events `system.connect`, `system.change` and `system.disconnect`
+  (ADR-0512).
 - **An atlas hub signing key rotates without interruption.** `ATLAS_BLUEPRINT_REGISTRY_KEY` pins one registry key or, during a rotation, two separated by a comma, and an index signed by either is accepted (ADR-0499 amendment). The server logs the pinned fingerprints at startup (`hub.registry_keys_pinned`), as a warning while two are pinned. Three keys, a key twice or a malformed one stop the server at startup. `examples/hub/README.md` gives the order: pin both, switch the signer, unpin the old key. A compromised key is replaced outright, never pinned beside its successor.
 - **One iteration replays step by step on the diagram.** In the Multi-Instance Explorer, *Replay this iteration* plays what ran inside one iteration — its start, the elements inside it, a nested execution as one step, its end — on the diagram, step by step or with *Play*, from a new bounded route (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps`, MCP tool `atlas_multi_instance_iteration_steps`). Iteration 37,421 of a 50,000-iteration instance answers in about a millisecond. Servers whose history predates it rebuild it once at startup.
 - **A large instance shows its whole course, with its loops collapsed.** Operations' bounded view of an instance with a large multi-instance execution now lists the instance's own steps — start, gateways, tasks, end — in the order they happened, with each loop as one collapsed row between them, from a new outline of the history that leaves out what runs inside iterations (`GET /api/v1/instances/{key}/outline`, MCP tool `atlas_instance_outline`). An instance with 50,000 iterations answers in under a millisecond with a few hundred bytes.
@@ -104,6 +190,7 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
@@ -148,6 +235,17 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
+- **A provisioning that reports at once keeps its report.** A provisioning process
+  that reported its position done (or failed) before the order's start came back to
+  mark the line running had its report overwritten with running, and the position
+  stayed running with nothing left to report on it. The start now marks a line
+  running only while it is still pending or blocked.
+- **An action is told the variant its position was ordered in.** The provision and
+  the return were given `variantId`; an action that starts its own instance was not,
+  so a decision over the licence tier it changed saw null — as the M365 example's
+  mailbox quota decision did.
+- **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 - **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
   rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
   thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and

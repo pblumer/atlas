@@ -64,6 +64,9 @@ var wantPublicRoutes = []string{
 	// A person's tasks as a resource of their own, the same document for the resource
 	// a client asks a tasks grant for (ADR-0510 §3).
 	"GET /.well-known/oauth-protected-resource/tasks",
+	// A connected system's own reading of this server, the document for the
+	// resource an administrator approves a system grant for (ADR-0512 §2).
+	"GET /.well-known/oauth-protected-resource/system",
 
 	// The authorization server (ADR-0200). Its metadata is read before a client
 	// holds anything at all, and its two endpoints have their own reasons:

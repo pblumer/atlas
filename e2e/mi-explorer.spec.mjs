@@ -218,3 +218,33 @@ test("unavailable iteration steps are explained, not shown as empty", async ({ p
   await expect(page.locator(".mi-ex-detail .mi-replay .mi-ex-error")).toContainText(/Iterationsschritte|iteration steps existed/);
   await expect(page.locator(".mi-ex-detail .mi-rp-step")).toHaveCount(0);
 });
+
+test("each step of the replay shows the iteration's variables as they stood then", async ({ page }) => {
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-explorer .mi-row").first().click();
+  const replay = page.locator(".mi-ex-detail .mi-replay");
+  await replay.locator(".mi-rp-load").click();
+  const vars = replay.locator(".mi-rp-vars");
+  await expect(vars.locator(".mi-rp-scope")).toHaveCount(1);
+  await expect(vars).toContainText("loopCounter");
+  await expect(vars).toContainText("running");
+  await replay.locator(".mi-rp-next").click();
+  await expect(vars).toContainText("done");
+  await replay.locator(".mi-rp-prev").click();
+  await expect(vars).toContainText("running");
+  // Each step is read once, by its position; stepping back reads nothing again.
+  const asked = await page.evaluate(() => window.__requests.filter((u) => u.includes("/variables?")));
+  expect(asked).toEqual(["/api/v1/instances/281474976723211/multi-instances/281474976799000/iterations/1000001/variables?at=101",
+    "/api/v1/instances/281474976723211/multi-instances/281474976799000/iterations/1000001/variables?at=151"]);
+});
+
+test("a failed variables read is shown at its step, not as no variables", async ({ page }) => {
+  await page.evaluate(() => { window.__scenario.noVars = true; });
+  await mount(page);
+  await page.locator("#history-list .ops-mi-explore").click();
+  await page.locator(".mi-explorer .mi-row").first().click();
+  await page.locator(".mi-ex-detail .mi-rp-load").click();
+  await expect(page.locator(".mi-ex-detail .mi-rp-vars-error")).toContainText("variables lost");
+  await expect(page.locator(".mi-ex-detail .mi-rp-scope")).toHaveCount(0);
+});

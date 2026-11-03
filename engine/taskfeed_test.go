@@ -76,6 +76,12 @@ func TestAUserTasksLifeLeavesOnTheFeed(t *testing.T) {
 	if rows[1].Task.Assignee != "alice" || rows[2].Task.Assignee != "" {
 		t.Errorf("assignees = %q then %q, want alice then nobody", rows[1].Task.Assignee, rows[2].Task.Assignee)
 	}
+	// The completed task is found by its key, at the row that completed it
+	// (ADR-0512 §2).
+	end, ok, err := h.store.FeedTaskEnd(1, jobKey)
+	if err != nil || !ok || end.Position != rows[3].Position || end.Kind != state.FeedTaskCompleted {
+		t.Fatalf("FeedTaskEnd = %+v %v %v, want the completion row at %d", end, ok, err, rows[3].Position)
+	}
 	if err := h.store.Close(); err != nil {
 		t.Fatalf("store.Close: %v", err)
 	}
@@ -103,6 +109,9 @@ func TestAUserTasksLifeLeavesOnTheFeed(t *testing.T) {
 			a.Definition != b.Definition || *a.Task != *b.Task {
 			t.Errorf("row %d replayed as %+v (%+v), was %+v (%+v)", i, b, b.Task, a, a.Task)
 		}
+	}
+	if again, ok, err := fresh.FeedTaskEnd(1, jobKey); err != nil || !ok || again.Position != end.Position || again.At != end.At {
+		t.Errorf("the replayed task end = %+v %v %v, was %+v", again, ok, err, end)
 	}
 }
 

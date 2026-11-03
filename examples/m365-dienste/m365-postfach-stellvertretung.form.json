@@ -1,0 +1,19 @@
+{
+  "type": "default",
+  "id": "m365-postfach-stellvertretung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Kalenderstellvertretung · Calendar delegate**\n\nDie Person sieht und bearbeitet den Kalender und erhält die Besprechungsanfragen (Bearbeiten mit Stellvertretung). · The person sees and edits the calendar and receives the meeting requests (editor with delegate)."
+    },
+    {
+      "key": "kalenderStellvertretung",
+      "type": "textfield",
+      "label": "Stellvertretung (UPN) · Delegate (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

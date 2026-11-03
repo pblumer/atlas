@@ -360,6 +360,25 @@ type Limits struct {
 	// a share of the writer nobody else notices.
 	TokenEndpointBurst int32
 	TokenEndpointRate  int32
+
+	// ClientMetadata and ClientMetadataSeconds bound one read of a client ID metadata
+	// document: the JSON a connected system publishes at the URL that is its client_id
+	// (ADR-0512 §1). Atlas reads it when an authorization request names such a client,
+	// which anybody can send — so the read is an outbound request a stranger can cause,
+	// and both how much of the answer is held and how long the request may hold up the
+	// person waiting on the consent screen are ceilings. Sixty-four kilobytes is a
+	// document with a name, a few redirect URIs and a key set many times over; five
+	// seconds is what a system answering its own document should never need.
+	ClientMetadata        int64
+	ClientMetadataSeconds int32
+
+	// ClientMetadataHostBurst and ClientMetadataHostRate throttle those reads per host
+	// named in a client_id: how many may be made at once, and how many per second are
+	// earned back. A document is cached, so a working system costs one read per hour;
+	// what this bounds is somebody using Atlas to send requests at a host of their
+	// choosing, by naming it in authorization requests faster than the cache absorbs.
+	ClientMetadataHostBurst int32
+	ClientMetadataHostRate  int32
 }
 
 // Default returns the budgets an installation runs with when it says nothing. Each
@@ -434,6 +453,12 @@ func Default() Limits {
 		// twenty-and-one-a-second until ADR-0510. See the fields for the sizing.
 		TokenEndpointBurst: 300,
 		TokenEndpointRate:  10,
+		// New rather than gathered: Atlas read no client ID metadata document before
+		// ADR-0512. See the fields for the sizing.
+		ClientMetadata:          64 << 10,
+		ClientMetadataSeconds:   5,
+		ClientMetadataHostBurst: 10,
+		ClientMetadataHostRate:  1,
 	}
 }
 

@@ -1,0 +1,27 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-gast",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Externe Person einladen · Invite an external person**\n\nDie Person erhält eine Einladung von Microsoft und wird Mitglied der Site. Die Einstellungen des Tenants müssen Gäste zulassen. · The person receives an invitation from Microsoft and becomes a member of the site. The tenant's settings must allow guests."
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse · Email address",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "anzeigename",
+      "type": "textfield",
+      "label": "Name · Display name",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

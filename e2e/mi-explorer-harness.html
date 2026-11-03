@@ -115,6 +115,20 @@
           if (window.__scenario.failNext > 0) { window.__scenario.failNext--; fail(500, "internal", "disk on fire"); }
           return page(u.searchParams);
         }
+        const vars = u.pathname.match(/\/iterations\/(\d+)\/variables$/);
+        if (vars) {
+          if (window.__scenario.noVars) fail(500, "internal", "variables lost");
+          // The iteration's own scope as it stood at the step: its inputs from the
+          // start, and a phase that changes when the task completed.
+          const n = Number(vars[1]) - 1_000_000;
+          const at = Number(u.searchParams.get("at"));
+          return { instanceKey: KEY, iteration: row(n), at, scopesTruncated: false, scopes: [
+            { elementInstanceKey: vars[1], iteration: true, variables: [
+              { name: "loopCounter", kind: "number", value: String(n), position: 90 + n, at: 1 },
+              { name: "phase", kind: "string", value: at < 150 + n ? "running" : "done", position: at < 150 + n ? 95 + n : 150 + n, at: 1 },
+            ] },
+          ] };
+        }
         const steps = u.pathname.match(/\/iterations\/(\d+)\/steps$/);
         if (steps) {
           if (window.__scenario.noSteps) fail(409, "history_unavailable", "iteration steps unavailable");

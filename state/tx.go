@@ -73,6 +73,10 @@ func (t *Tx) encodeValue(v model.Value) []byte {
 // elByProc one (this instance's tokens) and the piByEl one (this element's
 // instances). The second is the reverse direction, and it is what lets an operator
 // ask "which instances are sitting on this task?" without walking the version.
+//
+// An armed event-subprocess trigger is also indexed under the scope it is armed in
+// (cfScopeTrigger). A re-put (migration) keeps the trigger's scope and type, so it
+// rewrites the same entry.
 func (t *Tx) PutElementInstance(key uint64, v *model.ElementInstanceValue) error {
 	if err := t.b.Set(keyElementInstance(key), t.encodeValue(v), nil); err != nil {
 		return err
@@ -80,7 +84,40 @@ func (t *Tx) PutElementInstance(key uint64, v *model.ElementInstanceValue) error
 	if err := t.b.Set(keyElByProc(v.ProcessInstanceKey, key), nil, nil); err != nil {
 		return err
 	}
-	return t.b.Set(keyInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key), nil, nil)
+	if err := t.b.Set(keyInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key), nil, nil); err != nil ||
+		v.BpmnElementType != EventSubTriggerType {
+		return err
+	}
+	return t.b.Set(keyScopeTrigger(v.FlowScopeKey, key), nil, nil)
+}
+
+// EventSubTriggerType is the element type of an armed event-subprocess trigger,
+// compiler.TypeEventSubProcessStart; state does not import the compiler, and an
+// engine test holds the two equal.
+const EventSubTriggerType uint8 = 22
+
+// ScopeTriggers calls fn with the key of every armed event-subprocess trigger of
+// one scope, in key order, through this transaction — committed rows and this
+// batch's own writes alike, as ElementInstancesOfProcess sees them. It reads only
+// that scope's triggers, however many other element instances the process
+// instance holds (#1494).
+func (t *Tx) ScopeTriggers(scopeKey uint64, fn func(triggerKey uint64) error) error {
+	prefix := appendBE64([]byte{byte(cfScopeTrigger)}, scopeKey)
+	iter, err := t.b.NewIter(&pebble.IterOptions{LowerBound: prefix, UpperBound: prefixEnd(prefix)})
+	if err != nil {
+		return err
+	}
+	defer iter.Close()
+	for iter.First(); iter.Valid(); iter.Next() {
+		k := iter.Key()
+		if len(k) != 17 {
+			return errors.New("state: corrupt scope trigger index key")
+		}
+		if err := fn(binary.BigEndian.Uint64(k[9:17])); err != nil {
+			return err
+		}
+	}
+	return iter.Error()
 }
 
 // DropInstanceByElement removes one piByEl entry by the coordinates it was written
@@ -118,7 +155,11 @@ func (t *Tx) DeleteElementInstance(key uint64, v *model.ElementInstanceValue) er
 	if err := t.b.Delete(keyElByProc(v.ProcessInstanceKey, key), nil); err != nil {
 		return err
 	}
-	return t.DropInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key)
+	if err := t.DropInstanceByElement(v.ProcessDefKey, v.ElementId, v.ProcessInstanceKey, key); err != nil ||
+		v.BpmnElementType != EventSubTriggerType {
+		return err
+	}
+	return t.b.Delete(keyScopeTrigger(v.FlowScopeKey, key), nil)
 }
 
 // ElementInstancesOfProcess calls fn for every element instance of a process

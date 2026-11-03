@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,7 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 			ElementID              string `json:"elementId"`
 			Action                 string `json:"action"`
 			MultiInstanceIteration bool   `json:"multiInstanceIteration"`
+			Position               uint64 `json:"position"`
 		} `json:"steps"`
 		NextCursor string `json:"nextCursor"`
 	}
@@ -104,6 +106,20 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 	if len(s2.Steps) != 1 || s2.Steps[0].Action != "completed" || s2.NextCursor != "" {
 		t.Fatalf("second steps page: %+v", s2)
 	}
+	var vars struct {
+		Scopes []struct {
+			Iteration bool `json:"iteration"`
+			Variables []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"variables"`
+		} `json:"scopes"`
+	}
+	call(13, "atlas_multi_instance_iteration_variables", map[string]any{"key": key, "bodyKey": body,
+		"iterationKey": p2.Iterations[1].ElementInstanceKey, "at": s2.Steps[0].Position}, &vars)
+	if len(vars.Scopes) == 0 || !vars.Scopes[0].Iteration || !strings.Contains(fmt.Sprint(vars.Scopes[0].Variables), "loopCounter 5") {
+		t.Fatalf("variables at the last step: %+v", vars)
+	}
 	for i, bad := range []struct {
 		tool string
 		args map[string]any
@@ -112,6 +128,9 @@ func TestMultiInstanceHistoryViaTools(t *testing.T) {
 		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "iterationKey": 1}, "bodyKey"},
 		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "bodyKey": body}, "iterationKey"},
 		{"atlas_multi_instance_iteration_steps", map[string]any{"key": key, "bodyKey": body, "iterationKey": 1, "cursor": 7}, "cursor"},
+		{"atlas_multi_instance_iteration_variables", map[string]any{"key": key, "iterationKey": 1, "at": 1}, "bodyKey"},
+		{"atlas_multi_instance_iteration_variables", map[string]any{"key": key, "bodyKey": body, "at": 1}, "iterationKey"},
+		{"atlas_multi_instance_iteration_variables", map[string]any{"key": key, "bodyKey": body, "iterationKey": 1}, "at"},
 		{"atlas_multi_instance_iteration", map[string]any{"key": key, "bodyKey": body}, "iterationKey"},
 		{"atlas_multi_instance_iterations", map[string]any{"key": key, "bodyKey": body, "state": 3}, "state"},
 		{"atlas_instance_multi_instances", map[string]any{"key": key, "cursor": 7}, "cursor"},

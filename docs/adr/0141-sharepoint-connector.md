@@ -1,6 +1,6 @@
 # ADR-0141: A SharePoint connector (create list item, via Microsoft Graph)
 
-- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget. Amended 2026-10-23: a certificate may also be named by its thumbprint in the Windows certificate store, `certificateThumbprint`, the Entra worker's third credential read the same way; the store is asked on the first token request rather than while the engine builds the client on its run loop, and tried at startup by the worker.)
+- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget. Amended 2026-10-23: a certificate may also be named by its thumbprint in the Windows certificate store, `certificateThumbprint`, the Entra worker's third credential read the same way; the store is asked on the first token request rather than while the engine builds the client on its run loop, and tried at startup by the worker. Amended 2026-11-03: `get-site`, the one site-level operation and a read — the site and its default library's storage quota, `exists=false` for an address where there is no site — and a value lookup on `sites` that answers an order form's question whether a site name is free, ADR-0519.)
 - **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
@@ -293,3 +293,33 @@ two apart.
 - extended by [ADR-0484](0484-sharepoint-mock-mode.md): a `mock`
   provider whose site lives in the server's memory, so a SharePoint model runs without a
   tenant
+
+## Amendment 2026-11-03: reading a site, and whether a site name is free
+
+A process that offers a SharePoint site as a product has to read what the site holds
+and how much room is left before anybody asks for more; an order form has to say whether
+a site name is still free before anybody orders it. Both are reads of the site itself,
+which the operation table had so far left out with the rest of site administration.
+
+- **`get-site`** reads `GET /sites/{host}:{path}` (or a Graph site id) with
+  `$select=id,name,displayName,description,webUrl,createdDateTime,lastModifiedDateTime`,
+  then `GET /sites/{id}/drive?$select=quota`, and answers both as one object with
+  `exists=true`. A 404 on the site answers `exists=false` instead of failing, for the
+  reason `get-file` does: "is it there" is the question. A site without a default
+  library answers with `quota: null`. It needs `Sites.Read.All` (or `Sites.Selected` on
+  the site). The mockup reports a site once a task stored something there, and a quota
+  of 1 GiB a demo can fill.
+- **A value lookup on `sites`** (ADR-0473's query protocol, used by
+  ADR-0519) is `get-site` on `<host>:/<managedPath>/<name>`. The
+  host and the managed path (`sites` or `teams`) arrive as the query's two equality
+  filters and are checked here; the name is checked against SharePoint's URL characters.
+  One item when the site is there, none when it is not; only a code leaves on failure,
+  because the address carries what a person typed.
+
+Everything else of site administration stays out, for the reason given above: changing a
+site's quota, owners, sharing or lifecycle is either an Entra operation on the group
+behind a group-connected site (owners, deletion, restore — ADR-0172) or has no Microsoft
+Graph API at all (a site's storage quota, which only the SharePoint admin centre and its
+PowerShell set). Whether the drive's quota is the site's quota as the admin centre shows
+it is Microsoft's documentation of the drive resource and has not been checked against a
+tenant.

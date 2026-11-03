@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AdNamensregel: die Namenskonvention für alles, was der Katalog «Active Directory» anlegt (Governance).
+
+  Eingaben: objekttyp   ("sicherheitsgruppe" | "admin" | "service" | "test" | "extern")
+            bezeichnung (normalisiert: Kleinbuchstaben, Umlaute ausgeschrieben, nur a-z, 0-9 und Bindestriche;
+                         der Prozess bildet sie im Input-Mapping)
+            bereich     (Bereichskürzel, nur bei sicherheitsgruppe)
+            hauptkonto  (sAMAccountName des Hauptkontos, nur bei admin; der Prozess hat seine Form geprüft)
+  Ausgaben: erlaubt (Wahrheitswert), grund (Begründung, wird bei einer Ablehnung der bestellenden Person
+            gezeigt), cn, sAMAccountName, displayName
+
+  Präfixe: SG-<BEREICH>-<bezeichnung> (Sicherheitsgruppe), adm-<hauptkonto> (Admin-Konto),
+  svc-<bezeichnung> (Servicekonto), tst-<bezeichnung> (Testkonto), ext-<bezeichnung> (externes Konto; der
+  Prozess übergibt als Bezeichnung einen Teil der Auftrags-ID, keinen Namen).
+
+  Längen: Ein Kontoname (sAMAccountName eines Benutzerobjekts) hat laut Microsoft höchstens 20 Zeichen; der
+  Name einer Gruppe ist hier auf 64 Zeichen begrenzt, die Grenze von cn.
+
+  hitPolicy FIRST: zuerst die Ablehnungsgründe (leer, reserviert, Bereich, Länge), dann eine Regel je
+  Objekttyp, zuletzt die Auffangregel, die ablehnt (fail-closed). Wer die Konvention ändert, ändert diese
+  Tabelle und nicht die Prozesse. Bestehende Objekte findet der Katalog über die Herkunftskennzeichnung im
+  Attribut info, nicht über den Namen; ein geändertes Präfix gilt nur für neue Objekte.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_AdNamensregel" name="AdNamensregel" namespace="http://atlas/dmn">
+  <inputData id="id_objekttyp" name="objekttyp"/>
+  <inputData id="id_bezeichnung" name="bezeichnung"/>
+  <inputData id="id_bereich" name="bereich"/>
+  <inputData id="id_hauptkonto" name="hauptkonto"/>
+  <decision id="AdNamensregel" name="AdNamensregel">
+    <informationRequirement id="ir_objekttyp"><requiredInput href="#id_objekttyp"/></informationRequirement>
+    <informationRequirement id="ir_bezeichnung"><requiredInput href="#id_bezeichnung"/></informationRequirement>
+    <informationRequirement id="ir_bereich"><requiredInput href="#id_bereich"/></informationRequirement>
+    <informationRequirement id="ir_hauptkonto"><requiredInput href="#id_hauptkonto"/></informationRequirement>
+    <decisionTable id="dt_AdNamensregel" hitPolicy="FIRST">
+      <input id="in_objekttyp" label="objekttyp"><inputExpression id="ie_objekttyp" typeRef="string"><text>objekttyp</text></inputExpression></input>
+      <input id="in_bezeichnung" label="bezeichnung"><inputExpression id="ie_bezeichnung" typeRef="string"><text>bezeichnung</text></inputExpression></input>
+      <input id="in_hauptkonto" label="hauptkonto"><inputExpression id="ie_hauptkonto" typeRef="string"><text>if hauptkonto = null then null else lower case(hauptkonto)</text></inputExpression></input>
+      <input id="in_bereichOk" label="bereichOk"><inputExpression id="ie_bereichOk" typeRef="boolean"><text>bereich != null and matches(bereich, "^[A-Za-z]{2,5}$")</text></inputExpression></input>
+      <input id="in_laenge" label="laenge"><inputExpression id="ie_laenge" typeRef="number"><text>if objekttyp = "sicherheitsgruppe" then string length(bereich) + string length(bezeichnung) + 4 else if objekttyp = "admin" then string length(hauptkonto) + 4 else string length(bezeichnung) + 4</text></inputExpression></input>
+      <output id="out_erlaubt" label="erlaubt" name="erlaubt" typeRef="boolean"/>
+      <output id="out_grund" label="grund" name="grund" typeRef="string"/>
+      <output id="out_cn" label="cn" name="cn" typeRef="string"/>
+      <output id="out_sAMAccountName" label="sAMAccountName" name="sAMAccountName" typeRef="string"/>
+      <output id="out_displayName" label="displayName" name="displayName" typeRef="string"/>
+      <rule id="r1">
+        <description>Leere Bezeichnung: nichts, woraus sich ein Name bilden liesse</description>
+        <inputEntry id="r1_i0"><text>"sicherheitsgruppe", "service", "test", "extern"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>null, ""</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <inputEntry id="r1_i3"><text>-</text></inputEntry>
+        <inputEntry id="r1_i4"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Die Bezeichnung enthält keine Buchstaben oder Ziffern."</text></outputEntry>
+        <outputEntry id="r1_o2"><text>null</text></outputEntry>
+        <outputEntry id="r1_o3"><text>null</text></outputEntry>
+        <outputEntry id="r1_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Admin-Konto ohne Hauptkonto</description>
+        <inputEntry id="r2_i0"><text>"admin"</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <inputEntry id="r2_i2"><text>null, ""</text></inputEntry>
+        <inputEntry id="r2_i3"><text>-</text></inputEntry>
+        <inputEntry id="r2_i4"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>false</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Ohne Hauptkonto lässt sich kein Admin-Konto benennen."</text></outputEntry>
+        <outputEntry id="r2_o2"><text>null</text></outputEntry>
+        <outputEntry id="r2_o3"><text>null</text></outputEntry>
+        <outputEntry id="r2_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Reservierte Bezeichnungen: Namen, die das Verzeichnis selbst oder die Sicherheit beansprucht</description>
+        <inputEntry id="r3_i0"><text>-</text></inputEntry>
+        <inputEntry id="r3_i1"><text>"administrator", "admin", "krbtgt", "guest", "gast", "root", "system", "service", "dienst", "test", "support", "security", "sicherheit", "default", "everyone", "jeder", "domain", "domaene"</text></inputEntry>
+        <inputEntry id="r3_i2"><text>-</text></inputEntry>
+        <inputEntry id="r3_i3"><text>-</text></inputEntry>
+        <inputEntry id="r3_i4"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>false</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Diese Bezeichnung ist reserviert."</text></outputEntry>
+        <outputEntry id="r3_o2"><text>null</text></outputEntry>
+        <outputEntry id="r3_o3"><text>null</text></outputEntry>
+        <outputEntry id="r3_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Reservierte Hauptkonten: Für eingebaute Konten entsteht kein Admin-Konto</description>
+        <inputEntry id="r4_i0"><text>"admin"</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>"administrator", "admin", "krbtgt", "guest", "gast", "root", "system", "service", "dienst", "test", "support", "security", "sicherheit", "default", "everyone", "jeder", "domain", "domaene"</text></inputEntry>
+        <inputEntry id="r4_i3"><text>-</text></inputEntry>
+        <inputEntry id="r4_i4"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>false</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Für dieses Konto wird kein Admin-Konto angelegt (reservierter Name)."</text></outputEntry>
+        <outputEntry id="r4_o2"><text>null</text></outputEntry>
+        <outputEntry id="r4_o3"><text>null</text></outputEntry>
+        <outputEntry id="r4_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Sicherheitsgruppe: Bereichskürzel fehlt oder hat die falsche Form</description>
+        <inputEntry id="r5_i0"><text>"sicherheitsgruppe"</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>-</text></inputEntry>
+        <inputEntry id="r5_i3"><text>false</text></inputEntry>
+        <inputEntry id="r5_i4"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>false</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Das Bereichskürzel muss 2 bis 5 Buchstaben haben."</text></outputEntry>
+        <outputEntry id="r5_o2"><text>null</text></outputEntry>
+        <outputEntry id="r5_o3"><text>null</text></outputEntry>
+        <outputEntry id="r5_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Sicherheitsgruppe: Name länger als 64 Zeichen (Grenze von cn)</description>
+        <inputEntry id="r6_i0"><text>"sicherheitsgruppe"</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <inputEntry id="r6_i3"><text>-</text></inputEntry>
+        <inputEntry id="r6_i4"><text>&gt; 64</text></inputEntry>
+        <outputEntry id="r6_o0"><text>false</text></outputEntry>
+        <outputEntry id="r6_o1"><text>"Der Gruppenname wäre länger als 64 Zeichen."</text></outputEntry>
+        <outputEntry id="r6_o2"><text>null</text></outputEntry>
+        <outputEntry id="r6_o3"><text>null</text></outputEntry>
+        <outputEntry id="r6_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r7">
+        <description>Konten: Name länger als 20 Zeichen (Grenze des sAMAccountName)</description>
+        <inputEntry id="r7_i0"><text>"admin", "service", "test", "extern"</text></inputEntry>
+        <inputEntry id="r7_i1"><text>-</text></inputEntry>
+        <inputEntry id="r7_i2"><text>-</text></inputEntry>
+        <inputEntry id="r7_i3"><text>-</text></inputEntry>
+        <inputEntry id="r7_i4"><text>&gt; 20</text></inputEntry>
+        <outputEntry id="r7_o0"><text>false</text></outputEntry>
+        <outputEntry id="r7_o1"><text>"Der Kontoname wäre länger als 20 Zeichen (Grenze des sAMAccountName)."</text></outputEntry>
+        <outputEntry id="r7_o2"><text>null</text></outputEntry>
+        <outputEntry id="r7_o3"><text>null</text></outputEntry>
+        <outputEntry id="r7_o4"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r8">
+        <description>Sicherheitsgruppe: Präfix SG und Bereich</description>
+        <inputEntry id="r8_i0"><text>"sicherheitsgruppe"</text></inputEntry>
+        <inputEntry id="r8_i1"><text>-</text></inputEntry>
+        <inputEntry id="r8_i2"><text>-</text></inputEntry>
+        <inputEntry id="r8_i3"><text>-</text></inputEntry>
+        <inputEntry id="r8_i4"><text>-</text></inputEntry>
+        <outputEntry id="r8_o0"><text>true</text></outputEntry>
+        <outputEntry id="r8_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r8_o2"><text>"SG-" + upper case(bereich) + "-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r8_o3"><text>"SG-" + upper case(bereich) + "-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r8_o4"><text>"SG-" + upper case(bereich) + "-" + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r9">
+        <description>Admin-Konto: Präfix adm vor dem Hauptkonto</description>
+        <inputEntry id="r9_i0"><text>"admin"</text></inputEntry>
+        <inputEntry id="r9_i1"><text>-</text></inputEntry>
+        <inputEntry id="r9_i2"><text>-</text></inputEntry>
+        <inputEntry id="r9_i3"><text>-</text></inputEntry>
+        <inputEntry id="r9_i4"><text>-</text></inputEntry>
+        <outputEntry id="r9_o0"><text>true</text></outputEntry>
+        <outputEntry id="r9_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r9_o2"><text>"adm-" + lower case(hauptkonto)</text></outputEntry>
+        <outputEntry id="r9_o3"><text>"adm-" + lower case(hauptkonto)</text></outputEntry>
+        <outputEntry id="r9_o4"><text>"adm-" + lower case(hauptkonto)</text></outputEntry>
+      </rule>
+      <rule id="r10">
+        <description>Servicekonto: Präfix svc</description>
+        <inputEntry id="r10_i0"><text>"service"</text></inputEntry>
+        <inputEntry id="r10_i1"><text>-</text></inputEntry>
+        <inputEntry id="r10_i2"><text>-</text></inputEntry>
+        <inputEntry id="r10_i3"><text>-</text></inputEntry>
+        <inputEntry id="r10_i4"><text>-</text></inputEntry>
+        <outputEntry id="r10_o0"><text>true</text></outputEntry>
+        <outputEntry id="r10_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r10_o2"><text>"svc-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r10_o3"><text>"svc-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r10_o4"><text>"Servicekonto " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r11">
+        <description>Testkonto: Präfix tst</description>
+        <inputEntry id="r11_i0"><text>"test"</text></inputEntry>
+        <inputEntry id="r11_i1"><text>-</text></inputEntry>
+        <inputEntry id="r11_i2"><text>-</text></inputEntry>
+        <inputEntry id="r11_i3"><text>-</text></inputEntry>
+        <inputEntry id="r11_i4"><text>-</text></inputEntry>
+        <outputEntry id="r11_o0"><text>true</text></outputEntry>
+        <outputEntry id="r11_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r11_o2"><text>"tst-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r11_o3"><text>"tst-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r11_o4"><text>"Testkonto " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r12">
+        <description>Externes Konto: Präfix ext</description>
+        <inputEntry id="r12_i0"><text>"extern"</text></inputEntry>
+        <inputEntry id="r12_i1"><text>-</text></inputEntry>
+        <inputEntry id="r12_i2"><text>-</text></inputEntry>
+        <inputEntry id="r12_i3"><text>-</text></inputEntry>
+        <inputEntry id="r12_i4"><text>-</text></inputEntry>
+        <outputEntry id="r12_o0"><text>true</text></outputEntry>
+        <outputEntry id="r12_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r12_o2"><text>"ext-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r12_o3"><text>"ext-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r12_o4"><text>"Externe Person " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r13">
+        <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>
+        <inputEntry id="r13_i0"><text>-</text></inputEntry>
+        <inputEntry id="r13_i1"><text>-</text></inputEntry>
+        <inputEntry id="r13_i2"><text>-</text></inputEntry>
+        <inputEntry id="r13_i3"><text>-</text></inputEntry>
+        <inputEntry id="r13_i4"><text>-</text></inputEntry>
+        <outputEntry id="r13_o0"><text>false</text></outputEntry>
+        <outputEntry id="r13_o1"><text>"Für diesen Objekttyp ist keine Namensregel hinterlegt."</text></outputEntry>
+        <outputEntry id="r13_o2"><text>null</text></outputEntry>
+        <outputEntry id="r13_o3"><text>null</text></outputEntry>
+        <outputEntry id="r13_o4"><text>null</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

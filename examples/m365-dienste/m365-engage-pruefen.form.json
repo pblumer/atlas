@@ -1,0 +1,31 @@
+{
+  "type": "default",
+  "id": "m365-engage-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Community in Viva Engage prüfen · Check the community in Viva Engage**\n\nViva Engage hat das Anlegen angenommen, aber nicht innert der Frist bestätigt. Im Viva Engage Admin Center nachsehen, ob die Community besteht, und die id ihrer Microsoft-365-Gruppe eintragen. · Viva Engage accepted the creation but did not confirm it in time. Check in the Viva Engage admin centre whether the community exists, and enter the id of its Microsoft 365 group."
+    },
+    {
+      "key": "communityHinweis",
+      "type": "textfield",
+      "label": "Community und Vorgang · Community and operation",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "communityGruppeId",
+      "type": "textfield",
+      "label": "Id der Microsoft-365-Gruppe · Id of the Microsoft 365 group",
+      "validate": {
+        "required": true,
+        "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

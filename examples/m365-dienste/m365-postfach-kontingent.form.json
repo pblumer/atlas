@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "id": "m365-postfach-kontingent",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Postfachkontingent erhöhen · Increase the mailbox quota**\n\n50 GB werden ohne Prüfung gesetzt, 100 GB prüft M365-Administration. Mehr als 100 GB lässt Exchange Online mit E3 oder E5 nicht zu; mit einer Frontline-Lizenz (F3) bleibt das Postfach bei 2 GB. · 50 GB is set without review, 100 GB is reviewed by M365-Administration. Exchange Online allows no more than 100 GB with E3 or E5; with a frontline licence (F3) the mailbox stays at 2 GB."
+    },
+    {
+      "key": "postfachStufe",
+      "type": "radio",
+      "label": "Neues Kontingent · New quota",
+      "values": [
+        {
+          "label": "50 GB",
+          "value": "50"
+        },
+        {
+          "label": "100 GB",
+          "value": "100"
+        }
+      ],
+      "defaultValue": "50",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingentBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

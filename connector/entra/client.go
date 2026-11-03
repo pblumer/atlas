@@ -99,6 +99,27 @@ type Request struct {
 	// the magic is at the front, so a truncated one passes every format check there
 	// is and lands as a broken image nobody can explain.
 	MaxBytes int64
+
+	// WantLocation asks for the Location header of a 2xx answered without a body,
+	// returned as an [Accepted]. It is how an asynchronous create is followed:
+	// create-community is answered 202 Accepted, empty, with a Location naming the
+	// operation to poll — and without this the client would return nil for it and the
+	// one thing the answer carried would be lost.
+	//
+	// A field rather than a second method for [Request.Binary]'s reason: it is a
+	// property of this request, and a method would break every fake standing in for
+	// Graph for a distinction none of them make. The Location is returned absolute and
+	// confined to this client's own endpoint, exactly as a continuation is (see
+	// [GraphClient.resolve]): following it sends the bearer, so a response must not be
+	// able to name another host. A relative Location is taken against the base.
+	WantLocation bool
+}
+
+// Accepted is what a [Request] with WantLocation set returns for a 2xx without a body
+// that carried a Location: the absolute URL of the operation to follow. A 2xx without
+// either is still nil.
+type Accepted struct {
+	Location string
 }
 
 // Binary is what a [Request] with Binary set returns: the bytes, and what Graph
@@ -241,6 +262,9 @@ func (c *GraphClient) Call(ctx context.Context, r Request) (any, error) {
 		return nil, graphFailure(r.Method, r.Path, resp, raw)
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
+		if r.WantLocation {
+			return c.accepted(resp.Header.Get("Location"))
+		}
 		return nil, nil
 	}
 	var out any
@@ -300,22 +324,72 @@ func (c *GraphClient) readBinary(r Request, resp *http.Response) (any, error) {
 // hand that token to whoever wrote the response, so a foreign continuation is
 // refused rather than followed and reported.
 func (c *GraphClient) resolve(path string) (string, error) {
-	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
+	if !isAbsoluteURL(path) {
 		return c.baseURL + path, nil
 	}
-	u, err := url.Parse(path)
+	if err := c.confine(path, "a paged result", "a continuation"); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// isAbsoluteURL reports whether a path a caller or a response named is a whole URL
+// rather than a path under the base.
+func isAbsoluteURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+}
+
+// confine is the one check behind [GraphClient.resolve] and [GraphClient.accepted]:
+// an absolute URL a response handed this client must stay on the client's own scheme
+// and host, for the reason resolve gives — following it sends the bearer. what and
+// which name the URL in the refusal ("a paged result", "a continuation").
+func (c *GraphClient) confine(raw, what, which string) error {
+	u, err := url.Parse(raw)
 	if err != nil {
-		return "", fmt.Errorf("entra: cannot follow the paged result: %q is not a URL", path)
+		return fmt.Errorf("entra: cannot follow %s: %q is not a URL", what, raw)
 	}
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
-		return "", fmt.Errorf("entra: cannot follow the paged result: this worker's own base URL %q is not a URL", c.baseURL)
+		return fmt.Errorf("entra: cannot follow %s: this worker's own base URL %q is not a URL", what, c.baseURL)
 	}
 	if u.Scheme != base.Scheme || u.Host != base.Host {
-		return "", fmt.Errorf("entra: refusing to follow a paged result to %s://%s: a continuation may only stay on this worker's own endpoint (%s://%s)",
-			u.Scheme, u.Host, base.Scheme, base.Host)
+		return fmt.Errorf("entra: refusing to follow %s to %s://%s: %s may only stay on this worker's own endpoint (%s://%s)",
+			what, u.Scheme, u.Host, which, base.Scheme, base.Host)
 	}
-	return path, nil
+	return nil
+}
+
+// accepted turns the Location of a bodiless 2xx into an [Accepted] holding an absolute
+// URL on this client's own endpoint, or nil when Graph named none.
+//
+// An absolute Location is confined exactly as a continuation is. A relative one is a
+// path under the base — unless it already carries the base's own path (Graph's
+// "/v1.0/…"), which is then resolved against the base's host rather than doubled into
+// "/v1.0/v1.0/…". Graph documents an absolute Location for the operations this worker
+// follows; the relative case is handled because HTTP allows it, not because it has
+// been seen.
+func (c *GraphClient) accepted(loc string) (any, error) {
+	loc = strings.TrimSpace(loc)
+	if loc == "" {
+		return nil, nil
+	}
+	if isAbsoluteURL(loc) {
+		if err := c.confine(loc, "the operation Graph accepted", "an operation's Location"); err != nil {
+			return nil, err
+		}
+		return Accepted{Location: loc}, nil
+	}
+	base, err := url.Parse(c.baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("entra: cannot follow the operation Graph accepted: this worker's own base URL %q is not a URL", c.baseURL)
+	}
+	if !strings.HasPrefix(loc, "/") {
+		loc = "/" + loc
+	}
+	if p := strings.TrimRight(base.Path, "/"); p != "" && (loc == p || strings.HasPrefix(loc, p+"/")) {
+		return Accepted{Location: base.Scheme + "://" + base.Host + loc}, nil
+	}
+	return Accepted{Location: c.baseURL + loc}, nil
 }
 
 // graphFailure turns a non-2xx response into the most specific error the body allows.
