@@ -578,9 +578,11 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 		}
 		man, byPath := tree("app", nil, []sourceForm{{ID: "f1", Name: "F", Path: "forms/f.form.json"}}, nil)
 		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
-		var refusal sourceRefusal
-		if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
-			t.Fatalf("err = %v, want a 409 refusal", err)
+		// Not adopted, another application's artifact stops the import undecided,
+		// planned as elsewhere (ADR-0467 amendment 2026-11-03).
+		var undecided sourceUndecided
+		if !errors.As(err, &undecided) || len(undecided.refs) != 1 || !strings.HasPrefix(undecided.refs[0], "form:") {
+			t.Fatalf("err = %v, want the form undecided", err)
 		}
 	})
 
@@ -595,9 +597,11 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 		}
 		man, byPath := tree("app", nil, nil, []sourceDecision{{ID: "r1", Name: "D", ModelRef: "m2"}})
 		_, err := s.applySourceTree(man, byPath, sourceCaller{authorize: allow}, importplan.Decisions{})
-		var refusal sourceRefusal
-		if !errors.As(err, &refusal) || refusal.status != http.StatusConflict {
-			t.Fatalf("err = %v, want a 409 refusal", err)
+		// Not adopted, another application's artifact stops the import undecided,
+		// planned as elsewhere (ADR-0467 amendment 2026-11-03).
+		var undecided sourceUndecided
+		if !errors.As(err, &undecided) || len(undecided.refs) != 1 || !strings.HasPrefix(undecided.refs[0], "decision:") {
+			t.Fatalf("err = %v, want the decision undecided", err)
 		}
 	})
 }

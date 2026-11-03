@@ -238,6 +238,10 @@ func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide i
 			}
 			return code, msg
 		},
+		sees: func(app project) bool {
+			code, _ := s.checkProjectRole(r, app, ScopeRoleViewer)
+			return code == 0
+		},
 		admin: s.isAdmin(r),
 		audit: func(appID string, changes []constantChange) error {
 			return s.recordConstantChanges(r, appID, changes)

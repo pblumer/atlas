@@ -657,6 +657,14 @@ th{color:var(--muted);font-weight:600}
           <code>all</code>; mehrfach möglich</td>
         <td data-l="en">leave artifacts that differ on the server as they are there: refs or <code>all</code>;
           repeatable</td></tr>
+      <tr><td><code>--adopt</code></td>
+        <td data-l="de">Artefakte, die auf dem Server eine andere Applikation hält, in diese Applikation übernehmen:
+          Verweise wie <code>process:ID</code>, <code>form:ID</code> oder <code>decision:ID</code>, durch Komma
+          getrennt, ohne <code>all</code>; mehrfach möglich. Braucht die Bearbeiterrolle in der Applikation, die
+          sie abgibt</td>
+        <td data-l="en">take artifacts another application on the server holds into this one: refs such as
+          <code>process:ID</code>, <code>form:ID</code> or <code>decision:ID</code>, comma-separated, no
+          <code>all</code>; repeatable. Needs the editor role on the application they leave</td></tr>
       <tr><td><code>--dry-run</code></td>
         <td data-l="de">nur den Plan zeigen – was neu ist, was gleich bleibt, was sich unterscheidet – und nichts
           schreiben</td>
