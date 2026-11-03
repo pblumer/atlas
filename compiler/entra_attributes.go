@@ -7,18 +7,32 @@ import (
 	"strings"
 )
 
-// entraAttributesExpr compiles an inline attributes JSON template into a single FEEL
-// context expression (ADR-0172, amended). The template is authored in the modeler's
-// JSON editor; a string value with a leading '=' is a FEEL expression evaluated over the
-// instance's variables at call time (e.g. "displayName": "=vorname + \" \" + nachname"),
-// and every other value — string, number, bool, null, nested object or array — is a
-// literal. Turning the whole template into one FEEL context means it is parsed and
-// compiled once at deploy (invariant I5) and evaluated to the request body once at
-// runtime, reusing the same RestExpr the worker's other authored values use.
-//
-// An empty template returns the zero RestExpr: the task then falls back to its
-// attributesVariable, so the two ways of supplying a body stay mutually exclusive.
+// entraAttributesExpr compiles an Entra task's inline attributes JSON template
+// (ADR-0172, amended); see attributesTemplateExpr. An empty template falls back to the
+// task's attributesVariable.
 func entraAttributesExpr(g *feelGate, taskID, raw string) (RestExpr, error) {
+	return attributesTemplateExpr(g, "entra", taskID, raw, nil)
+}
+
+// attributesTemplateExpr compiles an inline attributes JSON template into a single FEEL
+// context expression. The Entra worker introduced it (ADR-0172, amended) and the AD
+// worker shares it (ADR-0166, amended 2026-11-03), so a template means the same thing
+// on both. The template is authored in the modeler's JSON editor; a string value with a
+// leading '=' is a FEEL expression evaluated over the instance's variables at call time
+// (e.g. "displayName": "=vorname + \" \" + nachname"), and every other value — string,
+// number, bool, null, nested object or array — is a literal. Turning the whole template
+// into one FEEL context means it is parsed and compiled once at deploy (invariant I5)
+// and evaluated to the request body once at runtime, reusing the same RestExpr the
+// worker's other authored values use.
+//
+// kind names the worker in the error messages ("entra", "ad"). check, when non-nil, is
+// that worker's own rule about the shape of the decoded object — AD refuses a nested
+// object, because an LDAP attribute holds values, not structures — and runs before
+// anything is compiled, so the author hears it at deploy.
+//
+// An empty template returns the zero RestExpr: the task then falls back to the variable
+// it names instead, so the two ways of supplying a body stay mutually exclusive.
+func attributesTemplateExpr(g *feelGate, kind, taskID, raw string, check func(map[string]any) error) (RestExpr, error) {
 	if strings.TrimSpace(raw) == "" {
 		return RestExpr{}, nil
 	}
@@ -26,18 +40,24 @@ func entraAttributesExpr(g *feelGate, taskID, raw string) (RestExpr, error) {
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra task %q has an invalid attributes JSON: %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q has an invalid attributes JSON: %w", kind, taskID, err)
 	}
-	if _, ok := v.(map[string]any); !ok {
-		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes must be a JSON object of directory properties, not a %T", taskID, v)
+	obj, ok := v.(map[string]any)
+	if !ok {
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q attributes must be a JSON object of directory properties, not a %T", kind, taskID, v)
+	}
+	if check != nil {
+		if err := check(obj); err != nil {
+			return RestExpr{}, fmt.Errorf("compiler: %s task %q attributes: %w", kind, taskID, err)
+		}
 	}
 	feel, err := jsonTemplateToFeel(v)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes: %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q attributes: %w", kind, taskID, err)
 	}
 	e, err := g.compileFEEL(feel)
 	if err != nil {
-		return RestExpr{}, fmt.Errorf("compiler: entra task %q attributes did not compile (a value's =expression may be malformed): %w", taskID, err)
+		return RestExpr{}, fmt.Errorf("compiler: %s task %q attributes did not compile (a value's =expression may be malformed): %w", kind, taskID, err)
 	}
 	return RestExpr{Expr: e}, nil
 }

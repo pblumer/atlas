@@ -2626,8 +2626,20 @@ type xmlAdConnector struct {
 	DN            string `xml:"dn,attr"`
 	MemberDN      string `xml:"memberDN,attr"`
 	EntryVariable string `xml:"entryVariable,attr"`
-	NewPassword   string `xml:"newPassword,attr"`
-	NewDN         string `xml:"newDN,attr"`
+	// Attributes is the entry inline: a JSON template whose "=…" values are FEEL,
+	// evaluated by the worker at handoff — Entra's attributes, shared (ADR-0166,
+	// amended 2026-11-03). It and EntryVariable are the two ways to supply an entry,
+	// and a task carries exactly one of them.
+	Attributes  string `xml:"attributes,attr"`
+	NewPassword string `xml:"newPassword,attr"`
+	NewDN       string `xml:"newDN,attr"`
+	// Select (search only) is the comma-separated attribute names a search returns;
+	// empty returns what the server returns by default. FoundVariable (search only)
+	// receives the result's found on its own, so the result variable can be declared
+	// personal while a gateway still branches on a boolean (ADR-0166, amended
+	// 2026-11-03).
+	Select        string `xml:"select,attr"`
+	FoundVariable string `xml:"foundVariable,attr"`
 	// The two reading operations share BaseDN (where the read starts), Filter (what it
 	// narrows to), MaxEntries (what caps it) and ResultVariable (what receives it).
 	//

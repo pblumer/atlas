@@ -13,6 +13,19 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **The AD Worker writes attributes a process keeps sealed.** An `<atlas:adConnector>`
+  that creates a user, group or contact or updates attributes may author its entry
+  inline as `attributes` — a JSON template whose `=…` values are FEEL, as Entra's are —
+  instead of naming an `entryVariable` the engine has to build. The Worker evaluates it
+  when it is handed the job, so it may read variables the process declares personal
+  (ADR-0314): a string is one value, a list several, a number or boolean its LDAP text,
+  and `null` leaves the attribute out of a create and clears it on an update. A `search`
+  takes `select`, the attributes it returns, and `foundVariable`, which receives `found`
+  on its own as a boolean, so the result — names and DNs — can be declared personal while
+  a gateway still branches; a search with only a `foundVariable` writes nothing else. The
+  Modeler's AD panel offers all three, and `examples/ad-dienste` now seals logon names,
+  names, addresses and found DNs and names external accounts `ext-<vorname>.<nachname>`
+  again (ADR-0166, amended 2026-11-03).
 - **A process commands what a person holds without reading what they hold.** A shop
   send task in mode `command` may name a `recipient` instead of an order and a position;
   the server finds that person's position of the product in the inventory and commands
