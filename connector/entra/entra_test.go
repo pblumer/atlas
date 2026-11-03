@@ -324,6 +324,16 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "list-deleted-groups", job: Job{ResultVariable: "papierkorb"},
 			method: "GET", path: "/directory/deletedItems/microsoft.graph.group",
 			wantBodyIs: func(b any) bool { return b == nil }},
+		// The user is bound as the first owner (community_test.go covers the 202 and
+		// following the operation it names).
+		{op: "create-community",
+			job:    Job{UserID: "u1", ResultVariable: "community", Attributes: map[string]any{"displayName": "Lernende"}},
+			method: "POST", path: "/employeeExperience/communities",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				owners, _ := m["owners@odata.bind"].([]any)
+				return ok && m["displayName"] == "Lernende" && len(owners) == 1 && owners[0] == "https://graph.microsoft.com/v1.0/users/u1"
+			}},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			var res any = map[string]any{"id": "x"}
@@ -359,7 +369,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 31 {
+	if len(Ops) != 32 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }

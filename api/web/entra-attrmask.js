@@ -21,6 +21,10 @@ import { t } from "./i18n.js";
 //           the forceChange bool into a nested passwordProfile object.
 //   unified — a bool that, when true, emits groupTypes:["Unified"] (a Microsoft-365
 //           group); omitted otherwise.
+//   select — one of a fixed set of `options` (stored as that JSON string); the empty
+//           choice omits the key. A value already in the body that is not one of the
+//           options (a hand-authored =FEEL, say) is offered as a further choice, so
+//           opening the mask never loses it.
 // A field with `nested:"passwordProfile"` is assembled into that sub-object.
 export const ENTRA_ATTR_SPECS = {
   "create-user": [
@@ -66,6 +70,14 @@ export const ENTRA_ATTR_SPECS = {
     { key: "inviteRedirectUrl", label: "pnl.ops.entra.field.inviteRedirectUrl", kind: "text", hint: "pnl.ops.entra.hint.invite-guest.inviteRedirectUrl" },
     { key: "sendInvitationMessage", label: "pnl.ops.entra.field.sendInvitationMessage", kind: "bool", hint: "pnl.ops.entra.hint.invite-guest.sendInvitationMessage" },
   ],
+  // A Viva Engage community: displayName is the one property Graph requires (its hint
+  // says so), privacy is Graph's public/private. The owner is not a field here — the
+  // task's User is bound as owners@odata.bind by the worker.
+  "create-community": [
+    { key: "displayName", label: "pnl.ops.entra.field.displayName", kind: "text", hint: "pnl.ops.entra.hint.create-community.displayName" },
+    { key: "description", label: "pnl.ops.entra.field.description", kind: "text", hint: "pnl.ops.entra.hint.create-community.description" },
+    { key: "privacy", label: "pnl.ops.entra.field.privacy", kind: "select", options: ["public", "private"], hint: "pnl.ops.entra.hint.create-community.privacy" },
+  ],
 };
 
 // hasMask reports whether an operation has a structured mask. Operations without one
@@ -101,6 +113,8 @@ export function entraResultShape(operation) {
       return t("pnl.ops.entra.result.restoreGroup");
     case "invite-guest":
       return t("pnl.ops.entra.result.inviteGuest");
+    case "create-community":
+      return t("pnl.ops.entra.result.createCommunity");
     case "delta-users":
     case "delta-groups":
       return t("pnl.ops.entra.result.delta");
@@ -294,9 +308,20 @@ export function attachEntraAttributeMask(host, ta, getOperation, onChange, esc) 
   let html = "";
   for (const f of spec) {
     const id = "f-emask-" + f.key;
-    html += `<label class="emask-row"><span>${escFn(t(f.label))}</span>` +
-      `<input id="${id}" type="text" value="${escFn(state.fields[f.key] || "")}" ` +
-      `placeholder="${escFn(f.kind === "bool" ? t("pnl.ops.entra.boolPlaceholder") : "")}"/>` +
+    const cur = state.fields[f.key] || "";
+    let control;
+    if (f.kind === "select") {
+      // The authored value stays choosable even when it is none of the options.
+      const opts = ["", ...f.options];
+      if (cur !== "" && opts.indexOf(cur) === -1) opts.push(cur);
+      control = `<select id="${id}">` +
+        opts.map((o) => `<option value="${escFn(o)}"${o === cur ? " selected" : ""}>${escFn(o === "" ? "—" : o)}</option>`).join("") +
+        `</select>`;
+    } else {
+      control = `<input id="${id}" type="text" value="${escFn(cur)}" ` +
+        `placeholder="${escFn(f.kind === "bool" ? t("pnl.ops.entra.boolPlaceholder") : "")}"/>`;
+    }
+    html += `<label class="emask-row"><span>${escFn(t(f.label))}</span>` + control +
       (f.hint ? `<small class="muted">${escFn(t(f.hint))}</small>` : "") +
       `</label>`;
   }
@@ -328,7 +353,7 @@ export function attachEntraAttributeMask(host, ta, getOperation, onChange, esc) 
     onChange();
   };
 
-  for (const { el } of inputs) el.addEventListener("input", recompute);
+  for (const { f, el } of inputs) el.addEventListener(f.kind === "select" ? "change" : "input", recompute);
   extraEl.addEventListener("input", recompute);
 
   return {

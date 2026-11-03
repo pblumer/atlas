@@ -242,6 +242,12 @@ type entraOp struct {
 	// user — get-user-manager (ADR-0172, amended 2026-10-22). Like a listing, it needs a
 	// resultVariable: reading the manager to discard it is a read nothing asked for.
 	expands bool
+	// async marks a create Graph answers 202 Accepted with an operation the worker
+	// follows — create-community (ADR-0172, amended 2026-11-03). It is the one write that
+	// needs a resultVariable: the object it answers is the only place the new id lands,
+	// and a community whose id nobody kept cannot have its members added, the follow-up
+	// it is created for.
+	async bool
 }
 
 var entraOps = map[string]entraOp{
@@ -277,6 +283,9 @@ var entraOps = map[string]entraOp{
 	"invite-guest":        {needsAttributes: true},
 	"restore-group":       {needsGroup: true},
 	"list-deleted-groups": {isList: true},
+	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
+	// owner (ADR-0172, amended 2026-11-03).
+	"create-community": {needsUser: true, needsAttributes: true, async: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -347,7 +356,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		return 0, fmt.Errorf("compiler: entra task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
 	}
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
-		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update, create-channel, invite-guest, assign-license and assign-role)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update, create-channel, create-community, invite-guest, assign-license and assign-role)", st.Id, op)
 	}
 	attrs, err := entraAttributesExpr(b.gate(), st.Id, cn.Attributes)
 	if err != nil {
@@ -358,6 +367,9 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	}
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
+	}
+	if spec.async && strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (what it creates is known only by the id it answers, and an id nobody keeps cannot be followed up)", st.Id, op)
 	}
 	if (spec.isList || spec.isDelta || spec.isBinary || spec.expands) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)

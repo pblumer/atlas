@@ -7064,7 +7064,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             beobachtender Delta-Sync)? Dann die <code>*.Read.All</code>-Varianten.
             <b>Entferne <code>Directory.ReadWrite.All</code>, falls vorhanden</b> – das ist der
             Alles-lesen-und-schreiben-Grant, den dieser Worker nie braucht. Teams-Operationen und Rollenzuweisung sind
-            opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>).</li>
+            opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
+            Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
+            <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
+            sein).</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
@@ -7072,7 +7075,9 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             delta sync)? Then the <code>*.Read.All</code> variants. <b>Remove
             <code>Directory.ReadWrite.All</code> if present</b> – that is the read-and-write-everything grant this
             worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
-            (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>).</li>
+            (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
+            communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
+            documents that the Engage network must be in native mode for it).</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the

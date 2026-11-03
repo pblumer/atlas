@@ -77,15 +77,24 @@ type Op struct {
 	// null. A select projects the expanded object, since that is what the result
 	// variable receives.
 	Expands string
+	// Async marks a create Graph answers 202 Accepted with an operation to follow
+	// rather than with the object: create-community (ADR-0172, amended 2026-11-03). [Run]
+	// follows the operation within the job, bounded, and answers the object it
+	// created. It needs a result variable, like a read and for a different reason:
+	// what a create returns is the only place its id lands, and a community whose id
+	// nobody kept cannot have its members added — the follow-up a process creates one
+	// for.
+	Async bool
 	// Describes the operation for an error message.
 	Label string
 }
 
-// needsResult reports whether the operation is a read whose answer has to land
-// somewhere: a collection, a delta, bytes or an expanded object. A run of one that
-// discards its result is one nothing asked for.
+// needsResult reports whether the operation's answer has to land somewhere: a read's
+// collection, delta, bytes or expanded object — a run of one that discards its result
+// is one nothing asked for — or an asynchronous create's object, the only place its id
+// lands.
 func (o Op) needsResult() bool {
-	return o.IsList || o.IsDelta || o.IsBinary || o.Expands != ""
+	return o.IsList || o.IsDelta || o.IsBinary || o.Expands != "" || o.Async
 }
 
 // Ops is the operation table. The set covers a joiner/mover/leaver lifecycle across the
@@ -93,7 +102,8 @@ func (o Op) needsResult() bool {
 // and its manager, list, update, enable, disable, reset-password, delete), the group
 // (create, read, list, update, delete, restore and list the deleted, and members and
 // owners), and the Team a group backs (create, add members and owners, create a
-// channel, archive) — plus guest invitation, and licence and directory-role assignment.
+// channel, archive) — plus guest invitation, a Viva Engage community, and licence and
+// directory-role assignment.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
@@ -143,6 +153,12 @@ var Ops = map[string]Op{
 	"invite-guest":        {Method: "POST", NeedsAttributes: true, Label: "invite a guest user"},
 	"restore-group":       {Method: "POST", NeedsGroup: true, Label: "restore a deleted group"},
 	"list-deleted-groups": {Method: "GET", IsList: true, ListPath: "/directory/deletedItems/microsoft.graph.group", Label: "list deleted groups"},
+	// A Viva Engage community is backed by a Microsoft 365 group — its groupId — as a
+	// Team is, so its members and admins are then managed with add-group-member and
+	// add-group-owner on that group rather than with operations of its own. The user is
+	// the community's first owner; the attributes are the community (displayName,
+	// description, privacy). See createCommunity for the 202 it is answered with.
+	"create-community": {Method: "POST", NeedsUser: true, NeedsAttributes: true, Async: true, Label: "create a Viva Engage community"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -367,6 +383,13 @@ func Run(ctx context.Context, j Job, reg *Registry) (map[string]any, error) {
 			return nil, err
 		}
 		return map[string]any{j.ResultVariable: items}, nil
+	}
+	if spec.Async {
+		v, err := createCommunity(ctx, j, spec, client)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{j.ResultVariable: v}, nil
 	}
 	res, err := client.Call(ctx, request(j, spec, client.BaseURL()))
 	if err != nil {
@@ -687,6 +710,9 @@ func checkRequired(j Job, spec Op) error {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
 	if spec.needsResult() && strings.TrimSpace(j.ResultVariable) == "" {
+		if spec.Async {
+			return fmt.Errorf("entra: operation %q resolved no resultVariable; what it creates is known only by the id it answers, and an id nobody keeps cannot be followed up", j.Operation)
+		}
 		return fmt.Errorf("entra: operation %q resolved no resultVariable; a directory read that discards its result is one nothing asked for", j.Operation)
 	}
 	return nil
@@ -820,6 +846,12 @@ func request(j Job, spec Op, baseURL string) Request {
 		// That is Microsoft's stated behaviour, not something verified against a tenant
 		// here. An id past the 30 days, or one that is no deleted group, is Graph's 404.
 		r.Path = "/directory/deletedItems/" + group + "/restore"
+	case "create-community":
+		// Graph answers 202 with a Location and no body; WantLocation is what keeps that
+		// Location rather than reading the empty answer as nil (createCommunity).
+		r.Path = "/employeeExperience/communities"
+		r.Body = withOwner(j.Attributes, base, user)
+		r.WantLocation = true
 	default: // assign-role — the only one left, guarded by the Ops lookup
 		// roleAssignments takes the principal as a field; the model authored it as the
 		// user, so it is merged in rather than repeated in the attributes object.

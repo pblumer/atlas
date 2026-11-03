@@ -366,3 +366,30 @@ func TestEntraJobTypeIndexIsReserved(t *testing.T) {
 		t.Errorf("reservedJobTypes[%d] = %q, want %q", EntraJobTypeIndex, got, EntraJobType)
 	}
 }
+
+// create-community (ADR-0172, amended 2026-11-03) names its first owner as the userId and
+// the community as attributes, and — unlike every other write — requires a
+// resultVariable: the community it answers is the only place its id lands.
+func TestEntraConnectorCreateCommunity(t *testing.T) {
+	cp, d := entraDetail(t, `connector="c" operation="create-community" userId="=antrag.owner" attributes="{&#34;displayName&#34;:&#34;=antrag.name&#34;,&#34;privacy&#34;:&#34;private&#34;}" resultVariable="community"`)
+	if got := cp.Intern(d.EntraOp); got != "create-community" {
+		t.Errorf("operation = %q, want create-community", got)
+	}
+	if d.EntraUserID.Expr == nil || d.EntraAttributes.Expr == nil {
+		t.Error("the owner and the inline community should compile to FEEL expressions")
+	}
+	if got := cp.Intern(d.ResultVar); got != "community" {
+		t.Errorf("resultVariable = %q", got)
+	}
+	for _, tc := range []struct{ attrs, want string }{
+		{`connector="c" operation="create-community" attributesVariable="a" resultVariable="r"`, "needs a userId"},
+		{`connector="c" operation="create-community" userId="u" resultVariable="r"`, "directory properties"},
+		{`connector="c" operation="create-community" userId="u" attributesVariable="a"`, "an id nobody keeps cannot be followed up"},
+		{`connector="c" operation="create-community" userId="u" attributesVariable="a" resultVariable="r" pageSize="10"`, "returns no collection"},
+	} {
+		_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to mention %q", tc.attrs, err, tc.want)
+		}
+	}
+}

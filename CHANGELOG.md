@@ -35,6 +35,17 @@ _Changed_ / _Removed_ for each version.
   like `list-groups` lists live ones. Two lookup resources, `groups` and
   `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
   availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
 - **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
   id, name, display name and web URL with its default library's quota (`used`, `total`,
   `remaining` in bytes), and `exists=false` for an address where there is no site, so a
