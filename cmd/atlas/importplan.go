@@ -150,9 +150,14 @@ func (f *refFlag) Set(v string) error {
 
 func newRefFlag() *refFlag { return &refFlag{refs: map[string]bool{}} }
 
-// decisions is what the flags decided, in the server's terms.
-func decisions(overwrite, keep *refFlag) (importplan.Decisions, error) {
-	d := importplan.Decisions{Overwrite: overwrite.refs, Keep: keep.refs, OverwriteAll: overwrite.all, KeepAll: keep.all}
+// decisions is what the flags decided, in the server's terms. --adopt has no all:
+// taking an artifact out of another application is decided artifact by artifact.
+func decisions(overwrite, keep, adopt *refFlag) (importplan.Decisions, error) {
+	d := importplan.Decisions{Overwrite: overwrite.refs, Keep: keep.refs, OverwriteAll: overwrite.all, KeepAll: keep.all,
+		Adopt: adopt.refs}
+	if adopt.all {
+		return d, errors.New("--adopt names each artifact to take from another application, as process:ID, form:ID or decision:ID; all is not accepted")
+	}
 	if d.OverwriteAll && d.KeepAll {
 		return d, errors.New("--overwrite all and --keep all contradict each other")
 	}
@@ -175,6 +180,23 @@ type planned struct {
 	// server, which settles it again where the write happens: an artifact edited
 	// in between is then refused rather than replaced.
 	decided bool
+	// ifAdopted and decidedIfAdopted are an Elsewhere artifact's outcome and
+	// decided once it is taken: its content, decided by the flags as any other
+	// artifact's is.
+	ifAdopted        string
+	decidedIfAdopted bool
+}
+
+// held says the artifact belongs to another application and is not taken.
+func (p planned) held() bool { return p.Status == importplan.Elsewhere && !p.Adopted }
+
+// holder names the application that holds an Elsewhere artifact, as far as the
+// server lets the caller see it.
+func (p planned) holder() string {
+	if p.HeldBy != nil {
+		return fmt.Sprintf("application %q", p.HeldBy.Name)
+	}
+	return "an application you cannot see"
 }
 
 func (p planned) label() string {
@@ -274,13 +296,31 @@ func (c *importClient) planConstants(src sourceImportBody, consts []packageConst
 	return out, nil
 }
 
-// decide settles each artifact's outcome as the flags decide it.
+// decide settles each artifact's outcome as the flags decide it. An artifact another
+// application holds is taken only when --adopt names it, and its content is then
+// decided as an artifact of this application's would be (ADR-0467 amendment
+// 2026-11-03).
 func (p *importPlan) decide(d importplan.Decisions) {
 	for i := range p.artifacts {
 		a := &p.artifacts[i]
+		if a.Status == importplan.Elsewhere {
+			a.Outcome = importplan.Undecided
+			a.ifAdopted = d.Outcome(a.Ref, a.Compared)
+			a.decidedIfAdopted = d.Overwrite[a.Ref] || d.Keep[a.Ref] || importplan.Asks(a.Compared) && a.ifAdopted != importplan.Undecided
+			if d.Adopt[a.Ref] {
+				a.adopt()
+			}
+			continue
+		}
 		a.Outcome = d.Outcome(a.Ref, a.Status)
 		a.decided = d.Overwrite[a.Ref] || d.Keep[a.Ref] || importplan.Asks(a.Status) && a.Outcome != importplan.Undecided
 	}
+}
+
+// adopt takes an Elsewhere artifact: it moves into the importing application, and
+// its content compares as the server reported.
+func (p *planned) adopt() {
+	p.Adopted, p.Outcome, p.decided = true, p.ifAdopted, p.decidedIfAdopted
 }
 
 // show writes the plan: how many artifacts are new, unchanged, behind, ahead and
@@ -291,9 +331,26 @@ func (p importPlan) show(out io.Writer, all bool) {
 	for _, a := range p.artifacts {
 		count[a.Status]++
 	}
-	fmt.Fprintf(out, "plan: %d new, %d unchanged, %d behind, %d ahead, %d changed\n", count[importplan.New],
+	fmt.Fprintf(out, "plan: %d new, %d unchanged, %d behind, %d ahead, %d changed", count[importplan.New],
 		count[importplan.Unchanged], count[importplan.Behind], count[importplan.Ahead], count[importplan.Changed])
+	if n := count[importplan.Elsewhere]; n > 0 {
+		fmt.Fprintf(out, ", %d held by another application", n)
+	}
+	fmt.Fprintln(out)
 	for _, a := range p.artifacts {
+		if a.Status == importplan.Elsewhere {
+			line := fmt.Sprintf("  %-9s %s, held by %s — ", a.Status, a.label(), a.holder())
+			switch {
+			case !a.Adopted:
+				line += "not taken; --adopt " + a.Ref + " moves it into this application"
+			case a.Compared == importplan.Changed:
+				line += "adopted, content differs — " + a.Outcome
+			default:
+				line += "adopted, content unchanged"
+			}
+			fmt.Fprintln(out, line)
+			continue
+		}
 		moved := a.Status == importplan.Changed || a.Status == importplan.Behind || a.Status == importplan.Ahead
 		if moved || all && a.Status == importplan.New {
 			line := fmt.Sprintf("  %-9s %s", a.Status, a.label())
@@ -321,8 +378,47 @@ func (p importPlan) show(out io.Writer, all bool) {
 // artifact, whose default is to keep the server's version; in a pipeline, a
 // refusal that names every one and the flags that decide them.
 func (p *importPlan) ask(out io.Writer) error {
-	var open []int
+	var held, open []int
 	for i, a := range p.artifacts {
+		switch {
+		case a.held():
+			held = append(held, i)
+		case a.Outcome == importplan.Undecided:
+			open = append(open, i)
+		}
+	}
+	if len(held) == 0 && len(open) == 0 {
+		return nil
+	}
+	in, interactive := decisionPrompt()
+	if !interactive && len(held) > 0 {
+		lines := make([]string, 0, len(held))
+		for _, i := range held {
+			lines = append(lines, p.artifacts[i].label()+", held by "+p.artifacts[i].holder())
+		}
+		return fmt.Errorf("%d artifacts belong to another application and were not taken; nothing was imported:\n  %s\n"+
+			"take each with --adopt REF, which needs the editor role on the application it leaves",
+			len(held), strings.Join(lines, "\n  "))
+	}
+	var sc *bufio.Scanner
+	if interactive {
+		sc = bufio.NewScanner(in)
+	}
+	// An artifact another application holds is asked about first: declined, the
+	// import cannot go on, and nothing is asked about its content.
+	for _, i := range held {
+		a := &p.artifacts[i]
+		fmt.Fprintf(out, "%s belongs to %s. Move it into this application? [y/N] ", a.label(), a.holder())
+		if !sc.Scan() {
+			fmt.Fprintln(out)
+			return errors.New("no answer was given; nothing was imported")
+		}
+		switch strings.ToLower(strings.TrimSpace(sc.Text())) {
+		case "y", "yes", "j", "ja":
+		default:
+			return fmt.Errorf("%s stays in %s, and the package cannot be imported without it; nothing was imported", a.label(), a.holder())
+		}
+		a.adopt()
 		if a.Outcome == importplan.Undecided {
 			open = append(open, i)
 		}
@@ -330,7 +426,6 @@ func (p *importPlan) ask(out io.Writer) error {
 	if len(open) == 0 {
 		return nil
 	}
-	in, interactive := decisionPrompt()
 	if !interactive {
 		lines := make([]string, 0, len(open))
 		for _, i := range open {
@@ -344,7 +439,6 @@ func (p *importPlan) ask(out io.Writer) error {
 			"decide each with --overwrite REF or --keep REF, or all of them with --overwrite all or --keep all",
 			len(open), strings.Join(lines, "\n  "))
 	}
-	sc := bufio.NewScanner(in)
 	for _, i := range open {
 		a := &p.artifacts[i]
 		question := a.label() + " differs from the server's"
@@ -373,8 +467,11 @@ func (p *importPlan) ask(out io.Writer) error {
 // changed after the plan was shown is refused rather than replaced on the strength
 // of a decision about something else.
 func (p importPlan) query() string {
-	var overwrite, keep []string
+	var overwrite, keep, adopt []string
 	for _, a := range p.artifacts {
+		if a.Adopted {
+			adopt = append(adopt, a.Ref)
+		}
 		if !a.decided {
 			continue
 		}
@@ -391,6 +488,9 @@ func (p importPlan) query() string {
 	}
 	if len(keep) > 0 {
 		q.Set("keep", strings.Join(keep, ","))
+	}
+	if len(adopt) > 0 {
+		q.Set("adopt", strings.Join(adopt, ","))
 	}
 	if len(q) == 0 {
 		return ""
