@@ -3277,8 +3277,10 @@ function renderBasket() {
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
-          // What a directory field in the form searches through: this release's item.
-          'data-release': rel && rel.id,
+          // What a directory field in the form searches through: this item in the
+          // release it is offered from — with several catalogues laid over one another
+          // (ADR-draft-several-catalogues-per-person) that is not always the first.
+          'data-release': (state.releaseOf || {})[x.id] || (rel && rel.id),
           'data-item': x.id,
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
       : null,
