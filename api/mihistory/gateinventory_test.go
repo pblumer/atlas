@@ -15,7 +15,7 @@ import (
 // Operator for any instance key, and none is narrowed per instance or per process.
 // These routes must not reach further than the timeline does, and they do not: they
 // read a subset of what the timeline already returns (keys, log positions,
-// lifecycle states and incident attributions), never a variable value. Should the
+// lifecycle states and incident attributions), never more than those routes already return. Should the
 // instance reads gain a per-instance gate, these handlers have to take the same
 // one, which is why they are listed here rather than left to be inferred.
 // Reflection supplies the actual set of handlers, so adding a route and forgetting
@@ -38,7 +38,10 @@ var miHistoryGates = []handlerGate{
 	{"HandleBodies", roleGated, "the multi-instance bodies of one instance: keys, positions, states and counters the timeline already exposes"},
 	{"HandleBody", roleGated, "one body of one instance, with incident counts the instance's incident list already exposes"},
 	{"HandleIterations", roleGated, "iteration keys, numbers, states and incident counts of one body; no variable values"},
-	{"HandleIteration", roleGated, "one iteration's incident attributions and nested bodies; no variable values"},
+	{"HandleIteration", roleGated, "one iteration's incidents, nested bodies, its own scope's variables and its decisions — what /timeline and /decisions already show an Operator for the same instance"},
+	{"HandleOutline", roleGated, "an instance's steps outside its MI iterations: a subset of the rows /timeline returns"},
+	{"HandleIterationSteps", roleGated, "the steps inside one MI iteration: a subset of the rows /timeline returns for the same instance"},
+	{"HandleIterationVariables", roleGated, "one iteration's own scopes' variables at a step, rendered by the server's one variable renderer: what /timeline shows an Operator at the same step"},
 }
 
 func TestEveryHandlerIsClassified(t *testing.T) {

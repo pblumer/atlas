@@ -40,6 +40,8 @@ async function stub(page, { me, providers = [], registration = { enabled: false 
   await page.route("**/api/v1/**", (route) => route.fulfill(json({})));
   await page.route("**/api/v1/shop/catalog", (route) =>
     route.fulfill(signedIn ? json(CATALOG) : REFUSED));
+  await page.route("**/api/v1/shop/catalogs", (route) =>
+    route.fulfill(signedIn ? json([CATALOG]) : REFUSED));
   await page.route("**/api/v1/catalogs/*/releases", (route) =>
     route.fulfill(signedIn ? json([RELEASE]) : REFUSED));
   await page.route("**/api/v1/orders", (route) =>
@@ -141,6 +143,8 @@ test("signing in loads the catalogue and stays on the portal", async ({ page }) 
   await page.route("**/api/v1/**", (route) => route.fulfill(json({})));
   await page.route("**/api/v1/shop/catalog", (route) =>
     route.fulfill(session ? json(CATALOG) : REFUSED));
+  await page.route("**/api/v1/shop/catalogs", (route) =>
+    route.fulfill(session ? json([CATALOG]) : REFUSED));
   await page.route("**/api/v1/catalogs/*/releases", (route) =>
     route.fulfill(session ? json([RELEASE]) : REFUSED));
   await page.route("**/api/v1/orders", (route) => route.fulfill(session ? json([]) : REFUSED));
@@ -264,6 +268,7 @@ test("a session that runs out while the page is open asks again", async ({ page 
   // a failure is the original defect with a different trigger.
   await stub(page, { me: json({ authEnabled: true, user: { id: "u1", username: "ada", roles: ["user"] } }) });
   await page.route("**/api/v1/shop/catalog", (route) => route.fulfill(json(CATALOG)));
+  await page.route("**/api/v1/shop/catalogs", (route) => route.fulfill(json([CATALOG])));
   await page.route("**/api/v1/catalogs/*/releases", (route) => route.fulfill(json([RELEASE])));
   await page.route("**/api/v1/orders", (route) => route.fulfill(REFUSED));
   await page.goto("/shop.html?lang=en");

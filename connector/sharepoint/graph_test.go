@@ -374,6 +374,52 @@ func TestGetFile(t *testing.T) {
 	}
 }
 
+// get-site reads the site by its address and then its default library's quota, and
+// answers both as one object; a site that is not there is exists=false, not a failure,
+// and a site without a default library answers without a quota.
+func TestGetSite(t *testing.T) {
+	driveStatus := http.StatusOK
+	fg, c := newFakeGraph(t, func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/drive"):
+			answer(w, driveStatus, `{"quota":{"total":1000,"used":250,"remaining":750,"state":"normal"}}`)
+		case strings.Contains(r.URL.EscapedPath(), "/sites/contoso.sharepoint.com:/sites/frei"):
+			answer(w, http.StatusNotFound, `{"error":{"code":"itemNotFound"}}`)
+		default:
+			answer(w, http.StatusOK, `{"id":"contoso.sharepoint.com,1,2","name":"dev-huda","displayName":"Dev HuDa","webUrl":"https://contoso.sharepoint.com/sites/dev-huda"}`)
+		}
+	})
+	got := do(t, c, Request{Operation: "get-site", Site: "https://contoso.sharepoint.com/sites/dev-huda"})
+	if len(fg.requests) != 2 {
+		t.Fatalf("get-site made %d requests, want the site and its drive", len(fg.requests))
+	}
+	first, second := fg.requests[0], fg.requests[1]
+	if first.method != http.MethodGet || first.path != "/sites/contoso.sharepoint.com:/sites/dev-huda" ||
+		!strings.HasPrefix(first.query, "$select=id,name,displayName") {
+		t.Errorf("site request = %s %s?%s, want the site by host and path", first.method, first.path, first.query)
+	}
+	if second.path != "/sites/contoso.sharepoint.com,1,2/drive" || second.query != "$select=quota" {
+		t.Errorf("drive request = %s?%s, want the default drive's quota by the site's id", second.path, second.query)
+	}
+	quota, _ := got["quota"].(map[string]any)
+	if got["exists"] != true || got["displayName"] != "Dev HuDa" || quota == nil || quota["used"] != json.Number("250") {
+		t.Errorf("answer = %#v, want the site with exists=true and its quota", got)
+	}
+
+	if got := do(t, c, Request{Operation: "get-site", Site: "contoso.sharepoint.com:/sites/frei"}); got["exists"] != false || got["site"] != "contoso.sharepoint.com:/sites/frei" {
+		t.Errorf("missing site = %#v, want exists=false naming the address asked", got)
+	}
+
+	driveStatus = http.StatusNotFound
+	if got := do(t, c, Request{Operation: "get-site", Site: siteID}); got["exists"] != true || got["quota"] != nil {
+		t.Errorf("site without a default library = %#v, want exists and a null quota", got)
+	}
+	driveStatus = http.StatusForbidden
+	if _, err := c.Do(context.Background(), Request{Operation: "get-site", Site: siteID}); err == nil || !strings.Contains(err.Error(), "storage") {
+		t.Errorf("refused drive read: err = %v, want a failure naming the storage read", err)
+	}
+}
+
 func TestListFolder(t *testing.T) {
 	fg, c := newFakeGraph(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		answer(w, http.StatusOK, `{"value":[{"id":"1","name":"a.pdf","@microsoft.graph.downloadUrl":"https://secret"}]}`)
@@ -555,6 +601,7 @@ var everyOperation = []Request{
 	{Operation: "list-folder", Site: siteID, Path: "a"},
 	{Operation: "create-folder", Site: siteID, Path: "a"},
 	{Operation: "delete-file", Site: siteID, Path: "a.txt"},
+	{Operation: "get-site", Site: siteID},
 }
 
 // TestEveryOperationIsCovered keeps the table above whole: an operation added to Ops

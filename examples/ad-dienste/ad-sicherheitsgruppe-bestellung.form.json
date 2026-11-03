@@ -1,0 +1,89 @@
+{
+  "type": "default",
+  "id": "ad-sicherheitsgruppe-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Sicherheitsgruppe im Active Directory · Active Directory security group**\n\nDer Name entsteht nach der Namensregel: SG-<BEREICH>-<bezeichnung>. Mitglieder kommen danach über die Aktionen im Shop dazu. · The name follows the naming rule SG-<DEPT>-<name>. Members are added afterwards through the shop's actions."
+    },
+    {
+      "key": "bereich",
+      "type": "textfield",
+      "label": "Bereichskürzel · Department code",
+      "description": "2 bis 5 Buchstaben, z.B. FIN, HR, IT. · 2 to 5 letters.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z]{2,5}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "Der Rest des Namens; Umlaute werden ausgeschrieben, Leerzeichen zu Bindestrichen. · The rest of the name; spaces become hyphens.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9äöüÄÖÜ .-]{2,40}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "gruppenbereich",
+      "type": "select",
+      "label": "Gruppenbereich · Group scope",
+      "description": "Global für Personen einer Domäne, domänenlokal für Berechtigungen auf Ressourcen, universell für mehrere Domänen. · Global for people of one domain, domain local for permissions on resources, universal across domains.",
+      "values": [
+        {
+          "label": "Global · Global",
+          "value": "global"
+        },
+        {
+          "label": "Domänenlokal · Domain local",
+          "value": "domaenenlokal"
+        },
+        {
+          "label": "Universell · Universal",
+          "value": "universell"
+        }
+      ],
+      "defaultValue": "global",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Zweck · Purpose",
+      "description": "Steht in der Beschreibung der Gruppe. · Goes into the group's description.",
+      "validate": {
+        "required": true,
+        "maxLength": 200
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "verantwortlich",
+      "type": "textfield",
+      "label": "Verantwortliche Person (Anmeldename) · Responsible person (logon name)",
+      "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores. Sie wird managedBy der Gruppe und entscheidet über Zugänge. · They become the group's managedBy and decide on access.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9._-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

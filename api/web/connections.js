@@ -10,6 +10,7 @@
 // the public half of a connection only, and the page keeps nothing in storage, the
 // URL or the console; TestTheConnectionsPageHoldsNoCredential holds it to that.
 
+import { mySystemsSection } from "./connectedsystems.js";
 import { fmtDateTime } from "./datefmt.js";
 import { t } from "./i18n.js";
 
@@ -117,6 +118,9 @@ function unlinkable(canConfigure) {
 }
 
 export async function viewConnections({ api, toast, view, isSuperseded, canConfigure = false }) {
+  // The connected systems a person is connected to or pre-approved for (ADR-0512 §4).
+  // They need no vault, so they are shown even where the linked accounts below are not.
+  const systems = await mySystemsSection({ api, toast });
   let mine;
   try {
     mine = await api("GET", "/api/v1/me/connections");
@@ -125,7 +129,8 @@ export async function viewConnections({ api, toast, view, isSuperseded, canConfi
     const key = e.status === 503 ? "connections.unavailable" : e.status === 401 ? "connections.signIn" : "";
     if (key) {
       view.innerHTML = `<div class="card"><h1>${esc(t("connections.title"))}</h1>
-        <p class="muted" id="con-unavailable">${esc(t(key))}</p></div>`;
+        <p class="muted" id="con-unavailable">${esc(t(key))}</p></div>${systems.html}`;
+      systems.wire(view);
       return;
     }
     throw e;
@@ -154,6 +159,7 @@ export async function viewConnections({ api, toast, view, isSuperseded, canConfi
       ${ctx.linkable.length ? `<p class="muted" style="font-size:12px; margin-top:8px">${esc(t("connections.link.privacy"))}</p>` : ""}
     </div>
     ${banner()}
+    ${systems.html}
     <div class="card" style="padding:0; margin-top:18px">
       <div style="padding:16px 18px 0"><h2>${esc(t("connections.identities.title"))}</h2></div>
       <table data-dt-key="identities">
@@ -173,6 +179,7 @@ export async function viewConnections({ api, toast, view, isSuperseded, canConfi
   </div>`;
 
   const root = document.getElementById("connections");
+  systems.wire(root);
   root.addEventListener("submit", async (e) => {
     const form = e.target.closest("form[data-workers-form]");
     if (!form) return;

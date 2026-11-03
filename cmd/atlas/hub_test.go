@@ -44,8 +44,8 @@ func TestHubReleasesAreCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(samples) != 10 {
-		t.Fatalf("%d bundles composed, want the 10 of bundles.json", len(samples))
+	if len(samples) != 11 {
+		t.Fatalf("%d bundles composed, want the 11 of bundles.json", len(samples))
 	}
 	if _, _, err := hubIndex(lock, samples); err != nil {
 		t.Fatalf("%v\n\nAfter changing an example, regenerate the catalogue and record its new version:\n"+
@@ -78,7 +78,7 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, out.String())
 	}
 	index := readBuiltIndex(t, dir, public)
-	if len(index.Releases) != 10 || index.RegistryID != "io.github.pblumer.atlas.hub" {
+	if len(index.Releases) != 11 || index.RegistryID != "io.github.pblumer.atlas.hub" {
 		t.Fatalf("index = %s with %d releases", index.RegistryID, len(index.Releases))
 	}
 	for _, r := range index.Releases {
@@ -377,5 +377,65 @@ func TestHubFingerprintChecksABackupAgainstTheRecordedKey(t *testing.T) {
 	other := blueprintregistry.EncodePublicKey(ed25519.NewKeyFromSeed(make([]byte, 32)).Public().(ed25519.PublicKey))
 	if err := runHub([]string{"fingerprint", "--key-file", keyFile, "--releases", hubReleasesWithKey(t, other)}, &out); err == nil {
 		t.Fatal("a key that is not the recorded one passed")
+	}
+}
+
+// TestHubAnnouncementIsVerifiedWithThePinnedKey: the current key announces its
+// successor, an installation pinning the current key verifies the statement and
+// is told what to pin, and one pinning another key — or a statement signed by
+// somebody else — is refused.
+func TestHubAnnouncementIsVerifiedWithThePinnedKey(t *testing.T) {
+	current := hubTestKey()
+	currentPublic := blueprintregistry.EncodePublicKey(current.Public().(ed25519.PublicKey))
+	nextSeed := sha256.Sum256([]byte("atlas hub announce: next key"))
+	next := ed25519.NewKeyFromSeed(nextSeed[:])
+	nextPublic := blueprintregistry.EncodePublicKey(next.Public().(ed25519.PublicKey))
+	dir := t.TempDir()
+	keyFile := filepath.Join(dir, "current.key")
+	if err := os.WriteFile(keyFile, []byte(blueprintregistry.EncodeSigningKey(current)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statement := filepath.Join(dir, "key-rotation.json")
+	releases := hubReleasesWithKey(t, currentPublic)
+	var out bytes.Buffer
+	if err := runHub([]string{"announce", "--key-file", keyFile, "--new-public-key", nextPublic, "--releases", releases, "--out", statement}, &out); err != nil {
+		t.Fatalf("announce: %v", err)
+	}
+	if strings.Contains(out.String(), blueprintregistry.EncodeSigningKey(current)) {
+		t.Fatal("announce printed the private key")
+	}
+
+	out.Reset()
+	if err := runHub([]string{"verify-announcement", "--pinned", currentPublic, "--statement", statement}, &out); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if !strings.Contains(out.String(), "ATLAS_BLUEPRINT_REGISTRY_KEY="+currentPublic+","+nextPublic) {
+		t.Fatalf("verify does not say what to pin:\n%s", out.String())
+	}
+
+	stranger := blueprintregistry.EncodePublicKey(ed25519.NewKeyFromSeed(make([]byte, 32)).Public().(ed25519.PublicKey))
+	if err := runHub([]string{"verify-announcement", "--pinned", stranger, "--statement", statement}, &out); err == nil ||
+		!strings.Contains(err.Error(), "NOT a valid announcement") {
+		t.Fatalf("a statement verified against a key that did not sign it: %v", err)
+	}
+	// A forger rewrites the statement to name their own key: the signature no
+	// longer matches.
+	raw, err := os.ReadFile(statement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statement, []byte(strings.Replace(string(raw), nextPublic, stranger, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := runHub([]string{"verify-announcement", "--pinned", currentPublic, "--statement", statement}, &out); err == nil {
+		t.Fatal("a rewritten statement verified")
+	}
+
+	// Only the key releases.json records may announce.
+	if err := runHub([]string{"announce", "--key-file", keyFile, "--new-public-key", nextPublic, "--releases", hubReleasesWithKey(t, nextPublic), "--out", statement}, &out); err == nil {
+		t.Fatal("a key that is not the recorded one announced a rotation")
+	}
+	if err := runHub([]string{"announce", "--key-file", keyFile, "--new-public-key", nextPublic, "--releases", releases, "--days", "3", "--out", statement}, &out); err == nil {
+		t.Fatal("a rotation with three days' notice was announced")
 	}
 }

@@ -1,14 +1,14 @@
-# M365-Entwicklungsumgebung für Atlas (OpenTofu)
+# M365-Entwicklungsumgebung für atlas (OpenTofu)
 
 Dieses OpenTofu-Projekt baut mit **einem** `tofu apply` eine schlüsselfertige
-Entwicklungsumgebung für die Microsoft-Worker von Atlas auf und entfernt sie mit
+Entwicklungsumgebung für die Microsoft-Worker von atlas auf und entfernt sie mit
 `tofu destroy` wieder:
 
 - im **Microsoft-365-Testtenant**: Testpersonen, Gruppen, eine Microsoft-365-Gruppe
   (SharePoint-Website, Teams-Ziel) und je Worker eine eigene App-Registrierung mit
   minimalen Berechtigungen und kurzlebigem Zertifikat oder Secret;
-- in **Azure**: einen **Atlas-Server** (Ubuntu 24.04), dessen Worker beim ersten Start
-  bereits in der Console eingerichtet sind und von Atlas selbst betrieben werden,
+- in **Azure**: einen **atlas-Server** (Ubuntu 24.04), dessen Worker beim ersten Start
+  bereits in der Console eingerichtet sind und von atlas selbst betrieben werden,
   Anmeldung der Testpersonen über Entra ID (OpenID Connect);
 - optional einen **Active-Directory-Domänencontroller** im selben Netz.
 
@@ -115,7 +115,7 @@ tofu apply plan.tfplan
 ```
 
 `apply` dauert einige Minuten. Danach richtet sich der Server selbst ein (Pakete,
-PowerShell und das Modul MicrosoftTeams, Atlas, Worker); das dauert erfahrungsgemäss
+PowerShell und das Modul MicrosoftTeams, atlas, Worker); das dauert erfahrungsgemäss
 10–20 Minuten:
 
 ```bash
@@ -144,7 +144,7 @@ tofu output -json atlas_admin
 
 - **Lokaler Administrator:** `admin` mit dem ausgegebenen Passwort.
 - **Testpersonen:** Schaltfläche *Sign in with Microsoft (…)*, Passwörter mit
-  `tofu output -json test_user_passwords`. Eine erste Anmeldung legt ein Atlas-Konto mit
+  `tofu output -json test_user_passwords`. Eine erste Anmeldung legt ein atlas-Konto mit
   der Rolle `user` an; weitere Rollen vergibt der Administrator unter *Organization →
   Users* oder über die Gruppenzuordnung unter *Organization → Single sign-on* (das
   ID-Token enthält die Objekt-IDs der Sicherheitsgruppen).
@@ -263,7 +263,7 @@ Schreibbereich, der Exchange-Worker mit der Rollengruppe statt der Verzeichnisro
 Gegentest mit `Test-ServicePrincipalAuthorization` (die Mail-App darf als Testpostfach senden,
 als echtes Postfach nicht).
 
-## Atlas-Server
+## atlas-Server
 
 - **Installation:** `atlas_install = "release"` lädt `atlas_version` von den GitHub-Releases
   und prüft es gegen `SHA256SUMS`. `atlas_install = "source"` baut `atlas_source_ref` aus
@@ -277,8 +277,8 @@ als echtes Postfach nicht).
   Administrator an, legt je Worker das Credential-Bundle im Vault ab
   (`PUT /api/v1/secrets/m365-<name>`), erstellt den Console-Worker
   (`POST /api/v1/configured-workers`) und ein API-Token im Vault unter `atlas`. Danach
-  löscht es die Datei mit den Zugangsdaten; sie liegen dann nur noch im Vault von Atlas.
-  Das Skript ist wiederholbar und gegen einen lokal gebauten Atlas-Server aus diesem
+  löscht es die Datei mit den Zugangsdaten; sie liegen dann nur noch im Vault von atlas.
+  Das Skript ist wiederholbar und gegen einen lokal gebauten atlas-Server aus diesem
   Repository geprüft.
 - **Zugriff aus einem Firmennetz:** Proxys, die HTTPS prüfen (geprüft mit dem Netz der
   Bundesverwaltung), sperren eine Seite mit Caddys eigenem Zertifikat (`atlas_tls =
@@ -303,7 +303,7 @@ Mit `enable_ad_dc = true` entsteht im selben VNet eine Windows-Server-2022-VM:
   nach dem Neustart `OU=AtlasService` mit dem Bind-Konto `svc-atlas-<zufall>` (Vollzugriff
   nur auf `OU=AtlasTest`, dazu *Replicating Directory Changes* für `sync`) sowie
   `OU=AtlasTest` mit Testpersonen und einer Testgruppe.
-- Der Atlas-Server erreicht den Domänencontroller als `ldaps://dc01.atlastest.internal:636`
+- Der atlas-Server erreicht den Domänencontroller als `ldaps://dc01.atlastest.internal:636`
   im VNet und vertraut dessen Zertifikat über den Systemspeicher. Der AD-Worker kennt
   keine Option, die Zertifikatsprüfung abzuschalten (`connector/ad/client.go`).
 - Von aussen ist der Domänencontroller nur für `ad_allowed_cidrs` erreichbar (LDAPS,
@@ -394,9 +394,9 @@ Massgebend ist der [Azure-Preisrechner](https://azure.microsoft.com/pricing/calc
 
 | Posten | Annahme | ca. USD |
 |---|---|---|
-| Atlas-VM `Standard_B2ms` (Linux) | ca. 0.106 pro Stunde | 0.11 / Stunde |
+| atlas-VM `Standard_B2ms` (Linux) | ca. 0.106 pro Stunde | 0.11 / Stunde |
 | Domänencontroller `Standard_B2ms` (Windows) | Linux-Preis + Windows-Lizenz | ca. 0.20 / Stunde |
-| Datenträger Atlas (64 GB Standard SSD) | läuft auch bei gestoppter VM | ca. 5 / Monat |
+| Datenträger atlas (64 GB Standard SSD) | läuft auch bei gestoppter VM | ca. 5 / Monat |
 | Datenträger DC (127 GB Standard SSD) | läuft auch bei gestoppter VM | ca. 10 / Monat |
 | Öffentliche IP-Adresse (Standard, statisch) | je VM, auch bei gestoppter VM | ca. 3.5–4 / Monat |
 | Key Vault, Datenverkehr | wenige Operationen, wenig Daten | unter 1 / Monat |
@@ -405,11 +405,11 @@ Massgebend ist der [Azure-Preisrechner](https://azure.microsoft.com/pricing/calc
 | Szenario | Laufzeit | ca. USD |
 |---|---|---|
 | Nur Tenant-Objekte (`enable_atlas_server = false`) | – | 0 (Azure) |
-| Atlas-Server, 2 Testtage rund um die Uhr | 48 h | ca. 6 |
-| Atlas-Server + DC, 2 Testtage rund um die Uhr | 48 h | ca. 16 |
-| Atlas-Server, Arbeitstage 8 h (22 Tage, Rest abgeschaltet) | 1 Monat | ca. 28 |
-| Atlas-Server + DC, Arbeitstage 8 h | 1 Monat | ca. 80 |
-| Atlas-Server + DC, durchgehend | 1 Monat | ca. 250 |
+| atlas-Server, 2 Testtage rund um die Uhr | 48 h | ca. 6 |
+| atlas-Server + DC, 2 Testtage rund um die Uhr | 48 h | ca. 16 |
+| atlas-Server, Arbeitstage 8 h (22 Tage, Rest abgeschaltet) | 1 Monat | ca. 28 |
+| atlas-Server + DC, Arbeitstage 8 h | 1 Monat | ca. 80 |
+| atlas-Server + DC, durchgehend | 1 Monat | ca. 250 |
 
 **Microsoft-365-Lizenzen** sind nicht eingerechnet. Ein Tenant aus dem Developer Program
 oder ein Testabonnement kostet nichts; gekaufte Lizenzen (z. B. Microsoft 365 E3/E5 je

@@ -469,6 +469,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/outline", s.miHistory.HandleOutline, apiOp{
+			summary: "Page through a process instance's step history without the steps inside multi-instance iterations — each element activation and end in the order it happened, a multi-instance body execution as one activation and one end — so a client can draw the history of an instance whose full timeline is too large to load. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's outline is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Instance outline page", tObject())}},
 		{"GET", "/api/v1/instances/{key}/multi-instances", s.miHistory.HandleBodies, apiOp{
 			summary: "List a process instance's multi-instance body executions — each concrete activation of a multi-instance activity, never merged by BPMN element, with its mode, lifecycle state and iteration counters (seeded, active, completed, terminated, historical incidents). Bounded and cursor-paged: query limit (1-200, default 100), cursor, parentIteration (the iteration whose nested bodies to list; omitted lists the bodies no iteration encloses). 409 history_unavailable while this installation's history index is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Multi-instance body executions", tObject())}},
@@ -481,6 +484,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", s.miHistory.HandleIteration, apiOp{
 			summary: "Read one multi-instance iteration: its iteration number, lifecycle state and log positions, the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and the multi-instance bodies nested in it (ADR-0517)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Iteration detail", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", s.miHistory.HandleIterationSteps, apiOp{
+			summary: "Page through the replay window of one multi-instance iteration — its own activation, every element that ran inside it (a nested multi-instance body as one step) and its end, in the order they happened — without reading the rest of the instance. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's iteration steps are not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration steps page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables", s.miHistory.HandleIterationVariables, apiOp{
+			summary: "Read one multi-instance iteration's variables as they stood at a log position (query at, required) — a step of its replay window: the iteration's own scope and every scope running inside it then, each folded to the latest change per name at or before that position, rendered as the instance's other variable views render them. The body's and the instance's scopes are not included. Bounded per scope and per value (truncated flags) (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration variables at a step", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
@@ -968,6 +977,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		// roleAny, like GET /api/v1/forms/{id}: whoever may read the form may ask what one
 		// of its fields offers. Which decision and which inputs is the stored form's; the
 		// request carries only the values of the fields it binds.
+		// roleAny, like the options route above, but only for a signed-in person: the
+		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-0519).
+		{"POST", "/api/v1/forms/{id}/fields/{field}/availability", s.handleFormFieldAvailability, apiOp{
+			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-0519)", tag: "Forms", role: roleAny,
+			req:  jsonBody("The typed value", schemaObj(map[string]any{"value": tString()})),
+			resp: jsonBody("Availability", tObject())}},
 		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{
 			summary: "The options one field of a stored form takes from a decision, for the values chosen in the fields its inputs are bound to — a group, then its members. The request names only those fields' values; a value from a field with fixed choices must be one of them. 404 not_found, 400 invalid_query, 422 as the decision cannot answer (ADR-0511)", tag: "Forms", role: roleAny,
 			req:  jsonBody("The values of the bound fields", schemaObj(map[string]any{"values": tObject()})),
@@ -1496,7 +1511,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Ask the source for its technical account's standing: whether it is reachable with its credential, the token's scope, the spaces it holds viewer in, and every problem — a scope other than read, any system role, any space role other than viewer. Answers 200 either way. Admin-only", tag: "Catalogue", role: RoleAdmin,
 			resp: jsonBody("Reachability and standing", tObject())}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. `orderableBy` lists the applications whose processes may order the product for somebody with a shop order task (ADR-0520), read the same way. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1609,6 +1624,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/shop/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
+		{"GET", "/api/v1/shop/catalogs", s.catalogs.HandleMyCatalogs, apiOp{
+			summary: "Every catalogue your groups reach, highest rank first (ADR-0522): the shop offers what all of them offer, a product in several from the highest-ranked, and an order goes to one catalogue's release, so a basket from two is placed as two orders. Reaching none is an empty list", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogues", tArray())}},
 		// Shop orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so
 		// fulfilment reads one record and never recomputes a graph — and what was
@@ -1753,6 +1771,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
+		{"POST", "/api/v1/blueprints/{id}/releases/{version}/import", s.handleBlueprintImport, apiOp{
+			summary: "Install the application of a signed atlas hub release: the server fetches it from its operator-pinned registry, refuses it unless ?digest= equals the digest the preview reported, inspects it and imports it through the same source import POST /api/v1/applications/source performs — the same plan, ?dryRun=true, ?overwrite= and ?keep= decisions (undecided stops with 409 and the plan), editor rule and needs. The package's catalogues are named under cataloguesNotImported and imported in the Console, where a person answers their questions (ADR-0499, ADR-0467).", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Import result with the release it came from", tObject())}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
@@ -1938,6 +1959,23 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("OAuth grants", tArray())}},
 		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
 			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/connected-systems", s.handleListConnectedSystems, apiOp{
+			summary: "List the connected systems (ADR-0512): per system its host and name, who approved it and when, its capabilities with their reach of projects, whether its people may connect without being asked (pre-consent), how many people are connected, when it last used Atlas, and for one no longer connected when and why it was disconnected (admin-only)", tag: "OAuth", role: RoleAdmin,
+			resp: jsonBody("Connected systems", tArray())}},
+		{"PUT", "/api/v1/connected-systems/{id}/preconsent", s.handleSetSystemPreconsent, apiOp{
+			summary: "Turn a connected system's pre-consent off, so its people are asked on the consent screen before they connect; only {\"preconsent\": false} is accepted — pre-consent is given by approving the system (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			req:    jsonBody("Pre-consent", schemaObj(map[string]any{"preconsent": tBool()}, "preconsent")),
+			status: http.StatusNoContent}},
+		{"DELETE", "/api/v1/connected-systems/{id}", s.handleDisconnectSystem, apiOp{
+			summary: "Disconnect a connected system: its system grant is withdrawn, and with ?people=withdraw every person's grant of the same client too (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/me/connected-systems", s.handleMyConnectedSystems, apiOp{
+			summary: "The connected systems you are connected to, and those an administrator pre-approved for you, with whether you declined them (ADR-0512)", tag: "OAuth", role: roleAny,
+			resp: jsonBody("Your connected systems", tArray())}},
+		{"POST", "/api/v1/me/connected-systems/withdraw", s.handleWithdrawFromSystem, apiOp{
+			summary: "Withdraw your own grants of a connected system and decline it, so pre-consent does not connect you to it again without your asking (ADR-0512)", tag: "OAuth", role: roleAny,
+			req:    jsonBody("The system's client id", schemaObj(map[string]any{"clientId": tString()}, "clientId")),
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
 			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth", role: roleAny,

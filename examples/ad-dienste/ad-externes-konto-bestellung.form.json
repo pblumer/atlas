@@ -1,0 +1,72 @@
+{
+  "type": "default",
+  "id": "ad-externes-konto-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Konto für eine externe Person · Account for an external person**\n\nDu bist der Sponsor: Das Konto steht in deinem Bestand und gilt höchstens 180 Tage. Im Verzeichnis heisst es ext-<Nummer>; Name, Firma und Adresse bleiben verschlüsselt in Atlas. · You are the sponsor: the account is in your inventory and lasts at most 180 days. In the directory it is called ext-<number>; name, company and address stay encrypted in Atlas."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname · First name",
+      "validate": {
+        "required": true,
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname · Last name",
+      "validate": {
+        "required": true,
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "firma",
+      "type": "textfield",
+      "label": "Firma · Company",
+      "validate": {
+        "required": true,
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse · E-mail address",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "sponsor",
+      "type": "textfield",
+      "label": "Dein Konto (Anmeldename) · Your account (logon name)",
+      "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores. Es wird manager des externen Kontos. · It becomes the external account's manager.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9._-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ablaufdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Gültig bis · Valid until",
+      "description": "Höchstens 180 Tage ab heute. · At most 180 days from today.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

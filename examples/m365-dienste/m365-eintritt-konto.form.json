@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-konto",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Atlas-Konto prüfen · Check the Atlas account**\n\nDie Kontenspiegelung aus Entra ID ist in vier Stunden nicht zwei Läufe weitergekommen (Personalnummer {{personalnummer}}). Prüfen, ob der Prozess der Spiegelung läuft und das Konto gespiegelt hat (Console → Administration → Users). Diese Aufgabe erst abschliessen, wenn das Atlas-Konto besteht: Danach liest der Prozess es, und fehlt es noch, wird der nächste Schritt zum Incident. · The directory mirror from Entra ID has not completed two runs in four hours (employee number {{personalnummer}}). Check that the mirror runs and has created the account (Console → Administration → Users). Complete this task only once the Atlas account exists: the process reads it next, and if it is still missing, that step becomes an incident."
+    }
+  ]
+}

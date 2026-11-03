@@ -281,6 +281,34 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	out, refusal := s.place(p.UserID, recipient, id, rel, req)
+	if refusal != nil {
+		httpapi.Error(w, refusal.Status, refusal.Message)
+		return
+	}
+	httpapi.JSON(w, http.StatusCreated, out)
+}
+
+// Refusal is why an order was not placed, as the status an HTTP caller is answered
+// with and a sentence a person can act on. A process placing an order reads the same
+// two, so a refused order says the same thing whichever door it came through.
+type Refusal struct {
+	Status  int
+	Message string
+}
+
+func (r *Refusal) Error() string { return r.Message }
+
+func refuse(status int, msg string) *Refusal { return &Refusal{Status: status, Message: msg} }
+
+// place is the part of placing an order that does not depend on who asked through
+// which door: what the recipient holds and which groups they are in, every rule the
+// release states about the basket, the durable write, and only then the fulfilment's
+// start (I2). The shop's HandlePlace and a process's PlaceForApplication both end
+// here, after each has decided in its own way that the caller may order from this
+// release for this recipient — so a process's order meets exactly the checks a
+// person's does.
+func (s *Service) place(orderer, recipient, id string, rel catalog.Release, req placeReq) (Order, *Refusal) {
 	// What the recipient already holds, read before the loop is entered for the
 	// same reason the catalogue gate is. An unreadable inventory refuses the order
 	// rather than placing one that would provision a second copy of something:
@@ -288,8 +316,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	// afternoon.
 	has, heldErr := s.held(recipient)
 	if heldErr != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "read inventory: "+heldErr.Error())
-		return
+		return Order{}, refuse(http.StatusInternalServerError, "read inventory: "+heldErr.Error())
 	}
 
 	// And which groups the recipient is in, read here for the reason the two above
@@ -305,12 +332,10 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// against nothing, and leaves a right attached to a string — so the refusal
 		// has to be readable by whoever typed the name, not by whoever reads the
 		// server log.
-		httpapi.Error(w, http.StatusBadRequest, groupErr.Error())
-		return
+		return Order{}, refuse(http.StatusBadRequest, groupErr.Error())
 	case groupErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError,
+		return Order{}, refuse(http.StatusInternalServerError,
 			"check who the recipient is: "+groupErr.Error())
-		return
 	}
 
 	var (
@@ -373,7 +398,7 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		}
 
 		out = Order{
-			ID: id, ReleaseID: rel.ID, Orderer: p.UserID, Recipient: recipient,
+			ID: id, ReleaseID: rel.ID, Orderer: orderer, Recipient: recipient,
 			Lines:     linesFor(rel, ordered, has, req.Config, req.Variants),
 			Waves:     wavesFor(rel, ordered),
 			Requires:  requiresFor(rel, ordered),
@@ -385,25 +410,25 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case opErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "place order: "+opErr.Error())
+		return Order{}, refuse(http.StatusInternalServerError, "place order: "+opErr.Error())
 	case empty:
-		httpapi.Error(w, http.StatusBadRequest, "an order needs at least one product the release carries")
+		return Order{}, refuse(http.StatusBadRequest, "an order needs at least one product the release carries")
 	case clash != nil:
-		httpapi.Error(w, http.StatusConflict, clash.reason())
+		return Order{}, refuse(http.StatusConflict, clash.reason())
 	case stray != "":
-		httpapi.Error(w, http.StatusBadRequest, stray)
+		return Order{}, refuse(http.StatusBadRequest, stray)
 	case barred != nil:
 		// 403 and not 409: a conflict is a state of the estate that could be
 		// resolved by giving something back, and this is a statement about who the
 		// recipient is. Telling the two apart is what lets a caller know whether
 		// there is anything to do about it.
-		httpapi.Error(w, http.StatusForbidden, barred.reason())
+		return Order{}, refuse(http.StatusForbidden, barred.reason())
 	case shut != nil:
 		// 403 for the reason above and one of its own: nothing about the request is
 		// malformed — the very same body is correct the day the window opens — so a
 		// 400 would send whoever reads it looking for a mistake they did not make.
 		// And there is nothing to give back, which is what a 409 would offer.
-		httpapi.Error(w, http.StatusForbidden, shut.reason())
+		return Order{}, refuse(http.StatusForbidden, shut.reason())
 	default:
 		// Start the fulfilment process for it. Durable first, then the side effect
 		// (I2): the order stands whether or not this succeeds, and a failure here
@@ -427,11 +452,10 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 		// operator's configured origin or empty; a model that finds it empty says
 		// where to go instead of printing a link nobody can follow.
 		if err := s.wake(PlacedMessage, out.ID, PlacedVariables(out, s.portalBase(), s.apiBase())); err != nil {
-			httpapi.Error(w, http.StatusInternalServerError,
+			return out, refuse(http.StatusInternalServerError,
 				"the order was placed, but fulfilment could not be started: "+err.Error())
-			return
 		}
-		httpapi.JSON(w, http.StatusCreated, out)
+		return out, nil
 	}
 }
 

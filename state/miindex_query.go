@@ -635,6 +635,39 @@ func (q queries) MIDecisions(piKey, ownerKey uint64, limit int, fn func(ts int64
 	return false, err
 }
 
+// VariableSnapshotsUpTo visits, in change order, the retained variable changes of
+// one scope recorded at or before log position at, up to limit of them, and
+// reports whether more such changes exist beyond the limit. Snapshot keys are
+// ordered by event time, and event times do not decrease in log order, so the
+// first change past at ends the read: nothing after it is at or before at.
+// Folding the visited changes by name gives the scope's values as they stood at
+// that position (ADR-0048).
+func (q queries) VariableSnapshotsUpTo(scopeKey, at uint64, limit int, fn func(ts int64, pos uint64, v *model.VariableValue) error) (bool, error) {
+	if err := validateMILimit(limit); err != nil {
+		return false, err
+	}
+	count, more := 0, false
+	err := q.scanPrefix(variableSnapshotScopePrefix(scopeKey), func(k, raw []byte) error {
+		if positionFromVarSnapKey(k) > at {
+			return errMIPageComplete
+		}
+		if count == limit {
+			more = true
+			return errMIPageComplete
+		}
+		v, err := model.DecodeValue(model.VTVariable, raw)
+		if err != nil {
+			return err
+		}
+		count++
+		return fn(timestampFromVarSnapKey(k), positionFromVarSnapKey(k), v.(*model.VariableValue))
+	})
+	if errors.Is(err, errMIPageComplete) {
+		err = nil
+	}
+	return more, err
+}
+
 // VariableSnapshotPage visits up to limit retained variable changes of one scope
 // in change order (ADR-0048) and reports whether more exist. A multi-instance
 // iteration's own scope is a scope, so this is how one iteration's inputs and

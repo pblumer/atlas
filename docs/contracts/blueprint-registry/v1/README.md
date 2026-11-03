@@ -41,7 +41,7 @@ The signed index records `sha256:<64 lowercase hex>` of **the exact compressed a
 4. Bound compressed artifact download to **50 MiB** and extracted data to a separately enforced hard limit (proposed **200 MiB**) with archive entry count and path validation; use no implicit trust of tar headers or symlinks.
 5. A successful index signature + artifact digest authenticates an artifact **relative to the operator-pinned registry key**. It does not certify BPMN, scripts, Worker Types or publisher reputation. Any executable content remains gated by existing explicit review and deployment rules.
 6. Cache by (`registry key fingerprint`, `blueprintId`, `version`, `digest`). Network/signature failure must not interrupt an already deployed application. Registry removal is not runtime licence revocation.
-7. Key rotation requires an explicit operator trust update in v1 (out of band). Automatic trust-on-first-use and signer keys embedded in remotely fetched metadata are forbidden.
+7. Key rotation requires an explicit operator trust update in v1 (out of band); an operator may pin the old and the new key together for the length of a planned rotation, never more than two. Automatic trust-on-first-use and signer keys embedded in remotely fetched metadata are forbidden.
 8. Authenticated/private delivery and third-party payment settlement remain outside v1 (BMP3), not implied by the static public example.
 
 ## Operator-pinned Console integration (BMP1)
@@ -53,6 +53,10 @@ until the server operator configures both environment variables before startup:
 ATLAS_BLUEPRINT_REGISTRY_URL=https://your-registry.example/blueprints/index.json
 ATLAS_BLUEPRINT_REGISTRY_KEY=<base64-of-32-raw-Ed25519-public-key-bytes>
 ```
+
+During a key rotation the key variable may pin two keys, separated by a comma
+(`<old>,<new>`). An index signed by either is accepted, and the server warns at
+every start until one is removed (ADR-0499 amendment 2026-11-02 b).
 
 The signing key must be obtained **out of band**, never from the index URL or a
 user request. A missing pair disables the current hub Blueprint source; an incomplete or invalid

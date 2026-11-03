@@ -1124,10 +1124,13 @@ What it takes to run this for real.
   iteration number, filter by lifecycle state and incident through event-derived indexes, and
   read off the single writer; a 50,000-iteration end-to-end test holds every read to its page
   ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Operations shows a large instance
-  without the full timeline and browses its iterations in the Multi-Instance Explorer. Not yet
-  built: a bounded outline of the other steps of such an instance (stores written before the
-  index are rebuilt from the log at startup; a compacted log stays "history unavailable"), OHS3 scoped detail replay, and a
-  fix for quadratic MI-subprocess completion ([issue #1494](https://github.com/pblumer/atlas/issues/1494)).
+  without the full timeline and browses its iterations in the Multi-Instance Explorer, which
+  replays one iteration's steps on the diagram with the variables of its own scopes at each step (OHS3). Not yet
+  built: per-instance readiness for compacted logs (stores written before the index are rebuilt
+  from the log at startup; a compacted log stays "history unavailable"),
+  job/user-task history per iteration (OHS3), and a
+  50,000-iteration acceptance through the HTTP server for a multi-instance *subprocess* (completing its
+  iterations is no longer quadratic, [issue #1494](https://github.com/pblumer/atlas/issues/1494)).
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
 - ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
@@ -1353,6 +1356,15 @@ Adoption and polish.
   provider conformance evidence; **T2** projects verified built-in operation claims
   without copying operation tables (see
   [implementation plan](docs/planning/technical-capability-contract.md)).
+- ✅ **Connected systems** ([ADR-0512](docs/adr/0512-connected-systems.md)): another
+  system — first Orbithek, formerly wikiwikibangbang — is connected with one
+  administrator's approval, naming itself by a client ID metadata document and signing
+  its token requests (`private_key_jwt`), with the capabilities `diagrams`, `tasklist` and
+  `events` narrowed to projects on the consent screen, pre-consent for its people's own
+  task grants, `prompt=none`, and Console → Administration → Connected systems. What a
+  system implements is in [`docs/integrations/connected-systems.md`](docs/integrations/connected-systems.md).
+  Still open: the draft the document follows may change (the record's open question), and
+  the other direction — a credential for a process writing into the system (§6).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Model independence and third-party provenance (MIP):** verify licence/origin of vendored BPMN/DMN assets and implementation references; propose native `atlas:` authoring while preserving existing Zeebe BPMN import, stored-definition reload and deterministic recovery. Current stage MIP0 is **documentation/provenance and architecture review only**; native authoring and Camunda-specific DMN removal are not implemented. [Programme](docs/planning/model-independence-and-provenance-program.md) · [Proposed ADR](docs/adr/0513-native-model-dialect-and-vendor-compatibility.md) · [Initial audit](docs/legal/PROVENANCE_AUDIT.md). Milestone A owns the Modeler slice; Milestone 1 owns compiler compatibility; Milestone 6 owns interoperability and release evidence.

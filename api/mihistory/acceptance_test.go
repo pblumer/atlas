@@ -271,6 +271,26 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 		b.Active != 10 || b.Terminated != 0 || b.IncidentsRaised != 10 || b.IterationsWithIncidents != 10 {
 		t.Fatalf("body summary: %+v", b)
 	}
+	var outline struct {
+		Steps []struct {
+			ElementID         string `json:"elementId"`
+			MultiInstanceBody bool   `json:"multiInstanceBody"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	measure("overview: outline of the 50k instance", fmt.Sprintf("/api/v1/instances/%d/outline", pi), &outline)
+	if len(outline.Steps) > 10 || outline.NextCursor != "" {
+		t.Fatalf("outline of the 50k instance holds %d steps", len(outline.Steps))
+	}
+	bodyRows := 0
+	for _, st := range outline.Steps {
+		if st.MultiInstanceBody {
+			bodyRows++
+		}
+	}
+	if bodyRows != 1 {
+		t.Fatalf("outline body rows: %+v", outline.Steps)
+	}
 	var smallBodies struct {
 		Bodies []body `json:"bodies"`
 	}
@@ -350,14 +370,41 @@ func TestFiftyThousandIterationsAreBoundedEndToEnd(t *testing.T) {
 	if *one.Iteration.Iteration != 20000 || len(one.Incidents) != 1 || one.Incidents[0].Status != "open" {
 		t.Fatalf("iteration 20,000: %+v", one)
 	}
+	var window struct {
+		Steps []struct {
+			Action                 string `json:"action"`
+			MultiInstanceIteration bool   `json:"multiInstanceIteration"`
+			Position               uint64 `json:"position"`
+		} `json:"steps"`
+		NextCursor string `json:"nextCursor"`
+	}
+	measure("replay window of iteration 37,421", fmt.Sprintf("%s/iterations/%d/steps", base, exact.Iterations[0].ElementInstanceKey), &window)
+	if len(window.Steps) != 2 || window.Steps[0].Action != "activated" || window.Steps[1].Action != "completed" ||
+		!window.Steps[0].MultiInstanceIteration || window.NextCursor != "" {
+		t.Fatalf("replay window of iteration 37,421: %+v", window)
+	}
+	var atEnd struct {
+		Scopes []struct {
+			Iteration bool `json:"iteration"`
+			Variables []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"variables"`
+		} `json:"scopes"`
+	}
+	measure("variables of iteration 37,421 at its last step", fmt.Sprintf("%s/iterations/%d/variables?at=%d",
+		base, exact.Iterations[0].ElementInstanceKey, window.Steps[1].Position), &atEnd)
+	if len(atEnd.Scopes) != 1 || !atEnd.Scopes[0].Iteration || !strings.Contains(fmt.Sprint(atEnd.Scopes[0].Variables), "loopCounter 37421") {
+		t.Fatalf("variables of iteration 37,421: %+v", atEnd)
+	}
 
 	// The overview must not grow with the iteration count: against the
 	// 2,000-iteration instance it is the same size, give or take the digits of
 	// larger numbers and the words for different states (one instance is still
 	// active, the other completed). 25 times the iterations may not cost more
 	// than those few bytes, and neither overview may approach a kilobyte.
-	if d := runs[0].bytes - runs[1].bytes; d < -64 || d > 64 || runs[0].bytes > 1024 {
-		t.Fatalf("overview size depends on the iteration count: %d vs %d bytes", runs[0].bytes, runs[1].bytes)
+	if d := runs[0].bytes - runs[2].bytes; d < -64 || d > 64 || runs[0].bytes > 1024 {
+		t.Fatalf("overview size depends on the iteration count: %d vs %d bytes", runs[0].bytes, runs[2].bytes)
 	}
 	for _, r := range runs {
 		if r.bytes > 64<<10 {
@@ -408,6 +455,18 @@ func miAnswers(t *testing.T, s *state.Store, pi, bodyKey uint64) []state.MIHisto
 		t.Fatalf("body: %v %v", ok, err)
 	}
 	out := []state.MIHistoryEntry{*body}
+	// An iteration's steps, as entries: its activation and end positions.
+	for _, n := range []uint64{1, 37421, 50000} {
+		if _, err := s.MIIterationPage(pi, bodyKey, body.ActivationPosition, state.MIIterationQuery{From: n, Limit: 1}, func(e state.MIHistoryEntry) error {
+			_, err := s.IterationStepsPage(pi, e.ElementInstanceKey, nil, 0, state.MIMaxPageLimit, func(o state.OutlineStep) error {
+				out = append(out, state.MIHistoryEntry{ElementInstanceKey: o.ElementInstanceKey, ActivationPosition: o.Position, LoopCounter: uint64(o.Action)})
+				return nil
+			})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, q := range []state.MIIterationQuery{
 		{Limit: 200}, {From: 37421, Limit: 200}, {From: 49901, Limit: 200},
 		{IncidentsOnly: true, Limit: 200}, {State: state.MIHistoryActive, Limit: 200},

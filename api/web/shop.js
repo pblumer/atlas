@@ -150,6 +150,12 @@ const STRINGS = {
     'cfg.title': 'Angaben zu dieser Leistung',
     'cfg.loading': 'Formular wird geladen …',
     'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
+    'cfg.taken': 'Ein Name in diesem Formular ist bereits vergeben. Bitte wählen Sie einen anderen.',
+    'avail.checking': '{label}: «{value}» wird geprüft …',
+    'avail.free': '{label}: «{value}» ist noch frei.',
+    'avail.taken': '{label}: «{value}» ist bereits vergeben. Bitte wählen Sie einen anderen Namen.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: Ob «{value}» frei ist, lässt sich gerade nicht prüfen. Bestellen ist möglich; die Bereitstellung prüft es erneut.',
     'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
     'line.withdraw': 'Position zurückziehen',
     'line.withdrawing': 'Wird zurückgezogen …',
@@ -377,6 +383,12 @@ const STRINGS = {
     'cfg.title': 'Details for this service',
     'cfg.loading': 'Loading the form …',
     'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
+    'cfg.taken': 'A name in this form is already taken. Please choose another one.',
+    'avail.checking': '{label}: checking “{value}” …',
+    'avail.free': '{label}: “{value}” is still free.',
+    'avail.taken': '{label}: “{value}” is already taken. Please choose another name.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: whether “{value}” is free cannot be checked right now. You can still order; provisioning checks it again.',
     'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
     'line.withdraw': 'Withdraw this position',
     'line.withdrawing': 'Withdrawing …',
@@ -602,6 +614,12 @@ const STRINGS = {
     'cfg.title': 'Informations sur cette prestation',
     'cfg.loading': 'Chargement du formulaire …',
     'cfg.failed': 'Ce formulaire ne peut pas être chargé. La commande reste possible ; les informations manqueront.',
+    'cfg.taken': 'Un nom de ce formulaire est déjà pris. Veuillez en choisir un autre.',
+    'avail.checking': '{label} : vérification de « {value} » …',
+    'avail.free': '{label} : « {value} » est encore libre.',
+    'avail.taken': '{label} : « {value} » est déjà pris. Veuillez choisir un autre nom.',
+    'avail.invalid': '{label} : {message}',
+    'avail.unknown': '{label} : impossible de vérifier pour l’instant si « {value} » est libre. La commande reste possible ; la mise à disposition le vérifie à nouveau.',
     'cfg.invalid': 'Certaines informations sont incomplètes. Veuillez les corriger avant de commander.',
     'line.withdraw': 'Retirer cette position',
     'line.withdrawing': 'Retrait en cours …',
@@ -826,6 +844,12 @@ const STRINGS = {
     'cfg.title': 'Indicazioni su questa prestazione',
     'cfg.loading': 'Caricamento del modulo …',
     'cfg.failed': 'Questo modulo non può essere caricato. È comunque possibile ordinare; le indicazioni mancheranno.',
+    'cfg.taken': 'Un nome di questo modulo è già in uso. Sceglierne un altro.',
+    'avail.checking': '{label}: verifica di «{value}» …',
+    'avail.free': '{label}: «{value}» è ancora libero.',
+    'avail.taken': '{label}: «{value}» è già in uso. Scegliere un altro nome.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: al momento non è possibile verificare se «{value}» è libero. È comunque possibile ordinare; la fornitura lo verifica di nuovo.',
     'cfg.invalid': 'Alcune indicazioni non sono complete. La preghiamo di correggerle prima di ordinare.',
     'line.withdraw': 'Ritirare questa posizione',
     'line.withdrawing': 'Ritiro in corso …',
@@ -1281,6 +1305,10 @@ const state = {
   taskOpen: '',
   taskError: '',
   catalog: null,
+  // every catalogue this person reaches, highest rank first, and which release each
+  // product in the merged release came from (ADR-0522)
+  catalogs: [],
+  releaseOf: {},
   release: null,
   orders: [],
   // held is what the inventory says this person already has, as itemId -> since.
@@ -1468,8 +1496,10 @@ const state = {
   // survive its container being replaced. What was typed is captured back into here
   // before each redraw and handed to the form again as its prefill.
   config: {},
-  // configError names the product whose form is not valid yet, empty for none.
+  // configError names the product whose form is not valid yet, empty for none;
+  // configTaken says the reason is a name already taken (ADR-0519).
   configError: '',
+  configTaken: false,
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
@@ -1803,7 +1833,9 @@ async function readMe() {
 function forgetTheReader() {
   state.loaded = false;
   state.catalog = null;
+  state.catalogs = [];
   state.release = null;
+  state.releaseOf = {};
   state.orders = [];
   state.held = new Map();
   state.favourites = new Set();
@@ -1831,18 +1863,32 @@ async function loadSignInOptions() {
   } catch { /* registration off or unreachable — the line stays hidden */ }
 }
 
-// loadCatalogue reads the catalogue assigned to this person and its newest release.
+// loadCatalogue reads every catalogue this person is the audience for and their
+// newest releases, and lays the releases over one another
+// (ADR-0522): the shop offers what all of them offer.
+// The highest-ranked catalogue is the one whose name, theme and languages the page
+// wears.
 async function loadCatalogue() {
-  let catalog = null;
+  let catalogs = [];
   try {
-    catalog = await api('/api/v1/shop/catalog');
+    catalogs = await api('/api/v1/shop/catalogs');
   } catch (e) {
-    // 404 here is the ordinary "you are the audience for nothing" answer, not a
-    // failure: the page says so rather than showing an error. Anything else is a
-    // failure, and is said as one — read as "none assigned", a server that could
-    // not answer told people they had no catalogue.
+    // A server without the route answers 404: it still knows one catalogue per
+    // person, and that one is asked for as before.
     if (!e || e.status !== 404) throw e;
+    try {
+      const one = await api('/api/v1/shop/catalog');
+      catalogs = one ? [one] : [];
+    } catch (e2) {
+      // 404 here is the ordinary "you are the audience for nothing" answer, not a
+      // failure: the page says so rather than showing an error. Anything else is a
+      // failure, and is said as one — read as "none assigned", a server that could
+      // not answer told people they had no catalogue.
+      if (!e2 || e2.status !== 404) throw e2;
+    }
   }
+  state.catalogs = Array.isArray(catalogs) ? catalogs : [];
+  const catalog = state.catalogs[0] || null;
   state.catalog = catalog;
   applyTheme(state.catalog);
   // The catalogue decides which languages there are to choose between, so the
@@ -1851,10 +1897,51 @@ async function loadCatalogue() {
   // chosen.
   settleLocale();
   state.release = null;
-  if (state.catalog) {
-    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
-    state.release = releases && releases.length ? releases[0] : null;
+  state.releaseOf = {};
+  const newest = [];
+  for (const c of state.catalogs) {
+    const releases = await api(`/api/v1/catalogs/${encodeURIComponent(c.id)}/releases`);
+    if (releases && releases.length) newest.push(releases[0]);
   }
+  state.release = newest.length ? mergeReleases(newest) : null;
+}
+
+// mergeReleases lays releases over one another, highest-ranked first, into the one
+// release the rest of the page reads. A product several of them carry is taken from
+// the first; what makes it up (includes, options and every other map keyed by product)
+// comes with it from that same release. Categories are headings over this list, so two
+// catalogues' "Mail" become one heading. state.releaseOf remembers which release each
+// product came from: an order names one release, so a basket is placed per release.
+function mergeReleases(releases) {
+  const owner = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (!(it.id in owner)) owner[it.id] = r.id;
+    }
+  }
+  state.releaseOf = owner;
+  if (releases.length === 1) return releases[0];
+  const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  const out = { ...releases[0], items: [], withoutApproval: [] };
+  const mapKeys = new Set();
+  for (const r of releases) {
+    for (const [key, value] of Object.entries(r)) if (isMap(value)) mapKeys.add(key);
+  }
+  for (const key of mapKeys) out[key] = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (owner[it.id] === r.id && !out.items.some((x) => x.id === it.id)) out.items.push(it);
+    }
+    for (const id of r.withoutApproval || []) {
+      if (owner[id] === r.id && !out.withoutApproval.includes(id)) out.withoutApproval.push(id);
+    }
+    for (const key of mapKeys) {
+      for (const [id, v] of Object.entries(r[key] || {})) {
+        if (owner[id] === r.id && !(id in out[key])) out[key][id] = v;
+      }
+    }
+  }
+  return out;
 }
 
 // loadOrdersAndTasks reads this person's orders and the open tasks on orders at once,
@@ -2152,6 +2239,18 @@ async function order() {
     try { ({ errors } = form.submit()); } catch { continue; }
     if (errors && Object.keys(errors).length) {
       state.configError = itemID;
+      state.configTaken = false;
+      render();
+      return;
+    }
+  }
+  // And whether a name somebody is about to take is known to be taken already. Only a
+  // definite "taken" stops the order: a check that could not run is the provisioning
+  // process's to repeat, not a reason to refuse.
+  for (const [itemID, watch] of availability) {
+    if (watch.taken().length) {
+      state.configError = itemID;
+      state.configTaken = true;
       render();
       return;
     }
@@ -2182,17 +2281,40 @@ async function order() {
       if (taken.length) variants[c.id] = [...taken];
     }
 
-    await api('/api/v1/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        releaseId: state.release.id,
-        items: [...state.basket],
-        ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
-        ...(Object.keys(config).length ? { config } : {}),
-        ...(Object.keys(variants).length ? { variants } : {}),
-      }),
-    });
+    // An order names one release (ADR-0312): a basket from several catalogues is
+    // placed as one order per release, each with its own products and what they are
+    // made of, their answers and their shapes.
+    const byRelease = new Map();
+    for (const id of state.basket) {
+      const rid = (state.releaseOf || {})[id] || state.release.id;
+      if (!byRelease.has(rid)) byRelease.set(rid, []);
+      byRelease.get(rid).push(id);
+    }
+    for (const [rid, ids] of byRelease) {
+      const part = new Set();
+      const walk = (id) => {
+        if (part.has(id)) return;
+        part.add(id);
+        for (const p of (rel.includes || {})[id] || []) walk(p);
+      };
+      ids.forEach(walk);
+      const partConfig = Object.fromEntries(Object.entries(config).filter(([id]) => part.has(id)));
+      const partVariants = Object.fromEntries(Object.entries(variants).filter(([id]) => part.has(id)));
+      await api('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: rid,
+          items: ids,
+          ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
+          ...(Object.keys(partConfig).length ? { config: partConfig } : {}),
+          ...(Object.keys(partVariants).length ? { variants: partVariants } : {}),
+        }),
+      });
+      // Placed: out of the basket, so a failure on the next release does not offer
+      // to order these a second time.
+      ids.forEach((id) => state.basket.delete(id));
+    }
     state.basket.clear();
     state.chosen.clear();
     state.config = {};
@@ -3235,7 +3357,7 @@ function renderBasket() {
       ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
         el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
         state.configError === x.id
-          ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+          ? el('p', { class: 'error' }, t(state.configTaken ? 'cfg.taken' : 'cfg.invalid')) : null,
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
@@ -3285,6 +3407,20 @@ const mounted = new Map();
 // schemas caches a form definition per id, so redrawing the basket does not refetch
 // what has not changed.
 const schemas = new Map();
+// availability holds the live name checks of the mounted forms, by the same key.
+const availability = new Map();
+
+// availabilitySay words one name field's state (formviewer.js, ADR-0519).
+function availabilitySay(status, { label, value, message }) {
+  const fill = (key) => t(key).replace('{label}', label).replace('{value}', value).replace('{message}', message);
+  switch (status) {
+    case 'checking': return fill('avail.checking');
+    case 'free': return fill('avail.free');
+    case 'taken': return fill('avail.taken');
+    case 'invalid': return fill('avail.invalid');
+    default: return fill('avail.unknown');
+  }
+}
 
 // harvest reads what is currently typed into every mounted form back into state.
 // Called before the page is redrawn, because a form does not survive its container
@@ -3381,14 +3517,16 @@ async function mountConfigForms() {
     try { form.destroy(); } catch { /* already gone with its container */ }
   }
   mounted.clear();
+  for (const [, watch] of availability) watch.destroy();
+  availability.clear();
   if (!hosts.length) return;
 
-  let Form, decisionOptions;
+  let Form, decisionOptions, attachAvailabilityChecks;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
-    ({ decisionOptions } = mod);
+    ({ decisionOptions, attachAvailabilityChecks } = mod);
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3410,6 +3548,11 @@ async function mountConfigForms() {
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
       await form.importSchema(parsed, fromText(parsed, state.config[itemID] || {}));
       mounted.set(itemID, form);
+      // A name field says while it is typed whether the name is still free
+      // (ADR-0519); one known to be taken stops the order below.
+      availability.set(itemID, attachAvailabilityChecks({
+        form, host, schema: parsed, formId: formID, say: availabilitySay,
+      }));
     } catch {
       // A form id that no longer resolves is a stale binding in the catalogue, not
       // a broken basket. Say so and leave the order possible: refusing it here

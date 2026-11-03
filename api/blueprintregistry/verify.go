@@ -127,6 +127,30 @@ func VerifySignedIndex(raw, signatureFile []byte, trustedPublicKey ed25519.Publi
 	return index, nil
 }
 
+// MaxPinnedKeys is how many registry keys an operator may pin at once: the
+// current one and, during a rotation, its successor. More would turn a rotation
+// aid into a standing set of trust roots, which v1 does not have.
+const MaxPinnedKeys = 2
+
+// VerifySignedIndexWithAny verifies an index against each operator-pinned key in
+// turn and returns the key that signed it. Every key is equally trusted; the
+// list exists so that an installation can accept the old and the new key while
+// the registry switches between them (ADR-0499 amendment 2026-11-02).
+func VerifySignedIndexWithAny(raw, signatureFile []byte, trusted []ed25519.PublicKey) (Index, ed25519.PublicKey, error) {
+	if len(trusted) == 0 || len(trusted) > MaxPinnedKeys {
+		return Index{}, nil, fmt.Errorf("registry needs 1..%d pinned keys", MaxPinnedKeys)
+	}
+	var lastErr error
+	for _, key := range trusted {
+		index, err := VerifySignedIndex(raw, signatureFile, key)
+		if err == nil {
+			return index, key, nil
+		}
+		lastErr = err
+	}
+	return Index{}, nil, lastErr
+}
+
 // checkUniqueJSON rejects ambiguous duplicate object keys before Go's normal
 // decoder could silently keep only the last value. It does not execute code.
 func checkUniqueJSON(decoder *json.Decoder, depth int) error {

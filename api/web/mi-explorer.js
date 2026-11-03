@@ -58,6 +58,20 @@ export async function loadMIBodies(api, key, { parentIteration = 0, cursor = "" 
   }
 }
 
+// loadOutline reads one page of an instance's outline: its steps without those
+// inside multi-instance iterations (ADR-0517). Like loadMIBodies it reports an
+// unavailable outline instead of throwing, because that means "not known".
+export async function loadOutline(api, key, { cursor = "" } = {}) {
+  const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  try {
+    const data = await api("GET", `/api/v1/instances/${encodeURIComponent(String(key))}/outline${qs}`);
+    return { available: true, ...data, steps: data.steps || [] };
+  } catch (err) {
+    if (failureCode(err) === "history_unavailable") return { available: false, steps: [] };
+    throw err;
+  }
+}
+
 // largestBody returns the number of iterations of the biggest body in a listing.
 export function largestBody(bodies) {
   return (bodies || []).reduce((max, b) => Math.max(max, Number(b.iterations) || 0), 0);
@@ -90,7 +104,24 @@ function stateClass(state) {
 // mountMIExplorer draws the explorer for one body into `root` and returns a handle
 // with destroy(). onSelect(iterationDetail) is called when the operator opens an
 // iteration; onOpenBody(body) when they open a body nested in one.
-export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpenBody, onClose }) {
+// STEP_INTERVAL_MS is how long "Play" shows each step of an iteration's replay
+// window before moving on.
+export const STEP_INTERVAL_MS = 700;
+
+// replayMarks says what the diagram shows at step `at` of an iteration's replay
+// window: the elements activated up to and including it, and the element of the
+// step itself. It reads only the steps loaded, which belong to one iteration.
+export function replayMarks(steps, at) {
+  const visited = [];
+  for (let i = 0; i <= at && i < steps.length; i++) {
+    const id = steps[i].elementId;
+    if (id && steps[i].action === "activated" && !visited.includes(id)) visited.push(id);
+  }
+  const cur = steps[at];
+  return { visited, current: cur && cur.elementId ? cur.elementId : "" };
+}
+
+export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpenBody, onClose, nameOf, onReplay }) {
   const st = {
     state: "",
     incidents: false,
@@ -107,7 +138,11 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
     detail: null,
     detailError: null,
     technical: false, // include rule traces: detail for the person who asks for it
+    // The replay window of the open iteration: its steps as the server pages
+    // them, the step shown, and whether "Play" is running.
+    replay: null,
   };
+  let timer = 0;
   let seq = 0; // the newest request; an older answer arriving late is dropped
   let destroyed = false;
 
@@ -257,13 +292,153 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
       <h5>${esc(tr("ops.mi.detail.variables"))}</h5>${variables}
       <h5>${esc(tr("ops.mi.detail.decisions"))}</h5>${decisions}${nested}
       <label class="mi-ex-check mi-ex-technical"><input type="checkbox" class="mi-ex-tech"${st.technical ? " checked" : ""}/> ${esc(tr("ops.mi.detail.technical"))}</label>
-      <p class="muted mi-ex-later">${esc(tr("ops.mi.detail.replaynote"))}</p>`;
+      <h5>${esc(tr("ops.mi.replay.title"))}</h5>
+      <div class="mi-replay" aria-live="polite"></div>`;
+    drawReplay();
     const techBox = el.querySelector(".mi-ex-tech");
     if (techBox) techBox.addEventListener("change", () => { st.technical = techBox.checked; openIteration(st.selected); });
     el.querySelectorAll(".mi-open-nested").forEach((btn) => btn.addEventListener("click", () => {
       const nb = d.nestedBodies.find((b) => String(b.bodyElementInstanceKey) === btn.dataset.key);
       if (nb && onOpenBody) onOpenBody(nb);
     }));
+  }
+
+  const label = (id) => (nameOf ? nameOf(id) : id) || "—";
+
+  function stopPlay() {
+    if (timer) { clearInterval(timer); timer = 0; }
+    if (st.replay) st.replay.playing = false;
+  }
+
+  function show(at) {
+    const r = st.replay;
+    if (!r || !r.steps.length) return;
+    r.at = Math.max(0, Math.min(r.steps.length - 1, at));
+    drawReplay();
+    if (onReplay) onReplay(replayMarks(r.steps, r.at));
+    loadVars(r, r.steps[r.at].position);
+  }
+
+  // loadVars reads the iteration's variables as they stood at one step, once per
+  // step position: the window keeps what it read, so stepping back costs nothing.
+  async function loadVars(r, pos) {
+    const key = String(pos);
+    r.varsAt = key;
+    if (r.vars.has(key)) { drawReplay(); return; }
+    r.vars.set(key, { loading: true });
+    drawReplay();
+    let entry;
+    try {
+      const data = await api("GET", `${base(instanceKey)}/${encodeURIComponent(String(st.body.bodyElementInstanceKey))}/iterations/${encodeURIComponent(st.selected)}/variables?at=${encodeURIComponent(key)}`);
+      entry = { data };
+    } catch (err) {
+      entry = { error: failureCode(err) === "history_unavailable" ? tr("ops.mi.replay.unavailable") : tr("ops.mi.error", { message: err.message }) };
+    }
+    if (destroyed || st.replay !== r) return;
+    if (entry.error) r.vars.delete(key); else r.vars.set(key, entry);
+    if (r.varsAt === key) { r.varsError = entry.error || ""; drawReplay(); }
+  }
+
+  function varsHTML(r) {
+    const entry = r.vars.get(r.varsAt);
+    if (r.varsError) return `<p class="mi-ex-error mi-rp-vars-error">${esc(r.varsError)}</p>`;
+    if (!entry || entry.loading) return `<p class="muted">${esc(tr("ops.mi.loading"))}</p>`;
+    const d = entry.data;
+    const scopes = (d.scopes || []).map((sc) => {
+      const head = sc.iteration ? tr("ops.mi.replay.vars.own") : label(sc.elementId);
+      const rows = (sc.variables || []).map((v) => `<tr><td class="mono">${esc(v.name)}</td>
+          <td class="mono mi-var-${esc(v.kind)}">${esc(v.value)}${v.valueTruncated ? ` <span class="muted">${esc(tr("ops.mi.replay.vars.cut"))}</span>` : ""}</td>
+          <td class="mono muted">${esc(v.position)}</td></tr>`).join("");
+      return `<div class="mi-rp-scope" data-key="${esc(sc.elementInstanceKey)}"><h6>${esc(head)}</h6>${rows
+        ? `<table class="mi-vars"><tbody>${rows}</tbody></table>`
+        : `<p class="muted">${esc(tr("ops.mi.replay.vars.none"))}</p>`}${
+        sc.truncated ? `<p class="muted">${esc(tr("ops.mi.replay.vars.more"))}</p>` : ""}</div>`;
+    }).join("");
+    return `${scopes}${d.scopesTruncated ? `<p class="muted">${esc(tr("ops.mi.replay.vars.scopes"))}</p>` : ""}
+      <p class="muted mi-rp-vars-note">${esc(tr("ops.mi.replay.vars.note"))}</p>`;
+  }
+
+  function drawReplay() {
+    const el = root.querySelector(".mi-replay");
+    if (!el) return;
+    const r = st.replay;
+    if (!r) {
+      el.innerHTML = `<button type="button" class="btn neutral small mi-rp-load">${esc(tr("ops.mi.replay.load"))}</button>`;
+      el.querySelector(".mi-rp-load").addEventListener("click", () => loadReplay());
+      return;
+    }
+    if (r.error) {
+      el.innerHTML = `<p class="mi-ex-error">${esc(r.error)}</p>
+        <button type="button" class="btn neutral small mi-rp-retry">${esc(tr("ops.mi.retry"))}</button>`;
+      el.querySelector(".mi-rp-retry").addEventListener("click", () => loadReplay());
+      return;
+    }
+    if (!r.steps.length) {
+      el.innerHTML = `<p class="muted">${esc(tr(r.loading ? "ops.mi.loading" : "ops.mi.replay.empty"))}</p>`;
+      return;
+    }
+    const n = r.steps.length;
+    el.innerHTML = `<div class="mi-rp-bar">
+        <button type="button" class="btn neutral small mi-rp-prev" aria-label="${esc(tr("ops.mi.replay.prev"))}"${r.at <= 0 ? " disabled" : ""}>&#9198;</button>
+        <button type="button" class="btn neutral small mi-rp-play">${r.playing ? `&#10074;&#10074; ${esc(tr("ops.mi.replay.pause"))}` : `&#9654; ${esc(tr("ops.mi.replay.play"))}`}</button>
+        <button type="button" class="btn neutral small mi-rp-next" aria-label="${esc(tr("ops.mi.replay.next"))}"${r.at >= n - 1 ? " disabled" : ""}>&#9197;</button>
+        <span class="mi-rp-pos muted">${esc(tr("ops.mi.replay.pos", { at: fmtNum(r.at + 1), count: fmtNum(n) }))}${r.next ? "+" : ""}</span>
+      </div>
+      <ol class="mi-rp-steps">${r.steps.map((s, i) => `<li class="mi-rp-step ${esc(s.action)}${i === r.at ? " cur" : ""}" data-i="${i}"${i === r.at ? ' aria-current="step"' : ""}>
+          <span class="mi-rp-name">${esc(label(s.elementId))}</span>
+          <span class="mi-rp-act muted">${esc(tr(`ops.mi.replay.action.${s.multiInstanceBody ? "body" : "step"}.${s.action}`))}</span>
+          <span class="mi-rp-at mono muted">${esc(s.position)}</span>
+        </li>`).join("")}</ol>
+      ${r.next ? `<button type="button" class="btn neutral small mi-rp-more"${r.loading ? " disabled" : ""}>${esc(tr("ops.mi.replay.more"))}</button>` : ""}
+      <section class="mi-rp-vars" aria-live="polite"><h5>${esc(tr("ops.mi.replay.vars.title"))}</h5>${varsHTML(r)}</section>`;
+    el.querySelector(".mi-rp-prev").addEventListener("click", () => { stopPlay(); show(r.at - 1); });
+    el.querySelector(".mi-rp-next").addEventListener("click", () => { stopPlay(); show(r.at + 1); });
+    el.querySelector(".mi-rp-play").addEventListener("click", () => {
+      if (r.playing) { stopPlay(); drawReplay(); return; }
+      if (r.at >= n - 1 && !r.next) show(0);
+      r.playing = true;
+      drawReplay();
+      timer = setInterval(async () => {
+        if (r.at < r.steps.length - 1) { show(r.at + 1); return; }
+        if (r.next && !r.loading) { await loadReplay(true); if (r.at < r.steps.length - 1) show(r.at + 1); return; }
+        if (!r.next) { stopPlay(); drawReplay(); }
+      }, STEP_INTERVAL_MS);
+    });
+    el.querySelectorAll(".mi-rp-step").forEach((li) => li.addEventListener("click", () => { stopPlay(); show(Number(li.dataset.i)); }));
+    const more = el.querySelector(".mi-rp-more");
+    if (more) more.addEventListener("click", () => loadReplay(true));
+  }
+
+  // loadReplay reads the first (or, with more, the next) page of the open
+  // iteration's steps. Only one iteration's window is ever held.
+  async function loadReplay(more = false) {
+    const key = st.selected;
+    if (!key) return;
+    if (!more) {
+      stopPlay();
+      st.replay = { steps: [], next: "", at: 0, loading: true, error: null, playing: false, vars: new Map(), varsAt: "", varsError: "" };
+    }
+    const r = st.replay;
+    r.loading = true; r.error = null;
+    drawReplay();
+    try {
+      const q = new URLSearchParams({ limit: String(PAGE_SIZE) });
+      if (more && r.next) q.set("cursor", r.next);
+      const page = await api("GET", `${base(instanceKey)}/${encodeURIComponent(String(st.body.bodyElementInstanceKey))}/iterations/${encodeURIComponent(key)}/steps?${q}`);
+      if (destroyed || st.selected !== key || st.replay !== r) return;
+      r.steps = r.steps.concat(page.steps || []);
+      r.next = page.nextCursor || "";
+      r.loading = false;
+      if (!more) show(0); else drawReplay();
+    } catch (err) {
+      if (destroyed || st.selected !== key || st.replay !== r) return;
+      stopPlay();
+      r.loading = false;
+      const code = failureCode(err);
+      r.error = code === "history_unavailable" ? tr("ops.mi.replay.unavailable")
+        : (code === "cursor_expired" ? tr("ops.mi.expired") : tr("ops.mi.error", { message: err.message }));
+      drawReplay();
+    }
   }
 
   function query() {
@@ -309,6 +484,11 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
 
   async function openIteration(raw) {
     const key = String(raw);
+    if (key !== st.selected) {
+      stopPlay();
+      st.replay = null;
+      if (onReplay) onReplay({ visited: [], current: "" });
+    }
     st.selected = key;
     drawList();
     st.detailError = null;
@@ -374,7 +554,12 @@ export function mountMIExplorer(root, { api, instanceKey, body, onSelect, onOpen
   drawList();
   load();
   return {
-    destroy() { destroyed = true; root.innerHTML = ""; },
+    destroy() {
+      destroyed = true;
+      stopPlay();
+      if (onReplay) onReplay({ visited: [], current: "" });
+      root.innerHTML = "";
+    },
     // Exposed for the replay's history: the explorer's own state is never shared.
     get selected() { return st.selected; },
   };

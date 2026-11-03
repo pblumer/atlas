@@ -135,3 +135,17 @@ func TestNextPatch(t *testing.T) {
 		t.Error("NextPatch accepted a non-semantic version")
 	}
 }
+
+// The exported validators are what the publisher's CLI checks a bundle with before
+// it signs, and must agree with what the index accepts.
+func TestExportedValidatorsAgreeWithTheIndex(t *testing.T) {
+	if !ValidVersion("1.0.3") || ValidVersion("1.0") {
+		t.Error("ValidVersion disagrees with the index")
+	}
+	if !ValidNamespace("io.github.pblumer.atlas") || ValidNamespace("x") {
+		t.Error("ValidNamespace disagrees with the index")
+	}
+	if !ValidTag("personal") || ValidTag("Not A Tag") {
+		t.Error("ValidTag disagrees with the index")
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // commanderBPMN is a process that does not carry the tool and commands one of its
@@ -176,5 +177,92 @@ func TestAProcessCommandsAnActionInTheNameOfItsApplication(t *testing.T) {
 	start("leaver-audit")
 	if after := refusedWith("leaver-audit", "does not list application "+appKey); after != before+1 {
 		t.Fatalf("an application taken off the list raised %d incident(s) in all, want %d", after, before+1)
+	}
+}
+
+// byRecipientBPMN commands the tool's action for the person in `who`, keeping the command
+// id in `asked`; with catch, a refused command takes the error boundary to "Abgelehnt".
+func byRecipientBPMN(id, action string, catch bool) string {
+	boundary := ""
+	if catch {
+		boundary = `<boundaryEvent id="Refused" attachedToRef="Command"><errorEventDefinition errorRef="err"/></boundaryEvent>
+    <endEvent id="Abgelehnt"/>
+    <sequenceFlow id="f3" sourceRef="Refused" targetRef="Abgelehnt"/>`
+	}
+	return `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:atlas="http://atlas/schema/1.0">
+  <error id="err" errorCode="SHOP_COMMAND_REFUSED"/>
+  <process id="` + id + `" isExecutable="true">
+    <startEvent id="S"/>
+    <sendTask id="Command"><extensionElements><atlas:shopTask mode="command" product="tool" action="` + action +
+		`" recipient="= who" resultVariable="asked" retries="1"/></extensionElements></sendTask>
+    <userTask id="Halt"/>
+    <endEvent id="E"/>
+    ` + boundary + `
+    <sequenceFlow id="f1" sourceRef="S" targetRef="Command"/>
+    <sequenceFlow id="f2" sourceRef="Command" targetRef="Halt"/>
+    <sequenceFlow id="f4" sourceRef="Halt" targetRef="E"/>
+  </process>
+</definitions>`
+}
+
+// TestAProcessCommandsWhatARecipientHolds (ADR-0521): a leaver
+// process names the person and the product, not an order it cannot read; the server
+// finds the position. Holding nothing is an answer (`asked` is ""), and a refusal is
+// the model's path when it catches SHOP_COMMAND_REFUSED.
+func TestAProcessCommandsWhatARecipientHolds(t *testing.T) {
+	ts, admin, _, _, ord, _ := aToolHeldForRita(t, `["customer","operator"]`)
+	code, b := cReq(t, admin, ts, "GET", "/api/v1/orders/"+ord, "")
+	var o struct{ Recipient string }
+	if code != http.StatusOK || json.Unmarshal(b, &o) != nil || o.Recipient == "" {
+		t.Fatalf("read order: %d (%s)", code, b)
+	}
+	samID := createUserWithRoles(t, admin, ts.URL, "sam2", `["user"]`)
+	appID, appKey := anApplication(t, admin, ts, "HR Austritte")
+	for id, catch := range map[string]bool{"leaver": false, "leaver-caught": true} {
+		if code, b := cReqTyped(t, admin, ts, "POST", "/api/v1/deployments?projectId="+appID, "application/xml",
+			byRecipientBPMN(id, "deprovision", catch)); code != http.StatusOK {
+			t.Fatalf("deploy %s: %d (%s)", id, code, b)
+		}
+	}
+	start := func(id, who string) uint64 {
+		t.Helper()
+		code, b := cReq(t, admin, ts, "POST", "/api/v1/instances", `{"processId":"`+id+`","variables":{"who":"`+who+`"}}`)
+		var started struct {
+			InstanceKey uint64 `json:"instanceKey"`
+		}
+		if code != http.StatusOK || json.Unmarshal(b, &started) != nil {
+			t.Fatalf("start %s: %d (%s)", id, code, b)
+		}
+		return started.InstanceKey
+	}
+	asked := func(key uint64) (string, bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if v, ok := lookupVariables(t, admin, ts, key)["asked"]; ok {
+				s, _ := v.(string)
+				return s, true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return "", false
+	}
+
+	// Not listed: refused — caught here, so the instance ends at "Abgelehnt".
+	caught := start("leaver-caught", o.Recipient)
+	awaitInstanceState(t, admin, ts, caught, "COMPLETED")
+
+	listToolFor(t, admin, ts, `["`+appKey+`"]`)
+	// A person who holds no tool: nothing to command, and the instance goes on.
+	if got, ok := asked(start("leaver", samID)); !ok || got != "" {
+		t.Fatalf("a person holding nothing: asked=%q (%v), want an empty answer", got, ok)
+	}
+	// Rita holds it: the server finds her position and the return starts.
+	if got, ok := asked(start("leaver", o.Recipient)); !ok || got == "" {
+		t.Fatalf("rita's tool: asked=%q (%v), want the return's command id", got, ok)
+	}
+	code, b = cReq(t, admin, ts, "GET", "/api/v1/orders/"+ord, "")
+	if code != http.StatusOK || !strings.Contains(string(b), `"status":"returning"`) {
+		t.Fatalf("after the commanded return the order is %d (%s), want the tool returning", code, b)
 	}
 }

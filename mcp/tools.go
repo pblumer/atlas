@@ -60,6 +60,7 @@ func defaultTools() []Tool {
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
 	tools = append(tools, catalogTools()...)
+	tools = append(tools, hubTools()...)
 	return append(tools, contentTools()...)
 }
 
@@ -483,6 +484,34 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_instance_outline",
+			Description: "Page through one process instance's step history without the steps inside multi-instance " +
+				"iterations (ADR-0517): each element activation and end in order, a multi-instance body execution as one " +
+				"activation and one end (multiInstanceBody: true; its iterations are in atlas_multi_instance_iterations). " +
+				"Bounded and paged: pass the nextCursor back as 'cursor'. Use this instead of atlas_instance_timeline for " +
+				"instances with large loops.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":    integerProp("The instance key (from atlas_list_instances)."),
+					"limit":  integerProp("Optional page size, 1-200 (default 100)."),
+					"cursor": stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "limit")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/instances/" + strconv.FormatUint(key, 10) + "/outline" + q))
+			},
+		},
+		{
 			Name: "atlas_multi_instance_body",
 			Description: "Read one multi-instance body execution of an instance (ADR-0517): its iteration counters " +
 				"and how many of its incidents are open now.",
@@ -563,6 +592,61 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10)))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_iteration_steps",
+			Description: "Page through the replay window of one multi-instance iteration (ADR-0517): its own " +
+				"activation and end (multiInstanceIteration: true) and every element that ran inside it in order, a " +
+				"nested multi-instance body as one step (multiInstanceBody: true; its iterations have their own steps). " +
+				"Bounded and paged: pass the nextCursor back as 'cursor'. A 409 history_unavailable means this " +
+				"installation's iteration steps are not verified complete — not that nothing ran.",
+			InputSchema: miBodySchema(map[string]any{
+				"iterationKey": integerProp("The iteration's element-instance key (from atlas_multi_instance_iterations)."),
+				"limit":        integerProp("Optional page size, 1-200 (default 100)."),
+				"cursor":       stringProp("Optional nextCursor of the previous page, passed back verbatim."),
+			}, "iterationKey"),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				it, err := argUint(args, "iterationKey")
+				if err != nil {
+					return "", err
+				}
+				q, err := miQuery(args, "limit")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10) + "/steps" + q))
+			},
+		},
+		{
+			Name: "atlas_multi_instance_iteration_variables",
+			Description: "Read one multi-instance iteration's variables as they stood at a log position (ADR-0517) — " +
+				"pass a step's position from atlas_multi_instance_iteration_steps as 'at': the iteration's own scope and " +
+				"every scope running inside it then, each folded to the latest value per name at or before that position. " +
+				"The body's and the instance's scopes are not included. 'truncated' and 'valueTruncated' say when not all " +
+				"was read.",
+			InputSchema: miBodySchema(map[string]any{
+				"iterationKey": integerProp("The iteration's element-instance key (from atlas_multi_instance_iterations)."),
+				"at":           integerProp("The log position of the step (from atlas_multi_instance_iteration_steps)."),
+			}, "iterationKey", "at"),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				path, err := miBodyPath(args)
+				if err != nil {
+					return "", err
+				}
+				it, err := argUint(args, "iterationKey")
+				if err != nil {
+					return "", err
+				}
+				at, err := argUint(args, "at")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(path + "/iterations/" + strconv.FormatUint(it, 10) + "/variables?at=" + strconv.FormatUint(at, 10)))
 			},
 		},
 		{

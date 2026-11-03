@@ -334,7 +334,7 @@ func (s *Server) countTaskFolders(matchers []*taskfolder.Matcher, u taskfolder.U
 // page cap, the truncation header and the cursor the unfiltered listing uses, so
 // a folder pages exactly like "All tasks" does — the only difference is that the
 // scan skips what the rule does not select.
-func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, folderID string, limit int, before uint64) {
+func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, folderID string, limit int, before uint64, inReach func(uint64) bool) {
 	viewer := taskfolder.Viewer(r)
 	_, matcher, ok, err := s.taskFolders.MatcherFor(folderID, viewer)
 	if err != nil {
@@ -347,7 +347,7 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 	}
 	now := time.Now()
 	s.pageOpenTasks(w, limit, before, matcher.NeedsInstance(), wantsTaskContent(r), func(tr taskResp, ft taskfolder.Task) bool {
-		return s.taskVisibleTo(viewer, tr) && matcher.Match(ft, viewer, now)
+		return s.taskVisibleTo(viewer, tr) && taskInReach(inReach, tr) && matcher.Match(ft, viewer, now)
 	})
 }
 
@@ -356,9 +356,12 @@ func (s *Server) listTasksForFolder(w http.ResponseWriter, r *http.Request, fold
 // walked off the loop because it has to skip what [Server.taskVisibleTo] withholds,
 // exactly as a folder skips what its rule does not select. For a viewer who sees
 // everything it skips nothing.
-func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool) {
+//
+// inReach, when it is not nil, narrows the page to a credential's reach of projects
+// as well (taskProjectFilter).
+func (s *Server) listVisibleTasks(w http.ResponseWriter, viewer taskfolder.User, limit int, before uint64, content bool, inReach func(uint64) bool) {
 	s.pageOpenTasks(w, limit, before, false, content, func(tr taskResp, _ taskfolder.Task) bool {
-		return s.taskVisibleTo(viewer, tr)
+		return s.taskVisibleTo(viewer, tr) && taskInReach(inReach, tr)
 	})
 }
 

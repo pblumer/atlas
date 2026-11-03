@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "m365-engage-person-weg",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Person entfernen · Remove a person**\n\nDie letzte Admin-Person lässt sich nicht entfernen. · The last admin cannot be removed."
+    },
+    {
+      "key": "communityPerson",
+      "type": "textfield",
+      "label": "Person (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "adminAuch",
+      "type": "radio",
+      "label": "Ist die Person auch Admin? · Is the person an admin too?",
+      "values": [
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        },
+        {
+          "label": "Ja, auch als Admin austragen · Yes, remove as admin too",
+          "value": "ja"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "type": "default",
+  "id": "ad-admin-konto-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Persönliches Admin-Konto · Personal admin account**\n\nDas Admin-Konto heisst adm-<Anmeldename> und gilt bis zum Ablaufdatum, höchstens ein Jahr. Es genehmigt die Informationssicherheit. · The admin account is called adm-<logon name> and is valid until the expiry date, at most one year. Information security approves it."
+    },
+    {
+      "key": "hauptkonto",
+      "type": "textfield",
+      "label": "Hauptkonto (Anmeldename) · Main account (logon name)",
+      "description": "Höchstens 16 Zeichen, damit adm- davor Platz hat. · At most 16 characters, so that adm- fits in front.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9._-]{1,16}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "anlass",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "description": "Wofür die Administrationsrechte nötig sind. · What the admin rights are needed for.",
+      "validate": {
+        "required": true,
+        "maxLength": 500
+      }
+    },
+    {
+      "key": "ablaufdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Gültig bis · Valid until",
+      "description": "Höchstens 365 Tage ab heute. · At most 365 days from today.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

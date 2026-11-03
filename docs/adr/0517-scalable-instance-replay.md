@@ -234,10 +234,57 @@ shadow replay through the unchanged `applyToState`, then a resumable swap of the
 MI families. A compacted log (ADR-0131) cannot prove the index and leaves it
 `history_unavailable`.
 
-**Still not built:** per-instance readiness for compacted logs; a bounded outline of the *other* steps of a
-large instance (the bounded view shows only its multi-instance executions);
-the step-by-step replay window of one iteration on the diagram (its inner
-elements' step frames for subprocess iterations); job and user-task history per
+**OHS2 increment 5 — the instance outline (2026-11-02).** `applyToState` also
+records every element activation and end outside a multi-instance iteration in
+`cfOutline` (an iteration, and anything whose flow scope is hidden, is carried
+down through `cfOutlineHidden`); a body execution appears as one activation and
+one end. Rows carry the definition key the element ran under. An element
+directly under the process instance costs one write and no read; the MI and
+lifecycle benchmarks show no added allocation. Own readiness marker
+`instance_outline_v1`, covered by the startup rebuild. `GET
+/api/v1/instances/{key}/outline` (MCP `atlas_instance_outline`) pages it; the
+bounded Operations view now shows the instance's own steps around its
+collapsed executions. Measured on the 50,000-iteration instance: 781 bytes,
+0.5 ms.
+
+**OHS3 increment 2 — the replay window of one iteration (2026-11-02).** What
+the outline hides is now recorded as the steps of the iteration it belongs to:
+`applyToState` writes every activation and end inside an iteration to
+`cfIterationStep`, keyed by the owning iteration, and `cfOutlineHidden` carries
+that owner down the flow scopes. An iteration owns itself (its own activation
+and end are its first and last steps); an element inside it belongs to it; a
+nested body inside it is one of its steps, and each of the nested body's
+iterations owns itself in turn. A hidden row written before owners were recorded
+names none: what runs below it stays hidden and records no steps. The family has
+its own readiness marker `mi_iteration_steps_v1` and is covered by the startup
+rebuild (contiguous MI range `0x38`–`0x46`). `GET
+/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps`
+(MCP `atlas_multi_instance_iteration_steps`) pages them; the explorer replays
+them step by step on the diagram (visited and active markers, previous/next,
+play). Measured on the 50,000-iteration instance: 1,110 bytes, 1.2 ms. The
+encoding adds no allocation of its own; the MI benchmark shows about 40 more
+allocations per 100-iteration instance (18,744–18,761 against 18,704–18,714),
+all inside Pebble's read path for the extra rows (`getIter.Next`).
+
+**OHS3 increment 3 — variable values at each step (2026-11-02).** `GET
+/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=<position>`
+(MCP `atlas_multi_instance_iteration_variables`) answers what one iteration's
+scopes held at a step: the iteration's own scope, and every element inside it
+that was activated by then and had not ended — a subprocess, a nested body, an
+activity's local inputs — each folded to the latest retained change per name at
+or before the position (ADR-0048), rendered by the server's one variable
+renderer. Nothing new is recorded: it is a bounded prefix read of the existing
+per-scope snapshot history (`VariableSnapshotsUpTo`, which stops at the first
+change past the position) and of the iteration's steps. Bounds: 200 steps to
+find the open scopes, 200 changes per scope, 4,096 bytes per value, each with a
+truncation flag. The body's and the instance's scopes are deliberately not
+folded: the body's history grows with the iteration count. The explorer shows
+the values under the replay window and reads each step once. Measured on the
+50,000-iteration instance: 519 bytes, 0.9 ms.
+
+**Still not built:** per-instance readiness for compacted logs; the body's and
+the instance's variables at a step; marking elements inside a *collapsed* subprocess, which
+bpmn-js draws on a separate plane; job and user-task history per
 iteration. A historical reconstruction must use durable event payloads,
 including the MI role and `FlowScopeKey`. The old `ElementReplayValue` alone
 does not record either field; inferring them from the token trail is unsafe,
@@ -249,13 +296,15 @@ rounds observed after upgrade are left absent from the new projection until the
 historical backfill has reconstructed their parent activation. Do not expose
 incomplete projections as if they covered a whole instance.
 
-*Known limitation found while measuring:* completing the iterations of a parallel
-multi-instance **subprocess** is quadratic in the engine today, independent of
-this index — every scope completion disarms event-subprocess triggers by walking
-all live element instances of the instance (`disarmEventSubprocesses`). 1,000
-such iterations took 24 s; 50,000 do not finish in reasonable time. The
-acceptance fixture therefore uses a multi-instance script task. Tracked in
-[Issue #1494](https://github.com/pblumer/atlas/issues/1494).
+*Limitation found while measuring, since fixed:* completing the iterations of a
+parallel multi-instance **subprocess** was quadratic in the engine, independent
+of this index — every scope completion disarmed event-subprocess triggers by
+walking all live element instances of the instance (`disarmEventSubprocesses`).
+1,000 such iterations took 24 s; 50,000 did not finish in reasonable time. The
+acceptance fixture therefore uses a multi-instance script task.
+[Issue #1494](https://github.com/pblumer/atlas/issues/1494) replaced the walk
+with a per-scope trigger index (ADR-0082 amendment): 50,000 subprocess
+iterations now complete in 76 s in the engine harness.
 
 ## Pros and cons of the options
 

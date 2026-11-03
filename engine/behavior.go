@@ -3389,18 +3389,16 @@ func findErrorBoundary(c *ProcessingContext, piKey, hostKey uint64, code string)
 // handler (always interrupting for an error).
 func findErrorEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
 	var found uint64
-	c.ForEachElementInstance(piKey, func(elKey uint64) {
+	c.ForEachScopeTrigger(scopeKey, func(elKey uint64) {
 		if found != 0 {
 			return
 		}
-		t := c.GetElementInstance(elKey)
-		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
-			return
-		}
-		cp := c.process(t.ProcessDefKey)
-		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
-		if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
-			found = elKey
+		if t := c.GetElementInstance(elKey); isScopeTrigger(t, piKey, scopeKey) {
+			cp := c.process(t.ProcessDefKey)
+			d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+			if d.Kind == compiler.BoundaryError && errorCodeMatches(d.ErrorCode, code) {
+				found = elKey
+			}
 		}
 	})
 	return found
@@ -3613,18 +3611,16 @@ func findEscalationBoundary(c *ProcessingContext, piKey, hostKey uint64, code st
 // per its compiled Interrupting flag.
 func findEscalationEventSub(c *ProcessingContext, piKey, scopeKey uint64, code string) uint64 {
 	var found uint64
-	c.ForEachElementInstance(piKey, func(elKey uint64) {
+	c.ForEachScopeTrigger(scopeKey, func(elKey uint64) {
 		if found != 0 {
 			return
 		}
-		t := c.GetElementInstance(elKey)
-		if t == nil || t.FlowScopeKey != scopeKey || t.BpmnElementType != uint8(compiler.TypeEventSubProcessStart) {
-			return
-		}
-		cp := c.process(t.ProcessDefKey)
-		d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
-		if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
-			found = elKey
+		if t := c.GetElementInstance(elKey); isScopeTrigger(t, piKey, scopeKey) {
+			cp := c.process(t.ProcessDefKey)
+			d := cp.EventSubProcess(cp.Node(t.ElementId).EventSub)
+			if d.Kind == compiler.BoundaryEscalation && errorCodeMatches(d.EscalationCode, code) {
+				found = elKey
+			}
 		}
 	})
 	return found
@@ -4684,9 +4680,8 @@ func activateEventSubHandler(c *ProcessingContext, ei *model.ElementInstanceValu
 // nothing) — the same pattern disarmBoundaryEvents uses.
 func disarmEventSubprocesses(c *ProcessingContext, procKey, scope uint64) {
 	var triggers []uint64
-	c.ForEachElementInstance(procKey, func(elKey uint64) {
-		if t := c.GetElementInstance(elKey); t != nil &&
-			t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) && t.FlowScopeKey == scope {
+	c.ForEachScopeTrigger(scope, func(elKey uint64) {
+		if t := c.GetElementInstance(elKey); isScopeTrigger(t, procKey, scope) {
 			triggers = append(triggers, elKey)
 		}
 	})
@@ -4816,16 +4811,23 @@ func rearmFiredTrigger(c *ProcessingContext, ei *model.ElementInstanceValue) {
 // except — a trigger a live delivery re-armed already (rearmFiredTrigger).
 func triggerArmed(c *ProcessingContext, piKey, scope uint64, handlerNode int32, except uint64) bool {
 	armed := false
-	c.ForEachElementInstance(piKey, func(k uint64) {
+	c.ForEachScopeTrigger(scope, func(k uint64) {
 		if armed || k == except {
 			return
 		}
-		if t := c.GetElementInstance(k); t != nil && t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) &&
-			t.FlowScopeKey == scope && t.ElementId == handlerNode {
+		if t := c.GetElementInstance(k); isScopeTrigger(t, piKey, scope) && t.ElementId == handlerNode {
 			armed = true
 		}
 	})
 	return armed
+}
+
+// isScopeTrigger reports whether t is a live event-subprocess trigger of the
+// process instance piKey armed in scope — what the index names, checked against
+// the record itself, the conditions the walk of every element instance applied.
+func isScopeTrigger(t *model.ElementInstanceValue, piKey, scope uint64) bool {
+	return t != nil && t.BpmnElementType == uint8(compiler.TypeEventSubProcessStart) &&
+		t.FlowScopeKey == scope && t.ProcessInstanceKey == piKey
 }
 
 // LoopCounterVariable is the standard multi-instance per-iteration counter variable

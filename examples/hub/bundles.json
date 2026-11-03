@@ -54,6 +54,11 @@
       "id": "m365-dienste",
       "tags": ["m365"],
       "examples": ["m365-dienste"]
+    },
+    {
+      "id": "ad-dienste",
+      "tags": ["active-directory"],
+      "examples": ["ad-dienste"]
     }
   ]
 }
