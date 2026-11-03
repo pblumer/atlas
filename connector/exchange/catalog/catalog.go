@@ -103,6 +103,12 @@ type Variant struct {
 	// Add-MailboxPermission mean "full access". A nil value is sent as an explicit
 	// null, which is how Exchange clears a property.
 	Fixed map[string]any
+	// ResolveIdentity marks a cmdlet whose Identity is an Active Directory object rather
+	// than a recipient: Exchange Server's Add-ADPermission does not find a mailbox by
+	// its address ("…@contoso.com wasn't found"), which every model authors. The worker
+	// looks the recipient up with Get-Recipient first and passes its distinguished
+	// name, so the model keeps naming the mailbox the same way on either target.
+	ResolveIdentity bool
 }
 
 // Op is one low-code operation.
@@ -145,6 +151,8 @@ type Op struct {
 type Invocation struct {
 	Cmdlet     string
 	Parameters map[string]any
+	// ResolveIdentity is the variant's [Variant.ResolveIdentity].
+	ResolveIdentity bool
 }
 
 // GenericOp is the name of the read-only escape hatch.
@@ -209,10 +217,10 @@ var Ops = map[string]Op{
 		Variant{Cmdlet: "Get-MailboxPermission"}),
 	"add-send-as": split(Op{Area: "permission", Label: "grant send as", Required: []string{"Identity", "User"}, Result: ResultObject},
 		&Variant{Cmdlet: "Add-RecipientPermission", Rename: map[string]string{"User": "Trustee"}, Fixed: map[string]any{"AccessRights": []any{"SendAs"}}},
-		&Variant{Cmdlet: "Add-ADPermission", Fixed: map[string]any{"ExtendedRights": []any{"Send As"}}}),
+		&Variant{Cmdlet: "Add-ADPermission", Fixed: map[string]any{"ExtendedRights": []any{"Send As"}}, ResolveIdentity: true}),
 	"remove-send-as": split(Op{Area: "permission", Label: "revoke send as", Required: []string{"Identity", "User"}},
 		&Variant{Cmdlet: "Remove-RecipientPermission", Rename: map[string]string{"User": "Trustee"}, Fixed: map[string]any{"AccessRights": []any{"SendAs"}}},
-		&Variant{Cmdlet: "Remove-ADPermission", Fixed: map[string]any{"ExtendedRights": []any{"Send As"}}}),
+		&Variant{Cmdlet: "Remove-ADPermission", Fixed: map[string]any{"ExtendedRights": []any{"Send As"}}, ResolveIdentity: true}),
 	"list-send-as": {Area: "permission", Label: "list send-as permissions", Required: identity, Optional: []string{"User"}, Result: ResultList, NeedsResult: true,
 		Online:      &Variant{Cmdlet: "Get-RecipientPermission", Rename: map[string]string{"User": "Trustee"}},
 		Unavailable: "Exchange Server keeps Send As as an Active Directory permission; read it with run-get-cmdlet and Get-ADPermission"},
@@ -551,7 +559,7 @@ func (o Op) Build(name string, target Target, cmdlet string, params map[string]a
 	if o.Generic {
 		v = &Variant{Cmdlet: cmdlet}
 	}
-	return Invocation{Cmdlet: v.Cmdlet, Parameters: out}, nil
+	return Invocation{Cmdlet: v.Cmdlet, Parameters: out, ResolveIdentity: v.ResolveIdentity}, nil
 }
 
 // hasValue reports whether an authored value says anything.

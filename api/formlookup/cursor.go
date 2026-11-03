@@ -19,7 +19,7 @@ import (
 // the field, the person and the normalised query — encrypted and authenticated with
 // AES-GCM under a key that exists only in this process's memory. It is opaque to the
 // person, cannot be forged or altered, opens only for the same query by the same
-// person on the same task, and expires. A restart makes a new key and every cursor
+// person on the same task (or the same product's order form), and expires. A restart makes a new key and every cursor
 // invalid, which costs nothing but a fresh search: nothing about a lookup survives a
 // restart, by design.
 
@@ -32,6 +32,7 @@ var errBadCursor = errors.New("the cursor is not one this server issued for this
 // cursorBinding is what a cursor is valid for.
 type cursorBinding struct {
 	Task      uint64 `json:"t"`
+	Ref       string `json:"r,omitempty"` // an order form's "<release>/<item>"; "" for a task
 	Field     string `json:"f"`
 	Principal string `json:"p"`
 	Query     string `json:"q"`

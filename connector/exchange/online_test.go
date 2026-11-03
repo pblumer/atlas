@@ -9,8 +9,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/connector/exchange/catalog"
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // staticToken hands out a fixed bearer, so these tests are about Exchange's endpoint
@@ -305,5 +307,59 @@ func TestOnlineDefaultsItsEndpoint(t *testing.T) {
 	c := NewOnlineClient(OnlineConfig{Tokens: staticToken{tok: "t"}, Organization: "contoso.onmicrosoft.com"})
 	if c.baseURL != DefaultOnlineBaseURL || c.httpc == nil {
 		t.Errorf("base %q httpc %v", c.baseURL, c.httpc)
+	}
+}
+
+// TestOnlineWaitsForAnObjectJustCreated: a change to an object Exchange Online created a
+// moment ago may answer 404 NotFound until the object is found everywhere (observed:
+// Set-DistributionGroup four seconds after New-DistributionGroup). A Set- or Add- is sent
+// again after a pause; a New- is not, because a create that found nothing to create
+// is no create to repeat.
+func TestOnlineWaitsForAnObjectJustCreated(t *testing.T) {
+	notFound := fakeReply{status: http.StatusNotFound, body: `{"error":{"code":"NotFound","message":"Error executing cmdlet"}}`}
+	f := newFakeExchange(t, notFound, notFound, fakeReply{body: `{"value":[]}`})
+	c := f.client("")
+	c.notFoundWaits = []time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}
+	if _, err := c.Invoke(context.Background(), catalog.Invocation{
+		Cmdlet: "Set-DistributionGroup", Parameters: map[string]any{"Identity": "vl@contoso.com", "CustomAttribute1": "atlas-katalog"},
+	}, 0); err != nil {
+		t.Fatalf("a change found on the third try failed: %v", err)
+	}
+	if len(f.calls) != 3 {
+		t.Fatalf("%d calls, want 3", len(f.calls))
+	}
+
+	g := newFakeExchange(t, notFound, notFound, notFound)
+	c = g.client("")
+	c.notFoundWaits = []time.Duration{time.Millisecond}
+	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "Set-Mailbox", Parameters: map[string]any{"Identity": "x"}}, 0); err == nil ||
+		!strings.Contains(err.Error(), "HTTP 404") || len(g.calls) != 2 {
+		t.Fatalf("a change still not found after its waits: err %v after %d calls, want the 404 after 2", err, len(g.calls))
+	}
+
+	h := newFakeExchange(t, notFound, fakeReply{body: `{"value":[]}`})
+	c = h.client("")
+	c.notFoundWaits = []time.Duration{time.Millisecond}
+	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "New-DistributionGroup", Parameters: map[string]any{"Name": "x"}}, 0); err == nil || len(h.calls) != 1 {
+		t.Fatalf("a New- answered 404 was sent again: err %v, %d calls", err, len(h.calls))
+	}
+}
+
+// A cmdlet waits longer than a REST call's shared bound: Add-MailboxPermission on a
+// mailbox created a minute before took more than ten seconds in a real tenant, and the
+// permission was set although the client had given up.
+func TestOnlineCmdletsWaitLongerThanARestCall(t *testing.T) {
+	if got := NewOnlineClient(OnlineConfig{Organization: "contoso.onmicrosoft.com"}).httpc.Timeout; got != defaultOnlineTimeout {
+		t.Fatalf("a client built without one waits %v, want %v", got, defaultOnlineTimeout)
+	}
+	if defaultOnlineTimeout <= nettimeout.Default {
+		t.Fatalf("the cmdlet bound %v is not longer than a REST call's %v", defaultOnlineTimeout, nettimeout.Default)
+	}
+	b, err := NewBackend("", `{"organization":"contoso.onmicrosoft.com","clientId":"c","clientSecret":"s"}`, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := b.(*OnlineClient).httpc.Timeout; got != defaultOnlineTimeout {
+		t.Fatalf("a Worker's backend waits %v per cmdlet, want %v", got, defaultOnlineTimeout)
 	}
 }

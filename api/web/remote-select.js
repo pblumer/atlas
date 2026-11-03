@@ -72,10 +72,23 @@ export function directoryFields(schema) {
 // taskTransport searches through a task: the server checks that the caller may work on
 // it, reads the field's data source from the task's stored form, and asks the Worker.
 export function taskTransport(taskKey, fetchImpl) {
+  return queryTransport("/api/v1/tasks/" + encodeURIComponent(taskKey), fetchImpl);
+}
+
+// orderFormTransport searches through a product's order form in the shop: the server
+// checks that the caller may order from the release's catalogue, reads the field's data
+// source from the form the release's item names, and asks the Worker (ADR-0473, amended).
+export function orderFormTransport(releaseId, itemId, fetchImpl) {
+  return queryTransport("/api/v1/shop/releases/" + encodeURIComponent(releaseId) +
+    "/items/" + encodeURIComponent(itemId), fetchImpl);
+}
+
+// queryTransport posts a field's query under base, the context the server authorizes.
+function queryTransport(base, fetchImpl) {
   const doFetch = fetchImpl || ((...a) => fetch(...a));
   return async (field, body, signal) => {
     const res = await doFetch(
-      "/api/v1/tasks/" + encodeURIComponent(taskKey) + "/form-data/" + encodeURIComponent(field) + "/query",
+      base + "/form-data/" + encodeURIComponent(field) + "/query",
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
     let data = null;
     try { data = await res.json(); } catch { /* not JSON: reported by status below */ }

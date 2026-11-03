@@ -393,6 +393,11 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instances": tInteger(), "finished": tInteger(), "tokens": tInteger(), "elements": tArray(),
 				"incidentTotal": tInteger(), "incidentCountsExact": tBool(),
 			}))}},
+		{"GET", "/api/v1/processes/{key}/versions", s.handleProcessVersions, apiOp{
+			summary: "Read what every deployed version of a definition's process still holds: for each version, newest first, its key, number, version tag, deploy time and active flag, and how many of its instances are running, how many have finished and how many tokens are parked behind an incident. A version with nothing in it is listed with zeroes. The cost is the number of versions, not of instances: the instance counts are maintained counters, the incident counts one shared reading of the incident family (incidentCountsExact false when it could not be taken)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Versions and their counts", schemaObj(map[string]any{
+				"processId": tString(), "incidentCountsExact": tBool(), "versions": tArray(),
+			}))}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
@@ -765,6 +770,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("Task key", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/form-data/{field}/query", s.formLookup.HandleQuery, apiOp{
 			summary: "Search the remote data source of one directory field of a task's form: one bounded page of options from the Worker the form names, for a caller who may work on the task. The request carries only the term, the values of the form fields the source is bound to, a cursor and a page size; which Worker, resource and properties is the stored form's (ADR-0473)", tag: "Tasks", role: RoleUser,
+			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
+				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Options and the cursor of the next page", tObject())}},
+		{"POST", "/api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query", s.formLookup.HandleOrderFormQuery, apiOp{
+			summary: "Search the remote data source of one directory field of a product's order form while the basket is filled in: the task form's search (ADR-0473), for a caller who may order from the release's catalogue, against the form the release's item names. A person chosen here is looked up again when the order is placed or its details are corrected, so a value the search would not have offered is refused there (ADR-0473, amended)", tag: "Order", role: RoleUser,
 			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
 				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
 			})),
@@ -1475,7 +1486,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"source": tString(), "primary": tString(), "pages": tObject(), "revision": tInteger()}, "source", "pages")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/refresh", s.catalogs.HandleContentRefresh, apiOp{
-			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
+			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. A request whose caller goes away before the recheck finishes answers 503 and records and writes nothing — a departed caller is no finding about the source. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("The precondition", schemaObj(map[string]any{"revision": tInteger()})),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/unlink", s.catalogs.HandleContentUnlink, apiOp{
@@ -1484,7 +1495,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
-			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped", tag: "Catalogue", role: RoleProductManager,
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("One line per bound product", tArray())}},
 		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
 			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,

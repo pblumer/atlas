@@ -445,6 +445,17 @@ func (s *Service) refresh(ctx context.Context, p *httpapi.Principal, it Item, re
 		rctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 		reasons, _, rerr := contentsource.Recheck(rctx, ad, checksOf(b))
 		cancel()
+		// A caller who went away is no finding about the source: the recheck
+		// stopped because the request did, not because the wiki failed to
+		// answer. Recording it would quarantine a product whose pages are fine —
+		// the very state a refresh exists to end — so nothing is recorded and
+		// nothing is written, as the sweep does on its own cancellation. The
+		// fetch's own deadline (fetchTimeout) is not the caller's, and a source
+		// too slow for it still fails the recheck.
+		if rerr != nil && ctx.Err() != nil {
+			return contentWrite{status: http.StatusServiceUnavailable,
+				message: "the request ended before the recheck of " + it.ID + " finished; nothing was recorded or written"}
+		}
 		res := contentsource.Result{Item: it.ID, At: s.now(), Passed: rerr == nil && len(reasons) == 0}
 		switch {
 		case rerr != nil:
@@ -716,6 +727,13 @@ func (s *Service) HandleCatalogContentRefresh(w http.ResponseWriter, r *http.Req
 	if s.noSources(w) {
 		return
 	}
+	// The products are refreshed to the end even when the caller stops waiting.
+	// A catalogue of a few dozen bound products takes longer than a client such
+	// as the MCP adapter (thirty seconds) waits, and a batch cut off half way
+	// leaves some products refreshed and the rest as they were; finishing it
+	// means asking again finds them refreshed. Each product stays bounded by
+	// fetchTimeout, and the caller's identity is kept.
+	ctx := context.WithoutCancel(r.Context())
 	out := []catalogRefresh{}
 	for _, it := range items {
 		if !mine[it.ID] {
@@ -723,7 +741,7 @@ func (s *Service) HandleCatalogContentRefresh(w http.ResponseWriter, r *http.Req
 				Message: "its home catalogue is maintained by somebody else"})
 			continue
 		}
-		res := s.refresh(r.Context(), p, it, 0)
+		res := s.refresh(ctx, p, it, 0)
 		line := catalogRefresh{Item: it.ID, Status: "refreshed"}
 		if res.status != http.StatusOK {
 			line.Status, line.Message, line.Problems = "refused", res.message, res.problems

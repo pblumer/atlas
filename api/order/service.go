@@ -75,6 +75,12 @@ type Service struct {
 	// does not grow a thirteenth positional argument for a value the server hands
 	// to all of them the same way.
 	Limits limits.Limits
+	// CheckAnswers holds a basket's configuration answers to the order forms they
+	// answer, where a form asks more than text can say: a directory field's value is a
+	// person who must exist and be within the field's filters (ADR-0473, amended). It
+	// writes the refusal and answers true when one fails. Set after construction, like
+	// Limits; nil checks nothing. It runs off the loop, because it may ask a Worker.
+	CheckAnswers func(w http.ResponseWriter, r *http.Request, rel catalog.Release, config map[string]map[string]string) bool
 	// wake tells the fulfilment process that an order moved. The variables it
 	// carries are the message's start variables, which is how the orchestrator
 	// learns anything beyond the order id it correlates on.
@@ -263,6 +269,13 @@ func (s *Service) HandlePlace(w http.ResponseWriter, r *http.Request) {
 	}
 	if !allowed {
 		httpapi.Error(w, http.StatusForbidden, "you cannot order from this catalogue")
+		return
+	}
+
+	// The answers a form can only check by asking somebody else: a person chosen in a
+	// directory field. Off the loop for the reason the gate above is, and before
+	// anything is written, so a refused value places nothing.
+	if s.CheckAnswers != nil && s.CheckAnswers(w, r, rel, req.Config) {
 		return
 	}
 

@@ -33,11 +33,33 @@
     },
     {
       "key": "besitzer",
-      "type": "textfield",
-      "label": "Verwaltet von (UPN) · Managed by (UPN)",
+      "type": "select",
+      "label": "Verwaltet von · Managed by",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "surname",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     },
     {

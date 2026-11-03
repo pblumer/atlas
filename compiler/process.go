@@ -864,6 +864,20 @@ type ConnectorTaskDetail struct {
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool
+	// AdAttributes is the entry of create-user/-group/-contact and update-attributes
+	// authored inline: a JSON template compiled to one FEEL context, evaluated by the
+	// worker at handoff, and the zero RestExpr when the task names AdEntryVar instead
+	// (the compiler requires exactly one). Because the worker evaluates it, it may read
+	// a variable the process declares personal (ADR-0314) — which an entry the engine
+	// had to build in a variable never could (ADR-0166, amended 2026-11-03).
+	//
+	// AdSelect is a search's interned attribute selection ("cn,mail", -1 for none: the
+	// server's default set). AdFoundVar is the interned name of the variable that
+	// receives a search's found on its own (-1 for none), so a gateway can branch on a
+	// boolean while the result variable — names, DNs — is declared personal.
+	AdAttributes RestExpr
+	AdSelect     int32
+	AdFoundVar   int32
 	// Generic SQL worker fields (JobType == SqlJobType, ADR-0173). Worker
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is

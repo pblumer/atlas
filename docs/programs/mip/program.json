@@ -7,7 +7,7 @@
   "last_reviewed": "2026-10-30",
   "plan": "../../planning/model-independence-and-provenance-program.md",
   "milestone": "../../../ROADMAP.md#milestone-6--ecosystem-",
-  "next_action": "Review PR #1447's pinned upstream moddle licences and regression guards; verify bundled DMN fork/transitive sources, complete the provenance review and accept/revise the native BPMN dialect ADR before MIP1/MIP2.",
+  "next_action": "Review PR #1459's DMN fork and npm-lockfile licence evidence; inspect actual generated DMN JS/CSS/font bundle, run reproducible rebuild and SBOM/notice checks, verify copied fixtures, and explicitly accept or revise ADR-0513 before authoring changes.",
   "slices": [
     {
       "id": "MIP0",
@@ -18,9 +18,10 @@
       "issues": [],
       "prs": [
         1443,
-        1447
+        1447,
+        1459
       ],
-      "note": "PR #1443 merged the initial inventory and Proposed ADR. Draft PR #1447 pins byte-identical Zeebe v1.17.0 source and separate MIT notices for Zeebe/DMN; combined DMN bundle, broader code/fixture provenance, SBOM/watermark and ADR acceptance remain open."
+      "note": "Merged #1443 (initial evidence/Proposed ADR) and #1447 (Zeebe and DMN moddle MIT provenance). PR #1459 checks pinned dmn-js/dmn-moddle fork licences and vendor lockfile metadata. MIP0 remains active: actual bundled dependencies, reproducibility, fork/source/fixture audit, SBOM, watermark and ADR-0513 acceptance are not complete."
     },
     {
       "id": "MIP1",

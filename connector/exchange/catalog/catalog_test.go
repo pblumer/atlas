@@ -152,6 +152,18 @@ func TestSendAsIsADifferentCmdletPerTarget(t *testing.T) {
 		!reflect.DeepEqual(onprem.Parameters["ExtendedRights"], []any{"Send As"}) {
 		t.Errorf("on-premises send-as = %#v", onprem)
 	}
+	// Add-ADPermission finds an Active Directory object, not a recipient by its
+	// address: on Exchange Server the worker resolves the Identity first. Found
+	// against a real Exchange Server SE ("…@atlastest.internal wasn't found").
+	if !onprem.ResolveIdentity || online.ResolveIdentity {
+		t.Errorf("resolve identity: on-premises %v, online %v; want true, false", onprem.ResolveIdentity, online.ResolveIdentity)
+	}
+	if rm := build(t, "remove-send-as", catalog.OnPrem, params); !rm.ResolveIdentity {
+		t.Errorf("on-premises remove-send-as does not resolve its identity: %#v", rm)
+	}
+	if fa := build(t, "add-full-access", catalog.OnPrem, params); fa.ResolveIdentity {
+		t.Errorf("Add-MailboxPermission finds a mailbox by its address itself: %#v", fa)
+	}
 }
 
 // TestAddressGoesIntoAHashtable: Exchange modifies a multi-valued property through a
