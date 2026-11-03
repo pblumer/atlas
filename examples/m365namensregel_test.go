@@ -3,11 +3,16 @@ package examples
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/dmn"
+	"github.com/pblumer/atlas/expr"
 )
 
 // TestM365NamingRuleTakesThePrefix evaluates the naming rule of m365-dienste: without a
@@ -109,6 +114,53 @@ func TestM365OrderFormsSearchThePersonTheyName(t *testing.T) {
 		}
 		if f.ValueProperty() != "userPrincipalName" {
 			t.Errorf("%s: %q submits %s; the processes address people by user principal name", form, key, f.ValueProperty())
+		}
+	}
+}
+
+// TestM365PartnerAccountNamesAreTrimmedAndPrefixed evaluates the attributes the partner
+// process hands to create-user: the public form takes names as they were typed, so a
+// leading or trailing space must not reach Entra, and the display name carries
+// NAME_PREFIX like the UPN, so the test environment's cleanup finds the account.
+func TestM365PartnerAccountNamesAreTrimmedAndPrefixed(t *testing.T) {
+	src, err := os.ReadFile("m365-dienste/partnerzugang.bpmn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`operation="create-user" attributes='([^']*)'`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("no create-user task in partnerzugang.bpmn")
+	}
+	var attrs map[string]any
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &attrs); err != nil {
+		t.Fatalf("attributes: %v", err)
+	}
+	vars := map[string]expr.Value{
+		"vorname":     expr.String("  Max"),
+		"nachname":    expr.String("Partner "),
+		"firma":       expr.String(" Muster AG "),
+		"email":       expr.String("max.partner@muster-ag.example"),
+		"application": expr.ContextOf(map[string]expr.Value{"NAME_PREFIX": expr.String("atlas-test-ab12-"), "PARTNER_UPN_DOMAIN": expr.String("contoso.onmicrosoft.com")}),
+	}
+	want := map[string]string{
+		"displayName":       "atlas-test-ab12-Max Partner (Muster AG)",
+		"givenName":         "Max",
+		"surname":           "Partner",
+		"companyName":       "Muster AG",
+		"userPrincipalName": "atlas-test-ab12-ext.max.partner.muster-ag@contoso.onmicrosoft.com",
+	}
+	for name, w := range want {
+		s, _ := attrs[name].(string)
+		c, err := expr.CompileAuto(strings.TrimPrefix(s, "="))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		v, err := c.Eval(vars)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got, _ := expr.ToJSON(v); got != strconv.Quote(w) {
+			t.Errorf("%s = %s, want %q", name, got, w)
 		}
 	}
 }
