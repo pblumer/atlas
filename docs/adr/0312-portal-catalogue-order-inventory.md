@@ -147,6 +147,11 @@ The rank resolves the one-catalogue-per-user rule against directory group member
 which is many-to-many; ranks must be unique, and publishing refuses a tie rather than
 falling back to an id nobody chose.
 
+**Superseded by [ADR-draft-several-catalogues-per-person](draft-several-catalogues-per-person.md)**
+for decision 11: a person now sees every catalogue they are the audience for, a product
+several carry from the highest-ranked, and a basket from several is placed as one order
+per release. Rank orders the catalogues rather than choosing one; ranks stay unique.
+
 A `CatalogRelease` is a frozen, published version, following the shape applications
 already have ([ADR-0128](0128-process-applications.md)). **Publishing is where the work
 happens**, and this is I5 applied to a catalogue:
