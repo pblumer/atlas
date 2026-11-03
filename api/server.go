@@ -286,6 +286,9 @@ type Server struct {
 	// stopped, the HTTP half of the rotation the in-process runner keeps for itself.
 	// See [Server.scanHeldCandidates].
 	gateResume map[int32]uint64
+	// serveResume is where a worker's scan for the jobs it serves last stopped, per job
+	// type and worker. See [Server.scanServedCandidates].
+	serveResume map[serveResumeKey]uint64
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
@@ -1789,6 +1792,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		workers:             newWorkerRegistry(nil),
 		breakers:            newWorkerBreakers(nil),
 		gateResume:          map[int32]uint64{},
+		serveResume:         map[serveResumeKey]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.

@@ -6706,7 +6706,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// (ADR-0270).
 			var keys []uint64
 			held = s.breakers.holdingFor(jobType)
-			if held {
+			if serves := servedConnectors(body.Connectors); serves != nil {
+				// The worker named the workers it holds: it is leased only their jobs,
+				// so a second worker of the same type serving another name never
+				// takes, and fails, a job meant for the first.
+				scanErr = s.scanServedCandidates(jobType, body.Worker, serves, held, want, &keys)
+			} else if held {
 				// A target under this type is down, so the candidates have to be
 				// filtered as they are scanned rather than after: collecting first
 				// would fill the page with jobs that may not go out and hand back

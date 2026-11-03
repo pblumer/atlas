@@ -13,7 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Fixed
-
+- **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
 - **A process variable read only inside a FEEL filter is no longer null.** `expr.CompileAuto` never declared a name that appears only in a filter predicate, because there an unknown name may be a key of the element, so `groups[starts with(alias, application.PREFIX)]` read the prefix as null and matched nothing; where the name was declared, it shadowed the element's key of the same name instead. The element's keys now take precedence and outer variables stay visible (DMN 10.3.2.5), through `github.com/pblumer/feel` with `CompileStringOpen` (ADR-0015, amended). A name declared personal (`atlas:personal`) that a filter alone reads stays the element's key and is not bound, so the filter never sees its ciphertext and a model that filters on such a key deploys as before (ADR-0314).
 
 ## [0.22.0] — 2026-11-03
