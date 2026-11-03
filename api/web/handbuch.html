@@ -5651,17 +5651,19 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Dreiundzwanzig Prozesse über die Worker-Typen Entra, Exchange, SharePoint und Teams Phone,
-              acht Entscheidungstabellen und 48 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              acht Entscheidungstabellen und 50 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
               zu, Abwesenheitsnotiz, Kontingent, Weiterleitung, Mailadressen und Kalenderstellvertretung am selben Produkt
               setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
-              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>. Das Bestellformular der
+              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>; wer Lizenzen über AD-Gruppen
+              vergibt (Konstante <code>LIZENZ_MODUS</code>), zusätzlich <code>ad_verzeichnis</code>. Das Bestellformular der
               SharePoint-Teamwebsite prüft schon während der Eingabe, ob die URL noch frei ist. Lizenz, Team, SharePoint-Teamwebsite, Community,
               Funktionspostfach und Postfachzugriff genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
               sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
             <p data-l="en">Twenty-three processes over the Entra, Exchange, SharePoint and Teams Phone Worker Types, eight
-              decision tables and 48 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
+              decision tables and 50 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
               automatic reply, the quota, forwarding, e-mail addresses and calendar delegates on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code>,
-              <code>ucc_sharepoint</code> and <code>ucc_teams</code>. The SharePoint team site's order form checks
+              <code>ucc_sharepoint</code> and <code>ucc_teams</code>; an installation that licenses through AD groups
+              (constant <code>LIZENZ_MODUS</code>) also uses <code>ad_verzeichnis</code>. The SharePoint team site's order form checks
               while the URL is typed whether it is still free. Licence, team, SharePoint team site, community, shared mailbox and mailbox access
               are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
