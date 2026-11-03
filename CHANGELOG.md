@@ -46,7 +46,9 @@ reports on its promise, and the examples ship through atlas hub.** A shop send t
 new mode `order` places an order in the name of its application, through every check a
 person's order meets, for a product whose `orderableBy` names that application — so an HR
 joiner process orders the starter package
-([ADR-0520](docs/adr/0520-process-places-an-order.md)); an order form says while a name is
+([ADR-0520](docs/adr/0520-process-places-an-order.md)), and a leaver process commands
+what a person holds by naming the person
+([ADR-0521](docs/adr/0521-command-by-recipient.md)); an order form says while a name is
 typed whether Entra, Exchange or SharePoint already use it
 ([ADR-0519](docs/adr/0519-name-availability-check.md)); and the Entra Worker invites
 guests, restores deleted groups and creates Viva Engage communities, while the SharePoint
@@ -128,10 +130,11 @@ What changes on disk, and going back:
     Connected systems before going back.
   - 0.21.0 does not open `start-grants`: task users lose Start, and the grants come back
     with 0.22.0.
-  - 0.21.0 refuses a shop send task in mode `order` when it reloads the deployed models,
-    and a deployed model it cannot reload stops it from starting. Delete every deployed
-    version that uses that mode — the M365 example's HR joiner process does — before
-    going back. The atlas hub package `m365-dienste` 1.0.3 requires 0.22.0.
+  - 0.21.0 refuses a shop send task in mode `order`, and one in mode `command` that names
+    a `recipient` instead of an order and a position, when it reloads the deployed
+    models, and a deployed model it cannot reload stops it from starting. Delete every
+    deployed version that uses either — the M365 example's `hr-eintritt` process uses
+    both — before going back. The atlas hub package `m365-dienste` 1.0.4 requires 0.22.0.
   - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
     same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
     event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
@@ -141,6 +144,14 @@ What changes on disk, and going back:
     snapshot taken before the first upgrade, or do not go back.
 
 ### Added
+- **A process commands what a person holds without reading what they hold.** A shop
+  send task in mode `command` may name a `recipient` instead of an order and a position;
+  the server finds that person's position of the product in the inventory and commands
+  it under the product's `commandedBy`, so a leaver process returns an admin account by
+  naming the person — the inventory stays the administrators' to read. Holding nothing
+  completes the task with an empty result, and a refused command, in either shape, is
+  thrown as `SHOP_COMMAND_REFUSED` when the process catches it
+  (ADR-0521).
 - **A process orders a product for somebody in the name of its application.** A shop
   send task in the new mode `order` names a catalogue and a product, the recipient's
   account id and the answers to the products' forms, and places the order through the

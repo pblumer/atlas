@@ -1,0 +1,40 @@
+{
+  "type": "default",
+  "id": "m365-lizenz-klaeren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenz klären · Resolve the licence**\n\nBenutzername · User name: {{upn}}\n\nDie Lizenz wird über eine Gruppe vergeben (Applikationskonstante LIZENZ_MODUS), und dabei ist etwas nicht wie erwartet: Entra ID hat die Lizenz nicht aktiviert, oder das Konto stammt nicht aus dem AD. Der Hinweis unten nennt den Grund und was zu prüfen ist. «Erneut prüfen» wiederholt die Prüfung, die zu dieser Aufgabe geführt hat; eine schon gesetzte Mitgliedschaft wird nicht noch einmal gesetzt. «Beenden» meldet die Position als fehlgeschlagen; eine schon gesetzte Mitgliedschaft bleibt dann bestehen und ist von Hand zu entfernen. · The licence is assigned through a group (application constant LIZENZ_MODUS), and something is not as expected: Entra ID has not activated the licence, or the account does not come from AD. The note below gives the reason and what to check. “Check again” repeats the check that led to this task; a membership already added is not added a second time. “End” reports the position as failed; a membership already added then stays and has to be removed by hand."
+    },
+    {
+      "key": "lizenzHinweis",
+      "type": "textarea",
+      "label": "Hinweis · Note",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "lizenzEntscheid",
+      "type": "radio",
+      "label": "Wie weiter · How to continue",
+      "values": [
+        {
+          "label": "Ursache behoben, erneut prüfen · Cause fixed, check again",
+          "value": "erneut"
+        },
+        {
+          "label": "Beenden, Position als fehlgeschlagen melden · End and report the position as failed",
+          "value": "beenden"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -285,6 +285,12 @@ var catalogSources = []catalogSource{
 	{ID: "m365-dienste", Dir: "m365-dienste", NoInstall: true,
 		Main: "m365-dienste/funktionspostfach.bpmn",
 		Shop: true},
+	// A shop for Active Directory: groups, permissions as group memberships, admin, service,
+	// test and external accounts and a transfer, over the AD Worker Type, with three decisions.
+	// It installs with `atlas import` once its decision models are uploaded (its README says how).
+	{ID: "ad-dienste", Dir: "ad-dienste", NoInstall: true,
+		Main: "ad-dienste/ad-sicherheitsgruppe.bpmn",
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it

@@ -1,0 +1,23 @@
+{
+  "type": "default",
+  "id": "ad-berechtigung-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Berechtigung im Active Directory · Active Directory permission**\n\nDie Berechtigung ist eine Mitgliedschaft in einer Gruppe. Es entscheidet die Person, die die Gruppe verantwortet. Sie gilt höchstens ein Jahr. · The permission is a group membership. The person responsible for the group decides. It lasts at most one year."
+    },
+    {
+      "key": "konto",
+      "type": "textfield",
+      "label": "Konto der empfangenden Person (Anmeldename) · Account of the recipient (logon name)",
+      "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9._-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

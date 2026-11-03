@@ -58,6 +58,7 @@ type ShopCommandConfig struct {
 	Action    string
 	Order     RestExpr
 	Position  RestExpr
+	Recipient RestExpr
 	ResultVar string
 	Retries   int32
 }
@@ -103,6 +104,7 @@ func (b *Builder) AddShopCommandTask(cfg ShopCommandConfig) int32 {
 		ShopProduct:   cfg.Product,
 		ShopOrder:     cfg.Order,
 		ShopPosition:  cfg.Position,
+		ShopRecipient: cfg.Recipient,
 		ShopResultVar: cfg.ResultVar,
 		Retries:       cfg.Retries,
 	})
@@ -220,9 +222,30 @@ func compileShopCommand(b *Builder, id, action string, st *xmlShopTask) (int32, 
 	if product == "" {
 		return 0, fmt.Errorf("compiler: shop task %q issues a command and needs the product it commands", id)
 	}
-	if strings.TrimSpace(st.Order) == "" || strings.TrimSpace(st.Position) == "" {
+	byOrder := strings.TrimSpace(st.Order) != "" || strings.TrimSpace(st.Position) != ""
+	byPerson := strings.TrimSpace(st.Recipient) != ""
+	switch {
+	case byOrder && byPerson:
+		return 0, fmt.Errorf("compiler: shop task %q issues a command to an order and a position or to "+
+			"what a recipient holds, not both", id)
+	case byPerson:
+		// The server finds the recipient's position of the product in the inventory, so
+		// a process commands what a person holds without reading what they hold
+		// (ADR-0521).
+		recipient, err := connectorValue(b.gate(), id, "shop task", "recipient", st.Recipient)
+		if err != nil {
+			return 0, err
+		}
+		retries, err := parseRetries("send task", id, st.Retries)
+		if err != nil {
+			return 0, err
+		}
+		return b.AddShopCommandTask(ShopCommandConfig{Product: product, Action: action, Recipient: recipient,
+			ResultVar: strings.TrimSpace(st.ResultVariable), Retries: retries}), nil
+	case strings.TrimSpace(st.Order) == "" || strings.TrimSpace(st.Position) == "":
 		return 0, fmt.Errorf("compiler: shop task %q issues a command and needs the order and the "+
-			"position it acts on (a literal or an =expression each)", id)
+			"position it acts on (a literal or an =expression each), or the recipient whose position "+
+			"of the product it acts on", id)
 	}
 	ord, err := connectorValue(b.gate(), id, "shop task", "order", st.Order)
 	if err != nil {

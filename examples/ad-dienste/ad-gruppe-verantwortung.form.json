@@ -1,0 +1,23 @@
+{
+  "type": "default",
+  "id": "ad-gruppe-verantwortung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verantwortung übergeben · Hand over responsibility**\n\nDie neue Person wird managedBy der Gruppe. · The new person becomes the group's managedBy."
+    },
+    {
+      "key": "neuerVerantwortlicher",
+      "type": "textfield",
+      "label": "Neue verantwortliche Person (Anmeldename) · New responsible person (logon name)",
+      "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9._-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

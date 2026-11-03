@@ -71,16 +71,87 @@ func (s *Server) shopCommandHandler(rd state.Reader) job.CompletingHandler {
 		if err != nil {
 			return job.Completion{}, fmt.Errorf("shop command: %w", err)
 		}
+		if shopAddressesPerson(detail) {
+			// The position is the recipient's, found here and never shown to the
+			// process: a process may command what a person holds without being able
+			// to read what they hold (ADR-0312, ADR-0521).
+			recipient := strings.TrimSpace(userResolve(detail.ShopRecipient, ei.ProcessInstanceKey, scope))
+			var held bool
+			if orderID, ref, held, err = s.heldPosition(recipient, detail.ShopProduct); err != nil {
+				return job.Completion{}, fmt.Errorf("shop command: %w", err)
+			}
+			if !held {
+				// Nothing to command is an answer, not a failure: a leaver who holds no
+				// admin account is the ordinary case. The result says so with "".
+				return shopCommandResult(detail, ""), nil
+			}
+		}
 		commandID, err := s.commandLine(app, orderID, ref, detail.ShopProduct, detail.ShopAction, shopCommandID(j.Key))
 		if err != nil {
+			var refused *commandRefused
+			if errors.As(err, &refused) && cp.CatchesErrorCode(ShopCommandRefused) {
+				return job.Completion{}, &job.BPMNError{Code: ShopCommandRefused, Message: "shop command: " + err.Error()}
+			}
 			return job.Completion{}, fmt.Errorf("shop command: %w", err)
 		}
-		var outputs []model.VariableValue
-		if detail.ShopResultVar != "" {
-			outputs = append(outputs, model.VariableValue{Name: detail.ShopResultVar, Kind: model.VarString, Text: commandID})
-		}
-		return job.Completion{Outputs: outputs}, nil
+		return shopCommandResult(detail, commandID), nil
 	}
+}
+
+// ShopCommandRefused is the BPMN error code a refused command is thrown as when the
+// process catches it (ADR-0521): the product does not list the
+// application, the action is not an operator's or a system's, the position is not
+// held. Uncaught it stays the failure it always was.
+const ShopCommandRefused = "SHOP_COMMAND_REFUSED"
+
+// commandRefused is a command the order would not take, as opposed to one that could
+// not be asked: a retry will not change it.
+type commandRefused struct{ msg string }
+
+func (e *commandRefused) Error() string { return e.msg }
+
+func refusedCommand(format string, a ...any) error {
+	return &commandRefused{msg: fmt.Sprintf(format, a...)}
+}
+
+// shopAddressesPerson reports whether a command task names a recipient instead of an
+// order and a position.
+func shopAddressesPerson(d *compiler.ConnectorTaskDetail) bool {
+	return d.ShopRecipient.Expr != nil || strings.TrimSpace(d.ShopRecipient.Literal) != ""
+}
+
+// shopCommandResult completes a command task, writing the command id — or "" when
+// there was nothing to command — into its result variable.
+func shopCommandResult(d *compiler.ConnectorTaskDetail, commandID string) job.Completion {
+	if d.ShopResultVar == "" {
+		return job.Completion{}
+	}
+	return job.Completion{Outputs: []model.VariableValue{{Name: d.ShopResultVar, Kind: model.VarString, Text: commandID}}}
+}
+
+// heldPosition finds the order and position through which recipient holds product, from
+// the inventory. held is false when they hold none, or hold it without an order — an
+// adopted or legacy right, which no order can be asked about.
+func (s *Server) heldPosition(recipient, product string) (orderID, position string, held bool, err error) {
+	if recipient == "" {
+		return "", "", false, refusedCommand("the task resolved no recipient; it commands what a person holds, by their account id")
+	}
+	err = s.readOffLoop(func(rv *state.ReadView, _ defIndex) error {
+		return rv.EntitlementsOf(recipient, func(v *model.EntitlementValue) error {
+			if v.ItemID != product || v.OrderID == "" || held {
+				return nil
+			}
+			orderID, position, held = v.OrderID, v.ItemID, true
+			if v.VariantID != "" {
+				position = v.ItemID + "#" + v.VariantID
+			}
+			return nil
+		})
+	})
+	if err != nil {
+		return "", "", false, fmt.Errorf("read the inventory of the recipient: %w", err)
+	}
+	return orderID, position, held, nil
 }
 
 // applicationOf is the portable key of the application the process definition was
@@ -111,11 +182,11 @@ func (s *Server) applicationOf(defKey uint64) (string, error) {
 // refused.
 func (s *Server) commandLine(app, orderID, ref, product, key, commandID string) (string, error) {
 	if app == "" {
-		return "", errors.New("the process belongs to no application; only an application a product " +
+		return "", refusedCommand("the process belongs to no application; only an application a product " +
 			"lists may command it")
 	}
 	if orderID == "" || ref == "" {
-		return "", fmt.Errorf("the task resolved order %q and position %q; it needs both", orderID, ref)
+		return "", refusedCommand("the task resolved order %q and position %q; it needs both", orderID, ref)
 	}
 	var (
 		h         heldLine
@@ -159,21 +230,21 @@ func (s *Server) commandLine(app, orderID, ref, product, key, commandID string) 
 	case opErr != nil:
 		return "", fmt.Errorf("read order %s: %w", orderID, opErr)
 	case !found:
-		return "", fmt.Errorf("no order %s", orderID)
+		return "", refusedCommand("no order %s", orderID)
 	case refusal != "":
-		return "", errors.New(refusal)
+		return "", refusedCommand("%s", refusal)
 	case !listed:
-		return "", fmt.Errorf("product %s does not list application %s among those that may command it", product, app)
+		return "", refusedCommand("product %s does not list application %s among those that may command it", product, app)
 	}
 	a, ok := h.line.ActionNamed(key)
 	switch {
 	case !ok:
-		return "", fmt.Errorf("product %s declares no action %s for this position", product, key)
+		return "", refusedCommand("product %s declares no action %s for this position", product, key)
 	case a.Effect == catalog.EffectProvision:
-		return "", errors.New("the provision action is the order's own: it runs when the position is " +
+		return "", refusedCommand("the provision action is the order's own: it runs when the position is " +
 			"fulfilled and is not commanded")
 	case !a.TriggeredBy(catalog.TriggerOperator) && !a.TriggeredBy(catalog.TriggerSystem):
-		return "", fmt.Errorf("action %s of product %s is asked for by %s; a process commands only what "+
+		return "", refusedCommand("action %s of product %s is asked for by %s; a process commands only what "+
 			"an operator or a system may ask for", key, product, strings.Join(a.Triggers, ", "))
 	case a.Effect == catalog.EffectDeprovision && unchanged:
 		// Already given back, or on its way: what the command wants is under way. A
@@ -182,9 +253,12 @@ func (s *Server) commandLine(app, orderID, ref, product, key, commandID string) 
 	case a.Effect == catalog.EffectDeprovision:
 		return s.commandReturn(app, orderID, h.position)
 	case h.line.Status != order.StatusDone:
-		return "", fmt.Errorf("position %s is %s; an action is asked only of a held right", h.position, h.line.Status)
+		return "", refusedCommand("position %s is %s; an action is asked only of a held right", h.position, h.line.Status)
 	}
 	if _, status, msg := s.fireAction(h, orderID, key, commandID, "asked by application "+app, nil); status != http.StatusOK {
+		if status < 500 {
+			return "", refusedCommand("%s", msg)
+		}
 		return "", errors.New(msg)
 	}
 	return commandID, nil
