@@ -105,6 +105,10 @@ def main(path):
             log(f"worker {w['name']} exists; its vault bundle {secret_name} was refreshed")
             continue
         body = {"name": w["name"], "kind": w["kind"], "credentialsRef": secret_name}
+        if w["kind"] == "entra":
+            # Directory fields in forms search through this Worker (ADR-0473); its owner
+            # opens it to them, and nothing else does (examples/m365-dienste).
+            body["formLookups"] = True
         for field in ("endpoint", "provider", "sender"):
             if w.get(field):
                 body[field] = w[field]

@@ -275,6 +275,12 @@ resource "azurerm_virtual_machine_extension" "ad_setup" {
   timeouts {
     create = "60m"
   }
+
+  # Azure stores the "created" tag of an extension in its own date format, which would
+  # show as a change on every plan.
+  lifecycle {
+    ignore_changes = [tags]
+  }
 }
 
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "ad" {

@@ -22,7 +22,7 @@ resource "azuread_user" "manager" {
   mail_nickname         = "${local.env_id}-manager"
   given_name            = "Max"
   surname               = "Vorgesetzt"
-  department            = "Atlas Test"
+  department            = local.env_id
   job_title             = "Vorgesetzter"
   usage_location        = var.usage_location
   password              = random_password.user["manager"].result
@@ -38,7 +38,7 @@ resource "azuread_user" "test" {
   mail_nickname         = "${local.env_id}-${replace(each.key, ".", "-")}"
   given_name            = each.value.given_name
   surname               = each.value.surname
-  department            = each.value.department
+  department            = coalesce(each.value.department, local.env_id)
   job_title             = each.value.job_title
   usage_location        = var.usage_location
   password              = random_password.user[each.key].result

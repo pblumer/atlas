@@ -8,7 +8,7 @@
   administrator:
 
     tofu output -json shared_tenant > out/shared-tenant.json
-    pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json [-Device]
+    pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json [-Device] [-Part SharePoint]
 
   Exchange Online:
     - a management scope over every recipient whose alias starts with the prefix;
@@ -16,7 +16,8 @@
       (the app holds no Mail.Send in Entra, which would be unscoped);
     - Exchange app: member of a role group whose write scope is that scope
       (the app holds no Exchange directory role).
-  SharePoint: the SharePoint app gets "write" on the test site (Sites.Selected).
+  SharePoint: the SharePoint app gets "write" on the test site (Sites.Selected), and the
+  site gets the list «Site-Inventar» for the catalogue's SharePoint team site.
 
   Re-running is safe. Exchange caches application permissions for 30 minutes to 2 hours,
   so the mail worker may be refused until then.
@@ -27,7 +28,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Config,
-    [switch] $Device
+    [switch] $Device,
+    # Repeat one part only, e.g. SharePoint after its sign-in timed out.
+    [ValidateSet('All', 'Exchange', 'SharePoint')] [string] $Part = 'All'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,11 +46,16 @@ function Step([string] $Text) { Write-Host "== $Text" }
 function Find([scriptblock] $Get) { try { & $Get } catch { $null } }
 
 # ---------------------------------------------------------------- Exchange Online
-if ($c.mail_app_id -or $c.exchange_app_id) {
+if ($Part -ne 'SharePoint' -and ($c.mail_app_id -or $c.exchange_app_id)) {
     $exo = @{ ShowBanner = $false }
     if ($Device) { $exo.Device = $true }
     Connect-ExchangeOnline @exo
     try {
+        # Small tenants start "dehydrated": custom scopes and role groups are refused until
+        # the one-time, irreversible Enable-OrganizationCustomization has run.
+        if ((Get-OrganizationConfig).IsDehydrated) {
+            throw 'Exchange Online is not customised yet (IsDehydrated). Run Enable-OrganizationCustomization once as an Exchange administrator (it cannot be undone, and may take a while to finish), then run this script again. See README.md, "Geteilter Tenant".'
+        }
         if (-not (Find { Get-ManagementScope -Identity $c.scope_name -ErrorAction Stop })) {
             Step "management scope $($c.scope_name): $($c.recipient_filter)"
             New-ManagementScope -Name $c.scope_name -RecipientRestrictionFilter $c.recipient_filter | Out-Null
@@ -80,6 +88,18 @@ if ($c.mail_app_id -or $c.exchange_app_id) {
                     -CustomRecipientWriteScope $c.scope_name `
                     -Description "Atlas test environment $($c.prefix): Exchange worker, test recipients only" | Out-Null
             }
+            # A role group from an earlier run keeps its roles; one the configuration now
+            # names is added with the same write scope. View-Only Recipients reads and
+            # takes no write scope.
+            $assigned = @(Get-ManagementRoleAssignment -RoleAssignee $c.exchange_role_group -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Role)" })
+            foreach ($role in $c.exchange_roles) {
+                if ($assigned -notcontains $role) {
+                    Step "role group $($c.exchange_role_group) gains $role, write scope $($c.scope_name)"
+                    $ra = @{ Role = $role; SecurityGroup = $c.exchange_role_group }
+                    if ($role -ne 'View-Only Recipients') { $ra.CustomRecipientWriteScope = $c.scope_name }
+                    New-ManagementRoleAssignment @ra | Out-Null
+                }
+            }
             $members = @(Find { Get-RoleGroupMember -Identity $c.exchange_role_group -ErrorAction Stop })
             if (-not ($members | Where-Object { "$($_.ExternalDirectoryObjectId)$($_.Identity)$($_.Name)" -match [regex]::Escape($c.exchange_sp_object_id) -or $_.Name -eq $c.exchange_display_name })) {
                 Step "$($c.exchange_display_name) joins $($c.exchange_role_group)"
@@ -93,20 +113,46 @@ if ($c.mail_app_id -or $c.exchange_app_id) {
 }
 
 # ---------------------------------------------------------------- SharePoint
-if ($c.sharepoint_app_id) {
-    $mg = @{ Scopes = 'Sites.FullControl.All'; NoWelcome = $true }
+# A delegated grant reaches only as far as the signed-in admin's own access, and a Global
+# Administrator has none on a private group's site (GET sites/root answers 403). The admin
+# is therefore made an owner of the test group for the grant only, and removed again in
+# finally - also when a step fails. Nothing outside the test group changes.
+if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
+    $mg = @{ Scopes = 'Sites.FullControl.All', 'Group.ReadWrite.All', 'User.Read'; NoWelcome = $true }
+    # Connect-MgGraph's device code sign-in needs a real terminal: started without one (in
+    # the background), it reports "timed out after 120 seconds" although the browser
+    # sign-in succeeded. -ClientTimeout does not change that.
     if ($Device) { $mg.UseDeviceCode = $true }
     Connect-MgGraph @mg
+    $graph = 'https://graph.microsoft.com/v1.0'
+    $ownerAdded = $false
+    $me = $null
     try {
-        # The group's site is provisioned some minutes after the group.
-        $site = $null
-        for ($i = 0; $i -lt 20 -and -not $site; $i++) {
-            try { $site = Invoke-MgGraphRequest -Method GET -Uri "https://graph.microsoft.com/v1.0/groups/$($c.site_group_id)/sites/root" }
-            catch { Step 'test site not provisioned yet; waiting 30 s'; Start-Sleep -Seconds 30 }
+        $me = (Invoke-MgGraphRequest -Method GET -Uri "$graph/me?`$select=id,userPrincipalName")
+        $owners = (Invoke-MgGraphRequest -Method GET -Uri "$graph/groups/$($c.site_group_id)/owners?`$select=id").value.id
+        if ($owners -notcontains $me.id) {
+            Step "$($me.userPrincipalName) becomes owner of the test group for the grant"
+            $ref = @{ '@odata.id' = "$graph/directoryObjects/$($me.id)" } | ConvertTo-Json
+            Invoke-MgGraphRequest -Method POST -Uri "$graph/groups/$($c.site_group_id)/owners/`$ref" -Body $ref -ContentType 'application/json' | Out-Null
+            $ownerAdded = $true
         }
-        if (-not $site) { throw "The test site of group $($c.site_group_id) does not exist yet; run this script again later." }
 
-        $uri = "https://graph.microsoft.com/v1.0/sites/$($site.id)/permissions"
+        # 404: the site is still being provisioned. 403 right after the owner was added:
+        # SharePoint has not seen the new owner yet. Both pass within minutes.
+        $site = $null
+        $last = $null
+        for ($i = 0; $i -lt 30 -and -not $site; $i++) {
+            try { $site = Invoke-MgGraphRequest -Method GET -Uri "$graph/groups/$($c.site_group_id)/sites/root" }
+            catch {
+                $code = $_.Exception.Response.StatusCode.value__
+                $last = "HTTP $code $($_.Exception.Message)"
+                if ($code -ne 404 -and -not ($code -eq 403 -and $ownerAdded)) { throw "GET sites/root of group $($c.site_group_id): $last" }
+                Step "test site not reachable yet ($last); waiting 30 s"; Start-Sleep -Seconds 30
+            }
+        }
+        if (-not $site) { throw "The test site of group $($c.site_group_id) is not reachable ($last); run this part again later (-Part SharePoint)." }
+
+        $uri = "$graph/sites/$($site.id)/permissions"
         $granted = (Invoke-MgGraphRequest -Method GET -Uri $uri).value | Where-Object {
             ($_.grantedToIdentitiesV2.application.id + $_.grantedToIdentities.application.id) -match [regex]::Escape($c.sharepoint_app_id)
         }
@@ -118,9 +164,30 @@ if ($c.sharepoint_app_id) {
             } | ConvertTo-Json -Depth 5
             Invoke-MgGraphRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' | Out-Null
         }
+        # The list the catalogue's SharePoint team site keeps its inventory in
+        # (examples/m365-dienste, README "Voraussetzungen" 6). Its site is
+        # SITE_INVENTAR for install-m365-dienste.py --site-inventory.
+        $lists = (Invoke-MgGraphRequest -Method GET -Uri "$graph/sites/$($site.id)/lists?`$select=id,displayName").value
+        if (-not ($lists | Where-Object { $_.displayName -eq 'Site-Inventar' })) {
+            Step "list «Site-Inventar» on $($site.webUrl)"
+            $columns = @('Alias', 'SiteUrl', 'GroupId', 'Sprache', 'Position', 'Status') | ForEach-Object { @{ name = $_; text = @{} } }
+            $columns += @{ name = 'KontingentGB'; number = @{} }
+            $body = @{ displayName = 'Site-Inventar'; columns = $columns; list = @{ template = 'genericList' } } | ConvertTo-Json -Depth 5
+            Invoke-MgGraphRequest -Method POST -Uri "$graph/sites/$($site.id)/lists" -Body $body -ContentType 'application/json' | Out-Null
+        }
+        $u = [uri]$site.webUrl
+        Write-Host "   SITE_INVENTAR: $($u.Host):$($u.AbsolutePath)  (install-m365-dienste.py --site-inventory)"
+        Step "check: site permissions for the SharePoint app"
+        (Invoke-MgGraphRequest -Method GET -Uri $uri).value | Where-Object {
+            ($_.grantedToIdentitiesV2.application.id + $_.grantedToIdentities.application.id) -match [regex]::Escape($c.sharepoint_app_id)
+        } | ForEach-Object { Write-Host "   roles: $($_.roles -join ', ')" }
     }
     finally {
-        Disconnect-MgGraph | Out-Null
+        if ($ownerAdded) {
+            Step "$($me.userPrincipalName) is removed as owner of the test group"
+            Invoke-MgGraphRequest -Method DELETE -Uri "$graph/groups/$($c.site_group_id)/owners/$($me.id)/`$ref" | Out-Null
+        }
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
     }
 }
 

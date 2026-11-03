@@ -22,7 +22,12 @@ echo "wait-atlas: Atlas answers"
 
 # shellcheck disable=SC2086
 until $ssh_cmd -o StrictHostKeyChecking=accept-new -o BatchMode=yes test -f /var/lib/atlas-setup.done 2>/dev/null; do
-  (( $(date +%s) < deadline )) || { echo "wait-atlas: setup not finished in time" >&2; break; }
+  (( $(date +%s) < deadline )) || {
+    echo "wait-atlas: setup not finished in time; last lines of /var/log/atlas-setup.log:" >&2
+    # shellcheck disable=SC2086
+    $ssh_cmd -o BatchMode=yes sudo tail -n 15 /var/log/atlas-setup.log >&2 || true
+    exit 1
+  }
   sleep 20
 done
 # shellcheck disable=SC2086

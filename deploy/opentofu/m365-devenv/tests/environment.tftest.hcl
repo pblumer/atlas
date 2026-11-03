@@ -12,7 +12,17 @@ mock_provider "azuread" {
   }
   mock_data "azuread_domains" {
     defaults = {
-      domains = [{ domain_name = "contoso.onmicrosoft.com", initial = true }]
+      # OpenTofu requires every attribute of a nested mock object, not only the ones read.
+      domains = [{
+        domain_name         = "contoso.onmicrosoft.com"
+        initial             = true
+        admin_managed       = true
+        authentication_type = "Managed"
+        default             = false
+        root                = true
+        supported_services  = []
+        verified            = true
+      }]
     }
   }
   mock_data "azuread_service_principal" {
@@ -28,6 +38,8 @@ mock_provider "azuread" {
         "Sites.Selected"             = "883ea226-0bf2-4a8f-9f9d-92c9162a727d"
         "Exchange.ManageAsApp"       = "dc50a0fb-09a3-484d-be87-e023b12c6440"
         "Mail.Send"                  = "b633e1c5-b582-4048-a93e-9f11b44c7e96"
+        "User.Invite.All"            = "09850681-111b-4a89-9bed-3f2cae46d706"
+        "Sites.Read.All"             = "332a536c-c7ef-4017-ab91-336970924f0d"
       }
       oauth2_permission_scope_ids = {
         "openid"  = "37f7f235-527c-4136-accd-4a02d197296e"
@@ -157,6 +169,20 @@ variables {
   expected_initial_domain = "contoso.onmicrosoft.com"
   azure_subscription_id   = "33333333-0000-0000-0000-000000000000"
   atlas_allowed_cidrs     = ["198.51.100.4/32"]
+
+  # tofu test also reads terraform.tfvars. Pin everything a real configuration sets, so
+  # the tests check the defaults and never reach a real tenant: with license_sku_ids set,
+  # an apply run would start scripts/assign-licenses.sh against Graph despite the mocks.
+  license_sku_ids           = []
+  shared_tenant             = false
+  credential_validity_days  = 14
+  workers                   = {}
+  atlas_tls                 = "internal"
+  sharepoint_read_all_sites = false
+  enable_exchange_onprem    = false
+  enable_ad_dc              = false
+  ad_allowed_cidrs          = []
+  mail_sender               = ""
 }
 
 run "defaults_build_every_worker_app_and_an_ad_mock" {
@@ -279,6 +305,58 @@ run "ad_without_server_needs_allowed_cidrs" {
   expect_failures = [terraform_data.ad_guard]
 }
 
+run "exchange_needs_the_domain_controller" {
+  command = plan
+
+  variables {
+    enable_exchange_onprem = true
+  }
+
+  expect_failures = [terraform_data.exchange_guard]
+}
+
+run "exchange_server_joins_the_test_domain" {
+  command = apply
+
+  variables {
+    enable_ad_dc           = true
+    ad_allowed_cidrs       = ["203.0.113.7/32"]
+    enable_exchange_onprem = true
+  }
+
+  assert {
+    condition     = tolist(azurerm_network_interface.exchange[0].dns_servers) == tolist(["10.42.0.10"])
+    error_message = "The Exchange server resolves through the domain controller, or it cannot join the domain."
+  }
+  assert {
+    condition     = azurerm_windows_virtual_machine.exchange[0].size == "Standard_D4s_v5" && azurerm_windows_virtual_machine.exchange[0].os_disk[0].disk_size_gb == 256
+    error_message = "Exchange needs 16 GB of memory and room for its image and databases."
+  }
+  assert {
+    condition     = length(azurerm_network_security_group.exchange[0].security_rule) == 0
+    error_message = "Without ad_allow_rdp nothing reaches the Exchange server from the Internet."
+  }
+  assert {
+    condition     = output.exchange_onprem.connection_uri == "http://exch01.atlastest.internal/PowerShell/"
+    error_message = "The worker reaches Exchange's Remote PowerShell by the server's domain name (Kerberos)."
+  }
+  assert {
+    condition     = !strcontains(azurerm_windows_virtual_machine.exchange[0].custom_data, base64encode(random_password.ad["admin"].result))
+    error_message = "The setup script carries no secret; those go in the extension's protected settings."
+  }
+}
+
+run "ipv6_and_open_ranges_are_refused" {
+  command = plan
+
+  variables {
+    atlas_allowed_cidrs = ["2001:db8::/32", "::/0"]
+    ad_allowed_cidrs    = ["0.0.0.0/0"]
+  }
+
+  expect_failures = [var.atlas_allowed_cidrs, var.ad_allowed_cidrs]
+}
+
 run "server_needs_allowed_cidrs" {
   command = plan
 
@@ -350,8 +428,12 @@ run "ad_domain_controller" {
     error_message = "The Atlas server's AD worker should reach the domain controller inside the network."
   }
   assert {
-    condition     = strcontains(local.atlas_setup_env, "AD_HOSTS_LINE=10.42.0.10 dc01.atlastest.internal")
+    condition     = strcontains(local.atlas_setup_env, "AD_HOSTS_LINE='10.42.0.10 dc01.atlastest.internal'")
     error_message = "The Atlas server should resolve the domain controller's private name."
+  }
+  assert {
+    condition     = alltrue([for l in compact(split("\n", local.atlas_setup_env)) : can(regex("^[A-Z_]+='[^']*'$", l))])
+    error_message = "Every line of setup.env must be NAME='value': atlas-setup.sh sources it, and an unquoted space aborts the setup."
   }
   assert {
     condition     = !strcontains(local.atlas_env, "ATLAS_AD_MOCK")
@@ -489,6 +571,26 @@ run "shared_tenant_scopes_the_mailbox_rights" {
   assert {
     condition     = length(module.teamsphone) == 0
     error_message = "No Teams Phone app in a shared tenant."
+  }
+}
+
+run "shared_tenant_reads_all_sites_only_when_asked" {
+  command = plan
+
+  variables {
+    shared_tenant             = true
+    workers                   = { teamsphone = false }
+    credential_validity_days  = 3
+    sharepoint_read_all_sites = true
+  }
+
+  assert {
+    condition     = tolist(local.sharepoint_graph_permissions_effective) == tolist(["Sites.Selected", "Sites.Read.All"])
+    error_message = "With sharepoint_read_all_sites the SharePoint app reads every site besides its Sites.Selected grant."
+  }
+  assert {
+    condition     = contains(var.entra_graph_permissions, "User.Invite.All")
+    error_message = "The Entra app invites the SharePoint team site's guests."
   }
 }
 
