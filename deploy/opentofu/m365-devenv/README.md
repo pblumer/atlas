@@ -280,6 +280,14 @@ als echtes Postfach nicht).
   löscht es die Datei mit den Zugangsdaten; sie liegen dann nur noch im Vault von Atlas.
   Das Skript ist wiederholbar und gegen einen lokal gebauten Atlas-Server aus diesem
   Repository geprüft.
+- **Zugriff aus einem Firmennetz:** Proxys, die HTTPS prüfen (geprüft mit dem Netz der
+  Bundesverwaltung), sperren eine Seite mit Caddys eigenem Zertifikat (`atlas_tls =
+  "internal"`). Dann `atlas_tls = "letsencrypt"` setzen; 80 und 443 sind danach für alle
+  offen, SSH bleibt auf `atlas_allowed_cidrs` beschränkt. Eine laufende VM lässt sich ohne
+  Ersatz umstellen: `tofu apply -target=azurerm_network_security_group.atlas`, auf der VM
+  die Zeile `tls internal` aus `/etc/caddy/Caddyfile` (und `/etc/atlas/Caddyfile`) entfernen,
+  `systemctl reload caddy`. Weitere Adressen für `atlas_allowed_cidrs` gehen ebenso nur
+  über die Netzwerksicherheitsgruppe.
 - **Protokolle:** `/var/log/atlas-setup.log`, `journalctl -u atlas`, `journalctl -u caddy`.
 - **Automatische Abschaltung** täglich um `atlas_auto_shutdown_time` (Vorgabe 19:00 UTC).
   Wieder starten mit `az vm start -g <ressourcengruppe> -n <vm>` oder im Azure-Portal.
@@ -431,7 +439,7 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
 - Neue Rollen einer App wirken in Exchange erst nach 30 min bis 2 h; `Test-ServicePrincipalAuthorization`
   zeigt die Zuweisung sofort.
 - Testpersonen, die sich nach der Installation zum ersten Mal anmelden, sind in keiner
-  Zielgruppe. Besser wäre die Gruppenzuordnung bei der SSO-Anmeldung
+  Zielgruppe; `install-m365-dienste.py` erneut ausführen nimmt sie auf. Besser wäre die Gruppenzuordnung bei der SSO-Anmeldung
   (Sicherheitsgruppe der Umgebung → Zielgruppe).
 - Teams: ein erstes Team wurde von Hand angelegt; ob das nötig war, ist offen, denn danach
   schlug `PUT /groups/{id}/team` weiter fehl, und erst `POST /teams` (Entra-Worker) gelang.
@@ -442,7 +450,10 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
   ersetzt die Atlas-VM (Cloud-Init-Daten); `ignore_changes` wäre zu erwägen.
 - M365-Gruppen (Teams) erhalten die Standard-Domain des Tenants (die eigene, nicht die `onmicrosoft.com`-Domain), nicht
   `MAIL_DOMAIN`.
-- Ungetestet: Postfachzugriff, Lizenz, Sitzungszimmer, Aktionen an Bestellungen,
+- Am 2026-11-03 zusätzlich geprüft: Rückgabe des Verteilers, Postfachzugriff erteilen und
+  entziehen, Lizenz, Abwesenheit; Zugriff aus dem Netz der Bundesverwaltung mit
+  `atlas_tls = "letsencrypt"`.
+- Ungetestet: Sitzungszimmer, Partnerzugang, übrige Aktionen an Bestellungen,
   Governance-Prüfung, Teams Phone.
 
 ## Bekannte Grenzen
