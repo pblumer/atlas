@@ -330,9 +330,10 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   `m365-postfachzugriff` verlangte die Zusatzfreigabe, die Informationssicherheit gab frei,
   `Add-MailboxPermission` bzw. `Remove-MailboxPermission` setzten und entfernten `FullAccess`;
   die Begründung liegt als personenbezogene Variable verschlüsselt.
-- **Sitzungszimmer** bestellt (Genehmigung durch die Rolle Facility-Management): Raumpostfach
+- **Sitzungszimmer** bestellt und zurückgegeben (Genehmigung durch die Rolle Facility-Management): Raumpostfach
   mit Präfix `RM`, `ResourceCapacity`, Buchungsregeln `AutoAccept`, keine Überschneidungen,
-  180 Tage, Herkunftskennzeichnung mit dem Standort.
+  180 Tage, Herkunftskennzeichnung mit dem Standort; die Rückgabe findet es über die
+  Kennzeichnung und entfernt es.
 - **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
   zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
   (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
@@ -357,7 +358,7 @@ Wer sich erst nach der Installation zum ersten Mal anmeldet, ist in keiner Zielg
 sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzwischen
 angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
 
-Nicht geprüft: die Rückgabe eines Sitzungszimmers, Partnerzugang, die übrigen Aktionen an Bestellungen,
+Nicht geprüft: Partnerzugang, die übrigen Aktionen an Bestellungen,
 die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
 Teams Phone und `installieren.ps1`.
 
