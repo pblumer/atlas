@@ -59,6 +59,8 @@ function installFixture(form) {
     "/api/v1/forms/genehmigung": { id: "genehmigung", schema: form },
     "/api/v1/instances/2022/variables": {},
   };
+  // Every catalogue this person reaches (ADR-0522).
+  ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   const json = (body) => Promise.resolve(new Response(JSON.stringify(body), {
     status: 200, headers: { "content-type": "application/json" },
   }));

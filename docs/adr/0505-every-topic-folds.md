@@ -180,7 +180,10 @@ anybody remembering. `e2e/fold-coverage.spec.mjs` opens every page of the menu, 
 `app.js` when it runs, with every answer empty, and fails on a page with two or more
 section headings that do not all fold, on a card headed by a bold word or an `<h3>`
 (unless it holds a form), and on a `<details>` not marked `fold-sub`; a heading that
-must not fold says so with `no-fold`. `TestEveryFoldInsideATopicDrawsTheTopicsCaret`
+must not fold says so with `no-fold`. An exception is a decision, so it carries its
+reason: `TestEveryNoFoldSaysWhy` refuses a `no-fold` without a comment
+`no-fold: <the reason>` on its line or the three above it, so the class is not a quiet
+way past the guard. `TestEveryFoldInsideATopicDrawsTheTopicsCaret`
 holds every `<details>` in the Console's modules to `fold-sub` in the source, which
 reaches the ones a page draws only around data.
 

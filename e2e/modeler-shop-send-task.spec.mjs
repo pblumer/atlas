@@ -3,7 +3,9 @@
 // <atlas:shopTask/> and nothing else — no message, no task definition, no Worker
 // extension — because that element is the whole contract the compiler parses. In mode
 // `outcome` it states mode, action and outcome; in mode `command` mode, product, action,
-// order, position and resultVariable, and never an outcome, which the compiler refuses.
+// order, position and resultVariable, and never an outcome, which the compiler refuses; in
+// mode `order` mode, catalog, product, recipient, answers and resultVariable, and never an
+// action or an outcome.
 // Choosing another kind takes it off again, and an action key no catalogue could declare
 // is flagged where it is typed rather than at deploy.
 import { test, expect } from "@playwright/test";
@@ -107,11 +109,11 @@ test("a shop task read from the model shows what it declares", async ({ page }) 
   const chosen = page.locator(".stkind-row-on");
   await expect(chosen).toHaveAttribute("data-kind", "shop");
   await expect(chosen).toContainText("Shop");
-  await expect(chosen).toContainText("Meldet, wie eine Produktaktion ausging, oder fordert eine von einer gehaltenen Position an (ADR-0429).");
+  await expect(chosen).toContainText("Meldet, wie eine Produktaktion ausging, fordert eine von einer gehaltenen Position an oder bestellt ein Produkt für jemanden (ADR-0429).");
 
   await openShop(page);
   const modes = await page.locator("#f-shop-mode option").evaluateAll((os) => os.map((o) => o.value));
-  expect(modes).toEqual(["outcome", "command"]);
+  expect(modes).toEqual(["outcome", "command", "order"]);
   await expect(page.locator("#f-shop-mode")).toHaveValue("outcome");
   await expect(page.locator("#f-shop-action")).toHaveValue("storage-extend");
   await expect(page.locator("#f-shop-outcome")).toHaveValue("failed");
@@ -237,6 +239,60 @@ test("switching a command back to an outcome clears the command's fields", async
   const task = await sendTaskXML(page, "Send_cmd");
   expect(extensionsOf(task)).toBe('<atlas:shopTask mode="outcome" action="deprovision" outcome="completed" />');
   for (const attr of ["product=", "order=", "position=", "resultVariable="]) expect(task).not.toContain(attr);
+  expect(page.__errors).toEqual([]);
+});
+
+test("choosing the order mode writes the order's fields and no action or outcome", async ({ page }) => {
+  await mount(page);
+  await page.evaluate((el) => window.__select(el), "Send_cmd");
+  await openShop(page);
+  await page.locator("#f-shop-mode").selectOption("order");
+
+  // The order's fields replace the command's; the product and the result variable carry
+  // over, and the action, the order and the position are gone from the panel and the model.
+  await expect(page.locator("#f-shop-catalog")).toBeVisible();
+  for (const key of ["action", "outcome", "order", "position"]) await expect(page.locator(`#f-shop-${key}`)).toHaveCount(0);
+  await expect(page.locator("#f-shop-product")).toHaveValue("mailbox");
+  // The message sources list products with actions, not the ones this application may
+  // order, so an order's product is plain text.
+  await expect(page.locator("#f-shop-product")).not.toHaveAttribute("list", /.*/);
+  let task = await sendTaskXML(page, "Send_cmd");
+  expect(extensionsOf(task)).toBe('<atlas:shopTask mode="order" product="mailbox" resultVariable="returnCommand" />');
+
+  await page.locator("#f-shop-catalog").fill("cat-m365-hr");
+  await page.locator("#f-shop-catalog").blur();
+  await page.locator("#f-shop-product").fill("m365-joiner");
+  await page.locator("#f-shop-product").blur();
+  await page.locator("#f-shop-recipient").fill("= account.id");
+  await page.locator("#f-shop-recipient").blur();
+  await page.locator("#f-shop-answers").fill("= answers");
+  await page.locator("#f-shop-answers").blur();
+  await page.locator("#f-shop-resultVariable").fill("orderId");
+  await page.locator("#f-shop-resultVariable").blur();
+
+  task = await sendTaskXML(page, "Send_cmd");
+  expect(extensionsOf(task)).toBe(
+    '<atlas:shopTask mode="order" catalog="cat-m365-hr" product="m365-joiner" recipient="= account.id" answers="= answers" resultVariable="orderId" />');
+  for (const attr of ["action=", "outcome=", "order=", "position="]) expect(task).not.toContain(attr);
+  // Opened again, the task reads back what it declares: the recipient as an expression.
+  await page.evaluate((el) => window.__select(el), "Send_msg");
+  await page.evaluate((el) => window.__select(el), "Send_cmd");
+  await openGroup(page, "Shop", "#f-shop-mode");
+  await expect(page.locator("#f-shop-mode")).toHaveValue("order");
+  await expect(page.locator("#f-shop-catalog")).toHaveValue("cat-m365-hr");
+  await expect(page.locator("#f-shop-recipient")).toHaveValue("= account.id");
+  await expect(fxToggle(page, "recipient")).toHaveClass(/active/);
+  // How a refusal is routed is said below the fields.
+  await expect(page.locator("#f-shop-after")).toContainText("SHOP_ORDER_REFUSED");
+  // An order may be placed once per product or per person, so the task offers the loop.
+  await expect(page.locator("#f-mi-mode")).toHaveCount(1);
+
+  // Back to an outcome: the order's fields are cleared, and the outcome starts on its first
+  // choice.
+  await page.locator("#f-shop-mode").selectOption("outcome");
+  await expect(page.locator("#f-shop-outcome")).toHaveValue("completed");
+  task = await sendTaskXML(page, "Send_cmd");
+  expect(extensionsOf(task)).toBe('<atlas:shopTask mode="outcome" outcome="completed" />');
   expect(page.__errors).toEqual([]);
 });
 

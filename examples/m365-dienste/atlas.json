@@ -9,6 +9,11 @@
       "path": "aufbewahrung.bpmn"
     },
     {
+      "id": "proc_m365_eintritt_paket",
+      "name": "Microsoft 365: Eintrittspaket",
+      "path": "eintritt-paket.bpmn"
+    },
+    {
       "id": "proc_m365_engage_community",
       "name": "Viva Engage: Community",
       "path": "engage-community.bpmn"
@@ -39,9 +44,19 @@
       "path": "governance-pruefung.bpmn"
     },
     {
+      "id": "proc_m365_hr_eintritt",
+      "name": "Microsoft 365: Eintritt und Austritt (HR-Ereignis)",
+      "path": "hr-eintritt.bpmn"
+    },
+    {
       "id": "proc_m365_lizenz",
       "name": "Microsoft 365: Lizenz und Postfach",
       "path": "lizenz.bpmn"
+    },
+    {
+      "id": "proc_m365_oe_mitgliedschaften",
+      "name": "Microsoft 365: Mitgliedschaften der Organisationseinheit",
+      "path": "oe-mitgliedschaften.bpmn"
     },
     {
       "id": "proc_m365_partnerzugang",
@@ -116,6 +131,46 @@
       "path": "m365-aufbewahrung-bestellung.form.json"
     },
     {
+      "id": "m365-austritt-abgelehnt",
+      "name": "m365-austritt-abgelehnt",
+      "path": "m365-austritt-abgelehnt.form.json"
+    },
+    {
+      "id": "m365-eintritt-abgelehnt",
+      "name": "m365-eintritt-abgelehnt",
+      "path": "m365-eintritt-abgelehnt.form.json"
+    },
+    {
+      "id": "m365-eintritt-angaben",
+      "name": "m365-eintritt-angaben",
+      "path": "m365-eintritt-angaben.form.json"
+    },
+    {
+      "id": "m365-eintritt-konto",
+      "name": "m365-eintritt-konto",
+      "path": "m365-eintritt-konto.form.json"
+    },
+    {
+      "id": "m365-eintritt-lizenz-bestellung",
+      "name": "m365-eintritt-lizenz-bestellung",
+      "path": "m365-eintritt-lizenz-bestellung.form.json"
+    },
+    {
+      "id": "m365-eintritt-passwort",
+      "name": "m365-eintritt-passwort",
+      "path": "m365-eintritt-passwort.form.json"
+    },
+    {
+      "id": "m365-eintritt-rueckgabe",
+      "name": "m365-eintritt-rueckgabe",
+      "path": "m365-eintritt-rueckgabe.form.json"
+    },
+    {
+      "id": "m365-eintritt-uebergabe",
+      "name": "m365-eintritt-uebergabe",
+      "path": "m365-eintritt-uebergabe.form.json"
+    },
+    {
       "id": "m365-engage-bestellung",
       "name": "m365-engage-bestellung",
       "path": "m365-engage-bestellung.form.json"
@@ -149,6 +204,21 @@
       "id": "m365-governance-befund",
       "name": "m365-governance-befund",
       "path": "m365-governance-befund.form.json"
+    },
+    {
+      "id": "m365-lizenz-klaeren",
+      "name": "m365-lizenz-klaeren",
+      "path": "m365-lizenz-klaeren.form.json"
+    },
+    {
+      "id": "m365-oe-bestellung",
+      "name": "m365-oe-bestellung",
+      "path": "m365-oe-bestellung.form.json"
+    },
+    {
+      "id": "m365-oe-unbekannt",
+      "name": "m365-oe-unbekannt",
+      "path": "m365-oe-unbekannt.form.json"
     },
     {
       "id": "m365-partnerzugang-antrag",
@@ -313,6 +383,12 @@
       "name": "M365Namensregel",
       "modelRef": "m365-namensregel",
       "path": "m365-namensregel.dmn"
+    },
+    {
+      "id": "dmn-m365-oe-mitgliedschaften",
+      "name": "M365OeMitgliedschaften",
+      "modelRef": "m365-oe-mitgliedschaften",
+      "path": "m365-oe-mitgliedschaften.dmn"
     },
     {
       "id": "dmn-m365-postfachkontingent",

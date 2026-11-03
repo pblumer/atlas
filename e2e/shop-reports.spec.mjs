@@ -40,6 +40,8 @@ function installShop(reports) {
     "/api/v1/shop/team-report": report("team"),
     "/api/v1/shop/organisation-report": report("organisation"),
   };
+  // Every catalogue this person reaches (ADR-0522).
+  ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   window.fetch = (input) => {
     const full = String(input).replace(/^https?:\/\/[^/]+/, "");
     const path = full.split("?")[0];

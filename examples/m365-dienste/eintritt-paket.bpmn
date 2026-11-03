@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Microsoft 365: Eintrittspaket. Lebenszyklus des Ganzen: bereitstellen meldet sofort erledigt,
+zurückgeben gibt die Teile zurück (zuerst die Mitgliedschaften, dann die Lizenz).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_eintritt_paket" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <message id="m_m365_eintritt_bereitstellen" name="m365.eintritt.bereitstellen"/>
+  <message id="m_m365_eintritt_zurueckgeben" name="m365.eintritt.zurueckgeben"/>
+  <process id="proc_m365_eintritt_paket" name="Microsoft 365: Eintrittspaket" isExecutable="true">
+    <documentation>Lebenszyklus des Produkts m365-eintritt, eines Pakets ohne eigenes Zielsystem. Das Paket besteht aus zwei integralen Teilen (Kanten composition): m365-eintritt-lizenz und m365-oe-mitgliedschaften. Ein Auftrag für das Paket trägt eine Position für das Paket und je eine für jeden Teil; jede Position wird von ihrem eigenen Prozess bereitgestellt.
+
+Bereitstellen: Das Paket selbst hat nichts anzulegen und meldet seine Position sofort als erledigt.
+
+Zurückgeben: Die Rückgabe einer Position gibt nur diese Position zurück, nicht die Teile, die das Ganze trägt (api/order/return.go kennt nur die Kante requires). Dieser Prozess gibt die Teile deshalb selbst zurück, mit Shop-Aufgaben im Modus command: zuerst die Mitgliedschaften, dann, wenn deren Rückgabe gemeldet ist, die Lizenz. Die Reihenfolge ist nötig, weil die Mitgliedschaften die Lizenz voraussetzen (Kante requires) und die Bestellung eine Lizenz nicht zurücknimmt, solange etwas sie braucht. Erst dann meldet er die Rückgabe des Pakets. So gibt jede Rückgabe des Pakets die Teile zurück, ob sie der Austrittsprozess, eine Person im Betrieb oder die Befristung auslöst.
+
+Keine Personendaten: Der Prozess liest nur Auftrag, Positionen und Ergebnisse. Braucht das Secret atlas (API-Token mit der Rolle operator) und die Konstante ATLAS_API_BASE, weil eine Rückgabe atlasApiBase nicht erhält.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/></atlas:constants></extensionElements>
+    <startEvent id="s_bereit" name="Paket bestellt"><documentation>Start der Operation provision.</documentation><outgoing>f_s_bereit__st_done</outgoing><messageEventDefinition messageRef="m_m365_eintritt_bereitstellen"/></startEvent>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>POST /api/v1/orders/{orderId}/lines/{positionId} mit status "done". Das Paket hat kein eigenes Zielsystem; was es gewährt, stellen seine Teile bereit.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + &quot;/api/v1/orders/&quot; + orderId + &quot;/lines/&quot; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&quot;done&quot;" target="status"/></zeebe:ioMapping></extensionElements><incoming>f_s_bereit__st_done</incoming><outgoing>f_st_done__e_bereit</outgoing></serviceTask>
+    <endEvent id="e_bereit" name="Paket bereit"><incoming>f_st_done__e_bereit</incoming></endEvent>
+    <startEvent id="s_rueck" name="Rückgabe angefordert"><documentation>Start der Operation deprovision: der Austrittsprozess, eine Person im Betrieb oder eine Rückgabe über die Bestellung.</documentation><outgoing>f_s_rueck__sd_oe</outgoing><messageEventDefinition messageRef="m_m365_eintritt_zurueckgeben"/></startEvent>
+    <sendTask id="sd_oe" name="Mitgliedschaften zurückgeben"><documentation>Shop-Aufgabe im Modus command: deprovision der Position m365-oe-mitgliedschaften desselben Auftrags. Das Produkt nennt die Applikation in commandedBy. Eine schon zurückgegebene Position ist kein Fehler.</documentation><extensionElements><atlas:shopTask mode="command" product="m365-oe-mitgliedschaften" action="deprovision" order="=orderId" position="m365-oe-mitgliedschaften"/></extensionElements><incoming>f_s_rueck__sd_oe</incoming><outgoing>f_sd_oe__gw_wjoin</outgoing></sendTask>
+    <exclusiveGateway id="gw_wjoin"><incoming>f_sd_oe__gw_wjoin</incoming><incoming>f_gw_stand__gw_wjoin</incoming><outgoing>f_gw_wjoin__t_warten</outgoing></exclusiveGateway>
+    <intermediateCatchEvent id="t_warten" name="5 Minuten warten"><documentation>Die Rückgabe läuft in ihrem eigenen Prozess.</documentation><incoming>f_gw_wjoin__t_warten</incoming><outgoing>f_t_warten__st_stand</outgoing><timerEventDefinition><timeDuration>PT5M</timeDuration></timerEventDefinition></intermediateCatchEvent>
+    <serviceTask id="st_stand" name="Rückgabe prüfen"><documentation>GET /api/v1/orders/{orderId}/lines/m365-oe-mitgliedschaften/outcomes (ein operator darf sie lesen): Hat die Position eine Rückgabe (effect deprovision) mit outcome completed? Übernommen werden nur dieses Ergebnis (oeZurueck) und der Zähler versuche.</documentation><extensionElements><atlas:restConnector method="GET" url="=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + &quot;/api/v1/orders/&quot; + orderId + &quot;/lines/m365-oe-mitgliedschaften/outcomes&quot;" resultVariable="stand" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:output source="=count(stand.outcomes[effect = &quot;deprovision&quot; and outcome = &quot;completed&quot;]) &gt; 0" target="oeZurueck"/><zeebe:output source="=if versuche = null then 1 else versuche + 1" target="versuche"/></zeebe:ioMapping></extensionElements><incoming>f_t_warten__st_stand</incoming><outgoing>f_st_stand__gw_stand</outgoing></serviceTask>
+    <exclusiveGateway id="gw_stand" name="Zurückgegeben?" default="f_gw_stand__ut_pruefen"><documentation>Höchstens 24 Versuche (zwei Stunden), dann prüft M365-Administration.</documentation><incoming>f_st_stand__gw_stand</incoming><outgoing>f_gw_stand__gw_ljoin</outgoing><outgoing>f_gw_stand__gw_wjoin</outgoing><outgoing>f_gw_stand__ut_pruefen</outgoing></exclusiveGateway>
+    <userTask id="ut_pruefen" name="Rückgabe prüfen"><documentation>Die Mitgliedschaften sind nach zwei Stunden nicht zurückgegeben. M365-Administration klärt das (Incident in der Rückgabe, Aufgabe offen) und schliesst ab; danach geht die Lizenz zurück.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="M365-Administration"/><zeebe:formDefinition formId="m365-eintritt-rueckgabe"/></extensionElements><incoming>f_gw_stand__ut_pruefen</incoming><outgoing>f_ut_pruefen__gw_ljoin</outgoing></userTask>
+    <exclusiveGateway id="gw_ljoin"><incoming>f_gw_stand__gw_ljoin</incoming><incoming>f_ut_pruefen__gw_ljoin</incoming><outgoing>f_gw_ljoin__sd_lizenz</outgoing></exclusiveGateway>
+    <sendTask id="sd_lizenz" name="Lizenz zurückgeben"><documentation>Shop-Aufgabe im Modus command: deprovision der Position m365-eintritt-lizenz. Mit der Lizenz verliert die Person ihr Postfach; Exchange Online hält es noch 30 Tage.</documentation><extensionElements><atlas:shopTask mode="command" product="m365-eintritt-lizenz" action="deprovision" order="=orderId" position="m365-eintritt-lizenz"/></extensionElements><incoming>f_gw_ljoin__sd_lizenz</incoming><outgoing>f_sd_lizenz__st_returned</outgoing></sendTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe des Pakets (status "returned"); damit endet das Recht im Bestand. Die Lizenz geht in ihrem eigenen Prozess zurück.</documentation><extensionElements><atlas:restConnector method="POST" url="=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + &quot;/api/v1/orders/&quot; + orderId + &quot;/lines/&quot; + (if positionId = null then itemId else positionId)" authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source="=&quot;returned&quot;" target="status"/></zeebe:ioMapping></extensionElements><incoming>f_sd_lizenz__st_returned</incoming><outgoing>f_st_returned__e_rueck</outgoing></serviceTask>
+    <endEvent id="e_rueck" name="Paket zurückgegeben"><incoming>f_st_returned__e_rueck</incoming></endEvent>
+    <sequenceFlow id="f_s_bereit__st_done" sourceRef="s_bereit" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_bereit" sourceRef="st_done" targetRef="e_bereit"/>
+    <sequenceFlow id="f_s_rueck__sd_oe" sourceRef="s_rueck" targetRef="sd_oe"/>
+    <sequenceFlow id="f_sd_oe__gw_wjoin" sourceRef="sd_oe" targetRef="gw_wjoin"/>
+    <sequenceFlow id="f_gw_wjoin__t_warten" sourceRef="gw_wjoin" targetRef="t_warten"/>
+    <sequenceFlow id="f_t_warten__st_stand" sourceRef="t_warten" targetRef="st_stand"/>
+    <sequenceFlow id="f_st_stand__gw_stand" sourceRef="st_stand" targetRef="gw_stand"/>
+    <sequenceFlow id="f_gw_stand__gw_ljoin" sourceRef="gw_stand" targetRef="gw_ljoin" name="zurückgegeben"><conditionExpression>=oeZurueck</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_stand__gw_wjoin" sourceRef="gw_stand" targetRef="gw_wjoin" name="weiter warten"><conditionExpression>=not(oeZurueck) and versuche &lt; 24</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_stand__ut_pruefen" sourceRef="gw_stand" targetRef="ut_pruefen" name="Zeit abgelaufen"/>
+    <sequenceFlow id="f_ut_pruefen__gw_ljoin" sourceRef="ut_pruefen" targetRef="gw_ljoin"/>
+    <sequenceFlow id="f_gw_ljoin__sd_lizenz" sourceRef="gw_ljoin" targetRef="sd_lizenz"/>
+    <sequenceFlow id="f_sd_lizenz__st_returned" sourceRef="sd_lizenz" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_rueck" sourceRef="st_returned" targetRef="e_rueck"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_eintritt_paket_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_eintritt_paket_plane" bpmnElement="proc_m365_eintritt_paket">
+      <bpmndi:BPMNShape id="s_bereit_di" bpmnElement="s_bereit"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="612" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_rueck_di" bpmnElement="s_rueck"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_oe_di" bpmnElement="sd_oe"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_wjoin_di" bpmnElement="gw_wjoin" isMarkerVisible="true"><omgdc:Bounds x="455" y="385" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="t_warten_di" bpmnElement="t_warten"><omgdc:Bounds x="612" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_stand_di" bpmnElement="st_stand"><omgdc:Bounds x="730" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_stand_di" bpmnElement="gw_stand" isMarkerVisible="true"><omgdc:Bounds x="905" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="1030" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ljoin_di" bpmnElement="gw_ljoin" isMarkerVisible="true"><omgdc:Bounds x="1205" y="385" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_lizenz_di" bpmnElement="sd_lizenz"><omgdc:Bounds x="1330" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="1480" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_rueck_di" bpmnElement="e_rueck"><omgdc:Bounds x="1662" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1630" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_bereit__st_done_di" bpmnElement="f_s_bereit__st_done"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_bereit_di" bpmnElement="f_st_done__e_bereit"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="612" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_rueck__sd_oe_di" bpmnElement="f_s_rueck__sd_oe"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_oe__gw_wjoin_di" bpmnElement="f_sd_oe__gw_wjoin"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="455" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_wjoin__t_warten_di" bpmnElement="f_gw_wjoin__t_warten"><omgdi:waypoint x="505" y="410"/><omgdi:waypoint x="612" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_t_warten__st_stand_di" bpmnElement="f_t_warten__st_stand"><omgdi:waypoint x="648" y="410"/><omgdi:waypoint x="730" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_stand__gw_stand_di" bpmnElement="f_st_stand__gw_stand"><omgdi:waypoint x="830" y="410"/><omgdi:waypoint x="905" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_stand__gw_ljoin_di" bpmnElement="f_gw_stand__gw_ljoin"><omgdi:waypoint x="955" y="410"/><omgdi:waypoint x="1205" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="388" width="94" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_stand__gw_wjoin_di" bpmnElement="f_gw_stand__gw_wjoin"><omgdi:waypoint x="930" y="435"/><omgdi:waypoint x="930" y="520"/><omgdi:waypoint x="480" y="520"/><omgdi:waypoint x="480" y="435"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="460" width="94" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_stand__ut_pruefen_di" bpmnElement="f_gw_stand__ut_pruefen"><omgdi:waypoint x="930" y="385"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="1030" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="346" width="107" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_ljoin_di" bpmnElement="f_ut_pruefen__gw_ljoin"><omgdi:waypoint x="1130" y="270"/><omgdi:waypoint x="1230" y="270"/><omgdi:waypoint x="1230" y="385"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ljoin__sd_lizenz_di" bpmnElement="f_gw_ljoin__sd_lizenz"><omgdi:waypoint x="1255" y="410"/><omgdi:waypoint x="1330" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_lizenz__st_returned_di" bpmnElement="f_sd_lizenz__st_returned"><omgdi:waypoint x="1430" y="410"/><omgdi:waypoint x="1480" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_rueck_di" bpmnElement="f_st_returned__e_rueck"><omgdi:waypoint x="1580" y="410"/><omgdi:waypoint x="1662" y="410"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
