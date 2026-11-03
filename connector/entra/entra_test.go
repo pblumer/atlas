@@ -247,8 +247,13 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		// A team's id is its group's id, so create-team teamifies the group and
 		// add-team-member addresses /teams/{groupId}.
 		{op: "create-team", job: Job{GroupID: "g1"},
-			method: "PUT", path: "/groups/g1/team",
-			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); _, has := m["memberSettings"]; return ok && has }},
+			method: "POST", path: "/teams",
+			wantBodyIs: func(b any) bool {
+				m, ok := b.(map[string]any)
+				_, has := m["memberSettings"]
+				bind, _ := m["group@odata.bind"].(string)
+				return ok && has && strings.HasSuffix(bind, "/groups('g1')") && m["template@odata.bind"] != nil
+			}},
 		{op: "add-team-member", job: Job{UserID: "u1", GroupID: "g1"},
 			method: "POST", path: "/teams/g1/members",
 			wantBodyIs: func(b any) bool {

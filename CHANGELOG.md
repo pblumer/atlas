@@ -158,6 +158,8 @@ What changes on disk, and going back:
     snapshot taken before the first upgrade, or do not go back.
 
 ### Added
+- **An order form searches the directory for a person.** A shop product's `configForm` may carry the directory field of ADR-0473: `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` searches through the field's Worker for a caller who may order from the release's catalogue, and placing the order and correcting its details look the chosen person up again, so a value the search would not have offered is refused with 422 (ADR-0473 amendment). The basket and the correction form show the search, and a task form in the shop now does too. `option.value` lets a field submit an Entra user's `userPrincipalName` instead of the object id.
+- **`examples/m365-dienste` runs in a shared tenant, and asks for people by search.** A new application constant `NAME_PREFIX` (empty by default: names unchanged) goes in front of every name and alias the naming rule builds and of a partner account's UPN, and limits the governance check to objects with that prefix. The owner, manager and recipient fields of the order forms search Entra and submit the user principal name. `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` installs the package into the environment, ready to order.
 - **The AD Worker writes attributes a process keeps sealed.** An `<atlas:adConnector>`
   that creates a user, group or contact or updates attributes may author its entry
   inline as `attributes` — a JSON template whose `=…` values are FEEL, as Entra's are —
@@ -393,6 +395,11 @@ What changes on disk, and going back:
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Send As on Exchange Server finds the mailbox by its address.** On-premises, `add-send-as` and `remove-send-as` run `Add-`/`Remove-ADPermission`, which look for an Active Directory object and answered "…@contoso.com wasn't found" for the address every model passes. The worker now looks the recipient up with `Get-Recipient` and passes its distinguished name; Exchange Online is unchanged. Found by a smoke test against a real Exchange Server SE.
+- **Exchange Online answers are read uncompressed.** The Exchange worker asked for gzip implicitly, and Exchange Online's admin API was observed answering with a body labelled gzip that was not (`gzip: invalid header` instead of the cmdlet's answer).
+- **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
+- **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
+- **`examples/m365-dienste` against a real tenant:** a distribution list is created without `-Type` (not granted to a worker scoped to distribution lists), and a team's owner is added after the replication wait rather than before it (`add-group-owner` answered 404 23 seconds after `create-group`). People are found by given name and surname too.
 - **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
 - **A provisioning that reports at once keeps its report.** A provisioning process
   that reported its position done (or failed) before the order's start came back to

@@ -138,6 +138,9 @@ type onPremRequest struct {
 	Cmdlet     string         `json:"cmdlet"`
 	Parameters map[string]any `json:"parameters"`
 	Limit      int            `json:"limit"`
+	// ResolveIdentity: look Identity up with Get-Recipient and pass its distinguished
+	// name ([catalog.Variant.ResolveIdentity]).
+	ResolveIdentity bool `json:"resolveIdentity,omitempty"`
 }
 
 // onPremAnswer is the one line the bootstrap writes.
@@ -159,7 +162,7 @@ type onPremAnswer struct {
 // another. A worker process that is slow and plain is easier to trust with an
 // organization's mailboxes than one that is fast and stateful.
 func (c *OnPremClient) Invoke(ctx context.Context, inv catalog.Invocation, limit int) ([]any, error) {
-	req, err := json.Marshal(onPremRequest{Cmdlet: inv.Cmdlet, Parameters: inv.Parameters, Limit: limit})
+	req, err := json.Marshal(onPremRequest{Cmdlet: inv.Cmdlet, Parameters: inv.Parameters, Limit: limit, ResolveIdentity: inv.ResolveIdentity})
 	if err != nil {
 		return nil, fmt.Errorf("exchange: encode %s: %w", inv.Cmdlet, err)
 	}
@@ -376,12 +379,22 @@ try {
         $open.Credential = New-Object System.Management.Automation.PSCredential($env:ATLAS_EXCHANGE_USERNAME, $secret)
     }
     $session = New-PSSession @open
-    $module = Import-PSSession -Session $session -CommandName $name -DisableNameChecking -AllowClobber -ErrorAction Stop
+    $names = @($name)
+    if ($req.resolveIdentity) { $names += 'Get-Recipient' }
+    $module = Import-PSSession -Session $session -CommandName $names -DisableNameChecking -AllowClobber -ErrorAction Stop
     $command = $null
     foreach ($c in $module.ExportedCommands.Values) { if ($c.Name -eq $name) { $command = $c } }
     if ($null -eq $command) { throw "The Exchange endpoint offers no command $name to this account." }
     if (-not $name.StartsWith('Get-', [System.StringComparison]::OrdinalIgnoreCase) -and $command.Parameters.ContainsKey('Confirm')) {
         $params['Confirm'] = $false
+    }
+    if ($req.resolveIdentity -and $params.ContainsKey('Identity')) {
+        $recipient = $null
+        foreach ($c in $module.ExportedCommands.Values) { if ($c.Name -eq 'Get-Recipient') { $recipient = $c } }
+        if ($null -eq $recipient) { throw "The Exchange endpoint offers no command Get-Recipient to this account." }
+        $found = @(& $recipient -Identity $params['Identity'] -ErrorAction Stop)
+        if ($found.Count -ne 1) { throw "$($params['Identity']) names $($found.Count) recipients, not one." }
+        $params['Identity'] = [string]$found[0].DistinguishedName
     }
     $params['ErrorAction'] = 'Stop'
     $limit = 0

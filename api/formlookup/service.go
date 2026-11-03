@@ -68,6 +68,11 @@ type Config struct {
 	// Task authorizes the caller against a task — the question task completion asks,
 	// ADR-0317 — and returns its form. ErrNoTask and ErrForbidden are its refusals.
 	Task func(r *http.Request, key uint64) (Task, error)
+	// OrderForm authorizes the caller against a product's order form in the shop — may
+	// this person order from the release's catalogue — and returns the form the
+	// release's item names (ADR-0473, amended: a directory field in an order form).
+	// ErrNoTask and ErrForbidden are its refusals too. nil serves no order forms.
+	OrderForm func(r *http.Request, release, item string) (Task, error)
 	// Worker resolves a Worker by name from the Worker store.
 	Worker func(name string) (Worker, bool, error)
 	// Workers lists the Workers a model author may pick, for the editor.
@@ -154,15 +159,18 @@ func invalid(format string, a ...any) *apiError {
 	return &apiError{status: http.StatusBadRequest, code: "invalid_query", msg: fmt.Sprintf(format, a...)}
 }
 
+// lookupContext is what a search is made from: a task, or a product's order form in the
+// shop. It names the context in the cursor and in the messages.
+type lookupContext struct {
+	task  uint64 // the task's key; 0 for an order form
+	ref   string // "" for a task; "<release>/<item>" for an order form
+	label string // "the task's form", "the order form"
+}
+
 // HandleQuery is POST /api/v1/tasks/{key}/form-data/{field}/query.
 func (s *Service) HandleQuery(w http.ResponseWriter, r *http.Request) {
-	principal := ""
-	if s.cfg.Principal != nil {
-		principal = s.cfg.Principal(r)
-	}
-	if s.cfg.Allow != nil && !s.cfg.Allow("lookup:"+principal) {
-		(&apiError{status: http.StatusTooManyRequests, code: "rate_limited",
-			msg: "too many searches in a short time; wait a moment", retry: 1}).write(w)
+	principal, ok := s.admit(w, r)
+	if !ok {
 		return
 	}
 	key, err := strconv.ParseUint(r.PathValue("key"), 10, 64)
@@ -183,22 +191,72 @@ func (s *Service) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusInternalServerError, "read task: "+err.Error())
 		return
 	}
+	s.serve(w, r, principal, lookupContext{task: key, label: "the task's form"}, task.Schema)
+}
+
+// HandleOrderFormQuery is POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query:
+// the same search, made from a product's order form while a person fills in the basket.
+// The authority is the release's catalogue — may this person order from it — and the
+// form is the one the release's item names, the release an order is placed against;
+// everything after that is the task's path.
+func (s *Service) HandleOrderFormQuery(w http.ResponseWriter, r *http.Request) {
+	principal, ok := s.admit(w, r)
+	if !ok {
+		return
+	}
+	release, item := r.PathValue("release"), r.PathValue("item")
+	if s.cfg.OrderForm == nil || release == "" || item == "" {
+		(&apiError{status: http.StatusNotFound, code: "not_found", msg: "no product with an order form there"}).write(w)
+		return
+	}
+	form, err := s.cfg.OrderForm(r, release, item)
+	switch {
+	case errors.Is(err, ErrNoTask):
+		(&apiError{status: http.StatusNotFound, code: "not_found", msg: "no product with an order form there"}).write(w)
+		return
+	case errors.Is(err, ErrForbidden):
+		(&apiError{status: http.StatusForbidden, code: "forbidden",
+			msg: "this product cannot be ordered from here, so its form cannot be searched"}).write(w)
+		return
+	case err != nil:
+		httpapi.Error(w, http.StatusInternalServerError, "read order form: "+err.Error())
+		return
+	}
+	s.serve(w, r, principal, lookupContext{ref: release + "/" + item, label: "the order form"}, form.Schema)
+}
+
+// admit applies the per-person rate limit and names the caller.
+func (s *Service) admit(w http.ResponseWriter, r *http.Request) (string, bool) {
+	principal := ""
+	if s.cfg.Principal != nil {
+		principal = s.cfg.Principal(r)
+	}
+	if s.cfg.Allow != nil && !s.cfg.Allow("lookup:"+principal) {
+		(&apiError{status: http.StatusTooManyRequests, code: "rate_limited",
+			msg: "too many searches in a short time; wait a moment", retry: 1}).write(w)
+		return "", false
+	}
+	return principal, true
+}
+
+// serve answers a search made from a form the caller has been authorized for.
+func (s *Service) serve(w http.ResponseWriter, r *http.Request, principal string, c lookupContext, schema []byte) {
 	var req queryRequest
 	if e := decode(w, r, s.cfg.MaxBody, &req); e != nil {
 		e.write(w)
 		return
 	}
-	form, err := Parse(task.Schema)
+	form, err := Parse(schema)
 	if err != nil {
 		(&apiError{status: http.StatusUnprocessableEntity, code: "invalid_configuration",
-			msg: "the task's form cannot be searched: " + err.Error()}).write(w)
+			msg: c.label + " cannot be searched: " + err.Error()}).write(w)
 		return
 	}
 	fieldKey := r.PathValue("field")
 	field, ok := form.Field(fieldKey)
 	if !ok {
 		(&apiError{status: http.StatusNotFound, code: "not_found",
-			msg: fmt.Sprintf("the task's form has no directory field %q", fieldKey)}).write(w)
+			msg: fmt.Sprintf("%s has no directory field %q", c.label, fieldKey)}).write(w)
 		return
 	}
 	if e := s.usable(field); e != nil {
@@ -210,7 +268,7 @@ func (s *Service) HandleQuery(w http.ResponseWriter, r *http.Request) {
 		e.write(w)
 		return
 	}
-	binding := cursorBinding{Task: key, Field: field.Key, Principal: principal, Query: queryHash(field, q)}
+	binding := cursorBinding{Task: c.task, Ref: c.ref, Field: field.Key, Principal: principal, Query: queryHash(field, q)}
 	if req.Cursor != "" {
 		if q.Value != "" {
 			invalid("a value lookup has no pages to continue").write(w)
@@ -272,10 +330,11 @@ func (s *Service) usable(f Field) *apiError {
 // does not.
 func build(form *Form, f Field, req queryRequest) (lookup.Query, *apiError) {
 	q := lookup.Query{
-		Resource:   f.Provider.Resource,
-		ActiveOnly: f.ActiveOnly(),
-		Properties: f.Properties(),
-		PageSize:   f.PageSize(),
+		Resource:      f.Provider.Resource,
+		ValueProperty: f.Source.Option.Value,
+		ActiveOnly:    f.ActiveOnly(),
+		Properties:    f.Properties(),
+		PageSize:      f.PageSize(),
 	}
 	if req.Limit < 0 || req.Limit > f.PageSize() {
 		return q, invalid("limit %d is outside 1..%d", req.Limit, f.PageSize())
@@ -303,8 +362,8 @@ func build(form *Form, f Field, req queryRequest) (lookup.Query, *apiError) {
 		if req.Search != "" {
 			return q, invalid("a request is a search or a value lookup, not both")
 		}
-		if !f.Provider.ValidValue(req.Value) {
-			return q, invalid("the value is not %s", f.Provider.ValueFormat)
+		if !f.ValidValue(req.Value) {
+			return q, invalid("the value is not %s", f.ValueFormat())
 		}
 		q.Value = req.Value
 		return q, nil
@@ -380,8 +439,8 @@ func queryHash(f Field, q lookup.Query) string {
 func items(f Field, page lookup.Page) []Item {
 	out := make([]Item, 0, len(page.Items))
 	for _, rec := range page.Items {
-		value, _ := rec[f.Provider.ValueProperty].(string)
-		if !f.Provider.ValidValue(value) {
+		value, _ := rec[f.ValueProperty()].(string)
+		if !f.ValidValue(value) {
 			continue
 		}
 		it := Item{Value: value, Label: text(rec[f.LabelProperty()])}

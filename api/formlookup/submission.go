@@ -68,8 +68,8 @@ func (s *Service) CheckSubmission(ctx context.Context, schema []byte, vars map[s
 		if !ok {
 			return submissionRefusal("%s takes the identifier of one entry, not a %T", name, raw).submission()
 		}
-		if !f.Provider.ValidValue(value) {
-			return submissionRefusal("%s does not hold %s", name, f.Provider.ValueFormat).submission()
+		if !f.ValidValue(value) {
+			return submissionRefusal("%s does not hold %s", name, f.ValueFormat()).submission()
 		}
 		filters, e := filtersOf(form, f, func(prop string) string {
 			for _, fl := range f.Source.Filters {
@@ -90,8 +90,8 @@ func (s *Service) CheckSubmission(ctx context.Context, schema []byte, vars map[s
 		if e := s.usable(f); e != nil {
 			return e.submission()
 		}
-		q := lookup.Query{Resource: f.Provider.Resource, Value: value, Filters: filters,
-			ActiveOnly: f.ActiveOnly(), Properties: f.Properties()}
+		q := lookup.Query{Resource: f.Provider.Resource, ValueProperty: f.Source.Option.Value, Value: value,
+			Filters: filters, ActiveOnly: f.ActiveOnly(), Properties: f.Properties()}
 		page, err := s.cfg.Ask(ctx, f.Provider.JobType, f.Source.Worker, q, s.cfg.Timeout)
 		if err != nil {
 			e := failure(err, "the choice in "+name+" could not be checked, so nothing was completed")
