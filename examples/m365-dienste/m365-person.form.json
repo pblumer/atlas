@@ -8,11 +8,33 @@
     },
     {
       "key": "upn",
-      "type": "textfield",
-      "label": "Benutzername (UPN) · User principal name",
+      "type": "select",
+      "label": "Benutzername · User principal name",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "surname",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     }
   ]

@@ -83,7 +83,8 @@ var engineEvaluatedExpressions = map[string]bool{
 //
 // Every one of these is a ConnectorTaskDetail field, and none of them is evaluated in
 // engine/: the evaluation sites are connector/rest/worker.go:95, connector/mail/worker.go:89,
-// connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
+// connector/ldap/worker.go:190, connector/ad/worker.go (resolveValue, and evalEntry for the
+// inline attributes), connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
 // connector/googlecontacts/offload.go, connector/carddav/offload.go and
@@ -95,6 +96,7 @@ var engineEvaluatedExpressions = map[string]bool{
 // enciphering step lands without deciphering at that point, every entry here becomes a
 // worker evaluating FEEL over ciphertext — and this comment is where to come back to.
 var workerEvaluatedExpressions = map[string]string{
+	"connectorTasks.AdAttributes.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBaseDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBindDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdDN.Expr":                "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

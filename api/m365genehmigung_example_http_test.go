@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -232,7 +233,12 @@ func setUpM365Approval(t *testing.T, ts *httptest.Server, admin *http.Client) {
 		return string(raw)
 	}
 	for _, id := range []string{"m365-team-bestellung", "m365-postfachzugriff-bestellung"} {
-		body := fmt.Sprintf(`{"id":%q,"name":%q,"schema":%s}`, id, id, read(id+".form.json"))
+		// The person fields are directory fields (ADR-0473): placing an order looks the
+		// person up through ucc_entra. These tests are about the approval, and they play
+		// the Entra Worker for jobs, not for queries, so their copy checks the value's
+		// shape only. The lookup at placement is TestAnOrderFormSearchesTheDirectory….
+		form := strings.ReplaceAll(read(id+".form.json"), `"atlasDataSource": {`, `"atlasDataSource": {"verify": "format",`)
+		body := fmt.Sprintf(`{"id":%q,"name":%q,"schema":%s}`, id, id, form)
 		if code, out := cReq(t, admin, ts, "POST", "/api/v1/forms", body); code != http.StatusOK {
 			t.Fatalf("save form %s: %d (%s)", id, code, out)
 		}

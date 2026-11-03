@@ -9,6 +9,10 @@
 // It lives in its own module for the reason the worker dialog does: app.js boots the
 // whole console on import, so anything left in it is only ever exercised by hand. Here
 // it is reachable from a test.
+//
+// Every sentence goes through the locale catalogue under "mig.*" (ADR-0267): the
+// parameters are escaped before they are put into a message that carries markup.
+import { t as tr, plural as trPlural } from "./i18n.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -44,31 +48,27 @@ export function planSummary(plan) {
 export function planHTML(plan) {
   if (!plan) return "";
   const s = planSummary(plan);
-  const problems = (plan.problems || []).map((p) => `<li><b>${esc(p.elementId || "an element")}</b> ${esc(p.reason)}</li>`).join("");
+  const problems = (plan.problems || []).map((p) => `<li><b>${esc(p.elementId || tr("mig.plan.anElement"))}</b> ${esc(p.reason)}</li>`).join("");
+  const version = esc(String(plan.toVersion));
   const head = plan.migratable
-    ? `<p class="mig-verdict ok">&#10003; This instance can move to v${esc(String(plan.toVersion))}.</p>`
-    : `<p class="mig-verdict bad">&#9888; This instance cannot move to v${esc(String(plan.toVersion))}${
-      plan.problems && plan.problems.length ? ":" : "."}</p>`;
+    ? `<p class="mig-verdict ok">&#10003; ${tr("mig.plan.ok", { version })}</p>`
+    : `<p class="mig-verdict bad">&#9888; ${tr(plan.problems && plan.problems.length ? "mig.plan.badWhy" : "mig.plan.bad", { version })}</p>`;
   const why = problems
     ? `<ul class="mig-problems">${problems}</ul>
-       <p class="muted" style="margin:6px 0 0;font-size:12px">Nothing has been changed. A migration is refused rather than
-       half-applied — a token left on an element that means something else in the target version corrupts an instance in a
-       way no later fix repairs.</p>`
+       <p class="muted" style="margin:6px 0 0;font-size:12px">${esc(tr("mig.plan.nothingChanged"))}</p>`
     : "";
   const movedRows = s.moved.map((p) =>
     `<li><span class="mono">${esc(p.from)}</span> &rarr; <span class="mono">${esc(p.to)}</span></li>`).join("");
   const mapping = s.total
     ? `<div class="mig-map">
-        <h4>Element mapping</h4>
+        <h4>${esc(tr("mig.map.title"))}</h4>
         ${s.moved.length
-      ? `<p class="muted" style="margin:0 0 4px;font-size:12px">${s.moved.length} element${s.moved.length === 1 ? "" : "s"} mapped across a changed id:</p>
+      ? `<p class="muted" style="margin:0 0 4px;font-size:12px">${esc(trPlural("mig.map.moved", s.moved.length))}</p>
              <ul class="mig-moved">${movedRows}</ul>`
       : ""}
-        <p class="muted" style="margin:4px 0 0;font-size:12px">${s.unchanged} element${s.unchanged === 1 ? "" : "s"} matched by
-        id, unchanged. Elements pair by their BPMN id — the identity a modeler controls and the only one stable across an
-        ordinary edit.</p>
+        <p class="muted" style="margin:4px 0 0;font-size:12px">${esc(trPlural("mig.map.unchanged", s.unchanged))}</p>
       </div>`
-    : `<p class="muted" style="margin:6px 0 0;font-size:12px">No elements could be paired between the two versions.</p>`;
+    : `<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(tr("mig.map.none"))}</p>`;
   return head + why + mapping;
 }
 
@@ -100,25 +100,23 @@ export function forkHTML(fork) {
   const boxes = candidates.length
     ? candidates.map((id) => `<label class="mig-resume-opt"><input type="checkbox" value="${esc(id)}"${
       chosen.has(id) ? " checked" : ""}/> <span class="mono">${esc(id)}</span></label>`).join("")
-    : `<p class="muted" style="margin:0;font-size:12px">This version has no element the work could resume at.</p>`;
+    : `<p class="muted" style="margin:0;font-size:12px">${esc(tr("mig.fork.noCandidates"))}</p>`;
   const stranded = s.unmatched.length
-    ? `<p class="muted" style="margin:6px 0 0;font-size:12px">${s.unmatched.map(esc).join(", ")} ${
-      s.unmatched.length === 1 ? "has" : "have"} no element of the same id in the target version, so nothing is
-       proposed for ${s.unmatched.length === 1 ? "it" : "them"} — say where that work picks up again.</p>`
+    ? `<p class="muted" style="margin:6px 0 0;font-size:12px">${
+      trPlural("mig.fork.stranded", s.unmatched.length, { ids: s.unmatched.map(esc).join(", ") })}</p>`
     : "";
   const problems = (fork.problems || []).length
     ? `<ul class="mig-problems">${fork.problems.map((p) =>
       `<li>${p.elementId ? `<b>${esc(p.elementId)}</b> ` : ""}${esc(p.reason)}</li>`).join("")}</ul>`
     : "";
   return `
-    <h4>Or continue in a new instance</h4>
-    <p class="muted" style="margin:0 0 8px;font-size:12px">This instance is ended where it is and a <b>new instance of
-    v${esc(String(fork.toVersion))}</b> continues its work from the elements ticked below. Both instances link to each
-    other, and nothing already done is undone.</p>
-    <p class="muted" style="margin:0 0 8px;font-size:12px"><b>Crosses:</b> ${s.variables} variable${
-  s.variables === 1 ? "" : "s"}, ${s.dataObjects} data object${s.dataObjects === 1 ? "" : "s"}.
-    <b>Ends with this instance:</b> ${s.jobs} job${s.jobs === 1 ? "" : "s"} or task${s.jobs === 1 ? "" : "s"} in flight,
-    its incidents, and its history — which stays readable on the old instance.</p>
+    <h4>${esc(tr("mig.fork.title"))}</h4>
+    <p class="muted" style="margin:0 0 8px;font-size:12px">${tr("mig.fork.intro", { version: esc(String(fork.toVersion)) })}</p>
+    <p class="muted" style="margin:0 0 8px;font-size:12px">${tr("mig.fork.crosses", {
+    variables: esc(trPlural("mig.fork.variables", s.variables)),
+    dataObjects: esc(trPlural("mig.fork.dataObjects", s.dataObjects)),
+  })}
+    ${tr("mig.fork.ends", { jobs: esc(trPlural("mig.fork.jobs", s.jobs)) })}</p>
     <div class="mig-resume">${boxes}</div>
     ${stranded}
     ${problems}`;
@@ -133,14 +131,14 @@ export async function migrateInstanceFlow({ api, toast, instanceKey, processId, 
   try {
     processes = await api("GET", "/api/v1/processes");
   } catch (e) {
-    toast("could not read the deployed versions: " + (e && e.message ? e.message : e), "err");
+    toast(tr("mig.err.readVersions", { error: e && e.message ? e.message : String(e) }), "err");
     return false;
   }
   const targets = otherVersions(processes, processId, fromProcessDefKey);
   if (!targets.length) {
     // Not an error and not a dialog: there is genuinely nowhere to go, and saying so is
     // the whole answer.
-    toast("Only one version of this process is deployed — deploy the fixed model first, then migrate.", "warn");
+    toast(tr("mig.onlyOne"), "warn");
     return false;
   }
 
@@ -167,10 +165,10 @@ export async function migrateInstanceFlow({ api, toast, instanceKey, processId, 
     // and this is the only moment the connection is in front of them.
     const next = got && got.successorInstanceKey;
     toast(next
-      ? `Instance continues as ${next} on ${versionLabel(choice.target)}`
-      : `Instance continued on ${versionLabel(choice.target)}`, "ok");
+      ? tr("mig.forked", { key: next, version: versionLabel(choice.target) })
+      : tr("mig.forkedNoKey", { version: versionLabel(choice.target) }), "ok");
   } else {
-    toast(`Instance migrated to ${versionLabel(choice.target)}`, "ok");
+    toast(tr("mig.migrated", { version: versionLabel(choice.target) }), "ok");
   }
   if (onDone) await onDone();
   return true;
@@ -182,14 +180,14 @@ export async function migrateInstanceFlow({ api, toast, instanceKey, processId, 
 // configuration answer rather than a problem with the instance.
 function migrateError(e) {
   const msg = (e && e.message) || String(e);
-  if (e && e.status === 403) return "migrating an instance is admin-only when authentication is on";
+  if (e && e.status === 403) return tr("mig.err.forbidden");
   if (e && e.status === 409 && e.body && Array.isArray(e.body.problems) && e.body.problems.length) {
     const first = e.body.problems[0];
     const more = e.body.problems.length - 1;
-    return `refused: ${first.elementId ? first.elementId + " " : ""}${first.reason}` +
-      (more > 0 ? ` (and ${more} more)` : "");
+    const problem = `${first.elementId ? first.elementId + " " : ""}${first.reason}`;
+    return more > 0 ? tr("mig.err.refusedMore", { problem, more }) : tr("mig.err.refused", { problem });
   }
-  return "migration failed: " + msg;
+  return tr("mig.err.failed", { error: msg });
 }
 
 // askMigration is the dialog itself: pick a target, read what it would do, say why.
@@ -202,30 +200,26 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="mig-title">
-        <div class="modal-head"><h2 id="mig-title">Migrate instance &middot; ${esc(String(instanceKey))}</h2></div>
+        <div class="modal-head"><h2 id="mig-title">${esc(tr("mig.one.title", { key: String(instanceKey) }))}</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">This instance is running on <b>v${esc(String(fromVersion))}</b> of
-          <b>${esc(processId)}</b>. Moving it to another deployed version keeps its variables, its tasks and everything
-          already done — it is rebound, not restarted. Pick the version to move it to; what that would do is shown before
-          anything is written.</p>
-          <label class="field"><span>Move to</span>
+          <p class="muted" style="margin:0 0 10px">${tr("mig.one.intro", { version: esc(String(fromVersion)), process: esc(processId) })}</p>
+          <label class="field"><span>${esc(tr("mig.one.target"))}</span>
             <select id="mig-target">
               ${targets.map((t, i) => `<option value="${esc(String(t.key))}"${i === 0 ? " selected" : ""}>${esc(versionLabel(t))}</option>`).join("")}
             </select>
           </label>
-          <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">Reading the plan…</p></div>
+          <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">${esc(tr("mig.one.readingPlan"))}</p></div>
           <div id="mig-fork" class="mig-fork" hidden></div>
-          <label class="field" style="margin-top:10px"><span>Reason</span>
-            <input id="mig-reason" placeholder="Why this instance is being moved" autocomplete="off"/>
+          <label class="field" style="margin-top:10px"><span>${esc(tr("mig.reason"))}</span>
+            <input id="mig-reason" placeholder="${esc(tr("mig.one.reasonPlaceholder"))}" autocomplete="off"/>
           </label>
-          <p class="muted" style="margin:6px 0 0;font-size:12px">Recorded with your name and the time, and shown on this
-          instance's replay at the point it happened.</p>
+          <p class="muted" style="margin:6px 0 0;font-size:12px">${esc(tr("mig.one.recorded"))}</p>
           <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-mig-cancel title="Close without migrating">Cancel</button>
-          <button class="btn neutral" data-mig-fork title="End this instance and continue its work in a new instance of the selected version" hidden disabled>Continue in a new instance</button>
-          <button class="btn" data-mig-go title="Move this instance to the selected version" disabled>Migrate</button>
+          <button class="btn neutral" data-mig-cancel title="${esc(tr("mig.cancelTitle"))}">${esc(tr("mig.cancel"))}</button>
+          <button class="btn neutral" data-mig-fork title="${esc(tr("mig.one.forkTitle"))}" hidden disabled>${esc(tr("mig.one.fork"))}</button>
+          <button class="btn" data-mig-go title="${esc(tr("mig.one.goTitle"))}" disabled>${esc(tr("mig.one.go"))}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -265,7 +259,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       const seq = ++planSeq;
       plan = null;
       sync();
-      planEl.innerHTML = `<p class="muted" style="margin:0;font-size:12px">Reading the plan…</p>`;
+      planEl.innerHTML = `<p class="muted" style="margin:0;font-size:12px">${esc(tr("mig.one.readingPlan"))}</p>`;
       let got;
       try {
         got = await api("POST", `/api/v1/instances/${encodeURIComponent(instanceKey)}/migrate/plan`, {
@@ -273,7 +267,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
         });
       } catch (e) {
         if (seq !== planSeq) return; // a newer target was picked while this was in flight
-        planEl.innerHTML = `<p class="mig-verdict bad">Could not read the plan: ${esc(migrateError(e))}</p>`;
+        planEl.innerHTML = `<p class="mig-verdict bad">${esc(tr("mig.one.planFailed", { error: migrateError(e) }))}</p>`;
         sync();
         return;
       }
@@ -297,7 +291,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
     goBtn.addEventListener("click", () => {
       const reason = reasonIn.value.trim();
       if (!reason) {
-        errEl.textContent = "A reason is required — it is what makes the migration auditable.";
+        errEl.textContent = tr("mig.one.reasonRequired");
         errEl.hidden = false;
         return;
       }
@@ -306,7 +300,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
     forkBtn.addEventListener("click", () => {
       const reason = reasonIn.value.trim();
       if (!reason) {
-        errEl.textContent = "A reason is required — a fork ends the instance it continues.";
+        errEl.textContent = tr("mig.one.reasonRequiredFork");
         errEl.hidden = false;
         return;
       }
@@ -344,7 +338,7 @@ export function runningByDefinition(rows) {
 export async function migrateProcessFlow({ api, toast, processId, processName, versions, runningOf, fromKey, onDone }) {
   const deployed = (versions || []).slice().sort((a, b) => b.version - a.version);
   if (deployed.length < 2) {
-    toast("Only one version of this process is deployed — deploy the fixed model first, then migrate.", "warn");
+    toast(tr("mig.onlyOne"), "warn");
     return false;
   }
   const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf, fromKey });
@@ -375,21 +369,22 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
       after = res.nextCursor;
       // Tens of thousands of instances are a hundred calls or more, and a dialog that
       // has closed with nothing on screen for that long reads as a hang.
-      toast(`Migrating to ${versionLabel(choice.to)} — ${migrated} moved${
-        refused.length ? `, ${refused.length} left behind` : ""} so far…`);
+      toast(refused.length
+        ? tr("mig.batch.progressLeft", { version: versionLabel(choice.to), moved: migrated, left: refused.length })
+        : tr("mig.batch.progress", { version: versionLabel(choice.to), moved: migrated }));
     }
   } catch (e) {
     // What moved before the failure has moved — each instance is its own event — so
     // the count is part of the message, and the caller's view is re-read either way.
     toast(migrated
-      ? `${migrateError(e)} — ${migrated} instance${migrated === 1 ? " was" : "s were"} already migrated`
+      ? trPlural("mig.batch.failedAfter", migrated, { error: migrateError(e) })
       : migrateError(e), "err");
     if (migrated && onDone) await onDone();
     return false;
   }
 
   if (!migrated && !refused.length) {
-    toast(`No running instances on ${versionLabel(choice.from)}`, "warn");
+    toast(tr("mig.batch.none", { version: versionLabel(choice.from) }), "warn");
     return false;
   }
   if (refused.length) {
@@ -398,7 +393,7 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
     // leave those instances silently behind on the old version.
     await showBatchOutcome({ migrated, refused, from: choice.from, to: choice.to });
   } else {
-    toast(`Migrated ${migrated} instance${migrated === 1 ? "" : "s"} to ${versionLabel(choice.to)}`, "ok");
+    toast(trPlural("mig.batch.done", migrated, { version: versionLabel(choice.to) }), "ok");
   }
   if (onDone) await onDone();
   return true;
@@ -414,8 +409,10 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
     // version would be a claim, and a false one exactly when the counts could not be read.
     const optionFor = (v) => {
       const n = running(v);
-      const count = runningOf ? (n ? ` — ${n} running` : " — none running") : "";
-      return `<option value="${esc(String(v.key))}">${esc(versionLabel(v))}${count}</option>`;
+      const label = !runningOf
+        ? versionLabel(v)
+        : n ? trPlural("mig.batch.optionRunning", n, { version: versionLabel(v) }) : tr("mig.batch.optionNone", { version: versionLabel(v) });
+      return `<option value="${esc(String(v.key))}">${esc(label)}</option>`;
     };
     // Default: the version the caller named, else drain the oldest version that still
     // holds instances onto the newest one, which is the shape of the job nearly every
@@ -432,29 +429,26 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="migb-title">
-        <div class="modal-head"><h2 id="migb-title">Migrate running instances &middot; ${esc(processName || processId)}</h2></div>
+        <div class="modal-head"><h2 id="migb-title">${esc(tr("mig.batch.title", { process: processName || processId }))}</h2></div>
         <div class="modal-body">
-          <p class="muted" style="margin:0 0 10px">Moves every running instance of one deployed version onto another. Each
-          instance keeps its variables, its tasks and everything already done.</p>
+          <p class="muted" style="margin:0 0 10px">${esc(tr("mig.batch.intro"))}</p>
           <div class="row" style="gap:10px;flex-wrap:wrap">
-            <label class="field" style="flex:1 1 200px"><span>From</span>
+            <label class="field" style="flex:1 1 200px"><span>${esc(tr("mig.batch.from"))}</span>
               <select id="migb-from">${versions.map(optionFor).join("")}</select>
             </label>
-            <label class="field" style="flex:1 1 200px"><span>To</span>
+            <label class="field" style="flex:1 1 200px"><span>${esc(tr("mig.batch.to"))}</span>
               <select id="migb-to">${versions.map(optionFor).join("")}</select>
             </label>
           </div>
-          <p class="muted" style="margin:8px 0 0;font-size:12px">Each instance is checked on its own. Any that cannot be
-          moved — a token on an element the new version does not have, an element that changed type — is left exactly where
-          it is and listed afterwards, so nothing is half-applied.</p>
-          <label class="field" style="margin-top:10px"><span>Reason</span>
-            <input id="migb-reason" placeholder="Why these instances are being moved" autocomplete="off"/>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">${esc(tr("mig.batch.checked"))}</p>
+          <label class="field" style="margin-top:10px"><span>${esc(tr("mig.reason"))}</span>
+            <input id="migb-reason" placeholder="${esc(tr("mig.batch.reasonPlaceholder"))}" autocomplete="off"/>
           </label>
           <p class="mig-err" style="margin:8px 0 0;font-size:12.5px" hidden></p>
         </div>
         <div class="modal-foot">
-          <button class="btn neutral" data-migb-cancel title="Close without migrating">Cancel</button>
-          <button class="btn" data-migb-go title="Move every running instance of the source version" disabled>Migrate instances</button>
+          <button class="btn neutral" data-migb-cancel title="${esc(tr("mig.cancelTitle"))}">${esc(tr("mig.cancel"))}</button>
+          <button class="btn" data-migb-go title="${esc(tr("mig.batch.goTitle"))}" disabled>${esc(tr("mig.batch.go"))}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);
@@ -473,7 +467,7 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
     const sync = () => {
       const same = fromSel.value === toSel.value;
       errEl.hidden = !same;
-      if (same) errEl.textContent = "Pick two different versions — an instance cannot be migrated onto the version it is already on.";
+      if (same) errEl.textContent = tr("mig.batch.same");
       goBtn.disabled = same || !reasonIn.value.trim();
     };
 
@@ -510,26 +504,23 @@ function showBatchOutcome({ migrated, refused, from, to }) {
     const rows = listed.map((r) => {
       const why = (r.problems || []).map((p) => `${p.elementId ? p.elementId + " " : ""}${p.reason}`).join("; ");
       return `<li><a href="#/operations/i/${esc(String(r.instanceKey))}" class="mono">${esc(String(r.instanceKey))}</a>
-        <span class="muted">${esc(why || "could not be migrated")}</span></li>`;
+        <span class="muted">${esc(why || tr("mig.out.couldNot"))}</span></li>`;
     }).join("");
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
       <div class="modal confirm-modal mig-modal" role="dialog" aria-modal="true" aria-labelledby="migo-title">
-        <div class="modal-head"><h2 id="migo-title">Migrated ${migrated} &middot; ${refused.length} left behind</h2></div>
+        <div class="modal-head"><h2 id="migo-title">${esc(tr("mig.out.title", { migrated, refused: refused.length }))}</h2></div>
         <div class="modal-body">
-          <p style="margin:0 0 10px">${migrated} instance${migrated === 1 ? "" : "s"} moved from
-          <b>${esc(versionLabel(from))}</b> to <b>${esc(versionLabel(to))}</b>.
-          ${refused.length} could not be, and ${refused.length === 1 ? "is" : "are"} still running on
-          <b>${esc(versionLabel(from))}</b> exactly as before:</p>
+          <p style="margin:0 0 10px">${trPlural("mig.out.moved", migrated, { from: esc(versionLabel(from)), to: esc(versionLabel(to)) })}
+          ${trPlural("mig.out.stayed", refused.length, { from: esc(versionLabel(from)) })}</p>
           <ul class="mig-problems mig-refused">${rows}</ul>
-          ${unlisted ? `<p class="mig-unlisted" style="margin:6px 0 0;font-size:12.5px">…and ${unlisted} more. Every one of them
-          is still on <b>${esc(versionLabel(from))}</b>, so that version&rsquo;s live view lists them all.</p>` : ""}
-          <p class="muted" style="margin:8px 0 0;font-size:12px">Open one to see where its token is. A refusal is not a
-          failure to apply — nothing was written for these, so they are unchanged rather than half-migrated.</p>
+          ${unlisted ? `<p class="mig-unlisted" style="margin:6px 0 0;font-size:12.5px">${
+    tr("mig.out.more", { n: unlisted, from: esc(versionLabel(from)) })}</p>` : ""}
+          <p class="muted" style="margin:8px 0 0;font-size:12px">${esc(tr("mig.out.note"))}</p>
         </div>
         <div class="modal-foot">
-          <button class="btn" data-migo-ok title="Close">Close</button>
+          <button class="btn" data-migo-ok title="${esc(tr("mig.out.close"))}">${esc(tr("mig.out.close"))}</button>
         </div>
       </div>`;
     document.body.appendChild(ov);

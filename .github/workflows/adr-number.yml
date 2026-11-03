@@ -47,7 +47,10 @@ jobs:
           # that example's atlas hub package, whose version is immutable
           # (examples/hub/README.md). Record the next version in the same commit, or
           # main fails TestHubReleasesAreCurrent and Pages refuses to publish the hub.
-          go run ./cmd/atlas hub lock
+          # The served example catalogue is derived from the same files, so it is
+          # regenerated first; left stale, the verify step below refuses the commit and
+          # the records stay unnumbered (ADR-0170, amendment of 2026-11-03).
+          make hub-lock
           if [ -n "$(git status --porcelain)" ]; then
             echo "numbered=true" >> "$GITHUB_OUTPUT"
           fi
@@ -88,7 +91,8 @@ jobs:
           git commit -m "Assign ADR numbers to the records merged into main"
           # Rebase first: a push that landed while this job ran would otherwise
           # reject ours, and the numbering commit touches only docs/adr, the
-          # citations of the drafts it numbered, and the feed derived from them.
+          # citations of the drafts it numbered, and the files derived from them:
+          # the example catalogue and examples/hub/releases.json.
           git pull --rebase origin main
           if ! git push origin HEAD:main; then
             echo "::error::Could not push the ADR numbering commit to main."

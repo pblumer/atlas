@@ -17,8 +17,10 @@ A number belongs to exactly one decision, and it is assigned **when the record l
 
 When the PR merges, a workflow on `main` runs `make adr-number`. That renames the
 file to `NNNN-<slug>.md`, rewrites the heading, appends the index row, and rewrites
-every citation of the draft to the number it just got. Nothing for you to remember;
-you can also run `make adr-number` by hand on `main`.
+every citation of the draft to the number it just got, then regenerates the example
+catalogue and records a new atlas hub version for any bundle that changed
+(`make hub-lock`). Nothing for you to remember; you can also run `make adr-number` by
+hand on `main`.
 
 Why the ceremony: the number used to be taken when the record was written, which is
 the earliest possible moment and the one with the least information. Two open

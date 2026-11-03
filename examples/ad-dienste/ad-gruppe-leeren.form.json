@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**Die Gruppe hat noch Mitglieder · The group still has members**\n\nDu hast die Sicherheitsgruppe zurückgegeben, sie hat aber noch {{gruppe.mitglieder}} Mitglieder. Wer Mitglied ist, verliert mit dem Löschen die Zugänge, die über die Gruppe laufen. · You returned the security group, but it still has {{gruppe.mitglieder}} members. Whoever is a member loses the access that runs through the group when it is deleted."
+      "text": "**Die Gruppe hat noch Mitglieder · The group still has members**\n\nDu hast die Sicherheitsgruppe zurückgegeben, sie hat aber noch Mitglieder. Wer Mitglied ist, verliert mit dem Löschen die Zugänge, die über die Gruppe laufen. · You returned the security group, but it still has members. Whoever is a member loses the access that runs through the group when it is deleted."
     },
     {
       "key": "leeren",

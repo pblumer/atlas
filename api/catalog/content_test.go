@@ -831,6 +831,55 @@ func TestACatalogueRefreshesEveryBoundProduct(t *testing.T) {
 	}
 }
 
+// cancelled runs a handler as the owner with a request whose caller has already
+// gone: its context is cancelled before the handler starts.
+func (b *boundFixture) cancelled(t *testing.T, h http.HandlerFunc, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	ctx, cancel := context.WithCancel(httpapi.WithPrincipal(context.Background(), b.owner))
+	cancel()
+	req := httptest.NewRequest("POST", "/x", strings.NewReader("")).WithContext(ctx)
+	req.SetPathValue("id", id)
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec
+}
+
+func TestARefreshItsCallerLeftRecordsNothing(t *testing.T) {
+	b := newBoundFixture(t)
+	it := b.linkVPN(t)
+	before := b.state(t, "vpn")
+	b.now.Add(minute)
+	rec := b.cancelled(t, b.s.HandleContentRefresh, "vpn")
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), "nothing was recorded") {
+		t.Fatalf("refresh = %d %s", rec.Code, rec.Body)
+	}
+	// A departed caller is no finding about the source: no quarantine, no
+	// recheck recorded, nothing written.
+	after := b.state(t, "vpn")
+	if after.Quarantine != nil || after.LastChecked != before.LastChecked {
+		t.Fatalf("state = %+v, want it as it was (%+v)", after, before)
+	}
+	if b.item(t, "vpn").Revision != it.Revision {
+		t.Fatal("a refresh whose caller left wrote")
+	}
+}
+
+func TestACatalogueRefreshFinishesWhenItsCallerLeaves(t *testing.T) {
+	b := newBoundFixture(t)
+	it := b.linkVPN(t)
+	b.now.Add(minute)
+	rec := b.cancelled(t, b.s.HandleCatalogContentRefresh, b.cat.ID)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"refreshed"`) {
+		t.Fatalf("refresh = %d %s", rec.Code, rec.Body)
+	}
+	if st := b.state(t, "vpn"); st.Quarantine != nil || st.LastPassed != b.now.Load() {
+		t.Fatalf("state = %+v, want a passed recheck and no quarantine", st)
+	}
+	if b.item(t, "vpn").Revision == it.Revision {
+		t.Fatal("the refresh did not write")
+	}
+}
+
 func TestBindingsTheRecheckCovers(t *testing.T) {
 	b := newBoundFixture(t)
 	b.linkVPN(t)
