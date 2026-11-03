@@ -13,6 +13,7 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
 - **An order form says while a name is typed whether it is still free.** A textfield
   carrying an `atlasAvailability` block names up to four sources — Entra groups and
   deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
@@ -213,6 +214,7 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
 - **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
 - **A server that recorded multi-instance history before its schema v2 starts again.** A multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.

@@ -306,6 +306,21 @@ The server then verifies the index signature and every package digest. A person 
 `modeler` role opens **atlas hub** in the Console, filters by tag, previews a bundle and
 imports it. A shop bundle's catalogue import needs `productmanager`.
 
+An agent does the same over MCP:
+1. `atlas_hub_list_releases` lists the releases.
+2. `atlas_hub_preview_release` returns the release's digest.
+3. `atlas_hub_import_release` with that digest runs a dry run by default and shows the plan.
+4. Only with `dryRun: false`, and the person's `overwrite`/`keep` decisions for anything changed here, does it write.
+
+The MCP import does not publish and does not import a shop bundle's catalogues. Their
+questions about groups and people are answered by a person in the Console.
+
+**Artifacts another application holds.** A process, form or decision that belongs to
+another existing application refuses the import ("already belongs to another
+application"). This happens where a sample was installed earlier into its own
+application or copied into another one. Artifacts of a *deleted* application do not
+block it: they read as Ungrouped and are filed into the imported application.
+
 A bundle's preview and its import plan name what it does not bring:
 
 - Worker Types and workers
