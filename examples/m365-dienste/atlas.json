@@ -131,6 +131,11 @@
       "path": "m365-aufbewahrung-bestellung.form.json"
     },
     {
+      "id": "m365-austritt-abgelehnt",
+      "name": "m365-austritt-abgelehnt",
+      "path": "m365-austritt-abgelehnt.form.json"
+    },
+    {
       "id": "m365-eintritt-abgelehnt",
       "name": "m365-eintritt-abgelehnt",
       "path": "m365-eintritt-abgelehnt.form.json"
@@ -199,6 +204,11 @@
       "id": "m365-governance-befund",
       "name": "m365-governance-befund",
       "path": "m365-governance-befund.form.json"
+    },
+    {
+      "id": "m365-lizenz-klaeren",
+      "name": "m365-lizenz-klaeren",
+      "path": "m365-lizenz-klaeren.form.json"
     },
     {
       "id": "m365-oe-bestellung",
