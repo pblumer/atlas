@@ -225,6 +225,11 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **The system overview shows the current atlas mark.** The architecture diagram that
+  the Console's welcome card, its help menu, the handbook and the architecture document
+  show still opened with the former logo, a triangle with a cross. It now carries the
+  mark from `docs/brand/atlas-mark.svg`, the lowercase a with the Swiss cross, and a
+  test holds the diagram to the mark's shapes.
 - **A provisioning that reports at once keeps its report.** A provisioning process
   that reported its position done (or failed) before the order's start came back to
   mark the line running had its report overwritten with running, and the position
