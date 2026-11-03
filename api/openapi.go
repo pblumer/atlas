@@ -393,6 +393,11 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instances": tInteger(), "finished": tInteger(), "tokens": tInteger(), "elements": tArray(),
 				"incidentTotal": tInteger(), "incidentCountsExact": tBool(),
 			}))}},
+		{"GET", "/api/v1/processes/{key}/versions", s.handleProcessVersions, apiOp{
+			summary: "Read what every deployed version of a definition's process still holds: for each version, newest first, its key, number, version tag, deploy time and active flag, and how many of its instances are running, how many have finished and how many tokens are parked behind an incident. A version with nothing in it is listed with zeroes. The cost is the number of versions, not of instances: the instance counts are maintained counters, the incident counts one shared reading of the incident family (incidentCountsExact false when it could not be taken)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Versions and their counts", schemaObj(map[string]any{
+				"processId": tString(), "incidentCountsExact": tBool(), "versions": tArray(),
+			}))}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),

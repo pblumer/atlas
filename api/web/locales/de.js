@@ -10,6 +10,17 @@
 //
 // Every other locale carries exactly these keys; a test holds it to that.
 export default {
+  "ops.versions.running.one": "{n} läuft",
+  "ops.versions.running.other": "{n} laufen",
+  "ops.versions.incidents.one": "{n} Incident",
+  "ops.versions.incidents.other": "{n} Incidents",
+  "ops.versions.finished.one": "{n} abgeschlossen",
+  "ops.versions.finished.other": "{n} abgeschlossen",
+  "ops.versions.empty": "keine Instanzen",
+  "ops.versions.inactive": "inaktiv",
+  "ops.versions.othersRunning": "Weitere Versionen mit laufenden Instanzen:",
+  "ops.versions.otherTitle": "Live-Ansicht von v{version} öffnen",
+  "ops.versions.pickerTitle": "Jede Version mit ihren laufenden, gestörten (Incidents) und abgeschlossenen Instanzen",
   "ops.mi.expand": "Ausführungen einblenden",
   "ops.mi.collapse": "Ausführungen ausblenden",
   "ops.mi.count": "{count} Ausführungen",

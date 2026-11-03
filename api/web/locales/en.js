@@ -4,6 +4,17 @@
 // selected only when somebody asks for it: German is the default, and the browser's
 // language is not consulted.
 export default {
+  "ops.versions.running.one": "{n} running",
+  "ops.versions.running.other": "{n} running",
+  "ops.versions.incidents.one": "{n} incident",
+  "ops.versions.incidents.other": "{n} incidents",
+  "ops.versions.finished.one": "{n} finished",
+  "ops.versions.finished.other": "{n} finished",
+  "ops.versions.empty": "no instances",
+  "ops.versions.inactive": "inactive",
+  "ops.versions.othersRunning": "Other versions with running instances:",
+  "ops.versions.otherTitle": "Open the live view of v{version}",
+  "ops.versions.pickerTitle": "Every version with its running, stuck (incidents) and finished instances",
   "ops.mi.expand": "Show iterations",
   "ops.mi.collapse": "Hide iterations",
   "ops.mi.count": "{count} iterations",
