@@ -425,11 +425,12 @@ func TestModelerOffersRestOAuth2(t *testing.T) {
 //
 //	<atlas:shopTask mode="outcome" action="password-reset" outcome="completed" />
 //	<atlas:shopTask mode="command" action="deprovision" product="mailbox" order="= leaver.orderId" position="mailbox" resultVariable="commandId" />
+//	<atlas:shopTask mode="order" catalog="cat-m365-hr" product="m365-joiner" recipient="= account.id" answers="= answers" resultVariable="orderId" />
 //
 // It is a contract with the compiler, which parses exactly this element. `retries` is the
-// task's own retry budget (ADR-0135) in either mode; the panel does not offer it, and it
+// task's own retry budget (ADR-0135) in every mode; the panel does not offer it, and it
 // is declared so a budget written by hand survives a Modeler round trip.
-var shopTaskAttrs = []string{"mode", "action", "outcome", "product", "order", "position", "resultVariable", "retries"}
+var shopTaskAttrs = []string{"mode", "action", "outcome", "catalog", "product", "order", "position", "recipient", "answers", "resultVariable", "retries"}
 
 // TestModdleDeclaresTheShopTaskContract pins the Modeler's half of that contract. Every
 // guard above finds an extension by the Connector suffix of the compiler's tag, and the

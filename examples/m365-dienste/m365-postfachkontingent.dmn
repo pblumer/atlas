@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365Postfachkontingent: Wie viel Speicher ein persönliches Postfach über den Katalog erhalten darf,
+  welche Grenzen Exchange dafür erhält und ob M365-Administration den Antrag prüft (Governance).
+
+  Eingaben: stufe    (Text, "50" oder "100": die gewünschte Grösse in GB, Antwort des Aktionsformulars
+                      m365-postfach-kontingent)
+            variante (Text: die Lizenzvariante der Position, standard = E3, erweitert = E5, frontline = F3)
+  Ausgaben: erlaubt (Wahrheitswert), pruefpflicht (Wahrheitswert: muss M365-Administration den Antrag
+            beurteilen?), warnung, sendenGesperrt, allesGesperrt (die drei Grenzen, wie Set-Mailbox sie als
+            IssueWarningQuota, ProhibitSendQuota und ProhibitSendReceiveQuota annimmt, z.B. "49GB"),
+            grund (Begründung; die Aufgabe zeigt sie, und bei einer Ablehnung steht sie in der Instanz)
+
+  hitPolicy FIRST: zuerst die Ablehnung der Frontline-Lizenz, dann die beiden Stufen, zuletzt die
+  Auffangregel, die ablehnt (fail-closed).
+
+  Exchange Online begrenzt die Grösse eines Postfachs nach der Lizenz: mit E3 und E5 auf 100 GB, mit F3
+  auf 2 GB. Einen grösseren Wert weist Exchange laut Microsofts Dokumentation ab. Die Tabelle vergibt
+  deshalb höchstens 100 GB und lehnt eine Erhöhung mit F3 ab. Ein Postfach mit E3 oder E5 hat von sich
+  aus schon 100 GB; die Stufe 50 GB ist für Organisationen gedacht, die ihre Postfächer tiefer
+  begrenzen. Die Grenzen unter der Höchstgrösse folgen den Werten, die Exchange Online selbst setzt
+  (98/99/100 GB bei 100 GB). Massgebend ist die Weisung der eigenen Organisation.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365Postfachkontingent" name="M365Postfachkontingent" namespace="http://atlas/dmn">
+  <inputData id="id_stufe" name="stufe"/>
+  <inputData id="id_variante" name="variante"/>
+  <decision id="M365Postfachkontingent" name="M365Postfachkontingent">
+    <informationRequirement id="ir_stufe"><requiredInput href="#id_stufe"/></informationRequirement>
+    <informationRequirement id="ir_variante"><requiredInput href="#id_variante"/></informationRequirement>
+    <decisionTable id="dt_M365Postfachkontingent" hitPolicy="FIRST">
+      <input id="in_stufe" label="stufe"><inputExpression id="ie_stufe" typeRef="string"><text>stufe</text></inputExpression></input>
+      <input id="in_variante" label="variante"><inputExpression id="ie_variante" typeRef="string"><text>variante</text></inputExpression></input>
+      <output id="out_erlaubt" label="erlaubt" name="erlaubt" typeRef="boolean"/>
+      <output id="out_pruef" label="pruefpflicht" name="pruefpflicht" typeRef="boolean"/>
+      <output id="out_warnung" label="warnung" name="warnung" typeRef="string"/>
+      <output id="out_senden" label="sendenGesperrt" name="sendenGesperrt" typeRef="string"/>
+      <output id="out_alles" label="allesGesperrt" name="allesGesperrt" typeRef="string"/>
+      <output id="out_grund" label="grund" name="grund" typeRef="string"/>
+      <rule id="q1">
+        <description>Frontline (F3): Exchange Online lässt kein grösseres Postfach als 2 GB zu</description>
+        <inputEntry id="q1_i0"><text>-</text></inputEntry>
+        <inputEntry id="q1_i1"><text>"frontline"</text></inputEntry>
+        <outputEntry id="q1_o0"><text>false</text></outputEntry>
+        <outputEntry id="q1_o1"><text>false</text></outputEntry>
+        <outputEntry id="q1_o2"><text>null</text></outputEntry>
+        <outputEntry id="q1_o3"><text>null</text></outputEntry>
+        <outputEntry id="q1_o4"><text>null</text></outputEntry>
+        <outputEntry id="q1_o5"><text>"Mit einer Frontline-Lizenz (F3) hat ein Postfach in Exchange Online höchstens 2 GB; ein grösseres Kontingent braucht die Lizenz Standard oder Erweitert."</text></outputEntry>
+      </rule>
+      <rule id="q2">
+        <description>50 GB mit E3 oder E5: ohne Prüfung</description>
+        <inputEntry id="q2_i0"><text>"50"</text></inputEntry>
+        <inputEntry id="q2_i1"><text>"standard", "erweitert"</text></inputEntry>
+        <outputEntry id="q2_o0"><text>true</text></outputEntry>
+        <outputEntry id="q2_o1"><text>false</text></outputEntry>
+        <outputEntry id="q2_o2"><text>"49GB"</text></outputEntry>
+        <outputEntry id="q2_o3"><text>"49.5GB"</text></outputEntry>
+        <outputEntry id="q2_o4"><text>"50GB"</text></outputEntry>
+        <outputEntry id="q2_o5"><text>"50 GB: ohne Prüfung."</text></outputEntry>
+      </rule>
+      <rule id="q3">
+        <description>100 GB mit E3 oder E5: die Höchstgrösse, M365-Administration prüft</description>
+        <inputEntry id="q3_i0"><text>"100"</text></inputEntry>
+        <inputEntry id="q3_i1"><text>"standard", "erweitert"</text></inputEntry>
+        <outputEntry id="q3_o0"><text>true</text></outputEntry>
+        <outputEntry id="q3_o1"><text>true</text></outputEntry>
+        <outputEntry id="q3_o2"><text>"98GB"</text></outputEntry>
+        <outputEntry id="q3_o3"><text>"99GB"</text></outputEntry>
+        <outputEntry id="q3_o4"><text>"100GB"</text></outputEntry>
+        <outputEntry id="q3_o5"><text>"100 GB ist das Grösste, was Exchange Online mit E3 oder E5 zulässt: M365-Administration prüft Begründung und Belegung."</text></outputEntry>
+      </rule>
+      <rule id="q4">
+        <description>Auffangregel: was keine Regel erlaubt, wird abgelehnt (fail-closed)</description>
+        <inputEntry id="q4_i0"><text>-</text></inputEntry>
+        <inputEntry id="q4_i1"><text>-</text></inputEntry>
+        <outputEntry id="q4_o0"><text>false</text></outputEntry>
+        <outputEntry id="q4_o1"><text>true</text></outputEntry>
+        <outputEntry id="q4_o2"><text>null</text></outputEntry>
+        <outputEntry id="q4_o3"><text>null</text></outputEntry>
+        <outputEntry id="q4_o4"><text>null</text></outputEntry>
+        <outputEntry id="q4_o5"><text>"Für diese Stufe oder diese Lizenz greift keine Regel; mehr als 100 GB lässt Exchange Online nicht zu."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

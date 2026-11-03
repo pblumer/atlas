@@ -1,6 +1,6 @@
 # ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -189,3 +189,24 @@ way in, so that backend starts PowerShell for each call (`connector/exchange/onp
   ADR-0164/0168 (worker-first), ADR-0314 (worker-evaluated expressions)
 - Microsoft: Exchange Online PowerShell V3 module; app-only authentication for unattended
   scripts; Exchange Online Admin API overview (preview)
+
+## Amendment 2026-11-03: whether an alias is still free
+
+A name field of an order form asks, while a name is typed, whether it is still free
+(ADR-0519). A Microsoft 365 group takes the address
+`<alias>@<domain>`, and a shared mailbox or a distribution list made by hand may already
+hold it — so Exchange is one of the places asked.
+
+The question rides the form-lookup protocol of ADR-0473: an ephemeral query a Worker
+Instance answers with the Worker's own organization, never a job. It is a value lookup on
+the resource `recipients` and nothing else (`connector/exchange/lookup.go`): the alias is
+held to `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, so it carries no quote, and the Worker writes
+the filter itself — `Get-Recipient -Filter "(Alias -eq '<alias>') -or (EmailAddresses
+-like 'smtp:<alias>@*')" -ResultSize 1`. One item when a recipient holds the alias or an
+address with that local part, none when it is free; on failure only a code leaves, because
+the filter carries what a person typed. `Get-Recipient` exists under that name on both
+targets, so the lookup needs no variant; it needs a role that may read recipients, which
+the roles this record names for the operations already include. Whether Exchange Online
+evaluates the `-like` clause on `EmailAddresses` in every tenant is Microsoft's
+documentation of filterable properties and has not been checked against one.
+

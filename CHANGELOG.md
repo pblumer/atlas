@@ -14,6 +14,56 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **The version picker says which versions still hold work.** In an Operations live view the *Version* dropdown labels every version with what it still holds — running instances, tokens parked behind an incident, finished instances, and whether it is inactive — and the heading names the other versions that still run instances, each a link to its live view, so the versions with work left no longer have to be found by opening one after another. The counts come from `GET /api/v1/processes/{key}/versions`, which answers for every deployed version of a definition's process from the maintained counters and the shared incident reading, never an instance scan; agents read the same through the new MCP tool `atlas_process_versions`.
+- **A process orders a product for somebody in the name of its application.** A shop
+  send task in the new mode `order` names a catalogue and a product, the recipient's
+  account id and the answers to the products' forms, and places the order through the
+  same checks a person's order meets — eligibility, conflicts, the orderable window,
+  answers, variants and the approval rule. Only a product whose new field `orderableBy`
+  lists the process's application may be ordered so; the list is read from the newest
+  release, so taking an application off it stops it at once, and the Console edits it
+  beside `commandedBy`. The order names `system:application:<key>` as its orderer, its
+  id comes from the task, so a retry finds the order instead of placing a second one,
+  and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
+  HR joiner process can order the starter package for a person who joins
+  (ADR-0520).
+- **An order form says while a name is typed whether it is still free.** A textfield
+  carrying an `atlasAvailability` block names up to four sources — Entra groups and
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
+  `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
+  and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
+  stops the order, a check that could not run does not. Each source is a value lookup
+  over the form-lookup worker query, answered by a Worker Instance with the Worker's own
+  credential, so nothing is written and the engine holds no Microsoft credential. Only a
+  signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
+  Worker whose editors switched on `formLookups`, which the Console now offers for
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
+  (ADR-0519).
+- **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
+  sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
+  https://myapps.microsoft.com, which Graph requires) and answers the invitation with the
+  new guest's id; `restore-group` restores a Microsoft 365 group deleted less than 30
+  days ago, and with it its SharePoint site; `list-deleted-groups` lists deleted groups
+  like `list-groups` lists live ones. Two lookup resources, `groups` and
+  `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
+  availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
+- **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
+  id, name, display name and web URL with its default library's quota (`used`, `total`,
+  `remaining` in bytes), and `exists=false` for an address where there is no site, so a
+  process can show a site's usage before somebody asks for more room. The mockup answers
+  it too (ADR-0141, amended).
 - **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
 - **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
 - **Another system is connected with one approval.** A system such as a wiki that shows
@@ -176,6 +226,15 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **A provisioning that reports at once keeps its report.** A provisioning process
+  that reported its position done (or failed) before the order's start came back to
+  mark the line running had its report overwritten with running, and the position
+  stayed running with nothing left to report on it. The start now marks a line
+  running only while it is still pending or blocked.
+- **An action is told the variant its position was ordered in.** The provision and
+  the return were given `variantId`; an action that starts its own instance was not,
+  so a decision over the licence tier it changed saw null — as the M365 example's
+  mailbox quota decision did.
 - **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
 - **A server that recorded multi-instance history before its schema v2 starts again.** A multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.

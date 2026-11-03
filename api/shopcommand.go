@@ -1,15 +1,18 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/order"
+	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/job"
 	"github.com/pblumer/atlas/model"
 	"github.com/pblumer/atlas/state"
@@ -58,6 +61,9 @@ func (s *Server) shopCommandHandler(rd state.Reader) job.CompletingHandler {
 		scope, err := state.VisibleVariablesMap(rd, j.ElementInstanceKey)
 		if err != nil {
 			return job.Completion{}, fmt.Errorf("shop command: read variables: %w", err)
+		}
+		if detail.ShopMode == compiler.ShopModeOrder {
+			return s.shopOrder(j, ei, detail, scope)
 		}
 		orderID := strings.TrimSpace(userResolve(detail.ShopOrder, ei.ProcessInstanceKey, scope))
 		ref := strings.TrimSpace(userResolve(detail.ShopPosition, ei.ProcessInstanceKey, scope))
@@ -243,4 +249,111 @@ func (s *Server) commandReturn(app, orderID, position string) (string, error) {
 		return "", opErr
 	}
 	return s.startReturnAttempt(binding, orderID, position, out, "asked by application "+app)
+}
+
+// The shop order task, served in-process on the command task's job type
+// (ADR-0520).
+//
+// A process orders a product for somebody — an HR joiner process ordering the starter
+// package — in the name of its application. The catalogue and the product are the
+// model's literals; the recipient and the answers are read from the instance's scope
+// when the task runs. Who may is the product's OrderableBy, read from the newest
+// release of the catalogue; everything else is the order's own checks (order.place).
+//
+// A refusal that will not change on a retry — the product does not list the
+// application, the recipient has no account, the basket breaks a rule of the release —
+// is thrown as the BPMN error ShopOrderRefused when the process catches it, so the
+// model can route it to a person; uncaught, it is a failure with retries and then an
+// incident, as every other task's. The message travels with the error and names no
+// person.
+
+// ShopOrderRefused is the BPMN error code a refused order is thrown as when the
+// process catches it.
+const ShopOrderRefused = "SHOP_ORDER_REFUSED"
+
+// shopOrder handles one `order` task.
+func (s *Server) shopOrder(j job.Job, ei *model.ElementInstanceValue, detail *compiler.ConnectorTaskDetail,
+	scope map[string]model.VariableValue) (job.Completion, error) {
+	app, err := s.applicationOf(ei.ProcessDefKey)
+	if err != nil {
+		return job.Completion{}, fmt.Errorf("shop order: %w", err)
+	}
+	recipient := strings.TrimSpace(userResolve(detail.ShopRecipient, ei.ProcessInstanceKey, scope))
+	config, err := shopOrderAnswers(userResolve(detail.ShopAnswers, ei.ProcessInstanceKey, scope))
+	if err != nil {
+		return job.Completion{}, fmt.Errorf("shop order: %w", err)
+	}
+	var (
+		rels   []catalog.Release
+		relErr error
+	)
+	s.do(func() { rels, relErr = s.catalogStore.ReleasesOf(detail.ShopCatalog) })
+	if relErr != nil {
+		return job.Completion{}, fmt.Errorf("shop order: read catalogue %q: %w", detail.ShopCatalog, relErr)
+	}
+	if len(rels) == 0 {
+		return job.Completion{}, s.shopOrderRefusal(ei, detail, fmt.Sprintf("catalogue %q has no published release", detail.ShopCatalog))
+	}
+	out, _, err := s.orders.PlaceForApplication(order.ApplicationOrder{
+		App: app, CommandID: shopCommandID(j.Key), Release: rels[0],
+		Items: []string{detail.ShopProduct}, Recipient: recipient, Config: config,
+	})
+	if err != nil {
+		var refusal *order.Refusal
+		if errors.As(err, &refusal) && refusal.Status < 500 {
+			return job.Completion{}, s.shopOrderRefusal(ei, detail, refusal.Message)
+		}
+		return job.Completion{}, fmt.Errorf("shop order: %w", err)
+	}
+	var outputs []model.VariableValue
+	if detail.ShopResultVar != "" {
+		outputs = append(outputs, model.VariableValue{Name: detail.ShopResultVar, Kind: model.VarString, Text: out.ID})
+	}
+	return job.Completion{Outputs: outputs}, nil
+}
+
+// shopOrderRefusal is a refused order as the job ends with it: the BPMN error when the
+// task's process catches ShopOrderRefused, a failure otherwise.
+func (s *Server) shopOrderRefusal(ei *model.ElementInstanceValue, detail *compiler.ConnectorTaskDetail, why string) error {
+	msg := "shop order: " + detail.ShopProduct + ": " + why
+	if cp := s.processLookup(ei.ProcessDefKey); cp != nil && cp.CatchesErrorCode(ShopOrderRefused) {
+		return &job.BPMNError{Code: ShopOrderRefused, Message: msg}
+	}
+	return errors.New(msg)
+}
+
+// shopOrderAnswers reads the task's answers: a JSON object {product: {field: value}},
+// every value kept as the text the order stores (a form's answer is text, ADR-0358).
+// Empty is no answers.
+func shopOrderAnswers(text string) (map[string]map[string]string, error) {
+	text = strings.TrimSpace(text)
+	if text == "" || text == "null" {
+		return nil, nil
+	}
+	var raw map[string]map[string]any
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		return nil, fmt.Errorf("the answers are not an object of products, each an object of answers: %v", err)
+	}
+	out := make(map[string]map[string]string, len(raw))
+	products := make([]string, 0, len(raw))
+	for p := range raw {
+		products = append(products, p)
+	}
+	sort.Strings(products)
+	for _, p := range products {
+		fields := make(map[string]string, len(raw[p]))
+		for k, v := range raw[p] {
+			switch x := v.(type) {
+			case nil:
+				continue
+			case string:
+				fields[k] = x
+			default:
+				b, _ := json.Marshal(x)
+				fields[k] = string(b)
+			}
+		}
+		out[p] = fields
+	}
+	return out, nil
 }

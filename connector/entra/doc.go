@@ -42,6 +42,16 @@
 // of the request the paging loop keeps, since Graph rejects a continuation fetched
 // without the header that made the query legal.
 //
+// # An accepted create, followed
+//
+// One operation is not answered with what it made: Graph answers create-community
+// 202 Accepted with the URL of an operation to poll ([Request.WantLocation]). The
+// worker follows that operation within the job, bounded, and answers the community —
+// or, when the bound is reached first, completes with a null id rather than failing,
+// because a failed job is retried and a retry would POST a second community
+// (createCommunity says why each outcome is what it is). The Location is confined to
+// the worker's own endpoint exactly as a continuation is.
+//
 // # Worker-only
 //
 // Like the SQL workers (ADR-0173) and unlike everything built before them, this
