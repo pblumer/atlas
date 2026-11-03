@@ -1,6 +1,6 @@
 # ADR-0467: An application and its shop move as a package, and an import asks before it replaces
 
-- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package"; and a target keeps a table of what another installation's names mean there — see "The target remembers what a name means")
+- **Status:** Accepted (amended 2026-10-20: an import remembers, per artifact, the version the last import brought, and asks only about what both sides moved — see "The plan remembers the last import"; constants are imported through `POST /api/v1/applications/{id}/constants/import`. Amended 2026-10-21: a source download carries the constants when asked, and the tree names what its processes need from the installation — see "The download carries the constants when asked, and names what the target needs". Amended again 2026-10-21: the Console writes and installs the whole package, catalogues included, and a fixed approver travels as an account by username — see "The Console writes and installs the package"; and a target keeps a table of what another installation's names mean there — see "The target remembers what a name means". Amended 2026-11-03: an artifact another existing application holds is planned as `elsewhere` and moves into the importing application only when the caller adopts it by name — see "Another application's artifact is adopted, never taken")
 - **Implementation:** Landed
 - **Date:** 2026-10-20
 - **Deciders:** Atlas maintainers
@@ -409,6 +409,49 @@ Considered and set aside:
   case appears, the key can gain the source without changing what an entry means.
 - **Remembering every answer, found or chosen.** A name found by itself needs no entry, and an
   entry for it would keep the old principal after somebody renamed the group here.
+
+### Another application's artifact is adopted, never taken (amended 2026-11-03)
+
+An import used to refuse a process, form or decision that another existing application holds,
+with `already belongs to another application`. That protects work, but it left no way forward
+when the person wants exactly that artifact in the imported application. The atlas hub
+acceptance test hit it at once: the sample bundles carry processes such as `proc_check_order`
+that an installation already filed into an application of its own, and nobody could install
+those bundles without first moving each artifact by hand. (An artifact of a *deleted*
+application is not held by anyone: it reads as Ungrouped, ADR-0034, and the import takes it as
+before.)
+
+**The plan names it; the caller decides.**
+
+- **A new status, `elsewhere`.** Such an artifact is planned, not refused, with `heldBy` (the
+  application's id and name, only for a caller who may see that application, else absent) and
+  `compared` (`unchanged` or `changed`: how its content compares with the import's). Unadopted,
+  it stops the import like a change nobody decided: 409, `undecided`, the plan.
+- **A new decision, `?adopt=`.** It takes refs one by one; there is no `*`, because moving an
+  artifact out of somebody's application is decided artifact by artifact. An adopted artifact
+  moves into the importing application, and its content is then decided as any other's is:
+  unchanged needs nothing more, changed needs `overwrite` or `keep` (or their `*`). Adopted and
+  kept, it moves with this server's content.
+- **The holder's consent is its editor role.** Adopting needs the editor role on the
+  application the artifact leaves, besides the one it joins. A caller without it is refused
+  with 404 and learns nothing more about that application. A protected application gives
+  nothing up (403).
+- **Everywhere the import runs.** `POST /api/v1/applications/source` and the hub import
+  (ADR-0499) take `adopt`. The Console's import dialog lists such artifacts in their own group,
+  unticked, with a second box for a changed content. `atlas import --adopt REF` decides it in a
+  pipeline, and at a terminal the move is asked first, its content after it. The MCP tool
+  `atlas_hub_import_release` passes `adopt` only as the person decided.
+
+Considered and set aside:
+
+- **Taking it silently when the content is unchanged.** Identical content says nothing about
+  whether the holder still wants it. The artifact would leave an application without anyone
+  having decided so.
+- **Copying it under a new id.** Two processes would then answer one name in the source tree,
+  and the package's references to it would point at the copy on one installation and at the
+  original on another.
+- **`adopt=*`.** It would turn one click into taking everything another application holds that
+  a package happens to name.
 
 ### Why not the others
 

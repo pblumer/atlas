@@ -113,6 +113,9 @@ func runImport(args []string, out io.Writer) error {
 	fs.Var(overwrite, "overwrite",
 		"replace artifacts that differ from the server's with the package's: refs such as process:ID, form:ID, model:HANDLE, constant:NAME or product:ID, comma-separated, or all; repeatable")
 	fs.Var(keep, "keep", "leave artifacts that differ from the server's as the server has them: refs, comma-separated, or all; repeatable")
+	adopt := newRefFlag()
+	fs.Var(adopt, "adopt",
+		"take artifacts another application on the server holds into this one: refs such as process:ID, form:ID or decision:ID, comma-separated; repeatable. Needs the editor role on the application they leave")
 	dryRun := fs.Bool("dry-run", false, "show what the import would create, leave and change, and write nothing")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -120,7 +123,7 @@ func runImport(args []string, out io.Writer) error {
 	if fs.NArg() != 1 {
 		return errors.New("name the package: atlas import [flags] DIR")
 	}
-	decide, err := decisions(overwrite, keep)
+	decide, err := decisions(overwrite, keep, adopt)
 	if err != nil {
 		return err
 	}
