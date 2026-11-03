@@ -849,24 +849,50 @@ const eligibleFrom = (f) =>
 // be one this reader may not see. A typed box takes a key that is not offered, and
 // is the whole field when the applications could not be read (apps is null).
 function commandedByField(apps, chosen) {
+  return appKeysField(apps, chosen, {
+    name: "commandedBy", cls: "commanded-by", verb: "command", placeholder: "hr-leavers",
+    hint: "A process deployed into one of these applications may ask a held "
+      + "position of this product for an action, with a Shop send task in mode "
+      + "<code>command</code> &mdash; a leaver process returning the right, a maintenance "
+      + "process resetting a password. It may ask only for an action whose triggers include "
+      + "<b>operator</b> or <b>system</b>, and never for the provision. <b>Empty is the "
+      + "default and means no process may command it</b> &mdash; the opposite of the "
+      + "eligible groups, where nothing chosen narrows nothing. The list is read from the "
+      + "newest published release when the task runs, so taking an application out and "
+      + "publishing stops it at once, for every right already held.",
+  });
+}
+
+// orderableByField is which process applications may ORDER this product for somebody
+// (ADR-draft-process-places-an-order): a process deployed into one of them may place
+// an order with a Shop send task in mode "order" — an HR joiner process ordering the
+// starter package. The same picker as commandedByField, and the same fail-closed
+// default, for the same reason: nobody opens this door by hand.
+function orderableByField(apps, chosen) {
+  return appKeysField(apps, chosen, {
+    name: "orderableBy", cls: "orderable-by", verb: "order", placeholder: "hr-eintritte",
+    hint: "A process deployed into one of these applications may order this product for "
+      + "a person, with a Shop send task in mode <code>order</code> &mdash; an HR joiner "
+      + "process ordering the starter package for somebody who joins. The order is placed "
+      + "in the application's name and goes through every check a person's order does: "
+      + "eligibility, conflicts, the orderable window and the approval rule. <b>Empty is "
+      + "the default and means no process may order it.</b> The list is read from the "
+      + "newest published release when the task runs.",
+  });
+}
+
+// appKeysField is the picker behind both: application boxes by name, stored by
+// portable key (ADR-0134), and a typed box for a key not offered.
+function appKeysField(apps, chosen, o) {
   const keys = chosen || [];
-  const hint = "A process deployed into one of these applications may ask a held "
-    + "position of this product for an action, with a Shop send task in mode "
-    + "<code>command</code> &mdash; a leaver process returning the right, a maintenance "
-    + "process resetting a password. It may ask only for an action whose triggers include "
-    + "<b>operator</b> or <b>system</b>, and never for the provision. <b>Empty is the "
-    + "default and means no process may command it</b> &mdash; the opposite of the "
-    + "eligible groups, where nothing chosen narrows nothing. The list is read from the "
-    + "newest published release when the task runs, so taking an application out and "
-    + "publishing stops it at once, for every right already held.";
   const typed = (value, label, note) => `<label style="display:block; margin-top:8px">${label}
-      <input name="commandedBy-keys" value="${esc(value)}" autocomplete="off" spellcheck="false"
-        placeholder="hr-leavers">
+      <input name="${o.name}-keys" value="${esc(value)}" autocomplete="off" spellcheck="false"
+        placeholder="${o.placeholder}">
       <span class="muted" style="display:block; margin-top:2px">${note}</span></label>`;
   if (!Array.isArray(apps)) {
-    return `<div class="field wide commanded-by">Applications whose processes may command it
+    return `<div class="field wide ${o.cls}">Applications whose processes may ${o.verb} it
       (application keys, comma separated; empty: no process may)
-      <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+      <span class="muted" style="display:block; margin:2px 0 6px">${o.hint}</span>
       ${typed(keys.join(", "), "",
     "The applications could not be read, so they are named by key here for now.")}</div>`;
   }
@@ -880,12 +906,12 @@ function commandedByField(apps, chosen) {
     ...orphans.map((k) => ({ key: k, text: `<code>${esc(k)}</code> &mdash; no application here carries this key` })),
   ];
   const have = new Set(keys);
-  return `<div class="field wide commanded-by">Applications whose processes may command it
+  return `<div class="field wide ${o.cls}">Applications whose processes may ${o.verb} it
     (none chosen: no process may)
-    <span class="muted" style="display:block; margin:2px 0 6px">${hint}</span>
+    <span class="muted" style="display:block; margin:2px 0 6px">${o.hint}</span>
     ${boxes.length ? `<div class="commanded-boxes" style="display:grid; gap:4px; margin-top:6px">
       ${boxes.map((b) => `<label style="display:flex; gap:6px; align-items:center; font-weight:400">
-        <input type="checkbox" name="commandedBy" value="${esc(b.key)}"${have.has(b.key) ? " checked" : ""}>
+        <input type="checkbox" name="${o.name}" value="${esc(b.key)}"${have.has(b.key) ? " checked" : ""}>
         <span>${b.text}</span></label>`).join("")}
     </div>` : `<p class="muted" style="margin:0">No application here has a key yet, so there is
       none to tick; name one by its key below.</p>`}
@@ -900,11 +926,13 @@ function commandedByField(apps, chosen) {
 // and none blank: publishing refuses a blank entry and a repeated one, and neither
 // says anything a single entry does not. Always a list, empty included, because a
 // save replaces the product and an absent field would keep the stored one — the
-// eligible groups' rule.
-const commandedByFrom = (f) => [...new Set([
-  ...f.getAll("commandedBy").map((k) => String(k).trim()),
-  ...list(f.get("commandedBy-keys")),
+// eligible groups' rule. orderableByFrom is the same for the other list.
+const appKeysFrom = (f, name) => [...new Set([
+  ...f.getAll(name).map((k) => String(k).trim()),
+  ...list(f.get(`${name}-keys`)),
 ].filter(Boolean))];
+const commandedByFrom = (f) => appKeysFrom(f, "commandedBy");
+const orderableByFrom = (f) => appKeysFrom(f, "orderableBy");
 
 // The orderable window, as two dates.
 //
@@ -1108,6 +1136,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     // process the way the actions are: a product with two processes still has a
     // return a leaver process may ask for.
     commandedBy: commandedByFrom(f),
+    orderableBy: orderableByFrom(f),
     lifecycleForm: f.get("lifecycleProcess") ? (f.get("lifecycleForm") || "") : "",
     multipleAllowed: !!f.get("multipleAllowed"),
     targets: parseTargets(f.get("targets")),
@@ -2478,6 +2507,7 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
         ${actionRows(v, langs)}
         <button type="button" class="btn ghost" data-add-action>Add an action</button></div>
       ${commandedByField(apps, v.commandedBy)}
+      ${orderableByField(apps, v.orderableBy)}
       <label class="field wide">How long the right may last
         <span class="muted" style="display:block; margin:2px 0 6px">In days, or
           <code>0</code> for a right that does not end &mdash; which is the ordinary case.

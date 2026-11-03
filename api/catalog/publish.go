@@ -393,6 +393,23 @@ func checkItems(in Input, add func(Problem)) {
 			}
 			seenCommander[key] = true
 		}
+		// And the applications that may order it (ADR-draft-process-places-an-order),
+		// under the same rule and for the same reasons.
+		seenOrderer := map[string]bool{}
+		for _, k := range it.OrderableBy {
+			key := strings.TrimSpace(k)
+			if key == "" {
+				add(Problem{Item: it.ID, Message: "names a blank application among those that may " +
+					"order it; an application is named by its key"})
+				break
+			}
+			if seenOrderer[key] {
+				add(Problem{Item: it.ID, Message: "names application " + key + " twice among those " +
+					"that may order it"})
+				break
+			}
+			seenOrderer[key] = true
+		}
 		// A category of nothing but spaces is a heading nobody can read and nobody
 		// can group by: the shop would render an empty column head, and a second
 		// product with a different number of spaces would sit under a different one
@@ -913,6 +930,9 @@ func freeze(items []Item) []Item {
 		}
 		if len(it.CommandedBy) > 0 {
 			it.CommandedBy = append([]string(nil), it.CommandedBy...)
+		}
+		if len(it.OrderableBy) > 0 {
+			it.OrderableBy = append([]string(nil), it.OrderableBy...)
 		}
 		// The binding travels too: the release says which pages its content was
 		// copied from, and the recheck reads it to decide whether it may still be

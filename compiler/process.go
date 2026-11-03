@@ -735,10 +735,19 @@ type ConnectorTaskDetail struct {
 	// acts on: the product is a literal fixed at deploy, the order and the position
 	// literal-or-FEEL values evaluated over the instance's variables when the task
 	// runs. ShopResultVar, when set, receives the command id the act was asked under.
-	ShopProduct     string
-	ShopOrder       RestExpr
-	ShopPosition    RestExpr
-	ShopResultVar   string
+	ShopProduct   string
+	ShopOrder     RestExpr
+	ShopPosition  RestExpr
+	ShopResultVar string
+	// ShopCatalog, ShopRecipient and ShopAnswers belong to an `order` task
+	// (ADR-draft-process-places-an-order): the catalogue whose newest release the order
+	// is placed against, a literal fixed at deploy; the recipient's account id and the
+	// answers to the products' forms ({product: {field: value}}), literal-or-FEEL
+	// values evaluated when the task runs. ShopProduct then names the product ordered
+	// and ShopResultVar receives the order's id.
+	ShopCatalog     string
+	ShopRecipient   RestExpr
+	ShopAnswers     RestExpr
 	UserName        RestExpr
 	UserEmail       RestExpr
 	UserDisplayName RestExpr

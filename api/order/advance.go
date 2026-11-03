@@ -134,3 +134,29 @@ func Ready(o Order) []Line {
 	}
 	return out
 }
+
+// MarkStarted records that a line's provisioning process was started: running, but
+// only while the line is still where a provisioning starts from (pending or blocked).
+//
+// Apply cannot be used for this. It records an outcome over whatever the line shows,
+// and the start is not an outcome: the provisioning process runs from the moment it
+// is started, and a process that finishes at once reports done — or failed — before
+// the start comes back to mark the line running. Applied after that report, running
+// overwrote done, and the line sat there with nothing left to report on it. Changed is
+// false when the report outran the start; the line already says more than running.
+func MarkStarted(o Order, ref string, at int64) (Order, bool, error) {
+	key, err := ResolveLine(o, ref)
+	if err != nil {
+		return o, false, err
+	}
+	for _, l := range o.Lines {
+		if l.Key() == key && !l.Status.mayStartProvision() {
+			return o, false, nil
+		}
+	}
+	next, err := Apply(o, ref, StatusRunning, at)
+	if err != nil {
+		return o, false, err
+	}
+	return next, true, nil
+}
