@@ -50,6 +50,8 @@ function installSlowShop(catalogStatus) {
     "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
   };
+  // Every catalogue this person reaches (ADR-draft-several-catalogues-per-person).
+  ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   // The catalogue answers only once the test lets it, with the status it names:
   // 200 for a catalogue, 404 for "none is assigned to you", 500 for a failure.
   let release;
@@ -59,10 +61,12 @@ function installSlowShop(catalogStatus) {
   window.fetch = (input) => {
     const path = String(input).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
     window.__requested.push(path);
-    if (path === "/api/v1/shop/catalog") {
-      return window.__answerCatalogue.then(() => catalogStatus === 200
-        ? new Response(JSON.stringify(ROUTES[path]), { status: 200, headers: { "content-type": "application/json" } })
-        : new Response(catalogStatus === 404 ? "no catalogue is assigned to you" : "resolve catalogue: disk", { status: catalogStatus }));
+    if (path === "/api/v1/shop/catalogs") {
+      // Every catalogue this person reaches: none is an empty list, not a 404
+      // (ADR-draft-several-catalogues-per-person).
+      return window.__answerCatalogue.then(() => catalogStatus === 200 || catalogStatus === 404
+        ? new Response(JSON.stringify(catalogStatus === 200 ? ROUTES[path] : []), { status: 200, headers: { "content-type": "application/json" } })
+        : new Response("resolve catalogues: disk", { status: catalogStatus }));
     }
     if (Object.prototype.hasOwnProperty.call(ROUTES, path)) {
       return Promise.resolve(new Response(JSON.stringify(ROUTES[path]), {
@@ -132,7 +136,7 @@ test("the reads that do not need the catalogue run while it is still unanswered"
   await open(page, 200);
   await expect(page.getByText("Loading the shop …")).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__requested)).toEqual(expect.arrayContaining([
-    "/api/v1/shop/catalog", "/api/v1/orders", "/api/v1/shop/tasks", "/api/v1/inventory",
+    "/api/v1/shop/catalogs", "/api/v1/orders", "/api/v1/shop/tasks", "/api/v1/inventory",
     "/api/v1/shop/favourites", "/api/v1/principals",
   ]));
   expect(await page.evaluate(() => window.__requested)).not.toContain("/api/v1/catalogs/cat_s/releases");
