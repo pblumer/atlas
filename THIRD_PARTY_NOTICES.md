@@ -29,6 +29,12 @@ Upstream references:
 - `zeebe-bpmn-moddle` **1.17.0**: the bundled BPMN `zeebe.json` descriptor is byte-identical to the [tagged upstream resource](https://github.com/camunda/zeebe-bpmn-moddle/blob/v1.17.0/resources/zeebe.json). Its MIT notice and copyright are retained in [ZEEBE-BPMN-MODDLE-LICENSE](api/web/vendor/bpmn/ZEEBE-BPMN-MODDLE-LICENSE), separately from the bpmn.io licence.
 - `camunda-dmn-moddle` **1.3.1**: integrated into the prebuilt DMN editor; its MIT copyright and permission notice is retained in [CAMUNDA-DMN-MODDLE-LICENSE](api/web/vendor/dmn/CAMUNDA-DMN-MODDLE-LICENSE). Source identification and bundle inclusion do **not** yet constitute an audited rebuild.
 
+## DMN editor fork and npm dependency evidence
+
+- `pblumer/dmn-js`, commit [`481cc5a`](https://github.com/pblumer/dmn-js/tree/481cc5a02ffa855689b59d81181478b84b25f9a5): its original bpmn.io licence with the required watermark condition is retained at [DMN LICENSE](api/web/vendor/dmn/LICENSE).
+- `pblumer/dmn-moddle`, commit [`ac76928`](https://github.com/pblumer/dmn-moddle/tree/ac76928df99382c36833d9300fd98acc604dc673): its independent MIT copyright/permission notice is retained at [DMN-MODDLE-LICENSE](api/web/vendor/dmn/DMN-MODDLE-LICENSE).
+- The DMN vendor build's npm lockfile records **68** package entries declaring 67 MIT and 1 ISC (`semver@7.8.5`). This is a **build dependency metadata inventory**, not a verified list of bundled/shipped modules or complete licence notices.
+
 All other bundled dependencies and transitive notices remain subject to the incomplete inventory and release checks.
 
 ## Go modules and other assets
