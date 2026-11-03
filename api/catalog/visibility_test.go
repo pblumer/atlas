@@ -135,3 +135,44 @@ func TestThePortalAnswersWhichCatalogueIsMine(t *testing.T) {
 		t.Fatalf("mine = %d, want 404", rec.Code)
 	}
 }
+
+// TestThePortalAnswersEveryCatalogueThatIsMine: a person is offered what all of their
+// catalogues offer, highest rank first (ADR-draft-several-catalogues-per-person). The
+// person in two audiences gets both — before, the lower one was hidden behind the
+// higher and its products could not be ordered at all — and may order from each.
+func TestThePortalAnswersEveryCatalogueThatIsMine(t *testing.T) {
+	s := serviceWithAdmin(t)
+	low := makeCatalog(t, s, user("usr_owner"))
+	high := makeCatalog(t, s, user("usr_owner"))
+	other := makeCatalog(t, s, user("usr_owner"))
+	as(t, s.HandleUpdateCatalog, user("usr_owner"), "PATCH", `{"rank":1,"groups":["grp_all"]}`, "id", low.ID)
+	as(t, s.HandleUpdateCatalog, user("usr_owner"), "PATCH", `{"rank":9,"groups":["grp_board"]}`, "id", high.ID)
+	as(t, s.HandleUpdateCatalog, user("usr_owner"), "PATCH", `{"rank":5,"groups":["grp_elsewhere"]}`, "id", other.ID)
+
+	member := &httpapi.Principal{UserID: "usr_b", Roles: []string{"user"},
+		GroupIDs: []string{"grp_all", "grp_board"}}
+	rec := as(t, s.HandleMyCatalogs, member, "GET", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("mine = %d (%s)", rec.Code, rec.Body)
+	}
+	got := decode[[]Catalog](t, rec)
+	if len(got) != 2 || got[0].ID != high.ID || got[1].ID != low.ID {
+		ids := []string{}
+		for _, c := range got {
+			ids = append(ids, c.ID)
+		}
+		t.Fatalf("got %v, want [%s %s]: both reached, highest rank first, the third not", ids, high.ID, low.ID)
+	}
+	for _, c := range got {
+		if ok, err := s.MayOrderFrom(member, c.ID); err != nil || !ok {
+			t.Fatalf("may order from %s = %v, %v; want true", c.ID, ok, err)
+		}
+	}
+
+	// Reaching none is an empty list, an answer rather than a 404.
+	nobody := &httpapi.Principal{UserID: "usr_n", Roles: []string{"user"}}
+	rec = as(t, s.HandleMyCatalogs, nobody, "GET", "")
+	if rec.Code != http.StatusOK || len(decode[[]Catalog](t, rec)) != 0 {
+		t.Fatalf("none reached = %d %s, want 200 and []", rec.Code, rec.Body)
+	}
+}

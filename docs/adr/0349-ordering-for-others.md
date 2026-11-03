@@ -1,6 +1,6 @@
 # ADR-0349: Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-03 — a process may order for somebody in the name of its application, ADR-0520)
 - **Implementation:** Landed
 - **Date:** 2026-09-15
 - **Deciders:** Atlas maintainers
@@ -85,3 +85,14 @@ exactly as everywhere else in this server.
 **It does not reach an order already placed.** Like every other gate here it
 decides what may be *created*. An order somebody placed in a colleague's name
 before this stands, and is visible where it always was.
+
+## Amendment 2026-11-03: a process that orders
+
+The context above observed that no modelled process places an order. One may now:
+ADR-0520 lets a process order a product for somebody in the
+name of its application, when the product's `orderableBy` lists that application. The
+question this record asks — whose name an order may carry — is answered there by the
+product rather than by a role: the orderer is the application
+(`system:application:<key>`), the recipient is the person the process names, and every
+rule of the release applies to the recipient exactly as it does here.
+

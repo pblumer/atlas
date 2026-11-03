@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-uebergabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zugangsdaten übergeben · Hand over the credentials**\n\nDas Konto in Entra ID besteht. · The account in Entra ID exists.\n\n- Benutzername · User name: {{konto.userPrincipalName}}\n- Initialpasswort · Initial password: {{initialpasswort}}\n- Eintritt am · Starting on: {{eintrittsdatum}}\n- Vorgesetzte Person · Line manager: {{vorgesetzter}}\n\nDie Zugangsdaten der Person bzw. der vorgesetzten Person übergeben. Das Eintrittspaket (Lizenz und Mitgliedschaften) bestellt der Prozess, sobald das Atlas-Konto besteht. Die vorgesetzte Person setzt der Prozess nicht in Entra ID; das bleibt Sache des HR-Systems oder der Administration. · Hand the credentials to the person or their line manager. The process orders the joiner package (licence and memberships) once the Atlas account exists. It does not set the line manager in Entra ID; that stays with the HR system or the administration."
+    }
+  ]
+}

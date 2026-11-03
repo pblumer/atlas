@@ -7,19 +7,20 @@ geändert und wieder entzogen. Das Paket enthält die Kataloge, die Produkte, al
 Entscheidungstabellen, die Formulare (darunter zwei öffentliche) und eine wöchentliche
 Governance-Prüfung, zweisprachig (Deutsch und Englisch).
 
-Die Worker heissen `ucc_entra`, `ucc_exchange`, `ucc_teams` und `ucc_sharepoint`. Wer andere
-Namen verwendet, ersetzt sie in den `.bpmn`-Dateien (Attribut `connector`) und im
+Die Worker heissen `ucc_entra`, `ucc_exchange`, `ucc_teams` und `ucc_sharepoint`, dazu
+`ad_verzeichnis` (Active Directory), wenn die Lizenzen über Gruppen im lokalen AD laufen (siehe
+«Lizenzen: direkt oder über Gruppen»). Wer andere Namen verwendet, ersetzt sie in den `.bpmn`-Dateien (Attribut `connector`) und im
 Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 ## Inhalt
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 20 Prozesse, 39 Formulare, 7 Entscheidungen samt ihren Modellen (Format 2) |
-| `katalog.json` | Das Katalogdokument: zwei Kataloge, dreizehn Produkte, eine Beziehung |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 23 Prozesse, 50 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `katalog.json` | Das Katalogdokument: drei Kataloge, sechzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
-| `*.dmn` | Die sieben Entscheidungsmodelle |
+| `*.dmn` | Die acht Entscheidungsmodelle |
 | `*.form.json` | Bestell-, Aktions-, Aufgaben- und öffentliche Formulare |
 | `installieren.sh`, `installieren.ps1` | Installation in eine Atlas-Instanz: Entscheidungsmodelle, Applikation, Veröffentlichung, Katalog |
 | `antworten.beispiel.json` | Vorlage für die Antworten auf `fragen.json` |
@@ -29,17 +30,22 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 | Katalog | Rang | Zielgruppe | Produkte |
 |---|---|---|---|
 | Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Verteiler, Postfachzugriff |
-| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | alle dreizehn |
+| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | die dreizehn Produkte des Shops |
+| Microsoft 365: HR-Eintritte (`cat-m365-hr`) | 520 | keine | Eintrittspaket, Lizenz mit Postfach (Eintritt), Mitgliedschaften der Organisationseinheit |
 
 Eine Person sieht im Shop genau einen Katalog: den mit dem höchsten Rang unter denen, die
 ihre Gruppen erreichen. Der UCC-Katalog bietet deshalb auch die allgemeinen Produkte an.
 Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.json` anzupassen.
 
+Der Katalog `cat-m365-hr` hat keine Zielgruppe und erreicht deshalb niemanden: Im Shop sieht ihn keine
+Person. Bestellt wird aus ihm nur vom Eintrittsprozess (siehe «Eintritt und Austritt (HR-Ereignis)»).
+Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einmal zulässt.
+
 ## Die Produkte
 
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
 |---|---|---|---|---|
-| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
+| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange, im Modus `ad-gruppe` AD | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
 | Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
 | Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
 | SharePoint: Teamwebsite (`m365-sharepoint-site`) | Entra, SharePoint | vorgesetzte Person der Besitzerin oder des Besitzers | `sharepoint-site.bpmn` (Lebenszyklus) | Site endgültig zurückgeben, Externe Person einladen, Site-Besitzer ändern, Speicherkontingent erhöhen, Site löschen, Gelöschte Site wiederherstellen |
@@ -52,8 +58,12 @@ Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.jso
 | Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
 | Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
 | Aufbewahrung eines Postfachs (`m365-aufbewahrung`, Litigation Hold) | Exchange | `{{compliance}}` | `aufbewahrung.bpmn` (Lebenszyklus) | Aufbewahrung aufheben |
+| Eintrittspaket Microsoft 365 (`m365-eintritt`), Paket aus den beiden folgenden Produkten | – | keine | `eintritt-paket.bpmn` (Lebenszyklus) | Eintrittspaket zurückgeben (nur Betrieb und Eintrittsprozess) |
+| Microsoft 365: Lizenz mit Postfach (Eintritt) (`m365-eintritt-lizenz`), ohne Varianten | Entra, Exchange, im Modus `ad-gruppe` AD | keine | `lizenz.bpmn` (Lebenszyklus) | die Aktionen am Postfach wie bei `m365-lizenz`; Rückgabe nur durch den Betrieb |
+| Mitgliedschaften der Organisationseinheit (`m365-oe-mitgliedschaften`), setzt die Lizenz voraus | Entra, Exchange | keine | `oe-mitgliedschaften.bpmn` (Lebenszyklus) | Mitgliedschaften entfernen (nur Betrieb) |
 
-Sitzungszimmer, Gerät, Anrufwarteschlange, Telefonzentrale und Aufbewahrung stehen nur im UCC-Katalog.
+Sitzungszimmer, Gerät, Anrufwarteschlange, Telefonzentrale und Aufbewahrung stehen nur im UCC-Katalog,
+die drei Produkte des Eintritts nur in `cat-m365-hr`.
 
 Die Rufnummer wählt die Gruppe `M365-Telefonie` aus ihrem Nummernplan (Aufgabe «Rufnummer
 wählen»), weil Atlas keinen Nummernbestand führt. Zugewiesen wird sie danach vom
@@ -102,6 +112,134 @@ kann. Eine Ablehnung trägt keinen Text; der Grund steht in der Instanz
 Calendar, Calendrier, Calendario …), und eine Ordnerberechtigung braucht diesen Namen
 (`<upn>:\Kalender`). Der Prozess liest ihn deshalb zuerst und nimmt den Ordner mit
 `FolderType` Calendar.
+
+## Lizenzen: direkt oder über Gruppen
+
+Die Lizenz der Produkte `m365-lizenz` und `m365-eintritt-lizenz` kann `lizenz.bpmn` auf drei Wegen
+vergeben. Welchen, sagt die Applikationskonstante `LIZENZ_MODUS`:
+
+| `LIZENZ_MODUS` | Zuweisen | Entziehen | Erledigt bzw. zurückgegeben gemeldet |
+|---|---|---|---|
+| `direkt` (Fallback) | `assign-license` mit der SKU aus `M365Lizenzprofil` | `assign-license` mit `removeLicenses` | sofort nach dem Aufruf |
+| `entra-gruppe` | `get-user` (Objekt-ID), dann `add-group-member` in die Cloud-Gruppe `entraGruppe` | `remove-group-member` aus derselben Gruppe | sobald die Lizenz aktiv ist bzw. die Mitgliedschaft entfernt ist |
+| `ad-gruppe` | `get-user` (`onPremisesSyncEnabled`), AD `search` nach dem Konto, AD `add-group-member` in `CN=<adGruppe>,<AD_LIZENZ_OU>` | AD `search`, AD `remove-group-member` | wie `entra-gruppe` |
+
+Ohne gesetzte Konstante gilt `direkt`, und eine bestehende Installation verhält sich wie bisher. Ein
+anderer Wert als diese drei (Gross- und Kleinschreibung und Leerzeichen gleichgültig) hält die
+Instanz am Gateway «Lizenzweg?» mit einem Incident an, statt still einen Weg zu wählen. Den
+Nutzungsort setzt der Prozess in allen drei Modi vorher, weil Entra ID eine Lizenz ohne ihn auch über
+eine Gruppe nicht vergibt.
+
+**Warum Gruppen.** Microsoft beschreibt die gruppenbasierte Lizenzierung von Entra ID als den Weg,
+Lizenzen in grösserem Umfang zu verwalten: Einer Sicherheitsgruppe wird eine Lizenz zugewiesen, und
+jedes Mitglied erhält sie, solange es Mitglied ist. Wer die Lizenzen einer Organisation sehen will,
+sieht sie an wenigen Gruppen statt an jedem Konto, und eine Lizenz entsteht und verschwindet mit der
+Mitgliedschaft, auch wenn jemand sie ausserhalb von Atlas setzt. Laut Microsoft braucht die
+gruppenbasierte Lizenzierung Microsoft Entra ID P1 oder eine Lizenz, die P1 enthält (etwa
+Microsoft 365 E3); das ist Microsofts Dokumentation und an keinem Tenant geprüft. Dieser Kunde führt
+seine Lizenzgruppen als **Gruppen im lokalen AD**, die Entra Connect nach Entra ID synchronisiert
+(`ad-gruppe`); andere führen **Cloud-Gruppen** in Entra ID (`entra-gruppe`).
+
+**Der Preis: Die Lizenz kommt später, und ein Fehler auch.** Mit `assign-license` weist Graph die
+Lizenz sofort zu oder lehnt den Aufruf ab, und die Aufgabe wird zum Incident. In den Gruppenmodi
+setzt der Prozess nur die Mitgliedschaft; die Lizenz vergibt Entra ID danach in seiner eigenen
+Verarbeitung, eine AD-Gruppe erst nach dem nächsten Lauf von Entra Connect (üblich alle 30 Minuten).
+Scheitert die Vergabe (keine freie Lizenz, widersprüchliche Servicepläne, ein Nutzungsort, in dem
+die Lizenz nicht erhältlich ist), sieht man das erst am Konto, in `licenseAssignmentStates`. Der
+Prozess prüft deshalb:
+
+1. **Prüfintervall abwarten** (`LIZENZ_PRUEFINTERVALL`, Fallback `PT10M`).
+2. **Lizenzstand lesen:** `get-user` mit `select` `assignedLicenses,licenseAssignmentStates`.
+3. **Lizenzstand auswerten** (Script-Task, `lizenzStatus`): `aktiv`, wenn ein Eintrag für die SKU
+   der Variante den Zustand `Active` hat (auch `ActiveWithError`: Die Lizenz wirkt, nur ein
+   Serviceplan hat einen Fehler, dessen Code in `lizenzStatus.fehler` steht); `fehler` bei `Error`,
+   mit dem Code von Entra ID (`CountViolation`, `MutuallyExclusiveViolation`, `DependencyViolation`,
+   `ProhibitedInUsageLocationViolation`, `UniquenessViolation`, …); `zeit` nach `LIZENZ_PRUEFUNGEN`
+   Prüfungen (Fallback 18, also drei Stunden); sonst `wartet`, und es geht zurück zu Schritt 1.
+4. **Aktiv:** Erst jetzt meldet der Prozess die Position als erledigt. Damit beginnen auch die
+   Positionen, die die Lizenz voraussetzen (die Mitgliedschaften des Eintrittspakets mit ihren
+   Verteilern, die das Postfach brauchen), und die Aktionen am Postfach stehen der Person erst
+   dann zur Verfügung, wie bisher erst nach der Zuweisung.
+5. **Fehler oder Zeit abgelaufen:** Aufgabe «Lizenz klären» für `M365-Administration` mit dem
+   Fehlercode und dem, was zu prüfen ist (Formular `m365-lizenz-klaeren`). «Erneut prüfen» beginnt
+   die Prüfung von vorn, ohne die Mitgliedschaft noch einmal zu setzen; «Beenden» meldet die Position
+   als `failed`.
+
+Im Modus `ad-gruppe` liest der Prozess zuerst, ob das Konto aus dem AD synchronisiert ist
+(`onPremisesSyncEnabled`). Ein Konto, das nur in Entra ID besteht, kann nicht Mitglied einer
+AD-Gruppe sein; es geht an die Aufgabe «AD-Konto klären» (dasselbe Formular). Das betrifft die
+Konten, die `hr-eintritt.bpmn` heute in Entra ID anlegt: Sie bestehen nur in der Cloud.
+
+**Rückgabe.** In den Gruppenmodi entfernt der Prozess die Mitgliedschaft und meldet die Rückgabe
+sofort. Die Lizenz verschwindet danach von selbst und ebenso verzögert (bei einer AD-Gruppe nach dem
+nächsten Lauf von Entra Connect), mit ihr das Postfach (30 Tage wiederherstellbar). Der Prozess wartet
+darauf nicht, weil das Recht, das Atlas vergeben hat, die Mitgliedschaft ist: Ihr Entfernen kann
+nicht an fehlenden Lizenzen oder Serviceplänen scheitern, und Entra ID braucht dafür niemanden mehr.
+Ein Warten hielte die Position stundenlang auf `returning`, ohne dass jemand etwas tun könnte. Hält
+die Person dieselbe SKU zusätzlich direkt oder über eine andere Gruppe, bleibt ihr die Lizenz; das
+ist dann ein anderes Recht als das zurückgegebene.
+
+**Die Suche im AD.** Gesucht wird unter `AD_DOMAIN_DN` mit
+`(&(objectCategory=person)(objectClass=user)(userPrincipalName=<upn>))` und höchstens einem Treffer.
+Die UPN kommt aus einem Bestellformular und ist ein Personendatum; sie steht deshalb nur im Ausdruck,
+den der AD-Worker auswertet. Damit sie den Filter nicht verändern kann (etwa mit `*)(cn=*`), maskiert
+der Ausdruck die Zeichen, die in einem LDAP-Filter etwas bedeuten, nach RFC 4515 (`\` → `\5c`,
+`*` → `\2a`, `(` → `\28`, `)` → `\29`); der Wert bleibt so immer ein Vergleichswert. Das Muster im
+Formular (`^[^@\s]+@[^@\s]+\.[^@\s]+$`) genügt dafür nicht: Es lässt diese Zeichen zu, und ob der
+Server es bei einer Bestellung über die API durchsetzt, ist nicht geprüft. Die Alternative, das Konto
+über `onPremisesSamAccountName` aus Entra ID zu suchen, bräuchte dieselbe Maskierung (ein
+sAMAccountName darf Klammern enthalten) und einen Aufruf mehr. Die Maskierung lokal gegen
+`*)(cn=*` und `a*b(c)\d@x.ch` ausgewertet, nicht gegen ein AD.
+
+**Berechtigungen.**
+
+- `entra-gruppe`: am Worker `ucc_entra` `GroupMember.ReadWrite.All` (in `Group.ReadWrite.All`
+  enthalten, das der Worker für die Teams ohnehin hat) und `User.Read.All` für `get-user`. Laut
+  Microsoft lässt sich eine Gruppe, die Rollen zuweisen kann (role-assignable), damit nicht ändern;
+  Lizenzgruppen sollten keine solchen sein.
+- `ad-gruppe`: am Worker `ad_verzeichnis` (Worker-Typ AD, in der Console angelegt; derselbe Name wie im
+  Paket `ad-dienste`) Lesen der Benutzerkonten unter `AD_DOMAIN_DN` und Schreiben des Attributs
+  `member` an den Gruppen der OU `AD_LIZENZ_OU` (delegiert: «Mitglieder schreiben» für
+  Gruppenobjekte), sonst nichts. Am Worker `ucc_entra` `User.Read.All`.
+- In beiden Gruppenmodi braucht kein Worker eine Berechtigung auf Lizenzen: Die vergibt Entra ID
+  selbst. `update-user` für den Nutzungsort braucht weiterhin `User.ReadWrite.All`.
+
+**Voraussetzungen der Gruppenmodi.** Die Lizenzgruppen bestehen, und ihnen ist in Entra ID die SKU
+derselben Zeile von `M365Lizenzprofil` zugewiesen; ihre Objekt-IDs (`entraGruppe`) bzw. ihr cn
+(`adGruppe`) stehen in der Tabelle, deren Werte heute **Platzhalter** sind (`00000000-…-0000e003`,
+`LIC-M365-E3`). Im Modus `ad-gruppe` liegen die Gruppen in `AD_LIZENZ_OU`, und Entra Connect
+synchronisiert sie (die OU liegt im Bereich der Synchronisation). Die Person ist direkt Mitglied:
+Verschachtelte Gruppen geben laut Microsoft keine Lizenz weiter, nur die direkten Mitglieder der
+lizenzierten Gruppe erhalten sie (Microsofts Dokumentation, nicht geprüft).
+
+**Geprüft und nicht geprüft.** Geprüft ohne Server und ohne Tenant: `lizenz.bpmn` kompiliert, auch
+gegen die Regel, dass keine Bedingung und keine Script-Task ein Personendatum liest; das Diagramm hält
+die Layout-Regeln ein; `M365Lizenzprofil` wurde mit allen Regeln lokal ausgewertet; die Ausdrücke für
+den Modus, die Auswertung des Lizenzstands (wartet, aktiv, Fehler mit Code, Zeit abgelaufen), die
+Hinweise, den Gruppen-DN und den maskierten LDAP-Filter wurden lokal ausgewertet. **Nicht geprüft**,
+weder gegen einen Server noch gegen Entra ID oder ein AD: dass Graph `licenseAssignmentStates` in der
+beschriebenen Form liefert und mit `select` keine weiteren Eigenschaften mitgibt, wie lange Entra ID
+und Entra Connect brauchen, die Bedeutung der Fehlercodes, dass Graph und das AD eine schon
+bestehende Mitgliedschaft abweisen, die AD-Suche und das Schreiben von `member` mit dem Worker
+`ad_verzeichnis`, kein Durchlauf der drei Modi durch den Shop.
+
+**Grenzen.**
+
+- **Den Modus nicht wechseln, solange Personen Lizenzen halten.** Massgebend ist `LIZENZ_MODUS`
+  beim Entziehen: Wer von `direkt` auf eine Gruppe wechselt, entfernt bei der Rückgabe einer früher
+  direkt vergebenen Lizenz eine Mitgliedschaft, die es nicht gibt (Incident), und die direkte
+  Zuweisung bleibt. Vor einem Wechsel die bestehenden Konten in die Gruppen aufnehmen und die
+  direkten Zuweisungen entfernen.
+- **Eine bestehende Mitgliedschaft** lässt das Zuweisen als Incident enden, eine fehlende das
+  Entziehen.
+- **Beenden lässt die Mitgliedschaft stehen.** Wird «Lizenz klären» beendet, bleibt die Person
+  Mitglied; erhält sie die Lizenz später doch, steht sie nicht im Bestand. Wer beendet, entfernt die
+  Mitgliedschaft von Hand.
+- **Die UPN im AD ist dieselbe wie in Entra ID** (die übliche Einrichtung von Entra Connect). Wo
+  Entra ID eine andere Anmelde-ID als die UPN des AD verwendet (Alternate Login ID), findet die Suche
+  das Konto nicht; dann ist der Filter in «Konto im AD suchen» anzupassen.
+- **Telefonie, Warteschlange und Telefonzentrale** weisen ihre Lizenzen weiter direkt zu; für sie
+  hat `M365Lizenzprofil` keine Gruppe.
 
 ## Gerät und Aufbewahrung
 
@@ -280,6 +418,267 @@ unter dem Schlüssel `anlass`. `begruendung` ist die Variable, in die der Postei
 Begründung einer Ablehnung schreibt; unter demselben Namen hätte die Antwort der
 bestellenden Person den Grund der Ablehnung überdeckt bzw. ihn als Personendatum gesperrt.
 
+## Eintritt und Austritt (HR-Ereignis)
+
+Wer eintritt, braucht ein Konto, eine Lizenz mit Postfach und die Mitgliedschaften seiner
+Organisationseinheit. Hier bestellt das niemand von Hand: Das HR-System meldet den Eintritt,
+und der Prozess `hr-eintritt.bpmn` (`proc_m365_hr_eintritt`) legt das Konto in Entra ID an und
+bestellt danach das **Eintrittspaket** `m365-eintritt` im Namen seiner Applikation
+(Shop-Aufgabe im Modus `order`, [ADR-0520](../../docs/adr/0520-process-places-an-order.md)).
+Meldet das HR-System den Austritt, sperrt derselbe Prozess das Konto und gibt das Paket zurück
+(Shop-Aufgabe im Modus `command`, ADR-0429 §10), daneben die AD-Adminkonten der Person aus dem
+Paket [`ad-dienste`](../ad-dienste/) (siehe [Kopplung an ad-dienste](#kopplung-an-ad-dienste-adminkonten)).
+
+### Ablauf
+
+1. **Eintritt gemeldet** (`hr.eintritt`). Ein Nachrichtenstart mit `singletonStart`: Solange eine
+   Instanz mit derselben Personalnummer läuft, startet keine zweite.
+2. **Lizenzvariante bestimmen.** E3 oder `standard` → `standard`, E5 oder `erweitert` →
+   `erweitert`, F3 oder `frontline` → `frontline`, keine Angabe → `standard`. Eine andere Angabe
+   legt der Prozess `M365-Administration` vor (Aufgabe «Lizenzvariante wählen»), statt still eine
+   Lizenz zu wählen.
+3. **Initialpasswort festlegen** (Aufgabe für `M365-Administration`). Die Person muss es bei der
+   ersten Anmeldung ändern. Eine Aufgabe und kein erzeugtes Passwort, weil jemand es übergeben
+   muss; ein Temporary Access Pass ist nicht modelliert.
+4. **Belegte Namen lesen** (`list-users` mit `startswith(userPrincipalName, '<vorname.nachname>')`)
+   und **Entra-Konto anlegen** (`create-user`). Namensregel: `vorname.nachname@<MAIL_DOMAIN>`,
+   kleingeschrieben, Umlaute umschrieben (ä → ae), Akzente entfernt, Leerzeichen und andere
+   Zeichen gestrichen; ist der Name belegt, der erste freie mit 2 bis 9 (`anna.mueller2`).
+   Gesetzt werden `accountEnabled` true, Anzeige-, Vor- und Nachname, `employeeId` (Personalnummer),
+   `department` (Organisationseinheit), `usageLocation` (`USAGE_LOCATION`) und das Passwort.
+5. Daneben, ohne den Ablauf aufzuhalten: **Zugangsdaten übergeben** (Aufgabe für
+   `M365-Administration` mit UPN, Initialpasswort, Eintrittsdatum und vorgesetzter Person).
+6. **Auf das Atlas-Konto warten.** Die Bestellung braucht das Atlas-Konto der Person, und das legt
+   die Kontenspiegelung aus Entra ID an (ADR-0332). Der Prozess merkt sich nach dem Anlegen die
+   Revision der Spiegelung (`GET /api/v1/directory-sync`) und prüft alle 15 Minuten, bis sie um
+   zwei weiter ist: Erst der zweite Lauf hat seine Änderungen sicher nach dem Anlegen gelesen.
+   Nach 16 Versuchen (vier Stunden) prüft `M365-Administration` (Aufgabe «Atlas-Konto prüfen»).
+7. **Atlas-Konto lesen** (`GET /api/v1/pending-work?principal=<Objekt-ID in Entra ID>`). Die Route
+   löst eine Person über Konto-ID, Benutzernamen, Verzeichnis-ID oder Mailadresse auf und antwortet
+   mit der Konto-ID; die Spiegelung trägt die Objekt-ID als Verzeichnis-ID ein, der Treffer ist
+   also exakt. Fehlt das Konto, antwortet sie 404, und die Aufgabe wird zum Incident.
+8. **Eintrittspaket bestellen** (Shop-Aufgabe im Modus `order`) für diese Konto-ID, mit den Antworten
+   der Teile: `{"m365-eintritt-lizenz": {upn, lizenzvariante}, "m365-oe-mitgliedschaften": {upn, oe}}`.
+   Besteller ist `system:application:beispiel-m365-dienste`. Lehnt die Bestellung ab
+   (`SHOP_ORDER_REFUSED`), legt der Prozess sie `M365-Administration` vor (Aufgabe «Ablehnung
+   prüfen»): erneut bestellen oder beenden.
+9. **Austritt gemeldet** (`hr.austritt` mit derselben Personalnummer) → **Entra-Konto sperren**
+   (`disable`) → nebeneinander **Eintrittspaket zurückgeben** und **AD-Adminkonto zurückgeben**
+   (je eine Shop-Aufgabe im Modus `command`, `deprovision`). Lehnt die Bestellung eine der beiden
+   Rückgaben ab (`SHOP_COMMAND_REFUSED`), legt der Prozess sie `M365-Administration` vor (Aufgabe
+   «Paket von Hand zurückgeben» bzw. «Admin-Konto von Hand zurückgeben»), und der Austritt endet,
+   wenn beide Zweige fertig sind. Gesperrt wird zuerst, damit keine abgelehnte oder hängende
+   Rückgabe den Zugang offen hält; die Rückgaben laufen nebeneinander, damit eine Ablehnung, die
+   auf eine Person wartet, die andere nicht aufhält.
+
+### Wie das HR-System meldet
+
+Beide Meldungen braucht ein API-Token mit der Rolle `operator` (Console → Administration → API
+tokens, Scope `full`).
+
+**Eintritt** über die Trigger-Route, nicht über `POST /api/v1/messages`:
+
+```sh
+curl -X POST "$SERVER/api/v1/processes/proc_m365_hr_eintritt/triggers/hr.eintritt" \
+  -H "Authorization: Bearer $HR_TOKEN" -H 'Content-Type: application/json' -d '{
+    "triggerId": "eintritt-P-4711",
+    "source": "hr",
+    "variables": {
+      "personalnummer": "P-4711", "vorname": "Anna", "nachname": "Müller", "oe": "FIN",
+      "eintrittsdatum": "2026-12-01", "variante": "E3", "vorgesetzter": "chef@contoso.ch"
+    }}'
+```
+
+`personalnummer`, `vorname`, `nachname` und `oe` sind nötig; `eintrittsdatum`, `variante` und
+`vorgesetzter` (UPN) sind freiwillig. Die Route verschlüsselt die deklarierten Personendaten,
+bevor sie in den Verlauf kommen, und beantwortet eine wiederholte `triggerId` mit der ersten
+Instanz (201 beim Start, 200 bei der Wiederholung, 409 solange eine Instanz für diese
+Personalnummer läuft). **Eine Nachricht über `POST /api/v1/messages` kann den Eintritt nicht
+starten:** Der Server verschlüsselt Personendaten nur dort, wo sie eintreten (Formular,
+Worker-Ergebnis, Start über die API), und ein Name in der Nutzlast einer Nachricht wird zum
+Incident («arrived in the clear»). So an einem lokalen Server beobachtet.
+
+**Austritt** als Nachricht, ohne Personendaten:
+
+```sh
+curl -X POST "$SERVER/api/v1/messages" \
+  -H "Authorization: Bearer $HR_TOKEN" -H 'Content-Type: application/json' -d '{
+    "name": "hr.austritt", "correlationKey": "P-4711",
+    "variables": {"personalnummer": "P-4711"},
+    "timeToLiveMs": 604800000, "messageId": "austritt-P-4711"}'
+```
+
+`correlationKey` ist die Personalnummer. Mit `timeToLiveMs` hält der Server eine Meldung, die
+eintrifft, bevor der Prozess auf sie wartet (etwa während er noch auf das Atlas-Konto wartet),
+höchstens so lange, wie `--message-ttl-max` erlaubt; ohne geht sie verloren. Der Prozess handelt
+beim Eintreffen: Das HR-System meldet den Austritt deshalb an dem Tag, an dem der Zugang enden soll.
+
+### Das Paket und seine Teile
+
+| Produkt | Kante | Genehmigung | Prozess |
+|---|---|---|---|
+| `m365-eintritt` (das Ganze) | – | keine | `eintritt-paket.bpmn`: meldet die Bereitstellung sofort als erledigt, gibt bei der Rückgabe die Teile zurück |
+| `m365-eintritt-lizenz` | `composition` vom Paket | keine | `lizenz.bpmn` |
+| `m365-oe-mitgliedschaften` | `composition` vom Paket, `requires` die Lizenz | keine | `oe-mitgliedschaften.bpmn` |
+
+`m365-eintritt` nennt die Applikation `beispiel-m365-dienste` in `orderableBy` (der Prozess darf es
+bestellen) und in `commandedBy` (er darf es zurückgeben); die beiden Teile nennen sie in
+`commandedBy`, weil das Paket sie zurückgibt. Was dabei in Atlas nachgelesen wurde:
+
+- **Varianten.** Eine Shop-Aufgabe im Modus `order` kann noch keine Variante nennen, und die
+  Bestellung lehnt jedes Produkt mit Varianten ab, das keine genannt bekommt, auch ein integrales
+  Teil. `m365-lizenz` mit seinen drei Varianten taugt deshalb nicht als Teil. `m365-eintritt-lizenz`
+  ist dieselbe Lizenz **ohne Varianten**, gebunden an denselben Prozess `lizenz.bpmn` mit denselben
+  Aktionen am Postfach; die Stufe kommt als Antwort `lizenzvariante` aus dem Bestellformular
+  `m365-eintritt-lizenz-bestellung`. Die drei Entscheidungen in `lizenz.bpmn` lesen dazu
+  `variantId` und, wo diese leer ist, `lizenzvariante`. Für `m365-lizenz` ändert sich nichts.
+- **Genehmigung der Teile.** Jede Position eines Auftrags trägt die Genehmigungsregel ihres eigenen
+  Produkts (`api/order/service.go`, `linesFor`); ein Teil erbt die Regel des Ganzen nicht. Als Teil
+  hätte `m365-lizenz` also auf die vorgesetzte Person gewartet. Alle drei Produkte des Eintritts
+  sind deshalb ohne Genehmigung: Der Eintrag im HR-System ist die Freigabe.
+- **Rückgabe.** Eine Rückgabe gibt genau die Position zurück, um die gebeten wird; die Teile, die
+  das Ganze trägt, bleiben im Bestand (`api/order/return.go` prüft nur die Kante `requires`, und
+  ein integrales Teil lässt sich zurückgeben, nur nicht einzeln stornieren). `eintritt-paket.bpmn`
+  gibt die Teile deshalb selbst zurück: zuerst die Mitgliedschaften, dann, sobald deren Rückgabe
+  gemeldet ist (`GET …/lines/m365-oe-mitgliedschaften/outcomes`, alle 5 Minuten, höchstens zwei
+  Stunden, danach eine Aufgabe für `M365-Administration`), die Lizenz, zuletzt das Paket selbst.
+  Die Reihenfolge ist nötig, weil die Bestellung eine Lizenz nicht zurücknimmt, solange die
+  Mitgliedschaften sie brauchen. So gibt jede Rückgabe des Pakets die Teile zurück, auch eine aus
+  der Console.
+- **Ein Paket ohne eigenes Zielsystem** braucht trotzdem einen Lebenszyklus mit `provision` und
+  `deprovision`; der Katalog veröffentlicht kein Produkt ohne. `eintritt-paket.bpmn` meldet seine
+  Position sofort als erledigt. Dass eine Meldung, die schneller ist als der Start-Vermerk der
+  Bestellung, nicht mehr mit «running» überschrieben wird, behebt derselbe Änderungssatz in der
+  Plattform (`order.MarkStarted`); ältere Server brauchten dafür eine Wartezeit im Modell.
+
+**Mitgliedschaften** (`oe-mitgliedschaften.bpmn`): Die Entscheidung `M365OeMitgliedschaften`
+bildet die Organisationseinheit auf drei Listen ab (Teams und Gruppen als Objekt-IDs, Verteiler
+als Alias). Zuweisen: `get-user` für die Objekt-ID, je Team `add-team-member`, je Gruppe
+`add-group-member`, und wenn Verteiler dabei sind, nach 30 Minuten (das Postfach entsteht erst nach
+der Lizenz) je Verteiler `add-distribution-group-member`. Entziehen in umgekehrter Reihenfolge,
+Teams mit `remove-group-member`. Eine Organisationseinheit, die die Tabelle nicht kennt, geht an
+`M365-Administration` (Aufgabe «Organisationseinheit klären»). Die IDs in der Tabelle sind Beispiele.
+
+### Kopplung an ad-dienste: Adminkonten
+
+Wer austritt, verliert auch seine **AD-Adminkonten**. Die bestellt man nicht in diesem Paket,
+sondern im Paket [`examples/ad-dienste`](../ad-dienste/) (Applikation `beispiel-ad-dienste`),
+als Produkt `ad-admin-konto` mit der Aktion `deprovision`. Der Austritt gibt sie zurück mit:
+
+```xml
+<atlas:shopTask mode="command" product="ad-admin-konto" action="deprovision"
+                recipient="=atlasKontoId" resultVariable="adRueckgabe" retries="3"/>
+```
+
+- **Adressiert über die Person**, nicht über Auftrag und Position
+  ([ADR-0521](../../docs/adr/0521-command-by-recipient.md)): Der Prozess
+  kennt das Atlas-Konto der Person aus dem Eintritt, aber nicht den Auftrag, aus dem ihr Adminkonto
+  stammt, und den Bestand einer anderen Person darf nur lesen, wer `admin` ist (ADR-0312; ein
+  API-Token ist das nie). Der Server sucht die Position im Bestand selbst. Der Bestand führt je
+  Person und Produkt ein Recht, also gibt es höchstens eine Position; eine Mehrfachinstanz braucht
+  es nicht.
+- **Die Berechtigung liegt beim Produkt:** `ad-admin-konto` muss `beispiel-m365-dienste` in
+  `commandedBy` nennen, und seine Aktion `deprovision` muss ein `operator` (oder `system`) auslösen
+  dürfen (ADR-0429 §10). Das ist eine Einstellung im Katalog von `ad-dienste`; wer dieses Paket
+  unter einem anderen Schlüssel installiert, ändert sie dort.
+- **Ohne `ad-dienste` geht der Austritt weiter.** Ist das Paket nicht installiert oder hält die
+  Person kein Adminkonto (oder nur ein übernommenes ohne Bestellung), endet die Aufgabe ohne etwas
+  zu tun, mit `adRueckgabe` = `""`. Sonst steht dort die Kennung der Rückgabe; der Austritt wartet
+  nicht darauf, dass sie im Active Directory ankommt.
+- **Eine Ablehnung** (Produkt nennt die Applikation nicht, Aktion nur für den Kunden, Auftrag
+  fehlt) wirft die Aufgabe als BPMN-Fehler `SHOP_COMMAND_REFUSED`; der Prozess fängt ihn und legt
+  die Aufgabe «Admin-Konto von Hand zurückgeben» `M365-Administration` vor (Formular
+  `m365-austritt-abgelehnt`). Ein Serverfehler bleibt eine Störung mit Wiederholungen und danach
+  ein Incident. Die Rückgabe des Eintrittspakets fängt denselben Fehler auf dieselbe Weise.
+
+### Personendaten
+
+`vorname`, `nachname`, `vorgesetzter`, `initialpasswort`, die gelesenen Namen `belegteUpns` und das
+angelegte Konto `konto` (mit der UPN) sind in `hr-eintritt.bpmn` deklariert und unter dem Schlüssel
+der Personalnummer verschlüsselt. Die Namensregel steht deshalb nicht in einer Script-Task, sondern
+in den Ausdrücken des Entra-Workers (Filter von `list-users`, Attribute von `create-user`, dort
+zweimal: in `userPrincipalName` und `mailNickname`, die gleich bleiben müssen); die Kontosuche liest
+die Objekt-ID in der Adresse des REST-Workers, die Antworten der Bestellung entstehen im Ausdruck
+der Shop-Aufgabe. Die Gateways lesen nur `lizenzvariante`, Revisionen, Zähler und `entscheid`.
+**`personalnummer` bleibt im Klartext:** Sie ist der Korrelationsschlüssel beider Meldungen, und
+den wertet die Engine aus. Sie benennt die Person bei einem Löschbegehren (`atlas:dataSubject`,
+`atlas:searchable`). Die Konto-ID in Atlas (`atlasKontoId`) ist wie `recipient` in jedem
+Lebenszyklus kein Personendatum. In `oe-mitgliedschaften.bpmn` sind `upn` und `personKonto`
+Personendaten der empfangenden Person.
+
+### Voraussetzungen
+
+- **Die Kontenspiegelung aus Entra ID** läuft (ADR-0332, z.B. stündlich). Ihr Intervall bestimmt,
+  wie lange Schritt 6 dauert: Zwei Läufe nach dem Anlegen sind bei einem Stundentakt bis zu zwei
+  Stunden. Ohne Spiegelung kommt kein Atlas-Konto, und nach vier Stunden geht die Aufgabe an
+  `M365-Administration`. Die Route `/api/v1/directory-sync` gibt es nur auf einem Server mit
+  Anmeldung.
+- **Der Applikationsschlüssel** `beispiel-m365-dienste` (Schlüssel in `atlas.json`). Wer die
+  Applikation unter einem anderen Schlüssel installiert, ändert `orderableBy` und `commandedBy` in
+  `katalog.json`.
+- **Der Katalog `cat-m365-hr`** ist veröffentlicht; seine Katalog-ID nennt die Shop-Aufgabe wörtlich.
+- **Gruppe `M365-Administration`**, Secret `atlas` (API-Token mit der Rolle `operator`), Worker
+  `ucc_entra` (`User.ReadWrite.All`, `Group.ReadWrite.All`, für Teams laut Microsoft
+  `TeamMember.ReadWrite.All`) und `ucc_exchange`, Konstanten `MAIL_DOMAIN` (eine verifizierte Domain
+  des Tenants, sonst nimmt Entra ID die UPN nicht an), `USAGE_LOCATION` und `ATLAS_API_BASE`.
+- **Die Tabelle `M365OeMitgliedschaften`** mit den Teams, Gruppen und Verteilern des eigenen Tenants.
+- **Für die Rückgabe der Adminkonten** (freiwillig): das Paket `examples/ad-dienste` installiert,
+  sein Produkt `ad-admin-konto` nennt `beispiel-m365-dienste` in `commandedBy`. Ohne das Paket
+  findet der Schritt nichts und geht weiter.
+
+### Was geprüft ist und was nicht
+
+Geprüft gegen einen lokalen Atlas-Server aus diesem Repository (Installation mit
+`installieren.sh`, Katalog über eine angemeldete Sitzung, Wartezeiten der Prüfung auf Sekunden
+verkürzt). Die Jobs der Entra- und Exchange-Worker hat die Prüfung über `POST /api/v1/jobs/activate`
+und `…/complete` selbst beantwortet, die Kontenspiegelung über `POST /api/v1/directory-sync`:
+
+- Start über die Trigger-Route, Personendaten verschlüsselt; ein zweiter Start mit derselben
+  Personalnummer mit 409 abgelehnt; der Start über `POST /api/v1/messages` mit Namen in der Nutzlast
+  als Incident (deshalb die Trigger-Route);
+- die Namensregel mit Umlauten und einem belegten Namen (`anna.mueller2`), Filter und Attribute im
+  Klartext beim Worker;
+- das Warten auf zwei Läufe der Spiegelung, die Kontosuche über die Objekt-ID, die Bestellung im
+  Namen der Applikation mit den Antworten beider Teile, Besteller
+  `system:application:beispiel-m365-dienste`;
+- die Bereitstellung aller drei Positionen: E5 und F3 über `lizenzvariante`, zwei Teams, eine
+  Gruppe und zwei Verteiler, eine unbekannte Organisationseinheit und eine unbekannte Variante
+  über die Aufgaben; der Bestand der Person mit allen drei Produkten, die Aktionen am Postfach für
+  die Person sichtbar, die Rückgaben nicht; die Aktion «Postfachkontingent erhöhen» an
+  `m365-eintritt-lizenz`;
+- der Austritt: Sperren, Rückgabe des Pakets, Entfernen der Mitgliedschaften, danach Entzug der
+  Lizenz mit der SKU aus `lizenzvariante`; alle drei Positionen `returned`.
+
+Nicht geprüft: irgendein Schritt gegen einen echten Tenant (`create-user` mit `passwordProfile`,
+`startswith` auf `userPrincipalName`, `add-team-member` für ein eben lizenziertes Konto, die
+Zeit, bis Exchange Online das Postfach anlegt), der Pfad `SHOP_ORDER_REFUSED` mit der Aufgabe
+«Ablehnung prüfen», die Aufgaben nach Ablauf der Wartezeiten und `installieren.ps1`. Die Rückgabe
+der AD-Adminkonten und die beiden Pfade `SHOP_COMMAND_REFUSED` sind nur so weit geprüft, wie
+`go test ./examples/... ./api/layout/...` reicht (das Modell lässt sich übersetzen und ist sauber
+gezeichnet), nicht gegen einen laufenden Server mit installiertem `ad-dienste`.
+
+### Bekannte Grenzen
+
+- **Keine Varianten in der Bestellung des Prozesses.** Deshalb die eigene Lizenz ohne Varianten
+  (siehe oben). Wer später ins Paket ein Produkt mit Varianten aufnimmt, macht jede Bestellung
+  unmöglich (`SHOP_ORDER_REFUSED`).
+- **Das Atlas-Konto muss bestehen**, bevor bestellt wird; ohne Kontenspiegelung wartet der Eintritt.
+- **Versetzung nicht modelliert.** Ändert die Organisationseinheit, bleiben die Mitgliedschaften
+  der alten. Ein Weg wäre eine dritte Meldung `hr.versetzung`, die die Position
+  `m365-oe-mitgliedschaften` zurückgibt und für die neue Einheit eine neue bestellt.
+- **Das Konto ist sofort aktiv**, nicht erst am Eintrittsdatum, und das Initialpasswort wählt
+  eine Person; die vorgesetzte Person setzt der Prozess nicht in Entra ID (der Entra-Worker hat
+  dafür keine Operation).
+- **Höchstens neun Personen mit demselben Grundnamen**; ist auch `vorname.nachname9` belegt, lehnt
+  Entra ID das Anlegen ab, und die Aufgabe wird zum Incident. Ein Zeichen ausserhalb der
+  Umschreibung (etwa ł, ø) fällt aus dem Namen.
+- **Massgebend ist die Tabelle beim Entziehen**, nicht die bei der Zuweisung: Wurde
+  `M365OeMitgliedschaften` dazwischen geändert, entfernt die Rückgabe die heutigen Listen. Wer schon
+  kein Mitglied mehr ist, lässt die Entfernung als Incident enden.
+- **Eine Paket-Lizenz neben einer bestellten.** Wer `m365-eintritt-lizenz` hält, kann im Shop
+  zusätzlich `m365-lizenz` bestellen; die Bestellung kennt die beiden nicht als dasselbe Recht.
+- **Wird der Eintritt nach einer Ablehnung beendet**, bleibt das Konto in Entra ID bestehen.
+
 ## Die Entscheidungen
 
 | Modell (Handle) | Entscheidung | Wofür |
@@ -287,10 +686,11 @@ bestellenden Person den Grund der Ablehnung überdeckt bzw. ihn als Personendatu
 | `m365-namensregel` | `M365Namensregel` | Namenskonvention: Präfix je Objekttyp (TM, FP, VL, RM, GE, CQ, AA, EC), Sperrliste reservierter Bezeichnungen, Längengrenze, Begründung jeder Ablehnung; für SharePoint-Sites (Objekttyp `site`) die Form der URL statt eines Präfixes |
 | `m365-site-kontingent` | `M365SiteKontingent` | gewünschtes Speicherkontingent einer Site und ihre Belegung → erlaubt ja/nein, Prüfung durch `M365-SharePoint` ja/nein (bis 25 GB ohne, bis 250 GB mit Prüfung, darüber und unter der Belegung abgelehnt) |
 | `m365-postfachkontingent` | `M365Postfachkontingent` | gewünschte Stufe (50 oder 100 GB) und Lizenzvariante → erlaubt ja/nein, Prüfung durch `M365-Administration` ja/nein, die drei Grenzen für `Set-Mailbox` (F3 abgelehnt, 50 GB ohne, 100 GB mit Prüfung, alles andere abgelehnt) |
-| `m365-lizenzprofil` | `M365Lizenzprofil` | Variante, Zusatzlizenz der Telefonie oder Lizenz eines Ressourcenkontos → SKU-ID |
+| `m365-lizenzprofil` | `M365Lizenzprofil` | Variante, Zusatzlizenz der Telefonie oder Lizenz eines Ressourcenkontos → SKU-ID, dazu für die drei Varianten die Lizenzgruppe in Entra ID (`entraGruppe`) und im AD (`adGruppe`, Platzhalter); ohne Auffangregel, eine unbekannte Variante ergibt nichts, und der nächste Schritt wird zum Incident |
 | `m365-postfachzugriff` | `M365PostfachzugriffFreigabe` | Postfachtyp und Zugriffsart → Zusatzfreigabe durch die Informationssicherheit ja/nein |
 | `m365-telefonie` | `M365TelefonieSprachregion` | Sprachregion → Sprache und Zeitzone der Teams-Telefonie |
 | `m365-verteiler-zuordnung` | `M365VerteilerZuordnung` | öffentliche Auswahl → interne Verteilerliste und Prüfpflicht |
+| `m365-oe-mitgliedschaften` | `M365OeMitgliedschaften` | Organisationseinheit → Teams und Gruppen (Objekt-IDs), Verteiler (Alias), unbekannt ja/nein (vier Beispiele, Auffangregel mit leeren Listen) |
 
 Jede Tabelle hat eine Auffangregel, die im Zweifel ablehnt bzw. die Prüfung verlangt
 (fail-closed).
@@ -367,6 +767,11 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
        Management* und *Organization Management* zu. Welche Gruppe sie im eigenen Tenant
        trägt, zeigt `Get-ManagementRoleAssignment -Role "Legal Hold"`.
      - Beides ist Microsofts Dokumentation und an keinem Tenant geprüft.
+   - Für die Lizenz über Gruppen (`LIZENZ_MODUS`, siehe «Lizenzen: direkt oder über Gruppen»):
+     im Modus `entra-gruppe` am Worker `ucc_entra` `GroupMember.ReadWrite.All` (in
+     `Group.ReadWrite.All` enthalten); im Modus `ad-gruppe` ein Worker `ad_verzeichnis` (Worker-Typ
+     AD) mit Leserecht auf die Konten unter `AD_DOMAIN_DN` und Schreibrecht auf `member` an den
+     Gruppen in `AD_LIZENZ_OU`. Keine Berechtigung auf Lizenzen.
    - `ucc_teams` (Microsoft Teams Phone): Rolle *Teams Administrator* und
      `User.ReadWrite.All`; PowerShell 7 mit dem Modul MicrosoftTeams auf dem Worker-Host.
    - Für die SharePoint-Teamwebsite zusätzlich: am Worker `ucc_entra` `User.Invite.All`
@@ -411,6 +816,11 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor UPN und Anzeigename eines Partnerkontos (so finden es auch die Aufräumskripte der Testumgebung, die nach dem Anzeigenamen suchen) und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
    | `SHAREPOINT_HOST` | `contoso.sharepoint.com` | SharePoint-Host des Tenants; die Sites liegen unter `https://<SHAREPOINT_HOST>/sites/<alias>` |
    | `SITE_INVENTAR` | `contoso.sharepoint.com:/sites/m365-governance` | Site, die die Liste «Site-Inventar» trägt (Host und Pfad, eine Site-ID oder die URL) |
+   | `LIZENZ_MODUS` | `direkt` | Wie `lizenz.bpmn` die Lizenz vergibt: `direkt` (`assign-license`), `entra-gruppe` (Mitgliedschaft in einer Cloud-Gruppe) oder `ad-gruppe` (Mitgliedschaft in einer Gruppe im lokalen AD, die Entra Connect synchronisiert); siehe «Lizenzen: direkt oder über Gruppen» |
+   | `LIZENZ_PRUEFINTERVALL` | `PT10M` | In den Gruppenmodi: wie lange der Prozess zwischen zwei Prüfungen wartet, ob die Lizenz aktiv ist (ISO-8601-Dauer) |
+   | `LIZENZ_PRUEFUNGEN` | `18` | In den Gruppenmodi: wie oft er prüft, bevor `M365-Administration` die Aufgabe «Lizenz klären» erhält (18 × 10 Minuten = drei Stunden) |
+   | `AD_DOMAIN_DN` | `DC=contoso,DC=ch` | Im Modus `ad-gruppe`: wo im AD das Konto der Person gesucht wird |
+   | `AD_LIZENZ_OU` | `OU=Lizenzen,OU=Gruppen,DC=contoso,DC=ch` | Im Modus `ad-gruppe`: die OU der Lizenzgruppen; der DN einer Gruppe ist `CN=<adGruppe>,<AD_LIZENZ_OU>` |
 6. **Die Liste «Site-Inventar»** auf der Site aus `SITE_INVENTAR`, von Hand angelegt, mit den
    Spalten `Title` (vorhanden), `Alias`, `SiteUrl`, `GroupId`, `Sprache` und `Position`
    (je eine Textzeile), `KontingentGB` (Zahl) und `Status` (Text oder Auswahl mit Active,
@@ -436,7 +846,7 @@ $env:ATLAS_TOKEN = 'atlasat_…'
 
 Das Skript
 
-1. lädt die sieben Entscheidungsmodelle unter ihren Handles hoch
+1. lädt die acht Entscheidungsmodelle unter ihren Handles hoch
    (`POST /api/v1/dmn-models?handle=…`). Der Quellbaum trägt die Modelle ebenfalls
    (`atlas.json` im Format 2), sodass `atlas import` und atlas hub ohne diesen Schritt
    auskommen; das Skript behält ihn, und der Import findet die Modelle dann unverändert vor;
@@ -462,8 +872,8 @@ aktualisiert sie, statt sie zu verdoppeln; ein anderes Token erhält «no applic
 that key». Nach der Installation die Applikation deshalb in der Console einer Person oder
 einem Team übergeben bzw. teilen; ein Admin sieht und verwaltet sie auch so.
 
-Ganz ohne Skript geht es auch in der Console: die sieben `.dmn`-Dateien im Modeler unter den
-Handles `m365-lizenzprofil`, `m365-namensregel`, `m365-postfachkontingent`,
+Ganz ohne Skript geht es auch in der Console: die acht `.dmn`-Dateien im Modeler unter den
+Handles `m365-lizenzprofil`, `m365-namensregel`, `m365-oe-mitgliedschaften`, `m365-postfachkontingent`,
 `m365-postfachzugriff`, `m365-site-kontingent`, `m365-telefonie` und
 `m365-verteiler-zuordnung` hochladen, die Applikation über **Import source** (ein
 `.tar.gz` mit `atlas.json` und den genannten Dateien) importieren und veröffentlichen,
@@ -471,7 +881,7 @@ dann `katalog.json` mit den Gruppen-IDs anstelle der fünf Platzhalter unter
 **Catalogue → Import** hochladen.
 
 Bezieht die Zielinstanz ihre Entscheidungen aus einem temis-Dienst
-(`ATLAS_DMN_RESOLVER_URL`), werden die sieben Modelle dort unter denselben Namen angelegt,
+(`ATLAS_DMN_RESOLVER_URL`), werden die acht Modelle dort unter denselben Namen angelegt,
 statt hochgeladen.
 
 ### Öffentliche Links erzeugen
@@ -634,6 +1044,13 @@ Governance-Prüfung, die Gruppen mit einem Anzeigenamen «EC-…» nicht mehr me
 
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind
+
+- **Lizenzgruppen** in `m365-lizenzprofil.dmn` (`entraGruppe`, `adGruppe`) sind Platzhalter. Einzutragen
+  sind die Gruppen, denen in Entra ID die SKU derselben Zeile zugewiesen ist; gebraucht nur, wenn
+  `LIZENZ_MODUS` nicht `direkt` ist.
+- **Nutzungsort im Modus `ad-gruppe`.** Der Prozess setzt `usageLocation` in Entra ID. Wo Entra Connect
+  den Nutzungsort aus dem AD synchronisiert (etwa aus `msExchUsageLocation`), gilt der Wert aus dem AD;
+  ob Graph das Schreiben dann annimmt, ist nicht geprüft.
 
 - **SKU-IDs** in `m365-lizenzprofil.dmn` stammen aus Microsofts Liste der Lizenz-IDs. Ein
   Tenant mit den Varianten ohne Teams hat andere; massgebend ist

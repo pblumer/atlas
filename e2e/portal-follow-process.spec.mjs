@@ -53,6 +53,8 @@ function installFixture() {
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
     "/api/v1/processes": PROCESSES,
   };
+  // Every catalogue this person reaches (ADR-draft-several-catalogues-per-person).
+  ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   const json = (body) => Promise.resolve(new Response(JSON.stringify(body), {
     status: 200, headers: { "content-type": "application/json" },
   }));

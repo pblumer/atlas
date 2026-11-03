@@ -27,6 +27,12 @@ administration is an approval rule — which says *who decides*, not *who may as
 
 ### Why "put it in a stricter catalogue" is not the answer
 
+> **Since [ADR-draft-several-catalogues-per-person](draft-several-catalogues-per-person.md)**
+> a person sees every catalogue they reach, so a stricter catalogue *adds* a product for
+> its audience instead of hiding the shop behind it. The narrowing below still serves
+> the case it was written for — a product in a catalogue, offered to part of its
+> audience — without a second catalogue to maintain.
+
 It is the obvious workaround and it does not work, for a reason written into the
 design: **one catalogue per person** (ADR-0312 decision 11). `Resolve` returns the
 highest-ranked catalogue a person's groups reach, and exactly one. A second,

@@ -219,6 +219,17 @@ type Item struct {
 	// holds, and taking an application off the list must stop it for every right
 	// already held, not only for the ones ordered afterwards.
 	CommandedBy []string `json:"commandedBy,omitempty"`
+	// OrderableBy names, by their portable keys (ADR-0134), the process applications
+	// whose processes may *order* this product for somebody with a shop order task
+	// (ADR-0520) — an HR joiner process ordering the starter
+	// package for a person who joins. Empty, which is the default, means no process
+	// may order it: a person in the catalogue's audience orders it in the shop, and
+	// nobody else.
+	//
+	// Read from the newest release of the catalogue the task names at the moment it
+	// orders, for CommandedBy's reason: taking an application off the list must stop
+	// it at once.
+	OrderableBy []string `json:"orderableBy,omitempty"`
 	// MultipleAllowed says whether a principal may hold this item more than once —
 	// two licences, two mailboxes. Where it is false the basket marks an item the
 	// orderer already holds as held, and skips it.
