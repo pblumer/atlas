@@ -38,6 +38,8 @@ func hubTools() []Tool {
 		"description": "Refs of changed artifacts to replace with the release's (process:<id>, form:<id>, decision:<id>, model:<handle>, constant:<NAME>, or *) — only as the person decided"}
 	props["keep"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
 		"description": "Refs of changed artifacts to leave as this server has them (or *)"}
+	props["adopt"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+		"description": "Refs of artifacts the plan lists as elsewhere — held by another existing application — to move into the release's application, one by one (no *), and only as the person decided. Needs the editor role on the application each leaves."}
 	importSchema["required"] = []any{"blueprintId", "version", "digest"}
 
 	return []Tool{
@@ -83,7 +85,10 @@ func hubTools() []Tool {
 				"that is changed here is written only when named in overwrite, left when named in keep, " +
 				"and one in neither stops the import with 409, undecided and the plan — ask the person " +
 				"which changes to take, never decide for them. A process, form or decision another " +
-				"existing application holds is refused. It creates the application when this server has " +
+				"existing application holds is planned as elsewhere, with heldBy (the application, when " +
+				"you may see it) and compared (unchanged or changed): it stops the import until the person " +
+				"decides to take it, named in adopt, which moves it into the release's application — and, " +
+				"if compared is changed, also needs overwrite or keep for its content. It creates the application when this server has " +
 				"never seen its key, else needs the editor role on it; it does not publish (use " +
 				"atlas_publish_application) and it does not import the package's catalogues, which it " +
 				"names under cataloguesNotImported: their questions ask for this installation's groups and " +
@@ -103,7 +108,7 @@ func hubTools() []Tool {
 				if dry, given := args["dryRun"].(bool); !given || dry {
 					q.Set("dryRun", "true")
 				}
-				for _, list := range []string{"overwrite", "keep"} {
+				for _, list := range []string{"overwrite", "keep", "adopt"} {
 					if refs := stringList(args[list]); len(refs) > 0 {
 						q.Set(list, strings.Join(refs, ","))
 					}
