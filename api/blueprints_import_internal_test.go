@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -159,5 +160,22 @@ func TestHubImportNeedsAConfiguredRegistry(t *testing.T) {
 	code, _ := hubPost(t, ts, "?digest=sha256:"+strings.Repeat("a", 64))
 	if code != http.StatusServiceUnavailable {
 		t.Fatalf("import without a registry = %d", code)
+	}
+}
+
+// An embedder's preconfigured registry is the one the server serves.
+func TestWithBlueprintRegistrySuppliesTheOperatorsRegistry(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := blueprintregistry.NewPublicClient("https://registry.example/index.json", pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{}
+	WithBlueprintRegistry(client)(s)
+	if s.blueprints == nil {
+		t.Fatal("the option did not set the registry")
 	}
 }
