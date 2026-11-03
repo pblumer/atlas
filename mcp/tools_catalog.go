@@ -165,6 +165,12 @@ func catalogItemProps() map[string]any {
 			"issued so, never the provision. Empty (the default) means no process may command it. It is " +
 			"read from the newest release when a task commands, so removing a key and publishing stops " +
 			"that application at once for every right already held."),
+		"orderableBy": arrayProp("The keys of the process applications whose processes may ORDER this " +
+			"product for somebody with a shop order task (<atlas:shopTask mode=\"order\">), e.g. " +
+			"[\"hr-eintritte\"] for an HR joiner process ordering the starter package. The order meets " +
+			"every check a person's order meets. Empty (the default) means no process may order it. It " +
+			"is read from the newest release when a task orders, so removing a key and publishing stops " +
+			"that application at once."),
 		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
 			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
 			"instance per order position at provisioning and DELIVERS every later operation to it: the " +
