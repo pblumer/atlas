@@ -553,13 +553,39 @@ func (d *MockDirectory) searchLocked(f *mockForest, req SearchRequest) ([]Entry,
 		if !filter.match(e.attrs) {
 			continue
 		}
-		out = append(out, Entry{DN: e.dn, Attributes: copyAttrs(e.attrs)})
+		out = append(out, Entry{DN: e.dn, Attributes: selectAttrs(e.attrs, req.Attributes)})
 	}
 	if max := int(req.MaxEntries); max > 0 && len(out) > max {
 		return nil, fmt.Errorf("ad: mock: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", req.BaseDN, max)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].DN < out[j].DN })
 	return out, nil
+}
+
+// selectAttrs is a search's attribute selection applied the way a directory applies it
+// (RFC 4511 §4.5.1.8): no selection, or "*" among it, returns every attribute; otherwise
+// only the named ones, matched without regard to case and returned under the entry's
+// own spelling. "1.1" alone asks for none. "+" asks for the operational attributes,
+// which the mock does not distinguish from the rest, so on its own it adds nothing —
+// an infidelity on the side of returning less, never more.
+func selectAttrs(attrs map[string][]string, sel []string) map[string][]string {
+	if len(sel) == 0 {
+		return copyAttrs(attrs)
+	}
+	want := make(map[string]bool, len(sel))
+	for _, s := range sel {
+		if s == "*" {
+			return copyAttrs(attrs)
+		}
+		want[strings.ToLower(s)] = true
+	}
+	out := make(map[string][]string, len(want))
+	for name, vals := range attrs {
+		if want[strings.ToLower(name)] {
+			out[name] = append([]string(nil), vals...)
+		}
+	}
+	return out
 }
 
 // inScope reports whether an entry is within the search scope: base is the entry at

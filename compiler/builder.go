@@ -1601,6 +1601,12 @@ type AdConfig struct {
 	ResultVar      string
 	MaxEntries     int32
 	ObjectSecurity bool
+	// Attributes is the inline entry (a compiled JSON template), the alternative to
+	// EntryVar. Select and FoundVar belong to search alone (ADR-0166, amended
+	// 2026-11-03).
+	Attributes RestExpr
+	Select     string
+	FoundVar   string
 }
 
 // AddAdConnectorTask adds an Active Directory task and returns its element
@@ -1646,6 +1652,9 @@ func (b *Builder) AddAdConnectorTask(cfg AdConfig) int32 {
 		AdCookieVar:      b.intern(cfg.CookieVar),
 		AdMaxEntries:     cfg.MaxEntries,
 		AdObjectSecurity: cfg.ObjectSecurity,
+		AdAttributes:     cfg.Attributes,
+		AdSelect:         b.intern(cfg.Select),
+		AdFoundVar:       b.intern(cfg.FoundVar),
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

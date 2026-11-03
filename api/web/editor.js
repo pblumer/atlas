@@ -3983,6 +3983,11 @@ const SERVICE_TASK_KINDS = [
           : "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
       },
       {
+        key: "select", label: "Attributes returned", placeholder: "cn,mail,sAMAccountName",
+        showIf: (v) => v.operation === "search",
+        hint: "The attributes the search returns, comma-separated — an LDAP attribute selection such as cn,mail. Empty returns the directory's default set: every attribute the account may read. Ask only for what the process needs, because whatever the search returns lands in the result variable.",
+      },
+      {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
         showIf: (v) => v.operation === "sync",
         hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
@@ -4006,8 +4011,18 @@ const SERVICE_TASK_KINDS = [
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
+        key: "attributes", label: "Attributes", type: "json", rows: 8,
+        // The inline entry and the entry variable are the two ways to supply an entry,
+        // and the compiler refuses both at once: the editor shows until a variable is
+        // named, and vice versa — the Entra panel's arrangement (ADR-0166, amended
+        // 2026-11-03).
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.entryVariable,
+        placeholder: '{\n  "sAMAccountName": "=konto",\n  "givenName": "=vorname",\n  "sn": "=nachname",\n  "displayName": "=vorname + \\" \\" + nachname",\n  "mail": "=email",\n  "telephoneNumber": null\n}',
+        hint: "The entry, authored here as JSON: attribute names to values. A string value beginning with = is a FEEL expression the Worker evaluates when it is handed the job, so it may read a variable the process declares personal — an attributes variable cannot, because the engine has to build it. A string is one value, a list several, a number or boolean its LDAP text; null leaves the attribute out of a create and clears it on an update. On a create, the object classes are supplied unless you set them.",
+      },
+      {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.attributes,
         hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
       },
       {
@@ -4033,6 +4048,11 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => v.operation === "search"
           ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
           : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+      },
+      {
+        key: "foundVariable", label: "Found variable", placeholder: "gefunden",
+        showIf: (v) => v.operation === "search",
+        hint: "Receives found on its own, as a boolean, so a gateway branches on =gefunden while the result variable — names and DNs of people — is declared personal and stays sealed. With only this set, the search writes nothing else.",
       },
     ],
   },

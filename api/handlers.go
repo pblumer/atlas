@@ -7102,6 +7102,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"scope": j.Scope, "cookie": j.Cookie, "cookieVariable": j.CookieVariable,
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
 			"resultVariable": j.ResultVariable,
+			// A search's attribute selection and the variable its found goes to on its
+			// own (ADR-0166, amended 2026-11-03).
+			"select": j.Select, "foundVariable": j.FoundVariable,
 		}}
 	case compiler.LdapJobTypeIndex:
 		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and

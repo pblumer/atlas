@@ -4,14 +4,16 @@
   "components": [
     {
       "type": "text",
-      "text": "**Konto für eine externe Person · Account for an external person**\n\nDu bist der Sponsor: Das Konto steht in deinem Bestand und gilt höchstens 180 Tage. Im Verzeichnis heisst es ext-<Nummer>; Name, Firma und Adresse bleiben verschlüsselt in Atlas. · You are the sponsor: the account is in your inventory and lasts at most 180 days. In the directory it is called ext-<number>; name, company and address stay encrypted in Atlas."
+      "text": "**Konto für eine externe Person · Account for an external person**\n\nDu bist der Sponsor: Das Konto steht in deinem Bestand und gilt höchstens 180 Tage. Im Verzeichnis heisst es ext-<vorname>.<nachname> und trägt Name, Firma und Adresse; in Atlas bleiben sie verschlüsselt. · You are the sponsor: the account is in your inventory and lasts at most 180 days. In the directory it is called ext-<first>.<last> and carries name, company and address; in Atlas they stay encrypted."
     },
     {
       "key": "vorname",
       "type": "textfield",
       "label": "Vorname · First name",
+      "description": "Mindestens ein Buchstabe. · At least one letter.",
       "validate": {
         "required": true,
+        "pattern": "^.*[A-Za-zÀ-ÿ].*$",
         "maxLength": 64
       }
     },
@@ -19,8 +21,10 @@
       "key": "nachname",
       "type": "textfield",
       "label": "Nachname · Last name",
+      "description": "Mindestens ein Buchstabe. · At least one letter.",
       "validate": {
         "required": true,
+        "pattern": "^.*[A-Za-zÀ-ÿ].*$",
         "maxLength": 64
       }
     },
@@ -29,7 +33,6 @@
       "type": "textfield",
       "label": "Firma · Company",
       "validate": {
-        "required": true,
         "maxLength": 64
       }
     },
@@ -50,9 +53,6 @@
       "validate": {
         "required": true,
         "pattern": "^[A-Za-z0-9._-]{1,20}$"
-      },
-      "properties": {
-        "personal": "false"
       }
     },
     {
