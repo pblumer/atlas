@@ -57,6 +57,15 @@ export const ENTRA_ATTR_SPECS = {
   "assign-role": [
     { key: "roleDefinitionId", label: "pnl.ops.entra.field.roleDefinitionId", kind: "text", hint: "pnl.ops.entra.hint.assign-role.roleDefinitionId" },
   ],
+  // invitedUserEmailAddress is the one property Graph cannot do without (its hint says
+  // so); inviteRedirectUrl is required by Graph too, but the worker defaults it to
+  // https://myapps.microsoft.com when left empty, so the mask leaves it optional.
+  "invite-guest": [
+    { key: "invitedUserEmailAddress", label: "pnl.ops.entra.field.invitedUserEmailAddress", kind: "text", hint: "pnl.ops.entra.hint.invite-guest.invitedUserEmailAddress" },
+    { key: "invitedUserDisplayName", label: "pnl.ops.entra.field.invitedUserDisplayName", kind: "text", hint: "pnl.ops.entra.hint.invite-guest.invitedUserDisplayName" },
+    { key: "inviteRedirectUrl", label: "pnl.ops.entra.field.inviteRedirectUrl", kind: "text", hint: "pnl.ops.entra.hint.invite-guest.inviteRedirectUrl" },
+    { key: "sendInvitationMessage", label: "pnl.ops.entra.field.sendInvitationMessage", kind: "bool", hint: "pnl.ops.entra.hint.invite-guest.sendInvitationMessage" },
+  ],
 };
 
 // hasMask reports whether an operation has a structured mask. Operations without one
@@ -86,6 +95,12 @@ export function entraResultShape(operation) {
       return t("pnl.ops.entra.result.group");
     case "list-groups":
       return t("pnl.ops.entra.result.listGroups");
+    case "list-deleted-groups":
+      return t("pnl.ops.entra.result.listDeletedGroups");
+    case "restore-group":
+      return t("pnl.ops.entra.result.restoreGroup");
+    case "invite-guest":
+      return t("pnl.ops.entra.result.inviteGuest");
     case "delta-users":
     case "delta-groups":
       return t("pnl.ops.entra.result.delta");
@@ -122,6 +137,7 @@ export function entraResultType(operation) {
   switch (operation) {
     case "list-users":
     case "list-groups":
+    case "list-deleted-groups":
       return "array";
     case "assign-license":
     case "assign-role":

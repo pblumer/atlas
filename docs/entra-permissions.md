@@ -41,6 +41,10 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `create-channel` | `POST /teams/{id}/channels` | `Channel.Create` |
 | `archive-team` | `POST /teams/{id}/archive` | `TeamSettings.ReadWrite.All` |
 | `assign-role` | `POST /roleManagement/directory/roleAssignments` | `RoleManagement.ReadWrite.Directory` |
+| `invite-guest` | `POST /invitations` | **`User.Invite.All`** (`User.ReadWrite.All` also suffices, but grants far more) |
+| `restore-group` | `POST /directory/deletedItems/{id}/restore` | `Group.ReadWrite.All` |
+| `list-deleted-groups` | `GET /directory/deletedItems/microsoft.graph.group` | `Group.Read.All` (or `Directory.Read.All`) |
+| A form's group-alias check (value lookup on `groups` / `deletedGroups`, not an operation) | `GET /groups?$filter=mailNickname eq '…'&$select=…&$top=1`, and the same on `/directory/deletedItems/microsoft.graph.group` | `Group.Read.All` |
 
 Read-only deployments (a re-certification report, a directory export, a delta sync that
 only observes) need only the `*.Read.All` variants — grant the `ReadWrite` ones only for

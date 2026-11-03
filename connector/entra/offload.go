@@ -91,9 +91,9 @@ func (o Op) needsResult() bool {
 // Ops is the operation table. The set covers a joiner/mover/leaver lifecycle across the
 // three objects an identity process manages: the account (create, read, read its photo
 // and its manager, list, update, enable, disable, reset-password, delete), the group
-// (create, read, list, update, delete, and members and owners), and the Team a group
-// backs (create, add members and owners, create a channel, archive) — plus licence and
-// directory-role assignment.
+// (create, read, list, update, delete, restore and list the deleted, and members and
+// owners), and the Team a group backs (create, add members and owners, create a
+// channel, archive) — plus guest invitation, and licence and directory-role assignment.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
@@ -136,6 +136,13 @@ var Ops = map[string]Op{
 	// the authored user as the principal, so a model never repeats the id it already gave.
 	"assign-license": {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a licence"},
 	"assign-role":    {Method: "POST", NeedsUser: true, NeedsAttributes: true, Label: "assign a directory role"},
+	// invite-guest authors the invitation through the attributes (invitedUserEmailAddress
+	// and the rest); Graph answers the invitation, whose invitedUser.id is the new guest's
+	// object id. restore-group takes a group back out of the directory's recycle bin, and
+	// list-deleted-groups reads what is in it (ADR-0172, amended 2026-11-03).
+	"invite-guest":        {Method: "POST", NeedsAttributes: true, Label: "invite a guest user"},
+	"restore-group":       {Method: "POST", NeedsGroup: true, Label: "restore a deleted group"},
+	"list-deleted-groups": {Method: "GET", IsList: true, ListPath: "/directory/deletedItems/microsoft.graph.group", Label: "list deleted groups"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -805,6 +812,14 @@ func request(j Job, spec Op, baseURL string) Request {
 		r.Path = "/teams/" + group + "/archive"
 	case "assign-license":
 		r.Path, r.Body = "/users/"+user+"/assignLicense", j.Attributes
+	case "invite-guest":
+		r.Path, r.Body = "/invitations", withRedirect(j.Attributes)
+	case "restore-group":
+		// Microsoft documents that a group deleted less than 30 days ago is restorable,
+		// and that restoring a Microsoft 365 group restores its SharePoint site with it.
+		// That is Microsoft's stated behaviour, not something verified against a tenant
+		// here. An id past the 30 days, or one that is no deleted group, is Graph's 404.
+		r.Path = "/directory/deletedItems/" + group + "/restore"
 	default: // assign-role — the only one left, guarded by the Ops lookup
 		// roleAssignments takes the principal as a field; the model authored it as the
 		// user, so it is merged in rather than repeated in the attributes object.
@@ -839,6 +854,32 @@ func withPrincipal(attrs map[string]any, principal string) map[string]any {
 	out["principalId"] = principal
 	if _, ok := out["directoryScopeId"]; !ok {
 		out["directoryScopeId"] = "/"
+	}
+	return out
+}
+
+// defaultInviteRedirectURL is where an invited guest lands after redeeming the
+// invitation when the model names nowhere else: the My Apps portal, which every guest
+// can reach and which lists what the tenant shares with them.
+const defaultInviteRedirectURL = "https://myapps.microsoft.com"
+
+// withRedirect copies the invitation attributes and sets inviteRedirectUrl to
+// [defaultInviteRedirectURL] when they leave it unset. Graph requires the property on
+// every invitation and refuses one without it with a 400, yet most processes inviting
+// a guest have no landing page of their own to name — so, as withPrincipal does for
+// assign-role's directoryScopeId, the worker supplies the one sensible default and an
+// authored value always wins. The authored map is not modified.
+func withRedirect(attrs map[string]any) map[string]any {
+	out := make(map[string]any, len(attrs)+1)
+	for k, v := range attrs {
+		out[k] = v
+	}
+	// Unset includes null and an empty string — what a FEEL leaf reading an absent
+	// variable produces. Anything else is the model's and is sent as authored, so a
+	// value of the wrong type is Graph's refusal to report rather than replaced here.
+	v, present := out["inviteRedirectUrl"]
+	if s, isString := v.(string); !present || v == nil || (isString && strings.TrimSpace(s) == "") {
+		out["inviteRedirectUrl"] = defaultInviteRedirectURL
 	}
 	return out
 }

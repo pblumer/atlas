@@ -100,6 +100,7 @@ import (
 	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
+	"github.com/pblumer/atlas/api/formavailability"
 	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/formlookup"
@@ -434,6 +435,10 @@ type Server struct {
 	// (ADR-0511). It owns no state and holds no run
 	// loop: formdecisions.go is its whole reach into this server.
 	formDecision *formdecision.Service
+	// formAvailability answers a name field's live check whether a name is still free
+	// (ADR-draft-name-availability-check), through the same broker as the form lookups. It owns no state;
+	// formavailability.go is its whole reach into this server.
+	formAvailability *formavailability.Service
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -2148,6 +2153,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
 	s.newFormDecisions()
+	s.newFormAvailability()
 	// The OAuth token and revocation endpoints draw on a bucket of their own, sized
 	// for a confidential server-side client renewing many people's tokens from one
 	// address rather than for a person at a public form (limits.TokenEndpointBurst,

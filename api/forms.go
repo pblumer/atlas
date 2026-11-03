@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/formavailability"
 	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -98,6 +99,12 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	// whether the decision is deployed now, which an import may well settle after the
 	// form arrives (ADR-0511).
 	if err := formdecision.Check(payload.Schema); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
+		return
+	}
+	// And a name field's availability check: which sources it asks and where, not
+	// whether those Workers exist yet (ADR-draft-name-availability-check).
+	if err := formavailability.CheckSchema(payload.Schema); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
 		return
 	}

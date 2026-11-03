@@ -188,6 +188,12 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"get-user-manager without a result variable", `connector="c" operation="get-user-manager" userId="u"`, "resultVariable"},
 		{"filter on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" filter="x eq 1"`, "applies to list-users"},
 		{"maxUsers on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" maxUsers="10"`, "applies to list-users"},
+		{"invite-guest without attributes", `connector="c" operation="invite-guest"`, "attributesVariable"},
+		{"filter on invite-guest", `connector="c" operation="invite-guest" attributesVariable="a" filter="x eq 1"`, "not a listing"},
+		{"restore-group without a group", `connector="c" operation="restore-group"`, "groupId"},
+		{"attributes on restore-group", `connector="c" operation="restore-group" groupId="g" attributesVariable="a"`, "attributes apply to"},
+		{"list-deleted-groups without a result variable", `connector="c" operation="list-deleted-groups"`, "resultVariable"},
+		{"deltaLink on list-deleted-groups", `connector="c" operation="list-deleted-groups" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
@@ -324,6 +330,30 @@ func TestEntraConnectorDelta(t *testing.T) {
 	_, single := entraDetail(t, `connector="c" operation="disable" userId="u"`)
 	if single.EntraDeltaLink.Literal != "" || single.EntraDeltaLink.Expr != nil {
 		t.Errorf("a non-delta task carries a deltaLink: %+v", single.EntraDeltaLink)
+	}
+}
+
+// The guest and recycle-bin operations (ADR-0172, amended 2026-11-03): invite-guest
+// authors its invitation as attributes, restore-group names the deleted group, and
+// list-deleted-groups is a listing with list-groups' query fields and default bound.
+func TestEntraConnectorGuestAndRecycleBin(t *testing.T) {
+	cp, inv := entraDetail(t, `connector="c" operation="invite-guest" attributes="{&#34;invitedUserEmailAddress&#34;:&#34;=antrag.mail&#34;}" resultVariable="einladung"`)
+	if got := cp.Intern(inv.EntraOp); got != "invite-guest" {
+		t.Errorf("operation = %q, want invite-guest", got)
+	}
+	if inv.EntraAttributes.Expr == nil {
+		t.Error("invite-guest's inline attributes should compile to a FEEL context expression")
+	}
+	_, rg := entraDetail(t, `connector="c" operation="restore-group" groupId="=geloescht.id"`)
+	if rg.EntraGroupID.Expr == nil {
+		t.Error("restore-group's groupId should be a compiled FEEL expression")
+	}
+	cpL, ls := entraDetail(t, `connector="c" operation="list-deleted-groups" resultVariable="r" filter="startswith(displayName,'P')" select="id,displayName,deletedDateTime" pageSize="100"`)
+	if got := cpL.Intern(ls.EntraSelect); got != "id,displayName,deletedDateTime" {
+		t.Errorf("select = %q", got)
+	}
+	if ls.EntraFilter.Literal != "startswith(displayName,'P')" || ls.EntraPageSize != 100 || ls.EntraMaxUsers != defaultEntraMaxUsers {
+		t.Errorf("listing = filter %q pageSize %d maxUsers %d", ls.EntraFilter.Literal, ls.EntraPageSize, ls.EntraMaxUsers)
 	}
 }
 

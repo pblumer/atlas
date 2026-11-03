@@ -136,7 +136,8 @@ type Op struct {
 
 // Ops is the operation table: the steps a business process takes in a SharePoint site.
 // It is deliberately not "every Graph call" — permissions, sharing links, content
-// types, versions and site administration are not here. A sharing link in particular
+// types, versions and changing a site's settings are not here; reading a site and its
+// storage (get-site) is the one site-level step, and it changes nothing. A sharing link in particular
 // changes who may open a document, which is a decision about access rather than a step
 // in a case, and the webUrl every file answer carries already opens it for anybody who
 // may.
@@ -189,7 +190,19 @@ var Ops = map[string]Op{
 		TakesList: true, NeedsPath: true, TakesResult: true,
 		Label: "delete a file or folder",
 	},
+	// get-site reads the site itself and the storage its default library reports
+	// (ADR-0141, amended 2026-11-03). It is the one site-level operation, and a read: a
+	// process that offers a site as a product has to show what the site holds and how
+	// much room is left before anybody asks for more. Like get-file it answers
+	// exists=false for a site that is not there instead of failing, because "is there a
+	// site at this address" is the question an order form asks before a name is taken.
+	OpGetSite: {
+		NeedsResult: true, TakesResult: true, Label: "read a site and its storage",
+	},
 }
+
+// OpGetSite is the site-level read (see [Ops]).
+const OpGetSite = "get-site"
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
 // was expected.
