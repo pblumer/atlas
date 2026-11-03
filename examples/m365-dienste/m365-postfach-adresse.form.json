@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "m365-postfach-adresse",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Mailadresse · E-mail address**\n\nDie Adresse endet immer auf die Domain der Organisation; anzugeben ist nur der Teil vor dem @. Die Hauptadresse bleibt, wie sie ist. · The address always ends in the organisation's domain; give only the part before the @. The primary address stays as it is."
+    },
+    {
+      "key": "adresseLokalteil",
+      "type": "textfield",
+      "label": "Teil vor dem @ · Part before the @",
+      "description": "Buchstaben, Ziffern, Punkt, - und _; nicht mit einem Punkt beginnen oder enden. · Letters, digits, dot, - and _; not starting or ending with a dot.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9]([A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$"
+      }
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Dieselben Schritte wie installieren.sh, für Windows PowerShell 5.1 und PowerShell 7:
-    1. die fünf Entscheidungsmodelle unter ihren Handles hochladen;
+    1. die sieben Entscheidungsmodelle unter ihren Handles hochladen;
     2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
     3. die Applikation veröffentlichen;
     4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
@@ -35,7 +35,7 @@ $auth = @{ Authorization = "Bearer $Token" }
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 Write-Host '1. Entscheidungsmodelle'
-foreach ($m in 'm365-lizenzprofil', 'm365-namensregel', 'm365-postfachzugriff', 'm365-telefonie', 'm365-verteiler-zuordnung') {
+foreach ($m in 'm365-lizenzprofil', 'm365-namensregel', 'm365-postfachkontingent', 'm365-postfachzugriff', 'm365-site-kontingent', 'm365-telefonie', 'm365-verteiler-zuordnung') {
   $bytes = [IO.File]::ReadAllBytes((Join-Path $here "$m.dmn"))
   Invoke-RestMethod -Method Post -Uri "$Server/api/v1/dmn-models?handle=$m" -Headers $auth -ContentType 'application/xml' -Body $bytes | Out-Null
   Write-Host "   $m"

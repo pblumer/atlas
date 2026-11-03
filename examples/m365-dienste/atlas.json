@@ -4,6 +4,16 @@
   "name": "Beispiel: Microsoft-365-Dienste",
   "processes": [
     {
+      "id": "proc_m365_aufbewahrung",
+      "name": "Exchange: Aufbewahrung (Litigation Hold)",
+      "path": "aufbewahrung.bpmn"
+    },
+    {
+      "id": "proc_m365_engage_community",
+      "name": "Viva Engage: Community",
+      "path": "engage-community.bpmn"
+    },
+    {
       "id": "proc_m365_funktionspostfach",
       "name": "Exchange: Funktionspostfach",
       "path": "funktionspostfach.bpmn"
@@ -12,6 +22,16 @@
       "id": "proc_m365_genehmigung_vorgesetzter",
       "name": "Microsoft 365: Genehmigung durch Vorgesetzte",
       "path": "genehmigung-vorgesetzter.bpmn"
+    },
+    {
+      "id": "proc_m365_geraet_einrichten",
+      "name": "Exchange: Gerätepostfach einrichten",
+      "path": "geraet-einrichten.bpmn"
+    },
+    {
+      "id": "proc_m365_geraet_entfernen",
+      "name": "Exchange: Gerätepostfach entfernen",
+      "path": "geraet-entfernen.bpmn"
     },
     {
       "id": "proc_m365_governance_pruefung",
@@ -47,6 +67,11 @@
       "id": "proc_m365_raum_entfernen",
       "name": "Exchange: Sitzungszimmer entfernen",
       "path": "raum-entfernen.bpmn"
+    },
+    {
+      "id": "proc_m365_sharepoint_site",
+      "name": "SharePoint: Team Site",
+      "path": "sharepoint-site.bpmn"
     },
     {
       "id": "proc_m365_team",
@@ -86,9 +111,39 @@
       "path": "m365-abwesenheit.form.json"
     },
     {
+      "id": "m365-aufbewahrung-bestellung",
+      "name": "m365-aufbewahrung-bestellung",
+      "path": "m365-aufbewahrung-bestellung.form.json"
+    },
+    {
+      "id": "m365-engage-bestellung",
+      "name": "m365-engage-bestellung",
+      "path": "m365-engage-bestellung.form.json"
+    },
+    {
+      "id": "m365-engage-person",
+      "name": "m365-engage-person",
+      "path": "m365-engage-person.form.json"
+    },
+    {
+      "id": "m365-engage-person-weg",
+      "name": "m365-engage-person-weg",
+      "path": "m365-engage-person-weg.form.json"
+    },
+    {
+      "id": "m365-engage-pruefen",
+      "name": "m365-engage-pruefen",
+      "path": "m365-engage-pruefen.form.json"
+    },
+    {
       "id": "m365-funktionspostfach-bestellung",
       "name": "m365-funktionspostfach-bestellung",
       "path": "m365-funktionspostfach-bestellung.form.json"
+    },
+    {
+      "id": "m365-geraet-bestellung",
+      "name": "m365-geraet-bestellung",
+      "path": "m365-geraet-bestellung.form.json"
     },
     {
       "id": "m365-governance-befund",
@@ -111,9 +166,34 @@
       "path": "m365-person.form.json"
     },
     {
+      "id": "m365-postfach-adresse",
+      "name": "m365-postfach-adresse",
+      "path": "m365-postfach-adresse.form.json"
+    },
+    {
+      "id": "m365-postfach-kontingent",
+      "name": "m365-postfach-kontingent",
+      "path": "m365-postfach-kontingent.form.json"
+    },
+    {
+      "id": "m365-postfach-kontingent-pruefung",
+      "name": "m365-postfach-kontingent-pruefung",
+      "path": "m365-postfach-kontingent-pruefung.form.json"
+    },
+    {
       "id": "m365-postfach-person",
       "name": "m365-postfach-person",
       "path": "m365-postfach-person.form.json"
+    },
+    {
+      "id": "m365-postfach-stellvertretung",
+      "name": "m365-postfach-stellvertretung",
+      "path": "m365-postfach-stellvertretung.form.json"
+    },
+    {
+      "id": "m365-postfach-weiterleitung",
+      "name": "m365-postfach-weiterleitung",
+      "path": "m365-postfach-weiterleitung.form.json"
     },
     {
       "id": "m365-postfachzugriff-bestellung",
@@ -139,6 +219,41 @@
       "id": "m365-rufnummer-person",
       "name": "m365-rufnummer-person",
       "path": "m365-rufnummer-person.form.json"
+    },
+    {
+      "id": "m365-sharepoint-besitzer",
+      "name": "m365-sharepoint-besitzer",
+      "path": "m365-sharepoint-besitzer.form.json"
+    },
+    {
+      "id": "m365-sharepoint-gast",
+      "name": "m365-sharepoint-gast",
+      "path": "m365-sharepoint-gast.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent",
+      "name": "m365-sharepoint-kontingent",
+      "path": "m365-sharepoint-kontingent.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent-pruefung",
+      "name": "m365-sharepoint-kontingent-pruefung",
+      "path": "m365-sharepoint-kontingent-pruefung.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent-setzen",
+      "name": "m365-sharepoint-kontingent-setzen",
+      "path": "m365-sharepoint-kontingent-setzen.form.json"
+    },
+    {
+      "id": "m365-sharepoint-site-bestellung",
+      "name": "m365-sharepoint-site-bestellung",
+      "path": "m365-sharepoint-site-bestellung.form.json"
+    },
+    {
+      "id": "m365-sharepoint-site-pruefen",
+      "name": "m365-sharepoint-site-pruefen",
+      "path": "m365-sharepoint-site-pruefen.form.json"
     },
     {
       "id": "m365-team-bestellung",
@@ -200,10 +315,22 @@
       "path": "m365-namensregel.dmn"
     },
     {
+      "id": "dmn-m365-postfachkontingent",
+      "name": "M365Postfachkontingent",
+      "modelRef": "m365-postfachkontingent",
+      "path": "m365-postfachkontingent.dmn"
+    },
+    {
       "id": "dmn-m365-postfachzugriff",
       "name": "M365PostfachzugriffFreigabe",
       "modelRef": "m365-postfachzugriff",
       "path": "m365-postfachzugriff.dmn"
+    },
+    {
+      "id": "dmn-m365-site-kontingent",
+      "name": "M365SiteKontingent",
+      "modelRef": "m365-site-kontingent",
+      "path": "m365-site-kontingent.dmn"
     },
     {
       "id": "dmn-m365-telefonie",

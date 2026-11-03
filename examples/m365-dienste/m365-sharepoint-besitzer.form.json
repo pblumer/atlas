@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-besitzer",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Site-Besitzer ändern · Change the site owner**\n\nDie neue Person wird zuerst eingetragen; erst danach wird die bisherige entfernt. · The new person is added first; only then is the previous one removed."
+    },
+    {
+      "key": "neuerBesitzer",
+      "type": "textfield",
+      "label": "Neue Besitzerin oder neuer Besitzer (UPN) · New owner (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "bisherigenEntfernen",
+      "type": "radio",
+      "label": "Bisherige Person als Besitzer entfernen? · Remove the previous owner?",
+      "values": [
+        {
+          "label": "Nein, beide bleiben Besitzer · No, both stay owners",
+          "value": "nein"
+        },
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bisherigerBesitzer",
+      "type": "textfield",
+      "label": "Bisherige Besitzerin oder bisheriger Besitzer (UPN) · Previous owner (UPN)",
+      "conditional": {
+        "hide": "=bisherigenEntfernen != \"ja\""
+      },
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

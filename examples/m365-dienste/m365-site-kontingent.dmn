@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365SiteKontingent: Wie viel Speicher eine SharePoint-Teamwebsite über den Katalog erhalten darf
+  und wer das prüft (Governance).
+
+  Eingaben: gewuenschtGB (Zahl; der Prozess bildet sie aus der Textantwort des Aktionsformulars)
+            belegtGB     (Zahl oder leer; die Belegung, die get-site gemeldet hat, in GB)
+            reserveGB    (berechnet: gewuenschtGB minus belegtGB; leer, wenn belegtGB leer ist)
+  Ausgaben: stufeErlaubt (Wahrheitswert), pruefpflicht (Wahrheitswert: muss M365-SharePoint den
+            Antrag beurteilen?), grund (Begründung; die Aufgabe zeigt sie)
+
+  hitPolicy FIRST: zuerst die Ablehnungen (keine Zahl, mehr als 250 GB, weniger als belegt), dann
+  die Stufen, zuletzt die Auffangregel, die ablehnt (fail-closed).
+
+  Setzen kann das Kontingent auch eine erlaubte Stufe nicht von selbst: Microsoft Graph hat keine
+  Schnittstelle für das Speicherkontingent einer Site. Die Gruppe M365-SharePoint setzt es im
+  SharePoint Admin Center; pruefpflicht sagt nur, ob sie den Antrag vorher beurteilen muss.
+
+  Die Grenzen (25 und 250 GB) sind ein Vorschlag; massgebend ist die Weisung der eigenen
+  Organisation und der Speicher, den der Tenant hat.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365SiteKontingent" name="M365SiteKontingent" namespace="http://atlas/dmn">
+  <inputData id="id_gewuenschtGB" name="gewuenschtGB"/>
+  <inputData id="id_belegtGB" name="belegtGB"/>
+  <decision id="M365SiteKontingent" name="M365SiteKontingent">
+    <informationRequirement id="ir_gewuenschtGB"><requiredInput href="#id_gewuenschtGB"/></informationRequirement>
+    <informationRequirement id="ir_belegtGB"><requiredInput href="#id_belegtGB"/></informationRequirement>
+    <decisionTable id="dt_M365SiteKontingent" hitPolicy="FIRST">
+      <input id="in_gewuenscht" label="gewuenschtGB"><inputExpression id="ie_gewuenscht" typeRef="number"><text>gewuenschtGB</text></inputExpression></input>
+      <input id="in_reserve" label="reserveGB"><inputExpression id="ie_reserve" typeRef="number"><text>gewuenschtGB - belegtGB</text></inputExpression></input>
+      <output id="out_erlaubt" label="stufeErlaubt" name="stufeErlaubt" typeRef="boolean"/>
+      <output id="out_pruef" label="pruefpflicht" name="pruefpflicht" typeRef="boolean"/>
+      <output id="out_grund" label="grund" name="grund" typeRef="string"/>
+      <rule id="k1">
+        <description>Keine Zahl: nichts, was sich setzen liesse</description>
+        <inputEntry id="k1_i0"><text>null</text></inputEntry>
+        <inputEntry id="k1_i1"><text>-</text></inputEntry>
+        <outputEntry id="k1_o0"><text>false</text></outputEntry>
+        <outputEntry id="k1_o1"><text>false</text></outputEntry>
+        <outputEntry id="k1_o2"><text>"Das gewünschte Kontingent ist keine Zahl."</text></outputEntry>
+      </rule>
+      <rule id="k2">
+        <description>Mehr als 250 GB: nicht über den Katalog</description>
+        <inputEntry id="k2_i0"><text>&gt; 250</text></inputEntry>
+        <inputEntry id="k2_i1"><text>-</text></inputEntry>
+        <outputEntry id="k2_o0"><text>false</text></outputEntry>
+        <outputEntry id="k2_o1"><text>false</text></outputEntry>
+        <outputEntry id="k2_o2"><text>"Mehr als 250 GB vergibt der Katalog nicht; bitte mit M365-SharePoint klären."</text></outputEntry>
+      </rule>
+      <rule id="k3">
+        <description>Weniger als belegt: Die Site wäre sofort voll</description>
+        <inputEntry id="k3_i0"><text>-</text></inputEntry>
+        <inputEntry id="k3_i1"><text>&lt; 0</text></inputEntry>
+        <outputEntry id="k3_o0"><text>false</text></outputEntry>
+        <outputEntry id="k3_o1"><text>false</text></outputEntry>
+        <outputEntry id="k3_o2"><text>"Das gewünschte Kontingent ist kleiner als der Speicher, den die Site schon belegt."</text></outputEntry>
+      </rule>
+      <rule id="k4">
+        <description>Bis 25 GB: ohne Prüfung setzen</description>
+        <inputEntry id="k4_i0"><text>[1..25]</text></inputEntry>
+        <inputEntry id="k4_i1"><text>-</text></inputEntry>
+        <outputEntry id="k4_o0"><text>true</text></outputEntry>
+        <outputEntry id="k4_o1"><text>false</text></outputEntry>
+        <outputEntry id="k4_o2"><text>"Bis 25 GB ohne Prüfung: bitte im SharePoint Admin Center setzen."</text></outputEntry>
+      </rule>
+      <rule id="k5">
+        <description>Über 25 bis 250 GB: M365-SharePoint beurteilt den Antrag</description>
+        <inputEntry id="k5_i0"><text>(25..250]</text></inputEntry>
+        <inputEntry id="k5_i1"><text>-</text></inputEntry>
+        <outputEntry id="k5_o0"><text>true</text></outputEntry>
+        <outputEntry id="k5_o1"><text>true</text></outputEntry>
+        <outputEntry id="k5_o2"><text>"Über 25 GB: M365-SharePoint prüft Begründung und Belegung, bevor das Kontingent gesetzt wird."</text></outputEntry>
+      </rule>
+      <rule id="k6">
+        <description>Auffangregel: was keine Regel erlaubt, wird abgelehnt (fail-closed)</description>
+        <inputEntry id="k6_i0"><text>-</text></inputEntry>
+        <inputEntry id="k6_i1"><text>-</text></inputEntry>
+        <outputEntry id="k6_o0"><text>false</text></outputEntry>
+        <outputEntry id="k6_o1"><text>true</text></outputEntry>
+        <outputEntry id="k6_o2"><text>"Für dieses Kontingent greift keine Regel."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

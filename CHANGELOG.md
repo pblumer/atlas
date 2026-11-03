@@ -13,6 +13,44 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **An order form says while a name is typed whether it is still free.** A textfield
+  carrying an `atlasAvailability` block names up to four sources — Entra groups and
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
+  `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
+  and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
+  stops the order, a check that could not run does not. Each source is a value lookup
+  over the form-lookup worker query, answered by a Worker Instance with the Worker's own
+  credential, so nothing is written and the engine holds no Microsoft credential. Only a
+  signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
+  Worker whose editors switched on `formLookups`, which the Console now offers for
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
+  (ADR-draft-name-availability-check).
+- **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
+  sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
+  https://myapps.microsoft.com, which Graph requires) and answers the invitation with the
+  new guest's id; `restore-group` restores a Microsoft 365 group deleted less than 30
+  days ago, and with it its SharePoint site; `list-deleted-groups` lists deleted groups
+  like `list-groups` lists live ones. Two lookup resources, `groups` and
+  `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
+  availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
+- **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
+  id, name, display name and web URL with its default library's quota (`used`, `total`,
+  `remaining` in bytes), and `exists=false` for an address where there is no site, so a
+  process can show a site's usage before somebody asks for more room. The mockup answers
+  it too (ADR-0141, amended).
 - **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
 - **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
 - **Another system is connected with one approval.** A system such as a wiki that shows

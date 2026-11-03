@@ -977,6 +977,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		// roleAny, like GET /api/v1/forms/{id}: whoever may read the form may ask what one
 		// of its fields offers. Which decision and which inputs is the stored form's; the
 		// request carries only the values of the fields it binds.
+		// roleAny, like the options route above, but only for a signed-in person: the
+		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-draft-name-availability-check).
+		{"POST", "/api/v1/forms/{id}/fields/{field}/availability", s.handleFormFieldAvailability, apiOp{
+			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-draft-name-availability-check)", tag: "Forms", role: roleAny,
+			req:  jsonBody("The typed value", schemaObj(map[string]any{"value": tString()})),
+			resp: jsonBody("Availability", tObject())}},
 		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{
 			summary: "The options one field of a stored form takes from a decision, for the values chosen in the fields its inputs are bound to — a group, then its members. The request names only those fields' values; a value from a field with fixed choices must be one of them. 404 not_found, 400 invalid_query, 422 as the decision cannot answer (ADR-0511)", tag: "Forms", role: roleAny,
 			req:  jsonBody("The values of the bound fields", schemaObj(map[string]any{"values": tObject()})),

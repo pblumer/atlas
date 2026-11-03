@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Aufbewahrung (Litigation Hold). Lebenszyklus-Prozess mit zwei Nachrichtenstarts (einrichten, aufheben).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_aufbewahrung" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <message id="m_m365_aufbewahrung_einrichten" name="m365.aufbewahrung.einrichten"/>
+  <message id="m_m365_aufbewahrung_aufheben" name="m365.aufbewahrung.aufheben"/>
+  <process id="proc_m365_aufbewahrung" name="Exchange: Aufbewahrung (Litigation Hold)" isExecutable="true" atlas:personal="upn,aufbewahrungGrund" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus einer Aufbewahrung (Litigation Hold) auf dem Postfach einer Person: Solange sie gilt, bewahrt Exchange Online jede Nachricht des Postfachs auf, auch was die Person löscht oder ändert, bis die Dauer abgelaufen ist oder die Aufbewahrung aufgehoben wird. Produkt m365-aufbewahrung, ein Prozess, Form pro Operation (ADR-0425/0429).
+
+- Einrichten (provision): enable-litigation-hold mit der Dauer aus dem Formular, einem Verantwortlichen und einem Hinweis.
+- Aufheben (deprovision): disable-litigation-hold. Was bis dahin aufbewahrt wurde, unterliegt danach wieder den Aufbewahrungsrichtlinien des Tenants.
+
+Startvariablen aus dem Shop: orderId, positionId, itemId, recipient und die Antworten des Bestellformulars m365-aufbewahrung-bestellung: upn (das Postfach der betroffenen Person), aufbewahrungGrund und dauerTage. upn und aufbewahrungGrund sind als Personendaten deklariert; dauerTage benennt niemanden.
+
+Genehmigt wird jede Aufbewahrung von der Gruppe, die der Katalog als Compliance nennt; sie steht nur im UCC-Katalog.
+
+Voraussetzung laut Microsoft: Das Postfach braucht eine Lizenz mit Exchange Online Plan 2 (in E3 und E5 enthalten) oder das Add-on Exchange Online Archiving, und die Identität des Workers die Exchange-Rolle Legal Hold (z.B. über die Rollengruppe Compliance Management). Eine Aufbewahrung wirkt nach Microsofts Angabe erst bis zu 60 Minuten nach dem Setzen.
+
+Worker: ucc_exchange.</documentation>
+    <extensionElements>
+      <atlas:constants>
+        <atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s_ein" name="Aufbewahrung bestellt"><documentation>Start der Operation provision (Nachricht m365.aufbewahrung.einrichten); die Bestellung startet ihn nach der Genehmigung durch die Compliance.</documentation><outgoing>f_s_ein__st_hold</outgoing><messageEventDefinition messageRef="m_m365_aufbewahrung_einrichten"/></startEvent>
+    <serviceTask id="st_hold" name="Aufbewahrung setzen"><documentation>enable-litigation-hold (Set-Mailbox -LitigationHoldEnabled $true). LitigationHoldDuration ist die Dauer in Tagen aus dem Formular oder Unlimited für «unbegrenzt». LitigationHoldOwner nennt den Auftrag, damit sich jede Aufbewahrung auf ihre Bestellung zurückführen lässt. RetentionComment ist bewusst ein neutraler Text und nicht der Grund: Microsoft beschreibt den Kommentar als Hinweis, den Outlook der Person selbst zeigt. Der Grund bleibt als Personendatum in der Instanz.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="enable-litigation-hold" parameters='{"Identity": "=upn", "LitigationHoldDuration": "=if dauerTage = \"unbegrenzt\" then \"Unlimited\" else number(dauerTage)", "LitigationHoldOwner": "=\"Atlas-Katalog, Auftrag \" + orderId", "RetentionComment": "Dieses Postfach wird auf Anordnung der Compliance aufbewahrt."}'/></extensionElements><incoming>f_s_ein__st_hold</incoming><outgoing>f_st_hold__st_done</outgoing></serviceTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit steht die Aufbewahrung im Bestand der empfangenden Person (der Person aus der Compliance, für die bestellt wurde), und die Rückgabe hebt sie wieder auf. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Die Adresse ist atlasApiBase, sonst die Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_hold__st_done</incoming><outgoing>f_st_done__e_ein</outgoing></serviceTask>
+    <endEvent id="e_ein" name="Aufbewahrung gilt"><documentation>Das Postfach steht unter Litigation Hold.</documentation><incoming>f_st_done__e_ein</incoming></endEvent>
+    <startEvent id="s_aus" name="Aufhebung angefordert"><documentation>Start der Operation deprovision (Nachricht m365.aufbewahrung.aufheben): Rückgabe durch die Person aus der Compliance oder den Betrieb.</documentation><outgoing>f_s_aus__st_aus</outgoing><messageEventDefinition messageRef="m_m365_aufbewahrung_aufheben"/></startEvent>
+    <serviceTask id="st_aus" name="Aufbewahrung aufheben"><documentation>disable-litigation-hold (Set-Mailbox -LitigationHoldEnabled $false). Hält eine andere Aufbewahrung (eine eDiscovery-Aufbewahrung oder eine Aufbewahrungsrichtlinie) dasselbe Postfach, bleibt sie davon unberührt.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="disable-litigation-hold" parameters='{"Identity": "=upn"}'/></extensionElements><incoming>f_s_aus__st_aus</incoming><outgoing>f_st_aus__st_returned</outgoing></serviceTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080).</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_aus__st_returned</incoming><outgoing>f_st_returned__e_aus</outgoing></serviceTask>
+    <endEvent id="e_aus" name="Aufbewahrung aufgehoben"><documentation>Das Postfach steht nicht mehr unter Litigation Hold.</documentation><incoming>f_st_returned__e_aus</incoming></endEvent>
+    <sequenceFlow id="f_s_ein__st_hold" sourceRef="s_ein" targetRef="st_hold"/>
+    <sequenceFlow id="f_st_hold__st_done" sourceRef="st_hold" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_ein" sourceRef="st_done" targetRef="e_ein"/>
+    <sequenceFlow id="f_s_aus__st_aus" sourceRef="s_aus" targetRef="st_aus"/>
+    <sequenceFlow id="f_st_aus__st_returned" sourceRef="st_aus" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_aus" sourceRef="st_returned" targetRef="e_aus"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_aufbewahrung_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_aufbewahrung_plane" bpmnElement="proc_m365_aufbewahrung">
+      <bpmndi:BPMNShape id="s_ein_di" bpmnElement="s_ein"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_hold_di" bpmnElement="st_hold"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ein_di" bpmnElement="e_ein"><omgdc:Bounds x="612" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_aus_di" bpmnElement="s_aus"><omgdc:Bounds x="162" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_aus_di" bpmnElement="st_aus"><omgdc:Bounds x="280" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="430" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_aus_di" bpmnElement="e_aus"><omgdc:Bounds x="612" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_ein__st_hold_di" bpmnElement="f_s_ein__st_hold"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_hold__st_done_di" bpmnElement="f_st_hold__st_done"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_ein_di" bpmnElement="f_st_done__e_ein"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="612" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_aus__st_aus_di" bpmnElement="f_s_aus__st_aus"><omgdi:waypoint x="198" y="270"/><omgdi:waypoint x="280" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_aus__st_returned_di" bpmnElement="f_st_aus__st_returned"><omgdi:waypoint x="380" y="270"/><omgdi:waypoint x="430" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_aus_di" bpmnElement="f_st_returned__e_aus"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="612" y="270"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
