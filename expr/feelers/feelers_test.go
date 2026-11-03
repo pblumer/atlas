@@ -184,3 +184,16 @@ func TestIsTemplateAndSource(t *testing.T) {
 		t.Errorf("Names = %v", names)
 	}
 }
+
+// TestATemplateSaysWhichVariablesItReads: the names every placeholder and section reads,
+// once each and sorted — what a deploy check asks of a mail's template
+// (ADR-draft-user-task-answered-by-link).
+func TestATemplateSaysWhichVariablesItReads(t *testing.T) {
+	tpl := compile(t, "Hallo {{kunde}}, {{#if betrag > limit}}bitte freigeben: {{answerLink}}{{/if}} {{kunde}}")
+	if got := strings.Join(tpl.Inputs(), ","); got != "answerLink,betrag,kunde,limit" {
+		t.Errorf("inputs = %s", got)
+	}
+	if got := compile(t, "no placeholders").Inputs(); len(got) != 0 {
+		t.Errorf("a plain text reads %v", got)
+	}
+}

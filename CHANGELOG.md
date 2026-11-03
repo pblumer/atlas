@@ -12,6 +12,23 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+
+- **A person without an account answers a task from a mail.** A user task marked
+  `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
+  that names it with `answerTask` is handed that link as `answerLink` for its subject and
+  bodies — before the task or beside it, and again from a reminder. The link opens a page
+  with the task's name, its documentation and its form, prefilled with what the instance
+  holds under the form's fields; submitting completes the task as the Tasks app would.
+  Opening the link answers nothing, so a link scanner cannot; the signed token is in the
+  link's fragment and so in no server log; it opens only that task while it is open — in
+  an event subprocess running several times, the task of the run that sent it — and the
+  task may still be answered in the Tasks app by whoever it is assigned to. The link
+  is built on the configured external URL (`--external-url`) and signed with a key the
+  vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
+  multi-instance task, a mail that never shows the link and a link to a task that did not
+  opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
+
 ### Fixed
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
 - **A process variable read only inside a FEEL filter is no longer null.** `expr.CompileAuto` never declared a name that appears only in a filter predicate, because there an unknown name may be a key of the element, so `groups[starts with(alias, application.PREFIX)]` read the prefix as null and matched nothing; where the name was declared, it shadowed the element's key of the same name instead. The element's keys now take precedence and outer variables stay visible (DMN 10.3.2.5), through `github.com/pblumer/feel` with `CompileStringOpen` (ADR-0015, amended). A name declared personal (`atlas:personal`) that a filter alone reads stays the element's key and is not bound, so the filter never sees its ciphertext and a model that filters on such a key deploys as before (ADR-0314).

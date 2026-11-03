@@ -14,6 +14,7 @@ package vault
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -74,6 +75,9 @@ type Vault struct {
 	dir   string
 	aead  cipher.AEAD
 	keyID string
+	// derive is the root the keys [Vault.DerivedKey] hands out are derived from: an HMAC
+	// of the master key, so no derived key is the master key or reveals it.
+	derive []byte
 	// mu guards the get-or-create of a subject's data key in personal.go, and nothing
 	// else. It exists because that one path is entered from HTTP handlers rather than
 	// from the run loop; the reason it is needed there is argued at dataKeyAEAD.
@@ -98,7 +102,22 @@ func New(dir string, key []byte) (*Vault, error) {
 		return nil, fmt.Errorf("vault: create dir: %w", err)
 	}
 	sum := sha256.Sum256(key)
-	return &Vault{dir: dir, aead: aead, keyID: hex.EncodeToString(sum[:8])}, nil
+	root := hmac.New(sha256.New, key)
+	root.Write([]byte("atlas/vault/derive/v1"))
+	return &Vault{dir: dir, aead: aead, keyID: hex.EncodeToString(sum[:8]), derive: root.Sum(nil)}, nil
+}
+
+// DerivedKey returns a 32-byte key for one purpose, derived from the master key and
+// stored nowhere: the same purpose under the same master key answers the same key, a
+// different purpose an unrelated one. It is for keys the server needs and nobody should
+// be able to set or read — the key answer links are signed with, say
+// (ADR-draft-user-task-answered-by-link) — which a named secret could not be, since an
+// administrator writes those. Rotating the master key rotates every derived key with it.
+// Safe for concurrent use: it reads only what New wrote.
+func (v *Vault) DerivedKey(purpose string) []byte {
+	m := hmac.New(sha256.New, v.derive)
+	m.Write([]byte(purpose))
+	return m.Sum(nil)
 }
 
 func (v *Vault) fileFor(name string) string {

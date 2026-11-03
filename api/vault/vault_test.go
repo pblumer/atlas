@@ -487,3 +487,39 @@ func TestAKeyFileThatCannotBeCreatedIsAnError(t *testing.T) {
 		t.Fatal("writeKeyFile over a directory = nil, want an error")
 	}
 }
+
+// TestADerivedKeyIsStableAndPurposeBound: a derived key is the same for one purpose under
+// one master key, unrelated across purposes and master keys, and is neither the master
+// key nor stored anywhere (ADR-draft-user-task-answered-by-link).
+func TestADerivedKeyIsStableAndPurposeBound(t *testing.T) {
+	key := testVaultKey(t)
+	dir := filepath.Join(t.TempDir(), "vault")
+	v, err := New(dir, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := New(dir, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := v.DerivedKey("atlas/answer-link/v1")
+	if len(a) != 32 || !bytes.Equal(a, again.DerivedKey("atlas/answer-link/v1")) {
+		t.Fatalf("the same purpose under the same master key answered %x and %x", a, again.DerivedKey("atlas/answer-link/v1"))
+	}
+	if bytes.Equal(a, v.DerivedKey("atlas/something-else/v1")) || bytes.Equal(a, key) {
+		t.Error("a derived key equals another purpose's or the master key")
+	}
+	other := make([]byte, 32)
+	copy(other, key)
+	other[0] ^= 0xff
+	w, err := New(filepath.Join(t.TempDir(), "vault"), other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(a, w.DerivedKey("atlas/answer-link/v1")) {
+		t.Error("another master key derives the same key")
+	}
+	if metas, _ := v.List(); len(metas) != 0 {
+		t.Errorf("deriving a key stored something: %v", metas)
+	}
+}
