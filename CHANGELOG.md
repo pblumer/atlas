@@ -15,8 +15,9 @@ _Changed_ / _Removed_ for each version.
 ### Added
 - **An order form says while a name is typed whether it is still free.** A textfield
   carrying an `atlasAvailability` block names up to four sources — Entra groups and
-  deleted groups by alias (`mailNickname`), a SharePoint site at the field's host and
-  managed path — and the shop asks
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
   `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
   and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
   stops the order, a check that could not run does not. Each source is a value lookup
@@ -24,7 +25,7 @@ _Changed_ / _Removed_ for each version.
   credential, so nothing is written and the engine holds no Microsoft credential. Only a
   signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
   Worker whose editors switched on `formLookups`, which the Console now offers for
-  SharePoint Workers too. The save refuses a block this server cannot serve
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
   (ADR-draft-name-availability-check).
 - **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
   sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to

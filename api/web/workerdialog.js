@@ -179,9 +179,10 @@ export function workerShape(kind, provider) {
     // form that names it (ADR-0473). It is a switch on the
     // Worker because it puts this Worker's credential behind every such form, and that
     // is its editors' decision, not the form author's.
-    // A SharePoint Worker can let an order form ask whether a site name is still free
-    // (ADR-draft-name-availability-check), under the same switch for the same reason.
-    formLookups: entra || sharepoint,
+    // A SharePoint or Exchange Worker can let an order form ask whether a site name or an
+    // alias is still free (ADR-draft-name-availability-check), under the same switch for
+    // the same reason.
+    formLookups: entra || sharepoint || kind === "exchange",
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
     // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.

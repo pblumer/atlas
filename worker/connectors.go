@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/lookup"
@@ -490,6 +491,11 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ExchangeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunExchangeJob(ctx, j, reg)
 			})
+			// The same organizations answer a name field's question whether an alias is
+			// still free (ADR-draft-name-availability-check), with the same credential.
+			built.Queries[compiler.ExchangeJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return exchange.RunLookup(ctx, connector, q, reg)
+			}
 		case "googlecontacts":
 			reg, names, err := googleContactsRegistryFromEnv(env)
 			if err != nil {

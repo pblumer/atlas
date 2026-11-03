@@ -4,7 +4,7 @@
 - **Implementation:** Landed
 - **Date:** 2026-11-03
 - **Deciders:** Atlas maintainers
-- **Open question:** three provider facts the implementation rests on and could not
+- **Open question:** four provider facts the implementation rests on and could not
   check against a live tenant. (1) Whether Microsoft Graph answers
   `GET /directory/deletedItems/microsoft.graph.group?$filter=mailNickname eq '…'` as a
   default (strongly consistent) query; its documentation of deleted items lists `$filter`
@@ -16,7 +16,10 @@
   URL; if so, the check reports such a name as free and only provisioning learns
   otherwise. (3) Whether the quota a SharePoint site's default drive reports
   (`/sites/{id}/drive?$select=quota`) is the site's storage quota as the SharePoint admin
-  centre shows it.
+  centre shows it. (4) Whether Exchange Online evaluates
+  `EmailAddresses -like 'smtp:<alias>@*'` in a `Get-Recipient` filter in every tenant;
+  Microsoft lists `EmailAddresses` among the filterable properties with `-like`, but the
+  Worker Type is tested against a recorded endpoint only.
 - **Question checked:** 2026-11
 
 ## Context and problem statement
@@ -132,6 +135,7 @@ Worker Type's own rules:
 |---|---|---|
 | `entra/groups` | `GET /groups?$filter=mailNickname eq '…'&$top=1` | a group has the alias |
 | `entra/deletedGroups` | the same on `/directory/deletedItems/microsoft.graph.group` | a deleted group still holds it (30 days) |
+| `exchange/recipients` | `Get-Recipient -Filter "(Alias -eq '…') -or (EmailAddresses -like 'smtp:…@*')" -ResultSize 1` | a mailbox, list, contact or group holds the alias or an address with that local part |
 | `sharepoint/sites` | `get-site` on `https://<host>/<managedPath>/<name>` | Graph answers the site |
 
 The save refuses a block this server cannot serve: an unknown source, a missing Worker
@@ -188,8 +192,10 @@ with a message; a check that could not run does not.
   both be told "free".
 - **Follow-ups:** the form editor has no panel for the block yet (it is authored as
   JSON, and kept by the editor); task forms and the amend dialog of an order line do not
-  mount the watcher yet; Exchange recipients (`mailNickname` of a shared mailbox) are a
-  natural third source.
+  mount the watcher yet. Exchange recipients were first named here as a follow-up and
+  became a source in the same change: a Microsoft 365 group takes the address
+  `<alias>@<domain>`, which a shared mailbox or a distribution list made by hand may
+  already hold, so a name Entra reports free could still fail at provisioning.
 
 ## Links
 

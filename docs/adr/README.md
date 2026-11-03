@@ -547,7 +547,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 | [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
-| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
+| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted (amended) | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |

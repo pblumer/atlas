@@ -11,6 +11,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/worker"
@@ -26,6 +27,7 @@ const siteOrderForm = `{"components":[
   {"type":"textfield","key":"url","label":"URL","atlasAvailability":{"version":1,"checks":[
     {"workerType":"entra","worker":"ucc_entra","resource":"groups"},
     {"workerType":"entra","worker":"ucc_entra","resource":"deletedGroups"},
+    {"workerType":"exchange","worker":"ucc_exchange","resource":"recipients"},
     {"workerType":"sharepoint","worker":"ucc_sharepoint","resource":"sites","host":"contoso.sharepoint.com"}
   ]}}
 ]}`
@@ -63,6 +65,7 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 	for _, body := range []string{
 		`{"name":"ucc_entra","kind":"entra","credentialsRef":"entra-ucc","formLookups":true}`,
 		`{"name":"ucc_sharepoint","kind":"sharepoint","credentialsRef":"sp-ucc","formLookups":true}`,
+		`{"name":"ucc_exchange","kind":"exchange","credentialsRef":"exo-ucc","formLookups":true}`,
 	} {
 		if code, b := cReq(t, admin, ts, "POST", "/api/v1/connectors", body); code != http.StatusOK && code != http.StatusCreated {
 			t.Fatalf("create a Worker: %d (%s)", code, b)
@@ -90,6 +93,26 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 	if _, err := site.Do(context.Background(), sharepoint.Request{Operation: "upload-file", Site: "contoso.sharepoint.com:/sites/dev-huda", Path: "a.txt", Content: "x"}); err != nil {
 		t.Fatal(err)
 	}
+	// Exchange Online, holding a shared mailbox whose alias is fp-fin.
+	exo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			CmdletInput struct {
+				Parameters map[string]any
+			}
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		if f, _ := body.CmdletInput.Parameters["Filter"].(string); strings.Contains(f, "'fp-fin'") {
+			_, _ = w.Write([]byte(`{"value":[{"Alias":"fp-fin"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"value":[]}`))
+	}))
+	t.Cleanup(exo.Close)
+	exReg := exchange.NewRegistry()
+	exReg.Register("ucc_exchange", exchange.NewOnlineClient(exchange.OnlineConfig{
+		Tokens: graphToken{}, BaseURL: exo.URL, Organization: "contoso.onmicrosoft.com", HTTPClient: exo.Client(),
+	}))
 	spReg := sharepoint.NewRegistry()
 	spReg.Register("ucc_sharepoint", site)
 
@@ -104,7 +127,7 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 		token = minted.Token
 	}
 	wk := worker.New(worker.Options{
-		Server: ts.URL, ID: "m365", Token: token, Connectors: []string{"ucc_entra", "ucc_sharepoint"},
+		Server: ts.URL, ID: "m365", Token: token, Connectors: []string{"ucc_entra", "ucc_sharepoint", "ucc_exchange"},
 		Wait: 2 * time.Second, Retry: 50 * time.Millisecond,
 		Handlers: map[string]worker.Exec{},
 		Queries: map[string]worker.QueryFunc{
@@ -113,6 +136,9 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 			},
 			compiler.SharePointOpsJobType: func(ctx context.Context, c string, q lookup.Query) (lookup.Page, error) {
 				return sharepoint.RunLookup(ctx, c, q, spReg)
+			},
+			compiler.ExchangeJobType: func(ctx context.Context, c string, q lookup.Query) (lookup.Page, error) {
+				return exchange.RunLookup(ctx, c, q, exReg)
 			},
 		},
 	})
@@ -147,6 +173,7 @@ func TestANameFieldSaysWhetherTheNameIsFree(t *testing.T) {
 		"Dev-HuDa": "a site is at /sites/dev-huda",
 		"team-x":   "a group has the alias",
 		"weg":      "a deleted group still holds the alias",
+		"fp-fin":   "a shared mailbox has the alias",
 	} {
 		if code, out := ask(anna, value); code != http.StatusOK || out["available"] != false {
 			t.Errorf("%s (%s): %d %v, want taken", value, why, code, out)

@@ -33,6 +33,7 @@ import (
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/entra"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/connector/sharepoint"
 )
@@ -97,6 +98,12 @@ var providers = []Provider{
 		Label:       "Microsoft Entra ID — deleted groups by alias, which keep it for 30 days",
 		ValueFormat: "letters, digits, '.', '-' and '_', starting with a letter or a digit, at most 64",
 		valid:       func(v string) bool { return entra.ValidLookupValue("deletedGroups", v) },
+	},
+	{
+		WorkerType: "exchange", Resource: exchange.LookupRecipients, JobType: compiler.ExchangeJobType, Property: "Alias",
+		Label:       "Microsoft Exchange — a recipient with this alias or an address with this local part",
+		ValueFormat: "letters, digits, '.', '-' and '_', starting with a letter or a digit, at most 64",
+		valid:       exchange.ValidAlias,
 	},
 	{
 		WorkerType: "sharepoint", Resource: sharepoint.LookupSites, JobType: compiler.SharePointOpsJobType, Property: "name",
