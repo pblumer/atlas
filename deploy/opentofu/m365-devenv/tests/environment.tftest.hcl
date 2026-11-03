@@ -38,6 +38,8 @@ mock_provider "azuread" {
         "Sites.Selected"             = "883ea226-0bf2-4a8f-9f9d-92c9162a727d"
         "Exchange.ManageAsApp"       = "dc50a0fb-09a3-484d-be87-e023b12c6440"
         "Mail.Send"                  = "b633e1c5-b582-4048-a93e-9f11b44c7e96"
+        "User.Invite.All"            = "09850681-111b-4a89-9bed-3f2cae46d706"
+        "Sites.Read.All"             = "332a536c-c7ef-4017-ab91-336970924f0d"
       }
       oauth2_permission_scope_ids = {
         "openid"  = "37f7f235-527c-4136-accd-4a02d197296e"
@@ -171,13 +173,15 @@ variables {
   # tofu test also reads terraform.tfvars. Pin everything a real configuration sets, so
   # the tests check the defaults and never reach a real tenant: with license_sku_ids set,
   # an apply run would start scripts/assign-licenses.sh against Graph despite the mocks.
-  license_sku_ids          = []
-  shared_tenant            = false
-  credential_validity_days = 14
-  workers                  = {}
-  enable_ad_dc             = false
-  ad_allowed_cidrs         = []
-  mail_sender              = ""
+  license_sku_ids           = []
+  shared_tenant             = false
+  credential_validity_days  = 14
+  workers                   = {}
+  atlas_tls                 = "internal"
+  sharepoint_read_all_sites = false
+  enable_ad_dc              = false
+  ad_allowed_cidrs          = []
+  mail_sender               = ""
 }
 
 run "defaults_build_every_worker_app_and_an_ad_mock" {
@@ -525,6 +529,26 @@ run "shared_tenant_scopes_the_mailbox_rights" {
   assert {
     condition     = length(module.teamsphone) == 0
     error_message = "No Teams Phone app in a shared tenant."
+  }
+}
+
+run "shared_tenant_reads_all_sites_only_when_asked" {
+  command = plan
+
+  variables {
+    shared_tenant             = true
+    workers                   = { teamsphone = false }
+    credential_validity_days  = 3
+    sharepoint_read_all_sites = true
+  }
+
+  assert {
+    condition     = tolist(local.sharepoint_graph_permissions_effective) == tolist(["Sites.Selected", "Sites.Read.All"])
+    error_message = "With sharepoint_read_all_sites the SharePoint app reads every site besides its Sites.Selected grant."
+  }
+  assert {
+    condition     = contains(var.entra_graph_permissions, "User.Invite.All")
+    error_message = "The Entra app invites the SharePoint team site's guests."
   }
 }
 

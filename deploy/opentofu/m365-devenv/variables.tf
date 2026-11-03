@@ -99,7 +99,7 @@ variable "license_sku_ids" {
 }
 
 variable "entra_graph_permissions" {
-  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team)."
+  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team) and invite-guest (User.Invite.All, the SharePoint team site's guests)."
   type        = list(string)
   default = [
     "User.ReadWrite.All",
@@ -107,6 +107,7 @@ variable "entra_graph_permissions" {
     "TeamMember.ReadWrite.All",
     "Channel.Create",
     "TeamSettings.ReadWrite.All",
+    "User.Invite.All",
   ]
 }
 
@@ -137,6 +138,12 @@ variable "sharepoint_graph_permissions" {
   description = "Microsoft Graph application permissions of the SharePoint worker app. Sites.ReadWrite.All is tenant-wide; Sites.Selected additionally needs a per-site grant (README.md, 'Sites.Selected')."
   type        = list(string)
   default     = ["Sites.ReadWrite.All"]
+}
+
+variable "sharepoint_read_all_sites" {
+  description = "In a shared tenant, also grant the SharePoint worker Sites.Read.All besides Sites.Selected. The catalogue's SharePoint team site reads each new site (get-site: quota, existence), which Sites.Selected cannot reach until somebody grants that one site. Sites.Read.All lets the test app read every site of the tenant, including real ones: false by default."
+  type        = bool
+  default     = false
 }
 
 variable "sharepoint_credential" {

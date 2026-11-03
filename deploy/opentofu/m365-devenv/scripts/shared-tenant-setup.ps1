@@ -16,7 +16,8 @@
       (the app holds no Mail.Send in Entra, which would be unscoped);
     - Exchange app: member of a role group whose write scope is that scope
       (the app holds no Exchange directory role).
-  SharePoint: the SharePoint app gets "write" on the test site (Sites.Selected).
+  SharePoint: the SharePoint app gets "write" on the test site (Sites.Selected), and the
+  site gets the list «Site-Inventar» for the catalogue's SharePoint team site.
 
   Re-running is safe. Exchange caches application permissions for 30 minutes to 2 hours,
   so the mail worker may be refused until then.
@@ -163,6 +164,19 @@ if ($Part -ne 'Exchange' -and $c.sharepoint_app_id) {
             } | ConvertTo-Json -Depth 5
             Invoke-MgGraphRequest -Method POST -Uri $uri -Body $body -ContentType 'application/json' | Out-Null
         }
+        # The list the catalogue's SharePoint team site keeps its inventory in
+        # (examples/m365-dienste, README "Voraussetzungen" 6). Its site is
+        # SITE_INVENTAR for install-m365-dienste.py --site-inventory.
+        $lists = (Invoke-MgGraphRequest -Method GET -Uri "$graph/sites/$($site.id)/lists?`$select=id,displayName").value
+        if (-not ($lists | Where-Object { $_.displayName -eq 'Site-Inventar' })) {
+            Step "list «Site-Inventar» on $($site.webUrl)"
+            $columns = @('Alias', 'SiteUrl', 'GroupId', 'Sprache', 'Position', 'Status') | ForEach-Object { @{ name = $_; text = @{} } }
+            $columns += @{ name = 'KontingentGB'; number = @{} }
+            $body = @{ displayName = 'Site-Inventar'; columns = $columns; list = @{ template = 'genericList' } } | ConvertTo-Json -Depth 5
+            Invoke-MgGraphRequest -Method POST -Uri "$graph/sites/$($site.id)/lists" -Body $body -ContentType 'application/json' | Out-Null
+        }
+        $u = [uri]$site.webUrl
+        Write-Host "   SITE_INVENTAR: $($u.Host):$($u.AbsolutePath)  (install-m365-dienste.py --site-inventory)"
         Step "check: site permissions for the SharePoint app"
         (Invoke-MgGraphRequest -Method GET -Uri $uri).value | Where-Object {
             ($_.grantedToIdentitiesV2.application.id + $_.grantedToIdentities.application.id) -match [regex]::Escape($c.sharepoint_app_id)
