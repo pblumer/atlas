@@ -31,8 +31,10 @@ func TestHubImportIsADryRunUnlessAskedAndCarriesTheDigest(t *testing.T) {
 
 	args["dryRun"] = false
 	args["keep"] = []any{"process:proc_check_order"}
+	args["adopt"] = []any{"process:proc_check_order", "form:f1"}
 	callToolAgainstBackend(t, backend, "atlas_hub_import_release", args)
-	if gotQuery.Has("dryRun") || gotQuery.Get("keep") != "process:proc_check_order" {
+	if gotQuery.Has("dryRun") || gotQuery.Get("keep") != "process:proc_check_order" ||
+		gotQuery.Get("adopt") != "process:proc_check_order,form:f1" {
 		t.Fatalf("query = %v, want the import with the person's decision", gotQuery)
 	}
 

@@ -47,9 +47,10 @@ func TestAnImportTakesTheArtifactsOfADeletedApplication(t *testing.T) {
 	}
 	_ = json.Unmarshal([]byte(body), &first)
 
-	// Another application keeps what it holds: a package naming its process is refused.
+	// Another application keeps what it holds: a package naming its process is
+	// stopped with the process planned as elsewhere, held by that application.
 	if code, body := postSourceTree(t, ts, "other", "lg-eintritt"); code != http.StatusConflict ||
-		!strings.Contains(body, "already belongs to another application") {
+		!strings.Contains(body, `"status":"elsewhere"`) || !strings.Contains(body, `"name":"lehrgang"`) {
 		t.Fatalf("import into another application = %d %s", code, body)
 	}
 

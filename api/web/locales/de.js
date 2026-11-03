@@ -873,6 +873,11 @@ export default {
   "home.import.untracked.one": "{n} lokales Artefakt nicht im Baum, behalten",
   "home.import.untracked.other": "{n} lokale Artefakte nicht im Baum, behalten",
 
+  "choices.elsewhere": "In einer anderen Applikation",
+  "choices.elsewhereHint": "Diese Artefakte gehören einer anderen Applikation. Angekreuzt werden sie in diese Applikation verschoben und verlassen die andere. Dafür braucht es die Bearbeitungsrolle in jener Applikation.",
+  "choices.elsewhereHidden": "eine Applikation, die du nicht sehen kannst",
+  "choices.adopt": "{label} aus «{holder}» übernehmen",
+  "choices.adoptContent": "und den Inhalt durch den des Pakets ersetzen (sonst bleibt der dieser Instanz)",
   "choices.changed": "Hier und in der Datei geändert",
   "choices.changedHint": "Angewählt ersetzt die Fassung der Datei die hier geänderte.",
   "choices.behind": "In der Datei neuer, hier unverändert",

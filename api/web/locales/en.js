@@ -881,6 +881,11 @@ export default {
   "home.import.untracked.one": "{n} local artifact not in the tree, kept",
   "home.import.untracked.other": "{n} local artifacts not in the tree, kept",
 
+  "choices.elsewhere": "In another application",
+  "choices.elsewhereHint": "Another application holds these. Tick one to move it into this application — it then leaves the other one. You need the editor role on that application.",
+  "choices.elsewhereHidden": "an application you cannot see",
+  "choices.adopt": "Take {label} from «{holder}»",
+  "choices.adoptContent": "and replace its content with the package's (otherwise it keeps this server's)",
   "choices.changed": "Changed here and in the file",
   "choices.changedHint": "Ticked, the file's version replaces the one changed here.",
   "choices.behind": "Newer in the file, unchanged here",
