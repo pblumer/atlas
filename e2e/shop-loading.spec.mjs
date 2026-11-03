@@ -50,7 +50,7 @@ function installSlowShop(catalogStatus) {
     "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
   };
-  // Every catalogue this person reaches (ADR-draft-several-catalogues-per-person).
+  // Every catalogue this person reaches (ADR-0522).
   ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   // The catalogue answers only once the test lets it, with the status it names:
   // 200 for a catalogue, 404 for "none is assigned to you", 500 for a failure.
@@ -63,7 +63,7 @@ function installSlowShop(catalogStatus) {
     window.__requested.push(path);
     if (path === "/api/v1/shop/catalogs") {
       // Every catalogue this person reaches: none is an empty list, not a 404
-      // (ADR-draft-several-catalogues-per-person).
+      // (ADR-0522).
       return window.__answerCatalogue.then(() => catalogStatus === 200 || catalogStatus === 404
         ? new Response(JSON.stringify(catalogStatus === 200 ? ROUTES[path] : []), { status: 200, headers: { "content-type": "application/json" } })
         : new Response("resolve catalogues: disk", { status: catalogStatus }));

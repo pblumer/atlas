@@ -63,7 +63,7 @@ function installFixture(form) {
     "/api/v1/forms/extend-form": { id: "extend-form", schema: form },
     "/api/v1/orders/ord_own/lines/mailbox/actions": ACTIONS,
   };
-  // Every catalogue this person reaches (ADR-draft-several-catalogues-per-person).
+  // Every catalogue this person reaches (ADR-0522).
   ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   const json = (body) => Promise.resolve(new Response(JSON.stringify(body), {
     status: 200, headers: { "content-type": "application/json" },

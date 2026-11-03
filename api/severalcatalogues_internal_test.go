@@ -6,7 +6,7 @@ import (
 )
 
 // The shop offers what every catalogue a person reaches offers
-// (ADR-draft-several-catalogues-per-person). The server half is tested in
+// (ADR-0522). The server half is tested in
 // api/catalog; this holds the page to its half: it asks for every catalogue, lays their
 // releases over one another remembering where each product came from, and places a
 // basket as one order per release — an order names one release, so an order naming the

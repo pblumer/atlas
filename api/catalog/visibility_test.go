@@ -137,7 +137,7 @@ func TestThePortalAnswersWhichCatalogueIsMine(t *testing.T) {
 }
 
 // TestThePortalAnswersEveryCatalogueThatIsMine: a person is offered what all of their
-// catalogues offer, highest rank first (ADR-draft-several-catalogues-per-person). The
+// catalogues offer, highest rank first (ADR-0522). The
 // person in two audiences gets both — before, the lower one was hidden behind the
 // higher and its products could not be ordered at all — and may order from each.
 func TestThePortalAnswersEveryCatalogueThatIsMine(t *testing.T) {

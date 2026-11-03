@@ -27,7 +27,7 @@ administration is an approval rule — which says *who decides*, not *who may as
 
 ### Why "put it in a stricter catalogue" is not the answer
 
-> **Since [ADR-draft-several-catalogues-per-person](draft-several-catalogues-per-person.md)**
+> **Since [ADR-0522](0522-several-catalogues-per-person.md)**
 > a person sees every catalogue they reach, so a stricter catalogue *adds* a product for
 > its audience instead of hiding the shop behind it. The narrowing below still serves
 > the case it was written for — a product in a catalogue, offered to part of its

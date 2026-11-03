@@ -1625,7 +1625,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
 		{"GET", "/api/v1/shop/catalogs", s.catalogs.HandleMyCatalogs, apiOp{
-			summary: "Every catalogue your groups reach, highest rank first (ADR-draft-several-catalogues-per-person): the shop offers what all of them offer, a product in several from the highest-ranked, and an order goes to one catalogue's release, so a basket from two is placed as two orders. Reaching none is an empty list", tag: "Catalogue", role: RoleUser,
+			summary: "Every catalogue your groups reach, highest rank first (ADR-0522): the shop offers what all of them offer, a product in several from the highest-ranked, and an order goes to one catalogue's release, so a basket from two is placed as two orders. Reaching none is an empty list", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogues", tArray())}},
 		// Shop orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so

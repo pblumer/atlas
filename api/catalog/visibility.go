@@ -52,7 +52,7 @@ func Resolve(catalogs []Catalog, groups []string) (Catalog, bool) {
 }
 
 // Reached returns every catalogue somebody in these groups is the audience for,
-// highest rank first. ADR-draft-several-catalogues-per-person replaced "one catalogue per person" (ADR-0312 decision
+// highest rank first. ADR-0522 replaced "one catalogue per person" (ADR-0312 decision
 // 11): a person is offered what all of their catalogues offer, and rank orders them —
 // it decides which catalogue's copy of a product they see, whose theme the shop wears,
 // and in which order the shop reads them. Reaching none is an empty list.
@@ -220,7 +220,7 @@ func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleMyCatalogs answers GET /api/v1/shop/catalogs: every catalogue the caller's
-// groups reach, highest rank first (ADR-draft-several-catalogues-per-person). Reaching none is an empty list and not
+// groups reach, highest rank first (ADR-0522). Reaching none is an empty list and not
 // a 404 — it is an answer. With nobody to be (enforcement off) every catalogue is the
 // answer, for the reason [Service.HandleMyCatalog] gives for its top-ranked one.
 func (s *Service) HandleMyCatalogs(w http.ResponseWriter, r *http.Request) {

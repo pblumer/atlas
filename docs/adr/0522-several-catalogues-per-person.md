@@ -1,4 +1,4 @@
-# ADR-DRAFT: A person sees every catalogue they are the audience for
+# ADR-0522: A person sees every catalogue they are the audience for
 
 - **Status:** Proposed
 - **Implementation:** Partial

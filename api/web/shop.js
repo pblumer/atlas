@@ -1306,7 +1306,7 @@ const state = {
   taskError: '',
   catalog: null,
   // every catalogue this person reaches, highest rank first, and which release each
-  // product in the merged release came from (ADR-draft-several-catalogues-per-person)
+  // product in the merged release came from (ADR-0522)
   catalogs: [],
   releaseOf: {},
   release: null,
@@ -1865,7 +1865,7 @@ async function loadSignInOptions() {
 
 // loadCatalogue reads every catalogue this person is the audience for and their
 // newest releases, and lays the releases over one another
-// (ADR-draft-several-catalogues-per-person): the shop offers what all of them offer.
+// (ADR-0522): the shop offers what all of them offer.
 // The highest-ranked catalogue is the one whose name, theme and languages the page
 // wears.
 async function loadCatalogue() {

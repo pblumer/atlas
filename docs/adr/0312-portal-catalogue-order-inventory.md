@@ -147,7 +147,7 @@ The rank resolves the one-catalogue-per-user rule against directory group member
 which is many-to-many; ranks must be unique, and publishing refuses a tie rather than
 falling back to an id nobody chose.
 
-**Superseded by [ADR-draft-several-catalogues-per-person](draft-several-catalogues-per-person.md)**
+**Superseded by [ADR-0522](0522-several-catalogues-per-person.md)**
 for decision 11: a person now sees every catalogue they are the audience for, a product
 several carry from the highest-ranked, and a basket from several is placed as one order
 per release. Rank orders the catalogues rather than choosing one; ranks stay unique.

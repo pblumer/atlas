@@ -49,7 +49,7 @@ function installShop() {
     "/api/v1/shop/favourites": { itemIds: [] },
     "/api/v1/principals": [{ id: "usr_1", name: "Anja" }],
   };
-  // Every catalogue this person reaches (ADR-draft-several-catalogues-per-person).
+  // Every catalogue this person reaches (ADR-0522).
   ROUTES["/api/v1/shop/catalogs"] = [ROUTES["/api/v1/shop/catalog"]];
   window.fetch = (input) => {
     const path = String(input).replace(/^https?:\/\/[^/]+/, "").split("?")[0];
