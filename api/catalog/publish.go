@@ -393,7 +393,7 @@ func checkItems(in Input, add func(Problem)) {
 			}
 			seenCommander[key] = true
 		}
-		// And the applications that may order it (ADR-draft-process-places-an-order),
+		// And the applications that may order it (ADR-0520),
 		// under the same rule and for the same reasons.
 		seenOrderer := map[string]bool{}
 		for _, k := range it.OrderableBy {

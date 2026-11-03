@@ -221,7 +221,7 @@ type Item struct {
 	CommandedBy []string `json:"commandedBy,omitempty"`
 	// OrderableBy names, by their portable keys (ADR-0134), the process applications
 	// whose processes may *order* this product for somebody with a shop order task
-	// (ADR-draft-process-places-an-order) — an HR joiner process ordering the starter
+	// (ADR-0520) — an HR joiner process ordering the starter
 	// package for a person who joins. Empty, which is the default, means no process
 	// may order it: a person in the catalogue's audience orders it in the shop, and
 	// nobody else.

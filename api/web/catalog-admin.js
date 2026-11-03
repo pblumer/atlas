@@ -864,7 +864,7 @@ function commandedByField(apps, chosen) {
 }
 
 // orderableByField is which process applications may ORDER this product for somebody
-// (ADR-draft-process-places-an-order): a process deployed into one of them may place
+// (ADR-0520): a process deployed into one of them may place
 // an order with a Shop send task in mode "order" — an HR joiner process ordering the
 // starter package. The same picker as commandedByField, and the same fail-closed
 // default, for the same reason: nobody opens this door by hand.

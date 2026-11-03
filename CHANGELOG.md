@@ -24,7 +24,7 @@ _Changed_ / _Removed_ for each version.
   id comes from the task, so a retry finds the order instead of placing a second one,
   and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
   HR joiner process can order the starter package for a person who joins
-  (ADR-draft-process-places-an-order).
+  (ADR-0520).
 - **An order form says while a name is typed whether it is still free.** A textfield
   carrying an `atlasAvailability` block names up to four sources — Entra groups and
   deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local

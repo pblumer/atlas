@@ -252,7 +252,7 @@ func (s *Server) commandReturn(app, orderID, position string) (string, error) {
 }
 
 // The shop order task, served in-process on the command task's job type
-// (ADR-draft-process-places-an-order).
+// (ADR-0520).
 //
 // A process orders a product for somebody — an HR joiner process ordering the starter
 // package — in the name of its application. The catalogue and the product are the

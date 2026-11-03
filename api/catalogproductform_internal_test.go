@@ -264,7 +264,7 @@ var productFieldControls = map[string]string{
 	// the helper being given it. Named here ahead of the record field, which lands
 	// on its own; this entry is what keeps the guard green when it does.
 	"commandedBy": `commandedByField(apps, v.commandedBy)`,
-	// And which may order it (ADR-draft-process-places-an-order), with the same picker.
+	// And which may order it (ADR-0520), with the same picker.
 	"orderableBy": `orderableByField(apps, v.orderableBy)`,
 	// The two headings are one row of per-language boxes each, and that row
 	// maintains the key and the wordings together — the first box that has

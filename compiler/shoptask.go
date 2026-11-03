@@ -28,7 +28,7 @@ const ShopModeCommand = "command"
 // ShopModeOrder places an order for somebody — an HR joiner process ordering the
 // starter package for a person who joins. It acts in the name of the process's
 // application, which every product ordered must list in its OrderableBy
-// (ADR-draft-process-places-an-order), and runs on the command task's job type: both
+// (ADR-0520), and runs on the command task's job type: both
 // go through the order, in-process, off the run loop.
 const ShopModeOrder = "order"
 

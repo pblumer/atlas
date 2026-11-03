@@ -6127,7 +6127,7 @@ const SEND_MESSAGE_KIND = {
 // SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
 // process states how the action it is carrying out ended, where a process asks a held
 // position of a product for an action of its own, or where a process orders a product for
-// somebody in its application's name (ADR-draft-process-places-an-order). Like the Message
+// somebody in its application's name (ADR-0520). Like the Message
 // kind it is not a Worker Type — the server serves its job itself, so there is no Worker to
 // name and no credential to hold — and a service task cannot carry it, so it too lives
 // outside SERVICE_TASK_KINDS and has its own fields (shopTaskFieldsHTML). Unlike the Message
@@ -6171,7 +6171,7 @@ const SHOP_OUTCOMES = [
 // leaver process finds them in the inventory — while its product and action are literals, so
 // the task names exactly one thing it may ask for (§10, decision 1).
 //
-// An order (ADR-draft-process-places-an-order) names its catalogue and product as literals
+// An order (ADR-0520) names its catalogue and product as literals
 // for the same reason — the task names exactly what it may order — while its recipient and
 // its answers are computed by the instance: a joiner process finds the account id in HR's
 // record and the answers in what HR said. It states no action and no outcome: the order's

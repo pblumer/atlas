@@ -2929,7 +2929,7 @@ type xmlShopTask struct {
 	Position       string `xml:"position,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
 	// Catalog, Recipient and Answers belong to mode `order`
-	// (ADR-draft-process-places-an-order): the catalogue ordered from (a literal), the
+	// (ADR-0520): the catalogue ordered from (a literal), the
 	// recipient's account id and the answers to the products' forms (each a literal
 	// or an =expression). Product names the product ordered, ResultVariable receives
 	// the order's id.

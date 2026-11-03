@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/catalog"
 )
 
-// A process orders in the name of its application (ADR-draft-process-places-an-order).
+// A process orders in the name of its application (ADR-0520).
 //
 // An HR joiner process orders the starter package for a person who joins. It has no
 // caller in the sense HandlePlace asks about — no session, no groups, no catalogue

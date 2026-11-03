@@ -34,7 +34,7 @@ func ordererBPMN(id, cat string, catch bool) string {
 </definitions>`
 }
 
-// TestAProcessOrdersInTheNameOfItsApplication (ADR-draft-process-places-an-order): a
+// TestAProcessOrdersInTheNameOfItsApplication (ADR-0520): a
 // process orders a product for somebody only when the product's newest release lists
 // its application; the order then names the application as its orderer, carries the
 // recipient, starts like a person's order, and its id lands in the instance. A refusal

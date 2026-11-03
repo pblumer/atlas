@@ -295,7 +295,7 @@ Wer eintritt, braucht ein Konto, eine Lizenz mit Postfach und die Mitgliedschaft
 Organisationseinheit. Hier bestellt das niemand von Hand: Das HR-System meldet den Eintritt,
 und der Prozess `hr-eintritt.bpmn` (`proc_m365_hr_eintritt`) legt das Konto in Entra ID an und
 bestellt danach das **Eintrittspaket** `m365-eintritt` im Namen seiner Applikation
-(Shop-Aufgabe im Modus `order`, [ADR-draft-process-places-an-order](../../docs/adr/draft-process-places-an-order.md)).
+(Shop-Aufgabe im Modus `order`, [ADR-0520](../../docs/adr/0520-process-places-an-order.md)).
 Meldet das HR-System den Austritt, sperrt derselbe Prozess das Konto und gibt das Paket zurück
 (Shop-Aufgabe im Modus `command`, ADR-0429 §10).
 

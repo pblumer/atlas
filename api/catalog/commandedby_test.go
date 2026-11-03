@@ -30,7 +30,7 @@ func TestTheApplicationsThatMayCommandAProductAreAListOfKeys(t *testing.T) {
 }
 
 // TestTheApplicationsThatMayOrderAProductAreAListOfKeys: orderableBy keeps
-// commandedBy's rules (ADR-draft-process-places-an-order) and travels into the
+// commandedBy's rules (ADR-0520) and travels into the
 // release, where an order task reads it.
 func TestTheApplicationsThatMayOrderAProductAreAListOfKeys(t *testing.T) {
 	orderable := func(keys ...string) Item {
