@@ -49,7 +49,10 @@ type oauthCode struct {
 	redirectURI string
 	challenge   string // the PKCE code_challenge, S256
 	resource    string
-	expires     time.Time
+	// system is what an administrator approved for the resource `…/system`, carried
+	// to the grant the code is exchanged for (ADR-0512 §2); nil for every other.
+	system  *oauthSystem
+	expires time.Time
 }
 
 // oauthCodeStore holds unspent codes. Touched from handler goroutines, so it

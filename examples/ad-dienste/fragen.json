@@ -1,0 +1,35 @@
+{
+  "zielgruppe-ad": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Active Directory»: wer bestellt",
+      "en": "Audience of \"Active Directory\": who orders"
+    },
+    "hint": {
+      "de": "Meist alle Mitarbeitenden. Der Katalog hat den Rang 600; wer ihn erreicht, sieht keinen Katalog mit tieferem Rang mehr.",
+      "en": "Usually all staff. The catalogue has rank 600; whoever it reaches no longer sees a catalogue of lower rank."
+    }
+  },
+  "informationssicherheit": {
+    "kind": "group",
+    "label": {
+      "de": "Wer genehmigt Admin-Konten",
+      "en": "Who approves admin accounts"
+    },
+    "hint": {
+      "de": "Eine Gruppe, meist die Informationssicherheit; wer zuerst entscheidet, entscheidet.",
+      "en": "A group, usually information security; whoever decides first decides."
+    }
+  },
+  "ad-administration": {
+    "kind": "group",
+    "label": {
+      "de": "AD-Administration: prüft Versetzungen und vertritt fehlende Gruppenverantwortliche",
+      "en": "AD administration: checks transfers and stands in for missing group owners"
+    },
+    "hint": {
+      "de": "Eine Gruppe. Sie genehmigt eine Berechtigung, wenn die Gruppe keine verantwortliche Person mit Atlas-Konto hat.",
+      "en": "A group. It approves a permission when the group has no responsible person with an Atlas account."
+    }
+  }
+}

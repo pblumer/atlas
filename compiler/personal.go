@@ -182,6 +182,8 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.SheetsValues.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ShopOrder.Expr":           "evaluated in the server's shop command task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ShopPosition.Expr":        "evaluated in the server's shop command task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.ShopRecipient.Expr":       "evaluated in the server's shop order and command tasks (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.ShopAnswers.Expr":         "evaluated in the server's shop order task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.Site.Expr":                "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SoapAction.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SoapBody.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

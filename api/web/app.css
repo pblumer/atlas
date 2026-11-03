@@ -689,15 +689,10 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
 .publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .product-form > .form-group > summary.form-sec {
-  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
   margin: 0; padding: 4px 0; user-select: none;
 }
-.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
-.product-form > .form-group > summary.form-sec::before {
-  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
-}
-.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
 .product-form > .form-group > summary.form-sec:hover { color: var(--text); }
 .product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
 .form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
@@ -2372,6 +2367,29 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 }
 /* The replay's Details tab renders the very same block (ADR-0151) — one incident
    vocabulary across both diagrams — so it needs no rules of its own. */
+/* A Live view's process identity is context, not a toolbar action. The shared
+   editor breadcrumb deliberately yields its width to controls; the name must not.
+   Keep it readable at tablet/phone widths and let a long name wrap instead of
+   disappearing behind an ellipsis (issue #1480). */
+.editor.live .live-process-heading {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border);
+}
+.editor.live .live-process-identity {
+  display: flex; align-items: baseline; flex: 1 1 360px;
+  flex-wrap: wrap; gap: 4px 10px; min-width: 0;
+}
+.editor.live .live-process-label {
+  color: var(--muted); font-size: 12px; flex: none;
+}
+.editor.live .live-process-name {
+  margin: 0; min-width: 0; font-size: 18px; line-height: 1.35;
+  font-weight: 650; overflow-wrap: anywhere;
+}
+.editor.live .live-process-version {
+  color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+
 /* Inline version/instance pickers in the live toolbar. */
 .bar-select { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
 .bar-select > span { font-size: 12px; color: var(--muted); }
@@ -2746,6 +2764,106 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   border-left: 3px solid transparent;
 }
 .ops-hrow:hover { background: var(--bg); }
+/* A multi-instance body is one row by default. Its rounds are added to the DOM
+   only on expansion; this is a presentation index, not a replacement for paging. */
+.ops-hrow.mi-child { padding-left: 38px; }
+.ops-hrow.mi-group { font-weight: 600; }
+.ops-mi-toggle {
+  flex: 0 0 20px; height: 22px; padding: 0;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.ops-mi-toggle:hover, .ops-mi-toggle:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+.ops-mi-count {
+  flex-shrink: 0; border-radius: 5px; padding: 2px 5px;
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  background: var(--bg); border: 1px solid var(--border);
+}
+.ops-mi-explore { margin-left: 4px; flex-shrink: 0; font-weight: 500; }
+.ops-hrow.mi-bounded { flex-wrap: wrap; cursor: default; }
+.mi-bounded-hint { font-size: 12px; }
+
+/* The Multi-Instance Explorer (ADR-0517): one page of one body execution's iterations.
+   The list never holds more than a page, so it needs no virtualisation — the server
+   cut it. */
+.mi-explorer-host { overflow: auto; flex: 1; min-height: 0; }
+.mi-bounded-note { padding: 12px 14px; font-size: 13px; }
+.mi-bounded-note h3 { margin: 0 0 6px; font-size: 14px; }
+.mi-explorer { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; font-size: 13px; }
+.mi-ex-head { display: flex; align-items: flex-start; gap: 10px; }
+.mi-ex-titles { flex: 1; min-width: 0; }
+.mi-ex-title { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mi-ex-sub { font-size: 12px; }
+.mi-ex-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.mi-stat {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 2px; background: var(--surface);
+}
+.mi-stat span { font-size: 11px; color: var(--muted); }
+.mi-stat b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mi-stat.incidents b, .mi-stat.open b { color: var(--danger); }
+.mi-ex-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.mi-ex-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.mi-ex-field input, .mi-ex-field select { font-size: 13px; min-width: 7em; }
+.mi-ex-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.mi-ex-notice { font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--warn-soft); color: var(--text); }
+.mi-ex-list { border: 1px solid var(--border); border-radius: 6px; max-height: 340px; overflow: auto; }
+.mi-ex-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mi-ex-list[aria-busy="true"] { opacity: .65; }
+.mi-row {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.mi-row:last-child { border-bottom: 0; }
+.mi-row:hover, .mi-row:focus { background: var(--bg); outline: none; }
+.mi-row.sel { background: var(--accent-soft); }
+.mi-row-n { min-width: 6em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mi-row-state { font-size: 11px; border-radius: 4px; padding: 1px 6px; border: 1px solid var(--border); }
+.mi-row-state.active { color: var(--accent-text); }
+.mi-row-state.terminated { color: var(--warn); }
+.mi-row-inc { margin-left: auto; font-size: 11px; color: var(--muted); }
+.mi-row-inc.open { color: var(--danger); font-weight: 600; }
+.mi-ex-error { color: var(--danger); padding: 8px 10px; }
+.mi-ex-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mi-ex-range { flex: 1; text-align: center; font-size: 12px; }
+.mi-ex-detail h4 { margin: 4px 0 6px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.mi-ex-detail h5 { margin: 10px 0 4px; font-size: 12px; }
+.mi-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+.mi-facts dt { color: var(--muted); }
+.mi-facts dd { margin: 0; }
+.mi-inc-list, .mi-nested { margin: 0; padding-left: 18px; }
+.mi-inc-list li.open b { color: var(--danger); }
+.mi-nested li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0; }
+.mi-summary { font-size: 11px; color: var(--muted); font-weight: 400; }
+.mi-vars { border-collapse: collapse; width: 100%; font-size: 12px; }
+.mi-vars th, .mi-vars td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.mi-vars th { color: var(--muted); font-weight: 500; }
+.mi-dec-list { margin: 0; padding-left: 18px; }
+.mi-dec-list li { margin: 4px 0; }
+.mi-dec-io { font-size: 12px; overflow-wrap: anywhere; }
+.mi-dec-io span { color: var(--muted); }
+.mi-dec-trace { font-size: 11px; max-height: 180px; overflow: auto; background: var(--bg); padding: 6px; border-radius: 4px; }
+.mi-ex-technical { margin-top: 8px; }
+.mi-replay { display: flex; flex-direction: column; gap: 6px; }
+.mi-rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mi-rp-pos { font-size: 11px; }
+.mi-rp-steps { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; max-height: 260px; overflow: auto; }
+.mi-rp-step { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.mi-rp-step:last-child { border-bottom: 0; }
+.mi-rp-step:hover { background: var(--bg); }
+.mi-rp-step.cur { background: var(--accent-soft); }
+.mi-rp-step.terminated .mi-rp-act { color: var(--warn); }
+.mi-rp-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mi-rp-at { font-size: 11px; }
+.mi-rp-vars h6 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; }
+.mi-rp-vars-note { font-size: 11px; }
+@media (max-width: 720px) {
+  .mi-ex-controls { flex-direction: column; align-items: stretch; }
+  .mi-ex-list { max-height: 50vh; }
+}
+
 /* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
    a position on the timeline — and ".sel" is the element instance the inspector is
    showing. They used to be filled in the same colour, differing only by a 3px bar, so
@@ -3221,19 +3339,35 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
+/* A fold inside a topic — a release, a list entry, a message, a group of a form, a
+   note — draws the caret the topics draw (.section-toggle above), before its summary,
+   turning when it opens. It is a <details> marked fold-sub; a <details> a library
+   draws (form-js, the API reference) is not marked and keeps its own look. */
+details.fold-sub > summary { cursor: pointer; list-style: none; }
+details.fold-sub > summary::-webkit-details-marker { display: none; }
+details.fold-sub > summary::before {
+  content: ""; display: inline-block; flex: none; width: 0; height: 0; margin-right: 6px;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  vertical-align: middle; transition: transform 0.15s ease;
+}
+details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 /* A folding heading with the count beside it, which is what a folded section still
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
 .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-/* Every card headed by an <h2> folds the same way (fold.js): folded, it keeps its
-   heading row, the title and the card's own actions, and nothing else. */
-.card[data-folded] > :not(.fold-head) { display: none !important; }
+/* Every card headed by an <h2> folds the same way (fold.js), and so does a headed
+   section drawn outside a card that asks with .fold-topic: folded, it keeps its
+   heading row, the title and its own actions, and nothing else. */
+.card[data-folded] > :not(.fold-head),
+.fold-topic[data-folded] > :not(.fold-head) { display: none !important; }
 .card[data-folded] > .fold-head,
-.card[data-folded] > .fold-head h2 { margin-bottom: 0; }
+.card[data-folded] > .fold-head h2,
+.fold-topic[data-folded] > .fold-head,
+.fold-topic[data-folded] > .fold-head h2 { margin-bottom: 0; }
 .card.fold-flush[data-folded] > .fold-head { padding-bottom: 16px !important; }
 .sec-head h2 { margin: 0; }
-#pd-deployments .sec-head { margin: 22px 0 10px; }
-#pd-deployments .sec-head h2 { font-size: 15px; }
+#pd-deployments .sec-head, #pd-constants .sec-head { margin: 22px 0 10px; }
+#pd-deployments .sec-head h2, #pd-constants .sec-head h2 { font-size: 15px; }
 
 /* ---------- Tasks (Outlook-style inbox, ADR-0028) ---------- */
 .tasks-mode main { max-width: none; }
@@ -3409,6 +3543,21 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* Detail pane */
 .tasks-detail { padding: 22px; overflow-y: auto; }
+/* MFE0 / ADR-0514: form-js renders authored grid rows as .cds--row and
+   .fjs-layout-column (not the editor's .fjs-columns). Its vendored Carbon
+   breakpoint follows the viewport (66rem), not the Tasks/Start pane. A user
+   can narrow a task pane on a wide screen; keep its fields readable without
+   mutating the authored form schema or re-mounting the viewer. */
+#task-form, #start-form { container: atlas-form-host / inline-size; }
+@container atlas-form-host (max-width: 560px) {
+  #task-form .fjs-layout-row > .fjs-layout-column,
+  #start-form .fjs-layout-row > .fjs-layout-column {
+    flex: 0 0 100% !important;
+    max-inline-size: 100% !important;
+    min-inline-size: 0;
+  }
+}
+
 .tasks-detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; }
 .tasks-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 .tasks-detail-head h1 { margin: 0; font-size: 20px; }
@@ -3687,6 +3836,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- Public start link (ADR-0029) ---------- */
 .tasks-publish { margin-top: 26px; max-width: 640px; padding-top: 20px; border-top: 1px solid var(--border); }
+/* The task user's Start view (ADR-0516): one status line that says what became of a
+   start, and actions large enough to hit with a thumb. */
+.selfstart-app-line { margin: -6px 0 14px; }
+.selfstart-status { max-width: 640px; margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--border); overflow-wrap: anywhere; }
+.selfstart-status p { margin: 0 0 8px; }
+.selfstart-status p:last-child { margin-bottom: 0; }
+.selfstart-status.err { border-color: var(--danger); }
+.selfstart-status.ok { border-color: var(--ok); background: var(--ok-soft); }
+.selfstart-status .btn, .selfstart-actions .btn { min-height: 44px; }
+.selfstart-actions { margin-top: 16px; max-width: 640px; }
+.selfstart-actions .btn { min-width: 44px; }
+.selfstart-app { cursor: default; }
 .tasks-publish .publish-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tasks-publish .publish-hint { margin: 0 0 12px; max-width: 60ch; font-size: 13px; }
 .tasks-publish .chip.ok { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
@@ -4203,25 +4365,15 @@ tr[hidden] { display: none; }
 .cat-steps-intro { max-width: 72ch; margin: 0 0 6px; }
 .cat-section { border-top: 1px solid var(--border); padding: 10px 0 4px; }
 .cat-section:last-child { border-bottom: 1px solid var(--border); }
-.cat-section > summary {
-  cursor: pointer; list-style: none; user-select: none;
-  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 0;
-}
-.cat-section > summary::-webkit-details-marker { display: none; }
-.cat-section > summary::before {
-  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
-}
-.cat-section[open] > summary::before { transform: rotate(90deg); }
-.cat-section > summary h3 { margin: 0; font-size: 15px; }
-.cat-section > summary:hover h3 { color: var(--accent-text); }
-.cat-section > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.cat-sec-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 0; }
+.cat-sec-head h2 { margin: 0; font-size: 15px; }
 .cat-sec-step {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--accent-soft); color: var(--accent-text); font-size: 12px; font-weight: 600;
 }
 .cat-sec-sum { font-size: 13px; }
-.cat-section.danger > summary h3 { color: var(--danger); }
+.cat-section.danger > .cat-sec-head h2 { color: var(--danger); }
 .cat-more-head {
   margin: 28px 0 0; padding-bottom: 6px; font-size: 13px; letter-spacing: 0.02em;
   text-transform: uppercase; color: var(--muted);
@@ -4240,22 +4392,13 @@ tr[hidden] { display: none; }
   .cat-sec-about { border-left: 1px solid var(--border); padding-left: 16px; }
 }
 
-/* The Events page (events.js): each of its two sections is a <details> that folds away,
-   its summary the section's heading with a caret that turns, and beside it a line saying
-   what the section holds and warns about — readable while the section is folded. A row's
-   detail is a dialog wide enough for the tables in it. */
+/* The Events page (events.js): each of its two sections folds under its heading like
+   every topic (fold-topic, fold.js), and beside the heading a line says what the section
+   holds and warns about — readable while the section is folded. A row's detail is a
+   dialog wide enough for the tables in it. */
 .ev-section { margin-top: 18px; }
-.ev-section > summary {
-  cursor: pointer; list-style: none; user-select: none;
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px;
-}
-.ev-section > summary::-webkit-details-marker { display: none; }
-.ev-section > summary::before {
-  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
-}
-.ev-section[open] > summary::before { transform: rotate(90deg); }
-.ev-section > summary h2 { margin: 0; }
-.ev-section > summary:hover h2 { color: var(--accent-text); }
+.ev-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px; }
+.ev-head h2 { margin: 0; }
 .ev-sum-warn { color: var(--warn); font-weight: 600; }
 .modal.ev-modal { width: min(960px, 100%); }
 .modal.ev-modal:focus { outline: none; }
@@ -4884,7 +5027,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }
 .ob-msg:last-child { border-bottom: 0; }
 .ob-msg > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ob-msg > summary::marker { color: var(--muted); }
 .ob-body { padding: 10px 2px 4px; }
 .ob-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
 .ob-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
@@ -4907,16 +5049,11 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    entry opening to its attributes. Containers the mock never got an entry for are
    rendered muted, because they exist only because something below them does. */
 .admock-worker { margin-top: 14px; }
-/* The card is one collapsible section: its summary is the worker line, so collapsing
-   leaves the identity and the freshness stamp on screen and puts the forests away. */
-.admock-card > summary {
-  cursor: pointer; display: flex; align-items: baseline; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.admock-card > summary::marker { color: var(--muted); }
-.admock-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.admock-card-head h2 { margin: 0; }
-.admock-card-state { white-space: nowrap; }
+/* The card folds under its heading row (fold.js): the worker line, so folding leaves
+   the identity and the freshness stamp on screen and puts the forests away. */
+.admock-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.admock-head h2 { margin: 0; }
+.admock-card-state { white-space: nowrap; margin-left: auto; }
 .admock-forest { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
 .admock-forest:first-of-type { border-top: 0; }
 .admock-forest h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
@@ -4926,7 +5063,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-tree ul { border-left: 1px solid var(--border); }
 .admock-node { font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .admock-entry > summary { cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.admock-entry > summary::marker { color: var(--muted); }
 .admock-detail { padding: 4px 0 8px 14px; }
 .admock-dn { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; }
 /* width:auto against the global table{width:100%}: an attribute list is two narrow
@@ -4965,7 +5101,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    and a journal, drawn as the mock database draws its sequence. */
 .spmock-list { margin-top: 8px; }
 .spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.spmock-list > summary::marker { color: var(--muted); }
 .spmock-table { width: 100%; margin: 4px 0 0; }
 .spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
 .spmock-table td { padding: 2px 12px 2px 0; }
@@ -5004,42 +5139,18 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 /* ---------- Release notes (Console landing page) ----------
    The CHANGELOG as this binary was built from it, release by release (see
    renderReleaseNotes in app.js). Everything is theme-variable driven so it follows
-   the accent and any theme. The section, each release and each change is a native
-   <details>. */
+   the accent and any theme. The card folds under its heading like every topic
+   (fold.js); each release and each change is a native <details>. */
 .release-notes { margin-top: 18px; }
-/* The section header doubles as the collapse toggle. A caret marks open/closed in
-   place of the default marker. */
-.release-notes .rn-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; cursor: pointer; list-style: none;
-}
-.release-notes .rn-head::-webkit-details-marker { display: none; }
-.release-notes .rn-title {
-  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
-}
-.release-notes .rn-title::before {
-  content: "▸"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
-}
-.release-notes .rn-root[open] .rn-title::before { transform: rotate(90deg); }
+.release-notes .rn-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.release-notes .rn-title { font-size: 18px; font-weight: 650; margin: 0; }
 
 .release-notes .rn-list { margin-top: 10px; }
 
 /* One release. The row with its version, date and size is always visible. */
 .release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
 .release-notes .rn-release:first-child { border-top: 0; }
-.release-notes .rn-release > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
-}
-/* A flex summary loses its marker, so a release and a change draw the caret the
-   section header draws: a row that opens should say so before it is clicked. */
-.release-notes .rn-release > summary::-webkit-details-marker,
-.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
-.release-notes .rn-release > summary::before,
-.release-notes .rn-change > summary::before {
-  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
-}
-.release-notes .rn-release[open] > summary::before,
-.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-release > summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .release-notes .rn-version { font-weight: 650; }
 .release-notes .rn-date,
 .release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
@@ -5055,9 +5166,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .release-notes .rn-changes { margin-top: 4px; }
 .release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
 .release-notes .rn-change:first-child { border-top: 0; }
-.release-notes .rn-change > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
-}
+.release-notes .rn-change > summary { display: flex; align-items: baseline; gap: 8px; }
 .release-notes .rn-cat { flex: none; }
 .release-notes .rn-change-title { font-weight: 600; }
 .release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
@@ -5075,23 +5184,13 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 
 /* ---------- Key features (Console landing page) ----------
    A short statement of what Atlas is, below the dashboard's own tiles (see
-   key-features.js). Bilingual, and collapsible like the release notes above it:
+   key-features.js). Bilingual, and folding like the release notes above it:
    someone who has read it once should be able to fold it away. The
    entries are a responsive two-column grid that collapses to one on a narrow
    window, so fourteen short items stay scannable instead of becoming a wall. */
 .key-features { margin-top: 18px; }
-.key-features .kf-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; cursor: pointer; list-style: none;
-}
-.key-features .kf-head::-webkit-details-marker { display: none; }
-.key-features .kf-title {
-  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
-}
-.key-features .kf-title::before {
-  content: "\25B8"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
-}
-.key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
+.key-features .kf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.key-features .kf-title { font-size: 18px; font-weight: 650; margin: 0; }
 
 /* Segmented EN/DE toggle. It sets the language of the whole landing page. */
 .key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -5146,16 +5245,12 @@ tr.wk-stale > td { background: var(--warn-soft); }
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
-/* The job-type table folds away, closed by default: an installation runs a handful of
-   types and the table lists every one it has ever seen, so the page opens on the
-   question rather than on rows of answer. What must survive the fold is the alarm —
-   hence .wk-unserved in the summary. */
-summary.wk-head { cursor: pointer; list-style: none; user-select: none; }
-summary.wk-head::-webkit-details-marker { display: none; }
-summary.wk-head:hover { background: var(--bg); }
-.wk-caret { display: inline-block; font-size: 10px; color: var(--muted); transition: transform .12s ease; }
-.wk-fold[open] > summary .wk-caret { transform: rotate(90deg); }
-.wk-fold:not([open]) > summary.wk-head { padding-bottom: 15px; }
+/* A card's heading is its <h2>, which is what folds it (fold.js). */
+.wk-head h2 { margin: 0; }
+/* The job-type table starts folded: an installation runs a handful of types and the
+   table lists every one it has ever seen, so the page opens on the question rather
+   than on rows of answer. What must survive the fold is the alarm — hence
+   .wk-unserved in the heading row. */
 .wk-unserved { color: var(--danger); font-weight: 600; }
 /* Which process a job type belongs to. Without it a table of fifty types is fifty
    names with no way back to the model that needs them. */
@@ -5245,10 +5340,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   border: 1px solid var(--border); border-radius: 0; background: var(--surface);
   font-size: 12.5px; line-height: 1.5;
 }
-.wtdoc-more > summary {
-  padding: 6px 10px; cursor: pointer; font-weight: 600; color: var(--accent-text);
-  list-style-position: inside;
-}
+.wtdoc-more > summary { padding: 6px 10px; font-weight: 600; color: var(--accent-text); }
 .wtdoc-more[open] > summary { border-bottom: 1px solid var(--border); }
 .wtdoc-steps { margin: 8px 0; padding: 0 10px 0 26px; }
 .wtdoc-steps li { margin: 0 0 7px; }
@@ -7078,6 +7170,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
   margin-top: 18px; padding: 12px 16px; border: 1px solid var(--border);
   border-radius: 10px; background: var(--bg); font-size: 12.5px;
 }
+.md-excluded h2 { font-size: inherit; margin: 0 0 6px; }
 .md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
 .md-excluded li { margin: 4px 0; }
 
@@ -7297,6 +7390,8 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
 .im-unresolved { color: var(--muted); border: 1px solid var(--border); }
 .im-group-head .muted { margin-left: auto; font-size: 12px; }
+.im-group-head h2 { margin: 0; font-size: inherit; font-weight: inherit; display: flex; align-items: center; gap: 10px; }
+.card[data-folded] > .im-group-head { border-bottom: 0; }
 
 /* ---- The object diagram: the Data tab's second reading ---------------------
    (ADR-0230, slice 4)
@@ -7676,6 +7771,73 @@ button.im-problem:hover { background: var(--accent-soft); }
 .estate-table td[data-tone="unknown"] { color: var(--muted); }
 .estate-reason, .estate-runtime { font-size: 12px; line-height: 1.5; margin-top: 2px; }
 
+/* MFE1: an explicit, local receipt only after an acknowledged server completion.
+   Do not let a toast or another task's auto-advance hide the outcome on a phone. */
+.mfe-completion { display: none; }
+.mfe-completion[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .mfe-completion:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin: 10px 12px 0;
+    min-width: 0;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .mfe-completion > span { min-width: 0; }
+  .mfe-completion button { flex: 0 0 auto; min-height: 44px; }
+  .mfe-completion:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+/* MFE1: one shared work destination switcher inside the two existing lists.
+   It is hidden on desktop and naturally disappears with the list on a selected
+   mobile task. Server roles still decide whether Start can actually be offered. */
+.mfe-entry { display: none; }
+
+@media (max-width: 860px) {
+  .mfe-entry {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 12px 0;
+  }
+  .mfe-entry-link {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 10px;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    overflow-wrap: anywhere;
+  }
+  .mfe-entry-link.active {
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+  .mfe-entry-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
 /* ---------- Tasks and the top bar on a narrow screen ----------
    (ADR-0417) The shop's breakpoint,
    860px, so a phone reads the shop and the inbox the same way: one column.
@@ -7689,9 +7851,18 @@ button.im-problem:hover { background: var(--accent-soft); }
    list's resizer writes the column widths inline — a width dragged on a desktop
    is not a width for this screen. */
 @media (max-width: 1180px) and (min-width: 861px) {
-  .tasks { grid-template-columns: 180px 300px 1fr !important; }
+  /* Keep folder navigation accessible without spending a whole column on it.
+     The remaining width belongs to the task list and the actual task form. */
+  .tasks:not(#start-grid) { grid-template-columns: minmax(240px, 35%) minmax(0, 1fr) !important; }
+  .tasks:not(#start-grid) > .tasks-folders { grid-column: 1 / -1; padding: 8px 12px; }
+  .tasks:not(#start-grid) > .tasks-folders nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .tasks:not(#start-grid) > .tasks-folders nav .tasks-folder { white-space: nowrap; }
+  .tasks:not(#start-grid) > .tasks-list-pane,
+  .tasks:not(#start-grid) > .tasks-detail { min-width: 0; }
+  .tasks:not(#start-grid) .tasks-col-resizer { display: none; }
   .tasks-detail { padding: 16px; }
-  .tasks-field { grid-template-columns: 120px 1fr; }
+  .tasks-detail-head h1 { overflow-wrap: break-word; }
+  .tasks-field { grid-template-columns: 120px minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
@@ -8014,3 +8185,118 @@ button.im-problem:hover { background: var(--accent-soft); }
 /* A send's mark (nobody received it, kept, expired unreceived) stands a size below the
    row's text, so it reads as a note on the verb rather than as a second headline. */
 .el-row .pill { font-size: 11px; line-height: 16px; padding: 1px 7px; }
+
+/* ---------- Delivery and SLA (ADR-0515) ---------- */
+.dr-period { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 0 0 12px; }
+.dr-period .field { margin: 0; }
+.dr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 12px; }
+.dr-kpi { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--surface); }
+.dr-v { font-size: 22px; font-weight: 700; }
+.dr-ok { color: var(--ok, #2d8a4e); }
+.dr-warn { color: #b26a00; }
+.dr-bad { color: var(--danger); }
+.dr-scroll { overflow-x: auto; }
+.dr-table td.num, .dr-table th.num { text-align: right; white-space: nowrap; }
+.sl-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.sl-row .field { margin: 0; min-width: 180px; }
+
+/* A suite's name above its apps in the drawer: Marketplace is the catalogue and the shop. */
+.app-suite { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 10px 14px 2px; }
+
+/* MFE1: phone-first shell. Keep the desktop nav unchanged; a phone gives its
+   limited width to the current app and two touch targets, not clipped tabs,
+   an inactive notifications bell, or diagram/modeler utilities. */
+#mobile-more { display: none; }
+#mobile-more[hidden] { display: none !important; }
+
+@media (max-width: 860px) {
+  /* A single destination is not a switcher: the same title is already on screen.
+     Two permitted destinations stay equally prominent as in ADR-0514. */
+  .mfe-entry:has(> .mfe-entry-link:only-child) { display: none; }
+}
+
+@media (max-width: 520px) {
+  .topbar { gap: 4px; padding: 0 8px; }
+  .topbar > .topbrand { flex: 1 1 auto !important; min-width: 0; }
+  .topbar #app-name {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .topbar #topnav,
+  .topbar #feel-assistant-btn,
+  .topbar #shortcuts-dropdown,
+  .topbar #appearance-toggle,
+  .topbar #global-search,
+  .topbar #help-btn,
+  .topbar #help-btn + .dropdown-menu,
+  .topbar .icon-btn[aria-label="Notifications"] {
+    display: none !important;
+  }
+  .topbar > #mobile-more { display: inline-flex; flex: 0 0 auto; }
+  .topbar #app-switcher, .topbar #mobile-more-btn, .topbar .avatar {
+    width: 44px; height: 44px;
+  }
+  .topbar .avatar { width: 38px; height: 38px; }
+  .topbar #mobile-more-btn { font-size: 27px; font-weight: 600; line-height: 1; position: relative; }
+  .topbar #mobile-more-btn .mobile-more-count {
+    position: absolute; top: -3px; right: -4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box;
+    border-radius: 99px; font: 700 10px/1 system-ui, sans-serif;
+    color: var(--status-ink); background: var(--accent);
+    border: 2px solid var(--surface);
+  }
+  .topbar #mobile-more-btn .mobile-more-count.incident { background: var(--danger); }
+  .topbar #mobile-more-btn .mobile-more-count[hidden] { display: none; }
+
+  #mobile-more-menu {
+    max-height: min(72dvh, 560px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-width: min(272px, calc(100vw - 16px));
+  }
+  #mobile-more-menu [role="menuitem"] { min-height: 44px; white-space: normal; }
+  #mobile-more-menu a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-text); }
+  #mobile-more-menu .nav-badge {
+    display: inline-flex; min-width: 20px; border-radius: 999px; margin-left: auto;
+    padding: 2px 6px; justify-content: center;
+    background: var(--danger); color: var(--status-ink); font-size: 11px; font-weight: 700;
+  }
+  #mobile-more-menu .nav-badge[hidden] { display: none; }
+}
+
+// ---------- MFE2: bounded, read-only incident triage on mobile / tablet ----------
+// Summary and selected detail have different reading widths. Never scale down
+// the desktop incident tables or expose remediation actions on this surface.
+.mfe2-shell { width: 100%; max-width: 1120px; margin: 0 auto; min-width: 0; }
+.mfe2-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.mfe2-header h1 { margin: 0; }
+.mfe2-lead { margin: 7px 0 14px; }
+.mfe2-state { margin: 8px 0 12px; }
+.mfe2-state:empty { display: none; }
+.mfe2-warning { color: var(--warn); overflow-wrap: anywhere; margin: 8px 0; }
+.mfe2-workspace { display: grid; grid-template-columns: minmax(270px, 0.9fr) minmax(0, 1.1fr); gap: 14px; min-width: 0; }
+.mfe2-cause-pane, .mfe2-detail-pane { min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 14px; }
+.mfe2-cause-pane h2, .mfe2-detail-pane h2 { margin: 0 0 12px; font-size: 16px; }
+.mfe2-causes { display: grid; gap: 7px; }
+.mfe2-cause { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; width: 100%; min-height: 52px; padding: 10px 12px;
+  text-align: left; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--bg); color: var(--text); cursor: pointer; }
+.mfe2-cause > strong { flex: 1 1 100%; overflow-wrap: anywhere; }
+.mfe2-cause-element { overflow-wrap: anywhere; font-family: var(--font-mono); }
+.mfe2-cause-meta { margin-left: auto; font-size: 12px; color: var(--muted); }
+.mfe2-cause:hover, .mfe2-cause[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.mfe2-cause:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.mfe2-fields { display: grid; gap: 10px; margin: 0 0 12px; }
+.mfe2-field { min-width: 0; }
+.mfe2-field dt { color: var(--muted); font-size: 12px; }
+.mfe2-field dd { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mfe2-readonly { padding: 8px 10px; background: var(--accent-soft); border-radius: 6px; font-size: 12px; }
+.mfe2-examples { padding-left: 21px; }
+.mfe2-examples li { margin-bottom: 10px; overflow-wrap: anywhere; }
+.mfe2-incident-message { margin: 3px 0 0; overflow-wrap: anywhere; }
+.mfe2-samples { min-width: 0; }
+.mfe2-samples h3 { font-size: 14px; margin: 16px 0 8px; }
+@media (max-width: 700px) {
+  .mfe2-workspace { grid-template-columns: minmax(0, 1fr); }
+  .mfe2-cause-pane, .mfe2-detail-pane { padding: 12px; }
+}

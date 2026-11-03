@@ -65,6 +65,22 @@ const (
 	cfAuthorization          columnFamily = 0x34 // authz:<piKey>:<jobKey>:<pos> → AuthorizationValue (ADR-0475 §12); 0x32 until it was found to be the event log's
 	cfApprovalExpiry         columnFamily = 0x35 // aprExp:<expiresAt>:<approvalKey> → piKey(8): the open approval requests, soonest first (ADR-0475 §9)
 	cfFlowTakenAgg           columnFamily = 0x36 // flowAgg:<procDefKey>:<flowId> → int64 cumulative traversals (merge, ADR-0496)
+	cfMIBody                 columnFamily = 0x38 // miBody:<piKey>:<activationPosition>:<bodyElKey> (ADR-0517)
+	cfMIIteration            columnFamily = 0x39 // miRound:<piKey>:<bodyElKey>:<activationPosition>:<roundElKey> (ADR-0517)
+	cfMIRoundByElement       columnFamily = 0x3A // miRoundByEl:<piKey>:<roundElKey> (ADR-0517)
+	cfMIBodyByElement        columnFamily = 0x3B // miBodyByEl:<piKey>:<bodyElKey> → activationPosition(8) (ADR-0517)
+	cfMIRoundOrder           columnFamily = 0x3C // miOrder:<piKey>:<bodyElKey>:<activationPosition>:<loopCounter>:<roundElKey> → empty (ADR-0517 v2)
+	cfMIRoundByState         columnFamily = 0x3D // miState:<piKey>:<bodyElKey>:<activationPosition>:<state>:<loopCounter>:<roundElKey> → empty (ADR-0517 v2)
+	cfMIRoundIncident        columnFamily = 0x3E // miInc:<piKey>:<bodyElKey>:<activationPosition>:<loopCounter>:<roundElKey> → firstIncidentPosition(8) (ADR-0517 v2)
+	cfMIIncidentByOwner      columnFamily = 0x3F // miIncOwner:<piKey>:<ownerElKey>:<raisedPosition> → incidentElKey(8) endPosition(8) outcome(1) (ADR-0517 v2)
+	cfMIIncidentOpen         columnFamily = 0x40 // miIncOpen:<piKey>:<incidentElKey> → ownerElKey(8) raisedPosition(8) (ADR-0517 v2)
+	cfMIBodyByParent         columnFamily = 0x41 // miBodyParent:<piKey>:<parentRoundElKey>:<activationPosition>:<bodyElKey> → empty (ADR-0517 v2)
+	cfMIBodyCounter          columnFamily = 0x42 // miBodyCount:<piKey>:<bodyElKey>:<kind> → int64 merge (ADR-0517 v2)
+	cfMIDecision             columnFamily = 0x43 // miDec:<piKey>:<ownerElKey>:<ts>:<pos> → empty; names a decEval row (ADR-0517, OHS3)
+	cfOutline                columnFamily = 0x44 // outline:<piKey>:<ts>:<pos> → step outside every MI iteration (ADR-0517, bounded overview)
+	cfOutlineHidden          columnFamily = 0x45 // outlineHidden:<piKey>:<elKey> → owning iteration elKey(8); an element inside an MI iteration (ADR-0517)
+	cfIterationStep          columnFamily = 0x46 // iterStep:<piKey>:<iterationElKey>:<ts>:<pos> → step inside one MI iteration (ADR-0517, OHS3 replay window)
+	cfScopeTrigger           columnFamily = 0x47 // scopeTrig:<scopeKey>:<triggerElKey> → nil; an armed event-subprocess trigger of a scope (ADR-0082, #1494)
 	cfJobTake                columnFamily = 0x37 // jobTake:<piKey>:<ts>:<pos> → elementInstanceKey(8) kind(1): a task taken up or handed back (ADR-0496)
 )
 
@@ -784,4 +800,11 @@ func keyEntitlementHistory(principal string, endedAt int64, itemID string) []byt
 // two — which is a per-variant key and a migration, named as such in the record.
 func keyEntitlement(principal, itemID string) []byte {
 	return append(entitlementPrefix(principal), itemID...)
+}
+
+// keyScopeTrigger keys one armed event-subprocess trigger under the scope it is
+// armed in, so the scope's triggers are a prefix read instead of a walk of every
+// live element instance of the process instance (#1494).
+func keyScopeTrigger(scopeKey, triggerKey uint64) []byte {
+	return appendBE64(appendBE64([]byte{byte(cfScopeTrigger)}, scopeKey), triggerKey)
 }

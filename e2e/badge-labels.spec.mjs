@@ -168,7 +168,7 @@ test("the live view marks a definition whose decision was frozen when it was dep
   // This is the view somebody opens to find out why an instance decided as it did,
   // and the binding on the task reads latest while the definition runs an older
   // version (ADR-0423).
-  const mark = page.locator(".crumbs .frozen-mark");
+  const mark = page.locator(".live-process-heading .frozen-mark");
   await expect(mark).toBeVisible();
   await expect(mark).toHaveText("Entscheidung eingefroren · neuere deployt");
   await expect(mark).toHaveClass(/\bwarn\b/);

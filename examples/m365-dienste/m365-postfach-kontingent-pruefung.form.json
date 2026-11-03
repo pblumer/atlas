@@ -1,0 +1,63 @@
+{
+  "type": "default",
+  "id": "m365-postfach-kontingent-pruefung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Postfachkontingent prüfen · Review the mailbox quota**\n\nAktuelle Belegung · Current size: {{postfachStatistik.TotalItemSize}}\n\n«Genehmigt» setzt das Kontingent sofort über den Exchange-Worker. · “Approved” sets the quota at once through the Exchange Worker."
+    },
+    {
+      "key": "pruefhinweis",
+      "type": "textfield",
+      "label": "Hinweis der Regel · Rule note",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "postfachStufe",
+      "type": "textfield",
+      "label": "Gewünschtes Kontingent (GB) · Requested quota (GB)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingentBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "disabled": true
+    },
+    {
+      "key": "kontingentEntscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigt · Approved",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Abgelehnt · Refused",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "pruefkommentar",
+      "type": "textarea",
+      "label": "Kommentar · Comment",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AdOe: was eine Organisationseinheit im Active Directory ist.
+
+  Eingabe:  oe (Kürzel der Organisationseinheit, Grossbuchstaben)
+  Ausgaben: bekannt (Wahrheitswert), ou (DN der OU, in der die Konten der Einheit liegen), gruppen (Liste der DNs
+            der Gruppen, in denen jedes Konto der Einheit Mitglied ist)
+
+  Die Versetzung (ad-versetzung.bpmn) liest die Tabelle für die bisherige und die neue Einheit: Sie trägt das Konto
+  aus den Gruppen der bisherigen aus, die nicht auch zur neuen gehören, in die fehlenden der neuen ein und
+  verschiebt es in die OU der neuen. Massgebend ist die Tabelle zum Zeitpunkt der Versetzung.
+
+  Die OUs liegen unter OU=Personen,DC=contoso,DC=local (AD_PERSONEN_OU), die Gruppen unter OU=Organisation,OU=Gruppen,DC=contoso,DC=local. Alles Beispiele; auf das
+  eigene Verzeichnis anzupassen. Ein Kürzel ohne Zeile ergibt bekannt = false (Auffangregel), und die Versetzung
+  wird mit Begründung abgelehnt.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_AdOe" name="AdOe" namespace="http://atlas/dmn">
+  <inputData id="id_oe" name="oe"/>
+  <decision id="AdOe" name="AdOe">
+    <informationRequirement id="ir_oe"><requiredInput href="#id_oe"/></informationRequirement>
+    <decisionTable id="dt_AdOe" hitPolicy="FIRST">
+      <input id="in_oe" label="oe"><inputExpression id="ie_oe" typeRef="string"><text>upper case(oe)</text></inputExpression></input>
+      <output id="out_bekannt" label="bekannt" name="bekannt" typeRef="boolean"/>
+      <output id="out_ou" label="ou" name="ou" typeRef="string"/>
+      <output id="out_gruppen" label="gruppen" name="gruppen"/>
+      <rule id="r1">
+        <description>Finanzen</description>
+        <inputEntry id="r1_i0"><text>"FIN"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>true</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"OU=FIN,OU=Personen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r1_o2"><text>["CN=SG-ORG-FIN-Alle,OU=Organisation,OU=Gruppen,DC=contoso,DC=local", "CN=SG-ORG-FIN-Drucker,OU=Organisation,OU=Gruppen,DC=contoso,DC=local"]</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Personal</description>
+        <inputEntry id="r2_i0"><text>"HR"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>true</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"OU=HR,OU=Personen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r2_o2"><text>["CN=SG-ORG-HR-Alle,OU=Organisation,OU=Gruppen,DC=contoso,DC=local"]</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Informatik</description>
+        <inputEntry id="r3_i0"><text>"IT"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"OU=IT,OU=Personen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r3_o2"><text>["CN=SG-ORG-IT-Alle,OU=Organisation,OU=Gruppen,DC=contoso,DC=local", "CN=SG-ORG-FIN-Drucker,OU=Organisation,OU=Gruppen,DC=contoso,DC=local"]</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Auffangregel: eine unbekannte Einheit (fail-closed)</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>false</text></outputEntry>
+        <outputEntry id="r4_o1"><text>null</text></outputEntry>
+        <outputEntry id="r4_o2"><text>[]</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

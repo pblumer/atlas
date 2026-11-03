@@ -170,6 +170,28 @@ func TestBlueprintRegistryOperatorConfigFailsClosed(t *testing.T) {
 	if c, err := configuredBlueprintSource(); err != nil || c == nil {
 		t.Fatalf("valid pinned operator config rejected: %v", err)
 	}
+	// Two keys, the old and the new one of a rotation, separated by a comma.
+	second := make([]byte, 32)
+	second[0] = 1
+	one, two := base64.StdEncoding.EncodeToString(make([]byte, 32)), base64.StdEncoding.EncodeToString(second)
+	t.Setenv("ATLAS_BLUEPRINT_REGISTRY_KEY", one+" , "+two)
+	if c, err := configuredBlueprintSource(); err != nil || c == nil {
+		t.Fatalf("two pinned keys rejected: %v", err)
+	}
+	third := make([]byte, 32)
+	third[0] = 2
+	for name, value := range map[string]string{
+		"three keys":         one + "," + two + "," + base64.StdEncoding.EncodeToString(third),
+		"one key twice":      one + "," + one,
+		"a malformed second": one + ",not-a-key",
+		"an empty second":    one + ",",
+	} {
+		t.Setenv("ATLAS_BLUEPRINT_REGISTRY_KEY", value)
+		if _, err := configuredBlueprintSource(); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	t.Setenv("ATLAS_BLUEPRINT_REGISTRY_KEY", one)
 	t.Setenv("ATLAS_BLUEPRINT_REGISTRY_URL", "http://169.254.169.254/index.json")
 	if _, err := configuredBlueprintSource(); err == nil {
 		t.Fatal("operator configuration accepted private HTTP metadata endpoint")

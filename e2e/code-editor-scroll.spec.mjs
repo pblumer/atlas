@@ -119,10 +119,13 @@ test("the JSON editor's backdrop breaks its lines at the text area's width", asy
 });
 
 test("a compact JSON field's backdrop leaves the toolbar's room too", async ({ page }) => {
-  // Focus expands the field; its toolbar sits on the right of both layers.
+  // Focus expands the field. The ResizeObserver fits the backdrop on the next
+  // layout cycle, not synchronously with focus; wait for that actual alignment.
   await page.locator("#json-compact").focus();
-  const w = await contentWidths(page, "json-compact");
-  expect(w.pre).toBe(w.ta);
+  await expect.poll(async () => {
+    const w = await contentWidths(page, "json-compact");
+    return w.pre - w.ta;
+  }).toBe(0);
 });
 
 // selectionInk selects line `n` of a field with its coloured backdrop hidden, so what

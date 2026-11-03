@@ -1,0 +1,98 @@
+{
+  "registryId": "io.github.pblumer.atlas.hub",
+  "publisherId": "io.github.pblumer.atlas",
+  "license": "AGPL-3.0-only",
+  "publicKey": "Sn9QiwlWXjJK9AJFypBjYEljRHgQMaME4dmSspQbP4w=",
+  "releases": [
+    {
+      "bundle": "auftrag-finanzen",
+      "version": "1.0.0",
+      "digest": "sha256:38b9b6c485b3a47b1871af35d59076ac56799d92fe11e7cbd2e5874bdcadfb82",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "bewerbermanagement",
+      "version": "1.0.0",
+      "digest": "sha256:4b45bad479c6c269e57abc4e5ddec08f6d78365a5aa2a9a66038632b540abfa4",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "einstieg",
+      "version": "1.0.0",
+      "digest": "sha256:5c8789000765542f528646c3ccf2e51b24934989ccdcce349dd404da3547da0a",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "identitaet",
+      "version": "1.0.0",
+      "digest": "sha256:cd90b7de3ab88d02ed4716986480f850763599a359c4d42f2521fb9d7d0956bf",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.0",
+      "digest": "sha256:824762f98d6fb5fc4cd80678a9ab0b6b2fe64d60d70c54af220e096eb18ea216",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "mitarbeitereintritt",
+      "version": "1.0.0",
+      "digest": "sha256:49569e0484e01ec3eb0c563ebe9cd07f383d4c22adb55a14c1aca4d473147078",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "onboarding-tutorial",
+      "version": "1.0.0",
+      "digest": "sha256:0fdc85d468516fa65a931846e41a3675388caa5d25bfcbe6d8ced1aa4755ea0c",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "personal",
+      "version": "1.0.0",
+      "digest": "sha256:af7311e149737e6232f96d0f0c64ed6aca0a081bae1c2c5d2c20430c482b8564",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "umsysteme",
+      "version": "1.0.0",
+      "digest": "sha256:514b3c87610de8f0c845a1f9adb72c1a44f28b22e82c79c9cfba2469477f86a7",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "verwaltung-dienstleistungen",
+      "version": "1.0.0",
+      "digest": "sha256:ed1bbf13f03ec0d9d8b41207cc289bbc58f8591159270ceca8caa69409650861",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.1",
+      "digest": "sha256:5274dd07669a276d56122ba87620dd6aa4a6af2a6514c044d1448da8f0c7d006",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.2",
+      "digest": "sha256:2c2554528b260f8a9ae21868e0277356822ee8b88ad751ca19c8c14c14a55aa4",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.0",
+      "digest": "sha256:e703e473951a3ea353d35ae71bd93f4a66d592cfb124fb84e042f2e003e9e7c3",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.3",
+      "digest": "sha256:5b1fe00ca7bf308faa1557bd64020f73b9227df84e8141df1ccce33c2dc51572",
+      "minAtlas": "0.21.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.4",
+      "digest": "sha256:82700dd6509d9c780de09f3d41a086fa844610cee8f9085389f8ea118d0bc348",
+      "minAtlas": "0.21.0-0"
+    }
+  ]
+}

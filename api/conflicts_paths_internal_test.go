@@ -120,7 +120,13 @@ func TestConflictsFailsWhenTheCatalogueCannotBeRead(t *testing.T) {
 	for _, broken := range []string{"catalogs", "releases"} {
 		t.Run(broken, func(t *testing.T) {
 			srv := newServerForErrors(t)
-			conflictsPathsSeed(t, srv, nil)
+			// A broken catalogs directory is read even with no records. Do not
+			// seed a file we immediately remove: Windows may still hold its
+			// read handle and refuse the directory replacement.
+			// The releases path needs one catalogue to reach ReleasesOf.
+			if broken == "releases" {
+				conflictsPathsSeed(t, srv, nil)
+			}
 			approvalsPathsDirAsFile(t, filepath.Join(srv.dataDir, "catalog", broken))
 			code, body := serveInternal(t, srv, http.MethodGet, "/api/v1/conflicts", "", "")
 			if code != http.StatusInternalServerError || !strings.Contains(string(body), "conflicts: ") {

@@ -21,6 +21,12 @@ import (
 // replays, and the position the feed was pruned through is kept beside the rows, so a
 // cursor older than it is answered as expired rather than silently skipping what it
 // missed.
+//
+// Beside the rows the feed keeps one index: from the key of a user task that ended to
+// the row that says how (ADR-0512 §2). A connected system that keeps copies of tasks
+// asks for one by key, and has to be told a task that ended from one it may no longer
+// see. The index is written with that row and dropped with it by the prune, so a task
+// is known as ended exactly as long as the feed still holds its end, and no longer.
 
 // FeedKind is what a feed row records.
 type FeedKind byte
@@ -49,8 +55,9 @@ const (
 )
 
 const (
-	feedRows  byte = 0x00
-	feedPrune byte = 0x01
+	feedRows    byte = 0x00
+	feedPrune   byte = 0x01
+	feedTaskEnd byte = 0x02
 )
 
 func feedRowPrefix(partition uint16) []byte {
@@ -63,6 +70,12 @@ func keyFeedRow(partition uint16, position uint64) []byte {
 
 func keyFeedPrunedThrough(partition uint16) []byte {
 	return appendBE32([]byte{byte(cfFeed), feedPrune}, uint32(partition))
+}
+
+// keyFeedTaskEnd keys the index entry of a user task that ended, by its job key: its
+// value is the position of the row that says how.
+func keyFeedTaskEnd(partition uint16, jobKey uint64) []byte {
+	return appendBE64(appendBE32([]byte{byte(cfFeed), feedTaskEnd}, uint32(partition)), jobKey)
 }
 
 // FeedEntry is one row of the feed: where the fact sits on the log, when it was
@@ -125,6 +138,11 @@ func feedIsTask(k FeedKind) bool {
 	return k >= FeedTaskCreated && k <= FeedTaskCancelled
 }
 
+// feedEndsTask reports whether a kind is the last turn in a user task's life.
+func feedEndsTask(k FeedKind) bool {
+	return k == FeedTaskCompleted || k == FeedTaskCancelled
+}
+
 // PutFeedEntry writes the row for the fact at position on partition, recorded at at.
 func (t *Tx) PutFeedEntry(partition uint16, position uint64, at int64, kind FeedKind, v model.Value) error {
 	if vt, ok := feedValueType(kind); !ok || feedCarriesDefinition(kind) || v.ValueType() != vt {
@@ -165,7 +183,16 @@ func (t *Tx) PutFeedTask(partition uint16, position uint64, at int64, kind FeedK
 	row = binary.BigEndian.AppendUint64(row, jobKey)
 	row = binary.BigEndian.AppendUint32(row, uint32(element))
 	row = model.AppendValue(row, v)
-	return t.b.Set(keyFeedRow(partition, position), row, nil)
+	if err := t.b.Set(keyFeedRow(partition, position), row, nil); err != nil {
+		return err
+	}
+	if !feedEndsTask(kind) {
+		return nil
+	}
+	// The row that ended the task, findable by the task's key (FeedTaskEnd). Written
+	// from the record's own key and position, so replay writes the same entry.
+	t.scratch = appendBE64(t.scratch[:0], position)
+	return t.b.Set(keyFeedTaskEnd(partition, jobKey), t.scratch, nil)
 }
 
 // PruneFeed drops every row of partition at or before through, and remembers through
@@ -186,10 +213,46 @@ func (t *Tx) PruneFeed(partition uint16, through uint64) error {
 	case !errors.Is(err, pebble.ErrNotFound):
 		return err
 	}
+	if err := t.dropTaskEnds(partition, through); err != nil {
+		return err
+	}
 	if err := t.b.DeleteRange(feedRowPrefix(partition), keyFeedRow(partition, through+1), nil); err != nil {
 		return err
 	}
 	return t.b.Set(keyFeedPrunedThrough(partition), binary.BigEndian.AppendUint64(nil, through), nil)
+}
+
+// dropTaskEnds removes the index entries of the task ends among the rows a prune
+// through `through` is about to drop, so the index never names a row that is gone and
+// never outgrows the feed. It reads the rows being dropped, which a prune — once an
+// hour, off the commands' path — can afford; the entries cannot be cut as a range,
+// because they are keyed by task and not by position.
+func (t *Tx) dropTaskEnds(partition uint16, through uint64) error {
+	iter, err := t.b.NewIter(&pebble.IterOptions{
+		LowerBound: feedRowPrefix(partition),
+		UpperBound: keyFeedRow(partition, through+1),
+	})
+	if err != nil {
+		return err
+	}
+	var ends []uint64
+	for iter.First(); iter.Valid(); iter.Next() {
+		raw := iter.Value()
+		// The kind, the time, the definition, then the job's key: see PutFeedTask.
+		if len(raw) < 25 || !feedEndsTask(FeedKind(raw[0])) {
+			continue
+		}
+		ends = append(ends, binary.BigEndian.Uint64(raw[17:25]))
+	}
+	if err := iter.Close(); err != nil {
+		return err
+	}
+	for _, jobKey := range ends {
+		if err := t.b.Delete(keyFeedTaskEnd(partition, jobKey), nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func decodeFeedRow(partition uint16, key, raw []byte) (FeedEntry, error) {
@@ -256,6 +319,34 @@ func (q queries) FeedAfter(partition uint16, after uint64, fn func(FeedEntry) er
 		}
 		return fn(e)
 	})
+}
+
+// FeedTaskEnd is the row that ended the user task with this job key — completed or
+// cancelled — and whether the feed still holds it (ADR-0512 §2). A task still open,
+// one that never existed, and one whose end the retention has pruned are all "not
+// held"; so is one that ended before this index existed, whose row was written
+// without an entry.
+func (q queries) FeedTaskEnd(partition uint16, jobKey uint64) (FeedEntry, bool, error) {
+	raw, ok, err := getCopy(q.r, keyFeedTaskEnd(partition, jobKey))
+	if err != nil || !ok {
+		return FeedEntry{}, false, err
+	}
+	if len(raw) != 8 {
+		return FeedEntry{}, false, fmt.Errorf("state: corrupt task end entry (%d bytes)", len(raw))
+	}
+	key := keyFeedRow(partition, binary.BigEndian.Uint64(raw))
+	row, ok, err := getCopy(q.r, key)
+	if err != nil || !ok {
+		return FeedEntry{}, false, err
+	}
+	e, err := decodeFeedRow(partition, key, row)
+	if err != nil {
+		return FeedEntry{}, false, err
+	}
+	if !feedEndsTask(e.Kind) || e.TaskKey != jobKey {
+		return FeedEntry{}, false, fmt.Errorf("state: task end entry of %d names a row about %d", jobKey, e.TaskKey)
+	}
+	return e, true, nil
 }
 
 // FeedPrunedThrough is the position partition's feed was pruned through, or 0 when

@@ -682,6 +682,23 @@ page as on the Console's sign-in, and comes back to the same request to approve 
 Registering a client is not the same as being able to use it: an application may
 *ask*, and only a person can say yes.
 
+#### Connecting another system
+
+A system such as a wiki that shows atlas's processes and mirrors people's tasks does not
+need a client entered here, nor API tokens copied into its environment: an administrator
+starts the connection in that system and approves it on atlas's consent screen, choosing
+what it may read — `diagrams`, `tasklist`, `events`, each optionally narrowed to projects
+— and whether its people may connect without a consent screen of their own
+([ADR-0512](adr/0512-connected-systems.md)). The system names itself by the URL of a
+document it publishes and signs its token requests with a key from it, so no secret
+exists to copy. **Console → Administration → Connected systems** lists the connected
+systems and disconnects them; each person sees theirs under **Connected accounts**.
+
+atlas reads that document from public addresses only. A system inside the same network
+needs `--client-metadata-allow-private` (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`); the
+read uses no outbound proxy. What a system implements is in
+[Connecting a system to atlas](integrations/connected-systems.md).
+
 #### Letting connectors register themselves
 
 If entering each client by hand is more ceremony than you want, `--oauth-dynamic-registration`
@@ -795,6 +812,98 @@ the Go workers either way; give the server an exception there.
 not the Windows PowerShell 5.1 that ships with the OS. Install it separately if
 you need them, or start with `--powershell=false`.
 
+### 4. Upgrade a service the script installed
+
+Run `install-atlas-service.ps1` again, in an elevated PowerShell. Where a service of
+that name exists and points at the script's wrapper
+(`<InstallRoot>\service\<ServiceName>-service.exe`), the script switches to update mode.
+It then does these steps in this order:
+
+1. It tries the new `atlas.exe` in the foreground with a throw-away data directory
+   while the old service keeps running (skip with `-SkipSmokeTest`).
+2. It stops the service.
+3. It copies the data directory to `<InstallRoot>\backup\data-<yyyyMMdd-HHmmss>`, with
+   `config\vault.key` if there is one (skip with `-SkipBackup`). Old backups are never
+   deleted.
+4. It replaces `<InstallRoot>\bin\atlas.exe`, but only if the new file differs from it.
+5. It **rewrites the WinSW configuration from the parameters of this run** and starts
+   the service again.
+
+Step 5 is the trap. The script does not read the old configuration back: every start
+parameter you gave at installation has to be given again. A parameter you leave out
+falls back to its default. Leave out `-Addr`, `-TlsCert` and `-TlsKey` on a server
+installed with TLS on `:8443`, and the service comes back on `http://127.0.0.1:8080`.
+A non-local `-Addr` without its certificate stops the script before anything has been
+changed. A loopback address does not. Before the upgrade, read the current start line
+from the configuration and repeat it:
+
+```powershell
+Select-String -Path D:\atlas\service\atlas-service.xml -Pattern '<arguments>'
+```
+
+Then unpack the release next to the installation and point the script at the binary.
+The archive holds a folder `atlas_<version>_windows_amd64`, so the binary is one level
+down:
+
+```powershell
+$Version = '0.22.0'
+$Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
+$Dir  = "D:\atlas\releases\$Version"
+New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile "$Dir\atlas.zip"
+Invoke-WebRequest "$Base/SHA256SUMS" -OutFile "$Dir\SHA256SUMS"
+$expected = (Select-String -Path "$Dir\SHA256SUMS" -Pattern "atlas_${Version}_windows_amd64.zip").Line.Split(' ')[0]
+if ($expected -ne (Get-FileHash "$Dir\atlas.zip" -Algorithm SHA256).Hash.ToLower()) { throw "checksum mismatch - do not use this download" }
+Expand-Archive "$Dir\atlas.zip" -DestinationPath $Dir
+
+# Local only, as installed with the defaults:
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe"
+
+# TLS in the binary: the script's own copies under config\ can be named directly.
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe" `
+    -Addr ':8443' -TlsCert D:\atlas\config\tls.crt -TlsKey D:\atlas\config\tls.key `
+    -ExternalUrl 'https://atlas.example.ch:8443'
+
+# Behind IIS/ARR:
+.\install-atlas-service.ps1 -AtlasExe "$Dir\atlas_${Version}_windows_amd64\atlas.exe" `
+    -ExternalUrl 'https://atlas.example.ch'
+```
+
+If the script itself was downloaded, unblock it first
+(`Unblock-File .\install-atlas-service.ps1`) or start it with
+`powershell -ExecutionPolicy Bypass -File .\install-atlas-service.ps1 …`.
+
+What each parameter does in update mode:
+
+| Parameter | In update mode |
+| --- | --- |
+| `-InstallRoot`, `-ServiceName` | **Repeat** if not the defaults (`D:\atlas`, `atlas`). With another `-ServiceName` the script takes the run for a new installation. It stops there only if an `atlas.exe` is running. With another `-InstallRoot` it finds the service, sees that it points elsewhere, and stops. |
+| `-DataDir` | **Repeat** if not the default. The default is `<InstallRoot>\data`, or an existing `<InstallRoot>\atlas-data` when `data` does not exist. |
+| `-AtlasExe` | The new binary. **Recommended always.** |
+| `-Version` | Downloads and verifies a release, but only when no `atlas.exe` is found under `-InstallRoot`. That search skips `bin`, `data`, `backup`, `service`, `logs` and `config`, and takes the newest file. After one installation a `releases\<old>\atlas.exe` is usually there, so `-Version` alone silently keeps the old binary. Use `-AtlasExe`. |
+| `-Addr`, `-TlsCert`, `-TlsKey`, `-ExternalUrl`, `-AllowPlaintext` | **Repeat.** They are written into the configuration again. |
+| `-ExtraArgs`, `-KeepAllInterpreters` | **Repeat** if you used them. The `--powershell`/`--python`/`--javascript=false` flags are worked out again from the machine `PATH` on every run. |
+| `-OpenFirewall`, `-FirewallProfile` | Optional. Without them the existing rule stays as it is. With them it is recreated for the port in `-Addr`, which is needed when the port changes. |
+| `-DefenderExclusion` | Optional. An existing exclusion stays. |
+| `-AdminUsername`, `-AdminPassword` | Ignored. The script seeds an administrator only while the user store is empty. |
+| `-VaultKeyMode` | Leave out. An existing `config\vault.key` is detected and kept. `File` on an installation whose key is `data\vault.key` stops the script. |
+| `-WinSWPath`, `-WinSWUrl`, `-WinSWSha256` | Ignored. The wrapper under `service\` is kept. |
+| `-ReadyTimeoutSec` | How long to wait for `recovery is complete` after the start (default 300 s). Raise it for a large data directory. |
+| `-SkipSmokeTest`, `-SkipBackup` | Leave out. |
+
+At the end the script prints the version now running. `Get-Content
+D:\atlas\service\atlas-service.xml` shows the configuration it wrote.
+
+**Going back.** Downgrading over newer data is not supported (see
+[Upgrading](#upgrading)). The script does not keep the previous binary. It stays only
+where you unpacked it, for instance `D:\atlas\releases\<old version>`. To go back:
+
+1. Stop the service.
+2. Replace the data directory with the backup from step 3. If the backup holds a
+   folder `_config`, that is the copy of `config\vault.key`: put it back under
+   `config\`, not into the data directory.
+3. Run the script with `-AtlasExe` pointing at the old binary and `-SkipBackup`.
+
 ## macOS
 
 `darwin_amd64` and `darwin_arm64` builds are published. Installation is the same
@@ -823,6 +932,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
+| `--client-metadata-allow-private` | `false` | Let atlas read a connected system's client ID metadata document from a private, loopback or link-local address ([ADR-0512](adr/0512-connected-systems.md)). Off by default: anyone can send an authorization request naming a URL, so with this on anyone could make atlas send a GET to a host inside its network. For a connected system that runs beside atlas in one network. Also `ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on` |
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
@@ -944,6 +1054,10 @@ away.
 | `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` | 300 | How many requests one address may make at once to the OAuth token and revocation endpoints — enough for a server-side client, such as a wiki, to renew all its people's tokens after its own restart |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` | 10 | How many of those requests per second the address earns back |
+| `ATLAS_LIMIT_CLIENT_METADATA` | 64 KiB | How much of a connected system's client ID metadata document atlas reads ([ADR-0512](adr/0512-connected-systems.md)) |
+| `ATLAS_LIMIT_CLIENT_METADATA_SECONDS` | 5 | How long atlas waits for that document before it tells the person on the consent screen that it could not be read |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_BURST` | 10 | How many such documents atlas reads from one host at once — a document is cached, so a working system needs one read an hour |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_RATE` | 1 | How many of those reads per second the host earns back |
 
 `TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
 hundred thousand iterations are a hundred thousand tokens taking one step each, which
@@ -1332,6 +1446,9 @@ journalctl -u atlas -n 50
 
 Downgrading is not supported: a newer build may have written state an older one
 cannot read. Restore the backup instead.
+
+On Windows, with the service installed by `install-atlas-service.ps1`, follow
+[Upgrade a service the script installed](#4-upgrade-a-service-the-script-installed).
 
 ## Uninstalling
 

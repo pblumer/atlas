@@ -140,6 +140,21 @@ func Open(dir string, opts ...Option) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("state: backfill element-token index: %w", err)
 	}
+	// The scope-trigger index (#1494) is later again. A missing entry would leave an
+	// armed event-subprocess trigger un-disarmed when its scope completes — not
+	// merely unlisted — so it is seeded once from the live triggers before the
+	// processor reads it.
+	if err := s.backfillScopeTriggerIndexIfNeeded(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: backfill scope-trigger index: %w", err)
+	}
+	// MI history was introduced after the existing replay trail. Only a
+	// provably empty store may advertise the v1 projection as complete;
+	// an upgraded store retains an absent marker until audited migration.
+	if err := s.initializeMIHistoryIndexReadiness(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("state: MI history index readiness: %w", err)
+	}
 	return s, nil
 }
 
@@ -1109,6 +1124,42 @@ func (s *Store) backfillElementTokenIndexIfNeeded() error {
 		return err
 	}
 	return b.Commit(pebble.Sync)
+}
+
+const metaScopeTriggerIndexV1 = "scope_trigger_index_v1"
+
+// backfillScopeTriggerIndexIfNeeded seeds the scope-trigger index from the armed
+// event-subprocess triggers a store already holds, the first time it gains that
+// index, then records that it has done so. The index is a function of the live
+// element instances alone — a trigger is live exactly while its record is — so the
+// records it is seeded from are complete by construction; no history is needed.
+//
+// One scan of the element-instance family, written with the marker in a single
+// atomic, synced batch, like the element-token index: a crash leaves nothing and
+// the next open re-runs it.
+func (s *Store) backfillScopeTriggerIndexIfNeeded() error {
+	if _, ok, err := getCopy(s.db, keyMeta(metaScopeTriggerIndexV1)); err != nil || ok {
+		return err
+	}
+	b := s.db.NewBatch()
+	defer b.Close()
+	err := s.scanPrefix([]byte{byte(cfElementInstance)}, func(k, raw []byte) error {
+		v, err := model.DecodeValue(model.VTElementInstance, raw)
+		if err != nil {
+			return err
+		}
+		if ei := v.(*model.ElementInstanceValue); ei.BpmnElementType == EventSubTriggerType {
+			return b.Set(keyScopeTrigger(ei.FlowScopeKey, trailingKey(k)), nil, nil)
+		}
+		return nil
+	})
+	if err == nil {
+		err = b.Set(keyMeta(metaScopeTriggerIndexV1), []byte{1}, nil)
+	}
+	if err == nil {
+		err = b.Commit(pebble.Sync)
+	}
+	return err
 }
 
 // InjectCorruptProcessInstance writes an undecodable record under a process

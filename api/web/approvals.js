@@ -95,8 +95,9 @@ function approvalCard(a, ctx) {
   </div>`;
 }
 
+// Each section folds under its heading (fold-topic, fold.js), remembered by its id.
 function section(id, title, intro, items, empty, ctx) {
-  return `<section id="${id}" style="margin-top:22px">
+  return `<section id="${id}" class="fold-topic" style="margin-top:22px">
     <h2>${esc(title)}</h2>
     <p class="muted">${esc(intro)}</p>
     ${items.map((a) => approvalCard(a, ctx)).join("") || `<p class="muted" data-empty>${esc(empty)}</p>`}

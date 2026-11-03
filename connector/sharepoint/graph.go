@@ -78,6 +78,9 @@ func (c *GraphClient) Do(ctx context.Context, req Request) (any, error) {
 		return nil, err
 	}
 	op, spec, path := p.op, p.spec, p.path
+	if op == OpGetSite {
+		return c.getSite(ctx, op, req.Site)
+	}
 	site, err := c.siteBase(ctx, op, req.Site)
 	if err != nil {
 		return nil, err
@@ -292,6 +295,71 @@ func (c *GraphClient) getFile(ctx context.Context, op, drive string, path cleane
 	return file, nil
 }
 
+// siteSelect is what get-site reads of a site: who it is and where it lives. Nothing
+// else of Graph's site resource is a fact a process decides on.
+const siteSelect = "id,name,displayName,description,webUrl,createdDateTime,lastModifiedDateTime"
+
+// getSite reads a site and the storage its default library reports. A site that is not
+// there answers exists=false rather than failing, for the reason get-file does: the
+// question asked is whether it is there.
+//
+// The storage is the default drive's quota. For a SharePoint site Graph reports the
+// site's own storage there — used, total and remaining, in bytes — which is what a
+// site's quota means to the person who ordered it. That reading is Microsoft's
+// documentation of the drive resource and has not been checked against a tenant; a
+// site without a default library answers without a quota rather than failing.
+func (c *GraphClient) getSite(ctx context.Context, op, raw string) (any, error) {
+	ref := strings.TrimSpace(raw)
+	host, path, isID := parseSite(ref)
+	endpoint := c.baseURL + "/sites/"
+	if isID {
+		endpoint += escapeSiteID(ref)
+	} else {
+		endpoint += url.PathEscape(host)
+		if path != "" {
+			endpoint += ":" + escapeSegments(path)
+		}
+	}
+	r, err := c.send(ctx, op, http.MethodGet, endpoint+"?$select="+odataEscape(siteSelect), nil, "", "")
+	if err != nil {
+		return nil, err
+	}
+	if r.status == http.StatusNotFound {
+		return map[string]any{"exists": false, "site": ref}, nil
+	}
+	if !r.ok() {
+		return nil, graphFailure(op, http.MethodGet, r)
+	}
+	answer, err := decodeAnswer(op, r)
+	if err != nil {
+		return nil, err
+	}
+	site, _ := answer.(map[string]any)
+	id, _ := site["id"].(string)
+	if id == "" {
+		return nil, fmt.Errorf("sharepoint: %s: reading the site %q answered with no site id", op, ref)
+	}
+	dr, err := c.send(ctx, op, http.MethodGet, c.baseURL+"/sites/"+escapeSiteID(id)+"/drive?$select=quota", nil, "", "")
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case dr.status == http.StatusNotFound:
+		site["quota"] = nil
+	case !dr.ok():
+		return nil, fmt.Errorf("%w (reading the site's storage)", graphFailure(op, http.MethodGet, dr))
+	default:
+		drive, err := decodeAnswer(op, dr)
+		if err != nil {
+			return nil, err
+		}
+		d, _ := drive.(map[string]any)
+		site["quota"] = d["quota"]
+	}
+	site["exists"] = true
+	return site, nil
+}
+
 // listFolder reads one page of what a folder holds — the library's top level when the
 // task names no path.
 func (c *GraphClient) listFolder(ctx context.Context, op, drive string, path cleanedPath, req Request) (any, error) {
@@ -417,7 +485,7 @@ func prepare(req Request) (prepared, error) {
 		return prepared{}, fmt.Errorf("sharepoint: %s has no itemId", op)
 	}
 	p := prepared{op: op, spec: spec}
-	if !spec.NeedsList {
+	if spec.NeedsPath || spec.TakesPath {
 		path, err := cleanPath(op, req.Path, spec.TakesPath && !spec.NeedsPath)
 		if err != nil {
 			return prepared{}, err

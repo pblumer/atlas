@@ -1,0 +1,42 @@
+# Operations History at Scale (OHS) delivery programme
+
+**Programme ID:** OHS.  
+**Baseline:** `pblumer/atlas` main, 2026-11-01.  
+**Strategic tracks:** Milestone 4 (Operability) and Milestone S (Operations UI).  
+**Owner:** pblumer (feature scope approved 2026-11-01).  
+**Source issue:** [#1481](https://github.com/pblumer/atlas/issues/1481).  
+**Operational status:** [programme manifest](../programs/ohs/program.json).
+
+## Outcome
+
+An operator can understand a process containing 50,000 multi-instance iterations without opening 50,000 rows, find a specific iteration, and inspect only that iteration's durable input/output, incidents, decisions and causal replay. The grouped overview is the normal representation at *any* MI cardinality.
+
+## Decisions and invariants
+
+- Existing [ADR-0077](../adr/0077-multi-instance-activities.md) defines MI body and inner execution. [ADR-0065](../adr/0065-multi-token-process-replay.md) defines durable token lineage; [ADR-0046](../adr/0046-single-process-step-replay.md) defines step history.
+- The initial UI grouping uses those existing facts only. Repeated or nested bodies may not be identified by BPMN element id alone. Older records without sufficient lineage remain ungrouped rather than incorrectly attributed.
+- The later bounded query API needs its own [draft decision](../adr/0517-scalable-instance-replay.md) before implementation.
+- I1/I3/I4/I6: no hot-path allocations, no data-dependent scans on the single-writer loop, one deterministic applier, and no fabricated facts. A grouped display is not aggregated execution or a new BPMN semantic.
+- The full timeline endpoint is currently unbounded, so OHS1 explicitly **does not** claim suitability for 50,000 iterations. The upper bound becomes a hard acceptance condition of OHS2/OHS3.
+
+## Vertical delivery slices
+
+### OHS1 – Default grouped History
+
+A replay displays a single collapsed row per uniquely identified multi-instance body, with iteration count and individual round navigation on expansion. It uses an additive parent-token field in the existing timeline, no new state or persistence. E2E tests verify distinct bodies and expansion. Limitation: the API and frames are still fully materialized.
+
+### OHS2 – Bounded iteration discovery
+
+Introduce a read-only, cursor-paged API to discover body groups and find iterations by exact iteration number, element-instance key, state and incident. Use off-writer snapshot reads, bounded results (e.g. 100) and a sound grouping index if necessary. Provide a usable search/next-page UI. Acceptance: 50,000 iterations do not cause an unbounded initial payload or writer stall. New index only through deterministic event-derived state with recovery tests.
+
+*Status 2026-11-02.* Built: the event-derived index (schema v2: loopCounter order, lifecycle-state and incident families, write-only body counters, nested-body parents; fail-closed readiness) and the read API in `api/mihistory` — body executions, one body, iteration pages with `state`, `incidents`, `iteration`, `from` and `elementInstanceKey`, one iteration's incidents and nested bodies — with signed, filter-bound cursors and a frozen high-water position, plus MCP tools. Evidence: `api/mihistory/acceptance_test.go` (50,000 iterations through the full server; every read bounded by its page, jump to 37,421 examines 100 index keys, identical answers after WAL replay) and `engine/miindex_v2_recovery_test.go`. The Operations Multi-Instance Explorer and a timeline-free view for large instances followed (`api/web/mi-explorer.js`, `e2e/mi-explorer.spec.mjs`). A bounded instance outline then gave that view the instance's own steps (`cfOutline`, `GET /api/v1/instances/{key}/outline`). Open in OHS2: a verified rebuild for stores written before index v2 (they answer `history_unavailable`), and [Issue #1494](https://github.com/pblumer/atlas/issues/1494) — completing parallel MI *subprocess* iterations was quadratic in the engine; a per-scope trigger index makes it linear (ADR-0082 amendment).
+
+### OHS3 – Scalable detail replay
+
+Load the selected iteration's causal replay window and its exact inputs, outputs, decisions, incidents and variables without materializing every frame/snapshot for the full process. Confirm semantics for nested MI, migration, terminated rounds, retention purge, parallel branches, and backwards compatibility. Test with a 50,000-iteration fixture and report memory/latency/writer responsiveness before merge.
+
+*Status 2026-11-02.* Built: one iteration's recorded scope variables and attributed DMN decisions in the iteration detail (increment 1), and its replay window (increment 2): the steps inside one iteration (`cfIterationStep`, own readiness marker, covered by the startup rebuild), `GET …/iterations/{iterationKey}/steps`, MCP `atlas_multi_instance_iteration_steps`, and a step-by-step replay on the diagram in the explorer. Evidence: `state/outline_test.go` (nested, parallel and terminated iterations, purge, older hidden rows), `engine/miindex_v2_recovery_test.go` (identical steps after WAL replay), `api/mihistory/acceptance_test.go` (replay window of iteration 37,421 at 50,000 iterations), `e2e/mi-explorer.spec.mjs`. Increment 3 then added the variables of the iteration's own scopes as they stood at each step (`GET …/iterations/{iterationKey}/variables?at=`, MCP `atlas_multi_instance_iteration_variables`, shown under the replay window; 519 bytes / 0.9 ms at 50,000 iterations). Open: the body's and the instance's variables at a step, collapsed-subprocess planes, job/user-task history per iteration, per-instance readiness for compacted logs.
+
+## Release and gates
+
+Each slice uses TDD, Playwright tests where the UI changes, the mandatory Go checks, review, and programme handoff. An implementation is not complete simply because its PR merges. Do not claim the 50,000-iteration user experience until OHS3 is independently verified.

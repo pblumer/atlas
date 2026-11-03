@@ -55,9 +55,9 @@ test("a mockup's lists, libraries and journal are shown, and a refusal stands ou
   await page.evaluate((f) => window.render(f), fixture);
   const card = page.locator('[data-worker="intranet"]');
   await expect(card.locator("h2")).toHaveText("intranet");
-  await expect(card.locator(".admock-card-head .muted")).toContainText("1 site");
-  await expect(card.locator(".admock-card-head .muted")).toContainText("2.0 KiB");
-  await expect(card.locator(".admock-card-head .muted")).toContainText("1 refused");
+  await expect(card.locator(".admock-head > .muted")).toContainText("1 site");
+  await expect(card.locator(".admock-head > .muted")).toContainText("2.0 KiB");
+  await expect(card.locator(".admock-head > .muted")).toContainText("1 refused");
   await expect(card.locator("h3")).toHaveText("https://contoso.sharepoint.com/sites/verwaltung");
 
   // A list: id first, then its columns; text as text (escaped), a number as JSON, a

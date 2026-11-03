@@ -1,0 +1,14 @@
+# Provider plugins and local state - the state holds every generated credential.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Generated worker configuration, certificates and the SSH key (mode 0600, credentials).
+out/
+
+# The real variable values name the tenant; keep only the example in git.
+terraform.tfvars
+*.auto.tfvars

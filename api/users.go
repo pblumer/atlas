@@ -206,7 +206,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": nil})
 		return
 	}
-	httpapi.JSON(w, http.StatusOK, map[string]any{"authEnabled": s.authEnabled, "user": meOf(u, groups)})
+	out := map[string]any{"authEnabled": s.authEnabled, "user": meOf(u, groups)}
+	// A connected system reading who it is learns what was approved for it, and by
+	// whom (ADR-0512 §3).
+	if g, ok := s.systemGrantOf(r); ok {
+		out["system"] = s.systemView(g)
+	}
+	httpapi.JSON(w, http.StatusOK, out)
 }
 
 // meUser is who am I's answer: the account's public record and the groups it is a

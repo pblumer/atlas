@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas delivery report e2e harness</title>
+    <!-- Drives the real api/web/deliveryreport.js card against a mock api
+         (ADR-0515): what the product manager's
+         dashboard draws from the delivery report, which period it asks for, and the
+         CSV link beside it. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div id="view"></div>
+    <script type="module">
+      import { deliveryCard, wireDelivery } from "/deliveryreport.js";
+      window.__calls = [];
+      window.__answer = null;
+      const api = async (method, url) => {
+        window.__calls.push(method + " " + url);
+        if (window.__answer instanceof Error) throw window.__answer;
+        return window.__answer;
+      };
+      window.__mount = (answer) => {
+        window.__answer = answer;
+        window.__calls = [];
+        const view = document.getElementById("view");
+        view.innerHTML = deliveryCard();
+        wireDelivery({ api, view });
+      };
+      window.__ready = true;
+    </script>
+  </body>
+</html>

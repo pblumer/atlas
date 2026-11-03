@@ -248,7 +248,10 @@ var productFieldControls = map[string]string{
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
 	"price":              `name="price"`,
-	"lifecycleProcess":   `procSelect("lifecycleProcess", v.lifecycleProcess)`,
+	// The delivery promise (ADR-0515): a name,
+	// the working days and a name per declared language, drawn by one helper.
+	"serviceLevel":     `serviceLevelField(v.serviceLevel, langs)`,
+	"lifecycleProcess": `procSelect("lifecycleProcess", v.lifecycleProcess)`,
 	// The legacy operation map and the actions are one grid: a product that still
 	// carries the map opens as the actions it means and is saved as actions
 	// (ADR-0429), so both fields are proved by the grid being given the product.
@@ -261,6 +264,8 @@ var productFieldControls = map[string]string{
 	// the helper being given it. Named here ahead of the record field, which lands
 	// on its own; this entry is what keeps the guard green when it does.
 	"commandedBy": `commandedByField(apps, v.commandedBy)`,
+	// And which may order it (ADR-0520), with the same picker.
+	"orderableBy": `orderableByField(apps, v.orderableBy)`,
 	// The two headings are one row of per-language boxes each, and that row
 	// maintains the key and the wordings together — the first box that has
 	// anything in it is the key. So both the key and its wordings are proved by

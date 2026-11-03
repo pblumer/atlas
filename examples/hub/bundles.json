@@ -1,0 +1,64 @@
+{
+  "bundles": [
+    {
+      "id": "einstieg",
+      "name": "Beispiele: Einstieg",
+      "tags": ["einstieg"],
+      "examples": ["pruefe-auftrag", "cart-total", "order-fulfillment", "bonitaet-mockup", "reisestorno", "blick-schlagzeilen", "hypothekarzinsen"]
+    },
+    {
+      "id": "auftrag-finanzen",
+      "name": "Beispiele: Auftrag & Finanzen",
+      "tags": ["auftrag", "finanzen"],
+      "examples": ["mahnwesen", "preisaenderung", "produkt-erfassung", "order-to-cash", "pruefe-datensaetze"]
+    },
+    {
+      "id": "personal",
+      "name": "Beispiele: Personal & Mitarbeitende",
+      "tags": ["personal"],
+      "examples": ["umzug", "pruefung", "reisebuchung", "arbeitsplatz"]
+    },
+    {
+      "id": "umsysteme",
+      "name": "Beispiele: Umsysteme",
+      "tags": ["umsysteme"],
+      "examples": ["google-sheets-antragseingang", "jira-zugangsantrag", "jira-ticket-eingang", "mssql-eintrittsmeldung", "sharepoint-fallakte"]
+    },
+    {
+      "id": "identitaet",
+      "name": "Beispiele: Identität & Verzeichnis",
+      "tags": ["identitaet", "verzeichnis"],
+      "examples": ["ad-gruppenzuweisung", "galsync", "entra-team-onboarding", "entra-rezertifizierung", "entra-delta-sync", "entra-verzeichnis-abgleich", "bestandsaufnahme", "rezertifizierung", "befristung", "erinnerung", "unvereinbarkeit", "abgleich", "exchange-austritt", "entra-onboarding-selfservice", "entra-benutzerauswahl", "account-bestellung", "identitaet-lebenszyklus"]
+    },
+    {
+      "id": "bewerbermanagement",
+      "tags": ["handbuch", "werkstatt", "personal"],
+      "examples": ["bewerbermanagement"]
+    },
+    {
+      "id": "mitarbeitereintritt",
+      "tags": ["handbuch", "leitfall", "personal"],
+      "examples": ["lehrgang"]
+    },
+    {
+      "id": "onboarding-tutorial",
+      "tags": ["handbuch", "tutorial", "einstieg"],
+      "examples": ["onboarding"]
+    },
+    {
+      "id": "verwaltung-dienstleistungen",
+      "tags": ["verwaltung"],
+      "examples": ["verwaltung-dienstleistungen"]
+    },
+    {
+      "id": "m365-dienste",
+      "tags": ["m365"],
+      "examples": ["m365-dienste"]
+    },
+    {
+      "id": "ad-dienste",
+      "tags": ["active-directory"],
+      "examples": ["ad-dienste"]
+    }
+  ]
+}

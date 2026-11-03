@@ -801,18 +801,35 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		refOwner[rec.ID] = rec
 	}
 
+	// An artifact belongs to another application only while that application exists:
+	// one whose application was deleted without purge keeps the id it was tagged with
+	// but reads as Ungrouped (ADR-0034), and an import takes it as it takes any other
+	// Ungrouped artifact. Without this, deleting an imported application left its
+	// processes, forms and decisions blocking every later import of the same package.
+	existing := make(map[string]bool, len(all))
+	for _, p := range all {
+		existing[p.ID] = true
+	}
+	ownedElsewhere := func(projectID string) bool {
+		return projectID != "" && projectID != app.ID && existing[projectID]
+	}
+	// ungrouped is an artifact filed nowhere: never in an application, or in one
+	// that no longer exists. The import files it into this application.
+	ungrouped := func(projectID string) bool {
+		return projectID == "" || (projectID != app.ID && !existing[projectID])
+	}
 	for _, p := range man.Processes {
-		if d, ok := draftOwner[p.ID]; ok && d.ProjectID != "" && d.ProjectID != app.ID {
+		if d, ok := draftOwner[p.ID]; ok && ownedElsewhere(d.ProjectID) {
 			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("process %q already belongs to another application", p.ID)}
 		}
 	}
 	for _, f := range man.Forms {
-		if rec, ok := formOwner[f.ID]; ok && rec.ProjectID != "" && rec.ProjectID != app.ID {
+		if rec, ok := formOwner[f.ID]; ok && ownedElsewhere(rec.ProjectID) {
 			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("form %q already belongs to another application", f.ID)}
 		}
 	}
 	for _, d := range man.Decisions {
-		if rec, ok := refOwner[d.ID]; ok && rec.ProjectID != "" && rec.ProjectID != app.ID {
+		if rec, ok := refOwner[d.ID]; ok && ownedElsewhere(rec.ProjectID) {
 			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("decision %q already belongs to another application", d.ID)}
 		}
 	}
@@ -849,19 +866,19 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		d, ok := draftOwner[p.ID]
 		note("process:"+p.ID, p.Name, ok,
 			importplan.Hash([]byte(d.Name), newlineTerminated([]byte(d.XML))),
-			importplan.Hash([]byte(p.Name), newlineTerminated(byPath[p.Path])), ok && d.ProjectID == "")
+			importplan.Hash([]byte(p.Name), newlineTerminated(byPath[p.Path])), ok && ungrouped(d.ProjectID))
 	}
 	for _, f := range man.Forms {
 		rec, ok := formOwner[f.ID]
 		note("form:"+f.ID, f.Name, ok,
 			importplan.Hash([]byte(rec.Name), newlineTerminated([]byte(rec.Schema))),
-			importplan.Hash([]byte(f.Name), newlineTerminated(byPath[f.Path])), ok && rec.ProjectID == "")
+			importplan.Hash([]byte(f.Name), newlineTerminated(byPath[f.Path])), ok && ungrouped(rec.ProjectID))
 	}
 	for _, d := range man.Decisions {
 		rec, ok := refOwner[d.ID]
 		note("decision:"+d.ID, d.Name, ok,
 			importplan.Hash([]byte(rec.Name), []byte(rec.ModelRef)),
-			importplan.Hash([]byte(d.Name), []byte(d.ModelRef)), ok && rec.ProjectID == "")
+			importplan.Hash([]byte(d.Name), []byte(d.ModelRef)), ok && ungrouped(rec.ProjectID))
 	}
 	models, err := s.planSourceModels(man, byPath)
 	if err != nil {
