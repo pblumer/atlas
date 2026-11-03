@@ -60,7 +60,7 @@ time that is frozen into the order line and reported on per period, line manager
 catalogue's customer responsibles see what their people hold, and the catalogue app finds
 the wiki's pages as building blocks
 ([ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md)). `atlas hub build`
-publishes the examples as ten signed packages by theme, a registry key rotates with two
+publishes the examples as eleven signed packages by theme, a registry key rotates with two
 keys pinned at once, a new key is announced through one verifiable channel, and an
 agent installs a release over MCP as the Console does
 ([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment). An OpenTofu
@@ -136,7 +136,8 @@ What changes on disk, and going back:
     a `recipient` instead of an order and a position, when it reloads the deployed
     models, and a deployed model it cannot reload stops it from starting. Delete every
     deployed version that uses either — the M365 example's `hr-eintritt` process uses
-    both — before going back. The atlas hub package `m365-dienste` 1.0.4 requires 0.22.0.
+    both — before going back. The atlas hub package `m365-dienste` requires 0.22.0 from 1.0.3
+    on, so the registry offers a 0.21.0 server nothing newer than 1.0.2.
   - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
     same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
     event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
