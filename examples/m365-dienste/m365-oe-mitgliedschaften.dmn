@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  M365OeMitgliedschaften: in welche Teams, Microsoft-365-Gruppen und Verteiler eine Person ihrer
+  Organisationseinheit wegen gehört.
+
+  Eingabe:  oe (Kürzel der Organisationseinheit, wie es das HR-System meldet; Gross- und Kleinschreibung zählt nicht)
+  Ausgaben: teams (Objekt-IDs der Gruppen der Teams in Entra ID), gruppen (Objekt-IDs von Microsoft-365- oder
+            Sicherheitsgruppen), verteiler (Alias der Verteilerlisten in Exchange), unbekannt (die Tabelle kennt die
+            Organisationseinheit nicht), bezeichnung
+
+  Die IDs und Listen sind Beispiele (ANNAHME) und vor dem Einsatz durch die des eigenen Tenants zu ersetzen. Eine
+  unbekannte Organisationseinheit erhält leere Listen und unbekannt = true; der Prozess legt sie dann
+  M365-Administration vor, statt still nichts zu tun (Auffangregel).
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_M365OeMitgliedschaften" name="M365OeMitgliedschaften" namespace="http://atlas/dmn">
+  <inputData id="id_oe" name="oe"/>
+  <decision id="M365OeMitgliedschaften" name="M365OeMitgliedschaften">
+    <informationRequirement id="ir_oe"><requiredInput href="#id_oe"/></informationRequirement>
+    <decisionTable id="dt_M365OeMitgliedschaften" hitPolicy="FIRST">
+      <input id="in_oe" label="oe"><inputExpression id="ie_oe" typeRef="string"><text>upper case(oe)</text></inputExpression></input>
+      <output id="out_teams" label="teams" name="teams"/>
+      <output id="out_gruppen" label="gruppen" name="gruppen"/>
+      <output id="out_verteiler" label="verteiler" name="verteiler"/>
+      <output id="out_unbekannt" label="unbekannt" name="unbekannt" typeRef="boolean"/>
+      <output id="out_bezeichnung" label="bezeichnung" name="bezeichnung" typeRef="string"/>
+      <rule id="r1">
+        <description>Finanzen: Team der Abteilung, Gruppe Buchhaltung, Verteiler der Abteilung</description>
+        <inputEntry id="r1_i0"><text>"FIN"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>["11111111-0000-4000-8000-00000000f101"]</text></outputEntry>
+        <outputEntry id="r1_o1"><text>["11111111-0000-4000-8000-00000000f102"]</text></outputEntry>
+        <outputEntry id="r1_o2"><text>["vl-fin-alle"]</text></outputEntry>
+        <outputEntry id="r1_o3"><text>false</text></outputEntry>
+        <outputEntry id="r1_o4"><text>"Finanzen"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Personal: Team der Abteilung und Verteiler der Abteilung</description>
+        <inputEntry id="r2_i0"><text>"HR"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>["11111111-0000-4000-8000-00000000a101"]</text></outputEntry>
+        <outputEntry id="r2_o1"><text>[]</text></outputEntry>
+        <outputEntry id="r2_o2"><text>["vl-hr-alle"]</text></outputEntry>
+        <outputEntry id="r2_o3"><text>false</text></outputEntry>
+        <outputEntry id="r2_o4"><text>"Personal"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Informatik: zwei Teams, eine Sicherheitsgruppe, zwei Verteiler</description>
+        <inputEntry id="r3_i0"><text>"IT"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>["11111111-0000-4000-8000-00000000b101", "11111111-0000-4000-8000-00000000b102"]</text></outputEntry>
+        <outputEntry id="r3_o1"><text>["11111111-0000-4000-8000-00000000b103"]</text></outputEntry>
+        <outputEntry id="r3_o2"><text>["vl-it-alle", "vl-it-betrieb"]</text></outputEntry>
+        <outputEntry id="r3_o3"><text>false</text></outputEntry>
+        <outputEntry id="r3_o4"><text>"Informatik"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Verkauf: Team der Abteilung, kein Verteiler</description>
+        <inputEntry id="r4_i0"><text>"VERK"</text></inputEntry>
+        <outputEntry id="r4_o0"><text>["11111111-0000-4000-8000-00000000c101"]</text></outputEntry>
+        <outputEntry id="r4_o1"><text>[]</text></outputEntry>
+        <outputEntry id="r4_o2"><text>[]</text></outputEntry>
+        <outputEntry id="r4_o3"><text>false</text></outputEntry>
+        <outputEntry id="r4_o4"><text>"Verkauf"</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Auffangregel: unbekannte Organisationseinheit, nichts setzen, zur Prüfung</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>[]</text></outputEntry>
+        <outputEntry id="r5_o1"><text>[]</text></outputEntry>
+        <outputEntry id="r5_o2"><text>[]</text></outputEntry>
+        <outputEntry id="r5_o3"><text>true</text></outputEntry>
+        <outputEntry id="r5_o4"><text>"Unbekannte Organisationseinheit"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

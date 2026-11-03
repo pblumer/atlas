@@ -87,3 +87,29 @@ func TestAnApplicationOrderIsRefused(t *testing.T) {
 		t.Error("an order without the asking task's id was placed")
 	}
 }
+
+// A provisioning process that reports before its start is marked keeps its report:
+// the start marks only a line that is still pending or blocked.
+func TestMarkStartedKeepsAReportThatOutranIt(t *testing.T) {
+	s := newService(t)
+	o, _, err := s.PlaceForApplication(ApplicationOrder{App: "hr", CommandID: "task-7",
+		Release: orderableRelease(t, "hr"), Items: []string{"workplace"}, Recipient: "usr_neu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started, changed, err := MarkStarted(o, "account", 1800)
+	if err != nil || !changed || statusOf(started.Lines, "account") != StatusRunning {
+		t.Fatalf("a pending line: changed=%v err=%v status=%s", changed, err, statusOf(started.Lines, "account"))
+	}
+	done, err := Apply(o, "account", StatusDone, 1801)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, changed, err := MarkStarted(done, "account", 1802)
+	if err != nil || changed || statusOf(after.Lines, "account") != StatusDone {
+		t.Fatalf("a line reported done first: changed=%v err=%v status=%s, want done kept", changed, err, statusOf(after.Lines, "account"))
+	}
+	if _, _, err := MarkStarted(o, "yacht", 1803); err == nil {
+		t.Error("a line the order does not carry was marked")
+	}
+}

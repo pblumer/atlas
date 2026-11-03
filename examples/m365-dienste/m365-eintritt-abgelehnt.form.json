@@ -1,0 +1,31 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-abgelehnt",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Bestellung des Eintrittspakets abgelehnt · Order of the joiner package refused**\n\nPersonalnummer {{personalnummer}}. Der Grund steht in der Meldung des Fehlers SHOP_ORDER_REFUSED im Verlauf dieser Instanz (Operations). Häufige Gründe: Das Produkt m365-eintritt nennt die Applikation beispiel-m365-dienste nicht in orderableBy, der Katalog cat-m365-hr ist nicht veröffentlicht, das Produkt hat Varianten erhalten, oder eine Regel des Katalogs (Berechtigung, Unvereinbarkeit, Bestellzeitraum) schliesst die Person aus. · Employee number {{personalnummer}}. The reason is in the message of the SHOP_ORDER_REFUSED error in this instance's history (Operations). Common reasons: the product m365-eintritt does not list the application beispiel-m365-dienste in orderableBy, the catalogue cat-m365-hr is not published, the product was given variants, or a rule of the catalogue (eligibility, conflict, orderable window) excludes the person."
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Wie weiter · How to continue",
+      "values": [
+        {
+          "label": "Ursache behoben, erneut bestellen · Cause fixed, order again",
+          "value": "erneut"
+        },
+        {
+          "label": "Eintritt beenden · End the joiner process",
+          "value": "beenden"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
