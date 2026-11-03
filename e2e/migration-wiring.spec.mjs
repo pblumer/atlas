@@ -106,7 +106,8 @@ const boot = async (page, hash, { countsFail = false } = {}) => {
     if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
     return route.fulfill({ json: [] });
   });
-  await page.goto("/index.html");
+  // The dialogs' English wording is what these tests read; German has its own spec.
+  await page.goto("/index.html?lang=en");
   await page.waitForFunction(
     () => document.querySelector("#view") && document.querySelector("#view").children.length > 0,
     null, { timeout: 15000 });

@@ -183,6 +183,7 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
