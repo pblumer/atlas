@@ -164,3 +164,50 @@ func TestM365PartnerAccountNamesAreTrimmedAndPrefixed(t *testing.T) {
 		}
 	}
 }
+
+// TestM365GovernanceCountsTeamsOutsideTheNamingRule evaluates the governance check's
+// count the way the engine compiles it (expr.CompileAuto): a Microsoft 365 group whose
+// alias does not follow the naming rule is a deviation, with and without NAME_PREFIX.
+// Against the shared test tenant the comparison stood in a filter, where
+// application.NAME_PREFIX read null, and the check reported no deviation at all.
+func TestM365GovernanceCountsTeamsOutsideTheNamingRule(t *testing.T) {
+	src, err := os.ReadFile("m365-dienste/governance-pruefung.bpmn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`<scriptTask id="sc_zahl".*?expression='([^']*)'`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("no sc_zahl in governance-pruefung.bpmn")
+	}
+	c, err := expr.CompileAuto(strings.TrimPrefix(html.UnescapeString(string(m[1])), "="))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		prefix string
+		groups []any
+		want   string
+	}{
+		{"atlas-test-ab12-", []any{
+			map[string]any{"mailNickname": "atlas-test-ab12-tm-acc-projekt"},
+			map[string]any{"mailNickname": "atlas-test-ab12-projektraum"},
+		}, "1"},
+		{"", []any{
+			map[string]any{"mailNickname": "tm-fin-budget"},
+			map[string]any{"mailNickname": "marketing"},
+			map[string]any{"mailNickname": "tm-x-zu-kurz"},
+		}, "2"},
+	} {
+		v, err := c.Eval(map[string]expr.Value{
+			"postfaecherOhne": expr.FromJSON([]any{}), "verteilerOhne": expr.FromJSON([]any{}),
+			"gruppen":     expr.FromJSON(tc.groups),
+			"application": expr.ContextOf(map[string]expr.Value{"NAME_PREFIX": expr.String(tc.prefix)}),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := expr.ToJSON(v); got != tc.want {
+			t.Errorf("prefix %q: %s deviations, want %s", tc.prefix, got, tc.want)
+		}
+	}
+}
