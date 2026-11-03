@@ -79,7 +79,10 @@ variable "test_users" {
   type = map(object({
     given_name = string
     surname    = string
-    department = optional(string, "Atlas Test")
+    # Default: the environment's id (<prefix>-<suffix>), so a directory field's fixed
+    # filter "department eq <id>" offers this environment's test users and nobody else
+    # in a shared tenant (examples/m365-dienste, scripts/install-m365-dienste.py).
+    department = optional(string)
     job_title  = optional(string, "Testperson")
   }))
   default = {
@@ -96,7 +99,7 @@ variable "license_sku_ids" {
 }
 
 variable "entra_graph_permissions" {
-  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team)."
+  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team) and invite-guest (User.Invite.All, the SharePoint team site's guests)."
   type        = list(string)
   default = [
     "User.ReadWrite.All",
@@ -104,6 +107,7 @@ variable "entra_graph_permissions" {
     "TeamMember.ReadWrite.All",
     "Channel.Create",
     "TeamSettings.ReadWrite.All",
+    "User.Invite.All",
   ]
 }
 
@@ -134,6 +138,12 @@ variable "sharepoint_graph_permissions" {
   description = "Microsoft Graph application permissions of the SharePoint worker app. Sites.ReadWrite.All is tenant-wide; Sites.Selected additionally needs a per-site grant (README.md, 'Sites.Selected')."
   type        = list(string)
   default     = ["Sites.ReadWrite.All"]
+}
+
+variable "sharepoint_read_all_sites" {
+  description = "In a shared tenant, also grant the SharePoint worker Sites.Read.All besides Sites.Selected. The catalogue's SharePoint team site reads each new site (get-site: quota, existence), which Sites.Selected cannot reach until somebody grants that one site. Sites.Read.All lets the test app read every site of the tenant, including real ones: false by default."
+  type        = bool
+  default     = false
 }
 
 variable "sharepoint_credential" {
@@ -249,13 +259,13 @@ variable "atlas_tls" {
 }
 
 variable "atlas_allowed_cidrs" {
-  description = "Source addresses allowed to reach the Atlas server over HTTPS (with atlas_tls = internal) and SSH - your own public address. Required with enable_atlas_server; 0.0.0.0/0 is refused."
+  description = "Source addresses allowed to reach the Atlas server over HTTPS (with atlas_tls = internal) and SSH - your own public IPv4 address (curl -4). Required with enable_atlas_server; IPv6 ranges and 0.0.0.0/0 are refused."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.atlas_allowed_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
-    error_message = "atlas_allowed_cidrs must be CIDR ranges, and 0.0.0.0/0 is not accepted."
+    condition     = alltrue([for c in var.atlas_allowed_cidrs : can(cidrhost(c, 0)) && can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/([1-9]|[12][0-9]|3[0-2])$", c))])
+    error_message = "atlas_allowed_cidrs must be IPv4 CIDR ranges (the public IP addresses are IPv4 only; find yours with curl -4 -s https://ifconfig.me), and a /0 range is not accepted."
   }
 }
 
@@ -323,13 +333,13 @@ variable "ad_netbios_name" {
 }
 
 variable "ad_allowed_cidrs" {
-  description = "Source addresses allowed to reach the domain controller from outside: LDAPS (636) and, if enabled, RDP (3389). Not needed for the Atlas server, which reaches it inside the virtual network; required when enable_ad_dc = true without the server. 0.0.0.0/0 is refused."
+  description = "Source addresses allowed to reach the domain controller from outside: LDAPS (636) and, if enabled, RDP (3389). Not needed for the Atlas server, which reaches it inside the virtual network; required when enable_ad_dc = true without the server. IPv4 only; 0.0.0.0/0 is refused."
   type        = list(string)
   default     = []
 
   validation {
-    condition     = alltrue([for c in var.ad_allowed_cidrs : can(cidrhost(c, 0)) && c != "0.0.0.0/0"])
-    error_message = "ad_allowed_cidrs must be CIDR ranges, and 0.0.0.0/0 is not accepted."
+    condition     = alltrue([for c in var.ad_allowed_cidrs : can(cidrhost(c, 0)) && can(regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}/([1-9]|[12][0-9]|3[0-2])$", c))])
+    error_message = "ad_allowed_cidrs must be IPv4 CIDR ranges (the public IP addresses are IPv4 only; find yours with curl -4 -s https://ifconfig.me), and a /0 range is not accepted."
   }
 }
 
@@ -343,4 +353,36 @@ variable "ad_auto_shutdown_time" {
   description = "Daily auto-shutdown of the domain controller (HHMM, UTC), so a forgotten environment stops costing compute. Empty disables it."
   type        = string
   default     = "1900"
+}
+
+# --- Exchange Server (optional, exchange.tf) ---------------------------------
+
+variable "enable_exchange_onprem" {
+  description = "Build an Exchange Server SE (Mailbox role) in the test domain, for the Exchange worker's on-premises backend. Needs enable_ad_dc. Costs a Windows VM of exchange_vm_size while it runs; the unattended installation takes one to two hours after the apply (scripts/wait-exchange.sh)."
+  type        = bool
+  default     = false
+}
+
+variable "exchange_vm_size" {
+  description = "VM size of the Exchange server. Exchange wants memory: 16 GB is the least that installs and runs a test organization."
+  type        = string
+  default     = "Standard_D4s_v5"
+}
+
+variable "exchange_auto_shutdown_time" {
+  description = "Daily auto-shutdown of the Exchange server (HHMM, UTC). Empty disables it."
+  type        = string
+  default     = "1900"
+}
+
+variable "exchange_iso_url" {
+  description = "Installation image of Exchange Server SE, from the Microsoft Download Center (details.aspx?id=108244)."
+  type        = string
+  default     = "https://download.microsoft.com/download/ad9b1e53-f28e-4a82-987d-6c88803795b2/ExchangeServerSE-x64.iso"
+}
+
+variable "exchange_iso_bytes" {
+  description = "Expected size of the image in bytes; a download of another size is fetched again rather than mounted."
+  type        = number
+  default     = 6402453504
 }

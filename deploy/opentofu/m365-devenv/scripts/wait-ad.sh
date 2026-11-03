@@ -25,8 +25,12 @@ echo "wait-ad: LDAPS answers with the expected certificate"
 
 if command -v ldapwhoami >/dev/null; then
   bind_dn="$(tofu output -raw ad_bind_dn)"
-  pw="$(tofu output -raw ad_bind_password)"
-  until LDAPTLS_CACERT="$ca" ldapwhoami -x -H "ldaps://$host:636" -D "$bind_dn" -w "$pw" >/dev/null 2>&1; do
+  # The password goes through a private file (-y), not the command line, where ps shows it.
+  pwfile="$(mktemp)"
+  trap 'rm -f "$pwfile"' EXIT
+  chmod 600 "$pwfile"
+  tofu output -raw ad_bind_password >"$pwfile"
+  until LDAPTLS_CACERT="$ca" ldapwhoami -x -H "ldaps://$host:636" -D "$bind_dn" -y "$pwfile" >/dev/null 2>&1; do
     (( $(date +%s) < deadline )) || { echo "wait-ad: the bind account cannot bind yet (phase 2 not done?)" >&2; exit 1; }
     sleep 20
   done

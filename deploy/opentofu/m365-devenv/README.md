@@ -55,8 +55,9 @@ Entra-Workers macht sie zum Test-Team.
 
 ## Voraussetzungen
 
-1. **Ein Microsoft-365-Testtenant**, nie ein produktiver (z. B. aus dem Microsoft 365
-   Developer Program oder ein Testabonnement). OpenTofu kann keinen Tenant anlegen.
+1. **Ein Microsoft-365-Testtenant** (z. B. aus dem Microsoft 365 Developer Program oder ein
+   Testabonnement). OpenTofu kann keinen Tenant anlegen. Ein auch produktiv genutzter
+   Tenant nur mit `shared_tenant = true` (siehe «Geteilter Tenant»).
 2. **Eine Anmeldung mit genügend Rechten** im Testtenant, am einfachsten *Globaler
    Administrator* (Apps anlegen, Administratorzustimmung erteilen, Verzeichnisrollen
    zuweisen, Benutzer und Gruppen anlegen).
@@ -67,7 +68,9 @@ Entra-Workers macht sie zum Test-Team.
 5. **Lizenzen** für Postfächer und Teams der Testpersonen (siehe «Lizenzen»). Ohne Lizenz
    laufen Entra, SharePoint und AD vollständig; Exchange-, Teams- und Mail-Tests brauchen
    Postfächer bzw. Teams-Benutzer.
-6. Die **eigene öffentliche IP-Adresse** für `atlas_allowed_cidrs` (HTTPS und SSH).
+6. Die **eigene öffentliche IPv4-Adresse** für `atlas_allowed_cidrs` (HTTPS und SSH):
+   `curl -4 -s https://ifconfig.me`. Ohne `-4` liefert der Dienst bei IPv6-Anschlüssen eine
+   IPv6-Adresse; die öffentlichen Adressen der VMs sind nur IPv4, IPv6-Bereiche lehnt der Plan ab.
 
 ## Ablauf
 
@@ -94,8 +97,21 @@ diese ID **und** diese Initial-Domain hat.
 tofu init
 ```
 
+Zuerst nur den Zufallssuffix anlegen (lokal im State, nichts in Azure oder im Tenant).
+Sonst bricht der Plan mit «`mail_nickname` is required for mail-enabled groups» ab: Der
+Provider `azuread` hält den beim Planen noch unbekannten Namen der Microsoft-365-Gruppe für
+leer. Die Fehlermeldung zum Output `atlas_ssh` bei diesem Teil-Apply ist harmlos.
+
 ```bash
-tofu apply
+tofu apply -target=random_string.suffix
+```
+
+```bash
+tofu plan -out=plan.tfplan
+```
+
+```bash
+tofu apply plan.tfplan
 ```
 
 `apply` dauert einige Minuten. Danach richtet sich der Server selbst ein (Pakete,
@@ -196,7 +212,7 @@ SharePoint:
 | Worker | Ohne Schalter | Mit `shared_tenant = true` |
 |---|---|---|
 | `mail` | `Mail.Send` in Entra (jedes Postfach) | kein `Mail.Send` in Entra; Exchange **RBAC for Applications**: «Application Mail.Send» nur im Management Scope |
-| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
+| `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Security Group Creation and Membership*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
 | `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website |
 | `teamsphone` | Rolle *Teams Administrator* | **nicht erlaubt**: die Rolle lässt sich nicht eingrenzen (`workers = { teamsphone = false }` setzen) |
 | `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
@@ -208,6 +224,11 @@ unter diesem Namen anlegen. Ein Testprozess, der ein Funktionspostfach oder eine
 anlegt, muss deren Alias deshalb mit dem Präfix beginnen lassen; sonst lehnt Exchange die
 Änderung ab. Lesen (*View-Only Recipients*) bleibt organisationsweit möglich; Exchange kennt für
 Leserechte keinen Empfängerbereich.
+
+**Voraussetzung in Exchange:** Kleine Tenants sind anfangs «dehydrated»; Management Scopes
+und Rollengruppen lehnt Exchange dann ab. Einmalig als Exchange-Administrator
+`Enable-OrganizationCustomization` ausführen (nicht umkehrbar, ändert sonst nichts am Betrieb;
+kann einige Zeit brauchen, bis es wirkt). Das Skript prüft das vorab (`IsDehydrated`).
 
 Die Exchange- und SharePoint-Rechte kann OpenTofu nicht setzen. Sie werden nach `tofu apply`
 einmal mit einem Skript vergeben, angemeldet als Administrator (PowerShell 7 mit den Modulen
@@ -236,9 +257,11 @@ das nicht will, testet zunächst nur lesend (`entra_graph_permissions = ["User.R
 "Group.Read.All"]`). Die prozessseitige Sperre auf Testobjekte (Präfix im Modell, wie in
 `examples/account-bestellung`) bleibt die eigentliche Grenze.
 
-Nicht an einem Tenant geprüft: der Filter `Alias -like …` im Management Scope, das Anlegen
-von Objekten innerhalb des Schreibbereichs mit *Mail Recipient Creation* und das Verhalten des
-Exchange-Workers mit einer Rollengruppe statt der Verzeichnisrolle.
+Am 2026-11-02 an einem echten Tenant geprüft (siehe «Erfahrungen mit einem echten Tenant»):
+der Filter `Alias -like …`, das Anlegen von Verteilerlisten und Funktionspostfächern im
+Schreibbereich, der Exchange-Worker mit der Rollengruppe statt der Verzeichnisrolle und der
+Gegentest mit `Test-ServicePrincipalAuthorization` (die Mail-App darf als Testpostfach senden,
+als echtes Postfach nicht).
 
 ## atlas-Server
 
@@ -257,6 +280,14 @@ Exchange-Workers mit einer Rollengruppe statt der Verzeichnisrolle.
   löscht es die Datei mit den Zugangsdaten; sie liegen dann nur noch im Vault von atlas.
   Das Skript ist wiederholbar und gegen einen lokal gebauten atlas-Server aus diesem
   Repository geprüft.
+- **Zugriff aus einem Firmennetz:** Proxys, die HTTPS prüfen (geprüft mit dem Netz der
+  Bundesverwaltung), sperren eine Seite mit Caddys eigenem Zertifikat (`atlas_tls =
+  "internal"`). Dann `atlas_tls = "letsencrypt"` setzen; 80 und 443 sind danach für alle
+  offen, SSH bleibt auf `atlas_allowed_cidrs` beschränkt. Eine laufende VM lässt sich ohne
+  Ersatz umstellen: `tofu apply -target=azurerm_network_security_group.atlas`, auf der VM
+  die Zeile `tls internal` aus `/etc/caddy/Caddyfile` (und `/etc/atlas/Caddyfile`) entfernen,
+  `systemctl reload caddy`. Weitere Adressen für `atlas_allowed_cidrs` gehen ebenso nur
+  über die Netzwerksicherheitsgruppe.
 - **Protokolle:** `/var/log/atlas-setup.log`, `journalctl -u atlas`, `journalctl -u caddy`.
 - **Automatische Abschaltung** täglich um `atlas_auto_shutdown_time` (Vorgabe 19:00 UTC).
   Wieder starten mit `az vm start -g <ressourcengruppe> -n <vm>` oder im Azure-Portal.
@@ -279,6 +310,65 @@ Mit `enable_ad_dc = true` entsteht im selben VNet eine Windows-Server-2022-VM:
   mit `ad_allow_rdp` auch RDP).
 
 Ohne Domänencontroller startet der Server den AD-Worker mit `ATLAS_AD_MOCK=1` (ADR-0181).
+
+## Exchange Server (optional)
+
+Mit `enable_exchange_onprem = true` (braucht `enable_ad_dc`) entsteht ein Exchange Server SE
+für das On-Premises-Backend des Exchange-Workers (ADR-0462, `"target": "onprem"`):
+
+- VM `<umgebung>-exch` (`exchange_vm_size`, Vorgabe `Standard_D4s_v5` mit 16 GB, 256-GB-Platte),
+  Windows Server 2022, Name `exch01.<ad_domain_name>`, interne Adresse `10.42.0.11`, DNS über
+  den Domänencontroller. Von aussen erreichbar ist sie nicht, ausser mit `ad_allow_rdp` per RDP
+  für `ad_allowed_cidrs`; die öffentliche Adresse dient den Downloads.
+- `scripts/exchange-setup.ps1` installiert unbeaufsichtigt in vier Phasen mit Neustarts:
+  Domänenbeitritt; Windows-Features, Visual C++ 2012/2013, URL Rewrite und das Image
+  (`exchange_iso_url`, 6 GB, mit Fortsetzung geladen und an `exchange_iso_bytes` geprüft);
+  UCMA, `/PrepareSchema`, `/PrepareAD /OrganizationName:AtlasTest` und die Mailbox-Rolle als
+  Domänenadministrator; zuletzt das Dienstkonto `svc-exch-<zufall>` in *Organization
+  Management* und ein Postfach für jede Person in `OU=AtlasTest`. Exchange SE läuft ohne
+  Produktschlüssel als Testversion.
+- Das dauert ein bis zwei Stunden nach dem Apply. `scripts/wait-exchange.sh` verfolgt es über
+  den Run Command von Azure (kein eingehender Port nötig) und zeigt bei einem Fehler das Ende
+  des Protokolls (`C:\AtlasSetup\exchange-phase<N>.log`).
+- `tofu output exchange_onprem` nennt den Endpunkt `http://exch01.<ad_domain_name>/PowerShell/`
+  (Kerberos) und das Dienstkonto; das Passwort gibt `tofu output -raw exchange_service_password`.
+- Abschaltung täglich um `exchange_auto_shutdown_time` (Vorgabe 19:00 UTC).
+
+Danach startet `onprem/install-worker.sh` den Exchange-Worker `ucc_exchange_onprem` auf `exch01`
+selbst, als Dienstkonto (Kerberos ohne Passwort in Atlas): Es baut `atlas.exe`, bietet es 30
+Minuten lang nur im VNet von der Atlas-VM an, erzeugt ein Worker-Token und führt
+`onprem/exchange-worker.ps1` über den Run Command aus (Token und Passwort als geschützte
+Parameter). `onprem/exchange-onprem-smoke.bpmn` prüft jede Operation von Funktionspostfach,
+Postfachzugriff und Verteiler einmal hin und zurück und hinterlässt nichts.
+
+**Geprüft am 2026-11-03:** Installation in rund 55 Minuten (Image in 7 Minuten), Worker auf
+`exch01`, Rauchtest vollständig: Funktionspostfach anlegen und kennzeichnen, Vollzugriff und
+«Senden als» erteilen, Postfach über die Kennzeichnung finden, Verteiler anlegen, Mitglied
+aufnehmen und entfernen, Verteiler entfernen, Rechte entziehen, Postfach entfernen.
+
+Danach über den Shop (Katalogvariante «Exchange Server», `install-m365-dienste.py`):
+Funktionspostfach bestellt (Vollzugriff und «Senden als» für die Besitzerin aus der
+Personensuche) und zurückgegeben, Postfachzugriff auf ein persönliches Postfach mit Prüfung der
+Informationssicherheit erteilt und entzogen; alles gegen `exch01`, nichts blieb zurück.
+
+Dabei gefunden:
+
+- «Senden als» (`Add-ADPermission`) fand das Postfach nicht über seine Adresse; der Worker
+  löst die Identität jetzt über `Get-Recipient` auf (`connector/exchange`, Branch
+  `feat/m365-dienste-shared-tenant`). `install-worker.sh` baut dafür mit
+  `ATLAS_REPO=<checkout>` aus jenem Branch.
+- Atlas verteilte Exchange-Jobs nur nach Jobtyp, nicht nach Worker-Name: Der Online-Worker
+  `ucc_exchange` übernahm einen Job für `ucc_exchange_onprem` und scheiterte mit «no worker
+  registered». Behoben in PR #1523 (ein Worker erhält nur noch Jobs der Namen, die er meldet);
+  mit diesem Stand lief der Rauchtest bei laufendem Online-Worker durch. Ohne ihn den
+  Online-Worker für den Rauchtest kurz ausschalten (Console → Workers, `ucc_exchange`).
+- Der Runner startet `atlas.exe` über `cmd.exe`: Windows PowerShell 5.1 bricht sonst mit
+  `ErrorActionPreference Stop` an der ersten Protokollzeile auf stderr ab.
+
+Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, gezielt:
+`tofu apply -target=azurerm_virtual_machine_extension.exchange_setup
+-target=azurerm_dev_test_global_vm_shutdown_schedule.exchange
+-target=azurerm_network_interface_security_group_association.exchange`.
 
 ## Lizenzen
 
@@ -338,8 +428,9 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 - **Kurze Laufzeit:** Zertifikate, Secrets und das API-Token laufen nach
   `credential_validity_days` (Vorgabe 14 Tage) ab.
 - **Anwendungsberechtigungen gelten tenantweit** (`Mail.Send` darf als jedes Postfach
-  senden). Die Grenze ist hier allein der Testtenant; deshalb nie gegen einen produktiven
-  Tenant anwenden.
+  senden). Ohne `shared_tenant` ist die Grenze allein der Testtenant; deshalb gegen einen
+  auch produktiv genutzten Tenant nur mit `shared_tenant = true` anwenden, und auch dann
+  bleibt der Entra-Worker tenantweit (siehe «Geteilter Tenant»).
 - **Netz:** SSH und (mit `atlas_tls = "internal"`) HTTPS nur für `atlas_allowed_cidrs`.
   `atlas_tls = "letsencrypt"` öffnet 80 und 443 für das ganze Internet, weil Let's Encrypt
   von nicht veröffentlichten Adressen prüft; die Anmeldung bleibt Pflicht. Ob für
@@ -364,19 +455,78 @@ tofu init -backend=false
 tofu test
 ```
 
+`tofu test` liest eine vorhandene `terraform.tfvars` mit ein. Das Testfile setzt deshalb alle
+Werte, die eine echte Konfiguration üblicherweise setzt, selbst (vor allem
+`license_sku_ids = []`): Provisioner laufen auch mit gemockten Providern, und
+`scripts/assign-licenses.sh` würde sonst mit der Anmeldung von `az` den echten Graph aufrufen.
+Wer neue Variablen mit Wirkung nach aussen ergänzt, setzt sie dort ebenfalls.
+
+## Erfahrungen mit einem echten Tenant (2026-11-02)
+
+Ein vollständiger Durchlauf im geteilten Tenant (`shared_tenant = true`, Business Basic,
+Domänencontroller an), mit `examples/m365-dienste` installiert und über den Shop bestellt.
+Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «Von Hand».
+
+**Korrigiert im Projekt**
+
+| Befund | Ursache | Lösung |
+|---|---|---|
+| `tofu test` mit OpenTofu: jeder Lauf übersprungen | Mock von `azuread_domains` ohne Pflichtattribute | Mock vollständig |
+| `tofu test` rief mit echter `az`-Anmeldung `assignLicense` gegen Graph auf | `tofu test` liest `terraform.tfvars`; Provisioner laufen auch mit gemockten Providern | Testfile setzt alle Werte selbst (`license_sku_ids = []` …) |
+| `ifconfig.me` lieferte IPv6, `/32` darauf wäre ein riesiger Bereich | CIDR-Prüfung nahm IPv6 und `::/0` an | nur IPv4-CIDR, `/0` abgelehnt; README: `curl -4` |
+| Plan bricht ab: «`mail_nickname` is required for mail-enabled groups» | `azuread` hält den beim Planen unbekannten Namen für leer | zuerst `tofu apply -target=random_string.suffix` (Ablauf) |
+| Atlas-Server richtet sich nicht ein | `AD_HOSTS_LINE=10.42.0.10 dc01…` ohne Anführungszeichen in `setup.env` | alle Werte in `'…'`, Test prüft die Form |
+| Zertifikate und DC-Extension bei jedem Plan «geändert» | `end_date` lokal vs. UTC; Tag-Format von Azure | `ignore_changes` |
+| LDAPS antwortet nicht (Ereignis 1220, Schannel 36886) | selbstsigniertes Zertifikat nicht in `LocalMachine\Root` | `ad-setup.ps1` legt es dort ab |
+| `wait-atlas.sh` meldete Erfolg nach Zeitüberschreitung | `break` mit Exit 0 | Exit 1 mit Protokollauszug |
+| `wait-ad.sh` gab das Bind-Passwort auf der Kommandozeile mit | `ldapwhoami -w` | Datei mit `-y` |
+| `New-ManagementScope` abgelehnt | Exchange-Organisation «dehydrated» | Skript prüft `IsDehydrated`, README nennt `Enable-OrganizationCustomization` |
+| SharePoint-Recht: Schleife «not provisioned yet» | 403 auf die private Gruppen-Website wurde als 404 behandelt; delegiert fehlt der Admin der Zugriff | Admin wird kurz Besitzer der Testgruppe, im `finally` wieder entfernt; echte Fehler werden gemeldet |
+| `GET /me` 403 | `User.Read` nicht angefordert | Scope ergänzt |
+| Verteiler entfernen, Mitglieder ändern: 403 | `BypassSecurityGroupManagerCheck` (und `-Type`) kommen mit *Security Group Creation and Membership* | Rolle in der Rollengruppe, gleicher Schreibbereich; Skript ergänzt fehlende Rollen |
+| Personensuche im Bestellformular: 403 | der Entra-Worker war nicht für Formulare geöffnet | Bootstrap setzt `formLookups` |
+| Suche im geteilten Tenant zeigte alle echten Konten | kein fester Filter möglich auf den Präfix | Testpersonen erhalten `department = <Umgebungs-ID>`, das Installationsskript filtert darauf |
+
+**Von Hand (noch nicht automatisiert)**
+
+- `Enable-OrganizationCustomization` einmal als Exchange-Administrator; danach brauchte die
+  Delegierung von «Application Mail.Send» rund eine Stunde, bis `New-ManagementRoleAssignment`
+  gelang («keine Delegierungsrollenzuweisung»).
+- `Connect-MgGraph -UseDeviceCode` (SharePoint-Teil) braucht ein echtes Terminal; ohne eins
+  meldet es nach 120 s «timed out», obwohl die Anmeldung im Browser gelang. `-Part SharePoint`
+  wiederholt nur diesen Teil.
+- Neue Rollen einer App wirken in Exchange erst nach 30 min bis 2 h; `Test-ServicePrincipalAuthorization`
+  zeigt die Zuweisung sofort.
+- Testpersonen, die sich nach der Installation zum ersten Mal anmelden, sind in keiner
+  Zielgruppe; `install-m365-dienste.py` erneut ausführen nimmt sie auf. Besser wäre die Gruppenzuordnung bei der SSO-Anmeldung
+  (Sicherheitsgruppe der Umgebung → Zielgruppe).
+- Teams: ein erstes Team wurde von Hand angelegt; ob das nötig war, ist offen, denn danach
+  schlug `PUT /groups/{id}/team` weiter fehl, und erst `POST /teams` (Entra-Worker) gelang.
+
+**Noch offen**
+
+- Ein normaler `tofu apply` nach Änderungen an `atlas-bootstrap.py` oder `atlas-setup.sh`
+  ersetzt die Atlas-VM (Cloud-Init-Daten); `ignore_changes` wäre zu erwägen.
+- M365-Gruppen (Teams) erhalten die Standard-Domain des Tenants (die eigene, nicht die `onmicrosoft.com`-Domain), nicht
+  `MAIL_DOMAIN`.
+- Am 2026-11-03 zusätzlich geprüft: Rückgabe des Verteilers, Postfachzugriff erteilen und
+  entziehen, Lizenz, Abwesenheit; Zugriff aus dem Netz der Bundesverwaltung mit
+  `atlas_tls = "letsencrypt"`.
+- Ungetestet: Sitzungszimmer, Partnerzugang, übrige Aktionen an Bestellungen,
+  Governance-Prüfung, Teams Phone.
+
 ## Bekannte Grenzen
 
-- **Noch nie gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen.**
-  Geprüft sind: Syntax und Schemas (`azuread` 3.10, `azurerm` 4.81, mit Terraform 1.16,
-  da OpenTofu in der Erstellungsumgebung nicht verfügbar war), 12 Offline-Tests, das
-  Bootstrap-Skript gegen einen lokalen atlas-Server. **Nicht** geprüft: `atlas-setup.sh`
-  und `ad-setup.ps1` auf echten VMs, die Wartezeiten von Microsoft, die Lizenzzuweisung
-  über `az rest` und Cloud-Init mit gzip-komprimierten Daten auf Azure.
-- **Exchange Server (on-premises)** ist nicht abgedeckt.
+- **Einmal gegen einen echten Tenant und ein echtes Azure-Abonnement gelaufen**
+  (2026-11-02, geteilter Tenant, OpenTofu 1.13.2, `azuread` 3.10.0): `atlas-setup.sh`,
+  `ad-setup.ps1`, Cloud-Init mit gzip, die Lizenzzuweisung über `az rest`, die Warteskripte
+  und `shared-tenant-setup.ps1` laufen nach den Korrekturen im Abschnitt «Erfahrungen mit
+  einem echten Tenant». Ein zweiter Durchlauf von Grund auf mit diesen Korrekturen steht aus.
+- **Exchange Server (on-premises)** ist optional (`enable_exchange_onprem`, Abschnitt
+  «Exchange Server (optional)») und einmal am 2026-11-03 installiert und mit dem Rauchtest geprüft.
 - **Teams Phone:** Rufnummern, Calling Plans und Direct Routing richtet das Projekt nicht
   ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
   verlangt, ist nicht geprüft (`teamsphone_graph_permissions`).
 - **Ein Team** legt erst der Entra-Worker an (`create-team`).
 - **Gruppenmitgliedschaften** ignoriert OpenTofu nach dem ersten Anlegen, damit die
   Worker sie ändern dürfen.
-- **`.terraform.lock.hcl`** ist nicht eingecheckt; nach dem ersten `tofu init` versionieren.
