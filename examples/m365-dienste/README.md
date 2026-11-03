@@ -314,7 +314,7 @@ Ersatzgruppe und nicht in einen Incident. Den Entra-Worker spielt der Test selbs
 übernimmt den Job und antwortet mit dem Vorgesetzten, ohne Vorgesetzten oder mit dem
 Fehler.
 
-**Gegen einen echten Tenant geprüft (2026-11-02)**, geteilter Tenant mit `NAME_PREFIX`,
+**Gegen einen echten Tenant geprüft (2026-11-02 und 2026-11-03)**, geteilter Tenant mit `NAME_PREFIX`,
 Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-devenv`,
 `shared_tenant = true`), über die Shop-Oberfläche bestellt:
 
@@ -324,6 +324,15 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   vorgesetzte Person: `get-user-manager` gegen Graph, Atlas-Konto der vorgesetzten Person aus
   der Entra-Anmeldung, Mail an sie über RBAC for Applications.
 - **Team** bestellt und zurückgegeben (archiviert).
+- **Verteiler** zurückgegeben (`Remove-DistributionGroup` mit `BypassSecurityGroupManagerCheck`,
+  nachdem die Rolle *Security Group Creation and Membership* in Exchange wirksam war).
+- **Postfachzugriff** erteilt und entzogen: persönliches Postfach, Vollzugriff, die Regel
+  `m365-postfachzugriff` verlangte die Zusatzfreigabe, die Informationssicherheit gab frei,
+  `Add-MailboxPermission` bzw. `Remove-MailboxPermission` setzten und entfernten `FullAccess`;
+  die Begründung liegt als personenbezogene Variable verschlüsselt.
+- **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
+  zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
+  (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
 - **Personensuche** in den Bestellformularen (ADR-0473, Amendment 2026-11-02), fest gefiltert
   auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
 
@@ -339,8 +348,12 @@ Mitglieder mit Adresse), verschluckt er den Fehler beim Auflösen (`api/handlers
 `mail.Resolve`) und der Worker meldet irreführend «is this server offloading the mail kind?».
 Die Mailadresse eines Teams ist die Standard-Domain des Tenants, nicht `MAIL_DOMAIN`.
 
-Nicht geprüft: Postfachzugriff, Lizenz, Sitzungszimmer, Partnerzugang, die Aktionen an
-Bestellungen, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
+Wer sich erst nach der Installation zum ersten Mal anmeldet, ist in keiner Zielgruppe und
+sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzwischen
+angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
+
+Nicht geprüft: Sitzungszimmer, Partnerzugang, die übrigen Aktionen an Bestellungen,
+die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
 Teams Phone und `installieren.ps1`.
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind

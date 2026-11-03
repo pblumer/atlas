@@ -21,9 +21,12 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
      the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE.
 
 Re-running is safe: existing groups are kept, the application and the catalogue are updated.
+Test persons join the approver and audience groups only once they have signed in to Atlas;
+whoever signs in for the first time after the installation sees no catalogue until this is
+run again (or they are added to the groups by hand).
 Needs python3 and tofu. --cafile is Caddy's root certificate
 (/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt on the server) with
-atlas_tls = "internal".
+atlas_tls = "internal"; with atlas_tls = "letsencrypt" leave it out.
 """
 import argparse
 import io
