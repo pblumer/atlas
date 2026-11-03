@@ -434,7 +434,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
 | [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
 | [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
-| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
+| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted (amended) | Landed |
 | [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
 | [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
 | [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
@@ -605,6 +605,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 | [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
 | [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
+| [0520](0520-process-places-an-order.md) | A process places an order in the name of its application | Accepted | Landed |
 
 ## The two states of a record
 

@@ -1,0 +1,45 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-lizenz-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenz des Eintrittspakets · Licence of the joiner package**\n\nBestellt der Eintrittsprozess im Namen seiner Applikation; im Shop steht dieses Produkt nicht. · Ordered by the joiner process in its application's name; it is not on offer in the shop."
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Benutzername (UPN) · User principal name",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "lizenzvariante",
+      "type": "radio",
+      "label": "Lizenzvariante · Licence variant",
+      "values": [
+        {
+          "label": "Standard (E3)",
+          "value": "standard"
+        },
+        {
+          "label": "Erweitert (E5) · Extended (E5)",
+          "value": "erweitert"
+        },
+        {
+          "label": "Frontline (F3)",
+          "value": "frontline"
+        }
+      ],
+      "defaultValue": "standard",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

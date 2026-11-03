@@ -1868,7 +1868,8 @@ function shopBadgeOf(bo, owners) {
   if (bo.$type === "bpmn:SendTask") {
     const shop = findExt(bo, SEND_SHOP_KIND.ext);
     if (!shop) return null;
-    return tr(shop.mode === "command" ? "bpmn.mark.shopCommand" : "bpmn.mark.shopOutcome");
+    const mode = shopTaskMode(shop.mode).v;
+    return tr(mode === "command" ? "bpmn.mark.shopCommand" : mode === "order" ? "bpmn.mark.shopOrder" : "bpmn.mark.shopOutcome");
   }
   if (bo.$type === "bpmn:ReceiveTask") {
     const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
@@ -6124,16 +6125,17 @@ const SEND_MESSAGE_KIND = {
 };
 
 // SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
-// process states how the action it is carrying out ended, or where a process asks a held
-// position of a product for an action of its own. Like the Message kind it is not a Worker
-// Type — the server serves its job itself, so there is no Worker to name and no credential to
-// hold — and a service task cannot carry it, so it too lives outside SERVICE_TASK_KINDS and
-// has its own fields (shopTaskFieldsHTML). Unlike the Message kind it is declared rather than
-// inferred: the <atlas:shopTask> extension is the whole of it, and exactly what the compiler
-// parses.
+// process states how the action it is carrying out ended, where a process asks a held
+// position of a product for an action of its own, or where a process orders a product for
+// somebody in its application's name (ADR-0520). Like the Message
+// kind it is not a Worker Type — the server serves its job itself, so there is no Worker to
+// name and no credential to hold — and a service task cannot carry it, so it too lives
+// outside SERVICE_TASK_KINDS and has its own fields (shopTaskFieldsHTML). Unlike the Message
+// kind it is declared rather than inferred: the <atlas:shopTask> extension is the whole of it,
+// and exactly what the compiler parses.
 const SEND_SHOP_KIND = {
   id: "shop", name: "Shop", icon: "S", group: "Messaging & events",
-  desc: "Reports how a product action ended, or asks a held position for one (ADR-0429).",
+  desc: "Reports how a product action ended, asks a held position for one, or orders a product for somebody (ADR-0429).",
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2298a"/><path d="M4.2 6.2h7.6l-.6 6.3H4.8z" fill="#fff"/><path d="M6.3 6.2V5a1.7 1.7 0 0 1 3.4 0v1.2" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
   ext: "atlas:ShopTask",
 };
@@ -6160,13 +6162,20 @@ const SHOP_OUTCOMES = [
 // SHOP_TASK_MODES are the modes a shop send task can be in (ADR-0429 §4), each with the
 // fields it carries beside `mode` itself, in the order the panel shows them. The select, the
 // fields and the save all read this list, and a save clears every field the chosen mode does
-// not carry: the compiler refuses a command that states an outcome, and the other mode's
-// leftovers would only look like configuration.
+// not carry: the compiler refuses a command that states an outcome, and an order that names
+// an action, an outcome, an order or a position, and the other modes' leftovers would only
+// look like configuration.
 //
 // A field marked fx holds a literal or an '=' expression, like the Worker Types' fx fields.
 // A command's order and position are such values because the instance computes them — a
 // leaver process finds them in the inventory — while its product and action are literals, so
 // the task names exactly one thing it may ask for (§10, decision 1).
+//
+// An order (ADR-0520) names its catalogue and product as literals
+// for the same reason — the task names exactly what it may order — while its recipient and
+// its answers are computed by the instance: a joiner process finds the account id in HR's
+// record and the answers in what HR said. It states no action and no outcome: the order's
+// own fulfilment says how it ended. compileShopOrder is the authority on these attributes.
 const SHOP_TASK_MODES = [
   {
     v: "outcome", l: "Outcome — report how the action ended",
@@ -6208,6 +6217,34 @@ const SHOP_TASK_MODES = [
       },
     ],
   },
+  {
+    v: "order", l: "Order — place an order for somebody in the application's name",
+    hint: "On reaching this send task the process orders the product for the recipient in the name of this process's application, and the token continues once the order is placed. The order goes through the same checks as a person's: what the recipient holds, eligibility, conflicts, the orderable window, the answers and the product's approval rule. A retry finds the order its first attempt placed instead of ordering again. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "catalog", label: "Catalogue", placeholder: "cat-m365-hr",
+        hint: "The catalogue the product is ordered from, by its id. Its newest published release must offer the product.",
+      },
+      {
+        key: "product", label: "Product", placeholder: "m365-joiner",
+        hint: "The product ordered, by its id. It must list this process's application in Console → Catalogue → product → “Applications whose processes may order it”; empty, the default, means no process may order it, and the order is refused when the task runs.",
+      },
+      {
+        key: "recipient", label: "Recipient", fx: true, placeholder: "= account.id",
+        hint: "The account id of the person the order is for: a literal, or a FEEL expression (fx) over the instance's variables. The person must already have an Atlas account — for a joiner, the directory synchronisation has to have run first.",
+      },
+      {
+        key: "answers", label: "Answers", fx: true, placeholder: "= answers",
+        hint: "Optional: the answers to the products' order forms, as a context {product: {field: value}} — a literal or a FEEL expression (fx). Leave empty when the product asks nothing.",
+      },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "orderId",
+        hint: "Receives the id of the order. Leave empty to discard it.",
+      },
+    ],
+    // Said below the fields, because it is what the model has to do around the task.
+    after: "A refusal a retry will not change — the product does not list this application, the recipient has no account, the order breaks a rule — is thrown as the BPMN error SHOP_ORDER_REFUSED when the process catches that code: put an error boundary event catching SHOP_ORDER_REFUSED on this task to route a refusal to a person. Uncaught, it fails the job and becomes an incident after the retries.",
+  },
 ];
 
 // shopTaskMode returns the mode entry a stored mode names, or the first one: an element
@@ -6227,8 +6264,9 @@ function shopActionKeyProblem(v) {
 }
 
 // shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
-// mode, then the fields that mode carries. The action key's problem is rendered from the
-// stored value too, so a key saved as typed is still flagged when the task is opened again.
+// mode, then the fields that mode carries, then what the mode does (and, for an order, how
+// the model routes a refusal). The action key's problem is rendered from the stored value
+// too, so a key saved as typed is still flagged when the task is opened again.
 function shopTaskFieldsHTML(bo) {
   const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
   const mode = shopTaskMode(shop.mode);
@@ -6251,7 +6289,11 @@ function shopTaskFieldsHTML(bo) {
     } else {
       // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
       // lists are filled once the message sources arrive, and the fields stay free text.
-      const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
+      // An order's product is not suggested: the message sources list the products with
+      // actions, not the ones that list this application as one that may order them, and
+      // a list of the former would offer products the order is then refused.
+      const suggest = f.key === "action" || (f.key === "product" && mode.v === "command")
+        ? ` list="f-shop-${f.key}-keys"` : "";
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
       if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
@@ -6265,7 +6307,8 @@ function shopTaskFieldsHTML(bo) {
   return `<h3 data-group="Shop">${esc(tr("bpmn.group.shop"))}</h3>
     <label class="field"><span>${esc(tr("pnl.task.shop.mode"))}</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
-    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>`;
+    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>
+    ${mode.after ? `<p class="muted" id="f-shop-after" style="font-size:12px">${esc(kindText(mode.after))}</p>` : ""}`;
 }
 
 // shopActionSuggestions are the action keys and products a shop task may name, from the
@@ -9258,7 +9301,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // mode decides the rest: an outcome is the one report of the one command its
         // instance carries out (ADR-0429 §3), so a second report changes nothing and there
         // is nothing to loop, while a command may well be asked once per position — a
-        // leaver process returning each right the leaver holds.
+        // leaver process returning each right the leaver holds — and an order once per
+        // product or per person.
         const sendKind = sendTaskKind(bo);
         const reportsOutcome = sendKind === SEND_SHOP_KIND &&
           shopTaskMode((findExt(bo, SEND_SHOP_KIND.ext) || {}).mode).v === "outcome";
