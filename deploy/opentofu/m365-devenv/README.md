@@ -352,11 +352,11 @@ Dabei gefunden:
   löst die Identität jetzt über `Get-Recipient` auf (`connector/exchange`, Branch
   `feat/m365-dienste-shared-tenant`). `install-worker.sh` baut dafür mit
   `ATLAS_REPO=<checkout>` aus jenem Branch.
-- **Offen, Plattform:** Atlas verteilt Exchange-Jobs nur nach Jobtyp, nicht nach Worker-Name.
-  Läuft daneben der Online-Worker `ucc_exchange`, kann er einen Job für `ucc_exchange_onprem`
-  übernehmen und mit «no worker registered» scheitern. Bis das behoben ist, den Online-Worker
-  für den Rauchtest kurz ausschalten (Console → Workers, `ucc_exchange`, oder `PATCH
-  /api/v1/configured-workers/<id>` mit `enabled: false`) und danach wieder ein.
+- Atlas verteilte Exchange-Jobs nur nach Jobtyp, nicht nach Worker-Name: Der Online-Worker
+  `ucc_exchange` übernahm einen Job für `ucc_exchange_onprem` und scheiterte mit «no worker
+  registered». Behoben in PR #1523 (ein Worker erhält nur noch Jobs der Namen, die er meldet);
+  mit diesem Stand lief der Rauchtest bei laufendem Online-Worker durch. Ohne ihn den
+  Online-Worker für den Rauchtest kurz ausschalten (Console → Workers, `ucc_exchange`).
 - Der Runner startet `atlas.exe` über `cmd.exe`: Windows PowerShell 5.1 bricht sonst mit
   `ErrorActionPreference Stop` an der ersten Protokollzeile auf stderr ab.
 
