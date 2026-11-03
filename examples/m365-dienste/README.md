@@ -341,6 +341,9 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   bzw. freigegeben: Mitgliedskonto mit Präfix in UPN und Anzeigename, `employeeType` Partner,
   Firma, Initialpasswort mit Änderung bei der ersten Anmeldung; Namen und Firma ohne
   Leerzeichen am Rand. Die Sperre nach Ablauf (frühestens 90 Tage) ist nicht abgewartet.
+- **Governance-Prüfung** von Hand gestartet: keine Postfächer und Verteiler ohne
+  Kennzeichnung, zwei Microsoft-365-Gruppen der Testumgebung ausserhalb der Namensregel,
+  Befund als Aufgabe an `M365-Administration`.
 - **Personensuche** in den Bestellformularen (ADR-0473, Amendment 2026-11-02), fest gefiltert
   auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
 
@@ -353,6 +356,12 @@ auf ein Cmdlet bis zu zwei Minuten statt zehn Sekunden (`Add-MailboxPermission` 
 angelegtes Funktionspostfach brauchte länger und wirkte trotzdem); Personen werden
 auch über Vor- und Nachname gefunden.
 
+Gefunden und korrigiert: Die Governance-Prüfung zählte keine Teams, solange der Vergleich mit
+der Namensregel in einem Filter stand (`gruppen[not(matches(mailNickname, "^" +
+application.NAME_PREFIX + …))]`): In einem Filter über Kontexte liest ein Name, der kein
+Schlüssel des Elements ist, nicht die Variable der Instanz. Der Vergleich steht jetzt in einem
+`for`.
+
 Gefunden, nicht korrigiert: Findet der Server keinen Empfänger für eine Mail (eine Gruppe ohne
 Mitglieder mit Adresse), verschluckt er den Fehler beim Auflösen (`api/handlers.go`,
 `mail.Resolve`) und der Worker meldet irreführend «is this server offloading the mail kind?».
@@ -363,7 +372,7 @@ sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzw
 angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
 
 Nicht geprüft: die Sperre eines Partnerkontos nach Ablauf, die übrigen Aktionen an Bestellungen,
-die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
+die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen,
 Teams Phone und `installieren.ps1`.
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind
