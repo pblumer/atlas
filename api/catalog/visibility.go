@@ -51,6 +51,34 @@ func Resolve(catalogs []Catalog, groups []string) (Catalog, bool) {
 	return Highest(reached)
 }
 
+// Reached returns every catalogue somebody in these groups is the audience for,
+// highest rank first. ADR-draft-several-catalogues-per-person replaced "one catalogue per person" (ADR-0312 decision
+// 11): a person is offered what all of their catalogues offer, and rank orders them —
+// it decides which catalogue's copy of a product they see, whose theme the shop wears,
+// and in which order the shop reads them. Reaching none is an empty list.
+func Reached(catalogs []Catalog, groups []string) []Catalog {
+	reached := make([]Catalog, 0, len(catalogs))
+	for _, c := range catalogs {
+		if c.ReachedBy(groups) {
+			reached = append(reached, c)
+		}
+	}
+	return byRank(reached)
+}
+
+// byRank orders catalogues highest rank first, by id within a rank.
+func byRank(catalogs []Catalog) []Catalog {
+	out := make([]Catalog, len(catalogs))
+	copy(out, catalogs)
+	sort.Slice(out, func(a, b int) bool {
+		if out[a].Rank != out[b].Rank {
+			return out[a].Rank > out[b].Rank
+		}
+		return out[a].ID < out[b].ID
+	})
+	return out
+}
+
 // Highest is the top-ranked catalogue of a set, and whether there was one.
 //
 // It is what "which catalogue" means when there is no audience question to ask —
@@ -187,6 +215,32 @@ func (s *Service) HandleMyCatalog(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		httpapi.Error(w, http.StatusNotFound, "no catalogue is assigned to you")
 		return
+	}
+	httpapi.JSON(w, http.StatusOK, got)
+}
+
+// HandleMyCatalogs answers GET /api/v1/shop/catalogs: every catalogue the caller's
+// groups reach, highest rank first (ADR-draft-several-catalogues-per-person). Reaching none is an empty list and not
+// a 404 — it is an answer. With nobody to be (enforcement off) every catalogue is the
+// answer, for the reason [Service.HandleMyCatalog] gives for its top-ranked one.
+func (s *Service) HandleMyCatalogs(w http.ResponseWriter, r *http.Request) {
+	p := httpapi.PrincipalFrom(r.Context())
+	var groups []string
+	if p != nil {
+		groups = p.GroupIDs
+	}
+	var (
+		all     []Catalog
+		loadErr error
+	)
+	s.loop.Do(func() { all, loadErr = s.store.Catalogs() })
+	if loadErr != nil {
+		httpapi.Error(w, http.StatusInternalServerError, "resolve catalogues: "+loadErr.Error())
+		return
+	}
+	got := Reached(all, groups)
+	if len(got) == 0 && p == nil && s.nobodyToBe() {
+		got = byRank(all)
 	}
 	httpapi.JSON(w, http.StatusOK, got)
 }
