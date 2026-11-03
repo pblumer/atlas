@@ -3735,6 +3735,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 	if err := p.refuseEngineWritesToPersonalData(); err != nil {
 		return nil, err
 	}
+	p.unbindPersonalFilterNames()
 	if err := p.refuseExpressionsReadingPersonalData(); err != nil {
 		return nil, err
 	}
