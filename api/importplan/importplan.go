@@ -39,6 +39,11 @@ const (
 	// Ahead is an artifact edited on this server since the last import, which this
 	// import brings as it did last time. It is kept unless the caller replaces it.
 	Ahead = "ahead"
+	// Elsewhere is an artifact another existing application holds. An import never
+	// takes it unasked: only a ref named under adopt moves it into the importing
+	// application, and the caller needs the editor role on the application it leaves.
+	// Unadopted, it stops the import like a change nobody decided.
+	Elsewhere = "elsewhere"
 )
 
 // Hash is the fingerprint an artifact is compared by: the parts that make it what it
@@ -91,6 +96,22 @@ type Artifact struct {
 	Name    string `json:"name,omitempty"`
 	Status  string `json:"status"`
 	Outcome string `json:"outcome"`
+	// HeldBy names the application an Elsewhere artifact belongs to, {id, name} —
+	// only for a caller who may see that application, and absent otherwise.
+	HeldBy *Holder `json:"heldBy,omitempty"`
+	// Compared is how an Elsewhere artifact's content compares with the import's
+	// (new is impossible; unchanged or changed), so one dialog can ask both whether
+	// to take it and, if its content differs, which version to keep.
+	Compared string `json:"compared,omitempty"`
+	// Adopted says the artifact moves into the importing application from the one
+	// that held it, as the caller decided under adopt.
+	Adopted bool `json:"adopted,omitempty"`
+}
+
+// Holder is the application an artifact belongs to before an import adopts it.
+type Holder struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // Decisions is what the caller decided for the artifacts that differ.
@@ -102,14 +123,18 @@ type Decisions struct {
 	// OverwriteAll and KeepAll stand for every changed artifact the other list does
 	// not name.
 	OverwriteAll, KeepAll bool
+	// Adopt names, by ref, the artifacts another application holds that the caller
+	// takes into the importing one. There is no * for it: moving an artifact out of
+	// somebody's application is decided artifact by artifact.
+	Adopt map[string]bool
 }
 
-// Parse reads ?dryRun=, ?overwrite= and ?keep=. Each list is refs separated by
+// Parse reads ?dryRun=, ?overwrite=, ?keep= and ?adopt=. Each list is refs separated by
 // commas, a parameter may repeat, and * stands for every changed artifact the other
 // list does not name. A ref in both lists, or * in both, contradicts itself and is
 // refused.
 func Parse(q url.Values) (Decisions, error) {
-	d := Decisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}}
+	d := Decisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}, Adopt: map[string]bool{}}
 	d.DryRun = q.Get("dryRun") == "true" || q.Get("dryRun") == "1"
 	read := func(param string, refs map[string]bool, all *bool) {
 		for _, v := range q[param] {
@@ -126,6 +151,11 @@ func Parse(q url.Values) (Decisions, error) {
 	}
 	read("overwrite", d.Overwrite, &d.OverwriteAll)
 	read("keep", d.Keep, &d.KeepAll)
+	var adoptAll bool
+	read("adopt", d.Adopt, &adoptAll)
+	if adoptAll {
+		return d, errors.New("adopt names each artifact to take from another application; * is not accepted")
+	}
 	if d.OverwriteAll && d.KeepAll {
 		return d, errors.New("overwrite=* and keep=* contradict each other")
 	}

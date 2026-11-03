@@ -2,8 +2,14 @@ dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
 
   - pblumer/dmn-js@17.10.2
     commit: 481cc5a02ffa855689b59d81181478b84b25f9a5
+    source: https://github.com/pblumer/dmn-js/tree/481cc5a02ffa855689b59d81181478b84b25f9a5
+    licence: LICENSE (byte-identical with the pinned fork's LICENSE)
+    licence Git blob: c6786fe7f8afb91b456f3009ae5d69bb9e387402
   - pblumer/dmn-moddle
     commit: ac76928df99382c36833d9300fd98acc604dc673
+    source: https://github.com/pblumer/dmn-moddle/tree/ac76928df99382c36833d9300fd98acc604dc673
+    licence: DMN-MODDLE-LICENSE (separate original MIT notice)
+    licence Git blob: e0a77fed0e410060b20cae9e1f2ec9eccc5618dc
   - dmn-js-properties-panel@3.11.1
   - @bpmn-io/properties-panel@3.48.0
   - camunda-dmn-moddle@1.3.1    (the camunda: DMN moddle descriptor, for versionTag et al.)
@@ -14,6 +20,14 @@ dmn-modeler.js is a combined, pre-built bundle (global: window.AtlasDmn) of:
   - inferno-create-element@5.6.3 (JSX for Atlas's own module below, on the fork's Inferno)
   - Atlas's own dmn-js modules in src/atlas/ (ADR-draft-form-options-from-a-decision)
   - esbuild@0.25.9              (bundler only; not shipped)
+
+The atlas-owned vendor build lockfile src/package-lock.json records 68
+node_modules entries as of 2026-10-30 (67 MIT declarations, 1 ISC declaration:
+semver@7.8.5). Every entry has a resolved package URL, version and integrity
+digest. These are metadata assertions in the build's npm lockfile, NOT proof
+of exact inclusion in the emitted bundle or legally complete third-party
+notices. A licence-aware bundle inventory, fork ancestry review, independent
+build and watermark display check are still required before release.
 
 The dmn-js fork is pinned to the exact commit above. Its dmn-js-shared package
 pins dmn-moddle to the exact commit above as well. The fork adds generic DMN 1.5

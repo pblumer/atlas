@@ -180,6 +180,7 @@
         { "name": "dn", "type": "String", "isAttr": true },
         { "name": "memberDN", "type": "String", "isAttr": true },
         { "name": "entryVariable", "type": "String", "isAttr": true },
+        { "name": "attributes", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
         { "name": "newDN", "type": "String", "isAttr": true },
         { "name": "baseDN", "type": "String", "isAttr": true },
@@ -187,6 +188,8 @@
         { "name": "scope", "type": "String", "isAttr": true },
         { "name": "cookieVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "select", "type": "String", "isAttr": true },
+        { "name": "foundVariable", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },
         { "name": "objectSecurity", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }

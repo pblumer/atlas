@@ -259,6 +259,10 @@ func TestBootstrapKeepsItsPromises(t *testing.T) {
 		"System.Text.UTF8Encoding",
 		"Remove-PSSession",
 		"$env:ATLAS_EXCHANGE_REQUEST",
+		// resolveIdentity: Get-Recipient finds the recipient and its distinguished name
+		// replaces the address, for Add-/Remove-ADPermission.
+		"if ($req.resolveIdentity) { $names += 'Get-Recipient' }",
+		"$params['Identity'] = [string]$found[0].DistinguishedName",
 	} {
 		if !strings.Contains(onPremBootstrap, want) {
 			t.Errorf("the bootstrap no longer contains %q", want)
@@ -266,5 +270,33 @@ func TestBootstrapKeepsItsPromises(t *testing.T) {
 	}
 	if strings.Contains(onPremBootstrap, "Invoke-Expression") || strings.Contains(onPremBootstrap, "iex ") {
 		t.Error("the bootstrap evaluates text as code")
+	}
+}
+
+// TestOnPremAsksToResolveTheIdentity: an invocation whose cmdlet takes an Active
+// Directory object carries resolveIdentity to the bootstrap; others do not.
+func TestOnPremAsksToResolveTheIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		inv  catalog.Invocation
+		want bool
+	}{
+		{catalog.Invocation{Cmdlet: "Add-ADPermission", Parameters: map[string]any{"Identity": "info@contoso.com", "User": "anna@contoso.com"}, ResolveIdentity: true}, true},
+		{catalog.Invocation{Cmdlet: "Add-MailboxPermission", Parameters: map[string]any{"Identity": "info@contoso.com", "User": "anna@contoso.com"}}, false},
+	} {
+		r := &fakeRunner{stdout: `{"ok":true,"value":[]}`}
+		c := onprem(t, r, OnPremConfig{Authentication: "Kerberos"})
+		if _, err := c.Invoke(context.Background(), tc.inv, 0); err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := r.envValue("ATLAS_EXCHANGE_REQUEST")
+		var req struct {
+			ResolveIdentity bool `json:"resolveIdentity"`
+		}
+		if err := json.Unmarshal([]byte(raw), &req); err != nil {
+			t.Fatal(err)
+		}
+		if req.ResolveIdentity != tc.want {
+			t.Errorf("%s: resolveIdentity %v, want %v", tc.inv.Cmdlet, req.ResolveIdentity, tc.want)
+		}
 	}
 }

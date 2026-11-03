@@ -31,6 +31,11 @@ type Query struct {
 	// Next are ignored when it is set; Filters still apply, so a record outside them is
 	// not found.
 	Value string `json:"value,omitempty"`
+	// ValueProperty names the property that identifies a record — what a form submits,
+	// what each answered record must carry and what Value is read by. Empty is the
+	// resource's own identifier (an object id); a resource may admit others, such as a
+	// user's principal name (ADR-0473, amended).
+	ValueProperty string `json:"valueProperty,omitempty"`
 	// Search is the person's term, matched as a prefix of each of SearchFields. Empty
 	// lists the first page of what Filters admit.
 	Search       string   `json:"search,omitempty"`

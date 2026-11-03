@@ -239,3 +239,34 @@ test("cancelling a question installs nothing", async ({ page }) => {
   await expect(result(page)).toHaveText("cancelled");
   expect((await page.evaluate(() => window.__calls)).every((c) => !c.key.includes("source?") || c.key.includes("dryRun"))).toBe(true);
 });
+
+test("a process another application holds is taken only when ticked, its content kept unless replaced", async ({ page }) => {
+  const tree = tarGz([["atlas.json", JSON.stringify({ formatVersion: 1, key: "k", name: "K" })]]);
+  const routes = {
+    "POST /api/v1/applications/source?dryRun=true": { status: 200, data: { created: true, applicationId: "", artifacts: [
+      { ref: "application:k", status: "new", outcome: "created" },
+      { ref: "process:p1", name: "P1", status: "elsewhere", outcome: "undecided", compared: "changed",
+        heldBy: { id: "h1", name: "Patrick's <Stuff>" } },
+      { ref: "process:p2", status: "elsewhere", outcome: "undecided", compared: "unchanged" },
+    ] } },
+    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1": { status: 200,
+      data: { applicationId: "a1", name: "K", artifacts: [] } },
+  };
+  page.evaluate(([b, r]) => window.__importPackage(b, r), [tree, routes]);
+
+  const choices = page.locator(".import-choices");
+  // The holder is named, escaped; one it may not see is named as such.
+  await expect(choices.locator('[data-status="elsewhere"]')).toContainText("Patrick's <Stuff>");
+  await expect(choices.locator('[data-status="elsewhere"]')).toContainText("eine Applikation, die du nicht sehen kannst");
+  await expect(choices.locator('.import-adopt[value="process:p1"]')).not.toBeChecked();
+  // Only a changed one asks about its content too.
+  await expect(choices.locator(".import-adopt-content")).toHaveCount(1);
+  await choices.locator('.import-adopt[value="process:p1"]').check();
+  await choices.locator("[data-ok]").click();
+  await expect(result(page)).toHaveText("done: ");
+  expect((await page.evaluate(() => window.__calls)).map((c) => c.key)).toEqual([
+    "POST /api/v1/applications/source?dryRun=true",
+    "POST /api/v1/applications/source?keep=process%3Ap1&adopt=process%3Ap1",
+  ]);
+  expect(page.__errors).toEqual([]);
+});

@@ -184,9 +184,15 @@ func onlineBackend(endpoint string, b Bundle, opts Options) (Backend, error) {
 			ClientSecret: b.ClientSecret, Scope: scope,
 		})
 	}
+	// The token request keeps the shared bound; a cmdlet gets its own, longer one (see
+	// defaultOnlineTimeout). A client the caller supplies is used for both, as given.
+	cmdc := opts.HTTPClient
+	if cmdc == nil {
+		cmdc = onlineCmdletClient()
+	}
 	return NewOnlineClient(OnlineConfig{
 		Tokens: oauth2.NewCached(fetch, opts.Now), BaseURL: base, Organization: org,
-		AnchorMailbox: b.AnchorMailbox, HTTPClient: httpc,
+		AnchorMailbox: b.AnchorMailbox, HTTPClient: cmdc,
 	}), nil
 }
 

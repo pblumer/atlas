@@ -158,11 +158,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.21.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.22.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.21.0-dev"
+var Version = "0.22.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -2213,6 +2213,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.OnChange(s.contentRunner.Reload)
 	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
+	s.orders.CheckAnswers = s.checkOrderAnswers
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
 	// (ADR-0429 §3).

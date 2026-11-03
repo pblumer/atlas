@@ -1,6 +1,6 @@
 # ADR-0473: A form looks remote data up through an ephemeral worker query
 
-- **Status:** Accepted (amended 2026-10-23: a directory field is a form-js select whose
+- **Status:** Accepted (amended 2026-11-02: a directory field may stand in a shop product's order form, searched and checked against the release's catalogue instead of a task, and may submit a user's principal name instead of the object id; see «Amendment (2026-11-02)». Amended 2026-10-23: a directory field is a form-js select whose
   options source is the remote data source, a fourth beside Static, Input data and
   Expression, edited under the select's own Options source; the vendored form-js bundles
   are rebuilt from a lockfile with Atlas's modules for it; a directory field saved as a
@@ -325,7 +325,7 @@ Every refusal is the API's error envelope with a machine-readable `code` beside
   - **Graph's order is Graph's.** Without an advanced query Graph does not sort a
     filtered listing, so the first page is the first 25 matches in Graph's order, not
     alphabetically the first 25.
-  - **Only task forms.** A lookup needs a task to authorize against. A start form in the
+  - **Only task forms** (lifted for order forms by the amendment of 2026-11-02). A lookup needs a task to authorize against. A start form in the
     Console and a repair form render the field as the plain text field it is, with no
     search and no check of the value; a public start link and a public wizard step
     refuse a form with such a field, because nobody there is signed in to search and a
@@ -443,6 +443,61 @@ uses the vendored bundle.
 
 A tag list — several entries chosen from the same source — is not part of this
 amendment. The submission check takes one id per field; a list of ids is its own change.
+
+### Amendment (2026-11-02): order forms, and a principal name as the value
+
+**Context.** A shop product asks for a person in its order form — the owner of a team,
+who manages a distribution list, who receives a licence (`examples/m365-dienste`). They
+were text fields: a person typed a UPN, nothing checked it until the provisioning job
+failed, and in a tenant also used for real work nothing kept the orderer from naming
+anybody in it. The search existed, but only for task forms, because "may this caller
+search" was "may this caller work on this task".
+
+**Decision.**
+
+- **A second context: the order form.**
+  `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` runs the
+  same search for a product's `configForm`. The question it asks instead of the task's is
+  the one placing an order asks — `MayOrderFrom` on the release's catalogue (its audience,
+  or whoever maintains it) — and the form is the one the release's item names, read from
+  the form store as the shop renders it. Everything after that is the task's path: the
+  per-person rate limit, the field's Worker and its `formLookups` switch, bound and fixed
+  filters, the page bound, the sealed cursor — bound to `<release>/<item>` instead of a
+  task key, so a cursor from one context never opens in another. The route is keyed by
+  release rather than catalogue because an order is placed against a release, and the
+  search and the check must read the same form.
+- **The choice is checked at both doors.** Placing an order (`HandlePlace`, through
+  `order.Service.CheckAnswers`) and correcting a position's details (`handleAmendLine`)
+  hold every answer to a directory field to `CheckSubmission`, as completing a task does:
+  required, shape, and — with `verify: lookup`, the default — the person looked up once
+  more under the field's fixed and bound filters. A value the search would not have
+  offered is refused with 422 before anything is written. The check runs off the run
+  loop, because it asks a Worker; the correction is checked only for a caller who may
+  correct that order, so it is no oracle for who is in the directory. Until now the shop
+  checked no answer's value at all; it still checks nothing else.
+- **What the field submits.** `option.value` names the property the field submits and
+  is checked by: the source's identifier when absent, or another the source admits. For
+  Entra users that is `id` or `userPrincipalName` — unique, and read by Graph on the
+  same path (`/users/{upn}`), so a value lookup is the same request. The query carries
+  `valueProperty` only when a field names one, so a Worker from before this amendment
+  still serves every form written before it. A principal name is checked for its shape
+  (one `@`, nothing a path would carry escaped) on the server and again on the Worker.
+- **The shop renders it.** The basket and the correction form mount the remote select
+  with a transport to the new route; a task form shown in the shop uses the task route.
+  An action's form has no search: an action is neither a task nor an order line's
+  answers, and its value is not checked anywhere, so offering a search there would show
+  a choice nothing holds to.
+
+**Consequences.**
+
+- A shared tenant is narrowed by the field, not by the person searching: a fixed filter
+  (`department eq <something only the intended people carry>`) is what keeps a search to
+  them. The M365 development environment sets its test users' department to the
+  environment id and fixes the filter on it (`deploy/opentofu/m365-devenv`).
+- Verified against a real Microsoft 365 tenant and a release server: the search offered
+  the four test users and nobody else, refused a moved fixed filter with 400, and an
+  order whose owner was chosen this way provisioned a distribution list managed by that
+  person.
 
 ## Pros and cons of the options
 

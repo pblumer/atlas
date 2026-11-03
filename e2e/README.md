@@ -47,6 +47,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   and a failed read is shown as an error at its step. The harness computes each page from the
   iteration number, as the server's index does, instead of holding 50,000 rows.
 
+- **`migration-wiring.spec.mjs`** (ADR-0162): where the Operations surfaces open the
+  batch migration, against the real console and a mocked server — the ⋯ menu of a process
+  row (also after the list is redrawn), the live view's *Migrate instances…* button for the
+  version on screen, and the *Migrate…* button beside each older version the live view's
+  heading lists as still running instances, which opens the dialog with that version as the
+  source and the newest as the target, uses the per-version counts the heading already holds,
+  re-reads them after the migration, and keeps working after the list is redrawn. Counts that
+  could not be read are left out rather than shown as none, and a process with a single
+  version offers no migration at all.
+
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the catalogue app's Building blocks page offers the sources the server names, shows each wiki

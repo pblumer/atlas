@@ -184,8 +184,12 @@ func variablesFrom(out map[string]any) []model.VariableValue {
 // stays a string (the cookie), and anything structured becomes JSON so the result
 // nests real objects and arrays rather than a stringified blob.
 func responseVariable(name string, body any) model.VariableValue {
-	if s, ok := body.(string); ok {
-		return model.VariableValue{Name: name, Kind: model.VarString, Text: s}
+	switch t := body.(type) {
+	case string:
+		return model.VariableValue{Name: name, Kind: model.VarString, Text: t}
+	case bool:
+		// A search's foundVariable: a boolean, so a gateway reads =gefunden as one.
+		return model.VariableValue{Name: name, Kind: model.VarBool, Bool: t}
 	}
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -242,6 +246,90 @@ func attrsFromVar(varName string, scopeVars map[string]model.VariableValue) (map
 		attrs[name] = toStrings(raw)
 	}
 	return attrs, nil
+}
+
+// evalEntry evaluates an inline attributes template (a FEEL context the compiler built
+// from the modeler's JSON) over the task's variables and turns it into an LDAP entry
+// (ADR-0166, amended 2026-11-03).
+//
+// Each value maps onto an attribute the way a person reading the template expects:
+// a string is one value; a number or a boolean is its LDAP text (a boolean as RFC
+// 4517's TRUE or FALSE, the only spelling AD's Boolean syntax accepts); a list is one
+// value per element. null — written as such, or an =expression over a variable that is
+// not set — means "no value": a create leaves the attribute out, because an add cannot
+// carry an attribute without one, and update-attributes clears it, because a replace
+// with no values is how LDAP removes an attribute. A list's null elements are dropped,
+// and an empty list means what null does. A nested object is refused: the compiler
+// already refuses one written literally, so this is an =expression that produced one,
+// and there is no attribute syntax to map it onto.
+func evalEntry(rv compiler.RestExpr, op string, piKey uint64, scopeVars map[string]model.VariableValue) (map[string][]string, error) {
+	v, err := rv.Expr.Eval(bindVars(piKey, scopeVars, rv.Expr.Inputs()))
+	if err != nil {
+		return nil, fmt.Errorf("ad: evaluate inline attributes: %w", err)
+	}
+	kind, _, text := expr.Classify(v)
+	if kind != expr.KindJSON {
+		return nil, fmt.Errorf("ad: inline attributes evaluated to a %v, not an object of attributes", kind)
+	}
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil {
+		return nil, fmt.Errorf("ad: inline attributes are not an object of attributes: %w", err)
+	}
+	clears := op == "update-attributes"
+	attrs := make(map[string][]string, len(obj))
+	for name, raw := range obj {
+		vals, err := entryValues(name, raw)
+		if err != nil {
+			return nil, err
+		}
+		if len(vals) == 0 {
+			if clears {
+				attrs[name] = []string{}
+			}
+			continue
+		}
+		attrs[name] = vals
+	}
+	return attrs, nil
+}
+
+// entryValues renders one inline attribute's value as LDAP values; nil or empty means
+// none.
+func entryValues(name string, raw any) ([]string, error) {
+	switch t := raw.(type) {
+	case nil:
+		return nil, nil
+	case map[string]any:
+		return nil, fmt.Errorf("ad: inline attribute %q evaluated to an object; an LDAP attribute holds values — a string, a number, a boolean or a list of them", name)
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			switch e.(type) {
+			case nil:
+				continue
+			case map[string]any, []any:
+				return nil, fmt.Errorf("ad: inline attribute %q lists a nested %T; each value of a multi-valued attribute is a string, a number or a boolean", name, e)
+			}
+			out = append(out, ldapText(e))
+		}
+		return out, nil
+	default:
+		return []string{ldapText(t)}, nil
+	}
+}
+
+// ldapText renders a scalar as an LDAP value: a boolean in RFC 4517's spelling, a
+// number as written, a string as it is.
+func ldapText(v any) string {
+	if b, ok := v.(bool); ok {
+		if b {
+			return "TRUE"
+		}
+		return "FALSE"
+	}
+	return scalarString(v)
 }
 
 // toStrings coerces one attribute value into LDAP's string-valued form.

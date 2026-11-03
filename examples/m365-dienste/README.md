@@ -813,6 +813,7 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
+   | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor UPN und Anzeigename eines Partnerkontos (so finden es auch die Aufräumskripte der Testumgebung, die nach dem Anzeigenamen suchen) und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
    | `SHAREPOINT_HOST` | `contoso.sharepoint.com` | SharePoint-Host des Tenants; die Sites liegen unter `https://<SHAREPOINT_HOST>/sites/<alias>` |
    | `SITE_INVENTAR` | `contoso.sharepoint.com:/sites/m365-governance` | Site, die die Liste «Site-Inventar» trägt (Host und Pfad, eine Site-ID oder die URL) |
    | `LIZENZ_MODUS` | `direkt` | Wie `lizenz.bpmn` die Lizenz vergibt: `direkt` (`assign-license`), `entra-gruppe` (Mitgliedschaft in einer Cloud-Gruppe) oder `ad-gruppe` (Mitgliedschaft in einer Gruppe im lokalen AD, die Entra Connect synchronisiert); siehe «Lizenzen: direkt oder über Gruppen» |
@@ -944,6 +945,67 @@ Ersatzgruppe und nicht in einen Incident. Den Entra-Worker spielt der Test selbs
 übernimmt den Job und antwortet mit dem Vorgesetzten, ohne Vorgesetzten oder mit dem
 Fehler.
 
+**Gegen einen echten Tenant geprüft (2026-11-02 und 2026-11-03)**, geteilter Tenant mit `NAME_PREFIX`,
+Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-devenv`,
+`shared_tenant = true`), über die Shop-Oberfläche bestellt:
+
+- **Verteiler** bestellt: Namensregel mit Präfix, `New-DistributionGroup` im Schreibbereich,
+  Herkunftskennzeichnung `CustomAttribute1–4`, «Verwaltet von» aus der Personensuche.
+- **Funktionspostfach** bestellt und zurückgegeben (gelöscht), mit Genehmigung durch die
+  vorgesetzte Person: `get-user-manager` gegen Graph, Atlas-Konto der vorgesetzten Person aus
+  der Entra-Anmeldung, Mail an sie über RBAC for Applications.
+- **Team** bestellt und zurückgegeben (archiviert).
+- **Verteiler** zurückgegeben (`Remove-DistributionGroup` mit `BypassSecurityGroupManagerCheck`,
+  nachdem die Rolle *Security Group Creation and Membership* in Exchange wirksam war).
+- **Postfachzugriff** erteilt und entzogen: persönliches Postfach, Vollzugriff, die Regel
+  `m365-postfachzugriff` verlangte die Zusatzfreigabe, die Informationssicherheit gab frei,
+  `Add-MailboxPermission` bzw. `Remove-MailboxPermission` setzten und entfernten `FullAccess`;
+  die Begründung liegt als personenbezogene Variable verschlüsselt.
+- **Sitzungszimmer** bestellt und zurückgegeben (Genehmigung durch die Rolle Facility-Management): Raumpostfach
+  mit Präfix `RM`, `ResourceCapacity`, Buchungsregeln `AutoAccept`, keine Überschneidungen,
+  180 Tage, Herkunftskennzeichnung mit dem Standort; die Rückgabe findet es über die
+  Kennzeichnung und entfernt es.
+- **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
+  zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
+  (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
+- **Partnerzugang** über den öffentlichen Link beantragt, von `M365-Administration` abgelehnt
+  bzw. freigegeben: Mitgliedskonto mit Präfix in UPN und Anzeigename, `employeeType` Partner,
+  Firma, Initialpasswort mit Änderung bei der ersten Anmeldung; Namen und Firma ohne
+  Leerzeichen am Rand. Die Sperre nach Ablauf (frühestens 90 Tage) ist nicht abgewartet.
+- **Governance-Prüfung** von Hand gestartet: keine Postfächer und Verteiler ohne
+  Kennzeichnung, zwei Microsoft-365-Gruppen der Testumgebung ausserhalb der Namensregel,
+  Befund als Aufgabe an `M365-Administration`.
+- **Personensuche** in den Bestellformularen (ADR-0473, Amendment 2026-11-02), fest gefiltert
+  auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
+
+Dabei korrigiert: das Team wartet die Replikation **vor** dem Besitzer ab (`add-group-owner`
+23 s nach `create-group` antwortete 404); der Entra-Worker legt Teams mit `POST /teams` an
+(`PUT /groups/{id}/team` antwortete einer App 403 «StampTenantRegionRequest»); die
+Verteilerliste entsteht ohne `-Type`; der Exchange-Worker liest Antworten unkomprimiert und
+wiederholt ein `Set-`/`Add-`, das ein eben angelegtes Objekt noch nicht findet, und wartet
+auf ein Cmdlet bis zu zwei Minuten statt zehn Sekunden (`Add-MailboxPermission` auf ein eben
+angelegtes Funktionspostfach brauchte länger und wirkte trotzdem); Personen werden
+auch über Vor- und Nachname gefunden.
+
+Gefunden und korrigiert: Die Governance-Prüfung zählte keine Teams, solange der Vergleich mit
+der Namensregel in einem Filter stand (`gruppen[not(matches(mailNickname, "^" +
+application.NAME_PREFIX + …))]`): In einem Filter über Kontexte liest ein Name, der kein
+Schlüssel des Elements ist, nicht die Variable der Instanz. Der Vergleich steht jetzt in einem
+`for`.
+
+Gefunden, nicht korrigiert: Findet der Server keinen Empfänger für eine Mail (eine Gruppe ohne
+Mitglieder mit Adresse), verschluckt er den Fehler beim Auflösen (`api/handlers.go`,
+`mail.Resolve`) und der Worker meldet irreführend «is this server offloading the mail kind?».
+Die Mailadresse eines Teams ist die Standard-Domain des Tenants, nicht `MAIL_DOMAIN`.
+
+Wer sich erst nach der Installation zum ersten Mal anmeldet, ist in keiner Zielgruppe und
+sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzwischen
+angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
+
+Nicht geprüft: die Sperre eines Partnerkontos nach Ablauf, die übrigen Aktionen an Bestellungen,
+die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen,
+Teams Phone und `installieren.ps1`.
+
 **SharePoint-Teamwebsite.** Geprüft ist nur ohne Server und ohne Tenant: Der Prozess
 kompiliert, das Katalogdokument veröffentlicht sich mit dem Produkt und allen sieben
 Aktionen, der Block `atlasAvailability` des Bestellformulars wird vom Parser des Servers
@@ -980,11 +1042,6 @@ von `M365Namensregel` wurde lokal ausgewertet. Nicht geprüft: `create-community
 Graph (der Vorgang, seine Dauer, das Ergebnis mit `groupId`), die Annahmen oben und die
 Governance-Prüfung, die Gruppen mit einem Anzeigenamen «EC-…» nicht mehr meldet.
 
-Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
-Worker gibt es keinen Mock), `get-user-manager` gegen Microsoft Graph,
-die Mail an die genehmigende Person, die Eskalation nach sieben Tagen, die
-Governance-Prüfung gegen echte Daten und `installieren.ps1` (in der Prüfumgebung stand keine
-PowerShell zur Verfügung).
 
 ## Annahmen, die vor dem Einsatz zu prüfen sind
 
