@@ -41,8 +41,16 @@ start its newest version with values the server holds to its start form
 work menu and read-only incident triage, and multi-column forms stack at narrow widths
 ([ADR-0514](docs/adr/0514-mobile-first-tasks-start-and-incident-triage.md)).
 
-**Forms take their options from a decision, the shop reports on its promise, and the
-examples ship through atlas hub.** A select, radio group, checklist or tag list shows what
+**A process orders for somebody, forms take their options from a decision, the shop
+reports on its promise, and the examples ship through atlas hub.** A shop send task in the
+new mode `order` places an order in the name of its application, through every check a
+person's order meets, for a product whose `orderableBy` names that application — so an HR
+joiner process orders the starter package
+([ADR-0520](docs/adr/0520-process-places-an-order.md)); an order form says while a name is
+typed whether Entra, Exchange or SharePoint already use it
+([ADR-0519](docs/adr/0519-name-availability-check.md)); and the Entra Worker invites
+guests, restores deleted groups and creates Viva Engage communities, while the SharePoint
+Worker reads a site and its storage. A select, radio group, checklist or tag list shows what
 the newest version of a deployed decision answers, bound to the form's other fields, and
 the decision editor edits a DMN boxed list
 ([ADR-0511](docs/adr/0511-form-options-from-a-decision.md)). A product promises a delivery
@@ -80,6 +88,12 @@ as it runs 0.22.0:
   budgets. Anyone who can reach `/oauth/authorize` can trigger such a fetch; nothing is
   saved before an administrator approved. An installation without outbound access sees
   the consent screen say that the document could not be read.
+- A Worker that runs apart from the server needs 0.22.0 for the new Entra operations
+  `invite-guest`, `restore-group`, `list-deleted-groups` and `create-community`, for the
+  SharePoint operation `get-site`, and to answer a name field's availability check. The
+  Entra app registration needs `User.Invite.All` for `invite-guest` and
+  `Community.ReadWrite.All` for `create-community`; nothing else changes for a Worker
+  that uses neither.
 - `ATLAS_BLUEPRINT_REGISTRY_KEY` accepts two keys separated by a comma. A value with three
   keys, the same key twice or a malformed key stops the server at startup, as a malformed
   single key already did.
@@ -92,7 +106,9 @@ What changes on disk, and going back:
   OAuth client and grant stores gain the fields of a connected system. The state store
   gains the multi-instance history families, the instance outline, the steps inside
   iterations, the index of armed event-subprocess triggers and an index from an ended user
-  task to the feed row that ended it, each with its marker. The log gains no record type
+  task to the feed row that ended it, each with its marker. A catalogue product gains
+  `orderableBy`, frozen into its release, and an order placed by a process names
+  `system:application:<key>` as its orderer. The log gains no record type
   and no intent, and no record it had changed. No system process and no event type
   changed, so the first start deploys nothing new and `GET /api/v1/event-catalog` answers
   as before.
@@ -112,6 +128,10 @@ What changes on disk, and going back:
     Connected systems before going back.
   - 0.21.0 does not open `start-grants`: task users lose Start, and the grants come back
     with 0.22.0.
+  - 0.21.0 refuses a shop send task in mode `order` when it reloads the deployed models,
+    and a deployed model it cannot reload stops it from starting. Delete every deployed
+    version that uses that mode — the M365 example's HR joiner process does — before
+    going back. The atlas hub package `m365-dienste` 1.0.3 requires 0.22.0.
   - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
     same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
     event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
