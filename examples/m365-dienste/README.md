@@ -337,6 +337,10 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
 - **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
   zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
   (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
+- **Partnerzugang** über den öffentlichen Link beantragt, von `M365-Administration` abgelehnt
+  bzw. freigegeben: Mitgliedskonto mit Präfix in UPN und Anzeigename, `employeeType` Partner,
+  Firma, Initialpasswort mit Änderung bei der ersten Anmeldung; Namen und Firma ohne
+  Leerzeichen am Rand. Die Sperre nach Ablauf (frühestens 90 Tage) ist nicht abgewartet.
 - **Personensuche** in den Bestellformularen (ADR-0473, Amendment 2026-11-02), fest gefiltert
   auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
 
@@ -358,7 +362,7 @@ Wer sich erst nach der Installation zum ersten Mal anmeldet, ist in keiner Zielg
 sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzwischen
 angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
 
-Nicht geprüft: Partnerzugang, die übrigen Aktionen an Bestellungen,
+Nicht geprüft: die Sperre eines Partnerkontos nach Ablauf, die übrigen Aktionen an Bestellungen,
 die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
 Teams Phone und `installieren.ps1`.
 
