@@ -14,6 +14,45 @@ import (
 // The inline entry, select and foundVariable (ADR-0166, amended 2026-11-03), through
 // the whole path a model takes: compiled from BPMN, resolved at the handoff, performed.
 
+// The entry a model builds in a variable (entryVariable) keeps working exactly as before
+// the inline attributes existed (ADR-0166, amended 2026-11-03): a BPMN that names only
+// an entryVariable compiles to the same detail and the worker writes the same entry —
+// including the old rendering, a boolean as "true" and a null as an empty value, which
+// the inline template deliberately renders differently (TRUE, and omitted or cleared).
+func TestAdEntryVariableBehavesAsBefore(t *testing.T) {
+	const entry = `{"sAMAccountName":"arno","flag":true,"n":5,"leer":null,"liste":["a","b"]}`
+	cp, jobType := adTaskModel(t, `operation="create-user" dn="cn=Arno,ou=users,dc=x" entryVariable="eintrag"`)
+	d := cp.ConnectorTask(cp.Node(cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target).Detail)
+	if d.AdAttributes.Expr != nil || cp.Intern(d.AdEntryVar) != "eintrag" {
+		t.Fatalf("an entryVariable model compiled to attributes=%v entryVar=%q, want the variable form unchanged",
+			d.AdAttributes.Expr != nil, cp.Intern(d.AdEntryVar))
+	}
+	log, store := openStore(t)
+	conn := &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "eintrag", Kind: model.VarJSON, Text: entry})
+	want := map[string][]string{
+		"sAMAccountName": {"arno"}, "flag": {"true"}, "n": {"5"}, "leer": {""}, "liste": {"a", "b"},
+		"objectClass": {"top", "person", "organizationalPerson", "user"},
+	}
+	if !reflect.DeepEqual(conn.addAt, want) {
+		t.Errorf("create entry = %v\nwant           %v", conn.addAt, want)
+	}
+
+	cp, jobType = adTaskModel(t, `operation="update-attributes" dn="cn=Arno,ou=users,dc=x" entryVariable="aenderung"`)
+	log, store = openStore(t)
+	conn = &fakeConn{}
+	drive(t, cp, jobType, &fakeDialer{conn: conn}, noSecret, store, log,
+		model.VariableValue{Name: "aenderung", Kind: model.VarJSON, Text: `{"title":"Leiter","mobile":null}`})
+	got := map[string][]string{}
+	for _, m := range conn.mods {
+		got[m.Attr] = m.Vals
+	}
+	if !reflect.DeepEqual(got, map[string][]string{"mobile": {""}, "title": {"Leiter"}}) {
+		t.Errorf("update mods = %v, want the entry variable's values replaced as before", got)
+	}
+}
+
 // adTaskModel compiles a model whose one AD task carries the given attributes and is
 // followed by a parked service task, so the instance — and its variables — outlive the
 // AD job for the test to read.
