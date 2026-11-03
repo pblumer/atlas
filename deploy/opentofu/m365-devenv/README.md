@@ -335,7 +335,7 @@ für das On-Premises-Backend des Exchange-Workers (ADR-0462, `"target": "onprem"
 - Abschaltung täglich um `exchange_auto_shutdown_time` (Vorgabe 19:00 UTC).
 
 Danach startet `onprem/install-worker.sh` den Exchange-Worker `ucc_exchange_onprem` auf `exch01`
-selbst, als Dienstkonto (Kerberos ohne Passwort in Atlas): Es baut `atlas.exe`, bietet es zehn
+selbst, als Dienstkonto (Kerberos ohne Passwort in Atlas): Es baut `atlas.exe`, bietet es 30
 Minuten lang nur im VNet von der Atlas-VM an, erzeugt ein Worker-Token und führt
 `onprem/exchange-worker.ps1` über den Run Command aus (Token und Passwort als geschützte
 Parameter). `onprem/exchange-onprem-smoke.bpmn` prüft jede Operation von Funktionspostfach,
@@ -522,7 +522,8 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
   `ad-setup.ps1`, Cloud-Init mit gzip, die Lizenzzuweisung über `az rest`, die Warteskripte
   und `shared-tenant-setup.ps1` laufen nach den Korrekturen im Abschnitt «Erfahrungen mit
   einem echten Tenant». Ein zweiter Durchlauf von Grund auf mit diesen Korrekturen steht aus.
-- **Exchange Server (on-premises)** ist nicht abgedeckt.
+- **Exchange Server (on-premises)** ist optional (`enable_exchange_onprem`, Abschnitt
+  «Exchange Server (optional)») und einmal am 2026-11-03 installiert und mit dem Rauchtest geprüft.
 - **Teams Phone:** Rufnummern, Calling Plans und Direct Routing richtet das Projekt nicht
   ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
   verlangt, ist nicht geprüft (`teamsphone_graph_permissions`).

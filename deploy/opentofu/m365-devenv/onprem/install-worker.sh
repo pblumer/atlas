@@ -2,7 +2,7 @@
 # Starts the on-premises Exchange worker on exch01 (onprem/exchange-worker.ps1) once the
 # Exchange server is ready (scripts/wait-exchange.sh):
 #   1. builds atlas.exe for Windows from the repository this script lives in,
-#   2. offers it for ten minutes from the Atlas VM inside the virtual network only,
+#   2. offers it for 30 minutes from the Atlas VM inside the virtual network only,
 #   3. mints a worker-scoped API token (7 days) in the Atlas server as its administrator,
 #   4. runs exchange-worker.ps1 on exch01 through Azure's managed run command, with the
 #      token and the service account's password as protected parameters.
