@@ -19,6 +19,17 @@ _Changed_ / _Removed_ for each version.
 ### Changed
 - **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
 
+### Fixed
+
+- **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
+  rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
+  thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
+  the cancellation was recorded as `the content source cannot be reached: … context canceled`. That
+  quarantined products whose wiki pages were fine, and the catalogue could not be published until
+  each was refreshed again. A recheck cut off by its caller now records and writes nothing (503 for a
+  single product), and `POST /api/v1/catalogs/{id}/content/refresh` runs to its end even when the
+  caller has gone, so asking again finds the products refreshed.
+
 ## [0.22.0] — 2026-11-02
 
 **A multi-instance execution of 50,000 iterations is explored a page at a time.**
@@ -154,6 +165,19 @@ What changes on disk, and going back:
     snapshot taken before the first upgrade, or do not go back.
 
 ### Added
+- **The AD Worker writes attributes a process keeps sealed.** An `<atlas:adConnector>`
+  that creates a user, group or contact or updates attributes may author its entry
+  inline as `attributes` — a JSON template whose `=…` values are FEEL, as Entra's are —
+  instead of naming an `entryVariable` the engine has to build. The Worker evaluates it
+  when it is handed the job, so it may read variables the process declares personal
+  (ADR-0314): a string is one value, a list several, a number or boolean its LDAP text,
+  and `null` leaves the attribute out of a create and clears it on an update. A `search`
+  takes `select`, the attributes it returns, and `foundVariable`, which receives `found`
+  on its own as a boolean, so the result — names and DNs — can be declared personal while
+  a gateway still branches; a search with only a `foundVariable` writes nothing else. The
+  Modeler's AD panel offers all three, and `examples/ad-dienste` now seals logon names,
+  names, addresses and found DNs and names external accounts `ext-<vorname>.<nachname>`
+  again (ADR-0166, amended 2026-11-03).
 - **An import takes another application's artifact when asked.** A process, form or decision that another existing application holds no longer refuses the import. The plan lists it as `elsewhere`, with the application that holds it and how its content compares, and `?adopt=` moves it into the importing application, ref by ref and never as `*` (ADR-0467). Adopting needs the editor role on the application the artifact leaves, and a protected application gives nothing up. The Console's import dialog lists such artifacts unticked in their own group, `atlas import` takes `--adopt REF` or asks at a terminal, and `atlas_hub_import_release` passes `adopt`, so a hub bundle installs on a server that already filed some of its processes elsewhere.
 - **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
 - **A process commands what a person holds without reading what they hold.** A shop
