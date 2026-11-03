@@ -199,7 +199,7 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
-   | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor dem UPN eines Partnerkontos und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
+   | `NAME_PREFIX` | `""` (Typ **json**) | Präfix vor jedem Namen und Alias, den die Namensregel bildet, vor UPN und Anzeigename eines Partnerkontos (so finden es auch die Aufräumskripte der Testumgebung, die nach dem Anzeigenamen suchen) und als Grenze der Governance-Prüfung. Für einen geteilten Tenant, z.B. `"atlas-test-58o4-"` (mit Anführungszeichen: der Typ ist json, weil ein leerer Text kein Fallback einer gebundenen Konstante sein kann) |
 
 ## Installieren
 
