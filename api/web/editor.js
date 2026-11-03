@@ -6212,10 +6212,15 @@ const SHOP_TASK_MODES = [
         hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
       },
       {
+        key: "recipient", label: "Or: recipient", fx: true, placeholder: "= account.id",
+        hint: "Instead of order and position: the account id of the person whose position of the product is asked. The server finds it in the inventory, so the process never reads what the person holds. When they hold none, the task completes and the result variable is empty. Fill either this or order and position.",
+      },
+      {
         key: "resultVariable", label: "Result variable", placeholder: "commandId",
-        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+        hint: "Receives the id of the command the action runs under, or an empty text when a recipient holds nothing to command. Leave empty to discard it.",
       },
     ],
+    after: "A refusal a retry will not change — the product does not list this application, the action is not an operator's or a system's, the position is not held — is thrown as the BPMN error SHOP_COMMAND_REFUSED when the process catches that code: put an error boundary event catching SHOP_COMMAND_REFUSED on this task to route it. Uncaught, it fails the job and becomes an incident after the retries.",
   },
   {
     v: "order", l: "Order — place an order for somebody in the application's name",

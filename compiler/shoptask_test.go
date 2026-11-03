@@ -161,3 +161,31 @@ func TestAShopOrderTaskNamesWhatItOrders(t *testing.T) {
 		}
 	}
 }
+
+// TestAShopCommandTaskMayNameARecipient: a command addresses either an order and a
+// position or what a recipient holds — never both, and never neither.
+func TestAShopCommandTaskMayNameARecipient(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(shopModel(
+		`mode="command" product="ad-admin-konto" action="deprovision" recipient="= konto.id" resultVariable="asked"`, false)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	idx, _ := cp.ElementIndexOf("Told")
+	d, err := cp.ConnectorTaskOf(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.JobType != compiler.ShopCommandJobTypeIndex || d.ShopMode != compiler.ShopModeCommand || d.ShopRecipient.Expr == nil ||
+		d.ShopOrder.Expr != nil || d.ShopOrder.Literal != "" || d.ShopResultVar != "asked" {
+		t.Fatalf("detail = %+v", d)
+	}
+	for name, attrs := range map[string]string{
+		"both":    `mode="command" product="p" action="deprovision" recipient="= r" order="= o" position="p"`,
+		"neither": `mode="command" product="p" action="deprovision"`,
+		"bad":     `mode="command" product="p" action="deprovision" recipient="= (("`,
+	} {
+		if _, err := compiler.Parse(1, 1, strings.NewReader(shopModel(attrs, false))); err == nil {
+			t.Errorf("%s: compiled", name)
+		}
+	}
+}

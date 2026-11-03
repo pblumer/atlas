@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "ad-konto-passwort",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Passwort festlegen · Set the password**\n\nDas Passwort wird verschlüsselt gespeichert, im Konto gesetzt und danach aus dem Vorgang entfernt. Es muss der Kennwortrichtlinie der Domäne genügen. Gib es der Person, die das Konto benutzt, auf einem sicheren Weg weiter. · The password is stored encrypted, set on the account and then removed from the case. It must meet the domain's password policy. Hand it to the person using the account through a secure channel.\n\n{{#if vorname}}Externe Person · External person: {{vorname}} {{nachname}}, {{firma}}, {{email}}{{/if}}"
+    },
+    {
+      "key": "passwort",
+      "type": "textfield",
+      "label": "Passwort · Password",
+      "description": "Mindestens 14 Zeichen. · At least 14 characters.",
+      "validate": {
+        "required": true,
+        "minLength": 14,
+        "maxLength": 128
+      }
+    }
+  ]
+}

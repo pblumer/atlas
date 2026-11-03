@@ -2243,12 +2243,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">45</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">46</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">45</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">46</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -5651,17 +5651,19 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Dreiundzwanzig Prozesse über die Worker-Typen Entra, Exchange, SharePoint und Teams Phone,
-              acht Entscheidungstabellen und 48 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              acht Entscheidungstabellen und 50 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
               zu, Abwesenheitsnotiz, Kontingent, Weiterleitung, Mailadressen und Kalenderstellvertretung am selben Produkt
               setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
-              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>. Das Bestellformular der
+              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>; wer Lizenzen über AD-Gruppen
+              vergibt (Konstante <code>LIZENZ_MODUS</code>), zusätzlich <code>ad_verzeichnis</code>. Das Bestellformular der
               SharePoint-Teamwebsite prüft schon während der Eingabe, ob die URL noch frei ist. Lizenz, Team, SharePoint-Teamwebsite, Community,
               Funktionspostfach und Postfachzugriff genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
               sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
             <p data-l="en">Twenty-three processes over the Entra, Exchange, SharePoint and Teams Phone Worker Types, eight
-              decision tables and 48 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
+              decision tables and 50 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
               automatic reply, the quota, forwarding, e-mail addresses and calendar delegates on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code>,
-              <code>ucc_sharepoint</code> and <code>ucc_teams</code>. The SharePoint team site's order form checks
+              <code>ucc_sharepoint</code> and <code>ucc_teams</code>; an installation that licenses through AD groups
+              (constant <code>LIZENZ_MODUS</code>) also uses <code>ad_verzeichnis</code>. The SharePoint team site's order form checks
               while the URL is typed whether it is still free. Licence, team, SharePoint team site, community, shared mailbox and mailbox access
               are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
@@ -5690,6 +5692,55 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p data-l="en"><b>It installs with <code>atlas import</code></b> once the eight decision models are uploaded; the
           steps, the answers to the catalogue's questions and the application's constants are in
           <code>examples/m365-dienste/README.md</code>. You create the public links yourself afterwards, deliberately.</p>
+      </div>
+      <div class="bsp" id="bsp-ad-dienste">
+        <h4><span class="rz-emoji" aria-hidden="true">🗄️</span>
+          <span data-l="de">Active-Directory-Dienste: Gruppen, Berechtigungen und Konten als Shop</span><span data-l="en">Active Directory services: groups, permissions and accounts as a shop</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag">Active Directory</span>
+          <span class="tag" data-l="de">Befristung</span><span class="tag" data-l="en">time limit</span>
+          <span class="tag" data-l="de">Namensregel</span><span class="tag" data-l="en">naming rule</span>
+          <span class="tag">examples/ad-dienste/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Was eine Informatik im Active Directory anbietet, als Shop: Sicherheitsgruppen mit einer
+              verantwortlichen Person, Berechtigungen auf Fileshares und Applikationen, persönliche Admin-Konten,
+              Servicekonten, Testkonten, Konten für externe Personen und die Versetzung in eine andere
+              Organisationseinheit. Über eine Berechtigung entscheidet, wer die Gruppe verantwortet; Admin-Konten
+              genehmigt die Informationssicherheit. Berechtigungen und Konten sind befristet und enden von selbst.</p>
+            <p data-l="en">What an IT department offers in Active Directory, as a shop: security groups with a responsible
+              person, permissions on file shares and applications, personal admin accounts, service accounts, test
+              accounts, accounts for external people, and the transfer to another organisational unit. A permission is
+              decided by whoever is responsible for the group; information security approves admin accounts.
+              Permissions and accounts are time-limited and end by themselves.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Acht Prozesse über den Worker-Typ AD (Worker <code>ad_verzeichnis</code>), drei
+              Entscheidungstabellen und elf Formulare. Alle Berechtigungen teilen einen Lebenszyklus: Die Tabelle
+              <code>AdBerechtigungen</code> sagt, welche Gruppe ein Produkt meint. Jedes angelegte Objekt trägt im
+              Attribut <code>info</code> eine Herkunftskennzeichnung, über die Rückgabe und Aktionen es finden. Ein
+              LDAP-Filter enthält nie einen Freitext, nur geprüfte Kennungen und Namen aus der Namensregel.</p>
+            <p data-l="en">Eight processes over the AD Worker Type (Worker <code>ad_verzeichnis</code>), three decision
+              tables and eleven forms. All permissions share one lifecycle: the table <code>AdBerechtigungen</code> says
+              which group a product means. Every object created carries a provenance tag in its <code>info</code>
+              attribute, by which returns and actions find it. An LDAP filter never contains free text, only checked
+              logon names and names from the naming rule.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die drei Entscheidungsmodelle
+          hochgeladen sind; die Schritte, die Antworten auf die Fragen des Katalogs, die Konstanten der Applikation und
+          die Rechte, die das Dienstkonto des Workers im Verzeichnis braucht, stehen in
+          <code>examples/ad-dienste/README.md</code>.</p>
+        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the three decision models are uploaded; the
+          steps, the answers to the catalogue's questions, the application's constants and the rights the Worker's
+          service account needs in the directory are in <code>examples/ad-dienste/README.md</code>.</p>
       </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
@@ -13595,7 +13646,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">45</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">45</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">46</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">46</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

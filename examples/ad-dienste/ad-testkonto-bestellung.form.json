@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "ad-testkonto-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Testkonto · Test account**\n\nDas Konto heisst tst-<Bezeichnung>, gilt höchstens 90 Tage und wird am Ablaufdatum gelöscht. · The account is called tst-<name>, lasts at most 90 days and is deleted on the expiry date."
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "2 bis 16 Zeichen: Buchstaben, Ziffern, Bindestrich. · 2 to 16 letters, digits or hyphens.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9-]{2,16}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ablaufdatum",
+      "type": "datetime",
+      "subtype": "date",
+      "dateLabel": "Gültig bis · Valid until",
+      "description": "Höchstens 90 Tage ab heute. · At most 90 days from today.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
