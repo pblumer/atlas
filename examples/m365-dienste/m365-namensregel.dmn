@@ -3,7 +3,7 @@
   M365Namensregel: die Namenskonvention für alles, was der Microsoft-365-Katalog anlegt (Governance).
 
   Eingaben: objekttyp  ("team" | "funktionspostfach" | "verteiler" | "raum" | "warteschlange" | "telefonzentrale"
-                        | "site")
+                        | "site" | "geraet" | "community")
             slug       (die normalisierte Bezeichnung; der Prozess bildet sie im Input-Mapping)
             laenge     (berechnet: Länge von slug und bereich zusammen)
             bereich, bezeichnung (Formularantworten; die Ausgaben lesen sie)
@@ -23,6 +23,9 @@
   gewählt. Die Sperrliste reservierter Bezeichnungen (r2) gilt auch für Sites. Anzeigename ist der
   Titel aus dem Bestellformular (bezeichnung), Alias die URL. Für alle anderen Objekttypen ändern
   die drei Regeln nichts.
+
+  Objekttypen geraet (Präfix GE) und community (Präfix EC) sind später dazugekommen; ihre Regeln
+  r11 und r12 stehen vor der Auffangregel r10 und ändern an den bisherigen nichts.
 
   Wer die Konvention ändert, ändert diese Tabelle und nicht die Prozesse. Achtung: Präfixe sind Teil
   der Identität bestehender Teams und Ressourcenkonten (deren Rückgabe bildet den Alias neu); ein
@@ -166,6 +169,26 @@
         <outputEntry id="r9_o1"><text>"Namensregel erfüllt"</text></outputEntry>
         <outputEntry id="r9_o2"><text>"AA-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
         <outputEntry id="r9_o3"><text>"aa-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r11">
+        <description>Objekttyp geraet: Präfix GE (Gerätepostfach: Beamer, Fahrzeug, Leihgerät)</description>
+        <inputEntry id="r11_i0"><text>"geraet"</text></inputEntry>
+        <inputEntry id="r11_i1"><text>-</text></inputEntry>
+        <inputEntry id="r11_i2"><text>-</text></inputEntry>
+        <outputEntry id="r11_o0"><text>true</text></outputEntry>
+        <outputEntry id="r11_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r11_o2"><text>"GE-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r11_o3"><text>"ge-" + lower case(bereich) + "-" + slug</text></outputEntry>
+      </rule>
+      <rule id="r12">
+        <description>Objekttyp community: Präfix EC (Viva-Engage-Community; der Alias benennt ihre Microsoft-365-Gruppe)</description>
+        <inputEntry id="r12_i0"><text>"community"</text></inputEntry>
+        <inputEntry id="r12_i1"><text>-</text></inputEntry>
+        <inputEntry id="r12_i2"><text>-</text></inputEntry>
+        <outputEntry id="r12_o0"><text>true</text></outputEntry>
+        <outputEntry id="r12_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r12_o2"><text>"EC-" + upper case(bereich) + " " + bezeichnung</text></outputEntry>
+        <outputEntry id="r12_o3"><text>"ec-" + lower case(bereich) + "-" + slug</text></outputEntry>
       </rule>
       <rule id="r10">
         <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>

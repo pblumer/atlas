@@ -15,11 +15,11 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 16 Prozesse, 28 Formulare, 6 Entscheidungen samt ihren Modellen (Format 2) |
-| `katalog.json` | Das Katalogdokument: zwei Kataloge, zehn Produkte, eine Beziehung |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 20 Prozesse, 39 Formulare, 7 Entscheidungen samt ihren Modellen (Format 2) |
+| `katalog.json` | Das Katalogdokument: zwei Kataloge, dreizehn Produkte, eine Beziehung |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
-| `*.dmn` | Die sechs Entscheidungsmodelle |
+| `*.dmn` | Die sieben Entscheidungsmodelle |
 | `*.form.json` | Bestell-, Aktions-, Aufgaben- und öffentliche Formulare |
 | `installieren.sh`, `installieren.ps1` | Installation in eine Atlas-Instanz: Entscheidungsmodelle, Applikation, Veröffentlichung, Katalog |
 | `antworten.beispiel.json` | Vorlage für die Antworten auf `fragen.json` |
@@ -28,8 +28,8 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Katalog | Rang | Zielgruppe | Produkte |
 |---|---|---|---|
-| Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Funktionspostfach, Verteiler, Postfachzugriff |
-| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | alle zehn |
+| Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Verteiler, Postfachzugriff |
+| Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | alle dreizehn |
 
 Eine Person sieht im Shop genau einen Katalog: den mit dem höchsten Rang unter denen, die
 ihre Gruppen erreichen. Der UCC-Katalog bietet deshalb auch die allgemeinen Produkte an.
@@ -39,16 +39,21 @@ Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.jso
 
 | Produkt | Worker | Genehmigung | Prozess | Aktionen nach der Bereitstellung |
 |---|---|---|---|---|
-| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen, Abwesenheitsnotiz beenden |
+| Microsoft 365: Lizenz mit Postfach (`m365-lizenz`), Varianten E3, E5, F3 | Entra, Exchange | vorgesetzte Person der betroffenen Person | `lizenz.bpmn` (Lebenszyklus) | Lizenz zurückgeben, Abwesenheitsnotiz setzen und beenden, Postfachkontingent erhöhen, Weiterleitung setzen und aufheben, Zusätzliche Mailadresse, Mailadresse entfernen, Kalenderstellvertretung erteilen und entziehen |
 | Teams-Telefonie mit eigener Rufnummer (`m365-telefonie`), setzt die Lizenz voraus | Entra, Teams Phone | `{{telefonie-team}}` | `telefonie.bpmn` (Lebenszyklus) | Telefonie aufheben |
 | Microsoft Teams: Team (`m365-team`) | Entra | vorgesetzte Person der verantwortlichen Person | `team.bpmn` (Lebenszyklus) | Team archivieren, Person aufnehmen, Kanal anlegen |
 | SharePoint: Teamwebsite (`m365-sharepoint-site`) | Entra, SharePoint | vorgesetzte Person der Besitzerin oder des Besitzers | `sharepoint-site.bpmn` (Lebenszyklus) | Site endgültig zurückgeben, Externe Person einladen, Site-Besitzer ändern, Speicherkontingent erhöhen, Site löschen, Gelöschte Site wiederherstellen |
+| Viva Engage: Community (`m365-engage`) | Entra | vorgesetzte Person der Besitzerin oder des Besitzers | `engage-community.bpmn` (Lebenszyklus) | Community löschen, Person aufnehmen, Person entfernen |
 | Funktionspostfach (`m365-funktionspostfach`) | Exchange | vorgesetzte Person der verantwortlichen Person | `funktionspostfach.bpmn` (Lebenszyklus) | entfernen, Zugriff erteilen, Zugriff entziehen |
 | Verteilerliste (`m365-verteiler`) | Exchange | keine | `verteiler.bpmn` (Lebenszyklus) | entfernen, Mitglied aufnehmen, Mitglied entfernen |
 | Zugriff auf ein Postfach (`m365-postfachzugriff`), 365 Tage befristet | Exchange | vorgesetzte Person der Person, die den Zugriff erhält, je nach Regel zusätzlich Informationssicherheit | `postfachzugriff-erteilen.bpmn`, `postfachzugriff-entziehen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Sitzungszimmer (`m365-raum`) | Exchange | `{{facility-management}}` | `raum-einrichten.bpmn`, `raum-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
+| Gerät (`m365-geraet`): Beamer, Fahrzeug, Leihgerät | Exchange | `{{facility-management}}` | `geraet-einrichten.bpmn`, `geraet-entfernen.bpmn` (getrennte Prozesse) | Rückgabe |
 | Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
 | Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
+| Aufbewahrung eines Postfachs (`m365-aufbewahrung`, Litigation Hold) | Exchange | `{{compliance}}` | `aufbewahrung.bpmn` (Lebenszyklus) | Aufbewahrung aufheben |
+
+Sitzungszimmer, Gerät, Anrufwarteschlange, Telefonzentrale und Aufbewahrung stehen nur im UCC-Katalog.
 
 Die Rufnummer wählt die Gruppe `M365-Telefonie` aus ihrem Nummernplan (Aufgabe «Rufnummer
 wählen»), weil Atlas keinen Nummernbestand führt. Zugewiesen wird sie danach vom
@@ -59,6 +64,66 @@ Nummer frei, bevor die Lizenz geht, und `remove-resource-account` gibt die Numme
 Warteschlange oder Telefonzentrale frei, bevor es das Konto löscht. Ein Ressourcenkonto
 nimmt eine Rufnummer nur mit Nutzungsort und der Lizenz *Microsoft Teams Phone Resource
 Account* an; beides gibt ihm der Entra-Worker gleich nach dem Anlegen.
+
+## Das Postfach an der Lizenz
+
+Die Lizenz bringt das Postfach in Exchange Online mit; die Aktionen am Produkt `m365-lizenz`
+ändern dieses Postfach über den Worker `ucc_exchange`. Jede startet eine eigene Instanz von
+`lizenz.bpmn` über ihren Nachrichtenstart und meldet ihr Ergebnis mit einer Shop-Aufgabe.
+
+| Aktion | Formular | Ablauf | Ergebnis |
+|---|---|---|---|
+| Postfachkontingent erhöhen (`kontingent`) | `m365-postfach-kontingent` | `get-mailbox-statistics` liest die Belegung, `M365Postfachkontingent` entscheidet über Stufe und Lizenz, bei 100 GB prüft `M365-Administration` (Aufgabe «Kontingent prüfen»), `set-mailbox-quota` setzt die drei Grenzen | `completed`, bei Ablehnung `rejected` |
+| Weiterleitung setzen (`weiterleitung`) | `m365-postfach-weiterleitung` | Ziel nur in der eigenen Domain (`MAIL_DOMAIN`), sonst Ablehnung mit Grund; `set-forwarding`, auf Wunsch mit Kopie im Postfach | `completed`, bei fremder Domain `rejected` |
+| Weiterleitung aufheben (`weiterleitung-aus`) | – | `clear-forwarding` | `completed` |
+| Zusätzliche Mailadresse (`alias`) | `m365-postfach-adresse` | `add-email-address` mit `smtp:<Lokalteil>@<MAIL_DOMAIN>` | `completed` |
+| Mailadresse entfernen (`alias-weg`) | `m365-postfach-adresse` | `remove-email-address` mit derselben Adresse | `completed` |
+| Kalenderstellvertretung erteilen (`stellvertretung`) | `m365-postfach-stellvertretung` | `run-get-cmdlet` mit `Get-MailboxFolderStatistics -FolderScope Calendar` liest den Namen des Kalenders, dann `add-folder-permission` auf `<upn>:\<Kalender>` mit `Editor` und `Delegate` | `completed` |
+| Kalenderstellvertretung entziehen (`stellvertretung-weg`) | `m365-postfach-stellvertretung` | Kalender lesen wie oben, `remove-folder-permission` | `completed` |
+
+**Kontingent.** Exchange Online begrenzt die Grösse eines Postfachs nach der Lizenz: mit E3 und
+E5 auf 100 GB, mit F3 auf 2 GB. Einen grösseren Wert weist Exchange laut Microsofts Dokumentation
+ab. Die Regel vergibt deshalb nur 50 und 100 GB und lehnt eine Erhöhung mit der Variante
+Frontline ab. Ein Postfach mit E3 oder E5 hat von sich aus schon 100 GB; die Stufe 50 GB hat nur
+Sinn, wo die Organisation ihre Postfächer tiefer begrenzt. Die Belegung ist ein Personendatum
+(das Ergebnis trägt Anzeigenamen und letzte Anmeldung); sie entscheidet deshalb nicht mit, und
+nur das Formular der Prüfung zeigt sie.
+
+**Weiterleitung nur in die eigene Domain.** Die Zieladresse benennt eine Person und ist ein
+Personendatum, das keine Bedingung lesen darf. Das Formular fragt sie deshalb in zwei Teilen:
+den Teil vor dem «@» (Personendatum) und die Domain (nicht personenbezogen). Eine Script-Task
+vergleicht die Domain mit `MAIL_DOMAIN` und bildet daraus `weiterleitungPruefung` mit `intern`
+und `grund`; das Gateway liest nur dieses Ergebnis. Der Exchange-Worker setzt den Lokalteil erst
+beim Aufruf vor die geprüfte Domain, sodass eine fremde Adresse nicht durch die Prüfung kommen
+kann. Eine Ablehnung trägt keinen Text; der Grund steht in der Instanz
+(`weiterleitungPruefung.grund`).
+
+**Kalendername.** Exchange benennt den Kalender in der Sprache des Postfachs (Kalender,
+Calendar, Calendrier, Calendario …), und eine Ordnerberechtigung braucht diesen Namen
+(`<upn>:\Kalender`). Der Prozess liest ihn deshalb zuerst und nimmt den Ordner mit
+`FolderType` Calendar.
+
+## Gerät und Aufbewahrung
+
+**Gerät** (`m365-geraet`): ein Gerätepostfach (Equipment Mailbox) für einen Beamer, ein Fahrzeug
+oder ein Leihgerät, gebaut wie das Sitzungszimmer. Exchange führt Räume und Geräte getrennt: Ein
+Raum erscheint in Outlook unter den Räumen und hat eine Kapazität, ein Gerät wird als Ressource
+eingeladen. Name nach der Namensregel mit dem Präfix GE, Buchungen werden automatisch angenommen
+(`AutomateProcessing` AutoAccept, keine Überschneidungen, 180 Tage im Voraus). Die
+Herkunftskennzeichnung trägt in `CustomAttribute4` den Standort und in `CustomAttribute5` die
+Geräteart; die Rückgabe findet das Postfach über `CustomAttribute3` (Auftrag/Position).
+
+**Aufbewahrung** (`m365-aufbewahrung`): Litigation Hold auf dem Postfach einer Person, die das
+Bestellformular nennt (`upn`), mit Grund und Dauer in Tagen («unbegrenzt» wird zu `Unlimited`).
+Solange sie gilt, bewahrt Exchange Online jede Nachricht auf, auch was die Person löscht. Die
+Rückgabe hebt sie mit `disable-litigation-hold` wieder auf. Genehmigt wird jede Bestellung von
+der Gruppe `{{compliance}}`. `LitigationHoldOwner` nennt den Auftrag; `RetentionComment` ist ein
+neutraler Text und nicht der Grund, weil Microsoft den Kommentar als Hinweis beschreibt, den
+Outlook der Person selbst zeigt. Der Grund bleibt als Personendatum in der Instanz.
+
+Laut Microsofts Dokumentation braucht ein Postfach für Litigation Hold eine Lizenz mit Exchange
+Online Plan 2 (in E3 und E5 enthalten) oder das Add-on Exchange Online Archiving, und eine
+Aufbewahrung wirkt erst bis zu 60 Minuten nach dem Setzen.
 
 ## Die SharePoint-Teamwebsite
 
@@ -73,7 +138,11 @@ selbst an; der Prozess legt deshalb die Gruppe an und wartet auf die Site.
 Kontingent (1, 5, 10 oder 25 GB), Zweck, Sichtbarkeit, Besitzer und Stellvertretung (UPN). Das
 Feld URL prüft beim Tippen, ob die URL noch frei ist (ADR-draft-name-availability-check): bei
 den Gruppen in Entra ID, bei den gelöschten Gruppen, die ihren Alias 30 Tage lang behalten,
-und bei SharePoint selbst unter `https://contoso.sharepoint.com/sites/<url>`. Der Wert wird
+bei SharePoint selbst unter `https://contoso.sharepoint.com/sites/<url>` und bei den
+Exchange-Empfängern. Die Gruppe erhält die Mailadresse `<url>@<Domain>`, und ein
+Funktionspostfach, ein Verteiler oder ein Kontakt kann diese Adresse schon tragen, ohne dass
+Entra ID eine Gruppe dieses Namens kennt; die Quelle `recipients` des Exchange-Workers fragt
+`Get-Recipient` nach dem Alias und nach dem Teil vor dem «@» jeder SMTP-Adresse. Der Wert wird
 kleingeschrieben geprüft; erlaubt sind 3 bis 64 Zeichen aus Kleinbuchstaben, Ziffern, `-` und
 `_` (`^[a-z0-9][a-z0-9_-]{2,63}$`, dasselbe Muster im Formular und in der Prüfung; einen Punkt
 erlaubt SharePoint in Site-Namen nicht). **Diese Prüfung ist eine Gefälligkeit**: Zwei Personen
@@ -86,8 +155,10 @@ können im selben Augenblick «frei» lesen. Verbindlich prüft die Bereitstellu
    Titel. Eine Ablehnung geht mit Begründung über die Entscheidungsroute an den Auftrag.
 2. `get-user` für Besitzer und Stellvertretung, bevor etwas angelegt wird.
 3. Verbindliche Prüfung: `list-groups` und `list-deleted-groups` mit
-   `mailNickname eq '<alias>'` und `get-site` auf `<SHAREPOINT_HOST>:/sites/<alias>`. Ein
-   Treffer irgendwo lehnt die Position mit «Die URL ist bereits vergeben» ab.
+   `mailNickname eq '<alias>'`, `get-site` auf `<SHAREPOINT_HOST>:/sites/<alias>` und
+   `run-get-cmdlet` mit `Get-Recipient -Filter "(Alias -eq '<alias>') -or (EmailAddresses -like
+   'smtp:<alias>@*')"` beim Worker `ucc_exchange`. Ein Treffer irgendwo lehnt die Position mit
+   «Die URL ist bereits vergeben» ab.
 4. `create-group` (Unified, `mailEnabled` true, `securityEnabled` false, Sichtbarkeit aus dem
    Formular, Beschreibung mit Zweck und Katalog-Position, `preferredLanguage` aus der Sprache),
    dann `add-group-owner` für beide Personen.
@@ -118,14 +189,55 @@ Eine Ablehnung einer Aktion (`rejected`, ADR-0429) trägt keinen Text; der Grund
 Instanz (`stufe.grund`, `pruefkommentar`). Die Gateways lesen keine Personendaten: Ob der
 bisherige Besitzer gehen soll, sagt das nicht personenbezogene Feld `bisherigenEntfernen`.
 
+## Die Viva-Engage-Community
+
+Das Produkt `m365-engage` legt eine Community in Viva Engage an. Eine Community steht auf einer
+Microsoft-365-Gruppe, die Viva Engage zu ihr anlegt; Mitglieder und Admins führt der Prozess auf
+dieser Gruppe.
+
+**Bestellformular** (`m365-engage-bestellung`): Bereich, Bezeichnung, Beschreibung, Sichtbarkeit
+(privat oder öffentlich) und Besitzerin oder Besitzer (UPN). Genehmigt wird von deren
+vorgesetzter Person (`proc_m365_genehmigung_vorgesetzter`).
+
+**Bereitstellung** (`m365.community.erstellen`, `engage-community.bpmn`):
+
+1. Namensregel `M365Namensregel` mit dem Objekttyp `community`: Anzeigename
+   «EC-<BEREICH> <Bezeichnung>», reservierte und zu lange Namen werden mit Begründung abgelehnt.
+2. `get-user` für die Besitzerin oder den Besitzer.
+3. Verbindliche Prüfung: `list-groups` mit `displayName eq '<Anzeigename>'`. Den Alias der Gruppe
+   wählt Viva Engage, geprüft wird deshalb der Anzeigename. Ein Treffer lehnt die Position mit
+   «Der Name ist bereits vergeben» ab.
+4. `create-community` mit Anzeigename, Beschreibung samt Katalog-Position und Sichtbarkeit; die
+   Person aus dem Formular wird erste Admin. Graph antwortet mit einem Vorgang, dem der Worker
+   bis zu seiner Grenze folgt.
+5. Ist die Community dann noch nicht fertig (`community.id` ist null), erhält
+   `M365-Administration` die Aufgabe «Community in Viva Engage prüfen» und trägt die id der
+   Gruppe ein; `get-group` prüft sie. Der Worker legt in diesem Fall nicht noch einmal an, damit
+   keine zweite Community entsteht.
+6. `done`.
+
+**Aktionen:**
+
+| Aktion | Formular | Ablauf | Ergebnis |
+|---|---|---|---|
+| Community löschen (`deprovision`) | – | Gruppe über den Anzeigenamen suchen, `delete-group` | `returned` |
+| Person aufnehmen (`mitglied`) | `m365-engage-person` | Gruppe suchen, `get-user`, als Mitglied `add-group-member`, als Admin `add-group-owner` | `completed` |
+| Person entfernen (`mitglied-weg`) | `m365-engage-person-weg` | Gruppe suchen, `get-user`, auf Wunsch zuerst `remove-group-owner`, dann `remove-group-member` | `completed` |
+
+Rolle und «auch als Admin» sind nicht personenbezogene Felder; nur sie liest ein Gateway.
+
+**Annahmen** (Microsofts Beschreibung, an keinem Tenant geprüft): Die Gruppe einer Community trägt
+deren Anzeigenamen; Besitzer der Gruppe sind Admins der Community; und wer die Gruppe löscht,
+löscht die Community mit.
+
 ## Die Genehmigung durch die vorgesetzte Person
 
-Lizenz, Team, SharePoint-Teamwebsite, Funktionspostfach und Postfachzugriff nennen als Genehmigungsart den Prozess
+Lizenz, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach und Postfachzugriff nennen als Genehmigungsart den Prozess
 `proc_m365_genehmigung_vorgesetzter` (`genehmigung-vorgesetzter.bpmn`) und nicht die
 eingebaute Art «superior». Der Grund: Die eingebaute Art fragt die vorgesetzte Person der
 **bestellenden** Person und kennt dafür nur deren Atlas-Konto. Bestellt wird hier aber für
 jemanden, den das Bestellformular nennt: `upn` (Lizenz), `besitzer` (Team,
-SharePoint-Teamwebsite, Funktionspostfach) oder `person` (Postfachzugriff). Diese Antworten erhält nur ein
+SharePoint-Teamwebsite, Community, Funktionspostfach) oder `person` (Postfachzugriff). Diese Antworten erhält nur ein
 Genehmigungsprozess der Installation selbst (ADR-0441).
 
 Ablauf:
@@ -172,8 +284,9 @@ bestellenden Person den Grund der Ablehnung überdeckt bzw. ihn als Personendatu
 
 | Modell (Handle) | Entscheidung | Wofür |
 |---|---|---|
-| `m365-namensregel` | `M365Namensregel` | Namenskonvention: Präfix je Objekttyp (TM, FP, VL, RM, CQ, AA), Sperrliste reservierter Bezeichnungen, Längengrenze, Begründung jeder Ablehnung; für SharePoint-Sites (Objekttyp `site`) die Form der URL statt eines Präfixes |
+| `m365-namensregel` | `M365Namensregel` | Namenskonvention: Präfix je Objekttyp (TM, FP, VL, RM, GE, CQ, AA, EC), Sperrliste reservierter Bezeichnungen, Längengrenze, Begründung jeder Ablehnung; für SharePoint-Sites (Objekttyp `site`) die Form der URL statt eines Präfixes |
 | `m365-site-kontingent` | `M365SiteKontingent` | gewünschtes Speicherkontingent einer Site und ihre Belegung → erlaubt ja/nein, Prüfung durch `M365-SharePoint` ja/nein (bis 25 GB ohne, bis 250 GB mit Prüfung, darüber und unter der Belegung abgelehnt) |
+| `m365-postfachkontingent` | `M365Postfachkontingent` | gewünschte Stufe (50 oder 100 GB) und Lizenzvariante → erlaubt ja/nein, Prüfung durch `M365-Administration` ja/nein, die drei Grenzen für `Set-Mailbox` (F3 abgelehnt, 50 GB ohne, 100 GB mit Prüfung, alles andere abgelehnt) |
 | `m365-lizenzprofil` | `M365Lizenzprofil` | Variante, Zusatzlizenz der Telefonie oder Lizenz eines Ressourcenkontos → SKU-ID |
 | `m365-postfachzugriff` | `M365PostfachzugriffFreigabe` | Postfachtyp und Zugriffsart → Zusatzfreigabe durch die Informationssicherheit ja/nein |
 | `m365-telefonie` | `M365TelefonieSprachregion` | Sprachregion → Sprache und Zeitzone der Teams-Telefonie |
@@ -202,12 +315,18 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
   abgelehnt; die Position steht danach auf `rejected`, nicht als Störung.
 - **Herkunftskennzeichnung.** Jedes Exchange-Objekt erhält `CustomAttribute1` =
   `atlas-katalog`, `CustomAttribute2` = Produkt, `CustomAttribute3` = Auftrag/Position,
-  `CustomAttribute4` = verantwortliche Person (beim Raum: Standort). Rückgabe und
+  `CustomAttribute4` = verantwortliche Person (beim Raum und beim Gerät: Standort; das Gerät
+  trägt in `CustomAttribute5` zusätzlich die Geräteart). Rückgabe und
   Änderungen finden das Objekt über diese Kennzeichnung, nicht über den Namen.
 - **Governance-Prüfung.** `governance-pruefung.bpmn` sucht wöchentlich Funktionspostfächer
   und Verteiler ohne Kennzeichnung sowie Microsoft-365-Gruppen ausserhalb der Namensregel
-  (ausgenommen die gekennzeichneten Gruppen der SharePoint-Teamwebsites) und legt den Befund `M365-Administration` vor. Der Befund entzieht nichts; gehandelt wird
+  (ausgenommen die gekennzeichneten Gruppen der SharePoint-Teamwebsites und die Gruppen der
+  Communities, deren Anzeigename mit «EC-» der Namensregel folgt) und legt den Befund `M365-Administration` vor. Der Befund entzieht nichts; gehandelt wird
   durch Menschen.
+- **Weiterleitung nur in die eigene Domain.** Eine Weiterleitung an eine fremde Domain lehnt der
+  Prozess mit Begründung ab, bevor Exchange etwas erfährt (siehe «Das Postfach an der Lizenz»).
+- **Aufbewahrung nur mit Compliance.** Eine Litigation Hold entsteht nur nach der Zustimmung der
+  Gruppe `{{compliance}}`, und ihr Grund wird der betroffenen Person nicht angezeigt.
 - **Zusatzfreigabe und Befristung.** Vollzugriff und «Senden als» auf ein persönliches
   Postfach verlangen die Zustimmung der Informationssicherheit; der Zugriff ist auf ein
   Jahr befristet.
@@ -230,9 +349,24 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    - `ucc_entra` (Microsoft Entra ID): `User.ReadWrite.All`, `Group.ReadWrite.All`. Für
      Teams-Mitglieder, Kanäle und das Archivieren verlangt Microsoft Graph laut seiner
      Dokumentation zusätzlich `TeamMember.ReadWrite.All`, `Channel.Create` und
-     `TeamSettings.ReadWrite.All` (an einem Tenant nicht geprüft).
+     `TeamSettings.ReadWrite.All` (an einem Tenant nicht geprüft). Für die
+     Viva-Engage-Community zusätzlich `Community.ReadWrite.All`, und der Tenant muss in Viva
+     Engage im nativen Modus (Native Mode) laufen; beides ist Microsofts Dokumentation und an
+     keinem Tenant geprüft.
    - `ucc_exchange` (Microsoft Exchange): `Exchange.ManageAsApp` und eine Exchange-Rolle
-     (z.B. *Exchange Recipient Administrator*).
+     (z.B. *Exchange Recipient Administrator*). Die Rolle muss die Cmdlets der Prozesse
+     decken; welche Verwaltungsrolle ein Cmdlet verlangt, sagt
+     `Get-ManagementRole -Cmdlet <Name>`:
+     - Weiterleitung, Mailadressen, Kontingent, Gerätepostfach (`Set-Mailbox`, `New-Mailbox`,
+       `Set-CalendarProcessing`) und die Ordnerberechtigungen der Kalenderstellvertretung
+       (`Add-`/`Remove-MailboxFolderPermission`, `Get-MailboxFolderStatistics`) gehören nach
+       Microsofts Dokumentation zur Rolle *Mail Recipients*, die *Exchange Recipient
+       Administrator* (Rollengruppe *Recipient Management*) enthält.
+     - **Litigation Hold** (`Set-Mailbox -LitigationHoldEnabled`) verlangt zusätzlich die Rolle
+       *Legal Hold*; Microsoft weist sie Rollengruppen wie *Compliance Management*, *Discovery
+       Management* und *Organization Management* zu. Welche Gruppe sie im eigenen Tenant
+       trägt, zeigt `Get-ManagementRoleAssignment -Role "Legal Hold"`.
+     - Beides ist Microsofts Dokumentation und an keinem Tenant geprüft.
    - `ucc_teams` (Microsoft Teams Phone): Rolle *Teams Administrator* und
      `User.ReadWrite.All`; PowerShell 7 mit dem Modul MicrosoftTeams auf dem Worker-Host.
    - Für die SharePoint-Teamwebsite zusätzlich: am Worker `ucc_entra` `User.Invite.All`
@@ -241,17 +375,19 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
      `ucc_sharepoint` (Microsoft SharePoint) mit `Sites.ReadWrite.All` oder mit
      `Sites.Selected` und Schreibrecht auf der Inventar-Site, dazu `Sites.Read.All` für
      `get-site` auf beliebigen Sites (Existenz und Belegung).
-   - **Live-Prüfung der URL** im Bestellformular: Bei beiden Workern (`ucc_entra` und
-     `ucc_sharepoint`) in der Console den Schalter «formLookups» (Formular-Abfragen erlauben)
-     einschalten. Der SharePoint-Worker muss dafür als Worker Instance laufen (beaufsichtigt
-     oder extern), nicht im Server-Prozess. Fehlt eines davon, kann das Formular nur nicht
+   - **Live-Prüfung der URL** im Bestellformular: Bei den drei Workern `ucc_entra`,
+     `ucc_sharepoint` und `ucc_exchange` in der Console den Schalter «formLookups»
+     (Formular-Abfragen erlauben) einschalten. `ucc_exchange` ist dabei, weil die Gruppe der Site
+     die Adresse `<url>@<Domain>` erhält und ein Funktionspostfach, ein Verteiler oder ein
+     Kontakt sie schon tragen kann. Der SharePoint-Worker muss dafür als Worker Instance laufen
+     (beaufsichtigt oder extern), nicht im Server-Prozess. Fehlt eines davon, kann das Formular nur nicht
      vorwarnen; bestellt werden kann trotzdem, und die Bereitstellung prüft wie immer.
 2. **Secret `atlas`** im Vault: ein API-Token mit der Rolle `operator`. Damit melden die
    Prozesse ihre Positionen an die Bestellung. Am einfachsten unter **Console → Administration → API tokens**:
    Scope `full`, «Direkt im Vault ablegen» angekreuzt, Name `atlas`. Das Geheimnis verlässt
    den Server dann nie.
-3. **Für die Genehmigung durch die vorgesetzte Person** (Lizenz, Team, Funktionspostfach,
-   Postfachzugriff):
+3. **Für die Genehmigung durch die vorgesetzte Person** (Lizenz, Team, SharePoint-Teamwebsite,
+   Community, Funktionspostfach, Postfachzugriff):
    - der Worker `ucc_entra` aus Punkt 1; er liest den Vorgesetzten mit `User.Read.All`,
      das in `User.ReadWrite.All` enthalten ist;
    - Atlas-Konten der vorgesetzten Personen, am einfachsten aus der Kontenspiegelung von
@@ -260,14 +396,15 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
    - für die Benachrichtigung ein Mail-Worker `mail`. Fehlt er, bleibt nur die Nachricht
      liegen; die Genehmigung läuft.
 4. **Gruppen** in Atlas: die beiden Zielgruppen, `M365-Telefonie`, `M365-Administration`,
-   `M365-SharePoint`, `Informationssicherheit` und die Gruppe des Facility Managements. Die
+   `M365-SharePoint`, `Informationssicherheit`, die Gruppe des Facility Managements und die der
+   Compliance. Die
    Aufgaben der Prozesse adressieren `M365-Telefonie`, `M365-Administration`,
    `M365-SharePoint` und `Informationssicherheit` über ihren Namen.
 5. **Applikationskonstanten** (Console → Applikation → Constants), nach dem Import:
 
    | Konstante | Fallback | Bedeutung |
    |---|---|---|
-   | `MAIL_DOMAIN` | `contoso.ch` | Domain der Adressen von Funktionspostfächern, Verteilern, Räumen und Ressourcenkonten |
+   | `MAIL_DOMAIN` | `contoso.ch` | Domain der Adressen von Funktionspostfächern, Verteilern, Räumen, Geräten und Ressourcenkonten, der zusätzlichen Mailadressen und die einzige Domain, an die weitergeleitet werden darf |
    | `USAGE_LOCATION` | `CH` | Nutzungsort, ohne den Graph keine Lizenz zuweist |
    | `PARTNER_UPN_DOMAIN` | `contoso.onmicrosoft.com` | Domain der Partnerkonten |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
@@ -298,7 +435,7 @@ $env:ATLAS_TOKEN = 'atlasat_…'
 
 Das Skript
 
-1. lädt die sechs Entscheidungsmodelle unter ihren Handles hoch
+1. lädt die sieben Entscheidungsmodelle unter ihren Handles hoch
    (`POST /api/v1/dmn-models?handle=…`). Der Quellbaum trägt die Modelle ebenfalls
    (`atlas.json` im Format 2), sodass `atlas import` und atlas hub ohne diesen Schritt
    auskommen; das Skript behält ihn, und der Import findet die Modelle dann unverändert vor;
@@ -324,15 +461,16 @@ aktualisiert sie, statt sie zu verdoppeln; ein anderes Token erhält «no applic
 that key». Nach der Installation die Applikation deshalb in der Console einer Person oder
 einem Team übergeben bzw. teilen; ein Admin sieht und verwaltet sie auch so.
 
-Ganz ohne Skript geht es auch in der Console: die sechs `.dmn`-Dateien im Modeler unter den
-Handles `m365-lizenzprofil`, `m365-namensregel`, `m365-postfachzugriff`,
-`m365-site-kontingent`, `m365-telefonie` und `m365-verteiler-zuordnung` hochladen, die Applikation über **Import source** (ein
+Ganz ohne Skript geht es auch in der Console: die sieben `.dmn`-Dateien im Modeler unter den
+Handles `m365-lizenzprofil`, `m365-namensregel`, `m365-postfachkontingent`,
+`m365-postfachzugriff`, `m365-site-kontingent`, `m365-telefonie` und
+`m365-verteiler-zuordnung` hochladen, die Applikation über **Import source** (ein
 `.tar.gz` mit `atlas.json` und den genannten Dateien) importieren und veröffentlichen,
-dann `katalog.json` mit den vier Gruppen-IDs anstelle der Platzhalter unter
+dann `katalog.json` mit den Gruppen-IDs anstelle der fünf Platzhalter unter
 **Catalogue → Import** hochladen.
 
 Bezieht die Zielinstanz ihre Entscheidungen aus einem temis-Dienst
-(`ATLAS_DMN_RESOLVER_URL`), werden die sechs Modelle dort unter denselben Namen angelegt,
+(`ATLAS_DMN_RESOLVER_URL`), werden die sieben Modelle dort unter denselben Namen angelegt,
 statt hochgeladen.
 
 ### Öffentliche Links erzeugen
@@ -406,6 +544,32 @@ einen echten Tenant**, und keine Bestellung lief durch den Shop: weder `create-g
 `invite-guest`, `restore-group` und `list-deleted-groups` gegen Microsoft Graph noch
 `get-site` und die Inventarliste gegen SharePoint, noch die Live-Prüfung im Formular.
 
+**Gerät, Aktionen am Postfach, Aufbewahrung und die Exchange-Prüfung der Site-URL.** Geprüft
+ist nur ohne Server und ohne Tenant: Die Prozesse kompilieren (auch gegen die Regel, dass keine
+Bedingung ein Personendatum liest), das Katalogdokument veröffentlicht sich mit den beiden neuen
+Produkten und den sieben neuen Aktionen ohne Warnung zu Personendaten, die Diagramme halten die
+Layout-Regeln ein, `M365Postfachkontingent` und die neuen Regeln von `M365Namensregel` wurden
+lokal mit allen Regeln ausgewertet, und der Ausdruck, der die Identität des Kalenders bildet
+(`<upn>:\<Name>`), wurde lokal ausgewertet. **Nichts davon lief gegen Exchange Online**, und
+keine Bestellung lief durch den Shop. Insbesondere nicht geprüft:
+
+- ob der REST-Endpunkt von Exchange Online, über den der Worker Exchange Online erreicht,
+  `Get-MailboxFolderStatistics` und `Get-Recipient` über `run-get-cmdlet` bedient und in welcher
+  Form er die Ordner zurückgibt (`FolderType`, `Name`);
+- in welcher Form `get-mailbox-statistics` `TotalItemSize` liefert (das Prüfformular zeigt den
+  Wert so, wie er kommt);
+- dass Exchange Online ein Kontingent über der Grenze der Lizenz abweist (Microsofts
+  Dokumentation);
+- `enable-litigation-hold` mit `RetentionComment` und die Rolle *Legal Hold*;
+- dass Outlook `RetentionComment` der Person zeigt (Microsofts Dokumentation).
+
+**Viva-Engage-Community.** Ebenso nur ohne Server und ohne Tenant: Der Prozess kompiliert gegen die
+Operation `create-community` des Entra-Workers, das Katalogdokument veröffentlicht sich mit dem
+Produkt in beiden Katalogen, das Diagramm hält die Layout-Regeln ein, und die Regel `community`
+von `M365Namensregel` wurde lokal ausgewertet. Nicht geprüft: `create-community` gegen Microsoft
+Graph (der Vorgang, seine Dauer, das Ergebnis mit `groupId`), die Annahmen oben und die
+Governance-Prüfung, die Gruppen mit einem Anzeigenamen «EC-…» nicht mehr meldet.
+
 Nicht geprüft: die Entra- und Exchange-Schritte gegen einen echten Tenant (für diese
 Worker gibt es keinen Mock), `get-user-manager` gegen Microsoft Graph,
 die Mail an die genehmigende Person, die Eskalation nach sieben Tagen, die
@@ -439,7 +603,7 @@ PowerShell zur Verfügung).
 
 ## Bekannte Grenzen
 
-- **Teams und Ressourcenkonten werden über ihren Namen wiedergefunden.** Ändert sich ein
+- **Teams, Communities und Ressourcenkonten werden über ihren Namen wiedergefunden.** Ändert sich ein
   Präfix der Namensregel, findet die Rückgabe bestehender Objekte dieses Typs sie nicht
   mehr. Präfixe sind deshalb wie Identitäten zu behandeln. Exchange-Objekte sind davon
   nicht betroffen.
@@ -494,13 +658,51 @@ PowerShell zur Verfügung).
   so gekennzeichnete Gruppen nicht als Abweichung. Die Kennzeichnung steht in einem Feld, das
   Besitzerinnen und Besitzer ändern können; sie ist ein Hinweis, kein Nachweis. Massgebend
   bleibt das Site-Inventar.
+- **Community: nur mit Viva Engage im nativen Modus.** Ein Tenant, der Viva Engage nicht im
+  nativen Modus betreibt, kennt Communities auf Microsoft-365-Gruppen nicht; `create-community`
+  scheitert dann als Incident.
+- **Community: der Anzeigename ist die Identität.** Die Aktionen finden die Gruppe über
+  `displayName`. Benennt jemand die Community in Viva Engage um, finden Rückgabe und Aktionen sie
+  nicht mehr; die Aufnahme einer Person scheitert dann als Incident, die Rückgabe meldet
+  `returned`, ohne etwas zu löschen. Eine Community, die nach dem Vorgang von Hand angelegt
+  wurde, muss denselben Anzeigenamen tragen.
+- **Community löschen löscht die Gruppe.** Dass Microsoft die Community mit ihrer Gruppe
+  löscht, ist Microsofts Beschreibung des Löschens einer Gruppe und nicht geprüft. Die Gruppe
+  liegt danach 30 Tage im Papierkorb.
+- **Die Exchange-Prüfung der Site-URL sieht keine Personen.** Damit das Gateway zählen kann,
+  ist das Ergebnis von `Get-Recipient` nicht als Personendatum deklariert. Damit es nie die
+  Daten einer Person enthält, schliesst der Filter Empfänger aus, die für Personen stehen
+  (`UserMailbox`, `MailUser`, `GuestMailUser`, `MailContact`). Hält das Postfach oder der Kontakt
+  einer Person den Alias der bestellten URL, lehnt erst `create-group` die doppelte Adresse ab;
+  der Job wiederholt sich und endet als Incident. Die Live-Prüfung im Bestellformular fragt alle
+  Empfänger, speichert nichts und erkennt diesen Fall in der Regel schon bei der Eingabe.
+- **Weiterleitung: genau die eigene Domain.** Verglichen wird die Domain mit `MAIL_DOMAIN`, ohne
+  Gross- und Kleinschreibung. Eine Subdomain oder eine zweite akzeptierte Domain des Tenants gilt
+  als fremd und wird abgelehnt; wer mehrere Domains zulassen will, ändert die Script-Task «Ziel
+  prüfen». Ob die Adresse im Tenant besteht, prüft der Prozess nicht: Eine Weiterleitung an eine
+  unbekannte Adresse der eigenen Domain nimmt Exchange an, und die Mails kommen nicht an.
+- **Belegte Mailadresse, bestehende Kalenderberechtigung.** Trägt schon ein anderes Objekt die
+  gewünschte Mailadresse, oder hat die Stellvertretung auf dem Kalender schon eine Berechtigung,
+  weist Exchange den Aufruf ab, und die Aufgabe wird zum Incident. Findet `Get-MailboxFolderStatistics`
+  keinen Ordner mit `FolderType` Calendar, fehlt die Identität, und auch das wird zum Incident.
+- **Kontingent: 50 GB ist mit E3 oder E5 keine Erhöhung.** Exchange Online gibt einem solchen
+  Postfach von sich aus 100 GB; die Stufe 50 GB senkt dann das Kontingent. Der Prozess vergleicht
+  nicht mit dem bisherigen Kontingent (das stünde in `get-mailbox`, nicht in der Statistik).
+- **Aufbewahrung: Personendaten unter dem Schlüssel der empfangenden Person.** Die Bestellung
+  verschlüsselt `upn` und `aufbewahrungGrund` unter dem Schlüssel der Person, die das Recht im
+  Bestand hält (meist jemand aus der Compliance), nicht unter dem der betroffenen Person. Ein
+  Löschbegehren der betroffenen Person erreicht diese Werte deshalb nicht von selbst.
+- **Keine Herkunftskennzeichnung auf persönlichen Postfächern.** Die Aktionen an der Lizenz und
+  die Aufbewahrung ändern das Postfach einer Person und schreiben keine `CustomAttribute`: Diese
+  Felder gehören dort oft schon der Personalverwaltung oder der Synchronisation.
 - **Gäste** lassen sich nur einladen, wenn die Einstellungen des Tenants für externe
   Zusammenarbeit (Entra ID) und für das Teilen (SharePoint) es erlauben; sonst endet die Aktion
   mit einem Incident.
 
 ## Was die Tests prüfen
 
-`go test ./examples` prüft ohne Server: alle Prozesse kompilieren, das Katalogdokument
+`go test ./examples` prüft ohne Server: alle Prozesse kompilieren (und keiner liest ein
+Personendatum in einem Ausdruck, den die Engine auswertet), das Katalogdokument
 veröffentlicht sich, Lebenszyklus-Bindungen und Shop-Aufgaben passen zu den Prozessen,
 jedes Formular ist vorhanden, jedes Bestellformular liefert nur Text (keine Zahlenfelder,
 Checkboxen oder Mehrfachauswahlen), jede Antwort eines Bestellformulars ist als Personendatum

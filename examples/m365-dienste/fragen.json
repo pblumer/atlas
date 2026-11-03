@@ -42,5 +42,16 @@
       "de": "Eine Gruppe, meist das Facility Management.",
       "en": "A group, usually facility management."
     }
+  },
+  "compliance": {
+    "kind": "group",
+    "label": {
+      "de": "Wer genehmigt Aufbewahrungen (Litigation Hold)",
+      "en": "Who approves litigation holds"
+    },
+    "hint": {
+      "de": "Eine Gruppe, meist der Rechtsdienst oder die Compliance. Sie entscheidet, ob das Postfach einer Person aufbewahrt wird; die betroffene Person erfährt davon nichts.",
+      "en": "A group, usually legal or compliance. It decides whether a person's mailbox is placed on hold; the person concerned is not told."
+    }
   }
 }

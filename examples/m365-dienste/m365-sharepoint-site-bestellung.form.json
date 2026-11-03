@@ -47,6 +47,11 @@
             "resource": "sites",
             "host": "contoso.sharepoint.com",
             "managedPath": "sites"
+          },
+          {
+            "workerType": "exchange",
+            "worker": "ucc_exchange",
+            "resource": "recipients"
           }
         ]
       },
