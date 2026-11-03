@@ -2165,6 +2165,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    deployed (ADR-0251). Quiet on purpose: it is a caveat about
    the picture, not a state of the process. */
 .live-layout-note { margin-left: 8px; font-size: 11px; }
+/* The other versions of a live view's process that still run instances, so an operator
+   sees where work is left without opening every version in the picker. */
+.live-other-versions { font-size: 12px; }
+.live-other-versions a { font-weight: 600; }
+.live-other-versions .err { color: var(--danger, #c0392b); }
+.live-other-versions .live-migrate-other { padding: 1px 8px; font-size: 12px; margin-left: 4px; }
 
 /* The three annotation badges below are deliberately the size of the token count and
    not of the word they used to spell out (ADR-0252).

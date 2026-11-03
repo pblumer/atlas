@@ -12,35 +12,7 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
-### Added
-
-- **A person without an account answers a task from a mail.** A user task marked
-  `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
-  that names it with `answerTask` is handed that link as `answerLink` for its subject and
-  bodies — before the task or beside it, and again from a reminder. The link opens a page
-  with the task's name, its documentation and its form, prefilled with what the instance
-  holds under the form's fields; submitting completes the task as the Tasks app would.
-  Opening the link answers nothing, so a link scanner cannot; the signed token is in the
-  link's fragment and so in no server log; it opens only that task while it is open — in
-  an event subprocess running several times, the task of the run that sent it — and the
-  task may still be answered in the Tasks app by whoever it is assigned to. The link
-  is built on the configured external URL (`--external-url`) and signed with a key the
-  vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
-  multi-instance task, a mail that never shows the link and a link to a task that did not
-  opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
-
-### Fixed
-
-- **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
-  rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
-  thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
-  the cancellation was recorded as `the content source cannot be reached: … context canceled`. That
-  quarantined products whose wiki pages were fine, and the catalogue could not be published until
-  each was refreshed again. A recheck cut off by its caller now records and writes nothing (503 for a
-  single product), and `POST /api/v1/catalogs/{id}/content/refresh` runs to its end even when the
-  caller has gone, so asking again finds the products refreshed.
-
-## [0.22.0] — 2026-11-02
+## [0.22.0] — 2026-11-03
 
 **A multi-instance execution of 50,000 iterations is explored a page at a time.**
 Operations' Multi-Instance Explorer pages an execution's iterations by number, state and
@@ -80,7 +52,12 @@ what a person holds by naming the person
 typed whether Entra, Exchange or SharePoint already use it
 ([ADR-0519](docs/adr/0519-name-availability-check.md)); and the Entra Worker invites
 guests, restores deleted groups and creates Viva Engage communities, while the SharePoint
-Worker reads a site and its storage. A select, radio group, checklist or tag list shows what
+Worker reads a site and its storage. The AD Worker writes the attributes a process keeps
+sealed, evaluating them itself, so logon names and DNs never reach the engine in plain
+text (ADR-0166, amended); an order form searches the directory for a person and checks
+the choice when the order is placed; and the shop shows every catalogue a person is the
+audience for, not only the highest-ranked
+([ADR-0522](docs/adr/0522-several-catalogues-per-person.md), proposed). A select, radio group, checklist or tag list shows what
 the newest version of a deployed decision answers, bound to the form's other fields, and
 the decision editor edits a DMN boxed list
 ([ADR-0511](docs/adr/0511-form-options-from-a-decision.md)). A product promises a delivery
@@ -91,7 +68,10 @@ the wiki's pages as building blocks
 publishes the examples as eleven signed packages by theme, a registry key rotates with two
 keys pinned at once, a new key is announced through one verifiable channel, and an
 agent installs a release over MCP as the Console does
-([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment). An OpenTofu
+([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment); an import
+takes another application's process, form or decision only when it is named one by one.
+Operations migrates an older version straight from the live view's heading, its version
+picker says which versions still hold work, and the migration dialogs speak the Console's language. An OpenTofu
 project builds a Microsoft 365 development environment for the Microsoft workers; it has
 not been applied to a real tenant yet.
 
@@ -124,7 +104,15 @@ as it runs 0.22.0:
   SharePoint operation `get-site`, and to answer a name field's availability check. The
   Entra app registration needs `User.Invite.All` for `invite-guest` and
   `Community.ReadWrite.All` for `create-community`; nothing else changes for a Worker
-  that uses neither.
+  that uses neither. The AD Worker needs 0.22.0 for a connector task that authors its
+  entry as `attributes` or reads a search through `select` and `foundVariable`, and the
+  Exchange Worker for the fixes to Send As, compressed answers and long-running cmdlets.
+- A person in the audience of several catalogues now sees all of them in the shop,
+  highest rank first, where 0.21.0 showed only the highest-ranked
+  ([ADR-0522](docs/adr/0522-several-catalogues-per-person.md)). A catalogue kept at a lower
+  rank so that a wider audience would not see it is shown to them from the upgrade on:
+  check the audiences of overlapping catalogues before upgrading. A basket from several
+  catalogues becomes one order per release.
 - `ATLAS_BLUEPRINT_REGISTRY_KEY` accepts two keys separated by a comma. A value with three
   keys, the same key twice or a malformed key stops the server at startup, as a malformed
   single key already did.
@@ -146,12 +134,13 @@ What changes on disk, and going back:
 - New settings, all optional: `--client-metadata-allow-private`
   (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`), and the limits
   `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST`, `_RATE`, `ATLAS_LIMIT_CLIENT_METADATA`, `_SECONDS`,
-  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 179
+  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 180
   (`atlas_catalog_building_blocks`, `atlas_catalog_delivery_report`,
   `atlas_hub_import_release`, `atlas_hub_list_releases`, `atlas_hub_preview_release`,
   `atlas_instance_multi_instances`, `atlas_instance_outline`, `atlas_multi_instance_body`,
   `atlas_multi_instance_iteration`, `atlas_multi_instance_iteration_steps`,
-  `atlas_multi_instance_iteration_variables`, `atlas_multi_instance_iterations`).
+  `atlas_multi_instance_iteration_variables`, `atlas_multi_instance_iterations`,
+  `atlas_process_versions`).
   `/metrics`, the event catalog and the Helm chart's values are unchanged.
 - Going back to 0.21.0 has not been tested end to end. By its code:
   - 0.21.0 knows no system grant. It reads a connected system's grant as a grant without
@@ -162,10 +151,15 @@ What changes on disk, and going back:
     with 0.22.0.
   - 0.21.0 refuses a shop send task in mode `order`, and one in mode `command` that names
     a `recipient` instead of an order and a position, when it reloads the deployed
-    models, and a deployed model it cannot reload stops it from starting. Delete every
-    deployed version that uses either — the M365 example's `hr-eintritt` process uses
-    both — before going back. The atlas hub package `m365-dienste` requires 0.22.0 from 1.0.3
-    on, so the registry offers a 0.21.0 server nothing newer than 1.0.2.
+    models, and a deployed model it cannot reload stops it from starting. It refuses an AD connector
+    task that creates or updates an entry from `attributes` instead of an
+    `entryVariable` the same way. Delete every deployed version that uses any of them —
+    the M365 example's `hr-eintritt` process uses both shop modes, and every
+    `ad-dienste` process from 1.0.1 on writes its entries inline — before going back. The atlas hub package `m365-dienste` requires 0.22.0 from 1.0.3
+    on, so the registry offers a 0.21.0 server nothing newer than 1.0.2; `ad-dienste` requires
+    it from 1.0.1 on.
+  - 0.21.0 shows a person only the highest-ranked catalogue they reach again. Orders
+    placed from the others stay as they are.
   - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
     same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
     event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
@@ -175,6 +169,22 @@ What changes on disk, and going back:
     snapshot taken before the first upgrade, or do not go back.
 
 ### Added
+- **A person without an account answers a task from a mail.** A user task marked
+  `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
+  that names it with `answerTask` is handed that link as `answerLink` for its subject and
+  bodies — before the task or beside it, and again from a reminder. The link opens a page
+  with the task's name, its documentation and its form, prefilled with what the instance
+  holds under the form's fields; submitting completes the task as the Tasks app would.
+  Opening the link answers nothing, so a link scanner cannot; the signed token is in the
+  link's fragment and so in no server log; it opens only that task while it is open — in
+  an event subprocess running several times, the task of the run that sent it — and the
+  task may still be answered in the Tasks app by whoever it is assigned to. The link
+  is built on the configured external URL (`--external-url`) and signed with a key the
+  vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
+  multi-instance task, a mail that never shows the link and a link to a task that did not
+  opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
+- **An older version is migrated straight from the live view's heading.** Each version the heading lists as still running instances carries a *Migrate…* button that opens the batch migration with that version as the source and the newest as the target, its picker counting what every version holds from the per-version reading the view already has; after the move the diagram and the counts are read again at once, so the drained version leaves the list.
+- **The version picker says which versions still hold work.** In an Operations live view the *Version* dropdown labels every version with what it still holds — running instances, tokens parked behind an incident, finished instances, and whether it is inactive — and the heading names the other versions that still run instances, each a link to its live view, so the versions with work left no longer have to be found by opening one after another. The counts come from `GET /api/v1/processes/{key}/versions`, which answers for every deployed version of a definition's process from the maintained counters and the shared incident reading, never an instance scan; agents read the same through the new MCP tool `atlas_process_versions`.
 - **An order form searches the directory for a person.** A shop product's `configForm` may carry the directory field of ADR-0473: `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` searches through the field's Worker for a caller who may order from the release's catalogue, and placing the order and correcting its details look the chosen person up again, so a value the search would not have offered is refused with 422 (ADR-0473 amendment). The basket and the correction form show the search, and a task form in the shop now does too. `option.value` lets a field submit an Entra user's `userPrincipalName` instead of the object id.
 - **`examples/m365-dienste` runs in a shared tenant, and asks for people by search.** A new application constant `NAME_PREFIX` (empty by default: names unchanged) goes in front of every name and alias the naming rule builds and of a partner account's UPN, and limits the governance check to objects with that prefix. The owner, manager and recipient fields of the order forms search Entra and submit the user principal name. `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` installs the package into the environment, ready to order.
 - **The AD Worker writes attributes a process keeps sealed.** An `<atlas:adConnector>`
@@ -367,6 +377,7 @@ What changes on disk, and going back:
   (ADR-0510).
 
 ### Changed
+- **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
 - **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
@@ -412,6 +423,14 @@ What changes on disk, and going back:
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
+  rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
+  thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
+  the cancellation was recorded as `the content source cannot be reached: … context canceled`. That
+  quarantined products whose wiki pages were fine, and the catalogue could not be published until
+  each was refreshed again. A recheck cut off by its caller now records and writes nothing (503 for a
+  single product), and `POST /api/v1/catalogs/{id}/content/refresh` runs to its end even when the
+  caller has gone, so asking again finds the products refreshed.
 - **Send As on Exchange Server finds the mailbox by its address.** On-premises, `add-send-as` and `remove-send-as` run `Add-`/`Remove-ADPermission`, which look for an Active Directory object and answered "…@contoso.com wasn't found" for the address every model passes. The worker now looks the recipient up with `Get-Recipient` and passes its distinguished name; Exchange Online is unchanged. Found by a smoke test against a real Exchange Server SE.
 - **Exchange Online answers are read uncompressed.** The Exchange worker asked for gzip implicitly, and Exchange Online's admin API was observed answering with a body labelled gzip that was not (`gzip: invalid header` instead of the cmdlet's answer).
 - **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
