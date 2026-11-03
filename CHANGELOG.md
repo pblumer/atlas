@@ -29,6 +29,17 @@ _Changed_ / _Removed_ for each version.
   multi-instance task, a mail that never shows the link and a link to a task that did not
   opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
 
+### Fixed
+
+- **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
+  rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
+  thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
+  the cancellation was recorded as `the content source cannot be reached: … context canceled`. That
+  quarantined products whose wiki pages were fine, and the catalogue could not be published until
+  each was refreshed again. A recheck cut off by its caller now records and writes nothing (503 for a
+  single product), and `POST /api/v1/catalogs/{id}/content/refresh` runs to its end even when the
+  caller has gone, so asking again finds the products refreshed.
+
 ## [0.22.0] — 2026-11-02
 
 **A multi-instance execution of 50,000 iterations is explored a page at a time.**
