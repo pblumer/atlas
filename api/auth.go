@@ -441,6 +441,12 @@ func (s *Server) principalFor(r *http.Request) *httpapi.Principal {
 		// revokes its grants and a role change rewrites them (revokeUserGrants,
 		// refreshUserGrants), at the same call sites that already do this for sessions.
 		if g, ok := s.oauthGrants.matchAccess(tok, time.Now().Unix()); ok {
+			s.oauthGrants.touch(g.ID, time.Now().Unix())
+			// A connected system's grant is the principal of the capability that serves
+			// this request, with its reach (ADR-0512 §2).
+			if g.System != nil {
+				return systemPrincipal(g, r)
+			}
 			return &httpapi.Principal{
 				UserID:   g.UserID,
 				Username: g.Username,

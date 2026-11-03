@@ -195,3 +195,73 @@ func TestATaskRowKeepsItsJobElementAndDefinition(t *testing.T) {
 		}
 	}
 }
+
+// TestATaskThatEndedIsFoundByItsKeyWhileTheFeedHoldsItsEnd (ADR-0512 §2): the row that
+// completed or cancelled a user task is found by the task's key; a task still open is
+// not; and the prune that drops the row drops the entry with it, so a task is known as
+// ended exactly as long as the feed holds its end.
+func TestATaskThatEndedIsFoundByItsKeyWhileTheFeedHoldsItsEnd(t *testing.T) {
+	s := openStore(t)
+	tx := s.NewTransaction()
+	job := &model.JobValue{ProcessInstanceKey: 41, ElementInstanceKey: 42, JobType: 1, Assignee: "alice"}
+	must(t, tx.PutFeedTask(1, 10, 100, FeedTaskCreated, 7, 500, 3, job))
+	must(t, tx.PutFeedTask(1, 11, 110, FeedTaskCreated, 7, 501, 3, job))
+	must(t, tx.PutFeedTask(1, 12, 120, FeedTaskCreated, 7, 502, 3, job))
+	must(t, tx.PutFeedTask(1, 13, 130, FeedTaskCompleted, 7, 500, 3, job))
+	must(t, tx.PutFeedTask(1, 14, 140, FeedTaskCancelled, 7, 501, 3, job))
+	// The same key on another partition is another task.
+	must(t, tx.PutFeedTask(2, 13, 130, FeedTaskCompleted, 9, 500, 4, job))
+	commit(t, tx)
+
+	e, ok, err := s.FeedTaskEnd(1, 500)
+	if err != nil || !ok || e.Kind != FeedTaskCompleted || e.At != 130 || e.Definition != 7 || e.Task.Assignee != "alice" {
+		t.Fatalf("FeedTaskEnd(500) = %+v %v %v, want the completion at 130", e, ok, err)
+	}
+	if e, ok, _ := s.FeedTaskEnd(1, 501); !ok || e.Kind != FeedTaskCancelled || e.Position != 14 {
+		t.Fatalf("FeedTaskEnd(501) = %+v %v, want the cancellation at 14", e, ok)
+	}
+	if _, ok, err := s.FeedTaskEnd(1, 502); ok || err != nil {
+		t.Fatalf("an open task was found as ended (%v, %v)", ok, err)
+	}
+	if _, ok, _ := s.FeedTaskEnd(1, 999); ok {
+		t.Fatal("a task nobody opened was found as ended")
+	}
+	if e, ok, _ := s.FeedTaskEnd(2, 500); !ok || e.Definition != 9 {
+		t.Fatalf("partition 2's task = %+v %v", e, ok)
+	}
+
+	// Pruning through the completion drops its entry and keeps the cancellation's.
+	tx = s.NewTransaction()
+	must(t, tx.PruneFeed(1, 13))
+	commit(t, tx)
+	if _, ok, err := s.FeedTaskEnd(1, 500); ok || err != nil {
+		t.Fatalf("a pruned end is still found (%v, %v)", ok, err)
+	}
+	if _, ok, err := getCopy(s.db, keyFeedTaskEnd(1, 500)); ok || err != nil {
+		t.Fatalf("the pruned end's entry is still stored (%v, %v)", ok, err)
+	}
+	if _, ok, _ := s.FeedTaskEnd(1, 501); !ok {
+		t.Fatal("the prune dropped an end it did not reach")
+	}
+	if _, ok, _ := s.FeedTaskEnd(2, 500); !ok {
+		t.Fatal("a prune of partition 1 dropped partition 2's entry")
+	}
+}
+
+// TestACorruptTaskEndEntryIsAnError: an entry that is not a position, or that names a
+// row about another task, is reported rather than read as an answer.
+func TestACorruptTaskEndEntryIsAnError(t *testing.T) {
+	s := openStore(t)
+	tx := s.NewTransaction()
+	job := &model.JobValue{ProcessInstanceKey: 41, ElementInstanceKey: 42, JobType: 1}
+	must(t, tx.PutFeedTask(1, 10, 100, FeedTaskCompleted, 7, 500, 3, job))
+	must(t, tx.b.Set(keyFeedTaskEnd(1, 600), []byte{1, 2, 3}, nil))
+	must(t, tx.b.Set(keyFeedTaskEnd(1, 700), appendBE64(nil, 10), nil))
+	commit(t, tx)
+	if _, _, err := s.FeedTaskEnd(1, 600); err == nil {
+		t.Error("a short entry was read as an answer")
+	}
+	if _, _, err := s.FeedTaskEnd(1, 700); err == nil {
+		t.Error("an entry naming another task's row was read as an answer")
+	}
+}

@@ -1,0 +1,55 @@
+{
+  "type": "default",
+  "id": "m365-postfach-weiterleitung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Weiterleitung setzen · Set forwarding**\n\nWeitergeleitet wird nur an Adressen der eigenen Domain; ein anderes Ziel wird mit Begründung abgelehnt. · Mail is forwarded only to addresses of the organisation's own domain; any other target is refused with a reason."
+    },
+    {
+      "key": "weiterleitungLokalteil",
+      "type": "textfield",
+      "label": "Ziel: Teil vor dem @ · Target: part before the @",
+      "description": "z.B. vorname.nachname · e.g. first.last",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"
+      }
+    },
+    {
+      "key": "weiterleitungDomain",
+      "type": "textfield",
+      "label": "Ziel: Domain nach dem @ · Target: domain after the @",
+      "description": "Die eigene Domain, z.B. contoso.ch · Your own domain, e.g. contoso.ch",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterleitungBehalten",
+      "type": "radio",
+      "label": "Kopie im eigenen Postfach behalten? · Keep a copy in the mailbox?",
+      "values": [
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        },
+        {
+          "label": "Nein, nur weiterleiten · No, forward only",
+          "value": "nein"
+        }
+      ],
+      "defaultValue": "ja",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

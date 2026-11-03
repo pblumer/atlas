@@ -241,6 +241,9 @@ func (m *MockSite) prune() {
 }
 
 func (m *MockSite) do(p prepared, req Request) (any, error) {
+	if p.op == OpGetSite {
+		return m.getSite(req.Site), nil
+	}
 	web := m.web(req.Site)
 	if p.spec.NeedsList {
 		switch p.op {
@@ -269,6 +272,51 @@ func (m *MockSite) do(p prepared, req Request) (any, error) {
 		return m.createFolder(web, p.op, p.path, req)
 	default:
 		return m.deleteFile(web, p.path, req)
+	}
+}
+
+// mockSiteQuota is the storage every mockup site reports as its total: the default
+// quota of a SharePoint site in a tenant that sets none of its own, 25 TB, would make
+// every bar in a demo read empty, so the mockup reports a quota a demo can fill.
+const mockSiteQuota = 1 << 30
+
+// getSite answers whether the mockup holds a site and, if it does, what it reports of
+// itself. A site exists in the mockup once a task wrote to it, which is also when the
+// Console lists it; reading a site never makes one, so an order form asking whether a
+// name is free gets "free" until something was stored there.
+func (m *MockSite) getSite(ref string) any {
+	ref = strings.TrimSpace(ref)
+	host, p, isID := parseSite(ref)
+	address := strings.ToLower(host + p)
+	if isID {
+		address = strings.ToLower(ref)
+	}
+	w, ok := m.webs[address]
+	if !ok || len(w.lists) == 0 {
+		return map[string]any{"exists": false, "site": ref}
+	}
+	var used int64
+	for _, l := range w.lists {
+		for _, f := range l.files {
+			used += int64(len(f.content))
+		}
+	}
+	name := p
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		name = p[i+1:]
+	}
+	return map[string]any{
+		"exists":      true,
+		"id":          host + ",mock-" + address,
+		"name":        name,
+		"displayName": name,
+		"webUrl":      w.url,
+		"quota": map[string]any{
+			"total":     json.Number(strconv.FormatInt(mockSiteQuota, 10)),
+			"used":      json.Number(strconv.FormatInt(used, 10)),
+			"remaining": json.Number(strconv.FormatInt(mockSiteQuota-used, 10)),
+			"state":     "normal",
+		},
 	}
 }
 

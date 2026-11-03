@@ -5633,27 +5633,31 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Was eine IT-Abteilung mit Microsoft 365 anbietet, als Shop: Lizenz mit Postfach, Teams-Telefonie,
-              Teams, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, Anrufwarteschlangen und
-              Telefonzentralen, in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
+              Teams, Communities in Viva Engage, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, buchbare Geräte,
+              Anrufwarteschlangen, Telefonzentralen und die Aufbewahrung eines Postfachs (Litigation Hold), in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
               Dazu zwei öffentliche Formulare: Externe beantragen einen Partnerzugang oder melden sich bei einem
               Verteiler an und ab.</p>
             <p data-l="en">What an IT department offers with Microsoft 365, as a shop: licence with mailbox, Teams
-              telephony, teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call queues
-              and auto attendants, in two catalogues for staff and for the people in charge of communication. Plus two
+              telephony, teams, Viva Engage communities, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, bookable
+              equipment, call queues, auto attendants and a litigation hold on a mailbox, in two catalogues for staff and for the people in charge of communication. Plus two
               public forms: externals request partner access, or subscribe to and leave a distribution list.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Fünfzehn Prozesse über die Worker-Typen Entra, Exchange und Teams Phone, fünf
-              Entscheidungstabellen und 21 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
-              zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
-              <code>ucc_exchange</code> und <code>ucc_teams</code>. Lizenz, Team, Funktionspostfach und Postfachzugriff
-              genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
+            <p data-l="de">Zwanzig Prozesse über die Worker-Typen Entra, Exchange, SharePoint und Teams Phone,
+              sieben Entscheidungstabellen und 39 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              zu, Abwesenheitsnotiz, Kontingent, Weiterleitung, Mailadressen und Kalenderstellvertretung am selben Produkt
+              setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
+              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>. Das Bestellformular der
+              SharePoint-Teamwebsite prüft schon während der Eingabe, ob die URL noch frei ist. Lizenz, Team, SharePoint-Teamwebsite, Community,
+              Funktionspostfach und Postfachzugriff genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
               sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
-            <p data-l="en">Fifteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
-              and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
-              reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
-              <code>ucc_teams</code>. Licence, team, shared mailbox and mailbox access are approved by the line manager
+            <p data-l="en">Twenty processes over the Entra, Exchange, SharePoint and Teams Phone Worker Types, seven
+              decision tables and 39 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
+              automatic reply, the quota, forwarding, e-mail addresses and calendar delegates on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code>,
+              <code>ucc_sharepoint</code> and <code>ucc_teams</code>. The SharePoint team site's order form checks
+              while the URL is typed whether it is still free. Licence, team, SharePoint team site, community, shared mailbox and mailbox access
+              are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
               <code>get-user-manager</code> through the <code>ucc_entra</code> Worker.</p>
           </div>
@@ -5673,11 +5677,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           needs information security's approval as well, depending on the access type, and ends after a year.</p>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die fünf Entscheidungsmodelle
+        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die sieben Entscheidungsmodelle
           hochgeladen sind; die Schritte, die Antworten auf die Fragen des Katalogs und die Konstanten der Applikation
           stehen in <code>examples/m365-dienste/README.md</code>. Die öffentlichen Links erzeugst du danach bewusst
           selbst.</p>
-        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the five decision models are uploaded; the
+        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the seven decision models are uploaded; the
           steps, the answers to the catalogue's questions and the application's constants are in
           <code>examples/m365-dienste/README.md</code>. You create the public links yourself afterwards, deliberately.</p>
       </div>
@@ -7062,14 +7066,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             beobachtender Delta-Sync)? Dann die <code>*.Read.All</code>-Varianten.
             <b>Entferne <code>Directory.ReadWrite.All</code>, falls vorhanden</b> – das ist der
             Alles-lesen-und-schreiben-Grant, den dieser Worker nie braucht. Teams-Operationen und Rollenzuweisung sind
-            opt-in.</li>
+            opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
+            Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
+            <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
+            sein).</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
             <code>GroupMember.ReadWrite.All</code> replaces the second. Read-only (a report, an export, an observing
             delta sync)? Then the <code>*.Read.All</code> variants. <b>Remove
             <code>Directory.ReadWrite.All</code> if present</b> – that is the read-and-write-everything grant this
-            worker never needs. Teams operations and role assignment are opt-in.</li>
+            worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
+            (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
+            communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
+            documents that the Engage network must be in native mode for it).</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the
@@ -9855,7 +9865,10 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           zugeklappte Zeile dazwischen, und den Explorer. <b>Diese Iteration wiedergeben</b> im Detail einer
           Iteration spielt ihre Schritte auf dem Diagramm ab – die bisher durchlaufenen Elemente sind markiert, das
           aktuelle hervorgehoben –, schrittweise vor und zurück oder mit <b>Abspielen</b>; eine verschachtelte
-          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Meldet der Explorer, die Historie lasse sich
+          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Unter der Wiedergabe stehen die
+          <b>Variablen bei diesem Schritt</b>: die eigenen Bereiche der Iteration – sie selbst und, was zu diesem
+          Zeitpunkt in ihr lief –, je Variable mit dem letzten Wert bis zu diesem Schritt. Variablen der
+          Multi-Instance-Ausführung und der Instanz sind darin nicht enthalten. Meldet der Explorer, die Historie lasse sich
           noch nicht sicher vollständig anzeigen, wurde sie aufgezeichnet, bevor es den Index dafür gab – das heisst
           nicht, dass keine Iterationen gelaufen sind. Dieselben Daten liefern
           <code>GET /api/v1/instances/{key}/multi-instances</code> und die MCP-Tools
@@ -9877,7 +9890,10 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
           as one collapsed row between them, and the explorer. <b>Replay this iteration</b> in an iteration's
           detail plays its steps on the diagram – the elements passed so far are marked, the current one
           highlighted – step by step forward and back or with <b>Play</b>; a nested execution is one step in it,
-          and its iterations have steps of their own. When the explorer says the history
+          and its iterations have steps of their own. Below the replay, <b>Variables at this step</b> shows the
+          iteration's own scopes – the iteration and whatever ran inside it at that moment – each variable with
+          its latest value up to that step. Variables of the multi-instance execution and of the instance are not
+          included. When the explorer says the history
           cannot yet be shown as complete, it was recorded before the index for it existed – that does not mean
           no iterations ran. The same data comes from <code>GET /api/v1/instances/{key}/multi-instances</code> and
           the MCP tools <code>atlas_instance_multi_instances</code> and
@@ -11552,6 +11568,106 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           approvals and can withdraw them.</b> For most people a screen is the only place they will ever do that.
           And because an MCP tool runs with the roles of whoever calls it, an assistant can never do more than the
           person who approved it.</p>
+      </div>
+
+      <h3 id="verbundene-systeme" data-l="de">Ein anderes System verbinden</h3><h3 data-l="en">Connecting another system</h3>
+      <p data-l="de">Ein System wie ein Wiki, das die Prozesse von atlas zeigt und die Aufgaben der Leute
+        spiegelt, verbindest du mit <b>einer Freigabe</b>. Du startest die Verbindung im anderen System; es schickt
+        dich auf den Zustimmungsdialog von atlas. Dort steht zuoberst die <b>Adresse (Host)</b>, unter der das System
+        sich ausweist, darunter der Name, den es sich selbst gibt &ndash; prüfe die Adresse, denn nur für sie bürgt
+        TLS. Danach wählst du, was das System lesen darf: <code>diagrams</code> (Prozesse und ihre Modelle),
+        <code>tasklist</code> (die offenen Aufgaben) und <code>events</code> (was mit den Aufgaben geschieht), je
+        auf alles oder auf einzelne Projekte begrenzt. Freigeben kann das nur, wer die Rolle <code>admin</code>
+        hat. Kein Token, kein Client-Secret und keine Redirect-URI wird von Hand kopiert.</p>
+      <p data-l="en">A system such as a wiki that shows atlas's processes and mirrors people's tasks is connected
+        with <b>one approval</b>. You start the connection in the other system; it sends you to atlas's consent
+        screen. At the top is the <b>address (host)</b> the system identifies itself by, and below it the name it
+        gives itself &ndash; check the address, because it is the only part TLS vouches for. Then you choose what the
+        system may read: <code>diagrams</code> (processes and their models), <code>tasklist</code> (the open tasks)
+        and <code>events</code> (what happens to the tasks), each for everything or narrowed to projects. Only
+        someone with the <code>admin</code> role can approve it. No token, client secret or redirect URI is copied
+        by hand.</p>
+      <p data-l="de">Die Option <b>«Personen verbinden lassen, ohne jede einzeln zu fragen»</b> erspart den Leuten
+        den eigenen Zustimmungsdialog: Wer bei atlas angemeldet ist, wird ohne Rückfrage verbunden. Jede Person
+        erhält trotzdem ihre eigene Freigabe, arbeitet ihre Aufgaben als sie selbst, und atlas entscheidet weiter,
+        wer welche Aufgabe übernehmen und erledigen darf. Unter
+        <a href="/#/console/connections">Verbundene Konten</a> sieht jede Person die Systeme, die für sie
+        freigegeben sind, und kann ihre Verbindung zurückziehen; dann fragt atlas sie wieder.</p>
+      <p data-l="en">The option <b>"Let people connect their accounts without asking each of them"</b> spares
+        people a consent screen of their own: whoever is signed in to atlas is connected without being asked. Each
+        person still gets their own approval, works their tasks as themselves, and atlas keeps deciding who may
+        take on and complete which task. Under <a href="/#/console/connections">Connected accounts</a> each person
+        sees the systems approved for them and can withdraw; atlas then asks them again.</p>
+      <p data-l="de">Unter <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> siehst du jedes System: wer es wann freigegeben hat, was es liest, ob die Vorab-Zustimmung gilt,
+        wie viele Personen verbunden sind und wann es atlas zuletzt verwendet hat. Dort schaltest du die
+        Vorab-Zustimmung aus oder trennst das System, auf Wunsch samt den Freigaben aller Personen. Was ein System
+        liest, änderst du, indem du es vom System aus erneut verbindest; die neue Freigabe ersetzt die alte. Verliert
+        die Person, die freigegeben hat, die Rolle <code>admin</code>, endet die Verbindung, und die Seite sagt
+        warum.</p>
+      <p data-l="en">Under <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> you see each system: who approved it and when, what it reads, whether pre-consent stands, how
+        many people are connected and when it last used atlas. There you turn pre-consent off or disconnect the
+        system, optionally with every person's approval. To change what a system reads, connect it again from the
+        system; the new approval replaces the old one. If the person who approved it loses the
+        <code>admin</code> role, the connection ends, and the page says why.</p>
+      <div class="note">
+        <div class="lbl" data-l="de">Was ein System umsetzt</div><div class="lbl" data-l="en">What a system implements</div>
+        <ol data-l="de">
+          <li><b>Ein Dokument über sich selbst.</b> Das System veröffentlicht unter einer https-Adresse ein
+            JSON-Dokument (OAuth Client ID Metadata Document); diese Adresse ist seine <code>client_id</code>. Es nennt
+            <code>client_id</code> (gleich der Adresse), <code>client_name</code>, <code>redirect_uris</code> auf
+            derselben Herkunft, <code>token_endpoint_auth_method: "private_key_jwt"</code> und unter
+            <code>jwks</code> mindestens einen Ed25519-Schlüssel. atlas liest es höchstens 64&nbsp;KiB gross, wartet
+            höchstens 5 Sekunden, folgt keiner Umleitung und hält es höchstens eine Stunde. Ein Schlüssel wird
+            gewechselt, indem das Dokument geändert wird.</li>
+          <li><b>Die Systemfreigabe.</b> Code-Flow mit PKCE (S256) an <code>/oauth/authorize</code> mit
+            <code>resource=&lt;atlas&gt;/system</code> und <code>scope</code> aus <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (leer heisst alle drei; alles andere wird mit
+            <code>invalid_scope</code> abgelehnt).</li>
+          <li><b>Die Freigabe einer Person.</b> Derselbe Flow mit <code>resource=&lt;atlas&gt;/tasks</code> und ohne
+            <code>scope</code>. Mit <code>prompt=none</code> zeigt atlas nie eine Seite, sondern antwortet
+            <code>login_required</code> (nicht angemeldet) oder <code>consent_required</code> (keine
+            Vorab-Zustimmung oder abgelehnt).</li>
+          <li><b>Der Token-Endpunkt.</b> <code>/oauth/token</code> mit <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> und einem mit EdDSA signierten JWT
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = der Token-Endpunkt,
+            eine einmalige <code>jti</code>, höchstens fünf Minuten gültig). Ein Fehler heisst
+            <code>401 invalid_client</code>; der Grund steht im Revisionsprotokoll.</li>
+          <li><b>Was es liest.</b> <code>GET /api/v1/auth/me</code> sagt unter <code>system</code>, was freigegeben
+            ist. <code>GET /api/v1/tasks/{key}</code> antwortet für eine beendete Aufgabe, die atlas noch kennt,
+            <code>410 Gone</code> mit <code>ended</code> und <code>endedAt</code>, und <code>404</code> für eine
+            ausserhalb der Reichweite.</li>
+          <li><b>Zurückgeben.</b> <code>POST /oauth/revoke</code> mit derselben Anmeldung beendet die ganze
+            Freigabe.</li>
+        </ol>
+        <ol data-l="en">
+          <li><b>A document about itself.</b> The system publishes a JSON document (OAuth Client ID Metadata
+            Document) at an https address; that address is its <code>client_id</code>. It names
+            <code>client_id</code> (equal to the address), <code>client_name</code>, <code>redirect_uris</code> on the
+            same origin, <code>token_endpoint_auth_method: "private_key_jwt"</code> and, under <code>jwks</code>, at
+            least one Ed25519 key. atlas reads at most 64&nbsp;KiB of it, waits at most 5 seconds, follows no redirect
+            and keeps it at most an hour. A key is rotated by changing the document.</li>
+          <li><b>The system grant.</b> The code flow with PKCE (S256) at <code>/oauth/authorize</code> with
+            <code>resource=&lt;atlas&gt;/system</code> and a <code>scope</code> of <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (empty means all three; anything else is refused with
+            <code>invalid_scope</code>).</li>
+          <li><b>A person's grant.</b> The same flow with <code>resource=&lt;atlas&gt;/tasks</code> and no
+            <code>scope</code>. With <code>prompt=none</code> atlas never shows a page and answers
+            <code>login_required</code> (not signed in) or <code>consent_required</code> (no pre-consent, or
+            declined).</li>
+          <li><b>The token endpoint.</b> <code>/oauth/token</code> with <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> and a JWT signed with EdDSA
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = the token endpoint, a
+            one-time <code>jti</code>, good for five minutes at most). A failure is <code>401 invalid_client</code>;
+            the reason is in the audit log.</li>
+          <li><b>What it reads.</b> <code>GET /api/v1/auth/me</code> says under <code>system</code> what was
+            approved. <code>GET /api/v1/tasks/{key}</code> answers a task that ended while atlas still holds it with
+            <code>410 Gone</code>, <code>ended</code> and <code>endedAt</code>, and one outside its reach with
+            <code>404</code>.</li>
+          <li><b>Giving it back.</b> <code>POST /oauth/revoke</code> with the same client authentication ends the
+            whole grant.</li>
+        </ol>
       </div>
 
       <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>

@@ -488,3 +488,21 @@ func TestRemoteMockOddAnswers(t *testing.T) {
 		}
 	}
 }
+
+// The mockup reports a site once a task stored something there, and not before: an
+// order form asking whether a name is free must not take it by asking.
+func TestMockGetSite(t *testing.T) {
+	m := newMock(t)
+	if got := do(t, m, sharepoint.Request{Operation: "get-site"}); got["exists"] != false {
+		t.Fatalf("unwritten site = %#v, want exists=false", got)
+	}
+	if got := do(t, m, sharepoint.Request{Operation: "get-site"}); got["exists"] != false {
+		t.Fatalf("asking twice made the site: %#v", got)
+	}
+	do(t, m, sharepoint.Request{Operation: "upload-file", Path: "a.txt", Content: "hallo"})
+	got := do(t, m, sharepoint.Request{Operation: "get-site", Site: "contoso.sharepoint.com:/sites/verwaltung"})
+	quota, _ := got["quota"].(map[string]any)
+	if got["exists"] != true || got["name"] != "verwaltung" || quota == nil || quota["used"] != json.Number("5") {
+		t.Errorf("written site = %#v, want exists, its name and 5 bytes used", got)
+	}
+}

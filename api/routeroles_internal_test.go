@@ -148,6 +148,11 @@ var wantAdminRoutes = []string{
 	"POST /api/v1/oauth-clients",
 	"GET /api/v1/oauth-clients",
 	"DELETE /api/v1/oauth-clients/{id}",
+	// The connected systems and what they reach, which only an administrator
+	// connects (ADR-0512 §4).
+	"GET /api/v1/connected-systems",
+	"PUT /api/v1/connected-systems/{id}/preconsent",
+	"DELETE /api/v1/connected-systems/{id}",
 	"POST /api/v1/connectors/{id}/provision-clio-key",
 	"GET /api/v1/secrets",
 	"PUT /api/v1/secrets/{name}",

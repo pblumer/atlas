@@ -15,6 +15,71 @@ _Changed_ / _Removed_ for each version.
 ### Added
 - **An order form searches the directory for a person.** A shop product's `configForm` may carry the directory field of ADR-0473: `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` searches through the field's Worker for a caller who may order from the release's catalogue, and placing the order and correcting its details look the chosen person up again, so a value the search would not have offered is refused with 422 (ADR-0473 amendment). The basket and the correction form show the search, and a task form in the shop now does too. `option.value` lets a field submit an Entra user's `userPrincipalName` instead of the object id.
 - **`examples/m365-dienste` runs in a shared tenant, and asks for people by search.** A new application constant `NAME_PREFIX` (empty by default: names unchanged) goes in front of every name and alias the naming rule builds and of a partner account's UPN, and limits the governance check to objects with that prefix. The owner, manager and recipient fields of the order forms search Entra and submit the user principal name. `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` installs the package into the environment, ready to order.
+- **An order form says while a name is typed whether it is still free.** A textfield
+  carrying an `atlasAvailability` block names up to four sources — Entra groups and
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
+  `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
+  and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
+  stops the order, a check that could not run does not. Each source is a value lookup
+  over the form-lookup worker query, answered by a Worker Instance with the Worker's own
+  credential, so nothing is written and the engine holds no Microsoft credential. Only a
+  signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
+  Worker whose editors switched on `formLookups`, which the Console now offers for
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
+  (ADR-0519).
+- **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
+  sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
+  https://myapps.microsoft.com, which Graph requires) and answers the invitation with the
+  new guest's id; `restore-group` restores a Microsoft 365 group deleted less than 30
+  days ago, and with it its SharePoint site; `list-deleted-groups` lists deleted groups
+  like `list-groups` lists live ones. Two lookup resources, `groups` and
+  `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
+  availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
+- **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
+  id, name, display name and web URL with its default library's quota (`used`, `total`,
+  `remaining` in bytes), and `exists=false` for an address where there is no site, so a
+  process can show a site's usage before somebody asks for more room. The mockup answers
+  it too (ADR-0141, amended).
+- **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
+- **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
+- **Another system is connected with one approval.** A system such as a wiki that shows
+  atlas's processes and mirrors people's tasks names itself by the https URL of a client
+  ID metadata document it publishes and signs its token requests with a key from it
+  (`private_key_jwt`, EdDSA or ES256), so no token, client secret or redirect URI is
+  copied by hand. An administrator starts the connection in the system and approves it
+  on the consent screen, which shows the system's host above the name it claims, for the
+  new resource `<origin>/system`: the capabilities `diagrams`, `tasklist` and `events`,
+  each optionally narrowed to projects — `tasklist` then lists only those projects' tasks
+  and `events` carries only their task facts — and, if chosen, pre-consent, which
+  connects the system's people to their own `…/tasks` grants without a consent page once
+  they are signed in; `prompt=none` answers `login_required` or `consent_required`. A
+  person who withdraws such a grant declines the system until they approve it
+  themselves. `GET /api/v1/auth/me` tells a system what was approved, and
+  `GET /api/v1/tasks/{key}` answers it `410 Gone` for a task that ended while the feed
+  still holds its end. Console → Administration → Connected systems lists each system
+  with its approver, reach, people and last use, turns pre-consent off and disconnects
+  it; Connected accounts lists each person's systems. Atlas reads such a document from
+  public addresses only unless `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`) is set, within the new budgets
+  `ATLAS_LIMIT_CLIENT_METADATA*`, and saves nothing before an administrator approved.
+  New routes `GET /api/v1/connected-systems`,
+  `PUT /api/v1/connected-systems/{id}/preconsent`, `DELETE /api/v1/connected-systems/{id}`,
+  `GET /api/v1/me/connected-systems` and `POST /api/v1/me/connected-systems/withdraw`;
+  audit events `system.connect`, `system.change` and `system.disconnect`
+  (ADR-0512).
 - **An atlas hub signing key rotates without interruption.** `ATLAS_BLUEPRINT_REGISTRY_KEY` pins one registry key or, during a rotation, two separated by a comma, and an index signed by either is accepted (ADR-0499 amendment). The server logs the pinned fingerprints at startup (`hub.registry_keys_pinned`), as a warning while two are pinned. Three keys, a key twice or a malformed one stop the server at startup. `examples/hub/README.md` gives the order: pin both, switch the signer, unpin the old key. A compromised key is replaced outright, never pinned beside its successor.
 - **One iteration replays step by step on the diagram.** In the Multi-Instance Explorer, *Replay this iteration* plays what ran inside one iteration — its start, the elements inside it, a nested execution as one step, its end — on the diagram, step by step or with *Play*, from a new bounded route (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps`, MCP tool `atlas_multi_instance_iteration_steps`). Iteration 37,421 of a 50,000-iteration instance answers in about a millisecond. Servers whose history predates it rebuild it once at startup.
 - **A large instance shows its whole course, with its loops collapsed.** Operations' bounded view of an instance with a large multi-instance execution now lists the instance's own steps — start, gateways, tasks, end — in the order they happened, with each loop as one collapsed row between them, from a new outline of the history that leaves out what runs inside iterations (`GET /api/v1/instances/{key}/outline`, MCP tool `atlas_instance_outline`). An instance with 50,000 iterations answers in under a millisecond with a few hundred bytes.
@@ -154,6 +219,7 @@ _Changed_ / _Removed_ for each version.
 - **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
 - **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
 - **`examples/m365-dienste` against a real tenant:** a distribution list is created without `-Type` (not granted to a worker scoped to distribution lists), and a team's owner is added after the replication wait rather than before it (`add-group-owner` answered 404 23 seconds after `create-group`). People are found by given name and surname too.
+- **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
 - **A server that recorded multi-instance history before its schema v2 starts again.** A multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.
 - **A terminate end event ends its scope in the token simulation.** The Design view's

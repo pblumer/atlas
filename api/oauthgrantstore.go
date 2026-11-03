@@ -71,6 +71,11 @@ type oauthGrant struct {
 	RefreshHash   string `json:"refreshHash"`
 
 	CreatedAt int64 `json:"createdAt"`
+
+	// System is what an administrator approved when the resource is `…/system`
+	// (ADR-0512 §2): the capabilities, each with its reach, and whether the system's
+	// people may connect without being asked. Nil on every other grant.
+	System *oauthSystem `json:"system,omitempty"`
 }
 
 // accessExpired reports whether the access token has run out at the given Unix
@@ -95,6 +100,10 @@ func (g oauthGrant) scope() string {
 		return apiScopeMCP
 	case strings.HasSuffix(g.Resource, oauthTasksResource):
 		return apiScopeTasks
+	case g.System != nil:
+		// What it reaches is decided per request (systemPrincipal); this names the
+		// part it reaches whatever it was given.
+		return apiScopeSystem
 	}
 	return ""
 }
@@ -110,13 +119,15 @@ type oauthGrantView struct {
 	Resource      string `json:"resource"`
 	AccessExpires int64  `json:"accessExpires"`
 	CreatedAt     int64  `json:"createdAt"`
+	// System is what a system grant reaches (ADR-0512 §2), so the listing shows it.
+	System *oauthSystem `json:"system,omitempty"`
 }
 
 func (g oauthGrant) view() oauthGrantView {
 	return oauthGrantView{
 		ID: g.ID, ClientID: g.ClientID, ClientName: g.ClientName,
 		UserID: g.UserID, Username: g.Username, Resource: g.Resource,
-		AccessExpires: g.AccessExpires, CreatedAt: g.CreatedAt,
+		AccessExpires: g.AccessExpires, CreatedAt: g.CreatedAt, System: g.System,
 	}
 }
 
@@ -141,6 +152,11 @@ type oauthGrantIndex struct {
 	mu        sync.RWMutex
 	byAccess  map[string]oauthGrant
 	byRefresh map[string]oauthGrant
+
+	// lastUsed is when each grant's access token was last presented (touch). It has a
+	// lock of its own, so noting a use never waits on a reader of the hashes.
+	useMu    sync.Mutex
+	lastUsed map[string]int64
 }
 
 func newOAuthGrantIndex() *oauthGrantIndex {
@@ -195,6 +211,48 @@ func (i *oauthGrantIndex) forUser(userID string) []string {
 		}
 	}
 	return out
+}
+
+// systemOf is the standing system grant of a client, if it has one (ADR-0512 §2).
+func (i *oauthGrantIndex) systemOf(clientID string) (oauthGrant, bool) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	for _, g := range i.byAccess {
+		if g.System != nil && g.ClientID == clientID {
+			return g, true
+		}
+	}
+	return oauthGrant{}, false
+}
+
+// all is every standing grant, once each.
+func (i *oauthGrantIndex) all() []oauthGrant {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	out := make([]oauthGrant, 0, len(i.byAccess))
+	for _, g := range i.byAccess {
+		out = append(out, g)
+	}
+	return out
+}
+
+// touch notes that a grant's access token was just used, and lastUse says when it
+// last was. In memory only: "when did this system last use Atlas" is a question for
+// the Console (ADR-0512 §4), not a fact worth a disk write per request, and after a
+// restart the time its tokens were last issued answers it instead.
+func (i *oauthGrantIndex) touch(id string, at int64) {
+	i.useMu.Lock()
+	if i.lastUsed == nil {
+		i.lastUsed = map[string]int64{}
+	}
+	i.lastUsed[id] = at
+	i.useMu.Unlock()
+}
+
+func (i *oauthGrantIndex) lastUse(id string) int64 {
+	i.useMu.Lock()
+	defer i.useMu.Unlock()
+	return i.lastUsed[id]
 }
 
 func (i *oauthGrantIndex) remove(id string) {

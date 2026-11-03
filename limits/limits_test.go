@@ -52,6 +52,13 @@ func TestDefaultsAreTheNumbersTheCodeAlreadyHad(t *testing.T) {
 		// connected people in one burst, then ten renewals a second.
 		{"TokenEndpointBurst", int64(l.TokenEndpointBurst), 300},
 		{"TokenEndpointRate", int64(l.TokenEndpointRate), 10},
+		// The read of a client ID metadata document is new as well (ADR-0512 §1):
+		// the size and the wait the contract with a connected system states, and a
+		// throttle per host a cached document never reaches.
+		{"ClientMetadata", l.ClientMetadata, 64 << 10},
+		{"ClientMetadataSeconds", int64(l.ClientMetadataSeconds), 5},
+		{"ClientMetadataHostBurst", int64(l.ClientMetadataHostBurst), 10},
+		{"ClientMetadataHostRate", int64(l.ClientMetadataHostRate), 1},
 	} {
 		if tc.got != tc.want {
 			t.Errorf("%s = %d, want %d", tc.name, tc.got, tc.want)

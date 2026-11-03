@@ -43,6 +43,14 @@ func TestM365NamingRuleTakesThePrefix(t *testing.T) {
 			wantAnzeigename: "atlas-test-58o4-TM-FIN Kreditoren", wantAlias: "atlas-test-58o4-tm-fin-kreditoren"},
 		{name: "shared tenant room", objekttyp: "raum", praefix: "atlas-test-58o4-",
 			wantAnzeigename: "atlas-test-58o4-RM-FIN Kreditoren", wantAlias: "atlas-test-58o4-rm-fin-kreditoren"},
+		{name: "shared tenant device", objekttyp: "geraet", praefix: "atlas-test-58o4-",
+			wantAnzeigename: "atlas-test-58o4-GE-FIN Kreditoren", wantAlias: "atlas-test-58o4-ge-fin-kreditoren"},
+		{name: "shared tenant community", objekttyp: "community", praefix: "atlas-test-58o4-",
+			wantAnzeigename: "atlas-test-58o4-EC-FIN Kreditoren", wantAlias: "atlas-test-58o4-ec-fin-kreditoren"},
+		{name: "shared tenant site", objekttyp: "site", praefix: "atlas-test-58o4-",
+			wantAnzeigename: "atlas-test-58o4-Kreditoren", wantAlias: "atlas-test-58o4-kreditoren"},
+		{name: "site without prefix", objekttyp: "site", nullPrefix: true,
+			wantAnzeigename: "Kreditoren", wantAlias: "kreditoren"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

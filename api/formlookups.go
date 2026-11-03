@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
+	"github.com/pblumer/atlas/api/formavailability"
 	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
@@ -157,8 +159,8 @@ func workerForLookup(c connector) formlookup.Worker {
 // formLookupKinds are the Worker Types a Worker's editors may open for form lookups:
 // those a remote data source is offered for.
 func formLookupKind(kind string) bool {
-	for _, p := range formlookup.Providers() {
-		if p.WorkerType == kind {
+	for _, k := range lookupKinds() {
+		if k == kind {
 			return true
 		}
 	}
@@ -171,10 +173,21 @@ func refuseFormLookups(kind string) string {
 		strings.Join(lookupKinds(), ", "), kind)
 }
 
+// lookupKinds are the Worker Types a form can ask through: those a directory field
+// searches (ADR-0473) and those a name field's availability check asks (ADR-0519),
+// each once and in that order.
 func lookupKinds() []string {
 	var out []string
+	add := func(kind string) {
+		if !slices.Contains(out, kind) {
+			out = append(out, kind)
+		}
+	}
 	for _, p := range formlookup.Providers() {
-		out = append(out, p.WorkerType)
+		add(p.WorkerType)
+	}
+	for _, p := range formavailability.Providers() {
+		add(p.WorkerType)
 	}
 	return out
 }

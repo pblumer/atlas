@@ -188,6 +188,12 @@ func TestEntraConnectorValidation(t *testing.T) {
 		{"get-user-manager without a result variable", `connector="c" operation="get-user-manager" userId="u"`, "resultVariable"},
 		{"filter on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" filter="x eq 1"`, "applies to list-users"},
 		{"maxUsers on get-user-manager", `connector="c" operation="get-user-manager" userId="u" resultVariable="r" maxUsers="10"`, "applies to list-users"},
+		{"invite-guest without attributes", `connector="c" operation="invite-guest"`, "attributesVariable"},
+		{"filter on invite-guest", `connector="c" operation="invite-guest" attributesVariable="a" filter="x eq 1"`, "not a listing"},
+		{"restore-group without a group", `connector="c" operation="restore-group"`, "groupId"},
+		{"attributes on restore-group", `connector="c" operation="restore-group" groupId="g" attributesVariable="a"`, "attributes apply to"},
+		{"list-deleted-groups without a result variable", `connector="c" operation="list-deleted-groups"`, "resultVariable"},
+		{"deltaLink on list-deleted-groups", `connector="c" operation="list-deleted-groups" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
@@ -327,6 +333,30 @@ func TestEntraConnectorDelta(t *testing.T) {
 	}
 }
 
+// The guest and recycle-bin operations (ADR-0172, amended 2026-11-03): invite-guest
+// authors its invitation as attributes, restore-group names the deleted group, and
+// list-deleted-groups is a listing with list-groups' query fields and default bound.
+func TestEntraConnectorGuestAndRecycleBin(t *testing.T) {
+	cp, inv := entraDetail(t, `connector="c" operation="invite-guest" attributes="{&#34;invitedUserEmailAddress&#34;:&#34;=antrag.mail&#34;}" resultVariable="einladung"`)
+	if got := cp.Intern(inv.EntraOp); got != "invite-guest" {
+		t.Errorf("operation = %q, want invite-guest", got)
+	}
+	if inv.EntraAttributes.Expr == nil {
+		t.Error("invite-guest's inline attributes should compile to a FEEL context expression")
+	}
+	_, rg := entraDetail(t, `connector="c" operation="restore-group" groupId="=geloescht.id"`)
+	if rg.EntraGroupID.Expr == nil {
+		t.Error("restore-group's groupId should be a compiled FEEL expression")
+	}
+	cpL, ls := entraDetail(t, `connector="c" operation="list-deleted-groups" resultVariable="r" filter="startswith(displayName,'P')" select="id,displayName,deletedDateTime" pageSize="100"`)
+	if got := cpL.Intern(ls.EntraSelect); got != "id,displayName,deletedDateTime" {
+		t.Errorf("select = %q", got)
+	}
+	if ls.EntraFilter.Literal != "startswith(displayName,'P')" || ls.EntraPageSize != 100 || ls.EntraMaxUsers != defaultEntraMaxUsers {
+		t.Errorf("listing = filter %q pageSize %d maxUsers %d", ls.EntraFilter.Literal, ls.EntraPageSize, ls.EntraMaxUsers)
+	}
+}
+
 // The reserved index is baked into jobs already on disk, so it may never move.
 func TestEntraJobTypeIndexIsReserved(t *testing.T) {
 	if EntraJobTypeIndex != 23 {
@@ -334,5 +364,32 @@ func TestEntraJobTypeIndexIsReserved(t *testing.T) {
 	}
 	if got := reservedJobTypes[EntraJobTypeIndex]; got != EntraJobType {
 		t.Errorf("reservedJobTypes[%d] = %q, want %q", EntraJobTypeIndex, got, EntraJobType)
+	}
+}
+
+// create-community (ADR-0172, amended 2026-11-03) names its first owner as the userId and
+// the community as attributes, and — unlike every other write — requires a
+// resultVariable: the community it answers is the only place its id lands.
+func TestEntraConnectorCreateCommunity(t *testing.T) {
+	cp, d := entraDetail(t, `connector="c" operation="create-community" userId="=antrag.owner" attributes="{&#34;displayName&#34;:&#34;=antrag.name&#34;,&#34;privacy&#34;:&#34;private&#34;}" resultVariable="community"`)
+	if got := cp.Intern(d.EntraOp); got != "create-community" {
+		t.Errorf("operation = %q, want create-community", got)
+	}
+	if d.EntraUserID.Expr == nil || d.EntraAttributes.Expr == nil {
+		t.Error("the owner and the inline community should compile to FEEL expressions")
+	}
+	if got := cp.Intern(d.ResultVar); got != "community" {
+		t.Errorf("resultVariable = %q", got)
+	}
+	for _, tc := range []struct{ attrs, want string }{
+		{`connector="c" operation="create-community" attributesVariable="a" resultVariable="r"`, "needs a userId"},
+		{`connector="c" operation="create-community" userId="u" resultVariable="r"`, "directory properties"},
+		{`connector="c" operation="create-community" userId="u" attributesVariable="a"`, "an id nobody keeps cannot be followed up"},
+		{`connector="c" operation="create-community" userId="u" attributesVariable="a" resultVariable="r" pageSize="10"`, "returns no collection"},
+	} {
+		_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to mention %q", tc.attrs, err, tc.want)
+		}
 	}
 }

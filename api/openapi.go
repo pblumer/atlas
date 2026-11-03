@@ -487,6 +487,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", s.miHistory.HandleIterationSteps, apiOp{
 			summary: "Page through the replay window of one multi-instance iteration — its own activation, every element that ran inside it (a nested multi-instance body as one step) and its end, in the order they happened — without reading the rest of the instance. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's iteration steps are not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Iteration steps page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables", s.miHistory.HandleIterationVariables, apiOp{
+			summary: "Read one multi-instance iteration's variables as they stood at a log position (query at, required) — a step of its replay window: the iteration's own scope and every scope running inside it then, each folded to the latest change per name at or before that position, rendered as the instance's other variable views render them. The body's and the instance's scopes are not included. Bounded per scope and per value (truncated flags) (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration variables at a step", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
@@ -980,6 +983,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		// roleAny, like GET /api/v1/forms/{id}: whoever may read the form may ask what one
 		// of its fields offers. Which decision and which inputs is the stored form's; the
 		// request carries only the values of the fields it binds.
+		// roleAny, like the options route above, but only for a signed-in person: the
+		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-0519).
+		{"POST", "/api/v1/forms/{id}/fields/{field}/availability", s.handleFormFieldAvailability, apiOp{
+			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-0519)", tag: "Forms", role: roleAny,
+			req:  jsonBody("The typed value", schemaObj(map[string]any{"value": tString()})),
+			resp: jsonBody("Availability", tObject())}},
 		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{
 			summary: "The options one field of a stored form takes from a decision, for the values chosen in the fields its inputs are bound to — a group, then its members. The request names only those fields' values; a value from a field with fixed choices must be one of them. 404 not_found, 400 invalid_query, 422 as the decision cannot answer (ADR-0511)", tag: "Forms", role: roleAny,
 			req:  jsonBody("The values of the bound fields", schemaObj(map[string]any{"values": tObject()})),
@@ -1950,6 +1959,23 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("OAuth grants", tArray())}},
 		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
 			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/connected-systems", s.handleListConnectedSystems, apiOp{
+			summary: "List the connected systems (ADR-0512): per system its host and name, who approved it and when, its capabilities with their reach of projects, whether its people may connect without being asked (pre-consent), how many people are connected, when it last used Atlas, and for one no longer connected when and why it was disconnected (admin-only)", tag: "OAuth", role: RoleAdmin,
+			resp: jsonBody("Connected systems", tArray())}},
+		{"PUT", "/api/v1/connected-systems/{id}/preconsent", s.handleSetSystemPreconsent, apiOp{
+			summary: "Turn a connected system's pre-consent off, so its people are asked on the consent screen before they connect; only {\"preconsent\": false} is accepted — pre-consent is given by approving the system (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			req:    jsonBody("Pre-consent", schemaObj(map[string]any{"preconsent": tBool()}, "preconsent")),
+			status: http.StatusNoContent}},
+		{"DELETE", "/api/v1/connected-systems/{id}", s.handleDisconnectSystem, apiOp{
+			summary: "Disconnect a connected system: its system grant is withdrawn, and with ?people=withdraw every person's grant of the same client too (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/me/connected-systems", s.handleMyConnectedSystems, apiOp{
+			summary: "The connected systems you are connected to, and those an administrator pre-approved for you, with whether you declined them (ADR-0512)", tag: "OAuth", role: roleAny,
+			resp: jsonBody("Your connected systems", tArray())}},
+		{"POST", "/api/v1/me/connected-systems/withdraw", s.handleWithdrawFromSystem, apiOp{
+			summary: "Withdraw your own grants of a connected system and decline it, so pre-consent does not connect you to it again without your asking (ADR-0512)", tag: "OAuth", role: roleAny,
+			req:    jsonBody("The system's client id", schemaObj(map[string]any{"clientId": tString()}, "clientId")),
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
 			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth", role: roleAny,

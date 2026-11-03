@@ -547,7 +547,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 | [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
-| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
+| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted (amended) | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
@@ -597,13 +597,14 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0509](0509-cockpit-appearance-skin.md) | A gamified cockpit skin as an opt-in appearance | Proposed | Partial |
 | [0510](0510-tasks-for-a-connected-system.md) | Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups | Proposed | Partial |
 | [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
-| [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Proposed | Not started |
+| [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Accepted | Landed |
 | [0513](0513-native-model-dialect-and-vendor-compatibility.md) | Native atlas authoring with versioned vendor-format compatibility | Proposed | Not started |
 | [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
 | [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
 | [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Landed |
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
 | [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
+| [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
 
 ## The two states of a record
 

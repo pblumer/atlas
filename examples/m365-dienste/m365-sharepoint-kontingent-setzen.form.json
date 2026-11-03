@@ -1,0 +1,48 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-kontingent-setzen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Speicherkontingent setzen · Set the storage quota**\n\nMicrosoft Graph hat keine Schnittstelle für das Speicherkontingent einer Site. Bitte das bestellte Kontingent im SharePoint Admin Center setzen (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota. · Microsoft Graph has no API for a site's storage quota. Please set the ordered quota in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota."
+    },
+    {
+      "key": "alias",
+      "type": "textfield",
+      "label": "URL (/sites/…) · Url (/sites/…)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "titel",
+      "type": "textfield",
+      "label": "Titel · Title",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingent",
+      "type": "textfield",
+      "label": "Bestelltes Kontingent (GB) · Ordered quota (GB)",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingentGesetzt",
+      "type": "checkbox",
+      "label": "Kontingent im SharePoint Admin Center gesetzt · Quota set in the SharePoint admin centre",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

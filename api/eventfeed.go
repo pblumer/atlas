@@ -159,7 +159,8 @@ func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	page, err := s.readFeedPage(view, defs, part, nodeID, after, limit, feedReach(httpapi.PrincipalFrom(r.Context())))
+	p := httpapi.PrincipalFrom(r.Context())
+	page, err := s.readFeedPageNarrowed(view, defs, part, nodeID, after, limit, feedReach(p), feedProjects(p))
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "event feed: "+err.Error())
 		return
@@ -198,6 +199,16 @@ func (s *Server) feedSnapshot() (view *state.ReadView, nodeID string, part uint1
 // with them: what is left is the engine's facts.
 func (s *Server) readFeedPage(view *state.ReadView, defs defIndex, part uint16, nodeID string, after uint64, limit int,
 	reach map[string]bool) (eventPage, error) {
+	return s.readFeedPageNarrowed(view, defs, part, nodeID, after, limit, reach, nil)
+}
+
+// readFeedPageNarrowed is readFeedPage narrowed, besides, to the task facts of
+// processes deployed from a set of projects — a connected system's reach for `events`
+// (ADR-0512 §2). Such a reader is given no catalogue fact and no incident, only the
+// turns in the lives of those tasks; the rows it is not given are passed over as a
+// reach of catalogues passes them, the cursor with them. nil projects narrows nothing.
+func (s *Server) readFeedPageNarrowed(view *state.ReadView, defs defIndex, part uint16, nodeID string, after uint64, limit int,
+	reach, projects map[string]bool) (eventPage, error) {
 	sources := feedSources{catalogue: s.eventSource(nodeID), engine: s.engineEventSource(nodeID)}
 	homes := s.itemHomes()
 	page := eventPage{Events: []cloudEvent{}, Next: strconv.FormatUint(after, 10)}
@@ -209,6 +220,10 @@ func (s *Server) readFeedPage(view *state.ReadView, defs defIndex, part uint16, 
 		}
 		read++
 		if s.catalogueOff && e.IsCatalogue() {
+			page.Next = strconv.FormatUint(e.Position, 10)
+			return nil
+		}
+		if projects != nil && (e.Task == nil || !projects[defs[e.Definition].ProjectID]) {
 			page.Next = strconv.FormatUint(e.Position, 10)
 			return nil
 		}
@@ -240,6 +255,15 @@ func feedReach(p *httpapi.Principal) map[string]bool {
 		return nil
 	}
 	return reachSet(p.Reach)
+}
+
+// feedProjects is the set of projects a connected system's grant narrows the feed to,
+// or nil for a reader it does not narrow (ADR-0512 §2).
+func feedProjects(p *httpapi.Principal) map[string]bool {
+	if p == nil || len(p.FeedProjects) == 0 {
+		return nil
+	}
+	return reachSet(p.FeedProjects)
 }
 
 // feedItem is the catalogue item a feed row is about.
