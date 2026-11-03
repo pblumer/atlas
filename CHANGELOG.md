@@ -14,6 +14,14 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 - **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
+- **A process commands what a person holds without reading what they hold.** A shop
+  send task in mode `command` may name a `recipient` instead of an order and a position;
+  the server finds that person's position of the product in the inventory and commands
+  it under the product's `commandedBy`, so a leaver process returns an admin account by
+  naming the person — the inventory stays the administrators' to read. Holding nothing
+  completes the task with an empty result, and a refused command, in either shape, is
+  thrown as `SHOP_COMMAND_REFUSED` when the process catches it
+  (ADR-0521).
 - **A process orders a product for somebody in the name of its application.** A shop
   send task in the new mode `order` names a catalogue and a product, the recipient's
   account id and the answers to the products' forms, and places the order through the

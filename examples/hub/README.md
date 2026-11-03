@@ -30,6 +30,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `onboarding-tutorial` | Onboarding | the handbook's end-to-end tutorial |
 | `verwaltung-dienstleistungen` | Beispiel: Dienstleistungen der Verwaltung | shop package with two catalogues |
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
+| `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |
 
 Rules, checked by `go test ./cmd/atlas`:
 

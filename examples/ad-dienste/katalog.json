@@ -1,0 +1,657 @@
+{
+  "publish": true,
+  "catalogs": [
+    {
+      "id": "cat-ad-dienste",
+      "texts": {
+        "de": "Active Directory",
+        "en": "Active Directory"
+      },
+      "rank": 600,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "ad-sicherheitsgruppe",
+        "ad-recht-fileshare-finanzen-lesen",
+        "ad-recht-fileshare-finanzen-aendern",
+        "ad-recht-applikation-crm",
+        "ad-admin-konto",
+        "ad-servicekonto",
+        "ad-testkonto",
+        "ad-externes-konto",
+        "ad-versetzung"
+      ],
+      "groups": [
+        "{{zielgruppe-ad}}"
+      ],
+      "edges": [
+        {
+          "from": "ad-recht-fileshare-finanzen-aendern",
+          "to": "ad-recht-fileshare-finanzen-lesen",
+          "kind": "excludes"
+        }
+      ]
+    }
+  ],
+  "products": [
+    {
+      "id": "ad-sicherheitsgruppe",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Active Directory: Sicherheitsgruppe",
+        "en": "Active Directory: security group"
+      },
+      "descriptions": {
+        "de": "Eine Sicherheitsgruppe mit verantwortlicher Person (managedBy); Mitglieder kommen über die Aktionen im Shop dazu. Name nach der Namensregel (SG-…). Zurückgeben lässt sich nur eine leere Gruppe.",
+        "en": "A security group with a responsible person (managedBy); members are added through the shop's actions. Name per the naming rule (SG-…). Only an empty group can be returned."
+      },
+      "approval": {
+        "kind": "superior"
+      },
+      "lifecycleProcess": "proc_ad_sicherheitsgruppe",
+      "configForm": "ad-sicherheitsgruppe-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.gruppe.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.gruppe.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Gruppe löschen",
+            "en": "Delete the group"
+          }
+        },
+        {
+          "key": "mitglied",
+          "message": "ad.gruppe.mitglied",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mitglied aufnehmen",
+            "en": "Add a member"
+          },
+          "form": "ad-gruppe-mitglied"
+        },
+        {
+          "key": "mitglied-weg",
+          "message": "ad.gruppe.mitglied-weg",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Mitglied entfernen",
+            "en": "Remove a member"
+          },
+          "form": "ad-gruppe-mitglied"
+        },
+        {
+          "key": "verantwortung",
+          "message": "ad.gruppe.verantwortung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Verantwortung übergeben",
+            "en": "Hand over responsibility"
+          },
+          "form": "ad-gruppe-verantwortung"
+        }
+      ],
+      "keywords": [
+        "AD",
+        "Gruppe",
+        "Security Group",
+        "Sicherheitsgruppe",
+        "managedBy"
+      ],
+      "category": "gruppen",
+      "categoryTexts": {
+        "de": "Gruppen und Berechtigungen",
+        "en": "Groups and permissions"
+      }
+    },
+    {
+      "id": "ad-recht-fileshare-finanzen-lesen",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "maxDays": 365,
+      "texts": {
+        "de": "Fileshare Finanzen: lesen",
+        "en": "Finance file share: read"
+      },
+      "descriptions": {
+        "de": "Lesezugriff auf das Fileshare der Finanzen über die Gruppe SG-FIN-Fileshare-Finanzen-Lesen. Genehmigt von der Person, die die Gruppe verantwortet; gilt ein Jahr.",
+        "en": "Read access to the finance file share through the group SG-FIN-Fileshare-Finanzen-Lesen. Approved by the person responsible for the group; lasts one year."
+      },
+      "approval": {
+        "kind": "proc_ad_genehmigung_gruppenverantwortung",
+        "ref": "{{ad-administration}}"
+      },
+      "lifecycleProcess": "proc_ad_berechtigung",
+      "configForm": "ad-berechtigung-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.berechtigung.erteilen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.berechtigung.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigung zurückgeben",
+            "en": "Give the permission back"
+          }
+        }
+      ],
+      "keywords": [
+        "Fileshare",
+        "Finanzen",
+        "Laufwerk",
+        "Share",
+        "lesen"
+      ],
+      "category": "gruppen",
+      "categoryTexts": {
+        "de": "Gruppen und Berechtigungen",
+        "en": "Groups and permissions"
+      }
+    },
+    {
+      "id": "ad-recht-fileshare-finanzen-aendern",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "maxDays": 365,
+      "texts": {
+        "de": "Fileshare Finanzen: ändern",
+        "en": "Finance file share: modify"
+      },
+      "descriptions": {
+        "de": "Schreibzugriff auf das Fileshare der Finanzen über die Gruppe SG-FIN-Fileshare-Finanzen-Aendern; schliesst den Lesezugriff aus (wer wechselt, gibt diesen zurück). Gilt ein Jahr.",
+        "en": "Write access to the finance file share through the group SG-FIN-Fileshare-Finanzen-Aendern; excludes read access (whoever switches returns it). Lasts one year."
+      },
+      "approval": {
+        "kind": "proc_ad_genehmigung_gruppenverantwortung",
+        "ref": "{{ad-administration}}"
+      },
+      "lifecycleProcess": "proc_ad_berechtigung",
+      "configForm": "ad-berechtigung-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.berechtigung.erteilen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.berechtigung.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigung zurückgeben",
+            "en": "Give the permission back"
+          }
+        }
+      ],
+      "keywords": [
+        "Fileshare",
+        "Finanzen",
+        "Laufwerk",
+        "Share",
+        "ändern"
+      ],
+      "category": "gruppen",
+      "categoryTexts": {
+        "de": "Gruppen und Berechtigungen",
+        "en": "Groups and permissions"
+      }
+    },
+    {
+      "id": "ad-recht-applikation-crm",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "maxDays": 365,
+      "texts": {
+        "de": "Applikation CRM",
+        "en": "CRM application"
+      },
+      "descriptions": {
+        "de": "Zugang zur CRM-Applikation über die Gruppe SG-APP-CRM-Benutzer. Genehmigt von der Person, die die Gruppe verantwortet; gilt ein Jahr.",
+        "en": "Access to the CRM application through the group SG-APP-CRM-Benutzer. Approved by the person responsible for the group; lasts one year."
+      },
+      "approval": {
+        "kind": "proc_ad_genehmigung_gruppenverantwortung",
+        "ref": "{{ad-administration}}"
+      },
+      "lifecycleProcess": "proc_ad_berechtigung",
+      "configForm": "ad-berechtigung-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.berechtigung.erteilen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.berechtigung.entziehen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Berechtigung zurückgeben",
+            "en": "Give the permission back"
+          }
+        }
+      ],
+      "keywords": [
+        "CRM",
+        "Applikation",
+        "Kunden"
+      ],
+      "category": "gruppen",
+      "categoryTexts": {
+        "de": "Gruppen und Berechtigungen",
+        "en": "Groups and permissions"
+      }
+    },
+    {
+      "id": "ad-admin-konto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "maxDays": 365,
+      "texts": {
+        "de": "Active Directory: Admin-Konto",
+        "en": "Active Directory: admin account"
+      },
+      "descriptions": {
+        "de": "Ein persönliches Admin-Konto adm-<Anmeldename> neben dem Hauptkonto, befristet auf höchstens ein Jahr. Genehmigt von der Informationssicherheit. Danach: entsperren, Passwort zurücksetzen.",
+        "en": "A personal admin account adm-<logon name> next to the main account, limited to at most one year. Approved by information security. Afterwards: unlock, reset the password."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{informationssicherheit}}"
+      },
+      "lifecycleProcess": "proc_ad_admin_konto",
+      "configForm": "ad-admin-konto-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.admin.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.admin.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Admin-Konto zurückgeben",
+            "en": "Return the admin account"
+          }
+        },
+        {
+          "key": "entsperren",
+          "message": "ad.admin.entsperren",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto entsperren",
+            "en": "Unlock the account"
+          }
+        },
+        {
+          "key": "passwort",
+          "message": "ad.admin.passwort",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Passwort zurücksetzen",
+            "en": "Reset the password"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-m365-dienste"
+      ],
+      "keywords": [
+        "Admin",
+        "Administrator",
+        "privilegiert",
+        "adm",
+        "Tier"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-servicekonto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 365,
+      "texts": {
+        "de": "Active Directory: Servicekonto",
+        "en": "Active Directory: service account"
+      },
+      "descriptions": {
+        "de": "Ein Konto svc-<Bezeichnung>, unter dem eine Anwendung läuft. Du bist verantwortlich und wählst das Passwort; das Konto gilt ein Jahr und wird rezertifiziert.",
+        "en": "An account svc-<name> an application runs under. You are responsible and choose the password; the account lasts one year and is recertified."
+      },
+      "approval": {
+        "kind": "superior"
+      },
+      "lifecycleProcess": "proc_ad_servicekonto",
+      "configForm": "ad-servicekonto-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.service.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.service.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Servicekonto zurückgeben",
+            "en": "Return the service account"
+          }
+        },
+        {
+          "key": "entsperren",
+          "message": "ad.service.entsperren",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto entsperren",
+            "en": "Unlock the account"
+          }
+        },
+        {
+          "key": "passwort",
+          "message": "ad.service.passwort",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Passwort zurücksetzen",
+            "en": "Reset the password"
+          }
+        }
+      ],
+      "keywords": [
+        "Servicekonto",
+        "Service Account",
+        "svc",
+        "Dienstkonto"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-testkonto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 90,
+      "texts": {
+        "de": "Active Directory: Testkonto",
+        "en": "Active Directory: test account"
+      },
+      "descriptions": {
+        "de": "Ein Konto tst-<Bezeichnung> für Tests, höchstens 90 Tage. Am Ablaufdatum gibt es sich selbst zurück und wird gelöscht.",
+        "en": "An account tst-<name> for testing, at most 90 days. On the expiry date it returns itself and is deleted."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_ad_testkonto",
+      "configForm": "ad-testkonto-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.test.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.test.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Testkonto zurückgeben",
+            "en": "Return the test account"
+          }
+        },
+        {
+          "key": "entsperren",
+          "message": "ad.test.entsperren",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto entsperren",
+            "en": "Unlock the account"
+          }
+        },
+        {
+          "key": "passwort",
+          "message": "ad.test.passwort",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Passwort zurücksetzen",
+            "en": "Reset the password"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-ad-dienste"
+      ],
+      "keywords": [
+        "Testkonto",
+        "Test Account",
+        "tst"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-externes-konto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 180,
+      "texts": {
+        "de": "Active Directory: Konto für eine externe Person",
+        "en": "Active Directory: account for an external person"
+      },
+      "descriptions": {
+        "de": "Ein Konto für eine externe Person, für die du als Sponsor einstehst, höchstens 180 Tage. Genehmigt von deiner vorgesetzten Person.",
+        "en": "An account for an external person you sponsor, at most 180 days. Approved by your line manager."
+      },
+      "approval": {
+        "kind": "superior"
+      },
+      "lifecycleProcess": "proc_ad_externes_konto",
+      "configForm": "ad-externes-konto-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.extern.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.extern.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto zurückgeben",
+            "en": "Return the account"
+          }
+        },
+        {
+          "key": "entsperren",
+          "message": "ad.extern.entsperren",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto entsperren",
+            "en": "Unlock the account"
+          }
+        },
+        {
+          "key": "passwort",
+          "message": "ad.extern.passwort",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Passwort zurücksetzen",
+            "en": "Reset the password"
+          }
+        }
+      ],
+      "keywords": [
+        "Extern",
+        "External",
+        "Partner",
+        "Lieferant",
+        "Sponsor",
+        "ext"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-versetzung",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Active Directory: Versetzung",
+        "en": "Active Directory: transfer"
+      },
+      "descriptions": {
+        "de": "Ein Konto wechselt in eine andere Organisationseinheit: neue OU, die Gruppen der neuen Einheit, ohne die der bisherigen. Ein Dienst, der nichts im Bestand hinterlässt. Geprüft von der AD-Administration.",
+        "en": "An account moves to another organisational unit: new OU, the new unit's groups, without the previous one's. A service that leaves nothing in the inventory. Checked by the AD administration."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{ad-administration}}"
+      },
+      "lifecycleProcess": "proc_ad_versetzung",
+      "configForm": "ad-versetzung-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.versetzung.ausfuehren",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.versetzung.abschliessen",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Versetzung abschliessen",
+            "en": "Close the transfer"
+          }
+        }
+      ],
+      "commandedBy": [
+        "beispiel-ad-dienste"
+      ],
+      "keywords": [
+        "Versetzung",
+        "Transfer",
+        "Organisationseinheit",
+        "OU",
+        "Mover"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    }
+  ]
+}
