@@ -34,8 +34,12 @@ type LookupResource struct {
 	// Path is the collection under the tenant's Graph root.
 	Path string
 	// ValueProperty identifies a record: what a form submits and what a value lookup
-	// reads by.
+	// reads by, unless a query names another of ValueProperties.
 	ValueProperty string
+	// ValueProperties are the properties a query may name as the value instead: each is
+	// unique in the directory and addresses the record by its path, so a value lookup
+	// reads it the same way.
+	ValueProperties []string
 	// Searchable are the properties a term may be a prefix of. Each supports
 	// startsWith without advanced query support, so a lookup stays strongly consistent.
 	Searchable []string
@@ -64,12 +68,15 @@ type LookupResource struct {
 // it is, not as an index last saw it.
 var LookupResources = map[string]LookupResource{
 	"users": {
-		Path:           "/users",
-		ValueProperty:  "id",
-		Searchable:     []string{"displayName", "givenName", "surname", "mail", "userPrincipalName"},
-		Filterable:     []string{"department", "jobTitle"},
-		Readable:       []string{"id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"},
-		ActiveProperty: "accountEnabled",
+		Path:          "/users",
+		ValueProperty: "id",
+		// A user principal name is unique and Graph reads /users/{upn} as it reads
+		// /users/{id}; processes that address people by name take it without a lookup.
+		ValueProperties: []string{"id", "userPrincipalName"},
+		Searchable:      []string{"displayName", "givenName", "surname", "mail", "userPrincipalName"},
+		Filterable:      []string{"department", "jobTitle"},
+		Readable:        []string{"id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"},
+		ActiveProperty:  "accountEnabled",
 	},
 	"groups": {
 		Path:          "/groups",
@@ -89,6 +96,10 @@ var LookupResources = map[string]LookupResource{
 // objectID is the shape of an Entra object id: a GUID.
 var objectID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+// principalName is the shape of a user principal name: one "@" with a local part and a
+// domain, no white space and nothing a path segment would have to carry escaped.
+var principalName = regexp.MustCompile(`^[A-Za-z0-9.!#$%&'*+=?^_{|}~-]+@[A-Za-z0-9.-]+$`)
+
 // mailNickname is the shape of a group alias a value lookup accepts: a letter or digit,
 // then up to 63 letters, digits, dots, underscores or hyphens. It is narrower than
 // what Graph stores, on purpose — it admits no quote, space or OData punctuation, so the
@@ -105,13 +116,41 @@ func ValidLookupValue(resource, v string) bool {
 	if !ok {
 		return false
 	}
-	switch res.ValueProperty {
+	return ValidLookupValueAs(resource, res.ValueProperty, v)
+}
+
+// ValidLookupValueAs is ValidLookupValue for a value read by property: an object id is
+// a GUID, a user principal name and a group alias have theirs. A property the resource does not admit
+// as a value holds no valid value.
+func ValidLookupValueAs(resource, property, v string) bool {
+	res, ok := LookupResources[resource]
+	if !ok || (property != res.ValueProperty && !slices.Contains(res.ValueProperties, property)) {
+		return false
+	}
+	if utf8.RuneCountInString(v) > lookup.MaxValueLength || !lookup.CleanText(v) {
+		return false
+	}
+	switch property {
 	case "id":
 		return objectID.MatchString(v)
+	case "userPrincipalName":
+		return principalName.MatchString(v)
 	case "mailNickname":
 		return mailNickname.MatchString(v)
 	}
-	return v != "" && utf8.RuneCountInString(v) <= lookup.MaxValueLength && lookup.CleanText(v)
+	return v != ""
+}
+
+// valueProperty is the property a query identifies records by: its own choice when the
+// resource admits it, the resource's identifier when it names none, and "" otherwise.
+func (res LookupResource) valueProperty(q lookup.Query) string {
+	switch {
+	case q.ValueProperty == "":
+		return res.ValueProperty
+	case q.ValueProperty == res.ValueProperty || slices.Contains(res.ValueProperties, q.ValueProperty):
+		return q.ValueProperty
+	}
+	return ""
 }
 
 // CheckLookup holds a query to its resource's allowlist and to the bounds every lookup
@@ -123,7 +162,8 @@ func CheckLookup(q lookup.Query) (LookupResource, error) {
 	if !ok {
 		return res, lookup.Fail(lookup.CodeInvalid)
 	}
-	if len(q.Properties) == 0 || !slices.Contains(q.Properties, res.ValueProperty) {
+	vp := res.valueProperty(q)
+	if vp == "" || len(q.Properties) == 0 || !slices.Contains(q.Properties, vp) {
 		return res, lookup.Fail(lookup.CodeInvalid)
 	}
 	for _, p := range q.Properties {
@@ -152,7 +192,7 @@ func CheckLookup(q lookup.Query) (LookupResource, error) {
 		return res, lookup.Fail(lookup.CodeInvalid)
 	}
 	if q.Value != "" {
-		if !ValidLookupValue(q.Resource, q.Value) {
+		if !ValidLookupValueAs(q.Resource, vp, q.Value) {
 			return res, lookup.Fail(lookup.CodeInvalid)
 		}
 		return res, nil
@@ -206,7 +246,7 @@ func RunLookup(ctx context.Context, connector string, q lookup.Query, reg *Regis
 		if !ok {
 			return lookup.Page{}, lookup.Fail(lookup.CodeUnavailable)
 		}
-		if v, _ := rec[res.ValueProperty].(string); v == "" {
+		if v, _ := rec[res.valueProperty(q)].(string); v == "" {
 			// A record without its value cannot be chosen, so it is not offered.
 			continue
 		}

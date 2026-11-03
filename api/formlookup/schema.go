@@ -82,8 +82,10 @@ type Filter struct {
 }
 
 // Option says what a result shows: the label a person reads, the line under it, and up
-// to four details beside it. The value is always the source's own identifier.
+// to four details beside it. Value is what the field submits: the source's own
+// identifier when empty, or another the source admits (a user's principal name).
 type Option struct {
+	Value       string   `json:"value,omitempty"`
 	Label       string   `json:"label,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Details     []string `json:"details,omitempty"`
@@ -154,6 +156,25 @@ func (f Field) DescriptionProperty() string {
 	return f.Source.Option.Description
 }
 
+// ValueProperty is the property the field submits and checks by.
+func (f Field) ValueProperty() string {
+	if f.Source.Option.Value != "" {
+		return f.Source.Option.Value
+	}
+	return f.Provider.ValueProperty
+}
+
+// ValidValue reports whether v has the shape of what the field submits.
+func (f Field) ValidValue(v string) bool { return f.Provider.ValidValueAs(f.ValueProperty(), v) }
+
+// ValueFormat says in words what the field submits, for an error message.
+func (f Field) ValueFormat() string {
+	if d, ok := f.Provider.ValueFormats[f.ValueProperty()]; ok {
+		return d
+	}
+	return f.Provider.ValueFormat
+}
+
 // Properties are everything a lookup for this field reads, and nothing more: the
 // value, what the option shows, and the fallback for a record that leaves either empty.
 func (f Field) Properties() []string {
@@ -163,7 +184,7 @@ func (f Field) Properties() []string {
 			out = append(out, p)
 		}
 	}
-	add(f.Provider.ValueProperty)
+	add(f.ValueProperty())
 	add(f.LabelProperty())
 	add(f.DescriptionProperty())
 	add(f.Provider.Fallback)
@@ -387,6 +408,9 @@ func field(comp map[string]any, inPath bool, form *Form, counts map[string]int) 
 		if f.Value != "" && f.Required {
 			return fail("filters: %q is fixed, so it cannot be required of the person", f.Property)
 		}
+	}
+	if v := src.Option.Value; v != "" && !slices.Contains(prov.ValueProperties, v) {
+		return fail("option: %q cannot be the value on %s (allowed: %s)", v, prov.Label, strings.Join(prov.ValueProperties, ", "))
 	}
 	for _, p := range []string{src.Option.Label, src.Option.Description} {
 		if p != "" && !slices.Contains(prov.Readable, p) {

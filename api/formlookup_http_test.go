@@ -131,7 +131,8 @@ func (g *fakeGraph) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(r.URL.Path, "/v1.0/users/"):
 		id := strings.TrimPrefix(r.URL.Path, "/v1.0/users/")
 		for _, u := range g.users {
-			if u.ID != id {
+			// Graph reads a user by id or by user principal name on the same path.
+			if u.ID != id && !strings.EqualFold(u.UPN, id) {
 				continue
 			}
 			if strings.HasPrefix(q.Get("$expand"), "manager") {
