@@ -31,20 +31,22 @@ const GROUPS = [
 // after the dialog was shown is then refused instead of replaced on the strength of a
 // decision about something else. Behind and ahead are named only where the person
 // moved a box: left as it started, the server settles them again where it writes.
-export function decisionQuery({ overwrite = [], keep = [] }) {
+export function decisionQuery({ overwrite = [], keep = [], adopt = [] }) {
   const q = new URLSearchParams();
   if (overwrite.length) q.set("overwrite", overwrite.join(","));
   if (keep.length) q.set("keep", keep.join(","));
+  if (adopt.length) q.set("adopt", adopt.join(","));
   return q.toString();
 }
 
 // needsAsking reports whether a plan has anything the dialog lists.
 export function needsAsking(artifacts) {
-  return (artifacts || []).some((a) => GROUPS.some((g) => g.status === a.status));
+  return (artifacts || []).some((a) => a.status === "elsewhere" || GROUPS.some((g) => g.status === a.status));
 }
 
-// openImportChoices shows the plan and asks what to replace. Resolves to
-// { overwrite, keep } — refs — or null on cancel, Escape or a click outside.
+// openImportChoices shows the plan and asks what to replace and what to take from
+// another application. Resolves to { overwrite, keep, adopt } — refs — or null on
+// cancel, Escape or a click outside.
 export function openImportChoices({ title, artifacts }) {
   return new Promise((resolve) => {
     const count = (status) => artifacts.filter((a) => a.status === status).length;
@@ -60,6 +62,23 @@ export function openImportChoices({ title, artifacts }) {
           <ul class="import-changed">${items.map((a) => `
             <li><label><input type="checkbox" class="import-pick" value="${esc(a.ref)}"
               data-status="${g.status}"${g.ticked ? " checked" : ""}> ${t("choices.replace", { label: label(a) })}</label></li>`).join("")}</ul>
+        </section>`;
+    };
+    // Artifacts another application holds (ADR-0467 amendment 2026-11-03): taken
+    // only when the person ticks them, and then, if their content differs, kept as
+    // this server has it unless the second box says to replace it.
+    const elsewhere = () => {
+      const items = artifacts.filter((a) => a.status === "elsewhere");
+      if (!items.length) return "";
+      const holder = (a) => a.heldBy ? a.heldBy.name : t("choices.elsewhereHidden");
+      return `<section class="import-group" data-status="elsewhere">
+          <h3>${esc(t("choices.elsewhere"))} <span class="muted">(${items.length})</span></h3>
+          <p class="muted small">${esc(t("choices.elsewhereHint"))}</p>
+          <ul class="import-changed">${items.map((a) => `
+            <li><label><input type="checkbox" class="import-adopt" value="${esc(a.ref)}">
+              ${t("choices.adopt", { label: label(a), holder: esc(holder(a)) })}</label>
+              ${a.compared === "changed" ? `<br><label class="small" style="margin-left:1.6em"><input type="checkbox"
+                class="import-adopt-content" value="${esc(a.ref)}"> ${esc(t("choices.adoptContent"))}</label>` : ""}</li>`).join("")}</ul>
         </section>`;
     };
     const ov = document.createElement("div");
@@ -79,6 +98,7 @@ export function openImportChoices({ title, artifacts }) {
             <button type="button" class="btn ghost small" data-all title="${esc(t("choices.tickAllTitle"))}">${esc(t("choices.tickAll"))}</button>
             <button type="button" class="btn ghost small" data-none title="${esc(t("choices.tickNoneTitle"))}">${esc(t("choices.tickNone"))}</button>
           </div>
+          ${elsewhere()}
           ${GROUPS.map(group).join("")}
           ${fresh.length ? `<details class="import-new fold-sub"><summary>${esc(t("choices.fresh", { n: fresh.length }))}</summary>
             <ul>${fresh.map((a) => `<li>${label(a)}</li>`).join("")}</ul></details>` : ""}
@@ -113,9 +133,16 @@ export function openImportChoices({ title, artifacts }) {
     ov.querySelector("[data-ok]").addEventListener("click", () => {
       // Changed is always named; behind and ahead only where a box was moved.
       const named = picks().filter((p) => p.dataset.status === "changed" || p.checked !== startsTicked(p));
+      const adopt = [...ov.querySelectorAll(".import-adopt")].filter((p) => p.checked).map((p) => p.value);
+      // An adopted artifact whose content differs is named too: replaced where the
+      // second box is ticked, kept as this server has it where it is not.
+      const contentBox = (ref) => [...ov.querySelectorAll(".import-adopt-content")].find((p) => p.value === ref);
+      const replaced = adopt.filter((ref) => contentBox(ref) && contentBox(ref).checked);
+      const keptHere = adopt.filter((ref) => contentBox(ref) && !contentBox(ref).checked);
       finish({
-        overwrite: named.filter((p) => p.checked).map((p) => p.value),
-        keep: named.filter((p) => !p.checked).map((p) => p.value),
+        overwrite: [...named.filter((p) => p.checked).map((p) => p.value), ...replaced],
+        keep: [...named.filter((p) => !p.checked).map((p) => p.value), ...keptHere],
+        adopt,
       });
     });
     ov.querySelector("[data-ok]").focus();
