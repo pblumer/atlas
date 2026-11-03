@@ -127,9 +127,9 @@ func TestVendoredDMNLockfileLicenceInventory(t *testing.T) {
 	}
 	var lock struct {
 		Packages map[string]struct {
-			Version string `json:"version"`
-			License string `json:"license"`
-			Resolved string `json:"resolved"`
+			Version   string `json:"version"`
+			License   string `json:"license"`
+			Resolved  string `json:"resolved"`
 			Integrity string `json:"integrity"`
 		} `json:"packages"`
 	}
