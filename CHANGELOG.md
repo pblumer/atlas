@@ -151,6 +151,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 - **Exchange Online answers are read uncompressed.** The Exchange worker asked for gzip implicitly, and Exchange Online's admin API was observed answering with a body labelled gzip that was not (`gzip: invalid header` instead of the cmdlet's answer).
+- **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
 - **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
 - **`examples/m365-dienste` against a real tenant:** a distribution list is created without `-Type` (not granted to a worker scoped to distribution lists), and a team's owner is added after the replication wait rather than before it (`add-group-owner` answered 404 23 seconds after `create-group`). People are found by given name and surname too.
 

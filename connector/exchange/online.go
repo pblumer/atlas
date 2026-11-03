@@ -84,6 +84,21 @@ type OnlineClient struct {
 // a minute in all; what is still missing after that is missing.
 var notFoundWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 15 * time.Second, 30 * time.Second}
 
+// defaultOnlineTimeout bounds one cmdlet sent to Exchange Online. The shared bound of a
+// REST call (nettimeout.Default, ten seconds) is too short for it: observed against a
+// real tenant, Add-MailboxPermission on a shared mailbox created a minute before took
+// longer than ten seconds, the client gave up, and the permission was set all the same —
+// the job failed for a change that had been made. Exchange's own module waits minutes;
+// this waits two, as the on-premises backend does, and is still a bound.
+const defaultOnlineTimeout = 2 * time.Minute
+
+// onlineCmdletClient is the client a cmdlet is sent with when the caller gives none.
+func onlineCmdletClient() *http.Client {
+	c := nettimeout.HTTPClient()
+	c.Timeout = defaultOnlineTimeout
+	return c
+}
+
 // cmdletError is a cmdlet's refusal with its HTTP status, so a caller can tell an object
 // not found from every other failure.
 type cmdletError struct {
@@ -108,7 +123,7 @@ func NewOnlineClient(c OnlineConfig) *OnlineClient {
 	}
 	httpc := c.HTTPClient
 	if httpc == nil {
-		httpc = nettimeout.HTTPClient()
+		httpc = onlineCmdletClient()
 	}
 	return &OnlineClient{
 		tokens: c.Tokens, baseURL: base, organization: strings.TrimSpace(c.Organization),

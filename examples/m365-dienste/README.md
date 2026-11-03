@@ -330,6 +330,9 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   `m365-postfachzugriff` verlangte die Zusatzfreigabe, die Informationssicherheit gab frei,
   `Add-MailboxPermission` bzw. `Remove-MailboxPermission` setzten und entfernten `FullAccess`;
   die Begründung liegt als personenbezogene Variable verschlüsselt.
+- **Sitzungszimmer** bestellt (Genehmigung durch die Rolle Facility-Management): Raumpostfach
+  mit Präfix `RM`, `ResourceCapacity`, Buchungsregeln `AutoAccept`, keine Überschneidungen,
+  180 Tage, Herkunftskennzeichnung mit dem Standort.
 - **Lizenz** bestellt (Variante «erweitert»; im Testtenant gibt es nur eine SKU, ein Wechsel
   zwischen Lizenzen war daher nicht prüfbar) und die Aktion **Abwesenheit** an der Bestellung
   (`Set-MailboxAutoReplyConfiguration`, geplant, intern und extern).
@@ -340,7 +343,9 @@ Dabei korrigiert: das Team wartet die Replikation **vor** dem Besitzer ab (`add-
 23 s nach `create-group` antwortete 404); der Entra-Worker legt Teams mit `POST /teams` an
 (`PUT /groups/{id}/team` antwortete einer App 403 «StampTenantRegionRequest»); die
 Verteilerliste entsteht ohne `-Type`; der Exchange-Worker liest Antworten unkomprimiert und
-wiederholt ein `Set-`/`Add-`, das ein eben angelegtes Objekt noch nicht findet; Personen werden
+wiederholt ein `Set-`/`Add-`, das ein eben angelegtes Objekt noch nicht findet, und wartet
+auf ein Cmdlet bis zu zwei Minuten statt zehn Sekunden (`Add-MailboxPermission` auf ein eben
+angelegtes Funktionspostfach brauchte länger und wirkte trotzdem); Personen werden
 auch über Vor- und Nachname gefunden.
 
 Gefunden, nicht korrigiert: Findet der Server keinen Empfänger für eine Mail (eine Gruppe ohne
@@ -352,7 +357,7 @@ Wer sich erst nach der Installation zum ersten Mal anmeldet, ist in keiner Zielg
 sieht keinen Katalog; `install-m365-dienste.py` erneut ausführen nimmt die inzwischen
 angemeldeten Testpersonen auf (oder sie von Hand in die Gruppen aufnehmen).
 
-Nicht geprüft: Sitzungszimmer, Partnerzugang, die übrigen Aktionen an Bestellungen,
+Nicht geprüft: die Rückgabe eines Sitzungszimmers, Partnerzugang, die übrigen Aktionen an Bestellungen,
 die Rückgabe einer Lizenz, die Eskalation nach sieben Tagen, die Governance-Prüfung gegen echte Daten,
 Teams Phone und `installieren.ps1`.
 

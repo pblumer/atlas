@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/connector/exchange/catalog"
+	"github.com/pblumer/atlas/connector/nettimeout"
 )
 
 // staticToken hands out a fixed bearer, so these tests are about Exchange's endpoint
@@ -341,5 +342,24 @@ func TestOnlineWaitsForAnObjectJustCreated(t *testing.T) {
 	c.notFoundWaits = []time.Duration{time.Millisecond}
 	if _, err := c.Invoke(context.Background(), catalog.Invocation{Cmdlet: "New-DistributionGroup", Parameters: map[string]any{"Name": "x"}}, 0); err == nil || len(h.calls) != 1 {
 		t.Fatalf("a New- answered 404 was sent again: err %v, %d calls", err, len(h.calls))
+	}
+}
+
+// A cmdlet waits longer than a REST call's shared bound: Add-MailboxPermission on a
+// mailbox created a minute before took more than ten seconds in a real tenant, and the
+// permission was set although the client had given up.
+func TestOnlineCmdletsWaitLongerThanARestCall(t *testing.T) {
+	if got := NewOnlineClient(OnlineConfig{Organization: "contoso.onmicrosoft.com"}).httpc.Timeout; got != defaultOnlineTimeout {
+		t.Fatalf("a client built without one waits %v, want %v", got, defaultOnlineTimeout)
+	}
+	if defaultOnlineTimeout <= nettimeout.Default {
+		t.Fatalf("the cmdlet bound %v is not longer than a REST call's %v", defaultOnlineTimeout, nettimeout.Default)
+	}
+	b, err := NewBackend("", `{"organization":"contoso.onmicrosoft.com","clientId":"c","clientSecret":"s"}`, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := b.(*OnlineClient).httpc.Timeout; got != defaultOnlineTimeout {
+		t.Fatalf("a Worker's backend waits %v per cmdlet, want %v", got, defaultOnlineTimeout)
 	}
 }
