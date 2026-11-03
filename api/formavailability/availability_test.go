@@ -214,3 +214,121 @@ func TestWriteCheckRateLimit(t *testing.T) {
 		t.Errorf("rate limited: %d %v %v", code, out, keys)
 	}
 }
+
+// The provider table is what the Console reads to offer the formLookups switch: every
+// Worker Type an availability check can ask, each source with a job type to route by.
+func TestProviders(t *testing.T) {
+	kinds := map[string]bool{}
+	for _, p := range Providers() {
+		if p.JobType == "" || p.Label == "" || p.ValueFormat == "" {
+			t.Errorf("%s/%s is missing a job type, a label or a value format", p.WorkerType, p.Resource)
+		}
+		kinds[p.WorkerType] = true
+	}
+	for _, k := range []string{"entra", "exchange", "sharepoint"} {
+		if !kinds[k] {
+			t.Errorf("no source of Worker Type %s", k)
+		}
+	}
+	ps := Providers()
+	ps[0].WorkerType = "changed"
+	if Providers()[0].WorkerType == "changed" {
+		t.Error("Providers hands out the table itself")
+	}
+}
+
+// A field states its own threshold; a value shorter than it is not asked.
+func TestMinLengthIsTheFieldsOwn(t *testing.T) {
+	schema := `{"components":[{"type":"textfield","key":"alias","atlasAvailability":{"version":1,"minLength":5,
+	  "checks":[{"workerType":"exchange","worker":"ucc_exchange","resource":"recipients"}]}}]}`
+	form, err := Parse([]byte(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, _ := form.Field("alias")
+	if f.MinLength() != 5 {
+		t.Fatalf("MinLength = %d, want 5", f.MinLength())
+	}
+	b := &fakeBroker{}
+	s := New(Config{Worker: func(string) (Worker, bool, error) {
+		return Worker{WorkerType: "exchange", Enabled: true, FormLookups: true}, true, nil
+	}, Ask: b.Ask})
+	rec := httptest.NewRecorder()
+	s.WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"abcd"}`)), []byte(schema), "alias")
+	if rec.Code != http.StatusBadRequest || len(b.asked) != 0 {
+		t.Errorf("a value under the field's threshold: %d, asked %d", rec.Code, len(b.asked))
+	}
+	rec = httptest.NewRecorder()
+	s.WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"abcde"}`)), []byte(schema), "alias")
+	if rec.Code != http.StatusOK || len(b.asked) != 1 || b.types[0] == "" {
+		t.Errorf("a value at the threshold: %d, asked %d", rec.Code, len(b.asked))
+	}
+}
+
+// A form that is not a form, and a block nobody can serve, say so rather than check.
+func TestMalformedForms(t *testing.T) {
+	for name, schema := range map[string]string{
+		"not JSON":              `{"atlasAvailability":`,
+		"components not a list": `{"components":{"type":"textfield"},"atlasAvailability":1}`,
+		"nested not a list":     `{"components":[{"type":"group","components":7,"key":"atlasAvailability"}]}`,
+		"two fields one key": `{"components":[
+		  {"type":"textfield","key":"a","atlasAvailability":{"version":1,"checks":[{"workerType":"entra","worker":"w","resource":"groups"}]}},
+		  {"type":"textfield","key":"a","atlasAvailability":{"version":1,"checks":[{"workerType":"entra","worker":"w","resource":"groups"}]}}]}`,
+		"five checks": `{"components":[{"type":"textfield","key":"a","atlasAvailability":{"version":1,"checks":[
+		  {"workerType":"entra","worker":"a","resource":"groups"},{"workerType":"entra","worker":"b","resource":"groups"},
+		  {"workerType":"entra","worker":"c","resource":"groups"},{"workerType":"entra","worker":"d","resource":"groups"},
+		  {"workerType":"entra","worker":"e","resource":"groups"}]}}]}`,
+	} {
+		if _, err := Parse([]byte(schema)); err == nil {
+			t.Errorf("%s: parsed", name)
+		}
+		rec := httptest.NewRecorder()
+		New(Config{}).WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"abc"}`)), []byte(schema), "a")
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: checking answered %d, want 422", name, rec.Code)
+		}
+	}
+}
+
+// What the Worker store and the broker can answer besides a page, and a body too large
+// to be a check.
+func TestWriteCheckEdges(t *testing.T) {
+	ask := func(s *Service, body string) (int, map[string]any) {
+		rec := httptest.NewRecorder()
+		s.WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body)), []byte(siteForm), "url")
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	if code, out := ask(New(Config{Ask: (&fakeBroker{}).Ask}), `{"value":"dev-huda"}`); code != http.StatusServiceUnavailable || out["code"] != "worker_unavailable" {
+		t.Errorf("no Worker store: %d %v", code, out)
+	}
+	broken := New(Config{Ask: (&fakeBroker{}).Ask, Worker: func(string) (Worker, bool, error) { return Worker{}, false, errors.New("disk") }})
+	if code, _ := ask(broken, `{"value":"dev-huda"}`); code != http.StatusInternalServerError {
+		t.Errorf("an unreadable Worker store: %d", code)
+	}
+	small := New(Config{Ask: (&fakeBroker{}).Ask, Worker: newService(nil, openWorkers).cfg.Worker, MaxBody: 8})
+	if code, out := ask(small, `{"value":"dev-huda-and-much-more"}`); code != http.StatusRequestEntityTooLarge || out["code"] != "invalid_query" {
+		t.Errorf("a body over the budget: %d %v", code, out)
+	}
+	for err, want := range map[error]string{
+		workerquery.ErrBusy:                  "worker_busy",
+		lookup.Fail(lookup.CodeUnconfigured): "worker_unavailable",
+		lookup.Fail(lookup.CodeInvalid):      "invalid_configuration",
+		context.DeadlineExceeded:             "timeout",
+	} {
+		b := &fakeBroker{failOn: "groups", err: err}
+		if code, out := ask(newService(b, openWorkers), `{"value":"dev-huda"}`); code < 400 || out["code"] != want {
+			t.Errorf("%v: %d %v, want %s", err, code, out, want)
+		}
+	}
+	// A person who typed on: the request is withdrawn and nothing is written.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	b := &fakeBroker{failOn: "groups", err: context.Canceled}
+	rec := httptest.NewRecorder()
+	newService(b, openWorkers).WriteCheck(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"value":"dev-huda"}`)).WithContext(ctx), []byte(siteForm), "url")
+	if rec.Body.Len() != 0 {
+		t.Errorf("a withdrawn check answered %q", rec.Body.String())
+	}
+}

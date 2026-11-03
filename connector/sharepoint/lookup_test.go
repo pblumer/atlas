@@ -94,3 +94,41 @@ func TestRunSiteLookup(t *testing.T) {
 		t.Errorf("unknown Worker: err = %v, want worker_unconfigured", err)
 	}
 }
+
+// A cancelled asker, an answer that is not a site, and a page larger than a lookup's.
+func TestSiteLookupEdges(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var le *lookup.Error
+	if err := siteLookupFailure(ctx, errors.New("sharepoint: get-site returned HTTP 403")); !errors.As(err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Errorf("cancelled: %v", err)
+	}
+	reg := NewRegistry()
+	reg.Register("odd", oddClient{})
+	if _, err := RunLookup(context.Background(), "odd", siteQuery("dev-huda"), reg); !errors.As(err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Errorf("an answer that is not a site: %v", err)
+	}
+	q := siteQuery("dev-huda")
+	q.PageSize = lookup.MaxPageSize + 1
+	if _, _, err := CheckLookup(q); err == nil {
+		t.Error("a page larger than a lookup's was accepted")
+	}
+	q = siteQuery("dev-huda", lookup.Filter{Property: LookupFilterHost, Value: "contoso.sharepoint.com"}, lookup.Filter{Property: LookupFilterHost, Value: "fabrikam.sharepoint.com"})
+	if _, _, err := CheckLookup(q); err == nil {
+		t.Error("a host named twice was accepted")
+	}
+}
+
+// oddClient answers every operation with something that is not an object.
+type oddClient struct{}
+
+func (oddClient) Do(context.Context, Request) (any, error) { return "not a site", nil }
+
+// A query the Worker would refuse is refused before the tenant is asked.
+func TestSiteLookupRefusesBeforeAsking(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register("odd", oddClient{})
+	if _, err := RunLookup(context.Background(), "odd", siteQuery("a/b"), reg); err == nil {
+		t.Error("a malformed site name was asked")
+	}
+}

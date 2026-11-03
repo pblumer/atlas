@@ -73,3 +73,41 @@ func TestRunRecipientLookup(t *testing.T) {
 		t.Errorf("an unknown Worker: %v", err)
 	}
 }
+
+// Throttling and an outage keep their codes; a cancelled asker is the provider being
+// unavailable, whatever the backend said.
+func TestRecipientLookupFailures(t *testing.T) {
+	for status, want := range map[int]string{
+		http.StatusTooManyRequests:     lookup.CodeThrottled,
+		http.StatusUnauthorized:        lookup.CodeRefused,
+		http.StatusInternalServerError: lookup.CodeUnavailable,
+	} {
+		f := newFakeExchange(t, fakeReply{status: status, body: `{"error":{"code":"x","message":"y"}}`})
+		reg := NewRegistry()
+		reg.Register("ucc_exchange", f.client(""))
+		_, err := RunLookup(context.Background(), "ucc_exchange", recipientQuery("a"), reg)
+		var le *lookup.Error
+		if !errors.As(err, &le) || le.Code != want {
+			t.Errorf("HTTP %d: %v, want %s", status, err, want)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var le *lookup.Error
+	if err := recipientLookupFailure(ctx, errors.New("exchange: returned HTTP 403")); !errors.As(err, &le) || le.Code != lookup.CodeUnavailable {
+		t.Errorf("cancelled: %v", err)
+	}
+	if err := CheckLookup(lookup.Query{Resource: LookupRecipients, Value: "a", PageSize: lookup.MaxPageSize + 1}); err == nil {
+		t.Error("a page larger than a lookup's was accepted")
+	}
+}
+
+// A query the Worker would refuse is refused before the organization is asked.
+func TestRecipientLookupRefusesBeforeAsking(t *testing.T) {
+	f := newFakeExchange(t)
+	reg := NewRegistry()
+	reg.Register("ucc_exchange", f.client(""))
+	if _, err := RunLookup(context.Background(), "ucc_exchange", recipientQuery("a'b"), reg); err == nil || len(f.calls) != 0 {
+		t.Errorf("err = %v after %d calls, want a refusal and none", err, len(f.calls))
+	}
+}

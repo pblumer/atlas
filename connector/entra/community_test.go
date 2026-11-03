@@ -329,3 +329,84 @@ func TestCompilerTakesCreateCommunity(t *testing.T) {
 		}
 	}
 }
+
+// scriptedClient answers each request with the next scripted reply, so the follow's
+// rarer branches can be driven without a server.
+type scriptedClient struct {
+	replies []scriptedReply
+	calls   int
+}
+
+type scriptedReply struct {
+	res any
+	err error
+}
+
+func (c *scriptedClient) BaseURL() string { return "https://graph.example/v1.0" }
+
+func (c *scriptedClient) Call(context.Context, Request) (any, error) {
+	i := c.calls
+	c.calls++
+	if i >= len(c.replies) {
+		i = len(c.replies) - 1
+	}
+	return c.replies[i].res, c.replies[i].err
+}
+
+func runScripted(t *testing.T, replies ...scriptedReply) (any, error) {
+	t.Helper()
+	client := &scriptedClient{replies: replies}
+	out, err := Run(context.Background(), communityJob(), regWith("contoso", client))
+	if err != nil {
+		return nil, err
+	}
+	return out["community"], nil
+}
+
+// The answers Microsoft does not describe, each with the outcome that keeps a retry
+// from creating a second community or names what went wrong.
+func TestCreateCommunityUnusualAnswers(t *testing.T) {
+	fastFollow(t, time.Millisecond, 20*time.Millisecond)
+	accepted := scriptedReply{res: Accepted{Location: "https://graph.example/v1.0" + communityOp}}
+	notFound := &GraphError{Status: http.StatusNotFound, Code: "NotFound"}
+
+	// A body on the POST is the community itself.
+	if c, err := runScripted(t, scriptedReply{res: map[string]any{"id": "c-9"}}); err != nil || c.(map[string]any)["id"] != "c-9" {
+		t.Errorf("a body on the POST: %#v, %v", c, err)
+	}
+	// An empty 2xx without a Location is a community not known yet.
+	if c, err := runScripted(t, scriptedReply{}); err != nil || c.(map[string]any)["status"] != "unknown" {
+		t.Errorf("an empty answer: %#v, %v", c, err)
+	}
+	// Anything else is not an answer this operation can give.
+	if _, err := runScripted(t, scriptedReply{res: "text"}); err == nil {
+		t.Error("a text answer completed")
+	}
+	// A failed operation without a statusDetail says so.
+	if _, err := runScripted(t, accepted, scriptedReply{res: map[string]any{"status": "failed"}}); err == nil || !strings.Contains(err.Error(), "no statusDetail") {
+		t.Errorf("failed without detail: %v", err)
+	}
+	// Succeeded without naming the community: completes, pending, never fails.
+	if c, err := runScripted(t, accepted, scriptedReply{res: map[string]any{"status": "succeeded"}}); err != nil || c.(map[string]any)["id"] != nil {
+		t.Errorf("succeeded without a resourceId: %#v, %v", c, err)
+	}
+	// An operation that is not an object, and a refusal that is not transient, fail.
+	if _, err := runScripted(t, accepted, scriptedReply{res: []any{}}); err == nil {
+		t.Error("an operation answered as a list completed")
+	}
+	if _, err := runScripted(t, accepted, scriptedReply{err: &GraphError{Status: http.StatusForbidden, Code: "Forbidden"}}); err == nil {
+		t.Error("a forbidden poll completed")
+	}
+	// The community is known but cannot be read before the bound: its id is the answer.
+	c, err := runScripted(t, accepted, scriptedReply{res: map[string]any{"status": "succeeded", "resourceId": "c-2"}}, scriptedReply{err: notFound})
+	if err != nil || c.(map[string]any)["id"] != "c-2" || c.(map[string]any)["status"] != "succeeded" {
+		t.Errorf("a community still replicating: %#v, %v", c, err)
+	}
+	// Read back as something other than an object, or failing outside Graph: an error.
+	if _, err := runScripted(t, accepted, scriptedReply{res: map[string]any{"status": "succeeded", "resourceId": "c-3"}}, scriptedReply{res: "x"}); err == nil {
+		t.Error("a community read back as text completed")
+	}
+	if _, err := runScripted(t, accepted, scriptedReply{res: map[string]any{"status": "succeeded", "resourceId": "c-4"}}, scriptedReply{err: errors.New("network")}); err == nil {
+		t.Error("a community read that failed outside Graph completed")
+	}
+}
