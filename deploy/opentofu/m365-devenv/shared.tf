@@ -44,11 +44,14 @@ resource "terraform_data" "shared_tenant_guard" {
 output "shared_tenant" {
   description = "Input for scripts/shared-tenant-setup.ps1 (null unless shared_tenant = true)."
   value = var.shared_tenant ? {
-    prefix                  = local.env_id
-    scope_name              = "${local.env_id}-scope"
-    recipient_filter        = "Alias -like '${local.env_id}*'"
-    exchange_role_group     = "${local.env_id}-exchange-worker"
-    exchange_roles          = ["Mail Recipients", "Mail Recipient Creation", "Distribution Groups", "Legal Hold", "View-Only Recipients"]
+    prefix              = local.env_id
+    scope_name          = "${local.env_id}-scope"
+    recipient_filter    = "Alias -like '${local.env_id}*'"
+    exchange_role_group = "${local.env_id}-exchange-worker"
+    # Security Group Creation and Membership: without it a distribution list's -Type and
+    # BypassSecurityGroupManagerCheck are not granted, so a worker that is not the list's
+    # owner cannot remove it or change its members (observed against a real tenant).
+    exchange_roles          = ["Mail Recipients", "Mail Recipient Creation", "Distribution Groups", "Security Group Creation and Membership", "Legal Hold", "View-Only Recipients"]
     mail_app_id             = var.workers.mail ? module.mail[0].client_id : null
     mail_sp_object_id       = var.workers.mail ? module.mail[0].service_principal_object_id : null
     mail_display_name       = var.workers.mail ? "${local.env_id}-worker-mail" : null
