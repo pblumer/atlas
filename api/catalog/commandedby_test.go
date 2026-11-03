@@ -28,3 +28,23 @@ func TestTheApplicationsThatMayCommandAProductAreAListOfKeys(t *testing.T) {
 		t.Fatalf("the release carries %+v (%v); the list did not travel", rel.Items, problems)
 	}
 }
+
+// TestTheApplicationsThatMayOrderAProductAreAListOfKeys: orderableBy keeps
+// commandedBy's rules (ADR-draft-process-places-an-order) and travels into the
+// release, where an order task reads it.
+func TestTheApplicationsThatMayOrderAProductAreAListOfKeys(t *testing.T) {
+	orderable := func(keys ...string) Item {
+		it := item("paket")
+		it.OrderableBy = keys
+		return it
+	}
+	contains(t, problemsOf(orderable("hr-eintritte", "")), "blank application")
+	contains(t, problemsOf(orderable("hr-eintritte", "hr-eintritte")), "names application hr-eintritte twice")
+	rel, problems := Publish(Input{
+		Catalogs: []Catalog{{ID: "cat", Rank: 1, Languages: []string{"de"}, Items: []string{"paket"}}},
+		Items:    []Item{orderable("hr-eintritte", "elsewhere")},
+	})
+	if len(problems) != 0 || len(rel.Items) != 1 || len(rel.Items[0].OrderableBy) != 2 {
+		t.Fatalf("the release carries %+v (%v); the list did not travel", rel.Items, problems)
+	}
+}

@@ -113,3 +113,11 @@ func TestMarkStartedKeepsAReportThatOutranIt(t *testing.T) {
 		t.Error("a line the order does not carry was marked")
 	}
 }
+
+// A refusal reads as its message wherever it travels as an error.
+func TestARefusalIsItsMessage(t *testing.T) {
+	var err error = refuse(http.StatusConflict, "already held")
+	if err.Error() != "already held" {
+		t.Errorf("Error() = %q", err.Error())
+	}
+}
