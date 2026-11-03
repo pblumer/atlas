@@ -311,6 +311,34 @@ Mit `enable_ad_dc = true` entsteht im selben VNet eine Windows-Server-2022-VM:
 
 Ohne Domänencontroller startet der Server den AD-Worker mit `ATLAS_AD_MOCK=1` (ADR-0181).
 
+## Exchange Server (optional)
+
+Mit `enable_exchange_onprem = true` (braucht `enable_ad_dc`) entsteht ein Exchange Server SE
+für das On-Premises-Backend des Exchange-Workers (ADR-0462, `"target": "onprem"`):
+
+- VM `<umgebung>-exch` (`exchange_vm_size`, Vorgabe `Standard_D4s_v5` mit 16 GB, 256-GB-Platte),
+  Windows Server 2022, Name `exch01.<ad_domain_name>`, interne Adresse `10.42.0.11`, DNS über
+  den Domänencontroller. Von aussen erreichbar ist sie nicht, ausser mit `ad_allow_rdp` per RDP
+  für `ad_allowed_cidrs`; die öffentliche Adresse dient den Downloads.
+- `scripts/exchange-setup.ps1` installiert unbeaufsichtigt in vier Phasen mit Neustarts:
+  Domänenbeitritt; Windows-Features, Visual C++ 2012/2013, URL Rewrite und das Image
+  (`exchange_iso_url`, 6 GB, mit Fortsetzung geladen und an `exchange_iso_bytes` geprüft);
+  UCMA, `/PrepareSchema`, `/PrepareAD /OrganizationName:AtlasTest` und die Mailbox-Rolle als
+  Domänenadministrator; zuletzt das Dienstkonto `svc-exch-<zufall>` in *Organization
+  Management* und ein Postfach für jede Person in `OU=AtlasTest`. Exchange SE läuft ohne
+  Produktschlüssel als Testversion.
+- Das dauert ein bis zwei Stunden nach dem Apply. `scripts/wait-exchange.sh` verfolgt es über
+  den Run Command von Azure (kein eingehender Port nötig) und zeigt bei einem Fehler das Ende
+  des Protokolls (`C:\AtlasSetup\exchange-phase<N>.log`).
+- `tofu output exchange_onprem` nennt den Endpunkt `http://exch01.<ad_domain_name>/PowerShell/`
+  (Kerberos) und das Dienstkonto; das Passwort gibt `tofu output -raw exchange_service_password`.
+- Abschaltung täglich um `exchange_auto_shutdown_time` (Vorgabe 19:00 UTC).
+
+Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, gezielt:
+`tofu apply -target=azurerm_virtual_machine_extension.exchange_setup
+-target=azurerm_dev_test_global_vm_shutdown_schedule.exchange
+-target=azurerm_network_interface_security_group_association.exchange`.
+
 ## Lizenzen
 
 Lizenzen kann OpenTofu nicht kaufen. Mit `license_sku_ids` weist das Projekt freie

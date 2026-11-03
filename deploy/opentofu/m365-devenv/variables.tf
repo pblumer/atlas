@@ -354,3 +354,35 @@ variable "ad_auto_shutdown_time" {
   type        = string
   default     = "1900"
 }
+
+# --- Exchange Server (optional, exchange.tf) ---------------------------------
+
+variable "enable_exchange_onprem" {
+  description = "Build an Exchange Server SE (Mailbox role) in the test domain, for the Exchange worker's on-premises backend. Needs enable_ad_dc. Costs a Windows VM of exchange_vm_size while it runs; the unattended installation takes one to two hours after the apply (scripts/wait-exchange.sh)."
+  type        = bool
+  default     = false
+}
+
+variable "exchange_vm_size" {
+  description = "VM size of the Exchange server. Exchange wants memory: 16 GB is the least that installs and runs a test organization."
+  type        = string
+  default     = "Standard_D4s_v5"
+}
+
+variable "exchange_auto_shutdown_time" {
+  description = "Daily auto-shutdown of the Exchange server (HHMM, UTC). Empty disables it."
+  type        = string
+  default     = "1900"
+}
+
+variable "exchange_iso_url" {
+  description = "Installation image of Exchange Server SE, from the Microsoft Download Center (details.aspx?id=108244)."
+  type        = string
+  default     = "https://download.microsoft.com/download/ad9b1e53-f28e-4a82-987d-6c88803795b2/ExchangeServerSE-x64.iso"
+}
+
+variable "exchange_iso_bytes" {
+  description = "Expected size of the image in bytes; a download of another size is fetched again rather than mounted."
+  type        = number
+  default     = 6402453504
+}

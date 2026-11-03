@@ -179,6 +179,7 @@ variables {
   workers                   = {}
   atlas_tls                 = "internal"
   sharepoint_read_all_sites = false
+  enable_exchange_onprem    = false
   enable_ad_dc              = false
   ad_allowed_cidrs          = []
   mail_sender               = ""
@@ -302,6 +303,47 @@ run "ad_without_server_needs_allowed_cidrs" {
   }
 
   expect_failures = [terraform_data.ad_guard]
+}
+
+run "exchange_needs_the_domain_controller" {
+  command = plan
+
+  variables {
+    enable_exchange_onprem = true
+  }
+
+  expect_failures = [terraform_data.exchange_guard]
+}
+
+run "exchange_server_joins_the_test_domain" {
+  command = apply
+
+  variables {
+    enable_ad_dc           = true
+    ad_allowed_cidrs       = ["203.0.113.7/32"]
+    enable_exchange_onprem = true
+  }
+
+  assert {
+    condition     = tolist(azurerm_network_interface.exchange[0].dns_servers) == tolist(["10.42.0.10"])
+    error_message = "The Exchange server resolves through the domain controller, or it cannot join the domain."
+  }
+  assert {
+    condition     = azurerm_windows_virtual_machine.exchange[0].size == "Standard_D4s_v5" && azurerm_windows_virtual_machine.exchange[0].os_disk[0].disk_size_gb == 256
+    error_message = "Exchange needs 16 GB of memory and room for its image and databases."
+  }
+  assert {
+    condition     = length(azurerm_network_security_group.exchange[0].security_rule) == 0
+    error_message = "Without ad_allow_rdp nothing reaches the Exchange server from the Internet."
+  }
+  assert {
+    condition     = output.exchange_onprem.connection_uri == "http://exch01.atlastest.internal/PowerShell/"
+    error_message = "The worker reaches Exchange's Remote PowerShell by the server's domain name (Kerberos)."
+  }
+  assert {
+    condition     = !strcontains(azurerm_windows_virtual_machine.exchange[0].custom_data, base64encode(random_password.ad["admin"].result))
+    error_message = "The setup script carries no secret; those go in the extension's protected settings."
+  }
 }
 
 run "ipv6_and_open_ranges_are_refused" {

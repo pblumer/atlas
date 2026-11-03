@@ -271,3 +271,21 @@ output "atlas_workers" {
   description = "Workers the bootstrap creates in the Atlas Console (name => kind)."
   value       = { for w in local.worker_defs : w.name => w.kind }
 }
+
+output "exchange_onprem" {
+  description = "The on-premises Exchange server, for an Exchange worker with target onprem: its Remote PowerShell endpoint (Kerberos, inside the virtual network) and the worker's service account in Organization Management."
+  value = local.exchange_count == 1 ? {
+    vm              = azurerm_windows_virtual_machine.exchange[0].name
+    resource_group  = azurerm_resource_group.env[0].name
+    fqdn            = local.exchange_fqdn
+    private_ip      = local.exchange_private_ip
+    connection_uri  = "http://${local.exchange_fqdn}/PowerShell/"
+    service_account = "${local.exchange_service_account}@${var.ad_domain_name}"
+  } : null
+}
+
+output "exchange_service_password" {
+  description = "Password of the Exchange worker's service account."
+  value       = local.exchange_count == 1 ? random_password.exchange_service[0].result : null
+  sensitive   = true
+}
