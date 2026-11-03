@@ -94,7 +94,7 @@ type Job struct {
 	// worker has no compiled process to ask.
 	ErrorCodes []string `json:"errorCodes,omitempty"`
 	// ResolveError is why the engine could not finish resolving the task — today, the
-	// link of the task the mail is for (ADR-draft-user-task-answered-by-link). Whoever
+	// link of the task the mail is for (ADR-0523). Whoever
 	// runs the job fails it with this message, before any worker is looked up, so the
 	// incident says what is wrong wherever the job ran.
 	ResolveError string `json:"resolveError,omitempty"`
@@ -102,7 +102,7 @@ type Job struct {
 
 // AnswerLinker mints the link of a user task answered by link: the task with BPMN id
 // task, in the instance piKey, inside the scope instance scopeKey the mail is sent from
-// (ADR-draft-user-task-answered-by-link). The scope is what tells two runs of one event
+// (ADR-0523). The scope is what tells two runs of one event
 // subprocess apart, each mailing the link of its own task. A [Directory] that can
 // implements it: both are the installation's answers to a question a model cannot carry
 // — an address, and a link signed with the installation's key.

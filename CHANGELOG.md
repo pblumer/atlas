@@ -27,7 +27,7 @@ _Changed_ / _Removed_ for each version.
   is built on the configured external URL (`--external-url`) and signed with a key the
   vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
   multi-instance task, a mail that never shows the link and a link to a task that did not
-  opt in. The Modeler offers both settings (ADR-draft-user-task-answered-by-link).
+  opt in. The Modeler offers both settings (ADR-0523).
 
 ### Fixed
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).

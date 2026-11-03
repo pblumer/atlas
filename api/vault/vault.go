@@ -111,7 +111,7 @@ func New(dir string, key []byte) (*Vault, error) {
 // stored nowhere: the same purpose under the same master key answers the same key, a
 // different purpose an unrelated one. It is for keys the server needs and nobody should
 // be able to set or read — the key answer links are signed with, say
-// (ADR-draft-user-task-answered-by-link) — which a named secret could not be, since an
+// (ADR-0523) — which a named secret could not be, since an
 // administrator writes those. Rotating the master key rotates every derived key with it.
 // Safe for concurrent use: it reads only what New wrote.
 func (v *Vault) DerivedKey(purpose string) []byte {

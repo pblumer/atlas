@@ -187,7 +187,7 @@ func TestIsTemplateAndSource(t *testing.T) {
 
 // TestATemplateSaysWhichVariablesItReads: the names every placeholder and section reads,
 // once each and sorted — what a deploy check asks of a mail's template
-// (ADR-draft-user-task-answered-by-link).
+// (ADR-0523).
 func TestATemplateSaysWhichVariablesItReads(t *testing.T) {
 	tpl := compile(t, "Hallo {{kunde}}, {{#if betrag > limit}}bitte freigeben: {{answerLink}}{{/if}} {{kunde}}")
 	if got := strings.Join(tpl.Inputs(), ","); got != "answerLink,betrag,kunde,limit" {

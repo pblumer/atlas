@@ -175,7 +175,7 @@ const (
 	// every abandoned attempt of an anonymous visitor would stay a live instance.
 	RuleWizardNoTimeout = "wizard.no-timeout"
 
-	// The answer rules (ADR-draft-user-task-answered-by-link). A user task marked
+	// The answer rules (ADR-0523). A user task marked
 	// atlas:answeredBy="link" may be answered by whoever holds the link a mail task
 	// naming it with answerTask carries.
 	//
@@ -295,14 +295,14 @@ func Validate(cp *CompiledProcess) []Problem {
 }
 
 // answerLinkVariable is the variable a mail task's subject and bodies read the link of
-// its answer task under (ADR-draft-user-task-answered-by-link).
+// its answer task under (ADR-0523).
 const answerLinkVariable = "answerLink"
 
 // AnswerLinkVariable is [answerLinkVariable] for the packages that resolve a mail task.
 const AnswerLinkVariable = answerLinkVariable
 
 // checkAnswerLinks holds tasks answered by link and the mail tasks that carry their links
-// to the shape ADR-draft-user-task-answered-by-link gives them.
+// to the shape ADR-0523 gives them.
 func checkAnswerLinks(cp *CompiledProcess) []Problem {
 	var ps []Problem
 	for _, id := range cp.invalidAnsweredBy {

@@ -7,7 +7,7 @@ import (
 )
 
 // A user task answered through a link a mail carries
-// (ADR-draft-user-task-answered-by-link): the task opts in with
+// (ADR-0523): the task opts in with
 // atlas:answeredBy="link", and a mail task names it with answerTask and shows the link
 // it is handed as answerLink.
 

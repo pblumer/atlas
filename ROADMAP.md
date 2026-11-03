@@ -1971,7 +1971,7 @@ the hand-written Details panel one vertical slice at a time:
   the task, `answerTask` on the mail task that sends `answerLink`; a static page at
   `/public/answer` shows the task's form and completes it, a signed token in the
   fragment opens that one open task, and opening the link answers nothing
-  ([ADR-draft-user-task-answered-by-link](docs/adr/draft-user-task-answered-by-link.md)).
+  ([ADR-0523](docs/adr/0523-user-task-answered-by-link.md)).
 
 **Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
 - ✅ An ephemeral engine sandbox: the real compiler + processor over an in-memory,

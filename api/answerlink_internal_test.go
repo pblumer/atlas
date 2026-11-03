@@ -11,7 +11,7 @@ import (
 // TestALinkOpensOnlyATaskAnsweredByLink: a token is minted only for a task that opted in,
 // but the check does not rely on that. A correctly signed token for a task that did not
 // opt in — the version an instance was migrated to dropped the mark, say — opens nothing
-// (ADR-draft-user-task-answered-by-link).
+// (ADR-0523).
 func TestALinkOpensOnlyATaskAnsweredByLink(t *testing.T) {
 	srv, _ := newValidateServer(t)
 	h := srv.Handler()

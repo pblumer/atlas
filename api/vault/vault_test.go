@@ -490,7 +490,7 @@ func TestAKeyFileThatCannotBeCreatedIsAnError(t *testing.T) {
 
 // TestADerivedKeyIsStableAndPurposeBound: a derived key is the same for one purpose under
 // one master key, unrelated across purposes and master keys, and is neither the master
-// key nor stored anywhere (ADR-draft-user-task-answered-by-link).
+// key nor stored anywhere (ADR-0523).
 func TestADerivedKeyIsStableAndPurposeBound(t *testing.T) {
 	key := testVaultKey(t)
 	dir := filepath.Join(t.TempDir(), "vault")

@@ -1823,7 +1823,7 @@ function wizardHTML(bo) {
 }
 
 // answeredByHTML is a user task's choice of who may answer it
-// (ADR-draft-user-task-answered-by-link): the people it is assigned to, or also whoever
+// (ADR-0523): the people it is assigned to, or also whoever
 // holds the link a mail task carries for it. A value the panel does not know is shown as
 // it stands; the Problems panel says why it is refused.
 function answeredByHTML(bo) {

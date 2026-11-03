@@ -1497,7 +1497,7 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	}
 	// The task to answer is kept by its BPMN id and judged in stage 5 — whether it exists,
 	// opted in, and whether the mail shows its link — so a model deployed before the rules
-	// comes back on restart (ADR-draft-user-task-answered-by-link, ADR-0177).
+	// comes back on restart (ADR-0523, ADR-0177).
 	cfg.AnswerTask = strings.TrimSpace(cn.AnswerTask)
 	return b.AddMailConnectorTask(cfg), nil
 }

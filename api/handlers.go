@@ -6966,7 +6966,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"store": j.Store, "bucket": j.Bucket, "key": j.Key,
 			"errorCodes": j.ErrorCodes,
 			// Why the task could not be resolved — the answer link a mail is for
-			// (ADR-draft-user-task-answered-by-link); the worker fails the job with it.
+			// (ADR-0523); the worker fails the job with it.
 			"resolveError": j.ResolveError,
 		}}
 	case compiler.RemedyJobTypeIndex:

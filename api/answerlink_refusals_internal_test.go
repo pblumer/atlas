@@ -13,7 +13,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// The refusals of an answer link (ADR-draft-user-task-answered-by-link): every way a
+// The refusals of an answer link (ADR-0523): every way a
 // request can fail to name an open task answers before anything is read or written, and
 // every one of them answers the same 404 a wrong signature does, so trying tokens tells a
 // visitor nothing.

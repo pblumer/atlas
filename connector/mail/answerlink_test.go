@@ -11,7 +11,7 @@ import (
 )
 
 // A mail task that carries the link of a user task answered by link
-// (ADR-draft-user-task-answered-by-link): Resolve asks whoever resolves recipients for the
+// (ADR-0523): Resolve asks whoever resolves recipients for the
 // link as well, and hands it to the subject and bodies as answerLink.
 
 // linkDirectory resolves no recipient and mints the links a test hands it.

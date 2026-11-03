@@ -1916,7 +1916,7 @@ type MailConfig struct {
 	Bucket       RestExpr
 	Key          RestExpr
 	// AnswerTask is the BPMN id of the user task whose link the message carries as
-	// answerLink (ADR-draft-user-task-answered-by-link); "" for none. It is judged in
+	// answerLink (ADR-0523); "" for none. It is judged in
 	// stage 5, not here, so it may name a task added after this one.
 	AnswerTask string
 }
@@ -3320,12 +3320,12 @@ func (b *Builder) markInvalidWizard(id int32) {
 	b.invalidWizards = append(b.invalidWizards, id)
 }
 
-// answeredByLink is atlas:answeredBy's one value (ADR-draft-user-task-answered-by-link).
+// answeredByLink is atlas:answeredBy's one value (ADR-0523).
 const answeredByLink = "link"
 
 // SetAnsweredByLink marks an already-added user task node as answered by link: whoever
 // holds the link a mail task carries for it may complete it through its form
-// (ADR-draft-user-task-answered-by-link). Any other node is left alone.
+// (ADR-0523). Any other node is left alone.
 func (b *Builder) SetAnsweredByLink(nodeID int32) {
 	if b.validNode(nodeID) && b.nodes[nodeID].Type == TypeUserTask {
 		b.userTasks[b.nodes[nodeID].Detail].AnsweredByLink = true

@@ -487,7 +487,7 @@ type UserTaskDetail struct {
 	FormId              int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
 	// AnsweredByLink is atlas:answeredBy="link": whoever holds the link a mail task
 	// carries for this task may complete it through its form, beside anybody it is
-	// assigned to (ADR-draft-user-task-answered-by-link).
+	// assigned to (ADR-0523).
 	AnsweredByLink bool
 	// Priority is the task's static importance from zeebe:priorityDefinition
 	// (default 50, Camunda's convention); higher sorts first in the inbox.
@@ -1796,7 +1796,7 @@ func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
 
 // AnswerTask returns the BPMN id of the user task whose link the mail task node id
-// carries, and false when it carries none (ADR-draft-user-task-answered-by-link). The id
+// carries, and false when it carries none (ADR-0523). The id
 // is what the model wrote; whether it names a task answered by link is stage 5's
 // question (RuleAnswerTask).
 func (p *CompiledProcess) AnswerTask(id int32) (string, bool) {

@@ -56,7 +56,7 @@ var wantPublicRoutes = []string{
 	"OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options",
 	// A user task answered through the link a mail carries: a static page, and the two
 	// calls it makes, where the signed token in the Authorization header is the whole
-	// authorization and opens one open task (ADR-draft-user-task-answered-by-link).
+	// authorization and opens one open task (ADR-0523).
 	// Rate-limited in their handlers.
 	"GET /public/answer",
 	"GET /public/answer/task",

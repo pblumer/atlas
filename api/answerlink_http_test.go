@@ -12,7 +12,7 @@ import (
 )
 
 // A user task answered through a link a mail carries
-// (ADR-draft-user-task-answered-by-link). The garage mails its customer the estimate
+// (ADR-0523). The garage mails its customer the estimate
 // with a link; the customer, who has no account, opens it, sees the task's form and
 // answers; the instance carries on with the answer.
 

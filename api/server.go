@@ -3893,7 +3893,7 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicWizardFieldOptions)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicFormPreflight)
 	// A user task answered through the link a mail carries
-	// (ADR-draft-user-task-answered-by-link). The page is static; the signed token in an
+	// (ADR-0523). The page is static; the signed token in an
 	// Authorization header is the whole authorization, and it opens one open task.
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)

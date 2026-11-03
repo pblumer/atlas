@@ -16,7 +16,7 @@ import (
 	"github.com/pblumer/atlas/model"
 )
 
-// The link that answers a user task (ADR-draft-user-task-answered-by-link).
+// The link that answers a user task (ADR-0523).
 //
 // A user task marked atlas:answeredBy="link" may be completed by whoever holds its link,
 // and a mail task naming it with answerTask carries that link as answerLink. The link is

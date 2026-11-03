@@ -1,4 +1,4 @@
-# ADR-DRAFT: A user task can be answered through a link a mail carries
+# ADR-0523: A user task can be answered through a link a mail carries
 
 - **Status:** Accepted
 - **Implementation:** Landed
