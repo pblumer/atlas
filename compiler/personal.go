@@ -293,6 +293,32 @@ type expressionSite struct {
 	e    *expr.Compiled
 }
 
+// unbindPersonalFilterNames keeps a declared personal variable out of a filter that
+// only names it there. Inside a filter a name may as well be a key of the elements
+// (people[vorname != null]), and before CompileAuto bound such names that is all it
+// ever read; binding the variable now would hand the filter ciphertext wherever an
+// element lacks the key — the comparison against bytes the rule below exists to
+// prevent. So such a name stays unbound: the element's key, or null, as before, and
+// the expression deploys as it did. A personal name read outside a filter is
+// untouched and still refused below.
+//
+// Only the engine-evaluated sites are touched: a worker evaluates its expressions
+// where the plaintext exists, so there the variable stays bound.
+func (p *CompiledProcess) unbindPersonalFilterNames() {
+	if len(p.personalSet) == 0 {
+		return
+	}
+	personal := func(name string) bool {
+		_, ok := p.personalSet[name]
+		return ok
+	}
+	for _, site := range p.expressionSites() {
+		if site.e != nil {
+			site.e.UnbindFilterOnly(personal)
+		}
+	}
+}
+
 // refuseExpressionsReadingPersonalData is called by Build on the assembled process. It
 // returns nil when nothing is declared, which is every process that has not opted in — the
 // rule cannot break an existing model that says nothing.

@@ -14,6 +14,7 @@
 package expr
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -128,6 +129,40 @@ func (c *Compiled) Inputs() []string { return c.inputs }
 // input; but do not count one as missing when the caller has no such variable —
 // people[age > 18] needs no variable age.
 func (c *Compiled) FilterOnly() []string { return c.filterOnly }
+
+// UnbindFilterOnly takes the filter-only names for which drop reports true out of
+// Inputs (and FilterOnly), so a caller that binds Inputs never binds them: inside
+// the filter such a name then reads the element's key, and where an element lacks
+// it, null — what every filter-only name read before CompileAuto declared them. It
+// returns the names it took out, sorted. A name read outside a filter too is never
+// taken out: there it can only be the variable.
+//
+// It is a deploy-time step on an expression nothing evaluates yet — the compiler
+// uses it for variables declared personal (ADR-0314), whose value the engine holds
+// as ciphertext and must not compare against.
+func (c *Compiled) UnbindFilterOnly(drop func(name string) bool) []string {
+	var dropped []string
+	for _, name := range c.filterOnly {
+		if drop(name) {
+			dropped = append(dropped, name)
+		}
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	keep := func(names []string) []string {
+		out := names[:0:0]
+		for _, n := range names {
+			if !slices.Contains(dropped, n) {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	c.inputs = keep(c.inputs)
+	c.filterOnly = keep(c.filterOnly)
+	return dropped
+}
 
 // Source returns the expression as it was written. A compiled expression is
 // otherwise opaque, so an explanation of what the engine decided — a loop's

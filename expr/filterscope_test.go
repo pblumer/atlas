@@ -59,3 +59,46 @@ func TestAVariableReadOnlyInsideAFilterIsBound(t *testing.T) {
 		t.Fatalf("people[age >= 18].name = %s", got)
 	}
 }
+
+// UnbindFilterOnly is how the compiler keeps a variable it must not bind out of a
+// filter that only names it: the name is no longer an input, so nothing binds it, and
+// inside the filter it reads the element's key or null — as before filter-only names
+// were bound. A name read outside the filter as well stays an input.
+func TestUnbindFilterOnlyLeavesTheNameToTheElements(t *testing.T) {
+	c, err := expr.CompileAuto(`count(people[vorname != null]) + count(people[alter > grenze]) + grenze`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropped := c.UnbindFilterOnly(func(n string) bool { return n == "vorname" || n == "grenze" })
+	if len(dropped) != 1 || dropped[0] != "vorname" {
+		t.Fatalf("dropped %v, want [vorname] (grenze is read outside the filter too)", dropped)
+	}
+	for _, in := range c.Inputs() {
+		if in == "vorname" {
+			t.Fatalf("inputs %v still bind vorname", c.Inputs())
+		}
+	}
+	for _, in := range c.FilterOnly() {
+		if in == "vorname" {
+			t.Fatalf("filter-only names %v still list vorname", c.FilterOnly())
+		}
+	}
+	// A caller binds only Inputs; even if a variable vorname were passed, the element
+	// without the key reads null.
+	v, err := c.Eval(map[string]expr.Value{
+		"people": expr.FromJSON([]any{
+			map[string]any{"vorname": "Ada", "alter": 40.0},
+			map[string]any{"alter": 10.0},
+		}),
+		"grenze": expr.Number(18),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := expr.ToJSON(v); got != "20" {
+		t.Fatalf("result = %s, want 20 (1 named + 1 adult + 18)", got)
+	}
+	if again := c.UnbindFilterOnly(func(string) bool { return true }); len(again) != 1 || again[0] != "alter" {
+		t.Fatalf("second unbind dropped %v, want [alter]", again)
+	}
+}
