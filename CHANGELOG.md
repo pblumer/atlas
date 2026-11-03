@@ -215,6 +215,7 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **Send As on Exchange Server finds the mailbox by its address.** On-premises, `add-send-as` and `remove-send-as` run `Add-`/`Remove-ADPermission`, which look for an Active Directory object and answered "…@contoso.com wasn't found" for the address every model passes. The worker now looks the recipient up with `Get-Recipient` and passes its distinguished name; Exchange Online is unchanged. Found by a smoke test against a real Exchange Server SE.
 - **Exchange Online answers are read uncompressed.** The Exchange worker asked for gzip implicitly, and Exchange Online's admin API was observed answering with a body labelled gzip that was not (`gzip: invalid header` instead of the cmdlet's answer).
 - **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
 - **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
