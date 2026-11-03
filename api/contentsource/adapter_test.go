@@ -59,6 +59,14 @@ func TestAnAnswerThatIsNotWhatItShouldBeIsAnError(t *testing.T) {
 	}
 }
 
+func TestTheAccountsOwnRouteAnswering404IsAboutTheSource(t *testing.T) {
+	ad := scripted(t, map[string]http.HandlerFunc{"/api/me": status(http.StatusNotFound)})
+	_, err := ad.Standing(ctx(t))
+	if err == nil || errors.Is(err, ErrUnreadable) || !strings.Contains(err.Error(), "404 to /api/me") {
+		t.Fatalf("standing on a 404: %v, want an answer about /api/me, not about a page", err)
+	}
+}
+
 func TestAFeedWithoutAPositionIsAnError(t *testing.T) {
 	ad := scripted(t, map[string]http.HandlerFunc{"/api/changes": answer(`{"changes":[]}`)})
 	if _, err := ad.Head(ctx(t)); err == nil || !strings.Contains(err.Error(), "no position") {

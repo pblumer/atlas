@@ -1481,7 +1481,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"source": tString(), "primary": tString(), "pages": tObject(), "revision": tInteger()}, "source", "pages")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/refresh", s.catalogs.HandleContentRefresh, apiOp{
-			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
+			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. A request whose caller goes away before the recheck finishes answers 503 and records and writes nothing — a departed caller is no finding about the source. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("The precondition", schemaObj(map[string]any{"revision": tInteger()})),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/unlink", s.catalogs.HandleContentUnlink, apiOp{
@@ -1490,7 +1490,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
-			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped", tag: "Catalogue", role: RoleProductManager,
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("One line per bound product", tArray())}},
 		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
 			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,

@@ -59,8 +59,11 @@ type Job struct {
 	// leasing the job already receives the task's variables regardless, which is why
 	// carrying it here adds no exposure that the lease did not already have.
 	NewPassword string `json:"newPassword,omitempty"`
-	// Attributes is the resolved entry for create-user, create-group and
-	// update-attributes.
+	// Attributes is the resolved entry for create-user, create-group, create-contact
+	// and update-attributes. An attribute with no values (an empty list) appears only
+	// on update-attributes, where it clears the attribute — an LDAP replace with no
+	// values; on a create, an inline null is left out instead, because an add cannot
+	// carry an attribute without a value (ADR-0166, amended 2026-11-03).
 	Attributes map[string][]string `json:"attributes,omitempty"`
 	// The fields of the two reading operations. BaseDN, Filter, MaxEntries and
 	// ResultVariable are shared: where to read, what to narrow it to, what caps it,
@@ -80,6 +83,12 @@ type Job struct {
 	MaxEntries     int    `json:"maxEntries,omitempty"`
 	ObjectSecurity bool   `json:"objectSecurity,omitempty"`
 	ResultVariable string `json:"resultVariable,omitempty"`
+	// Select (search only) is the attribute selection the search asks for; empty asks
+	// for the server's default set. FoundVariable (search only) receives the result's
+	// found on its own, beside or instead of ResultVariable, so a model can seal the
+	// result and branch on a boolean that names nobody (ADR-0166, amended 2026-11-03).
+	Select        []string `json:"select,omitempty"`
+	FoundVariable string   `json:"foundVariable,omitempty"`
 }
 
 // Resolve turns a compiled AD task into a [Job]: the authored values
@@ -111,7 +120,18 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		NewPassword: resolveValue(detail.AdNewPassword, piKey, scopeVars),
 	}
 	if needsEntry(op) {
-		attrs, err := attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
+		// Inline attributes when authored — evaluated here, at the handoff, over the
+		// opened variables, which is what lets an entry carry a value the process
+		// declares personal; otherwise the variable the engine built.
+		var (
+			attrs map[string][]string
+			err   error
+		)
+		if detail.AdAttributes.Expr != nil {
+			attrs, err = evalEntry(detail.AdAttributes, op, piKey, scopeVars)
+		} else {
+			attrs, err = attrsFromVar(cp.Intern(detail.AdEntryVar), scopeVars)
+		}
 		if err != nil {
 			return Job{}, err
 		}
@@ -135,6 +155,10 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		}
 	case "search":
 		j.Scope = cp.Intern(detail.AdScope)
+		if sel := cp.Intern(detail.AdSelect); sel != "" {
+			j.Select = strings.Split(sel, ",")
+		}
+		j.FoundVariable = cp.Intern(detail.AdFoundVar)
 	}
 	return j, nil
 }
@@ -286,6 +310,7 @@ func runSearch(j Job, conn Conn) (map[string]any, error) {
 		BaseDN:     j.BaseDN,
 		Scope:      j.Scope,
 		Filter:     j.Filter,
+		Attributes: j.Select,
 		PageSize:   adSearchPageSize,
 		MaxEntries: int32(j.MaxEntries),
 	})
@@ -301,14 +326,21 @@ func runSearch(j Job, conn Conn) (map[string]any, error) {
 	if len(sorted) > 0 {
 		first = sorted[0].DN
 	}
-	return map[string]any{
-		j.ResultVariable: map[string]any{
+	out := make(map[string]any, 2)
+	if j.ResultVariable != "" {
+		out[j.ResultVariable] = map[string]any{
 			"found":   len(sorted) > 0,
 			"count":   len(sorted),
 			"dn":      first,
 			"entries": entriesToJSON(sorted),
-		},
-	}, nil
+		}
+	}
+	// found on its own: the one fact about a search that names nobody, so a model
+	// that declares the result personal still has something a gateway can read.
+	if j.FoundVariable != "" {
+		out[j.FoundVariable] = len(sorted) > 0
+	}
+	return out, nil
 }
 
 // entriesToJSON turns directory entries — a delta's or a search's — into a JSON-ready
