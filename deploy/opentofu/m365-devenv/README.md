@@ -346,6 +346,11 @@ Postfachzugriff und Verteiler einmal hin und zurück und hinterlässt nichts.
 «Senden als» erteilen, Postfach über die Kennzeichnung finden, Verteiler anlegen, Mitglied
 aufnehmen und entfernen, Verteiler entfernen, Rechte entziehen, Postfach entfernen.
 
+Danach über den Shop (Katalogvariante «Exchange Server», `install-m365-dienste.py`):
+Funktionspostfach bestellt (Vollzugriff und «Senden als» für die Besitzerin aus der
+Personensuche) und zurückgegeben, Postfachzugriff auf ein persönliches Postfach mit Prüfung der
+Informationssicherheit erteilt und entzogen; alles gegen `exch01`, nichts blieb zurück.
+
 Dabei gefunden:
 
 - «Senden als» (`Add-ADPermission`) fand das Postfach nicht über seine Adresse; der Worker
