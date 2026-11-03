@@ -260,22 +260,13 @@ def build_onprem(pkg, dst):
                 a["message"] = message(a["message"])
         y["texts"] = {k: v + " (Exchange Server)" for k, v in x["texts"].items()}
         out_products.append(y)
-    # A person sees one catalogue, the highest-ranked their groups reach: the variant's
-    # own catalogue is its products' home, and the online catalogues that offer an
-    # Exchange product offer its Exchange Server twin beside it.
-    twin = {x["id"]: x["id"] + "-onprem" for x in products}
-    offering = []
-    for c in cat["catalogs"]:
-        extra = [twin[i] for i in c["items"] if i in twin]
-        if extra:
-            c = json.loads(json.dumps(c))
-            c["items"] = c["items"] + extra
-            offering.append(c)
+    # A person sees every catalogue they are the audience for (ADR-0522), so the
+    # variant's catalogue, with the staff audience, is offered beside the online ones.
     doc = {"publish": cat.get("publish", True),
            "catalogs": [{"id": "cat-m365-onprem",
                          "texts": {"de": "Exchange Server (OnPrem)", "en": "Exchange Server (on-premises)"},
                          "rank": 400, "languages": ["de", "en"], "items": [y["id"] for y in out_products],
-                         "groups": ["{{zielgruppe}}"], "edges": []}] + offering,
+                         "groups": ["{{zielgruppe}}"], "edges": []}],
            "products": out_products}
     json.dump(doc, open(os.path.join(dst, "katalog.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 

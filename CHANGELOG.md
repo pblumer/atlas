@@ -15,6 +15,27 @@ _Changed_ / _Removed_ for each version.
 ### Added
 - **An order form searches the directory for a person.** A shop product's `configForm` may carry the directory field of ADR-0473: `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` searches through the field's Worker for a caller who may order from the release's catalogue, and placing the order and correcting its details look the chosen person up again, so a value the search would not have offered is refused with 422 (ADR-0473 amendment). The basket and the correction form show the search, and a task form in the shop now does too. `option.value` lets a field submit an Entra user's `userPrincipalName` instead of the object id.
 - **`examples/m365-dienste` runs in a shared tenant, and asks for people by search.** A new application constant `NAME_PREFIX` (empty by default: names unchanged) goes in front of every name and alias the naming rule builds and of a partner account's UPN, and limits the governance check to objects with that prefix. The owner, manager and recipient fields of the order forms search Entra and submit the user principal name. `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` installs the package into the environment, ready to order.
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
+- **A process commands what a person holds without reading what they hold.** A shop
+  send task in mode `command` may name a `recipient` instead of an order and a position;
+  the server finds that person's position of the product in the inventory and commands
+  it under the product's `commandedBy`, so a leaver process returns an admin account by
+  naming the person — the inventory stays the administrators' to read. Holding nothing
+  completes the task with an empty result, and a refused command, in either shape, is
+  thrown as `SHOP_COMMAND_REFUSED` when the process catches it
+  (ADR-0521).
+- **A process orders a product for somebody in the name of its application.** A shop
+  send task in the new mode `order` names a catalogue and a product, the recipient's
+  account id and the answers to the products' forms, and places the order through the
+  same checks a person's order meets — eligibility, conflicts, the orderable window,
+  answers, variants and the approval rule. Only a product whose new field `orderableBy`
+  lists the process's application may be ordered so; the list is read from the newest
+  release, so taking an application off it stops it at once, and the Console edits it
+  beside `commandedBy`. The order names `system:application:<key>` as its orderer, its
+  id comes from the task, so a retry finds the order instead of placing a second one,
+  and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
+  HR joiner process can order the starter package for a person who joins
+  (ADR-0520).
 - **An order form says while a name is typed whether it is still free.** A textfield
   carrying an `atlasAvailability` block names up to four sources — Entra groups and
   deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
@@ -171,6 +192,7 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
@@ -220,6 +242,16 @@ _Changed_ / _Removed_ for each version.
 - **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
 - **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
 - **`examples/m365-dienste` against a real tenant:** a distribution list is created without `-Type` (not granted to a worker scoped to distribution lists), and a team's owner is added after the replication wait rather than before it (`add-group-owner` answered 404 23 seconds after `create-group`). People are found by given name and surname too.
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
+- **A provisioning that reports at once keeps its report.** A provisioning process
+  that reported its position done (or failed) before the order's start came back to
+  mark the line running had its report overwritten with running, and the position
+  stayed running with nothing left to report on it. The start now marks a line
+  running only while it is still pending or blocked.
+- **An action is told the variant its position was ordered in.** The provision and
+  the return were given `variantId`; an action that starts its own instance was not,
+  so a decision over the licence tier it changed saw null — as the M365 example's
+  mailbox quota decision did.
 - **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
 - **A server that recorded multi-instance history before its schema v2 starts again.** A multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.

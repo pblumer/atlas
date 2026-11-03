@@ -569,6 +569,10 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("form owned by another application", func(t *testing.T) {
 		s := storesFor(t)
+		// "other" exists: an artifact of a deleted application reads as Ungrouped.
+		if err := s.projects.Save(project{ID: "other", Name: "Other", Key: "other"}); err != nil {
+			t.Fatalf("save project: %v", err)
+		}
 		if err := s.forms.Save(form{ID: "f1", Name: "Fremd", ProjectID: "other", Schema: "{}"}); err != nil {
 			t.Fatalf("save form: %v", err)
 		}
@@ -582,6 +586,10 @@ func TestApplySourceTreeRefusals(t *testing.T) {
 
 	t.Run("decision owned by another application", func(t *testing.T) {
 		s := storesFor(t)
+		// "other" exists: an artifact of a deleted application reads as Ungrouped.
+		if err := s.projects.Save(project{ID: "other", Name: "Other", Key: "other"}); err != nil {
+			t.Fatalf("save project: %v", err)
+		}
 		if err := s.dmnrefs.Save(dmnRef{ID: "r1", Name: "Fremd", ModelRef: "m", ProjectID: "other"}); err != nil {
 			t.Fatalf("save ref: %v", err)
 		}

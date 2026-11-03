@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "m365-oe-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Mitgliedschaften der Organisationseinheit · Memberships of the organisational unit**\n\nWelche Teams, Gruppen und Verteiler zur Organisationseinheit gehören, sagt die Entscheidung M365OeMitgliedschaften. · Which teams, groups and distribution lists belong to the unit is decided by M365OeMitgliedschaften."
+    },
+    {
+      "key": "oe",
+      "type": "textfield",
+      "label": "Organisationseinheit · Organisational unit",
+      "description": "Kürzel, wie es das HR-System führt, z.B. FIN. · Code as the HR system keeps it, e.g. FIN.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9_-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Benutzername (UPN) · User principal name",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

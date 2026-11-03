@@ -7,7 +7,10 @@
 // gets folding by being written the way pages already are and nothing has to remember
 // to ask for it. A card headed by an <h1> is the page's title and stays; an <h3> heads
 // a form or a part of a topic, not a topic. A card that must not fold says so with
-// class "no-fold". A topic a page draws outside a card, an <h2> over a list of cards
+// class "no-fold", and says why in a comment beside it — `no-fold: <the reason>` on its
+// line or the three above — which api/foldsub_internal_test.go requires, so an
+// exception is a decision somebody wrote down rather than a way past the rule. A
+// topic a page draws outside a card, an <h2> over a list of cards
 // say, is the one shape the rule cannot find by itself, so it asks with class
 // "fold-topic" on the element that holds the heading and what it heads.
 //

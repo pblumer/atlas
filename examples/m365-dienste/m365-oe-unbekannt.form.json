@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-oe-unbekannt",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Organisationseinheit klären · Clarify the organisational unit**\n\nDie Entscheidung M365OeMitgliedschaften kennt die Organisationseinheit «{{oe}}» nicht. Die Mitgliedschaften für {{upn}} von Hand setzen bzw. entfernen und die Tabelle für die nächste Person ergänzen; dann abschliessen. · The decision M365OeMitgliedschaften does not know the unit “{{oe}}”. Add or remove the memberships of {{upn}} by hand and extend the table for the next person; then complete this task."
+    }
+  ]
+}

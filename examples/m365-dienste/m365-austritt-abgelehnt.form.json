@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-austritt-abgelehnt",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rückgabe beim Austritt abgelehnt · Return at leaving refused**\n\nPersonalnummer {{personalnummer}}. Welche Rückgabe abgelehnt wurde, sagt der Name dieser Aufgabe (Eintrittspaket oder AD-Adminkonto); den Grund nennt die Meldung des Fehlers SHOP_COMMAND_REFUSED im Verlauf dieser Instanz (Operations). Häufige Gründe: Das Produkt (m365-eintritt oder ad-admin-konto) nennt die Applikation beispiel-m365-dienste nicht in commandedBy, oder seine Aktion deprovision darf kein operator auslösen. Das Entra-Konto ist bereits gesperrt. Das Recht von Hand zurückgeben oder im Zielsystem entfernen lassen, dann diese Aufgabe abschliessen; der Austritt läuft danach weiter. · Employee number {{personalnummer}}. The name of this task says which return was refused (joiner package or AD admin account); the message of the SHOP_COMMAND_REFUSED error in this instance's history (Operations) says why. Common reasons: the product (m365-eintritt or ad-admin-konto) does not list the application beispiel-m365-dienste in commandedBy, or its deprovision action may not be triggered by an operator. The Entra account is already disabled. Return the right by hand or have it removed in the target system, then complete this task; the leaver process then continues."
+    }
+  ]
+}

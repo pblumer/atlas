@@ -61,13 +61,19 @@ var mcpToolRoutes = map[string]string{
 	"atlas_catalog_releases":          "GET /api/v1/catalogs/{id}/releases",
 	"atlas_catalog_unpublished":       "GET /api/v1/catalogs/{id}/unpublished",
 	"atlas_import_catalog":            "POST /api/v1/catalogs/import",
-	"atlas_export_catalog":            "GET /api/v1/catalogs/{id}/document",
-	"atlas_export_catalog_products":   "GET /api/v1/catalog-products/document",
-	"atlas_import_catalog_archimate":  "POST /api/v1/catalogs/{id}/import",
-	"atlas_catalog_deletion":          "GET /api/v1/catalogs/{id}/deletion",
-	"atlas_delete_catalog":            "DELETE /api/v1/catalogs/{id}",
-	"atlas_catalog_product_deletion":  "GET /api/v1/catalog-products/{id}/deletion",
-	"atlas_delete_catalog_product":    "DELETE /api/v1/catalog-products/{id}",
+	// atlas hub (ADR-0499): the operator-pinned signed registry, read and installed
+	// as the Console does. The import is a dry run unless asked, refuses changes
+	// nobody decided, and leaves a package's catalogues to a person.
+	"atlas_hub_list_releases":        "GET /api/v1/blueprints",
+	"atlas_hub_preview_release":      "GET /api/v1/blueprints/{id}/releases/{version}/preview",
+	"atlas_hub_import_release":       "POST /api/v1/blueprints/{id}/releases/{version}/import",
+	"atlas_export_catalog":           "GET /api/v1/catalogs/{id}/document",
+	"atlas_export_catalog_products":  "GET /api/v1/catalog-products/document",
+	"atlas_import_catalog_archimate": "POST /api/v1/catalogs/{id}/import",
+	"atlas_catalog_deletion":         "GET /api/v1/catalogs/{id}/deletion",
+	"atlas_delete_catalog":           "DELETE /api/v1/catalogs/{id}",
+	"atlas_catalog_product_deletion": "GET /api/v1/catalog-products/{id}/deletion",
+	"atlas_delete_catalog_product":   "DELETE /api/v1/catalog-products/{id}",
 	// A product's content from an external source
 	// (ADR-0491), maintained like the
 	// rest of the product.
@@ -309,8 +315,9 @@ var mcpOmittedRoutes = map[string]string{
 	// Ordering, for the same reason. An order is also somebody's own: the handler
 	// confines reads to the orders you placed or are the recipient of, and a tool
 	// acting as a server identity would have no such person to be.
-	"GET /api/v1/shop/tasks":   "one person's view of their own orders and the tasks they hold in them, drawn beside those orders in the shop; an agent is nobody's orderer, and the task tools already reach any task by key",
-	"GET /api/v1/shop/catalog": "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
+	"GET /api/v1/shop/tasks":    "one person's view of their own orders and the tasks they hold in them, drawn beside those orders in the shop; an agent is nobody's orderer, and the task tools already reach any task by key",
+	"GET /api/v1/shop/catalog":  "which catalogue is *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
+	"GET /api/v1/shop/catalogs": "which catalogues are *yours*, answered from the caller's own groups; an agent acting as a server identity has none",
 	// The inventory. Same shape as the catalogue above — it answers about the
 	// caller — with one more reason on top: a list of somebody's access is exactly
 	// the read that should need a person behind it, and an agent acting as a server
@@ -867,9 +874,7 @@ var mcpOmittedRoutes = map[string]string{
 	// application APIs, returning a raw downloaded package to an MCP agent
 	// would bypass the dedicated import decision UI without adding a distinct
 	// agent capability. MCP uses the existing application/import tools.
-	"GET /api/v1/blueprints":                                 "Console discovery of operator-pinned signed releases, with no standalone agent workflow yet",
-	"GET /api/v1/blueprints/{id}/releases/{version}/preview": "Console design-time safety and dependency preview before a human import decision",
-	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; MCP does not download raw package bytes",
+	"GET /api/v1/blueprints/{id}/releases/{version}/package": "binary download for an explicitly reviewed Console import; an agent installs through atlas_hub_import_release, which the server feeds the verified bytes, so MCP never moves raw package bytes",
 
 	// Repository: package management, an admin/UI concern.
 	"GET /api/v1/repository/packages":               "repository management is a UI concern",

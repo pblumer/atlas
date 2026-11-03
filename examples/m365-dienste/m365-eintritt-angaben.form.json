@@ -1,0 +1,35 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-angaben",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenzvariante wählen · Choose the licence variant**\n\nDas HR-System hat für die Personalnummer {{personalnummer}} (Organisationseinheit {{oe}}) die Variante «{{variante}}» gemeldet, die der Prozess nicht kennt. Gültig sind E3, E5 und F3. · The HR system reported the variant “{{variante}}” for employee number {{personalnummer}} (unit {{oe}}), which the process does not know. Valid are E3, E5 and F3."
+    },
+    {
+      "key": "lizenzvariante",
+      "type": "radio",
+      "label": "Lizenzvariante · Licence variant",
+      "values": [
+        {
+          "label": "Standard (E3)",
+          "value": "standard"
+        },
+        {
+          "label": "Erweitert (E5) · Extended (E5)",
+          "value": "erweitert"
+        },
+        {
+          "label": "Frontline (F3)",
+          "value": "frontline"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
