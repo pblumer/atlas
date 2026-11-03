@@ -196,4 +196,17 @@ func TestAnOrderFormSearchesTheDirectoryAndItsChoiceIsCheckedAtEveryDoor(t *test
 	if cfg := line["config"].(map[string]any); cfg["besitzer"] != "claudia@example.com" {
 		t.Fatalf("the corrected owner did not take: %v", cfg)
 	}
+
+	// A release that does not exist has no order form; neither has a product whose
+	// form was deleted since the release was published.
+	if code, b := cReq(t, w.anna, w.st.ts, "POST", "/api/v1/shop/releases/rel_missing/items/team/form-data/besitzer/query",
+		`{"search":"Anna"}`); code != http.StatusNotFound {
+		t.Fatalf("a search in a release that does not exist = %d, want 404 (%s)", code, b)
+	}
+	if code, b := cReq(t, w.admin, w.st.ts, "DELETE", "/api/v1/forms/form_team", ""); code != http.StatusOK && code != http.StatusNoContent {
+		t.Fatalf("delete the order form: %d %s", code, b)
+	}
+	if code, out, raw := w.search(t, w.anna, "team", `{"search":"Anna"}`); code != http.StatusNotFound || out.Code != "not_found" {
+		t.Fatalf("a search in an order form deleted since = %d %s, want 404", code, raw)
+	}
 }
