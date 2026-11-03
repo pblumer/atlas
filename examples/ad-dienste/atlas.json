@@ -1,0 +1,124 @@
+{
+  "formatVersion": 2,
+  "key": "beispiel-ad-dienste",
+  "name": "Beispiel: Active-Directory-Dienste",
+  "processes": [
+    {
+      "id": "proc_ad_admin_konto",
+      "name": "Active Directory: Admin-Konto",
+      "path": "ad-admin-konto.bpmn"
+    },
+    {
+      "id": "proc_ad_berechtigung",
+      "name": "Active Directory: Berechtigung",
+      "path": "ad-berechtigung.bpmn"
+    },
+    {
+      "id": "proc_ad_externes_konto",
+      "name": "Active Directory: Externes Konto",
+      "path": "ad-externes-konto.bpmn"
+    },
+    {
+      "id": "proc_ad_genehmigung_gruppenverantwortung",
+      "name": "Active Directory: Genehmigung durch die Gruppenverantwortung",
+      "path": "ad-genehmigung-gruppenverantwortung.bpmn"
+    },
+    {
+      "id": "proc_ad_servicekonto",
+      "name": "Active Directory: Servicekonto",
+      "path": "ad-servicekonto.bpmn"
+    },
+    {
+      "id": "proc_ad_sicherheitsgruppe",
+      "name": "Active Directory: Sicherheitsgruppe",
+      "path": "ad-sicherheitsgruppe.bpmn"
+    },
+    {
+      "id": "proc_ad_testkonto",
+      "name": "Active Directory: Testkonto",
+      "path": "ad-testkonto.bpmn"
+    },
+    {
+      "id": "proc_ad_versetzung",
+      "name": "Active Directory: Versetzung",
+      "path": "ad-versetzung.bpmn"
+    }
+  ],
+  "forms": [
+    {
+      "id": "ad-admin-konto-bestellung",
+      "name": "ad-admin-konto-bestellung",
+      "path": "ad-admin-konto-bestellung.form.json"
+    },
+    {
+      "id": "ad-berechtigung-bestellung",
+      "name": "ad-berechtigung-bestellung",
+      "path": "ad-berechtigung-bestellung.form.json"
+    },
+    {
+      "id": "ad-externes-konto-bestellung",
+      "name": "ad-externes-konto-bestellung",
+      "path": "ad-externes-konto-bestellung.form.json"
+    },
+    {
+      "id": "ad-gruppe-leeren",
+      "name": "ad-gruppe-leeren",
+      "path": "ad-gruppe-leeren.form.json"
+    },
+    {
+      "id": "ad-gruppe-mitglied",
+      "name": "ad-gruppe-mitglied",
+      "path": "ad-gruppe-mitglied.form.json"
+    },
+    {
+      "id": "ad-gruppe-verantwortung",
+      "name": "ad-gruppe-verantwortung",
+      "path": "ad-gruppe-verantwortung.form.json"
+    },
+    {
+      "id": "ad-konto-passwort",
+      "name": "ad-konto-passwort",
+      "path": "ad-konto-passwort.form.json"
+    },
+    {
+      "id": "ad-servicekonto-bestellung",
+      "name": "ad-servicekonto-bestellung",
+      "path": "ad-servicekonto-bestellung.form.json"
+    },
+    {
+      "id": "ad-sicherheitsgruppe-bestellung",
+      "name": "ad-sicherheitsgruppe-bestellung",
+      "path": "ad-sicherheitsgruppe-bestellung.form.json"
+    },
+    {
+      "id": "ad-testkonto-bestellung",
+      "name": "ad-testkonto-bestellung",
+      "path": "ad-testkonto-bestellung.form.json"
+    },
+    {
+      "id": "ad-versetzung-bestellung",
+      "name": "ad-versetzung-bestellung",
+      "path": "ad-versetzung-bestellung.form.json"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dmn-ad-berechtigungen",
+      "name": "AdBerechtigungen",
+      "modelRef": "ad-berechtigungen",
+      "path": "ad-berechtigungen.dmn"
+    },
+    {
+      "id": "dmn-ad-namensregel",
+      "name": "AdNamensregel",
+      "modelRef": "ad-namensregel",
+      "path": "ad-namensregel.dmn"
+    },
+    {
+      "id": "dmn-ad-oe",
+      "name": "AdOe",
+      "modelRef": "ad-oe",
+      "path": "ad-oe.dmn"
+    }
+  ]
+}
