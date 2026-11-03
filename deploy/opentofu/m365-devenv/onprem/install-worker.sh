@@ -10,7 +10,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-repo="$(git rev-parse --show-toplevel)"
+# ATLAS_REPO builds atlas.exe from another checkout, e.g. a branch with a worker fix.
+repo="${ATLAS_REPO:-$(git rev-parse --show-toplevel)}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -25,10 +26,16 @@ atlas_ip="$(az vm list-ip-addresses -g "$rg" -n "$atlas_vm" --query '[0].virtual
 echo "install-worker: building atlas.exe"
 (cd "$repo" && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o "$work/atlas.exe" ./cmd/atlas)
 
-echo "install-worker: offering it on http://$atlas_ip:8099 for ten minutes"
+# Azure's managed run command can take ten minutes and more before the script starts, so
+# the binary is offered for 30 minutes; setsid keeps the server alive once ssh is gone,
+# and the script goes on only when it answers.
+echo "install-worker: offering it on http://$atlas_ip:8099 for 30 minutes"
 key="$(awk '{print $3}' <<<"$ssh_cmd")"; host="$(awk '{print $4}' <<<"$ssh_cmd")"
 scp -q -i "$key" "$work/atlas.exe" "$host:/tmp/atlas.exe"
-$ssh_cmd "mkdir -p /tmp/atlas-dl && mv /tmp/atlas.exe /tmp/atlas-dl/ && (cd /tmp/atlas-dl && nohup timeout 600 python3 -m http.server 8099 --bind $atlas_ip >/dev/null 2>&1 &)"
+# A server from an earlier run is stopped by its pid file (pkill -f would match this
+# very shell, whose command line names the server too).
+$ssh_cmd "mkdir -p /tmp/atlas-dl && mv -f /tmp/atlas.exe /tmp/atlas-dl/ && { [ -f /tmp/atlas-dl/pid ] && kill \$(cat /tmp/atlas-dl/pid) 2>/dev/null; true; } && cd /tmp/atlas-dl && { setsid nohup timeout 1800 python3 -m http.server 8099 --bind $atlas_ip >/dev/null 2>&1 < /dev/null & echo \$! > /tmp/atlas-dl/pid; } && sleep 2 && curl -sf -o /dev/null -I http://$atlas_ip:8099/atlas.exe" \
+  || { echo "install-worker: the download server on the Atlas VM does not answer" >&2; exit 1; }
 
 echo "install-worker: minting a worker token"
 token="$(python3 -I - "$url" <<'EOF'
@@ -52,7 +59,10 @@ az vm run-command create -g "$rg" --vm-name "$vm" --name atlas-exchange-worker \
   --parameters "AtlasUrl=$url" "BinaryUrl=http://$atlas_ip:8099/atlas.exe" "ServiceAccount=$account" "ExchangeFqdn=$fqdn" \
   --protected-parameters "Token=$token" "ServicePassword=$(tofu output -raw exchange_service_password)" \
   --output none
-az vm run-command show -g "$rg" --vm-name "$vm" --name atlas-exchange-worker --instance-view \
-  --query 'instanceView.{state:executionState, output:output, error:error}' -o json
+result="$(az vm run-command show -g "$rg" --vm-name "$vm" --name atlas-exchange-worker --instance-view \
+  --query 'instanceView.{state:executionState, output:output, error:error}' -o json)"
+echo "$result"
 az vm run-command delete -g "$rg" --vm-name "$vm" --name atlas-exchange-worker --yes
+[[ "$(python3 -I -c 'import json,sys; print(json.loads(sys.argv[1])["state"])' "$result")" == Succeeded ]] \
+  || { echo "install-worker: the run command failed" >&2; exit 1; }
 echo "install-worker: done"

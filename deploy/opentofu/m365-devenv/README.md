@@ -341,6 +341,25 @@ Minuten lang nur im VNet von der Atlas-VM an, erzeugt ein Worker-Token und führ
 Parameter). `onprem/exchange-onprem-smoke.bpmn` prüft jede Operation von Funktionspostfach,
 Postfachzugriff und Verteiler einmal hin und zurück und hinterlässt nichts.
 
+**Geprüft am 2026-11-03:** Installation in rund 55 Minuten (Image in 7 Minuten), Worker auf
+`exch01`, Rauchtest vollständig: Funktionspostfach anlegen und kennzeichnen, Vollzugriff und
+«Senden als» erteilen, Postfach über die Kennzeichnung finden, Verteiler anlegen, Mitglied
+aufnehmen und entfernen, Verteiler entfernen, Rechte entziehen, Postfach entfernen.
+
+Dabei gefunden:
+
+- «Senden als» (`Add-ADPermission`) fand das Postfach nicht über seine Adresse; der Worker
+  löst die Identität jetzt über `Get-Recipient` auf (`connector/exchange`, Branch
+  `feat/m365-dienste-shared-tenant`). `install-worker.sh` baut dafür mit
+  `ATLAS_REPO=<checkout>` aus jenem Branch.
+- **Offen, Plattform:** Atlas verteilt Exchange-Jobs nur nach Jobtyp, nicht nach Worker-Name.
+  Läuft daneben der Online-Worker `ucc_exchange`, kann er einen Job für `ucc_exchange_onprem`
+  übernehmen und mit «no worker registered» scheitern. Bis das behoben ist, den Online-Worker
+  für den Rauchtest kurz ausschalten (Console → Workers, `ucc_exchange`, oder `PATCH
+  /api/v1/configured-workers/<id>` mit `enabled: false`) und danach wieder ein.
+- Der Runner startet `atlas.exe` über `cmd.exe`: Windows PowerShell 5.1 bricht sonst mit
+  `ErrorActionPreference Stop` an der ersten Protokollzeile auf stderr ab.
+
 Eine laufende Umgebung erhält den Server, ohne dass die Atlas-VM ersetzt wird, gezielt:
 `tofu apply -target=azurerm_virtual_machine_extension.exchange_setup
 -target=azurerm_dev_test_global_vm_shutdown_schedule.exchange

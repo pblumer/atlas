@@ -185,8 +185,16 @@ try {
                     -Enabled $true -PasswordNeverExpires $true -Description 'Atlas Exchange worker (on-premises)'
             }
             # Organization Management: every cmdlet of the worker's table, within this
-            # test organization only.
-            Add-RoleGroupMember -Identity 'Organization Management' -Member $sam -ErrorAction SilentlyContinue
+            # test organization only. The role group is an Active Directory group; added
+            # there and checked, because Add-RoleGroupMember for an account created a
+            # moment before failed silently on the first real run ("isn't assigned to any
+            # management roles").
+            if (-not (Get-ADGroupMember -Identity 'Organization Management' | Where-Object { $_.SamAccountName -eq $sam })) {
+                Add-ADGroupMember -Identity 'Organization Management' -Members $sam
+            }
+            if (-not (Get-ADGroupMember -Identity 'Organization Management' | Where-Object { $_.SamAccountName -eq $sam })) {
+                throw "$sam is not a member of Organization Management"
+            }
             # Remote PowerShell for the account (on by default; stated so it is checked).
             Set-User -Identity $sam -RemotePowerShellEnabled $true
 
