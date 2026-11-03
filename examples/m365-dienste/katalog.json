@@ -16,6 +16,7 @@
         "m365-lizenz",
         "m365-telefonie",
         "m365-team",
+        "m365-sharepoint-site",
         "m365-funktionspostfach",
         "m365-verteiler",
         "m365-postfachzugriff"
@@ -46,6 +47,7 @@
         "m365-lizenz",
         "m365-telefonie",
         "m365-team",
+        "m365-sharepoint-site",
         "m365-funktionspostfach",
         "m365-verteiler",
         "m365-postfachzugriff",
@@ -290,6 +292,125 @@
         "Team",
         "Gruppe",
         "Group",
+        "Zusammenarbeit"
+      ],
+      "category": "zusammenarbeit",
+      "categoryTexts": {
+        "de": "Zusammenarbeit",
+        "en": "Collaboration"
+      }
+    },
+    {
+      "id": "m365-sharepoint-site",
+      "homeCatalog": "cat-m365-mitarbeitende",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "SharePoint: Teamwebsite",
+        "en": "SharePoint: team site"
+      },
+      "descriptions": {
+        "de": "Eine moderne SharePoint-Teamwebsite mit Microsoft-365-Gruppe unter einer selbst gewählten URL, mit zwei Besitzern. Danach: Gäste einladen, Besitzer ändern, Speicher erhöhen, löschen und innert 30 Tagen wiederherstellen.",
+        "en": "A modern SharePoint team site with a Microsoft 365 group at a URL of your choice, with two owners. Afterwards: invite guests, change owners, increase storage, delete and restore within 30 days."
+      },
+      "approval": {
+        "kind": "proc_m365_genehmigung_vorgesetzter"
+      },
+      "lifecycleProcess": "proc_m365_sharepoint_site",
+      "configForm": "m365-sharepoint-site-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.site.erstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.site.rueckgabe",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site endgültig zurückgeben",
+            "en": "Return the site for good"
+          }
+        },
+        {
+          "key": "gast",
+          "message": "m365.site.gast",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Externe Person einladen",
+            "en": "Invite an external person"
+          },
+          "form": "m365-sharepoint-gast"
+        },
+        {
+          "key": "besitzer",
+          "message": "m365.site.besitzer",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site-Besitzer ändern",
+            "en": "Change the site owner"
+          },
+          "form": "m365-sharepoint-besitzer"
+        },
+        {
+          "key": "kontingent",
+          "message": "m365.site.kontingent",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Speicherkontingent erhöhen",
+            "en": "Increase the storage quota"
+          },
+          "form": "m365-sharepoint-kontingent"
+        },
+        {
+          "key": "loeschen",
+          "message": "m365.site.loeschen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Site löschen",
+            "en": "Delete the site"
+          }
+        },
+        {
+          "key": "wiederherstellen",
+          "message": "m365.site.wiederherstellen",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Gelöschte Site wiederherstellen",
+            "en": "Restore the deleted site"
+          }
+        }
+      ],
+      "keywords": [
+        "SharePoint",
+        "Site",
+        "Teamwebsite",
+        "Team Site",
         "Zusammenarbeit"
       ],
       "category": "zusammenarbeit",

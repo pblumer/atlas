@@ -2,7 +2,8 @@
 <!--
   M365Namensregel: die Namenskonvention für alles, was der Microsoft-365-Katalog anlegt (Governance).
 
-  Eingaben: objekttyp  ("team" | "funktionspostfach" | "verteiler" | "raum" | "warteschlange" | "telefonzentrale")
+  Eingaben: objekttyp  ("team" | "funktionspostfach" | "verteiler" | "raum" | "warteschlange" | "telefonzentrale"
+                        | "site")
             slug       (die normalisierte Bezeichnung; der Prozess bildet sie im Input-Mapping)
             laenge     (berechnet: Länge von slug und bereich zusammen)
             bereich, bezeichnung (Formularantworten; die Ausgaben lesen sie)
@@ -12,6 +13,16 @@
   hitPolicy FIRST: zuerst die Ablehnungsgründe (leer, reserviert, zu lang), dann eine Regel je
   Objekttyp, zuletzt die Auffangregel. Die Reihenfolge ist die Regel: Eine reservierte Bezeichnung
   wird abgelehnt, welcher Objekttyp auch immer.
+
+  Objekttyp site (SharePoint-Teamwebsite): Hier wählt die bestellende Person die URL selbst, ohne
+  Präfix und ohne Bereich. Der Prozess übergibt die URL kleingeschrieben als slug, aber nur, wenn
+  sie die Form ^[a-z0-9][a-z0-9_-]{2,63}$ hat; sonst einen leeren slug. Die drei Regeln für site
+  (s1 vor r1, s2 und s3 vor r3) begründen eine falsche Form als solche, statt sie mit «enthält
+  keine Buchstaben» abzuweisen, und setzen für die URL die Grenze von 64 Zeichen an die Stelle der
+  30 Zeichen aus Bereich und Bezeichnung: Eine Site hat keinen Bereich, und ihre URL ist frei
+  gewählt. Die Sperrliste reservierter Bezeichnungen (r2) gilt auch für Sites. Anzeigename ist der
+  Titel aus dem Bestellformular (bezeichnung), Alias die URL. Für alle anderen Objekttypen ändern
+  die drei Regeln nichts.
 
   Wer die Konvention ändert, ändert diese Tabelle und nicht die Prozesse. Achtung: Präfixe sind Teil
   der Identität bestehender Teams und Ressourcenkonten (deren Rückgabe bildet den Alias neu); ein
@@ -36,6 +47,16 @@
       <output id="out_grund" label="grund" name="grund" typeRef="string"/>
       <output id="out_anzeigename" label="anzeigename" name="anzeigename" typeRef="string"/>
       <output id="out_alias" label="alias" name="alias" typeRef="string"/>
+      <rule id="s1">
+        <description>Objekttyp site: Die URL hat nicht die erlaubte Form (der Prozess übergibt dann einen leeren slug)</description>
+        <inputEntry id="s1_i0"><text>"site"</text></inputEntry>
+        <inputEntry id="s1_i1"><text>null, ""</text></inputEntry>
+        <inputEntry id="s1_i2"><text>-</text></inputEntry>
+        <outputEntry id="s1_o0"><text>false</text></outputEntry>
+        <outputEntry id="s1_o1"><text>"Die URL muss 3 bis 64 Zeichen lang sein, mit einem Kleinbuchstaben oder einer Ziffer beginnen und darf nur Kleinbuchstaben, Ziffern, - und _ enthalten."</text></outputEntry>
+        <outputEntry id="s1_o2"><text>null</text></outputEntry>
+        <outputEntry id="s1_o3"><text>null</text></outputEntry>
+      </rule>
       <rule id="r1">
         <description>Leere Bezeichnung: nichts, woraus sich ein Alias bilden liesse</description>
         <inputEntry id="r1_i0"><text>-</text></inputEntry>
@@ -55,6 +76,26 @@
         <outputEntry id="r2_o1"><text>"Diese Bezeichnung ist reserviert (z.B. admin, postmaster, security, support)."</text></outputEntry>
         <outputEntry id="r2_o2"><text>null</text></outputEntry>
         <outputEntry id="r2_o3"><text>null</text></outputEntry>
+      </rule>
+      <rule id="s2">
+        <description>Objekttyp site: URL über 64 Zeichen</description>
+        <inputEntry id="s2_i0"><text>"site"</text></inputEntry>
+        <inputEntry id="s2_i1"><text>-</text></inputEntry>
+        <inputEntry id="s2_i2"><text>&gt; 64</text></inputEntry>
+        <outputEntry id="s2_o0"><text>false</text></outputEntry>
+        <outputEntry id="s2_o1"><text>"Die URL ist länger als 64 Zeichen."</text></outputEntry>
+        <outputEntry id="s2_o2"><text>null</text></outputEntry>
+        <outputEntry id="s2_o3"><text>null</text></outputEntry>
+      </rule>
+      <rule id="s3">
+        <description>Objekttyp site: SharePoint-Teamwebsite, Alias = URL, Anzeigename = Titel</description>
+        <inputEntry id="s3_i0"><text>"site"</text></inputEntry>
+        <inputEntry id="s3_i1"><text>-</text></inputEntry>
+        <inputEntry id="s3_i2"><text>-</text></inputEntry>
+        <outputEntry id="s3_o0"><text>true</text></outputEntry>
+        <outputEntry id="s3_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="s3_o2"><text>bezeichnung</text></outputEntry>
+        <outputEntry id="s3_o3"><text>slug</text></outputEntry>
       </rule>
       <rule id="r3">
         <description>Zu lang: Bereich und Bezeichnung zusammen über 30 Zeichen</description>

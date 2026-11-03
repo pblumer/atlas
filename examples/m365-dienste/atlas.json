@@ -49,6 +49,11 @@
       "path": "raum-entfernen.bpmn"
     },
     {
+      "id": "proc_m365_sharepoint_site",
+      "name": "SharePoint: Team Site",
+      "path": "sharepoint-site.bpmn"
+    },
+    {
       "id": "proc_m365_team",
       "name": "Microsoft Teams: Team",
       "path": "team.bpmn"
@@ -141,6 +146,41 @@
       "path": "m365-rufnummer-person.form.json"
     },
     {
+      "id": "m365-sharepoint-besitzer",
+      "name": "m365-sharepoint-besitzer",
+      "path": "m365-sharepoint-besitzer.form.json"
+    },
+    {
+      "id": "m365-sharepoint-gast",
+      "name": "m365-sharepoint-gast",
+      "path": "m365-sharepoint-gast.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent",
+      "name": "m365-sharepoint-kontingent",
+      "path": "m365-sharepoint-kontingent.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent-pruefung",
+      "name": "m365-sharepoint-kontingent-pruefung",
+      "path": "m365-sharepoint-kontingent-pruefung.form.json"
+    },
+    {
+      "id": "m365-sharepoint-kontingent-setzen",
+      "name": "m365-sharepoint-kontingent-setzen",
+      "path": "m365-sharepoint-kontingent-setzen.form.json"
+    },
+    {
+      "id": "m365-sharepoint-site-bestellung",
+      "name": "m365-sharepoint-site-bestellung",
+      "path": "m365-sharepoint-site-bestellung.form.json"
+    },
+    {
+      "id": "m365-sharepoint-site-pruefen",
+      "name": "m365-sharepoint-site-pruefen",
+      "path": "m365-sharepoint-site-pruefen.form.json"
+    },
+    {
       "id": "m365-team-bestellung",
       "name": "m365-team-bestellung",
       "path": "m365-team-bestellung.form.json"
@@ -204,6 +244,12 @@
       "name": "M365PostfachzugriffFreigabe",
       "modelRef": "m365-postfachzugriff",
       "path": "m365-postfachzugriff.dmn"
+    },
+    {
+      "id": "dmn-m365-site-kontingent",
+      "name": "M365SiteKontingent",
+      "modelRef": "m365-site-kontingent",
+      "path": "m365-site-kontingent.dmn"
     },
     {
       "id": "dmn-m365-telefonie",

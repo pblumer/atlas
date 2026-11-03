@@ -1,0 +1,172 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-site-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**SharePoint: Teamwebsite · SharePoint: team site**\n\nEine moderne Teamwebsite mit Microsoft-365-Gruppe, erreichbar unter /sites/<URL>. · A modern team site with a Microsoft 365 group, at /sites/<URL>."
+    },
+    {
+      "key": "titel",
+      "type": "textfield",
+      "label": "Titel · Title",
+      "description": "Der Anzeigename der Site. · The site's display name.",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "url",
+      "type": "textfield",
+      "label": "URL · Url",
+      "description": "Der Teil nach /sites/: 3 bis 64 Zeichen, Kleinbuchstaben, Ziffern, - und _. Das Formular prüft beim Tippen, ob die URL noch frei ist. Bei der Installation ist der Host in diesem Feld (contoso.sharepoint.com) auf den eigenen Tenant anzupassen. · The part after /sites/: 3 to 64 characters, lower-case letters, digits, - and _. The form checks as you type whether the URL is still free. On installation, adapt the host in this field (contoso.sharepoint.com) to your own tenant.",
+      "validate": {
+        "required": true,
+        "pattern": "^[a-z0-9][a-z0-9_-]{2,63}$"
+      },
+      "atlasAvailability": {
+        "version": 1,
+        "minLength": 3,
+        "checks": [
+          {
+            "workerType": "entra",
+            "worker": "ucc_entra",
+            "resource": "groups"
+          },
+          {
+            "workerType": "entra",
+            "worker": "ucc_entra",
+            "resource": "deletedGroups"
+          },
+          {
+            "workerType": "sharepoint",
+            "worker": "ucc_sharepoint",
+            "resource": "sites",
+            "host": "contoso.sharepoint.com",
+            "managedPath": "sites"
+          }
+        ]
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sprache",
+      "type": "select",
+      "label": "Sprache · Language",
+      "values": [
+        {
+          "label": "Deutsch · German",
+          "value": "de-CH"
+        },
+        {
+          "label": "Englisch · English",
+          "value": "en-US"
+        },
+        {
+          "label": "Französisch · French",
+          "value": "fr-CH"
+        },
+        {
+          "label": "Italienisch · Italian",
+          "value": "it-CH"
+        }
+      ],
+      "defaultValue": "de-CH",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingent",
+      "type": "select",
+      "label": "Anfängliches Kontingent (GB) · Initial quota (GB)",
+      "description": "Setzt die Gruppe M365-SharePoint nach der Bereitstellung im SharePoint Admin Center. · Set by the M365-SharePoint group in the SharePoint admin centre after provisioning.",
+      "values": [
+        {
+          "label": "1 GB",
+          "value": "1"
+        },
+        {
+          "label": "5 GB",
+          "value": "5"
+        },
+        {
+          "label": "10 GB",
+          "value": "10"
+        },
+        {
+          "label": "25 GB",
+          "value": "25"
+        }
+      ],
+      "defaultValue": "5",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Zweck · Purpose",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "sichtbarkeit",
+      "type": "radio",
+      "label": "Sichtbarkeit · Visibility",
+      "values": [
+        {
+          "label": "Privat · Private",
+          "value": "Private"
+        },
+        {
+          "label": "Öffentlich in der Organisation · Public within the organisation",
+          "value": "Public"
+        }
+      ],
+      "defaultValue": "Private",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "besitzer",
+      "type": "textfield",
+      "label": "Besitzerin oder Besitzer (UPN) · Site owner (UPN)",
+      "description": "Verantwortlich für Inhalt und Berechtigungen. · Responsible for content and permissions.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "stellvertretung",
+      "type": "textfield",
+      "label": "Stellvertretung (UPN) · Secondary owner (UPN)",
+      "description": "Eine zweite Person, damit die Site nie ohne Besitzer ist. · A second person, so the site is never left without an owner.",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 #   ATLAS_TOKEN=atlasat_… ./installieren.sh https://atlas.intern.example.ch antworten.json
 #
 # Schritte, in dieser Reihenfolge:
-#   1. die fünf Entscheidungsmodelle unter ihren Handles hochladen (der Quellbaum trägt sie
+#   1. die sechs Entscheidungsmodelle unter ihren Handles hochladen (der Quellbaum trägt sie
 #      ebenfalls; der Import findet sie dann unverändert vor);
 #   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
 #   3. die Applikation veröffentlichen;
@@ -29,7 +29,7 @@ trap 'rm -rf "$WORK"' EXIT
 AUTH="Authorization: Bearer $TOKEN"
 
 echo "1. Entscheidungsmodelle"
-for m in m365-lizenzprofil m365-namensregel m365-postfachzugriff m365-telefonie m365-verteiler-zuordnung; do
+for m in m365-lizenzprofil m365-namensregel m365-postfachzugriff m365-site-kontingent m365-telefonie m365-verteiler-zuordnung; do
   curl -fsS -X POST "$SERVER/api/v1/dmn-models?handle=$m" -H "$AUTH" \
     -H 'Content-Type: application/xml' --data-binary "@$HERE/$m.dmn" > /dev/null
   echo "   $m"
