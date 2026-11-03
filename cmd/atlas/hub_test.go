@@ -44,8 +44,8 @@ func TestHubReleasesAreCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(samples) != 10 {
-		t.Fatalf("%d bundles composed, want the 10 of bundles.json", len(samples))
+	if len(samples) != 11 {
+		t.Fatalf("%d bundles composed, want the 11 of bundles.json", len(samples))
 	}
 	if _, _, err := hubIndex(lock, samples); err != nil {
 		t.Fatalf("%v\n\nAfter changing an example, regenerate the catalogue and record its new version:\n"+
@@ -78,7 +78,7 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, out.String())
 	}
 	index := readBuiltIndex(t, dir, public)
-	if len(index.Releases) != 10 || index.RegistryID != "io.github.pblumer.atlas.hub" {
+	if len(index.Releases) != 11 || index.RegistryID != "io.github.pblumer.atlas.hub" {
 		t.Fatalf("index = %s with %d releases", index.RegistryID, len(index.Releases))
 	}
 	for _, r := range index.Releases {

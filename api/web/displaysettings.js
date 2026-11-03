@@ -129,14 +129,15 @@ export async function renderDisplaySettings(root, { api, toast }) {
       <p class="muted">${t("display.intro")}</p>
       <p class="muted" id="ds-scope">${esc(scopeNote(scope))}</p>
 
+      <!-- no-fold: the preview is the form's output, a caption over a sample of the
+           choices below, and not a section of its own -->
       <div class="ds-preview no-fold">
         <h2>${esc(t("display.preview"))}</h2>
         <div id="ds-sample">${sampleHTML(pending)}</div>
       </div>
 
       <!-- Each choice folds under its heading (fold-topic, fold.js), remembered by its
-           id; the preview above is the form's output, not a topic of its own, and says
-           so with no-fold. -->
+           id. -->
       <section class="fold-topic" id="ds-sec-numbers" style="margin-top:18px">
         <h2>${esc(t("display.numbers.title"))}</h2>
         <p class="muted">${t("display.numbers.hint")}</p>

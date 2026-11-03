@@ -1624,6 +1624,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/shop/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
+		{"GET", "/api/v1/shop/catalogs", s.catalogs.HandleMyCatalogs, apiOp{
+			summary: "Every catalogue your groups reach, highest rank first (ADR-0522): the shop offers what all of them offer, a product in several from the highest-ranked, and an order goes to one catalogue's release, so a basket from two is placed as two orders. Reaching none is an empty list", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogues", tArray())}},
 		// Shop orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so
 		// fulfilment reads one record and never recomputes a graph — and what was
@@ -1768,6 +1771,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
+		{"POST", "/api/v1/blueprints/{id}/releases/{version}/import", s.handleBlueprintImport, apiOp{
+			summary: "Install the application of a signed atlas hub release: the server fetches it from its operator-pinned registry, refuses it unless ?digest= equals the digest the preview reported, inspects it and imports it through the same source import POST /api/v1/applications/source performs — the same plan, ?dryRun=true, ?overwrite= and ?keep= decisions (undecided stops with 409 and the plan), editor rule and needs. The package's catalogues are named under cataloguesNotImported and imported in the Console, where a person answers their questions (ADR-0499, ADR-0467).", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Import result with the release it came from", tObject())}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical

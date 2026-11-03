@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AdBerechtigungen: welche AD-Gruppe ein Berechtigungsprodukt meint.
+
+  Eingabe:  itemId (die Produkt-ID im Katalog)
+  Ausgaben: bekannt (Wahrheitswert), gruppeCn, gruppeDn, bezeichnung, maxTage
+
+  Jedes Produkt ad-recht-* ist an denselben Lebenszyklus (ad-berechtigung.bpmn) und dieselbe Genehmigung
+  (ad-genehmigung-gruppenverantwortung.bpmn) gebunden; was es meint, steht hier. Ein neues Recht ist eine Zeile
+  in dieser Tabelle und ein Produkt im Katalog, kein neuer Prozess.
+
+  Die Gruppen bestehen schon; der Katalog legt sie nicht an. Die DNs sind Beispiele (OU=Berechtigungen,OU=Gruppen,DC=contoso,DC=local) und
+  auf das eigene Verzeichnis anzupassen. maxTage ist ein Hinweis für die Pflege des Katalogs: Verbindlich ist
+  maxDays am Produkt, das die Befristung der Plattform liest.
+
+  Die Auffangregel antwortet bekannt = false: Der Lebenszyklus lehnt die Bestellung dann mit Begründung ab, die
+  Rückgabe meldet returnFailed, und die Genehmigung geht an die Ersatzgruppe.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_AdBerechtigungen" name="AdBerechtigungen" namespace="http://atlas/dmn">
+  <inputData id="id_itemId" name="itemId"/>
+  <decision id="AdBerechtigungen" name="AdBerechtigungen">
+    <informationRequirement id="ir_itemId"><requiredInput href="#id_itemId"/></informationRequirement>
+    <decisionTable id="dt_AdBerechtigungen" hitPolicy="FIRST">
+      <input id="in_itemId" label="itemId"><inputExpression id="ie_itemId" typeRef="string"><text>itemId</text></inputExpression></input>
+      <output id="out_bekannt" label="bekannt" name="bekannt" typeRef="boolean"/>
+      <output id="out_gruppeCn" label="gruppeCn" name="gruppeCn" typeRef="string"/>
+      <output id="out_gruppeDn" label="gruppeDn" name="gruppeDn" typeRef="string"/>
+      <output id="out_bezeichnung" label="bezeichnung" name="bezeichnung" typeRef="string"/>
+      <output id="out_maxTage" label="maxTage" name="maxTage" typeRef="number"/>
+      <rule id="r1">
+        <description>Fileshare Finanzen, lesen</description>
+        <inputEntry id="r1_i0"><text>"ad-recht-fileshare-finanzen-lesen"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>true</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"SG-FIN-Fileshare-Finanzen-Lesen"</text></outputEntry>
+        <outputEntry id="r1_o2"><text>"CN=SG-FIN-Fileshare-Finanzen-Lesen,OU=Berechtigungen,OU=Gruppen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r1_o3"><text>"Fileshare Finanzen: lesen"</text></outputEntry>
+        <outputEntry id="r1_o4"><text>365</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Fileshare Finanzen, ändern (schliesst lesen aus: excludes-Kante im Katalog)</description>
+        <inputEntry id="r2_i0"><text>"ad-recht-fileshare-finanzen-aendern"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>true</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"SG-FIN-Fileshare-Finanzen-Aendern"</text></outputEntry>
+        <outputEntry id="r2_o2"><text>"CN=SG-FIN-Fileshare-Finanzen-Aendern,OU=Berechtigungen,OU=Gruppen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r2_o3"><text>"Fileshare Finanzen: ändern"</text></outputEntry>
+        <outputEntry id="r2_o4"><text>365</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Applikation CRM, Benutzerrolle</description>
+        <inputEntry id="r3_i0"><text>"ad-recht-applikation-crm"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"SG-APP-CRM-Benutzer"</text></outputEntry>
+        <outputEntry id="r3_o2"><text>"CN=SG-APP-CRM-Benutzer,OU=Berechtigungen,OU=Gruppen,DC=contoso,DC=local"</text></outputEntry>
+        <outputEntry id="r3_o3"><text>"Applikation CRM"</text></outputEntry>
+        <outputEntry id="r3_o4"><text>365</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Auffangregel: ein Produkt ohne Zeile ist unbekannt (fail-closed)</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>false</text></outputEntry>
+        <outputEntry id="r4_o1"><text>null</text></outputEntry>
+        <outputEntry id="r4_o2"><text>null</text></outputEntry>
+        <outputEntry id="r4_o3"><text>null</text></outputEntry>
+        <outputEntry id="r4_o4"><text>null</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>
