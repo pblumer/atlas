@@ -212,9 +212,9 @@ func (s *Server) handleStartLine(w http.ResponseWriter, r *http.Request) {
 			opErr = err
 			return
 		}
-		next, err := order.Apply(cur, position, order.StatusRunning, s.now())
-		if err != nil {
-			return // settled meanwhile — the report outran this; nothing to mark
+		next, changed, err := order.MarkStarted(cur, position, s.now())
+		if err != nil || !changed {
+			return // the report outran this start: the line says more than running already
 		}
 		opErr = s.orderStore.Save(next)
 	})

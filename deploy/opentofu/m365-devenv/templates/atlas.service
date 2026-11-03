@@ -1,0 +1,27 @@
+[Unit]
+Description=Atlas BPMN workflow engine (M365 development environment)
+Documentation=https://github.com/pblumer/atlas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atlas
+Group=atlas
+ExecStart=/usr/local/bin/atlas serve --addr 127.0.0.1:8080 --data-dir /var/lib/atlas --auth
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+EnvironmentFile=-/etc/atlas/atlas.env
+
+# As docs/install.md, plus a writable HOME for PowerShell (Teams Phone worker),
+# which the supervised workers inherit.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/atlas
+
+[Install]
+WantedBy=multi-user.target

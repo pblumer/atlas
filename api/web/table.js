@@ -93,19 +93,51 @@ export function enhanceTable(table, opts = {}) {
   // A filter row under the header, one text input per filterable column. The inputs
   // live in the (view-owned-but-stable) header, so their values survive a tbody
   // refresh; the helper re-applies them whenever the rows are rebuilt.
+  //
+  // A box with a term carries a small cross at its trailing edge that empties it, and
+  // Escape does the same from the keyboard. The cross sits at the box's end rather than
+  // after the typed text: it stays where the hand learned to find it however long the
+  // term is, and it is not where a click goes to put the caret behind the text. It is
+  // out of the tab order — Escape is the keyboard's way, and a second stop per column
+  // would double the Tab presses across the row.
   const frow = document.createElement("tr");
   frow.className = "dt-filter-row";
   ths.forEach((th, i) => {
     const cell = document.createElement("th");
     cell.className = "dt-filter-cell";
     if (cols[i].filterable) {
+      const column = cols[i].label || t("table.column", { n: i + 1 });
+      const box = document.createElement("span");
+      box.className = "dt-filter-box";
       const inp = document.createElement("input");
       inp.type = "text";
       inp.className = "dt-filter";
       inp.placeholder = t("table.filter");
-      inp.setAttribute("aria-label", t("table.filterBy", { column: cols[i].label || t("table.column", { n: i + 1 }) }));
+      inp.setAttribute("aria-label", t("table.filterBy", { column }));
       inp.addEventListener("input", apply);
-      cell.appendChild(inp);
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "dt-filter-clear";
+      clear.tabIndex = -1;
+      clear.hidden = true;
+      clear.title = t("table.clearFilter");
+      clear.setAttribute("aria-label", t("table.clearFilterOf", { column }));
+      clear.innerHTML = '<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M1 1l6 6M7 1L1 7"/></svg>';
+      const empty = () => { inp.value = ""; apply(); };
+      // Keep the focus in the box through the press, so the caret is still there for
+      // the next term once the old one is gone.
+      clear.addEventListener("mousedown", (e) => e.preventDefault());
+      clear.addEventListener("click", () => { empty(); inp.focus(); });
+      // Escape empties a box that has a term and stops there, so a dialog around the
+      // list does not close on the same press; an empty box lets it through.
+      inp.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || inp.value === "") return;
+        e.preventDefault();
+        e.stopPropagation();
+        empty();
+      });
+      box.append(inp, clear);
+      cell.appendChild(box);
     }
     frow.appendChild(cell);
   });
@@ -158,7 +190,9 @@ export function enhanceTable(table, opts = {}) {
     try {
       const filters = [...frow.cells].map((c) => {
         const inp = c.querySelector(".dt-filter");
-        return inp ? inp.value.trim().toLowerCase() : "";
+        if (!inp) return "";
+        c.querySelector(".dt-filter-clear").hidden = inp.value === "";
+        return inp.value.trim().toLowerCase();
       });
       const active = filters.some(Boolean);
       funnel.classList.toggle("dt-has-filters", active);

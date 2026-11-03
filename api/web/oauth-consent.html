@@ -40,9 +40,25 @@
   button.approve { color:var(--accent-ink); background:var(--accent); border:1px solid var(--accent); }
   button.approve:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
   button.deny { color:var(--text); background:var(--surface); border:1px solid var(--border); }
+  /* A provider's sign-in, drawn like the primary button: it is the way in for
+     somebody who has no password here. */
+  a.sso { display:block; text-align:center; font-weight:600; text-decoration:none; border-radius:7px;
+    padding:10px 18px; margin-top:12px; color:var(--accent-ink); background:var(--accent); border:1px solid var(--accent); }
+  a.sso:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+  .or { text-align:center; margin:12px 0 0; font-size:14px; }
   label { display:block; margin-top:12px; font-size:14px; font-weight:600; }
   input { width:100%; font:inherit; padding:9px 11px; border:1px solid var(--border); border-radius:7px; margin-top:4px; }
   code { font-family:ui-monospace,monospace; font-size:13px; background:var(--bg); padding:1px 5px; border-radius:4px; }
+  /* A connected system is shown by the host its client_id is on, above the name it
+     claims (ADR-0512 §1). */
+  .host { font-size:13px; color:var(--muted); font-family:ui-monospace,monospace; margin:0 0 2px; }
+  fieldset.caps { border:1px solid var(--border); border-radius:8px; margin:16px 0 0; padding:10px 14px 12px; }
+  fieldset.caps legend { font-size:14px; font-weight:600; padding:0 4px; }
+  .cap { margin-top:8px; }
+  .cap label.check, label.check { display:flex; gap:8px; align-items:flex-start; font-weight:400; margin-top:6px; }
+  .cap label.check input, label.check input { width:auto; margin-top:4px; }
+  .cap select { width:100%; font:inherit; margin-top:4px; padding:6px; border:1px solid var(--border); border-radius:7px; }
+  .cap .hint { font-size:13px; }
 </style>
 </head>
 <body>
@@ -105,16 +121,59 @@ function signInFailure(e) {
   }
 }
 
+// consentReturn is this very request, for a federated sign-in to come back to: the
+// path and the query the application built, without the server's own failure
+// marker, so a second attempt that works does not come back saying the first one
+// failed. The server takes it only as /oauth/authorize with its query re-encoded,
+// and the page re-checks every parameter when it loads again (oidcConsentReturn in
+// oidclogin.go, ADR-0510) — so this names the request rather than choosing a
+// destination.
+function consentReturn() {
+  const back = new URLSearchParams(location.search);
+  back.delete("sso");
+  const qs = back.toString();
+  return location.pathname + (qs ? "?" + qs : "");
+}
+
+// offerProviders adds a button per identity provider, the way the Console's sign-in
+// does (app.js, viewLogin): the endpoint is public and answers an empty list where
+// none is configured, which is the ordinary case — so nothing appears unless there
+// is somewhere to go, and a server that cannot answer leaves the password form
+// exactly as it is. Somebody who signs in only through their provider has no
+// password to type here, and without this could never reach the question below.
+async function offerProviders() {
+  let providers = [];
+  try {
+    providers = await api("GET", "/api/v1/auth/providers");
+  } catch { return; /* the password form stands */ }
+  if (!Array.isArray(providers) || providers.length === 0) return;
+  const host = document.getElementById("sso-providers");
+  if (!host) return; // the person moved on before the answer came
+  const back = encodeURIComponent(consentReturn());
+  host.innerHTML = providers.map((p) =>
+    `<a class="sso" href="${esc(p.start)}${String(p.start).includes("?") ? "&amp;" : "?"}returnTo=${back}"` +
+    ` title="Sign in with ${esc(p.name)}">Sign in with ${esc(p.name)}</a>`).join("") +
+    `<p class="muted or">or sign in with a password</p>`;
+  host.hidden = false;
+}
+
 function signIn(ctx) {
   card.innerHTML = `<h1>Sign in to continue</h1>
     <p class="muted"><b>${esc(ctx.clientName)}</b> is asking for access to atlas.
     Sign in to decide.</p>
+    <p class="err" id="sso-error" hidden>Signing in with your identity provider did not
+    work. Try again, or ask an administrator to check the server log.</p>
+    <div id="sso-providers" hidden></div>
     <form id="login">
       <label>Username<input name="username" autocomplete="username" required autofocus /></label>
       <label>Password<input name="password" type="password" autocomplete="current-password" required /></label>
       <p class="err" id="login-error" hidden></p>
       <div class="actions"><button class="approve" type="submit">Sign in</button></div>
     </form>`;
+  // The callback sends a failed federated attempt back here with sso=failed and no
+  // reason; the reason is in the server's audit log, as on the Console's sign-in.
+  if (q.get("sso") === "failed") document.getElementById("sso-error").hidden = false;
+  offerProviders();
   document.getElementById("login").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -124,7 +183,10 @@ function signIn(ctx) {
       await api("POST", "/api/v1/auth/login", {
         username: fd.get("username"), password: fd.get("password"),
       });
-      load(); // back to the same question, now with a session
+      // Back to the same request, now with a session, through the server: a system
+      // whose administrator pre-consented connects the person without the question
+      // (ADR-0512 §3), and every other request comes back to this page.
+      location.reload();
     } catch (ex) {
       err.textContent = signInFailure(ex);
       err.hidden = false;
@@ -132,7 +194,104 @@ function signIn(ctx) {
   });
 }
 
+// heading names the application: for a connected system the host its client_id is on
+// first, because that is what TLS vouched for, and the name it claims under it.
+function heading(ctx, verb) {
+  const host = ctx.clientHost ? `<p class="host">${esc(ctx.clientHost)}</p>` : "";
+  return `${host}<h1>${esc(verb)} ${esc(ctx.clientName)}</h1>`;
+}
+
+// CAPABILITIES says what each capability a system may ask for lets it read
+// (ADR-0512 §2), in the order the server lists them.
+const CAPABILITIES = {
+  diagrams: "Read the deployed processes, their models and the counts of where their instances are.",
+  tasklist: "List the open tasks and read one task — without taking one on or completing it.",
+  events: "Follow the event feed: what happened to tasks, and, without a reach, everything else the feed carries.",
+};
+
+// systemConsent is the consent screen of a system grant: only an administrator
+// decides, choosing which capabilities the system gets, how far each reaches, and
+// whether its people may connect their accounts without being asked.
+function systemConsent(ctx) {
+  const sys = ctx.system || {};
+  if (!sys.mayApprove) {
+    card.innerHTML = `${heading(ctx, "Connect")}
+      <p class="muted">This system is asking to be connected to atlas.</p>
+      <p class="err">Only an administrator can connect a system. Ask one to start the
+      connection from the system.</p>
+      <div class="who">Signed in as <b>${esc(ctx.signedInAs)}</b></div>
+      <div class="actions"><button class="deny" id="deny">Back to the system</button></div>`;
+    document.getElementById("deny").addEventListener("click", () => decideSystem(false));
+    return;
+  }
+  const projects = sys.projects || [];
+  const options = projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name || p.id)}</option>`).join("");
+  const caps = (sys.scopes || []).map((scope) => `<div class="cap" data-cap="${esc(scope)}">
+      <label class="check"><input type="checkbox" name="cap" value="${esc(scope)}" checked />
+        <span><b>${esc(scope)}</b> — ${esc(CAPABILITIES[scope] || "")}</span></label>
+      ${projects.length ? `<select multiple size="${Math.min(4, projects.length)}" aria-label="Reach of ${esc(scope)}">${options}</select>
+      <div class="muted hint">Choose projects to narrow it to them; choose none to let it read all.</div>` : ""}
+    </div>`).join("");
+  const current = sys.current
+    ? `<div class="vouch"><b>This system is already connected</b>, approved by
+       ${esc(sys.current.approvedBy)}. Allowing it again replaces that approval.</div>` : "";
+  card.innerHTML = `${heading(ctx, "Connect")}
+    <p class="muted">This system is asking to read atlas on its own. Choose what it may read.</p>
+    ${current}
+    <fieldset class="caps"><legend>What it may read</legend>${caps}</fieldset>
+    <label class="check"><input type="checkbox" id="preconsent" checked />
+      <span>Let people connect their accounts without asking each of them. Each person
+      still gets a grant of their own, works their own tasks as themselves, and can
+      withdraw it under Connected accounts.</span></label>
+    <p class="muted" style="margin-top:14px">It will be able to do this until it is
+    disconnected under Console → Administration → Connected systems. Access is limited to
+    <code>${esc(ctx.resource)}</code>.</p>
+    <div class="who">Signed in as <b>${esc(ctx.signedInAs)}</b></div>
+    <p class="err" id="sys-error" hidden></p>
+    <div class="actions">
+      <button class="approve" id="approve">Connect</button>
+      <button class="deny" id="deny">Don't connect</button>
+    </div>`;
+  document.getElementById("approve").addEventListener("click", () => {
+    const capabilities = [...card.querySelectorAll(".cap")]
+      .filter((el) => el.querySelector("input[name=cap]").checked)
+      .map((el) => ({
+        scope: el.dataset.cap,
+        projects: [...(el.querySelector("select")?.selectedOptions || [])].map((o) => o.value),
+      }));
+    if (!capabilities.length) {
+      const err = document.getElementById("sys-error");
+      err.textContent = "Choose at least one thing the system may read, or don't connect it.";
+      err.hidden = false;
+      return;
+    }
+    decideSystem(true, capabilities, document.getElementById("preconsent").checked);
+  });
+  document.getElementById("deny").addEventListener("click", () => decideSystem(false));
+}
+
+async function decideSystem(approve, capabilities, preconsent) {
+  for (const b of card.querySelectorAll("button")) b.disabled = true;
+  try {
+    const out = await api("POST", "/api/v1/oauth/authorize", {
+      clientId: q.get("client_id"),
+      redirectUri: q.get("redirect_uri"),
+      state: q.get("state") || "",
+      codeChallenge: q.get("code_challenge"),
+      resource: q.get("resource"),
+      scope: q.get("scope") || "",
+      capabilities,
+      preconsent: !!preconsent,
+      approve,
+    });
+    location.href = out.redirect;
+  } catch (e) {
+    fatal(e.message || "the decision could not be recorded");
+  }
+}
+
 function consent(ctx) {
+  if (ctx.system) return systemConsent(ctx);
   const resource = String(ctx.resource || "");
   // What each resource reaches, in the order isCanonicalResource names them: the
   // transport, a person's tasks (ADR-0510 §3), and
@@ -154,7 +313,7 @@ function consent(ctx) {
        entered it or checked it, and the name above is the one it chose. Approve it
        only if you started this yourself and recognise what you started.</div>`
     : "";
-  card.innerHTML = `<h1>Authorize ${esc(ctx.clientName)}</h1>
+  card.innerHTML = `${heading(ctx, "Authorize")}
     <p class="muted">This application is asking to act as you in atlas.</p>
     ${vouch}
     <ul class="reach">${reach.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>

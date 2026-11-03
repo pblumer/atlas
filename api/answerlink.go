@@ -341,6 +341,11 @@ func (s *Server) handlePublicAnswerComplete(w http.ResponseWriter, r *http.Reque
 	if refuseDirectoryFieldInPublic(w, schema) {
 		return
 	}
+	// A list whose options come from a decision was shown with them written in
+	// (publicStepOf); what comes back is held to it, as at every public in-edge (ADR-0511).
+	if s.refuseDecisionValues(w, r, schema, body) {
+		return
+	}
 	if err := s.encipherJobVars(taskKey, vars); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

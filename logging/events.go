@@ -117,6 +117,16 @@ var (
 	// later can see whose word it was taken on (ADR-0448).
 	ServerTrustedProxies = newEvent("server.trusted_proxies")
 	DataDirOpened        = newEvent("server.data_dir_opened")
+	// MIHistoryRebuilt is the multi-instance history index of a store that
+	// predates it, rebuilt at startup by replaying the whole log (ADR-0517);
+	// MIHistoryUnavailable is the same index left unavailable, with the reason
+	// (a compacted log, a log that ends early, or a failed rebuild).
+	MIHistoryRebuilt     = newEvent("server.mi_history_rebuilt")
+	MIHistoryUnavailable = newEvent("server.mi_history_unavailable")
+	// HubRegistryKeysPinned names, at startup, the fingerprints of the atlas hub
+	// registry keys the operator pinned (ADR-0499). One key is INFO; two are a
+	// WARN, because two are meant only for the length of a key rotation.
+	HubRegistryKeysPinned = newEvent("hub.registry_keys_pinned")
 	// AuthDisabled is a server started with --auth=false: no login is required for
 	// anything. It is a WARN and it is loud because it is now the deliberate
 	// exception rather than the default — the one line that says this instance is
@@ -211,6 +221,14 @@ var (
 	// A setting that widens what an unauthenticated caller may do is one nobody
 	// should be able to inherit without being told (ADR-0200).
 	AuthOAuthRegistrationOpen = newEvent("auth.oauth_registration_open")
+	// A connected system (ADR-0512): an administrator approved a system grant for the
+	// first time, approved one again or changed it, or the grant ended — withdrawn in
+	// the Console, given back by the system, or ended with its approver's administrator
+	// role. Each carries the approver, the capabilities and their reach, because "what
+	// could that system read, and since when" is the question an audit of it asks.
+	SystemConnect    = newEvent("system.connect")
+	SystemChange     = newEvent("system.change")
+	SystemDisconnect = newEvent("system.disconnect")
 	// Worker ownership (ADR-0205). Who may reach a worker's configuration —
 	// its endpoint, its credential reference and its inbound subscriptions — is now
 	// somebody's decision rather than everybody's, so the decision is recorded.
@@ -586,6 +604,10 @@ var (
 	// ApprovalAnswered is an approver answering, or withdrawing an answer to, an
 	// approval of an action.
 	ApprovalAnswered = newEvent("authz.approval_answered")
+	// ReportNamesRead is somebody reading a report that names people: a line
+	// manager's team report or a customer responsible's organisation report
+	// (ADR-0515).
+	ReportNamesRead = newEvent("audit.report_names_read")
 )
 
 // The FEEL assistant (ADR-0445).

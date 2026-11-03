@@ -473,6 +473,7 @@ type timelineStep struct {
 	Iteration          int    `json:"iteration,omitempty"`
 	Position           uint64 `json:"position"`
 	TokenID            uint64 `json:"tokenId,omitempty"`
+	ParentTokenID      uint64 `json:"parentTokenId,omitempty"` // durable lineage for exact MI body grouping
 	ElementInstanceKey uint64 `json:"elementInstanceKey,omitempty"`
 	SourceElementID    string `json:"sourceElementId,omitempty"`
 	Action             string `json:"action,omitempty"`
@@ -2776,7 +2777,7 @@ func (s *Server) handleInstanceTimeline(w http.ResponseWriter, r *http.Request) 
 				Action:    "activate",
 			}
 			if rv, ok := activations[sr.pos]; ok {
-				step.TokenID, step.ElementInstanceKey = rv.TokenID, rv.ElementInstanceKey
+				step.TokenID, step.ParentTokenID, step.ElementInstanceKey = rv.TokenID, rv.ParentTokenID, rv.ElementInstanceKey
 				step.Inputs = inputsByEIK[rv.ElementInstanceKey]
 				step.Iteration = iterationByEIK[rv.ElementInstanceKey]
 				// A step a person forced carries its attribution (ADR-0159).
@@ -4946,8 +4947,12 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// scan — so a small embedded client (the order-to-cash demo, which asks only for
 	// its own instance's task) always finds it, even when a flood has pushed that
 	// task past the global page cap.
+	// A credential that states a reach of projects lists the tasks of those projects'
+	// processes and no others, on every one of the paths below (ADR-0512 §2).
+	inReach := s.taskProjectFilter(r)
+
 	if v := strings.TrimSpace(q.Get("processInstance")); v != "" {
-		s.listTasksForInstance(w, taskfolder.Viewer(r), v, limit)
+		s.listTasksForInstance(w, taskfolder.Viewer(r), v, limit, inReach)
 		return
 	}
 
@@ -4970,7 +4975,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// and that walk grows with the open-task population, unlike the capped page
 	// below.
 	if id := folderQuery(r); id != "" {
-		s.listTasksForFolder(w, r, id, limit, before)
+		s.listTasksForFolder(w, r, id, limit, before, inReach)
 		return
 	}
 
@@ -4981,8 +4986,8 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	// scope and the form that allows them, which is disk work the writer must not
 	// wait on. Operators and administrators keep the loop-bound page below for the
 	// plain rows.
-	if viewer := taskfolder.Viewer(r); wantsTaskContent(r) || (s.authEnabled && !viewer.SeesAll) {
-		s.listVisibleTasks(w, viewer, limit, before, wantsTaskContent(r))
+	if viewer := taskfolder.Viewer(r); wantsTaskContent(r) || (s.authEnabled && !viewer.SeesAll) || inReach != nil {
+		s.listVisibleTasks(w, viewer, limit, before, wantsTaskContent(r), inReach)
 		return
 	}
 
@@ -5035,7 +5040,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 // than the global activatable scan. This keeps a client that only cares about its
 // own instance — the order-to-cash demo — working under a flood that has pushed that
 // instance's task past the global /tasks page cap.
-func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.User, raw string, limit int) {
+func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.User, raw string, limit int, inReach func(uint64) bool) {
 	instKey, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "invalid processInstance (want an instance key)")
@@ -5063,7 +5068,7 @@ func (s *Server) listTasksForInstance(w http.ResponseWriter, viewer taskfolder.U
 			if jv.JobType != compiler.UserTaskJobTypeIndex || jv.Retries <= 0 {
 				return nil
 			}
-			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, tr) {
+			if tr := s.enrichTask(jobKey, jv); s.taskVisibleTo(viewer, tr) && taskInReach(inReach, tr) {
 				tasks = append(tasks, tr)
 			}
 			return nil
@@ -5169,9 +5174,14 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	viewer := taskfolder.Viewer(r)
+	reach := taskReachOf(r)
+	// A connected system is told a task that ended from one it may not see
+	// (ADR-0512 §2); every other caller is answered as before.
+	_, isSystem := s.systemGrantOf(r)
 	var (
 		task  taskResp
 		found bool
+		ended *taskEnded
 		opErr error
 	)
 	s.do(func() {
@@ -5184,11 +5194,14 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		// jobs are addressable here; anything else (a service-task job) is treated as
 		// absent so this stays the inbox's read side, not a generic job peek.
 		if !ok || jv.JobType != compiler.UserTaskJobTypeIndex {
+			if !ok && isSystem {
+				ended, opErr = s.endedTaskFor(viewer, reach, key)
+			}
 			return
 		}
 		// A task the viewer may not see answers exactly as an absent one does: the
-		// by-key read must not be a way round the list's filter.
-		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, tr) {
+		// by-key read must not be a way round the list's filter — nor a reach's.
+		if tr := s.enrichTask(key, jv); s.taskVisibleTo(viewer, tr) && s.inProjectsOnLoop(reach, tr.ProcessDefKey) {
 			found = true
 			task = tr
 		}
@@ -5196,6 +5209,8 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case opErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "get task: "+opErr.Error())
+	case ended != nil:
+		httpapi.JSON(w, http.StatusGone, ended)
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:

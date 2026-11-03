@@ -390,6 +390,34 @@ one apply-time exclusion from the counter, and (e) a disarm scan when a scope co
   `ElementInstanceKey` and self-retire on "element gone"); a root-scope trigger has no
   element at the PI key.
 
+## Amendment — the disarm scan becomes a scope index (2026-11-02, Issue #1494)
+
+The "disarm scan at scope completion" accepted above walked every live element
+instance of the process instance. A parallel multi-instance subprocess completes
+one scope per iteration while the others are still alive, so completing N
+iterations cost O(N²) reads on the single writer: 250 iterations took 0.23 s,
+500 took 1.5 s, 1,000 took 41 s, and 50,000 did not finish within ten minutes.
+
+Armed triggers are now also indexed under the scope they are armed in
+(`cfScopeTrigger`, `scopeTrig:<scopeKey>:<triggerElKey>`). The index is written
+and dropped with the trigger's own record in `Tx.PutElementInstance` /
+`Tx.DeleteElementInstance`, so `applyToState` maintains it live and on recovery
+alike (I4); a migration re-put keeps the trigger's scope and type and rewrites
+the same entry. `disarmEventSubprocesses`, `findErrorEventSub`,
+`findEscalationEventSub` and `triggerArmed` read the scope's prefix instead of
+the walk, check each record against the same conditions the walk applied, and
+visit triggers in the same key order, so the events they emit are unchanged.
+
+The index is a function of the live element instances alone, so a store that
+armed triggers before it existed is seeded once at open from those records, in
+one synced batch with its marker (`scope_trigger_index_v1`), like the
+element-token index; no history and no readiness fallback are needed.
+
+Measured after the change (4-vCPU container, engine harness): 1,000 iterations
+in 0.5 s, 8,000 in 4.2 s, 50,000 in 76 s. What remains grows with the store
+rather than with the iteration count squared: point reads of absent keys
+(`TokenEntering`) and compaction.
+
 ## Links
 
 - builds directly on ADR-0040 (boundary events — arm a waiting trigger, fire to Completing,

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="defs_mfe1_safety_inspection" targetNamespace="http://atlas/examples/mfe">
+<process id="proc_mfe1_safety_inspection" name="Sicherheitskontrolle vor Ort" isExecutable="true">
+<startEvent id="start" name="Kontrolle beauftragt"><outgoing>flow_to_inspection</outgoing></startEvent>
+<userTask id="inspect" name="Sicherheitskontrolle durchführen"><extensionElements><zeebe:formDefinition formId="mfe1-safety-inspection"/></extensionElements><incoming>flow_to_inspection</incoming><outgoing>flow_to_result</outgoing></userTask>
+<exclusiveGateway id="gateway_result" name="Ohne Befund?" default="flow_finding"><incoming>flow_to_result</incoming><outgoing>flow_passed</outgoing><outgoing>flow_finding</outgoing></exclusiveGateway>
+<endEvent id="end_passed" name="Kontrolle bestanden"><incoming>flow_passed</incoming></endEvent>
+<endEvent id="end_finding" name="Befund erfasst"><incoming>flow_finding</incoming></endEvent>
+<sequenceFlow id="flow_to_inspection" sourceRef="start" targetRef="inspect"/>
+<sequenceFlow id="flow_to_result" sourceRef="inspect" targetRef="gateway_result"/>
+<sequenceFlow id="flow_passed" sourceRef="gateway_result" targetRef="end_passed"><conditionExpression>= safetyCheckResult = "ok"</conditionExpression></sequenceFlow>
+<sequenceFlow id="flow_finding" sourceRef="gateway_result" targetRef="end_finding"/>
+</process>
+<bpmndi:BPMNDiagram id="diagram"><bpmndi:BPMNPlane id="plane" bpmnElement="proc_mfe1_safety_inspection">
+<bpmndi:BPMNShape id="s1" bpmnElement="start"><dc:Bounds x="160" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s2" bpmnElement="inspect"><dc:Bounds x="260" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s3" bpmnElement="gateway_result" isMarkerVisible="true"><dc:Bounds x="440" y="115" width="50" height="50"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s4" bpmnElement="end_passed"><dc:Bounds x="590" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNShape id="s5" bpmnElement="end_finding"><dc:Bounds x="590" y="240" width="36" height="36"/></bpmndi:BPMNShape>
+<bpmndi:BPMNEdge id="e1" bpmnElement="flow_to_inspection"><di:waypoint x="196" y="140"/><di:waypoint x="260" y="140"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e2" bpmnElement="flow_to_result"><di:waypoint x="360" y="140"/><di:waypoint x="440" y="140"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e3" bpmnElement="flow_passed"><di:waypoint x="490" y="140"/><di:waypoint x="590" y="140"/></bpmndi:BPMNEdge>
+<bpmndi:BPMNEdge id="e4" bpmnElement="flow_finding"><di:waypoint x="465" y="165"/><di:waypoint x="465" y="258"/><di:waypoint x="590" y="258"/></bpmndi:BPMNEdge>
+</bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</definitions>

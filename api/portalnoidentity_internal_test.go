@@ -72,8 +72,17 @@ func TestWhetherAnOrderIsPossibleIsTheServersRuleMirrored(t *testing.T) {
 // cost the catalogue. Before this, one 400 from a per-person list threw out of
 // load() and the page showed an error instead of the shop.
 func TestAMissingPerAccountListDoesNotTakeThePageDown(t *testing.T) {
-	body := webRegion(t, readWeb(t, "shop.js"), "async function load(", "\n}")
-	for _, route := range []string{"/api/v1/inventory", "/api/v1/shop/favourites"} {
+	// The load reads each list in a function of its own, beside the other reads.
+	src := readWeb(t, "shop.js")
+	load := webRegion(t, src, "async function load(", "\n}")
+	for route, reader := range map[string]string{
+		"/api/v1/inventory": "loadHeld", "/api/v1/shop/favourites": "loadFavourites",
+	} {
+		if !strings.Contains(load, reader+"()") {
+			t.Errorf("load() no longer reads %s through %s", route, reader)
+			continue
+		}
+		body := webRegion(t, src, "async function "+reader+"(", "\n}")
 		i := strings.Index(body, route)
 		if i < 0 {
 			t.Errorf("load() no longer reads %s", route)

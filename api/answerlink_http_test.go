@@ -378,3 +378,38 @@ func TestEachRunOfAnEventSubprocessMailsTheLinkOfItsOwnTask(t *testing.T) {
 		t.Errorf("the link of the answered BF-2: %d, want 404", code)
 	}
 }
+
+// TestAnAnswerIsHeldToTheListADecisionOffers: a field of the task's form whose options
+// come from a decision (ADR-0511) is shown with them written in, and what the link holder
+// submits on it is held to that list, as on every other public form.
+func TestAnAnswerIsHeldToTheListADecisionOffers(t *testing.T) {
+	ts, admin, _ := answerLinkServer(t, api.WithExternalURL("https://atlas.example.ch"))
+	if code, body := cReqBytes(t, admin, ts, "POST", "/api/v1/decision-deployments",
+		[]byte(stammdatenDMN(`"Rom"`, `"Paris"`)), "application/xml"); code != http.StatusOK {
+		t.Fatalf("deploy decision: %d %s", code, body)
+	}
+	if code, body := cReq(t, admin, ts, "POST", "/api/v1/forms", `{"id":"al-approve","name":"Freigabe","schema":{"type":"default","components":[
+  {"type":"checkbox","key":"freigegeben","label":"Ich gebe die Reparatur frei"},
+  {"type":"select","key":"werkstatt","label":"Werkstatt","atlasDecision":{"version":1,"decisionId":"Kostenstellen"}}]}}`); code != http.StatusOK {
+		t.Fatalf("save form: %d (%s)", code, body)
+	}
+	token := answerTokenFrom(t, ts, admin)
+
+	code, body := anon(t, ts, "GET", "/public/answer/task", token, "")
+	var got answerStep
+	if code != http.StatusOK || json.Unmarshal(body, &got) != nil || got.Step == nil {
+		t.Fatalf("open the link: %d (%s)", code, body)
+	}
+	if strings.Contains(string(got.Step.Schema), "atlasDecision") || !strings.Contains(string(got.Step.Schema), `"label":"Paris"`) {
+		t.Fatalf("the task was not shown with the options written in: %s", got.Step.Schema)
+	}
+	path := fmt.Sprintf("/public/answer/task/%d/complete", got.Step.TaskKey)
+	if code, body := anon(t, ts, "POST", path, token, `{"variables":{"freigegeben":true,"werkstatt":"Berlin"}}`); code != http.StatusBadRequest || !strings.Contains(string(body), "invalid_value") {
+		t.Fatalf("a value the list does not offer: %d (%s), want 400 invalid_value", code, body)
+	}
+	code, body = anon(t, ts, "POST", path, token, `{"variables":{"freigegeben":true,"werkstatt":"Paris"}}`)
+	var done answerStep
+	if code != http.StatusOK || json.Unmarshal(body, &done) != nil || done.State != "done" {
+		t.Fatalf("answer with a value the list offers: %d (%s)", code, body)
+	}
+}

@@ -27,6 +27,46 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
 
 ## What's covered
 
+- **`mi-history.spec.mjs`** ([OHS1](../docs/planning/operations-history-at-scale-program.md)):
+  Operations instance replay groups the iterations of one multi-instance body by
+  default, expands them on demand and still selects an exact iteration. The grouping
+  uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
+  accidentally merged. A small instance keeps this classic replay and opens the
+  Multi-Instance Explorer from the grouped row.
+- **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
+  [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
+  iterations opens without requesting `/timeline`, shows its loop as one collapsed group
+  with the server's counts, and the explorer pages iterations (never more than one page
+  of rows in the DOM), jumps to iteration 37,421 by asking the server for that position,
+  sends state and incident filters to the server, supports keyboard selection, retries a
+  failed page and stays within a narrow screen. The bounded view lists the instance's own steps
+  from the outline route around the collapsed loop, and says so when no outline is available. One
+  iteration's steps replay on the diagram (visited and active markers, previous/next, play to the end,
+  a second page of steps, a fresh start for another iteration) and an unavailable replay window is
+  explained. Each step shows the iteration's variables as they stood then, read once per step position,
+  and a failed read is shown as an error at its step. The harness computes each page from the
+  iteration number, as the server's index does, instead of holding 50,000 rows.
+
+- **`building-blocks.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the catalogue app's Building blocks page offers the sources the server names, shows each wiki
+  page with the products using it, turns an unused page into a draft product bound to it, says
+  when no source is configured, and writes product ids as product ids are written.
+
+- **`shop-reports.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the shop draws a My team tab only for a line manager and an Organisation tab only for a customer
+  responsible; each reads its report, names the people with what they hold and their positions,
+  says that every reading is recorded, and asks for and exports a chosen period.
+
+- **`delivery-report.spec.mjs`** and **`service-level-body.spec.mjs`**
+  ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
+  the product manager's Delivery and SLA card draws four tiles and a row per product from the
+  delivery report, fills the period the server chose, asks for and exports a chosen period, and
+  says when the report cannot be read; the product editor sends no service level for empty boxes,
+  a typed one as typed (a half-filled one for the publish to refuse), and keeps names in languages
+  the catalogue does not declare.
+
 - **`blueprint-marketplace.spec.mjs`** ([ADR-0499](../docs/adr/0499-blueprint-registry-and-distribution.md)):
   the atlas hub Console displays only an operator-pinned signed index, safely escapes remote text,
   previews the application's included product catalogues and their offered products,
@@ -144,6 +184,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): a
+  terminate end **ends its enclosing scope** — inside a subprocess it takes the message
+  catch waiting beside it along and completes the subprocess, so the outer token continues
+  while a branch outside the subprocess keeps waiting; at the process level it leaves no
+  token behind.
 - **`playground.spec.mjs`** ([ADR-0215](../docs/adr/0215-modeler-playground.md)):
   the **Playground tab** — a mode rather than a level of detail, so it takes the control
   strip and a side panel and gives the properties panel's width back to the diagram;
@@ -438,6 +483,14 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   product's information, each an inline SVG with no glyph beside it and a name for screen
   readers; their stroke is the shop's accent and follows a catalogue theme's.
 
+- **`shop-loading.spec.mjs`**: the shop **while it loads**, against a catalogue route
+  that answers only when the test lets it. It says "Loading the shop …", and not that
+  no catalogue is assigned, until the first load has finished, on the catalogue and on
+  *My services*; "No catalogue is assigned to you" appears only after a 404; a 500 is a
+  failure with a retry. And the reads that do not need the catalogue — orders, open
+  tasks, inventory, favourites, directory — are all asked for while it is still
+  unanswered; only its releases wait for it.
+
 - **`shop-reorder-parts.spec.mjs`** ([ADR-0312](../docs/adr/0312-portal-catalogue-order-inventory.md), amended 2026-10-28):
   **what a held bundle lacks is offered again**, against a stubbed API in which the
   iPhone is held, its hardware given back and its case never taken. In the catalogue the
@@ -519,6 +572,37 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   preview search made-up people and ask no directory, while the canvas shows the field without
   searching; and a directory field saved as a textfield is converted into a select on request.
   `worker-test.spec.mjs` covers the Worker dialog's **Forms may search** switch.
+- **`form-decision-options.spec.mjs`**
+  ([ADR-0511](../docs/adr/0511-form-options-from-a-decision.md)):
+  a field whose options come from a deployed decision. In the form editor, Decision (DMN) is an
+  Options source ▸ Type of the select, radio group, checklist and tag list; choosing it names the
+  first decision the server offers, the panel picks another and shows what it answers now, the
+  canvas shows the list, and Save sends the block instead of options; a stored decision the
+  server does not offer is named as such with the reason it cannot answer; back to static
+  options drops the block. Rendered through the console's own loader, each field shows its
+  decision's list — each decision asked once per form — and submits the value chosen; a
+  prefilled value stays while the list offers it and goes when it does not; a decision that
+  cannot answer says the choices could not be loaded, in the form's language; and the field
+  says it is loading while the list is on its way. A decision's input is bound to the field
+  of the same name or fixed in the panel, which says what a bound field waits for; rendered,
+  a choice in one field decides what the next one offers, a change clears what no longer
+  fits, and the request names only the bound field's value. The options routes are answered
+  by `page.route`.
+- **`dmn-list-editor.spec.mjs`**
+  ([ADR-0511](../docs/adr/0511-form-options-from-a-decision.md)):
+  the decision editor's boxed list (`vendor/dmn/src/atlas/`) against the real DMN bundle — a list
+  decision opens in its own tab as its entries, under a hint that says what a list is and a
+  header without the fork's "Expression type"; entries are added, moved and removed, Ctrl+Z and
+  Ctrl+Y take a removal back and forth, and the model saved holds the list as shown; the replace
+  menu turns a decision table into a list, keeping its id and its requirements and the overlay
+  that opens it, and does not offer List to a list; and a decision's tab opens it as it now is
+  after the replace menu changed its kind.
+- **`dmn-table-rows.spec.mjs`**:
+  the height of a decision table's rules against the real DMN bundle — a rule is as tall as its
+  longest entry, annotated or not, because the Console's `.empty` placeholder and its `tbody td`
+  padding are held off the dmn-js table (dmn-js flags an unset annotation `empty` itself); the
+  rule number keeps dmn-js's own padding; and the Console's own placeholders and tables keep
+  theirs.
 
 - **`user-presence.spec.mjs`** ([ADR-0228](../docs/adr/0228-user-presence.md)):
   **who is signed in**, in the Users card under Organization. The column must render the
@@ -912,3 +996,126 @@ The fixture needs hand-authored BPMN-DI — bpmn-js renders nothing without it.
 
 The `e2e` job in `.github/workflows/ci.yml` runs this suite on every push and PR, in
 parallel with the Go `check` job.
+
+## MFE0 mobile browser matrix
+
+`tasks-responsive.spec.mjs` now includes a Chromium regression matrix for
+Tasks and Process Start at **320, 360, 390, 600, 768, 1024 and 1280 CSS px**,
+including initial list, selected task/start detail, the ADR-0417 860px pane
+contract and horizontal page overflow. One additional scenario resizes a
+selected Tasks detail from portrait (390×844) to landscape (844×390) and
+back. The same test mocks the API but renders the production web assets.
+
+The additional `form-refusal.spec.mjs` MFE0 browser scenarios exercise **real
+vendored form-js fields**, not placeholder cards: a required-field refusal at
+320px without sending a command, preservation of typed data while crossing the
+ADR-0417 breakpoint, and preservation of a Process Start form across
+portrait/landscape resizing. They also assert the document does not overflow
+horizontally at the measured small sizes.
+
+Further MFE0 regressions exercise a grouped, several-field form-js schema
+(with a required text field, select, date field and a long-label text area)
+inside the actual Tasks and Process Start screens at narrow phone widths.
+The checks cover visible, labelled controls, required-field refusal without
+an outgoing completion command, no document overflow, and preservation of
+select/text values across phone-to-tablet resizing. This covers a **grouped**
+layout, not a proof that any form-js multi-column renderer fits small screens.
+
+Two-column form-js regression tests exercise a full 8+8 row on the
+16-unit Carbon grid in Tasks and Process Start. At 320px the inputs stack without page overflow; at 1024px
+the vendored form-js <=66rem grid breakpoint also stacks the task inputs. At
+1600px the authored row is retained, but it stacks when the Tasks detail pane
+itself is narrowed below 560px (without shrinking the viewport). Typed values
+survive a 320px → 1024px → 1600px → narrow pane → 320px resize without
+remounting the form.
+
+These tests **do not** validate every complex multi-column form-js schema, text zoom,
+iOS Safari/Android Chrome, physical touch, camera selection, virtual-keyboard
+focus or foldable hinges. They are a *browser regression baseline*, not
+evidence that MFE0's real-device exit gate is complete. Record the remaining
+checks and actual device runs in [MFE0's evidence plan](../docs/planning/mfe0-device-and-contract-baseline.md)
+and [issue #1451](https://github.com/pblumer/atlas/issues/1451).
+
+## MFE1 mobile work destinations (ADR-0514)
+
+`mfe1-mobile-entry.spec.mjs` covers the first bounded MFE1 navigation slice on
+the real Console/Tasks production DOM: a 320px operator can switch between
+My tasks and Start process via equally sized, 44px-minimum direct destinations,
+with the correct current-page semantics; a `user`-only worker is **not**
+offered operator-only Start (ADR-0209); an `operator` without the `user` role is not offered a task inbox shortcut; a selected phone task hides the
+list-level navigation to avoid losing a partially entered form; desktop retains
+the existing top bar without duplicated controls; auth-disabled mode follows
+existing open-server navigation. The normal HTTP task/start routes remain the
+server-side authority.
+
+This is **not** proof that ordinary `user` principals can start processes:
+they cannot under ADR-0209. Scoped self-service process starts need a separate
+decision ([MFE1 issue #1467](https://github.com/pblumer/atlas/issues/1467)).
+Real-device MFE0 checks, screen-reader/zoom evidence, field inspection BPMN,
+and final MFE1 task completion/confirmation journeys are still outstanding.
+
+## MFE1 mobile task completion receipt
+
+`mfe1-mobile-completion.spec.mjs` adds five browser regressions against the
+**real Tasks DOM and vendored form-js**, using a **mocked** safety inspection
+task. At 320–390 CSS px, the UI keeps the editing form in place on validation
+refusal, a server-side 403 and while an HTTP completion command is pending;
+a second Ctrl/Enter during the pending command does not duplicate the POST.
+Only a successful HTTP response provides a dismissible, accessible
+`role=status` receipt naming the completed task. On mobile, completion
+returns to the inbox rather than instantly selecting another task; desktop
+retains the existing auto-advance behaviour. Any wizard continuation still
+takes precedence.
+
+These are **not** real-device tests, a persistently queryable receipt, an
+offline retry protocol, or an end-to-end deployed BPMN safety-inspection
+process. Unknown/lost responses remain failures to confirm and must not be
+reported as successful. Recording those outcomes safely is an MFE5 design
+gate. Device/zoom/accessibility acceptance stays open under MFE0 issue #1451.
+
+## MFE1 compact phone work menu and foreground polling
+
+`mfe1-mobile-work-shell.spec.mjs` is a regression for the first real iPhone
+Safari feedback: a phone shows the app identity and a single **More** menu,
+not a clipped desktop navigation bar with six utility controls. The menu
+reuses role-filtered app destinations; a task-only user never gains the
+operator's Start or Incidents links. One permitted mobile destination no
+longer duplicates the page name in a 44px-tall strip. Desktop navigation is
+unchanged (also covered by `console-menu.spec.mjs`).
+
+While the tab is visible, read-only task and (for operators) incident status
+queries run every ten seconds. Changing task snapshots refresh the inbox only
+when no task, form or bulk selection is active, and the menu shows counts
+without interpreting them as alarm acknowledgements. Polling pauses in hidden
+tabs and refreshes on return; API failures are not an empty inbox. Tests
+include new tasks, incident counts and open-task preservation using a
+controlled clock, on the production DOM with mocked HTTP responses.
+
+The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+`mfe1-self-start.spec.mjs` ([ADR-0516](../docs/adr/0516-scoped-authenticated-process-start.md))
+holds the task user's Start view against a mocked server: Start is offered only when
+`GET /api/v1/me/startable-processes` lists something, a process is picked by name and
+application, its start form is filled and sent once (the POST body is checked), and the
+answer is said — started with its reference, refused values with the data kept, a grant
+revoked while the form is open, a replaced version, an expired session, a double tap that
+sends one start, and a broken connection whose outcome is unknown. It runs at 320, 390 and
+768px and on desktop, and checks that an operator keeps the operator Start view. What the
+server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
+acceptance either.
+
+This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
+Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom
+or field conditions. Record those separately under MFE0 issue #1451.
+
+## MFE2 read-only mobile incident triage (ADR-0514)
+
+`mfe2-mobile-triage.spec.mjs` verifies the first actual MFE2 UI slice at
+320/390/768 CSS pixels and unchanged desktop Operations at 1280 px. It
+mocks the real operator-only summary and bounded incident-list contracts;
+non-operators and 401/403/expired sessions must show no incident metadata.
+Cause selection may request only a specifically scoped `limit=10` read-only
+sample. Long incident messages render as text, not HTML. Truncated summaries
+must disclose ungrouped counts. No incident POST, repair, retry or alarm
+acknowledgement may occur. Physical iOS/Android/screen-reader and foldable
+acceptance remains open in MFE0 #1451; these Chromium tests do not replace it.

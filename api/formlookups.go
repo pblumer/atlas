@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
+	"github.com/pblumer/atlas/api/formavailability"
+	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/workerquery"
@@ -155,8 +158,8 @@ func workerForLookup(c connector) formlookup.Worker {
 // formLookupKinds are the Worker Types a Worker's editors may open for form lookups:
 // those a remote data source is offered for.
 func formLookupKind(kind string) bool {
-	for _, p := range formlookup.Providers() {
-		if p.WorkerType == kind {
+	for _, k := range lookupKinds() {
+		if k == kind {
 			return true
 		}
 	}
@@ -169,24 +172,41 @@ func refuseFormLookups(kind string) string {
 		strings.Join(lookupKinds(), ", "), kind)
 }
 
+// lookupKinds are the Worker Types a form can ask through: those a directory field
+// searches (ADR-0473) and those a name field's availability check asks (ADR-0519),
+// each once and in that order.
 func lookupKinds() []string {
 	var out []string
+	add := func(kind string) {
+		if !slices.Contains(out, kind) {
+			out = append(out, kind)
+		}
+	}
 	for _, p := range formlookup.Providers() {
-		out = append(out, p.WorkerType)
+		add(p.WorkerType)
+	}
+	for _, p := range formavailability.Providers() {
+		add(p.WorkerType)
 	}
 	return out
 }
 
 // checkTaskSubmission holds a completion's variables to the task form's directory
-// fields before the processor is told anything. A form without one is not looked at.
-// It answers true when it wrote a refusal.
+// fields, and to the lists of its fields whose options come from a decision
+// (formdecisions.go), before the processor is told anything. A form without either is
+// not looked at. It answers true when it wrote a refusal.
 func (s *Server) checkTaskSubmission(w http.ResponseWriter, r *http.Request, key uint64, body []byte) bool {
 	schema, found, err := s.taskFormSchema(key)
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "read task form: "+err.Error())
 		return true
 	}
-	if !found || !strings.Contains(string(schema), formlookup.DataSourceMember) {
+	if !found {
+		return false
+	}
+	lookups := strings.Contains(string(schema), formlookup.DataSourceMember)
+	decisions := strings.Contains(string(schema), formdecision.Member)
+	if !lookups && !decisions {
 		return false
 	}
 	vars, err := submittedVariables(body)
@@ -194,9 +214,18 @@ func (s *Server) checkTaskSubmission(w http.ResponseWriter, r *http.Request, key
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return true
 	}
-	if refusal := s.formLookup.CheckSubmission(r.Context(), schema, vars); refusal != nil {
-		refusal.Write(w)
-		return true
+	if lookups {
+		if refusal := s.formLookup.CheckSubmission(r.Context(), schema, vars); refusal != nil {
+			refusal.Write(w)
+			return true
+		}
+	}
+	if decisions {
+		known := func() map[string]any { return s.taskVariables(key) }
+		if refusal := s.formDecision.CheckSubmission(r.Context(), schema, vars, known); refusal != nil {
+			refusal.Write(w)
+			return true
+		}
 	}
 	return false
 }

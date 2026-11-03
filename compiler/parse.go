@@ -2934,6 +2934,14 @@ type xmlShopTask struct {
 	Order          string `xml:"order,attr"`
 	Position       string `xml:"position,attr"`
 	ResultVariable string `xml:"resultVariable,attr"`
+	// Catalog, Recipient and Answers belong to mode `order`
+	// (ADR-0520): the catalogue ordered from (a literal), the
+	// recipient's account id and the answers to the products' forms (each a literal
+	// or an =expression). Product names the product ordered, ResultVariable receives
+	// the order's id.
+	Catalog   string `xml:"catalog,attr"`
+	Recipient string `xml:"recipient,attr"`
+	Answers   string `xml:"answers,attr"`
 	// Retries is the task's own retry budget (ADR-0135); blank means the default.
 	Retries string `xml:"retries,attr"`
 }

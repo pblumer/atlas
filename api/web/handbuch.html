@@ -942,6 +942,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <code>examples/reisebuchung/reisepflichten.dmn</code> (Reisepflichten).</p>
       <p data-l="en">Examples in the repository: <code>examples/pruefung/notenschluessel.dmn</code> (grading scale),
         <code>examples/reisebuchung/reisepflichten.dmn</code> (travel requirements).</p>
+
+      <div id="dmn-liste" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Eine Entscheidung als Liste</h3><h3 data-l="en">A decision as a list</h3>
+      <p data-l="de">Nicht jede Entscheidung ist eine Tabelle. Eine <b>Liste</b> (in DMN die «Boxed List») besteht aus
+        Einträgen, und jeder Eintrag ist ein FEEL-Ausdruck. Das Ergebnis der Entscheidung ist die Liste ihrer Werte, in
+        der Reihenfolge der Einträge. So pflegst du Stammdaten wie Kostenstellen, Länder oder Abwesenheitsarten an
+        einer Stelle, versioniert und deployt wie jede andere Entscheidung. Ein Eintrag wie
+        <code>{value: "CC100", label: "Einkauf"}</code> ist eine Option mit Wert und Bezeichnung, ein Eintrag wie
+        <code>"CH"</code> ist beides zugleich.</p>
+      <p data-l="en">Not every decision is a table. A <b>list</b> (in DMN, the boxed list) is made of entries, and each
+        entry is a FEEL expression. The decision's result is the list of their values, in the order of the entries.
+        This is where reference data such as cost centres, countries or kinds of leave is kept in one place, versioned
+        and deployed like any other decision. An entry such as <code>{value: "CC100", label: "Purchasing"}</code> is an
+        option with a value and a label; an entry such as <code>"CH"</code> is both at once.</p>
+      <p data-l="de">Im DRG wählst du an der Entscheidung das Schraubenschlüssel-Symbol und dann <b>Liste</b>. Die
+        Entscheidung behält dabei ihre ID und ihre Anforderungen. Ihr Reiter zeigt die Einträge untereinander:
+        <b>Eintrag hinzufügen</b> hängt einen an, die Pfeile verschieben ihn, das Kreuz entfernt ihn, und
+        <kbd>Ctrl</kbd>+<kbd>Z</kbd> nimmt jeden Schritt zurück. Eine Liste kann einem Auswahlfeld eines Formulars seine
+        Optionen geben – siehe <a href="#optionen-aus-entscheidung">Optionen aus einer
+        Entscheidung</a>.</p>
+      <p data-l="en">In the DRG, choose the wrench on the decision and then <b>List</b>. The decision keeps its id and its
+        requirements. Its tab shows the entries one below the other: <b>Add entry</b> appends one, the arrows move it,
+        the cross removes it, and <kbd>Ctrl</kbd>+<kbd>Z</kbd> takes each step back. A list can give a form's choice field its options – see <a href="#optionen-aus-entscheidung">Options from a decision</a>.</p>
     </section>
 
     <!-- ==================== FEEL ==================== -->
@@ -1052,6 +1075,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <h2 data-l="de">Rezepte</h2><h2 data-l="en">Recipes</h2>
       <p class="lead" data-l="de">Fertige Bausteine für die wichtigsten BPMN-Muster. Jedes Rezept zeigt dir zuerst das <b>Diagramm</b> — du kannst es mit einem Klick <b>ausprobieren</b> (atlas deployt und startet es in dieser Instanz) oder <b>im Modeler öffnen</b> und umbauen. Das XML dahinter ist eingeklappt: du brauchst es nur, wenn du Modelle von Hand bearbeitest.</p>
       <p class="lead" data-l="en">Ready-made building blocks for the essential BPMN patterns. Every recipe leads with its <b>diagram</b> — <b>try it</b> in one click (atlas deploys and starts it in this instance) or <b>open it in the Modeler</b> and rebuild it. The XML behind it is collapsed: you only need it if you edit models by hand.</p>
+      <p class="muted" data-l="de">«Im Modeler öffnen» legt den Entwurf in deiner Application <b>atlas-samples</b> ab (wird bei Bedarf angelegt), nicht unter den ungruppierten Entwürfen. «Ausprobieren» deployt und startet den Prozess unabhängig davon.</p>
+      <p class="muted" data-l="en">“Open in the Modeler” saves the draft in your <b>atlas-samples</b> application (created when needed), not among ungrouped drafts. “Try it” still deploys and starts the process separately.</p>
       <h3 class="rz-group"><span data-l="de">Automatisieren</span><span data-l="en">Automate</span></h3>
       <div class="recipe" id="rz-script-value" data-proc="recipe-script-value">
         <h4><span class="rz-emoji" aria-hidden="true">🧮</span>
@@ -2218,16 +2243,18 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">45</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">46</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">45</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">46</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
         one-person business to a corporate directory with 50,000 accounts.</p>
+      <p class="muted" data-l="de">«Im Modeler öffnen» speichert nur einen Entwurf in <b>atlas-samples</b>. «Installieren» erstellt dagegen die vollständige Beispiel-Applikation mit ihren Abhängigkeiten.</p>
+      <p class="muted" data-l="en">“Open in the Modeler” only saves a draft in <b>atlas-samples</b>. “Install” creates the complete example application with its dependencies instead.</p>
 
       <div class="note">
         <span class="lbl" data-l="de">Wie dieses Kapitel zu den anderen steht</span><span class="lbl" data-l="en">How this chapter relates to the others</span>
@@ -5606,27 +5633,39 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <div>
             <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
             <p data-l="de">Was eine IT-Abteilung mit Microsoft 365 anbietet, als Shop: Lizenz mit Postfach, Teams-Telefonie,
-              Teams, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, Anrufwarteschlangen und
-              Telefonzentralen, in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
+              Teams, Communities in Viva Engage, Funktionspostfächer, Verteiler, Zugriff auf ein Postfach, Sitzungszimmer, buchbare Geräte,
+              Anrufwarteschlangen, Telefonzentralen und die Aufbewahrung eines Postfachs (Litigation Hold), in zwei Katalogen für Mitarbeitende und für die Verantwortlichen der Kommunikation.
               Dazu zwei öffentliche Formulare: Externe beantragen einen Partnerzugang oder melden sich bei einem
-              Verteiler an und ab.</p>
+              Verteiler an und ab. Und ein Eintritt aus dem HR-System: Meldet es eine neue Person, legt ein Prozess
+              ihr Konto in Entra ID an, wartet auf ihr Atlas-Konto und bestellt in seinem eigenen Namen das
+              Eintrittspaket mit Lizenz und den Mitgliedschaften ihrer Organisationseinheit; beim Austritt gibt er es
+              zurück.</p>
             <p data-l="en">What an IT department offers with Microsoft 365, as a shop: licence with mailbox, Teams
-              telephony, teams, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, call queues
-              and auto attendants, in two catalogues for staff and for the people in charge of communication. Plus two
-              public forms: externals request partner access, or subscribe to and leave a distribution list.</p>
+              telephony, teams, Viva Engage communities, shared mailboxes, distribution lists, access to a mailbox, meeting rooms, bookable
+              equipment, call queues, auto attendants and a litigation hold on a mailbox, in two catalogues for staff and for the people in charge of communication. Plus two
+              public forms: externals request partner access, or subscribe to and leave a distribution list. And a
+              joiner from the HR system: when it reports a new person, a process creates their account in Entra ID,
+              waits for their Atlas account and orders the joiner package with the licence and their organisational
+              unit's memberships in its own name; when they leave, it returns it.</p>
           </div>
           <div>
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
-            <p data-l="de">Fünfzehn Prozesse über die Worker-Typen Entra, Exchange und Teams Phone, fünf
-              Entscheidungstabellen und 21 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
-              zu, die Abwesenheitsnotiz am selben Produkt setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
-              <code>ucc_exchange</code> und <code>ucc_teams</code>. Lizenz, Team, Funktionspostfach und Postfachzugriff
-              genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
+            <p data-l="de">Dreiundzwanzig Prozesse über die Worker-Typen Entra, Exchange, SharePoint und Teams Phone,
+              acht Entscheidungstabellen und 50 Formulare. Ein Produkt darf mehrere Worker verwenden: Die Lizenz weist Entra
+              zu, Abwesenheitsnotiz, Kontingent, Weiterleitung, Mailadressen und Kalenderstellvertretung am selben Produkt
+              setzt Exchange. Die Worker heissen <code>ucc_entra</code>,
+              <code>ucc_exchange</code>, <code>ucc_sharepoint</code> und <code>ucc_teams</code>; wer Lizenzen über AD-Gruppen
+              vergibt (Konstante <code>LIZENZ_MODUS</code>), zusätzlich <code>ad_verzeichnis</code>. Das Bestellformular der
+              SharePoint-Teamwebsite prüft schon während der Eingabe, ob die URL noch frei ist. Lizenz, Team, SharePoint-Teamwebsite, Community,
+              Funktionspostfach und Postfachzugriff genehmigt die vorgesetzte Person der Person, für die bestellt wird: ein eigener Genehmigungsprozess liest
               sie mit <code>get-user-manager</code> über den Worker <code>ucc_entra</code> aus Entra ID.</p>
-            <p data-l="en">Fifteen processes over the Entra, Exchange and Teams Phone Worker Types, five decision tables
-              and 21 forms. One product may use several Workers: Entra assigns the licence, Exchange sets the automatic
-              reply on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code> and
-              <code>ucc_teams</code>. Licence, team, shared mailbox and mailbox access are approved by the line manager
+            <p data-l="en">Twenty-three processes over the Entra, Exchange, SharePoint and Teams Phone Worker Types, eight
+              decision tables and 50 forms. One product may use several Workers: Entra assigns the licence, and Exchange sets the
+              automatic reply, the quota, forwarding, e-mail addresses and calendar delegates on the same product. The Workers are called <code>ucc_entra</code>, <code>ucc_exchange</code>,
+              <code>ucc_sharepoint</code> and <code>ucc_teams</code>; an installation that licenses through AD groups
+              (constant <code>LIZENZ_MODUS</code>) also uses <code>ad_verzeichnis</code>. The SharePoint team site's order form checks
+              while the URL is typed whether it is still free. Licence, team, SharePoint team site, community, shared mailbox and mailbox access
+              are approved by the line manager
               of the person they are ordered for: an approval process of its own reads the manager from Entra ID with
               <code>get-user-manager</code> through the <code>ucc_entra</code> Worker.</p>
           </div>
@@ -5646,13 +5685,62 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           needs information security's approval as well, depending on the access type, and ends after a year.</p>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die fünf Entscheidungsmodelle
+        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die acht Entscheidungsmodelle
           hochgeladen sind; die Schritte, die Antworten auf die Fragen des Katalogs und die Konstanten der Applikation
           stehen in <code>examples/m365-dienste/README.md</code>. Die öffentlichen Links erzeugst du danach bewusst
           selbst.</p>
-        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the five decision models are uploaded; the
+        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the eight decision models are uploaded; the
           steps, the answers to the catalogue's questions and the application's constants are in
           <code>examples/m365-dienste/README.md</code>. You create the public links yourself afterwards, deliberately.</p>
+      </div>
+      <div class="bsp" id="bsp-ad-dienste">
+        <h4><span class="rz-emoji" aria-hidden="true">🗄️</span>
+          <span data-l="de">Active-Directory-Dienste: Gruppen, Berechtigungen und Konten als Shop</span><span data-l="en">Active Directory services: groups, permissions and accounts as a shop</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag">Active Directory</span>
+          <span class="tag" data-l="de">Befristung</span><span class="tag" data-l="en">time limit</span>
+          <span class="tag" data-l="de">Namensregel</span><span class="tag" data-l="en">naming rule</span>
+          <span class="tag">examples/ad-dienste/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Was eine Informatik im Active Directory anbietet, als Shop: Sicherheitsgruppen mit einer
+              verantwortlichen Person, Berechtigungen auf Fileshares und Applikationen, persönliche Admin-Konten,
+              Servicekonten, Testkonten, Konten für externe Personen und die Versetzung in eine andere
+              Organisationseinheit. Über eine Berechtigung entscheidet, wer die Gruppe verantwortet; Admin-Konten
+              genehmigt die Informationssicherheit. Berechtigungen und Konten sind befristet und enden von selbst.</p>
+            <p data-l="en">What an IT department offers in Active Directory, as a shop: security groups with a responsible
+              person, permissions on file shares and applications, personal admin accounts, service accounts, test
+              accounts, accounts for external people, and the transfer to another organisational unit. A permission is
+              decided by whoever is responsible for the group; information security approves admin accounts.
+              Permissions and accounts are time-limited and end by themselves.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Acht Prozesse über den Worker-Typ AD (Worker <code>ad_verzeichnis</code>), drei
+              Entscheidungstabellen und elf Formulare. Alle Berechtigungen teilen einen Lebenszyklus: Die Tabelle
+              <code>AdBerechtigungen</code> sagt, welche Gruppe ein Produkt meint. Jedes angelegte Objekt trägt im
+              Attribut <code>info</code> eine Herkunftskennzeichnung, über die Rückgabe und Aktionen es finden. Ein
+              LDAP-Filter enthält nie einen Freitext, nur geprüfte Kennungen und Namen aus der Namensregel.</p>
+            <p data-l="en">Eight processes over the AD Worker Type (Worker <code>ad_verzeichnis</code>), three decision
+              tables and eleven forms. All permissions share one lifecycle: the table <code>AdBerechtigungen</code> says
+              which group a product means. Every object created carries a provenance tag in its <code>info</code>
+              attribute, by which returns and actions find it. An LDAP filter never contains free text, only checked
+              logon names and names from the naming rule.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es mit <code>atlas import</code></b>, nachdem die drei Entscheidungsmodelle
+          hochgeladen sind; die Schritte, die Antworten auf die Fragen des Katalogs, die Konstanten der Applikation und
+          die Rechte, die das Dienstkonto des Workers im Verzeichnis braucht, stehen in
+          <code>examples/ad-dienste/README.md</code>.</p>
+        <p data-l="en"><b>It installs with <code>atlas import</code></b> once the three decision models are uploaded; the
+          steps, the answers to the catalogue's questions, the application's constants and the rights the Worker's
+          service account needs in the directory are in <code>examples/ad-dienste/README.md</code>.</p>
       </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
@@ -6086,6 +6174,62 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         a form. Departments are fixed choices, because Microsoft Graph has no query for every department in use. In the
         editor and its preview the field searches made-up example data, never the real directory. An example is
         <a href="#bsp-entra-benutzerauswahl">Pick a person</a>.</p>
+
+      <div id="optionen-aus-entscheidung" style="scroll-margin-top:66px"></div>
+      <h4 data-l="de">Optionen aus einer Entscheidung</h4><h4 data-l="en">Options from a decision</h4>
+      <p data-l="de">Eine Auswahlliste, eine Optionsgruppe, eine Checkbox-Gruppe oder eine Tag-Liste kann ihre Optionen
+        aus einer <b>deployten Entscheidung</b> beziehen – meist einer <a href="#dmn-liste">Liste</a>, die
+        die zuständige Stelle im Entscheidungseditor pflegt. Im Formular-Editor wählst du beim Feld unter
+        <b>Options source ▸ Type</b> die Quelle <b>Decision (DMN)</b> und darunter die Entscheidung. <b>Options now</b>
+        zeigt, was sie im Moment ergibt. Das Formular enthält keine Kopie der Liste: Jedes Mal, wenn jemand das Formular
+        öffnet, wertet der Server die neueste deployte Version aus. Eine neue Version erreicht damit das nächste Formular,
+        ohne dass du das Formular anfasst.</p>
+      <p data-l="en">A select, a radio group, a checkbox group or a tag list can take its options from a <b>deployed
+        decision</b> – usually a <a href="#dmn-liste">list</a> the people responsible for it keep in the
+        decision editor. In the form editor, choose <b>Decision (DMN)</b> under the field's <b>Options source ▸ Type</b>
+        and the decision below it. <b>Options now</b> shows what it answers at the moment. The form holds no copy of the
+        list: each time somebody opens the form, the server evaluates the newest deployed version. A new version
+        reaches the next form without your touching the form.</p>
+      <p data-l="de"><b>Eine Wahl steuert die nächste Liste.</b> Hat die Entscheidung Eingaben, ordnest du unter
+        <b>Options source</b> jeder Eingabe ein anderes Feld des Formulars zu oder gibst ihr einen festen Wert. Heisst
+        ein Feld so wie die Eingabe, ist es schon zugeordnet. Wählt die Person dann zum Beispiel eine Gruppe, zeigt das
+        nächste Feld die Mitglieder dieser Gruppe; wählt sie eine andere Gruppe, erscheinen deren Mitglieder, und eine
+        vorher getroffene Wahl, die nicht mehr passt, wird zurückgesetzt. Solange das zugeordnete Feld leer ist, bietet
+        das Feld nichts an. Innerhalb einer dynamischen Liste gilt das Zeile für Zeile. Bietet das zugeordnete Feld
+        selbst feste Optionen an, nimmt der Server nur diese als Eingabe an – über das Formular lässt sich die
+        Entscheidung also nicht zu Werten befragen, die es gar nicht anbietet. Ist das zugeordnete Feld ein freies
+        Textfeld, kann jede Person, die das Formular ausfüllt, jeden beliebigen Wert eingeben.</p>
+      <p data-l="en"><b>One choice decides the next list.</b> If the decision has inputs, you give each of them another
+        field of the form under <b>Options source</b>, or a fixed value. A field named like the input is given it
+        already. When the person then chooses a group, say, the next field shows the members of that group; when they
+        choose another group, its members appear, and a choice made before that no longer fits is cleared. While the
+        given field is empty, the field offers nothing. Inside a dynamic list this holds row by row. If the given field
+        offers fixed options itself, the server accepts only those as the input – so the form cannot be used to ask the
+        decision about values it does not offer. If it is a free text field, anybody filling in the form can enter any
+        value there.</p>
+      <p data-l="de"><b>Was geprüft wird.</b> Bevor eine Aufgabe abgeschlossen wird, und bevor ein öffentlicher Link
+        oder ein öffentlicher Wizard-Schritt weiterläuft, prüft der Server, ob der gewählte Wert in der Liste steht, die
+        die Entscheidung jetzt für die mitgesendete Wahl ergibt – etwa für die Gruppe, die im selben Formular gewählt
+        wurde. Ist er nicht mehr darin, wird nichts abgeschlossen; die Person öffnet das Formular
+        neu und sieht die aktuelle Liste. Öffentliche Seiten bekommen feste Listen direkt ins Formular geschrieben;
+        abhängige Listen fragen über den Link nach.</p>
+      <p data-l="en"><b>What is checked.</b> Before a task is completed, and before a public link or a public wizard step
+        continues, the server checks that the chosen value is in the list the decision answers now for the choice sent with it – the group
+        chosen in the same form, for instance. If it no longer is,
+        nothing is completed; the person opens the form again and sees the current list. Public pages receive fixed lists written into the form;
+        dependent lists ask through the link.</p>
+      <p data-l="de"><b>Grenzen.</b> Die Entscheidung muss als eigene Entscheidung deployt sein, und jede ihrer Eingaben braucht ein
+        Feld oder einen festen Wert; eine nur mit einem Prozess mitgelieferte Entscheidung wird nicht angeboten. Was eine Person gesehen hat,
+        wird nicht gespeichert, nur der gewählte Wert. Muss ein Prozess festhalten, welche Optionen angeboten wurden,
+        oder hängt die Liste vom Fall ab, setzt du eine Business-Rule-Task vor die Aufgabe und liest die Optionen mit
+        <b>Input data</b> aus ihrer Variable. Wird die Entscheidung gelöscht, meldet das Feld, dass seine Auswahl nicht
+        geladen werden konnte.</p>
+      <p data-l="en"><b>Limits.</b> The decision must be deployed as a decision of its own, and each of its inputs needs a field or a
+        fixed value; a decision
+        only bundled with a process is not offered. What a person saw is not stored, only the value chosen. If a process
+        must record which options were offered, or the list depends on the case, put a business rule task before the
+        task and read the options from its variable with <b>Input data</b>. If the decision is deleted, the field says
+        its choices could not be loaded.</p>
 
       <div id="wizards" style="scroll-margin-top:66px"></div>
       <h4 data-l="de">Mehrstufige Formulare (Wizards)</h4><h4 data-l="en">Multi-step forms (wizards)</h4>
@@ -7011,14 +7155,20 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             beobachtender Delta-Sync)? Dann die <code>*.Read.All</code>-Varianten.
             <b>Entferne <code>Directory.ReadWrite.All</code>, falls vorhanden</b> – das ist der
             Alles-lesen-und-schreiben-Grant, den dieser Worker nie braucht. Teams-Operationen und Rollenzuweisung sind
-            opt-in.</li>
+            opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
+            Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
+            <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
+            sein).</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
             <code>GroupMember.ReadWrite.All</code> replaces the second. Read-only (a report, an export, an observing
             delta sync)? Then the <code>*.Read.All</code> variants. <b>Remove
             <code>Directory.ReadWrite.All</code> if present</b> – that is the read-and-write-everything grant this
-            worker never needs. Teams operations and role assignment are opt-in.</li>
+            worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
+            (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
+            communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
+            documents that the Engage network must be in native mode for it).</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the
@@ -9785,6 +9935,58 @@ curl -X POST https://atlas-prod.example.com/api/v1/applications/source \
         the count, the message and the worker it hangs on. You repair that worker from the line and clear
         everything behind it with <b>Resolve all</b>; individual rows below can be ticked and resolved
         together. Mind that retrying without fixing the cause parks the same tokens again straight away.</li>
+        <li data-l="de" id="mi-explorer"><b>Grosse Multi-Instance-Ausführungen</b> – im <b>Replay</b> erscheint
+          eine Multi-Instance-Aktivität als <i>eine</i> zugeklappte Zeile je Ausführung, mit den Zahlen, die der
+          Server führt: wie viele Iterationen gestartet, abgeschlossen, abgebrochen und aktiv sind und wie viele
+          Incidents ihnen zugeordnet wurden. <b>Iterationen erkunden</b> öffnet den Multi-Instance-Explorer: Er
+          zeigt immer nur eine Seite von 100 Iterationen in der Reihenfolge ihrer Nummer (<code>loopCounter</code>),
+          blättert vor und zurück, springt direkt zu einer Nummer wie 37421, filtert nach Zustand und zeigt auf
+          Wunsch nur Iterationen mit Incidents. Wählst du eine Iteration, siehst du ihre Elementinstanz, ihre
+          Log-Positionen und jeden zugeordneten Incident – <b>offen</b>, <b>behoben</b>, durch einen späteren
+          <b>ersetzt</b> oder <b>ohne Behebung beendet</b>, weil das Element abgebrochen wurde. Dazu kommen die
+          Variablen ihres eigenen Bereichs, so wie sie aufgezeichnet wurden (Nummer, Element der Liste, was die
+          Iteration selbst geschrieben hat), und die DMN-Entscheidungen, die sie ausgewertet hat, mit den
+          Eingaben und dem Ergebnis aus dem Log – nichts davon wird neu berechnet. <b>Technische Details
+          anzeigen</b> ergänzt die Regel-Spur einer Entscheidung. Hat eine
+          Ausführung mehr als 500 Iterationen, lädt das Replay die vollständige schrittweise Historie nicht, weil
+          sie mit der Zahl der Iterationen quadratisch wächst. Du siehst dann das Diagramm und die Schritte der
+          Instanz in ihrer Reihenfolge – Start, Aufgaben, Gateways, Ende –, jede grosse Ausführung als eine
+          zugeklappte Zeile dazwischen, und den Explorer. <b>Diese Iteration wiedergeben</b> im Detail einer
+          Iteration spielt ihre Schritte auf dem Diagramm ab – die bisher durchlaufenen Elemente sind markiert, das
+          aktuelle hervorgehoben –, schrittweise vor und zurück oder mit <b>Abspielen</b>; eine verschachtelte
+          Ausführung ist darin ein Schritt, ihre Iterationen haben eigene Schritte. Unter der Wiedergabe stehen die
+          <b>Variablen bei diesem Schritt</b>: die eigenen Bereiche der Iteration – sie selbst und, was zu diesem
+          Zeitpunkt in ihr lief –, je Variable mit dem letzten Wert bis zu diesem Schritt. Variablen der
+          Multi-Instance-Ausführung und der Instanz sind darin nicht enthalten. Meldet der Explorer, die Historie lasse sich
+          noch nicht sicher vollständig anzeigen, wurde sie aufgezeichnet, bevor es den Index dafür gab – das heisst
+          nicht, dass keine Iterationen gelaufen sind. Dieselben Daten liefern
+          <code>GET /api/v1/instances/{key}/multi-instances</code> und die MCP-Tools
+          <code>atlas_instance_multi_instances</code> und <code>atlas_multi_instance_iterations</code>.</li>
+        <li data-l="en"><b>Large multi-instance executions</b> – in the <b>replay</b>, a multi-instance activity
+          appears as <i>one</i> collapsed row per execution, with the numbers the server keeps: how many iterations
+          were started, completed, terminated and are active, and how many incidents were attributed to them.
+          <b>Explore iterations</b> opens the Multi-Instance Explorer. It always shows a single page of 100
+          iterations in the order of their number (<code>loopCounter</code>), pages forward and back, jumps straight
+          to a number such as 37421, filters by state and, if you ask, shows only iterations that had an incident.
+          Choose an iteration to see its element instance, its log positions and every incident attributed to it –
+          <b>open</b>, <b>resolved</b>, <b>replaced</b> by a later one, or <b>ended without resolution</b> because
+          its element was terminated – together with the variables of its own scope as they were recorded (its
+          number, its list item, what the iteration wrote itself) and the DMN decisions it evaluated, with the
+          inputs and the result taken from the log; none of it is recomputed. <b>Show technical details</b> adds a
+          decision's rule trace. When an execution has more than 500 iterations, the replay does not load the
+          complete step-by-step history, because that grows with the square of the iteration count. You see the
+          diagram and the instance's steps in their order – start, tasks, gateways, end – with each large execution
+          as one collapsed row between them, and the explorer. <b>Replay this iteration</b> in an iteration's
+          detail plays its steps on the diagram – the elements passed so far are marked, the current one
+          highlighted – step by step forward and back or with <b>Play</b>; a nested execution is one step in it,
+          and its iterations have steps of their own. Below the replay, <b>Variables at this step</b> shows the
+          iteration's own scopes – the iteration and whatever ran inside it at that moment – each variable with
+          its latest value up to that step. Variables of the multi-instance execution and of the instance are not
+          included. When the explorer says the history
+          cannot yet be shown as complete, it was recorded before the index for it existed – that does not mean
+          no iterations ran. The same data comes from <code>GET /api/v1/instances/{key}/multi-instances</code> and
+          the MCP tools <code>atlas_instance_multi_instances</code> and
+          <code>atlas_multi_instance_iterations</code>.</li>
         <li data-l="de"><b><a href="/#/operations/decisions">Decisions</a></b> – jede ausgewertete DMN-Entscheidung
           mit Ein- und Ausgaben.</li>
         <li data-l="en"><b><a href="/#/operations/decisions">Decisions</a></b> – every evaluated DMN decision with
@@ -11107,8 +11309,11 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
             <td data-l="en">Starting, cancelling and repairing instances, resolving incidents, workers and the
               outbox – running what is deployed.</td></tr>
           <tr><td><b><code>user</code></b></td>
-            <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen.</td>
-            <td data-l="en">Their own task list: seeing, claiming and completing tasks.</td></tr>
+            <td data-l="de">Die eigene Aufgabenliste: Aufgaben sehen, übernehmen und abschliessen. Dazu die
+              Prozesse starten, die eine Administratorin der Person ausdrücklich freigegeben hat
+              (<a href="#konten-startfreigaben">Startfreigaben</a>).</td>
+            <td data-l="en">Their own task list: seeing, claiming and completing tasks. Plus starting the processes
+              an administrator has explicitly granted them (<a href="#konten-startfreigaben">start grants</a>).</td></tr>
           <tr><td><b><code>productmanager</code></b></td>
             <td data-l="de">Die Kataloge des Shops und die Produkte darin pflegen, an deployte Prozesse binden und
               veröffentlichen – die App <a href="/#/catalog">Catalogue</a>. Bewusst nicht <code>modeler</code>:
@@ -11160,11 +11365,82 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
       <p data-l="de">Eine <b>Gruppe</b> ist eine benannte Menge von Konten. Sie ist die zweite Achse neben den
         Rollen: Rollen sagen, <i>welche Art</i> von Endpunkt jemand erreicht, eine Freigabe an eine Gruppe sagt,
         <i>welches Objekt</i> – ein Projekt oder ein Worker wird einmal mit dem Team geteilt statt Person für
-        Person. Eine Änderung an der Mitgliedschaft wirkt bei der nächsten Anmeldung des Mitglieds.</p>
+        Person. Eine Änderung an der Mitgliedschaft wirkt ab der nächsten Anfrage des Mitglieds; es muss sich
+        dafür nicht neu anmelden.</p>
       <p data-l="en">A <b>group</b> is a named set of accounts. It is the second axis beside roles: a role says
         <i>which kind</i> of endpoint somebody reaches, sharing with a group says <i>which object</i> – a project or
-        a worker is shared with the team once instead of person by person. A membership change takes effect at
-        the member's next sign-in.</p>
+        a worker is shared with the team once instead of person by person. A membership change takes effect from
+        the member's next request; they do not have to sign in again.</p>
+
+      <div id="konten-startfreigaben" style="scroll-margin-top:66px"></div>
+      <h3 data-l="de">Prozesse selbst starten: Startfreigaben</h3><h3 data-l="en">Starting processes yourself: start grants</h3>
+      <p data-l="de">Mit der Rolle <code>user</code> allein startet niemand einen Prozess. Eine <b>Startfreigabe</b>
+        erlaubt bestimmten Konten oder Gruppen, <b>einen</b> Prozess <b>einer</b> Anwendung selbst zu starten – ohne
+        die Rolle <code>operator</code>, die auch Abbrechen und Reparieren erlauben würde. Ohne Freigabe darf niemand
+        starten. Wer eine Anwendung besitzt oder bearbeitet, ihre Aufgaben bearbeitet oder einen Link oder QR-Code
+        zu ihr hat, erhält dadurch keine Freigabe.</p>
+      <p data-l="en">The <code>user</code> role alone starts no process. A <b>start grant</b> lets named accounts or
+        groups start <b>one</b> process of <b>one</b> application themselves – without the <code>operator</code>
+        role, which would also allow cancelling and repairing. Without a grant nobody may start. Owning or editing
+        an application, working its tasks, or holding a link or QR code to it grants nothing.</p>
+      <p data-l="de"><b>Freigeben.</b> Eine Administratorin vergibt Freigaben mit ihrer eigenen Anmeldung; ein
+        API-Token, ein verbundener KI-Assistent oder die Besitzerin einer Anwendung kann es nicht. Die Console hat
+        dafür noch keine eigene Oberfläche, du verwendest die API:</p>
+      <ul data-l="de">
+        <li><code>PUT /api/v1/applications/{id}/start-grants/{processId}</code> mit
+          <code>{"groupIds":["&lt;Gruppen-ID&gt;"],"expectedRevision":0}</code> gibt einer Gruppe frei. Gib IDs an
+          (aus <a href="/#/console/org">Organization</a>), keine Namen. <code>expectedRevision</code> ist die
+          Revision, die du zuletzt gelesen hast – 0 für einen Prozess ohne Freigabe. Hat jemand anderes inzwischen
+          geändert, antwortet der Server mit 409; lies die Freigabe neu und entscheide auf ihrem aktuellen Stand.</li>
+        <li><code>GET …/start-grants/{processId}/preview?userId=&lt;Konto-ID&gt;</code> sagt, ob diese Person den
+          Prozess angeboten bekäme, und wenn nicht, warum: keine Freigabe, Konto deaktiviert, Rolle
+          <code>user</code> fehlt, Prozess deaktiviert oder nicht ausführbar.</li>
+        <li><code>DELETE …/start-grants/{processId}?expectedRevision=&lt;n&gt;</code> entzieht die Freigabe. Jede
+          Prüfung danach verweigert den Start; ein bereits gestarteter Prozess läuft weiter. Entziehen geht auch,
+          wenn die Anwendung oder der Prozess schon gelöscht ist.</li>
+        <li><code>…/history</code> zeigt jede Änderung mit Zeitpunkt und der Administratorin, die sie vorgenommen
+          hat.</li>
+      </ul>
+      <p data-l="en"><b>Granting.</b> An administrator grants from their own sign-in; an API token, a connected AI
+        assistant or an application's owner cannot. The Console has no screen for it yet, so you use the API:</p>
+      <ul data-l="en">
+        <li><code>PUT /api/v1/applications/{id}/start-grants/{processId}</code> with
+          <code>{"groupIds":["&lt;group id&gt;"],"expectedRevision":0}</code> grants a group. Give ids (from
+          <a href="/#/console/org">Organization</a>), not names. <code>expectedRevision</code> is the revision you
+          last read – 0 for a process without a grant. When somebody else changed it meanwhile, the server answers
+          409; read the grant again and decide on its current state.</li>
+        <li><code>GET …/start-grants/{processId}/preview?userId=&lt;account id&gt;</code> says whether this person
+          would be offered the process and, if not, why: no grant, account disabled, <code>user</code> role
+          missing, process deactivated or not executable.</li>
+        <li><code>DELETE …/start-grants/{processId}?expectedRevision=&lt;n&gt;</code> revokes the grant. Every check
+          after that refuses the start; a process already started keeps running. Revoking works even when the
+          application or the process has been deleted.</li>
+        <li><code>…/history</code> lists every change with its time and the administrator who made it.</li>
+      </ul>
+      <p data-l="de"><b>Welche Version gestartet wird.</b> Immer die neueste deployte Version des Prozesses, solange
+        sie zur Anwendung der Freigabe gehört. Eine ältere Version wird nie angeboten und kann auch nicht über ihren
+        Schlüssel gestartet werden. Deployt eine andere Anwendung zuletzt einen Prozess mit derselben ID, gilt die
+        Freigabe für ihn nicht.</p>
+      <p data-l="en"><b>Which version starts.</b> Always the newest deployed version of the process, as long as it
+        belongs to the grant's application. An older version is never offered and cannot be started by its key
+        either. When another application last deployed a process with the same id, the grant does not apply to
+        it.</p>
+      <p data-l="de"><b>Für die Person, die startet.</b> Sobald ihr etwas freigegeben ist, zeigt die App Tasks den
+        Eintrag <b>Prozess starten</b> – am Desktop in der oberen Leiste, am Telefon im Menü. Dort wählt sie den
+        Prozess nach Namen und Anwendung, füllt sein Startformular aus und drückt einmal auf
+        <b>Prozess starten</b>. Der Server prüft Freigabe, Version und Angaben erneut; die Meldung «ist gestartet»
+        mit Referenz erscheint erst, wenn der Start gespeichert ist. Bricht die Verbindung dabei ab, ist offen, ob
+        der Prozess gestartet wurde: Sieh zuerst in deinen Aufgaben nach, bevor du ihn noch einmal startest.</p>
+      <p data-l="en"><b>For the person starting.</b> Once something is granted to them, the Tasks app shows
+        <b>Start process</b> – in the top bar on a desktop, in the menu on a phone. There they pick the process by
+        name and application, fill in its start form and press <b>Start process</b> once. The server checks the
+        grant, the version and the values again; the “has started” message with its reference appears only once
+        the start is saved. If the connection breaks meanwhile, it is unknown whether the process started: look in
+        your tasks first before you start it again.</p>
+      <p data-l="de">Auf einem Server ohne Anmeldung gibt es keine Startfreigaben; dort starten Operatoren wie
+        bisher. Die Einzelheiten stehen in <a href="https://github.com/pblumer/atlas/blob/main/docs/adr/0516-scoped-authenticated-process-start.md">ADR-0516</a>.</p>
+      <p data-l="en">A server without sign-in has no start grants; operators start processes there as before. The
+        details are in <a href="https://github.com/pblumer/atlas/blob/main/docs/adr/0516-scoped-authenticated-process-start.md">ADR-0516</a>.</p>
 
       <h3 data-l="de">Linienvorgesetzte</h3><h3 data-l="en">Line managers</h3>
       <p data-l="de">Ein Konto kann seinen <b>Linienvorgesetzten</b> nennen, als Verweis auf ein anderes Konto. Eine
@@ -11381,6 +11657,106 @@ Get-Content leaf.pem, chain.pem | Set-Content -Encoding ascii C:\Atlas\tls\tls.c
           approvals and can withdraw them.</b> For most people a screen is the only place they will ever do that.
           And because an MCP tool runs with the roles of whoever calls it, an assistant can never do more than the
           person who approved it.</p>
+      </div>
+
+      <h3 id="verbundene-systeme" data-l="de">Ein anderes System verbinden</h3><h3 data-l="en">Connecting another system</h3>
+      <p data-l="de">Ein System wie ein Wiki, das die Prozesse von atlas zeigt und die Aufgaben der Leute
+        spiegelt, verbindest du mit <b>einer Freigabe</b>. Du startest die Verbindung im anderen System; es schickt
+        dich auf den Zustimmungsdialog von atlas. Dort steht zuoberst die <b>Adresse (Host)</b>, unter der das System
+        sich ausweist, darunter der Name, den es sich selbst gibt &ndash; prüfe die Adresse, denn nur für sie bürgt
+        TLS. Danach wählst du, was das System lesen darf: <code>diagrams</code> (Prozesse und ihre Modelle),
+        <code>tasklist</code> (die offenen Aufgaben) und <code>events</code> (was mit den Aufgaben geschieht), je
+        auf alles oder auf einzelne Projekte begrenzt. Freigeben kann das nur, wer die Rolle <code>admin</code>
+        hat. Kein Token, kein Client-Secret und keine Redirect-URI wird von Hand kopiert.</p>
+      <p data-l="en">A system such as a wiki that shows atlas's processes and mirrors people's tasks is connected
+        with <b>one approval</b>. You start the connection in the other system; it sends you to atlas's consent
+        screen. At the top is the <b>address (host)</b> the system identifies itself by, and below it the name it
+        gives itself &ndash; check the address, because it is the only part TLS vouches for. Then you choose what the
+        system may read: <code>diagrams</code> (processes and their models), <code>tasklist</code> (the open tasks)
+        and <code>events</code> (what happens to the tasks), each for everything or narrowed to projects. Only
+        someone with the <code>admin</code> role can approve it. No token, client secret or redirect URI is copied
+        by hand.</p>
+      <p data-l="de">Die Option <b>«Personen verbinden lassen, ohne jede einzeln zu fragen»</b> erspart den Leuten
+        den eigenen Zustimmungsdialog: Wer bei atlas angemeldet ist, wird ohne Rückfrage verbunden. Jede Person
+        erhält trotzdem ihre eigene Freigabe, arbeitet ihre Aufgaben als sie selbst, und atlas entscheidet weiter,
+        wer welche Aufgabe übernehmen und erledigen darf. Unter
+        <a href="/#/console/connections">Verbundene Konten</a> sieht jede Person die Systeme, die für sie
+        freigegeben sind, und kann ihre Verbindung zurückziehen; dann fragt atlas sie wieder.</p>
+      <p data-l="en">The option <b>"Let people connect their accounts without asking each of them"</b> spares
+        people a consent screen of their own: whoever is signed in to atlas is connected without being asked. Each
+        person still gets their own approval, works their tasks as themselves, and atlas keeps deciding who may
+        take on and complete which task. Under <a href="/#/console/connections">Connected accounts</a> each person
+        sees the systems approved for them and can withdraw; atlas then asks them again.</p>
+      <p data-l="de">Unter <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> siehst du jedes System: wer es wann freigegeben hat, was es liest, ob die Vorab-Zustimmung gilt,
+        wie viele Personen verbunden sind und wann es atlas zuletzt verwendet hat. Dort schaltest du die
+        Vorab-Zustimmung aus oder trennst das System, auf Wunsch samt den Freigaben aller Personen. Was ein System
+        liest, änderst du, indem du es vom System aus erneut verbindest; die neue Freigabe ersetzt die alte. Verliert
+        die Person, die freigegeben hat, die Rolle <code>admin</code>, endet die Verbindung, und die Seite sagt
+        warum.</p>
+      <p data-l="en">Under <a href="/#/console/connected-systems">Console&nbsp;→&nbsp;Administration&nbsp;→&nbsp;Connected
+        systems</a> you see each system: who approved it and when, what it reads, whether pre-consent stands, how
+        many people are connected and when it last used atlas. There you turn pre-consent off or disconnect the
+        system, optionally with every person's approval. To change what a system reads, connect it again from the
+        system; the new approval replaces the old one. If the person who approved it loses the
+        <code>admin</code> role, the connection ends, and the page says why.</p>
+      <div class="note">
+        <div class="lbl" data-l="de">Was ein System umsetzt</div><div class="lbl" data-l="en">What a system implements</div>
+        <ol data-l="de">
+          <li><b>Ein Dokument über sich selbst.</b> Das System veröffentlicht unter einer https-Adresse ein
+            JSON-Dokument (OAuth Client ID Metadata Document); diese Adresse ist seine <code>client_id</code>. Es nennt
+            <code>client_id</code> (gleich der Adresse), <code>client_name</code>, <code>redirect_uris</code> auf
+            derselben Herkunft, <code>token_endpoint_auth_method: "private_key_jwt"</code> und unter
+            <code>jwks</code> mindestens einen Ed25519-Schlüssel. atlas liest es höchstens 64&nbsp;KiB gross, wartet
+            höchstens 5 Sekunden, folgt keiner Umleitung und hält es höchstens eine Stunde. Ein Schlüssel wird
+            gewechselt, indem das Dokument geändert wird.</li>
+          <li><b>Die Systemfreigabe.</b> Code-Flow mit PKCE (S256) an <code>/oauth/authorize</code> mit
+            <code>resource=&lt;atlas&gt;/system</code> und <code>scope</code> aus <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (leer heisst alle drei; alles andere wird mit
+            <code>invalid_scope</code> abgelehnt).</li>
+          <li><b>Die Freigabe einer Person.</b> Derselbe Flow mit <code>resource=&lt;atlas&gt;/tasks</code> und ohne
+            <code>scope</code>. Mit <code>prompt=none</code> zeigt atlas nie eine Seite, sondern antwortet
+            <code>login_required</code> (nicht angemeldet) oder <code>consent_required</code> (keine
+            Vorab-Zustimmung oder abgelehnt).</li>
+          <li><b>Der Token-Endpunkt.</b> <code>/oauth/token</code> mit <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> und einem mit EdDSA signierten JWT
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = der Token-Endpunkt,
+            eine einmalige <code>jti</code>, höchstens fünf Minuten gültig). Ein Fehler heisst
+            <code>401 invalid_client</code>; der Grund steht im Revisionsprotokoll.</li>
+          <li><b>Was es liest.</b> <code>GET /api/v1/auth/me</code> sagt unter <code>system</code>, was freigegeben
+            ist. <code>GET /api/v1/tasks/{key}</code> antwortet für eine beendete Aufgabe, die atlas noch kennt,
+            <code>410 Gone</code> mit <code>ended</code> und <code>endedAt</code>, und <code>404</code> für eine
+            ausserhalb der Reichweite.</li>
+          <li><b>Zurückgeben.</b> <code>POST /oauth/revoke</code> mit derselben Anmeldung beendet die ganze
+            Freigabe.</li>
+        </ol>
+        <ol data-l="en">
+          <li><b>A document about itself.</b> The system publishes a JSON document (OAuth Client ID Metadata
+            Document) at an https address; that address is its <code>client_id</code>. It names
+            <code>client_id</code> (equal to the address), <code>client_name</code>, <code>redirect_uris</code> on the
+            same origin, <code>token_endpoint_auth_method: "private_key_jwt"</code> and, under <code>jwks</code>, at
+            least one Ed25519 key. atlas reads at most 64&nbsp;KiB of it, waits at most 5 seconds, follows no redirect
+            and keeps it at most an hour. A key is rotated by changing the document.</li>
+          <li><b>The system grant.</b> The code flow with PKCE (S256) at <code>/oauth/authorize</code> with
+            <code>resource=&lt;atlas&gt;/system</code> and a <code>scope</code> of <code>diagrams</code>,
+            <code>tasklist</code>, <code>events</code> (empty means all three; anything else is refused with
+            <code>invalid_scope</code>).</li>
+          <li><b>A person's grant.</b> The same flow with <code>resource=&lt;atlas&gt;/tasks</code> and no
+            <code>scope</code>. With <code>prompt=none</code> atlas never shows a page and answers
+            <code>login_required</code> (not signed in) or <code>consent_required</code> (no pre-consent, or
+            declined).</li>
+          <li><b>The token endpoint.</b> <code>/oauth/token</code> with <code>client_assertion_type</code>
+            <code>urn:ietf:params:oauth:client-assertion-type:jwt-bearer</code> and a JWT signed with EdDSA
+            (<code>iss</code> = <code>sub</code> = <code>client_id</code>, <code>aud</code> = the token endpoint, a
+            one-time <code>jti</code>, good for five minutes at most). A failure is <code>401 invalid_client</code>;
+            the reason is in the audit log.</li>
+          <li><b>What it reads.</b> <code>GET /api/v1/auth/me</code> says under <code>system</code> what was
+            approved. <code>GET /api/v1/tasks/{key}</code> answers a task that ended while atlas still holds it with
+            <code>410 Gone</code>, <code>ended</code> and <code>endedAt</code>, and one outside its reach with
+            <code>404</code>.</li>
+          <li><b>Giving it back.</b> <code>POST /oauth/revoke</code> with the same client authentication ends the
+            whole grant.</li>
+        </ol>
       </div>
 
       <h3 data-l="de">Zugang für Maschinen: API-Tokens</h3><h3 data-l="en">Access for machines: API tokens</h3>
@@ -13282,7 +13658,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">45</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">45</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">46</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">46</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
@@ -13582,6 +13958,42 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
     return text ? JSON.parse(text) : {};
   }
 
+  // All handbook copy-to-Modeler actions use one design-time application. This
+  // is deliberately separate from installing a complete example application.
+  // Its private scope belongs to the current reader (ADR-0071).
+  async function applicationId(name){
+    const list = await call("GET", "/api/v1/applications");
+    const found = (list || []).find((a) => a.name === name && !a.protected);
+    if (found) return found.id;
+    return (await call("POST", "/api/v1/applications", { name })).id;
+  }
+
+  let samplesApp;
+  function samplesApplicationId(){
+    if (!samplesApp){
+      samplesApp = applicationId("atlas-samples").catch((e) => {
+        samplesApp = null; // a failed attempt must not poison the next click
+        throw e;
+      });
+    }
+    return samplesApp;
+  }
+
+  async function saveHandbookSampleDraft(xml, processId){
+    const appId = await samplesApplicationId();
+    // Draft IDs are installation-global (ADR-0222). POST with projectId can MOVE
+    // an existing draft, so never silently take one out of another application.
+    // An earlier ungrouped handbook draft may be filed into samples on re-open.
+    const drafts = await call("GET", "/api/v1/drafts");
+    const existing = (drafts || []).find((d) => d.processId === processId);
+    if (existing && existing.projectId && existing.projectId !== appId){
+      throw new Error(T("Für diesen Prozess gibt es bereits einen Entwurf in einer anderen Application. Öffne ihn dort, statt ihn zu verschieben.",
+                        "A draft for this process already belongs to another application. Open it there rather than moving it."));
+    }
+    const draft = await call("POST", "/api/v1/drafts?projectId=" + encodeURIComponent(appId), xml, true);
+    return draft.processId || processId;
+  }
+
   // --- bpmn-js loader (same assets the Modeler uses) ---
   const BPMN_CSS = ["vendor/bpmn/assets/diagram-js.css", "vendor/bpmn/assets/bpmn-js.css",
                     "vendor/bpmn/assets/bpmn-font/css/bpmn-embedded.css"];
@@ -13783,8 +14195,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       let xml = xmlOf(card);
       try { xml = await call("POST", "/api/v1/layout", xml, true, true); }
       catch (e) { /* fall back to the raw model rather than not opening at all */ }
-      const d = await call("POST", "/api/v1/drafts", xml, true);
-      const id = d.processId || card.dataset.proc;
+      const id = await saveHandbookSampleDraft(xml, card.dataset.proc);
       setStatus(card, T("✓ Entwurf angelegt — wird geöffnet…", "✓ Draft created — opening…"), "ok");
       window.location.href = "/#/modeler/draft/" + encodeURIComponent(id);
     } catch (e) {
@@ -13833,15 +14244,6 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       b.className = "rz-btn" + (ghost ? " ghost" : "") + " " + cls;
       b.innerHTML = '<span data-l="de">' + de + '</span><span data-l="en">' + en + '</span>';
       return b;
-    }
-
-    // Reuse an application of the same name rather than leaving a second, empty copy
-    // behind — installing an example twice has to be harmless.
-    async function applicationId(name){
-      const list = await call("GET", "/api/v1/applications");
-      const found = (list || []).find((a) => a.name === name && !a.protected);
-      if (found) return found.id;
-      return (await call("POST", "/api/v1/applications", { name })).id;
     }
 
     async function install(ex, card){
@@ -13927,9 +14329,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
           // would hand straight back is a round trip that can only fail.
           try { xml = await call("POST", "/api/v1/layout", xml, true, true); } catch (e) { /* raw model still opens */ }
         }
-        const d = await call("POST", "/api/v1/drafts", xml, true);
+        const id = await saveHandbookSampleDraft(xml, proc.processId);
         setStatus(card, T("✓ Entwurf angelegt — wird geöffnet…", "✓ Draft created — opening…"), "ok");
-        window.location.href = "/#/modeler/draft/" + encodeURIComponent(d.processId || proc.processId);
+        window.location.href = "/#/modeler/draft/" + encodeURIComponent(id);
       } catch (e) {
         // A 401 is "you are not signed in"; a 403 is the server declining with a reason
         // worth reading (a protected artifact, a scope you may not write). Showing the

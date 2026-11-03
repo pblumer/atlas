@@ -1,0 +1,140 @@
+{
+  "id": "mfe",
+  "name": "Mobile & Field Experience",
+  "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-02",
+  "plan": "../../planning/mobile-field-experience-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
+  "next_action": "MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the \"published\" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1.",
+  "slices": [
+    {
+      "id": "MFE0",
+      "title": "Architecture and real-device baseline",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [
+        1451
+      ],
+      "prs": [
+        1448,
+        1449,
+        1452,
+        1453,
+        1454,
+        1455,
+        1458,
+        1460
+      ],
+      "note": "ADR-0514 Accepted; PRs #1448/#1449/#1452/#1453/#1454/#1458/#1460 merged with green CI. PR #1455 adds responsive two-column form-js Tasks/Start layouts with E2E; code is merged, but hardware acceptance remains pending. Physical iOS/Android, 200% zoom, accessible inputs, keyboard, foldable and complex-form evidence remain open in #1451."
+    },
+    {
+      "id": "MFE1",
+      "title": "Mobile Tasks and Process Start",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "MFE0"
+      ],
+      "issues": [
+        1456,
+        1467
+      ],
+      "prs": [
+        1468,
+        1469,
+        1470,
+        1472,
+        1486,
+        1489,
+        1492,
+        1495,
+        1497,
+        1498,
+        1500
+      ],
+      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is merged (PR #1495). POST /api/v1/me/processes/{key}/instances (grant and version re-checked as a guard in the command turn, server-side start-form constraints, reuse of the operator start path, startedBy and WAL-replay recovery test over the safety-inspection example) is merged (PR #1497). The Tasks Start view for task users (offered only with a grant, all outcome states including unknown outcome, 320/390/768px Playwright E2E) completes ADR-0516's slices (merged, PR #1498). The owner decided on 2026-11-02 that \"published\" means the newest deployed version within the application (no release-membership requirement); ADR-0516 records it. A bilingual handbook section for administrators and task users is in PR #1500. MFE1 stays active: the issue #1456 acceptance list still needs real iOS/Android evidence (MFE0 #1451). Existing operator rights are unchanged."
+    },
+    {
+      "id": "MFE2",
+      "title": "Mobile incident triage",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [
+        "MFE0"
+      ],
+      "issues": [
+        1457
+      ],
+      "prs": [
+        1477,
+        1479
+      ],
+      "note": "Owner-approved limited parallel MFE2 UI slice on 2026-11-01 despite active MFE0/MFE1 (explicit three-slice WIP exception). PR #1477 delivered the contract and PR #1479 was merged with green CI for read-only operator mobile grouped incident triage and bounded details. No notification, acknowledgement, repair or new authorization; physical-device acceptance #1451 remains open."
+    },
+    {
+      "id": "MFE3",
+      "title": "Incident alerting and escalation",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Design secure deduplicated durable-fact alerts, acknowledgement/ownership ADR, monitored escalation and fallback without a second notification engine."
+    },
+    {
+      "id": "MFE4",
+      "title": "Field capture and evidence",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Camera, QR/barcode, staged evidence with validated durable references outside process variables and WAL."
+    },
+    {
+      "id": "MFE5",
+      "title": "Offline drafts and synchronization",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE4"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Secure drafts, completion operation IDs, server-side dedup/status checks, conflict handling and restart/replay tests; no premature success display."
+    },
+    {
+      "id": "MFE6",
+      "title": "Optional large-tablet BPMN authoring",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Reuse bpmn-js with adaptive inspection and touch/pen modelling only where real-device validation supports it."
+    },
+    {
+      "id": "MFE7",
+      "title": "Wearable companion and cross-device handoff",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "MFE1",
+        "MFE3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "Proposed watchOS/Wear OS companion proof only after MFE1 authenticated task deep links and MFE3 durable alarm identity/delivery: privacy-safe minimal urgent signal and authenticated handoff to phone, no new task/incident command path. Secure draft continuity depends on MFE5. Watch delivery, authorization and any one-tap action require a separately accepted ADR and actual hardware tests; no watch functionality is shipped."
+    }
+  ]
+}

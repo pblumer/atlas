@@ -9,8 +9,13 @@
 //   remote   the adapter the preview's remote selects search through. A design-time
 //            preview is given made-up entries, never a live directory.
 //   locale   the language the e-mail view speaks ("de" or "en"); German without one.
+//   decisions the answer of GET /api/v1/form-data/decisions: the decisions a field's
+//            options can come from, which the properties panel offers.
+//   decisionOptions the service the canvas, the preview and the panel ask a decision's
+//            list of (viewer.js says what it answers).
 
 import './atlas/remote-source.js';
+import './atlas/decision-source.js';
 
 import { Playground as BasePlayground } from '@bpmn-io/form-js-playground';
 
@@ -25,6 +30,7 @@ export class Playground extends BasePlayground {
       viewerAdditionalModules: [
         AtlasViewerModule,
         ...(atlas.remote ? [ { atlasRemote: [ 'value', atlas.remote ] } ] : []),
+        ...(atlas.decisionOptions ? [ { atlasDecisions: [ 'value', atlas.decisionOptions ] } ] : []),
         ...(atlas.locale ? [ { atlasLocale: [ 'value', atlas.locale ] } ] : []),
         ...viewerAdditionalModules
       ],
@@ -32,6 +38,8 @@ export class Playground extends BasePlayground {
         AtlasViewerModule,
         AtlasEditorModule,
         { atlasRemoteSources: [ 'value', atlas.sources || null ] },
+        { atlasDecisionList: [ 'value', atlas.decisions || null ] },
+        ...(atlas.decisionOptions ? [ { atlasDecisions: [ 'value', atlas.decisionOptions ] } ] : []),
         ...(atlas.locale ? [ { atlasLocale: [ 'value', atlas.locale ] } ] : []),
         ...editorAdditionalModules
       ]

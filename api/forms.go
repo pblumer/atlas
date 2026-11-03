@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pblumer/atlas/api/formavailability"
+	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formlookup"
 	"github.com/pblumer/atlas/api/httpapi"
 )
@@ -90,6 +92,19 @@ func (s *Server) handleSaveForm(w http.ResponseWriter, r *http.Request) {
 	// (ADR-0473). Every other part of the schema stays
 	// form-js's own business.
 	if err := formlookup.Check(payload.Schema); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
+		return
+	}
+	// So is a field whose options come from a decision — what its block says, not
+	// whether the decision is deployed now, which an import may well settle after the
+	// form arrives (ADR-0511).
+	if err := formdecision.Check(payload.Schema); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
+		return
+	}
+	// And a name field's availability check: which sources it asks and where, not
+	// whether those Workers exist yet (ADR-0519).
+	if err := formavailability.CheckSchema(payload.Schema); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, "the form cannot be saved: "+err.Error())
 		return
 	}

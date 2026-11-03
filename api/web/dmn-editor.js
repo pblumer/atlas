@@ -312,7 +312,8 @@ const hintTail = () => tr("dmn.hint.tail");
 // hintFor says what the view on screen is for. dmn-js opens four, and they are not
 // variations on one editor: the requirements graph, a decision's rule table, a
 // decision written as one FEEL expression, and a business knowledge model — a
-// reusable function with its own parameters — are four different things to author.
+// reusable function with its own parameters — are four different things to author;
+// a decision whose logic is a list is a fifth, opened in the knowledge model's view.
 // The hint used to describe the decision table under all of them, which left it
 // wrong on three views out of four, and most wrong on the one whose layout explains
 // itself least: a knowledge model shows `F`, a parameter list and a result variable,
@@ -326,6 +327,12 @@ function hintFor(active) {
     return tr("dmn.hint.literal") + " " + hintTail();
   }
   if (type === "boxedExpression") {
+    // The boxed-expression view opens a knowledge model, and a decision whose logic is
+    // a list (vendor/dmn/src/atlas/modeler.js): two different things to author.
+    const logic = active.element && active.element.decisionLogic;
+    if (logic && logic.$type === "dmn:List") {
+      return tr("dmn.hint.list") + " " + hintTail();
+    }
     return tr("dmn.hint.boxed") + " " + hintTail();
   }
   return tr("dmn.hint.table") + " " + hintTail();
@@ -1310,7 +1317,16 @@ export async function mountDmnEditor(root, { api, toast, refId, draftId, project
         b.type = "button";
         b.className = active && v.id === active.id ? "active" : "";
         b.textContent = viewLabel(v);
-        b.addEventListener("click", () => modeler.open(v).catch(() => {}));
+        // The view is looked up again when the tab is pressed. Changing a decision's
+        // kind in the graph's replace menu — a table into a literal expression or a
+        // list — keeps its id and name, and dmn-js compares views by id, so it reports
+        // no change and this strip is not redrawn: the view captured here would still
+        // open the old kind, over a decision that is no longer in the model.
+        b.addEventListener("click", () => {
+          const now = (modeler.getViews() || []).find((x) => x.id === v.id && x.type === v.type)
+            || (modeler.getViews() || []).find((x) => x.id === v.id) || v;
+          modeler.open(now).catch(() => {});
+        });
         viewsBar.appendChild(b);
       }
       propsPanel.hidden = !(active && active.type === "drd");

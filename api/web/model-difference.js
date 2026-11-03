@@ -85,15 +85,17 @@ export async function mountModelDifference(root, { api, applicationId, applicati
   const planned = diff.planned || [];
   const built = diff.built || [];
 
+  // Each side, and the list of what was never compared, folds under its heading
+  // (fold-topic, fold.js).
   body.innerHTML = `
     <div class="md-cols">
-      <section class="md-col planned">
+      <section class="md-col planned fold-topic" data-fold="planned">
         <h2>Planned, not built <span class="md-count">${planned.length}</span></h2>
         <p class="md-meaning">In the model and in no process. This is the backlog: a decision taken and
           not yet implemented. It is the direction the pair exists for, and it is <b>not</b> a defect.</p>
         ${sideHTML(planned, { empty: "Everything the model plans, the processes build." })}
       </section>
-      <section class="md-col built">
+      <section class="md-col built fold-topic" data-fold="built">
         <h2>Built, not described <span class="md-count">${built.length}</span></h2>
         <p class="md-meaning">In the processes and in no model. Usually that means write it down —
           occasionally it means a process is doing something nobody agreed to, which is the more
@@ -101,8 +103,8 @@ export async function mountModelDifference(root, { api, applicationId, applicati
         ${sideHTML(built, { empty: "Everything the processes build, the model describes." })}
       </section>
     </div>
-    ${(diff.excluded || []).length ? `<div class="md-excluded">
-      <b>What this comparison never looked at</b>
+    ${(diff.excluded || []).length ? `<div class="md-excluded fold-topic" data-fold="excluded">
+      <h2>What this comparison never looked at</h2>
       <p class="muted">Derivation cannot see these, so a difference in them would be a fact about
         derivation rather than about your system — and each would sit on every class for ever. A short
         list above is therefore not a clean bill.</p>

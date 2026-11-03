@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-rueckgabe",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rückgabe des Eintrittspakets prüfen · Check the return of the joiner package**\n\nAuftrag {{orderId}}: Die Mitgliedschaften der Organisationseinheit sind nach zwei Stunden nicht als zurückgegeben gemeldet. In Operations die Rückgabe dieser Position prüfen (Incident, offene Aufgabe «Organisationseinheit klären»). Nach dem Abschluss dieser Aufgabe gibt der Prozess die Lizenz zurück. · Order {{orderId}}: the memberships of the organisational unit have not been reported returned after two hours. Check that position's return in Operations (an incident, an open task). Once this task is completed, the process returns the licence."
+    }
+  ]
+}

@@ -42,12 +42,18 @@ var wantPublicRoutes = []string{
 	"POST /public/forms/{token}/start",
 	"OPTIONS /public/forms/{token}/schema",
 	"OPTIONS /public/forms/{token}/start",
+	// The options of a field of that form whose decision depends on what the visitor
+	// chose in another one (ADR-0511).
+	"POST /public/forms/{token}/fields/{field}/options",
+	"OPTIONS /public/forms/{token}/fields/{field}/options",
 	// A public wizard's later screens, where the pass in the Authorization header is
 	// the whole authorization (ADR-0449). Rate-limited in their handlers.
 	"GET /public/wizard/step",
 	"POST /public/wizard/steps/{taskKey}/complete",
 	"OPTIONS /public/wizard/step",
 	"OPTIONS /public/wizard/steps/{taskKey}/complete",
+	"POST /public/wizard/steps/{taskKey}/fields/{field}/options",
+	"OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options",
 	// A user task answered through the link a mail carries: a static page, and the two
 	// calls it makes, where the signed token in the Authorization header is the whole
 	// authorization and opens one open task (ADR-draft-user-task-answered-by-link).
@@ -65,6 +71,9 @@ var wantPublicRoutes = []string{
 	// A person's tasks as a resource of their own, the same document for the resource
 	// a client asks a tasks grant for (ADR-0510 §3).
 	"GET /.well-known/oauth-protected-resource/tasks",
+	// A connected system's own reading of this server, the document for the
+	// resource an administrator approves a system grant for (ADR-0512 §2).
+	"GET /.well-known/oauth-protected-resource/system",
 
 	// The authorization server (ADR-0200). Its metadata is read before a client
 	// holds anything at all, and its two endpoints have their own reasons:
@@ -72,11 +81,13 @@ var wantPublicRoutes = []string{
 	// person with 401 is answering them with nothing they can act on — the page it
 	// serves shows only what the context endpoint gives it, and asks them to sign in
 	// first. /oauth/token authenticates the client out of its own request body, so a
-	// session would be the wrong question to ask of it. The context endpoint backs
-	// that page for someone not yet signed in.
+	// session would be the wrong question to ask of it, and /oauth/revoke (RFC 7009)
+	// authenticates it the same way to give a grant back (ADR-0510). The context
+	// endpoint backs that page for someone not yet signed in.
 	"GET /.well-known/oauth-authorization-server",
 	"GET /oauth/authorize",
 	"POST /oauth/token",
+	"POST /oauth/revoke",
 	"GET /api/v1/oauth/authorize-context",
 
 	// The shop's former address, answered with a redirect to /shop.html and

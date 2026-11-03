@@ -4,6 +4,19 @@ name: Pages
 # demo opens straight from a github.io URL. The app is self-contained (no build),
 # so the job just assembles a small site directory and deploys it.
 #
+# Beside it, under hub/, the job publishes the atlas hub sample registry: every
+# installable example as a signed Blueprint Registry v1 package (ADR-0499),
+# built by `atlas hub build` from examples/ and examples/hub/releases.json. An
+# installation lists and imports them once its operator sets
+#
+#   ATLAS_BLUEPRINT_REGISTRY_URL=https://<owner>.github.io/<repo>/hub/index.json
+#   ATLAS_BLUEPRINT_REGISTRY_KEY=<the publicKey recorded in examples/hub/releases.json>
+#
+# The private signing key is the repository secret ATLAS_HUB_SIGNING_KEY (what
+# `atlas hub keygen` wrote). Without it the registry is not published and the
+# rest of the site still is; with it, a build whose samples changed without a
+# recorded version fails, so a published version never changes its content.
+#
 # One-time enablement: repo Settings → Pages → Build and deployment → Source:
 # "GitHub Actions". After that this runs on every push to main that touches
 # examples/, and the site is served at https://<owner>.github.io/<repo>/.
@@ -11,7 +24,12 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ['examples/**']
+    paths:
+      - 'examples/**'
+      - 'api/web/examples-catalog.json'
+      - 'api/blueprintregistry/**'
+      - 'cmd/atlas/hub.go'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -33,6 +51,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
       - name: Assemble site
         run: |
           mkdir -p _site
@@ -40,6 +62,21 @@ jobs:
           cp examples/order-to-cash-app.html _site/index.html
           # Ship the BPMN models alongside so they can be linked/downloaded.
           cp examples/*.bpmn _site/ 2>/dev/null || true
+
+      - name: Build the signed atlas hub sample registry
+        env:
+          ATLAS_HUB_SIGNING_KEY: ${{ secrets.ATLAS_HUB_SIGNING_KEY }}
+        run: |
+          if [ -z "$ATLAS_HUB_SIGNING_KEY" ]; then
+            echo "::notice::ATLAS_HUB_SIGNING_KEY is not set; the atlas hub registry is not published"
+            exit 0
+          fi
+          go run ./cmd/atlas hub build _site/hub
+          # An announced key rotation travels beside the index it concerns. Its own
+          # signature, by the current key, is what operators check, not this host.
+          if [ -f examples/hub/key-rotation.json ]; then
+            cp examples/hub/key-rotation.json examples/hub/key-rotation.json.sig _site/hub/
+          fi
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

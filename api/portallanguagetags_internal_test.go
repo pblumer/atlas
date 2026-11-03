@@ -152,13 +152,17 @@ func TestTheChoiceIsSettledOntoALanguageTheCatalogueHas(t *testing.T) {
 		t.Error("the choice is not carried onto the same language in another tag, so " +
 			"a reader on en meeting a catalogue kept in en-EN gets its first language")
 	}
-	// Called once the catalogue is known and before anything is drawn.
-	load := webRegion(t, src, "async function load(", "\n}")
-	if !strings.Contains(load, "settleLocale();") {
+	// Called once the catalogue is known and before anything is drawn: the load
+	// reads the catalogue in loadCatalogue, and that is where the choice is settled.
+	if load := webRegion(t, src, "async function load(", "\n}"); !strings.Contains(load, "loadCatalogue()") {
+		t.Error("the load no longer reads the catalogue through loadCatalogue")
+	}
+	cat := webRegion(t, src, "async function loadCatalogue(", "\n}")
+	if !strings.Contains(cat, "settleLocale();") {
 		t.Error("the choice is never settled, so the switch cannot show the language " +
 			"the page is actually being read in")
 	}
-	if strings.Index(load, "settleLocale();") < strings.Index(load, "state.catalog = await") {
+	if strings.Index(cat, "settleLocale();") < strings.Index(cat, "catalog = await api('/api/v1/shop/catalog')") {
 		t.Error("the choice is settled before the catalogue is read, against a list " +
 			"that is not there yet")
 	}

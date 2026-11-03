@@ -61,6 +61,7 @@ var writesWhileFrozen = map[string]string{
 	"POST /api/v1/auth/logout":   "ending a session gives space back rather than taking it",
 	"POST /api/v1/auth/presence": "held in memory; it writes nothing",
 	"POST " + oauthTokenPath:     "a machine client's access token, as small as a session",
+	"POST " + oauthRevokePath:    "giving a grant back deletes a record; it gives space back rather than taking it",
 	"POST /api/v1/checkpoints":   "a checkpoint followed by WAL compaction is how the server gives log space back",
 	// A job a worker has finished has done its work already. Refusing the report would
 	// not undo it: the lease would run out and the job would run a second time.

@@ -54,6 +54,7 @@ import (
 	"github.com/pblumer/atlas/api/policy"
 	"github.com/pblumer/atlas/api/runloop"
 	"github.com/pblumer/atlas/api/startfavourites"
+	"github.com/pblumer/atlas/api/startgrant"
 	"github.com/pblumer/atlas/api/storage"
 	"github.com/pblumer/atlas/api/taskfolder"
 	"github.com/pblumer/atlas/api/userprefs"
@@ -99,12 +100,16 @@ import (
 	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
+	"github.com/pblumer/atlas/api/formavailability"
+	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/formlookup"
+	"github.com/pblumer/atlas/api/mihistory"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
 	"github.com/pblumer/atlas/api/releasenotes"
+	"github.com/pblumer/atlas/api/servicereport"
 	"github.com/pblumer/atlas/api/token"
 	"github.com/pblumer/atlas/api/vault"
 	"github.com/pblumer/atlas/api/workerquery"
@@ -316,10 +321,12 @@ type Server struct {
 	publicLinks         *publicLinkStore  // durable sidecar for public start links (ADR-0029)
 	publicRate          *rateLimiter      // throttles the unauthenticated public endpoints
 	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
+	tokenRate           *rateLimiter      // throttles the OAuth token and revocation endpoints, on their own budget
 	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
+	startGrants         *startgrant.Store // ADR-0516, run-loop owned; never accessed by engine
 	deployTokenStore    *deployTokenStore // durable sidecar for peer deploy tokens (ADR-0129)
 	deployTokens        *deployTokenIndex // in-memory hash->token index, read on the handler goroutine
 	apiTokenStore       *apiTokenStore    // durable sidecar for machine credentials (ADR-0194)
@@ -350,6 +357,9 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// miHistory serves the bounded multi-instance history (ADR-0517). It reads
+	// only through read views taken off the run loop (miHistoryView).
+	miHistory *mihistory.Service
 	// identity holds linked external accounts and delegated connections and brokers
 	// their credentials; policies is the policy administration point; governed is the
 	// in-memory view of which Workers carry an identity policy, read by the
@@ -371,6 +381,9 @@ type Server struct {
 	// area service on the ADR-0147 shape: its own store, the run loop for every
 	// access, no engine state anywhere.
 	catalogs *catalog.Service
+	// reports answers the delivery report and the reports that name people
+	// (ADR-0515), reaching the engine through api/shopcontract only.
+	reports *servicereport.Service
 	// orders serves the portal's orders: what somebody asked for, against one
 	// frozen catalogue release.
 	orders *order.Service
@@ -400,6 +413,9 @@ type Server struct {
 	// startFavourites serves the processes each person starred on the Tasks app's
 	// Start view (ADR-0466).
 	startFavourites *startfavourites.Service
+	// startGrantAdmin serves the administration of ADR-0516's process-scoped start
+	// grants over startGrants, on the run loop.
+	startGrantAdmin *startgrant.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -415,6 +431,14 @@ type Server struct {
 	workerQueries *workerquery.Service
 	queryBroker   *workerquery.Broker
 	lookupRate    *rateLimiter
+	// formDecision gives a form field its options from a deployed DMN decision
+	// (ADR-0511). It owns no state and holds no run
+	// loop: formdecisions.go is its whole reach into this server.
+	formDecision *formdecision.Service
+	// formAvailability answers a name field's live check whether a name is still free
+	// (ADR-0519), through the same broker as the form lookups. It owns no state;
+	// formavailability.go is its whole reach into this server.
+	formAvailability *formavailability.Service
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -957,6 +981,16 @@ type Server struct {
 	// advertises it cannot disagree. Set once before Handler is mounted; read-only
 	// thereafter.
 	dynamicRegistration bool
+
+	// Connected systems (ADR-0512 §1): the client ID metadata documents read for
+	// authorization requests, held in memory only, and the client assertions already
+	// spent at the token and revocation endpoints. clientMetadataPrivate lets the
+	// documents be read from private addresses (WithClientMetadataPrivateAddresses).
+	// Both are built after the options, so the budgets an installation configured are
+	// the ones they hold.
+	clientMetadataPrivate bool
+	clientMetadata        *clientMetadataFetcher
+	assertionReplay       *assertionReplayCache
 
 	// externalURL is the origin this server is reachable under from outside, when an
 	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
@@ -1589,6 +1623,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	startGrants, err := startgrant.NewStore(filepath.Join(dataDir, "start-grants"))
+	if err != nil {
+		return nil, err
+	}
 	apiTokenStore, err := newAPITokenStore(filepath.Join(dataDir, "api-tokens"))
 	if err != nil {
 		return nil, err
@@ -1775,6 +1813,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
+		startGrants:       startGrants,
 		deployTokenStore:  deployTokenStore,
 		deployTokens:      newDeployTokenIndex(),
 		apiTokenStore:     apiTokenStore,
@@ -1863,6 +1902,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
 	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
+	if s.miHistory, err = mihistory.New(s.miHistoryView, time.Now, func(v *model.VariableValue) (string, string) {
+		view := toVariableView(v)
+		return view.Kind, view.Value
+	}); err != nil {
+		return nil, err
+	}
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,
@@ -1901,6 +1946,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// what may start next. Publishing runs the processor, which is a visit to the
 	// loop of its own — so the order service calls this outside its own closure.
 	s.catalogStore, s.orderStore = catalogStore, orderStore
+	s.reports = &servicereport.Service{
+		Now: func() int64 { return s.now() }, Catalogs: catalogStore.Catalogs, ReleasesOf: catalogStore.ReleasesOf,
+		MayEdit: s.catalogs.MayEdit, Orders: orderStore.All,
+		Inventory: shopInventory{s}, Directory: shopDirectory{s},
+		NameOf: s.principalNamer, Audit: auditNamesRead,
+	}
 	s.orders = order.New(s.runLoop, orderStore, func() int64 { return s.now() },
 		catalogStore.Release, s.catalogs.MayOrderFrom,
 		// Which groups the recipient is in, for the eligibility check
@@ -2026,6 +2077,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.startFavourites = startfavourites.New(s.runLoop, startFavouritesStore,
 		func(processID string) bool { _, ok := s.versions[processID]; return ok },
 		func() int { return int(s.budgets().StartFavourites) })
+	// Start grants (ADR-0516) are checked against the directory and the deployment
+	// registry in the same loop turn that writes them. Whether authentication is on is
+	// read per request: the options that turn it on are applied below.
+	s.startGrantAdmin = startgrant.NewService(s.runLoop, s.startGrants, s.startGrantDirectory(),
+		s.startGrantTarget, func() bool { return s.authEnabled }, func() int64 { return time.Now().Unix() })
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the
@@ -2096,6 +2152,16 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	}
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
+	s.newFormDecisions()
+	s.newFormAvailability()
+	// The OAuth token and revocation endpoints draw on a bucket of their own, sized
+	// for a confidential server-side client renewing many people's tokens from one
+	// address rather than for a person at a public form (limits.TokenEndpointBurst,
+	// ADR-0510). Built after the options, so the budgets an installation configured
+	// are the ones it holds.
+	s.tokenRate = newRateLimiter(float64(s.budgets().TokenEndpointBurst), float64(s.budgets().TokenEndpointRate))
+	s.clientMetadata = s.newClientMetadataFetcher()
+	s.assertionReplay = newAssertionReplayCache(maxAssertionReplay)
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
@@ -2115,6 +2181,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.formGen.Limits = s.budgets()
 	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.startGrantAdmin.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
@@ -3689,14 +3756,20 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A connected system's own reading of this server, for the system grant an
+	// administrator approves (ADR-0512 §2).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
 	// not an answer a person can act on — and the page it serves shows nothing until
 	// it asks, while /oauth/token authenticates the client from its own body.
+	// /oauth/revoke does too (RFC 7009): the client gives back a grant it holds, so a
+	// session would be the wrong question here as well (ADR-0510).
 	mountFunc(accessPublic, roleAny, "GET "+oauthMetadataPath, s.handleAuthorizationServerMetadata)
 	mountFunc(accessPublic, roleAny, "GET "+oauthAuthorizePath, s.handleAuthorize)
 	mountFunc(accessPublic, roleAny, "POST "+oauthTokenPath, s.handleToken)
+	mountFunc(accessPublic, roleAny, "POST "+oauthRevokePath, s.handleRevoke)
 	if s.dynamicRegistration {
 		// RFC 7591 self-registration, when an operator opened it. Public because a
 		// client that has nothing yet is the entire caller — and mounted only when it
@@ -3801,12 +3874,19 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A preflight carries no credentials by definition, so it is public with them.
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/schema", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/start", s.handlePublicFormPreflight)
+	// The options of a field of the link's form whose decision is bound to what the
+	// visitor chose in another field (ADR-0511): only
+	// that form's fields, only the values of the fields they bind.
+	mountFunc(accessPublic, roleAny, "POST /public/forms/{token}/fields/{field}/options", s.handlePublicFieldOptions)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/forms/{token}/fields/{field}/options", s.handlePublicFormPreflight)
 	// A public wizard's later screens (ADR-0449). The pass in the Authorization header
 	// is the whole authorization, and it opens the public sittings of one instance.
 	mountFunc(accessPublic, roleAny, "GET /public/wizard/step", s.handlePublicWizardStep)
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/complete", s.handlePublicWizardComplete)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/step", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
+	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicWizardFieldOptions)
+	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicFormPreflight)
 	// A user task answered through the link a mail carries
 	// (ADR-draft-user-task-answered-by-link). The page is static; the signed token in an
 	// Authorization header is the whole authorization, and it opens one open task.

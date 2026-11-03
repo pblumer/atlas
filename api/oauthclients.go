@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -265,27 +266,13 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 		mine = p.UserID
 	}
 	id := r.PathValue("id")
-	var (
-		err   error
-		found bool
-	)
-	s.do(func() {
-		var recs []oauthGrant
-		if recs, err = s.oauthGrantStore.LoadAll(); err != nil {
-			return
+	var own oauthGrant
+	found, err := s.withdrawGrant(r, "oauth-grants", func(g oauthGrant) bool {
+		if g.ID == id && p != nil && g.UserID == p.UserID {
+			own = g
 		}
-		for _, rec := range recs {
-			if rec.ID != id {
-				continue
-			}
-			if !anyone && rec.UserID != mine {
-				return // not theirs: indistinguishable from absent
-			}
-			found = true
-			err = s.oauthGrantStore.Delete(id)
-			s.oauthGrants.remove(id)
-			return
-		}
+		// Somebody else's is not theirs to withdraw, and indistinguishable from absent.
+		return g.ID == id && (anyone || g.UserID == mine)
 	})
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "revoke oauth grant: "+err.Error())
@@ -295,8 +282,77 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusNotFound, "no such grant")
 		return
 	}
-	audit(r, logging.AuthOAuthGrantRevoked, "oauth grant revoked", slog.String("grant_id", id))
+	// A person who withdraws their own grant of a pre-consented system declines it, so
+	// pre-consent does not connect them again behind their back (ADR-0512 §3). An
+	// administrator withdrawing somebody else's grant decides nothing for that person.
+	if own.ID != "" && own.System == nil {
+		s.do(func() { s.markDeclined(own.ClientID, own.UserID) })
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// withdrawGrant ends the first grant `which` selects, and reports whether there was
+// one.
+//
+// It is the one way a single grant is withdrawn on request — by the person or an
+// administrator on the grants page, and by the client itself at the revocation
+// endpoint (RFC 7009, handleRevoke) — so both are the same state change, recorded the
+// same way. The selection runs inside the same run-loop turn as the delete, against
+// the durable records rather than the index: what is withdrawn is what the store
+// holds, and a retry after a failed delete still finds the grant it is meant to end.
+// The index entry goes in that turn too, so the grant's tokens stop resolving on the
+// next request (ADR-0200).
+//
+// `via` names which door it came through, for the audit line: "oauth-grants" for
+// the listing's DELETE, "revoke" for the client's own request.
+func (s *Server) withdrawGrant(r *http.Request, via string, which func(oauthGrant) bool) (bool, error) {
+	var (
+		err   error
+		found bool
+		gone  oauthGrant
+	)
+	s.do(func() {
+		var recs []oauthGrant
+		if recs, err = s.oauthGrantStore.LoadAll(); err != nil {
+			return
+		}
+		for _, rec := range recs {
+			if !which(rec) {
+				continue
+			}
+			found, gone = true, rec
+			if err = s.oauthGrantStore.Delete(rec.ID); err != nil {
+				return
+			}
+			s.oauthGrants.remove(rec.ID)
+			if rec.System != nil {
+				s.noteSystemEnded(rec.ClientID, systemEndedVia(via), time.Now().Unix())
+			}
+			return
+		}
+	})
+	if err != nil || !found {
+		return found, err
+	}
+	audit(r, logging.AuthOAuthGrantRevoked, "oauth grant revoked",
+		slog.String("grant_id", gone.ID), slog.String("client_id", gone.ClientID),
+		slog.String("subject", gone.Username), slog.String("via", via))
+	if gone.System != nil {
+		auditSystem(r, logging.SystemDisconnect, "connected system disconnected", gone, slog.String("via", via))
+	}
+	return true, nil
+}
+
+// systemEndedVia says, for the Console, how a system grant withdrawn through
+// withdrawGrant ended.
+func systemEndedVia(via string) string {
+	switch via {
+	case "revoke":
+		return "the system gave its grant back"
+	case "connected-systems":
+		return "an administrator disconnected it"
+	}
+	return "its grant was withdrawn"
 }
 
 // revokeUserGrants withdraws every grant belonging to a user, and refreshUserGrants
@@ -316,17 +372,35 @@ func (s *Server) revokeUserGrants(userID string) {
 	if len(ids) == 0 {
 		return
 	}
+	var systems []oauthGrant
+	for _, g := range s.oauthGrants.all() {
+		if g.UserID == userID && g.System != nil {
+			systems = append(systems, g)
+		}
+	}
+	now := time.Now().Unix()
 	s.do(func() {
 		for _, id := range ids {
 			_ = s.oauthGrantStore.Delete(id)
 			s.oauthGrants.remove(id)
 		}
+		for _, g := range systems {
+			s.noteSystemEnded(g.ClientID, "the account of the administrator who approved it was disabled or deleted", now)
+		}
 	})
+	for _, g := range systems {
+		auditSystem(nil, logging.SystemDisconnect, "connected system disconnected with its approver's account", g)
+	}
 	logging.Info(logging.AuthOAuthGrantRevoked, "oauth grants revoked with the account",
 		slog.String("user_id", userID), slog.Int("grants", len(ids)))
 }
 
 func (s *Server) setUserGrantRoles(userID string, roles []string) {
+	// A system grant stands on its approver being an administrator (ADR-0512 §2):
+	// rewritten without the role it would be a connection nobody could approve now.
+	if !slices.Contains(roles, RoleAdmin) {
+		s.withdrawSystemGrantsOfApprover(userID)
+	}
 	s.rewriteUserGrants(userID, func(g *oauthGrant) bool {
 		g.Roles = append([]string(nil), roles...)
 		return true
