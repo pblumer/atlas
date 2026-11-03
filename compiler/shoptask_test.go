@@ -119,3 +119,45 @@ func TestAShopCommandTaskNamesWhatItCommands(t *testing.T) {
 		}
 	}
 }
+
+// TestAShopOrderTaskNamesWhatItOrders: an `order` task rides the command task's job
+// type with its catalogue and product as literals and its recipient and answers as
+// values evaluated when it runs; everything it would ignore, or cannot do without, is
+// a deploy error.
+func TestAShopOrderTaskNamesWhatItOrders(t *testing.T) {
+	cp, err := compiler.Parse(1, 1, strings.NewReader(shopModel(
+		`mode="order" catalog="cat-hr" product="m365-eintritt" recipient="= konto.id" answers="= antworten" resultVariable="auftrag" retries="1"`, false)))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	idx, _ := cp.ElementIndexOf("Told")
+	d, err := cp.ConnectorTaskOf(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.JobType != compiler.ShopCommandJobTypeIndex || d.ShopMode != compiler.ShopModeOrder || d.ShopCatalog != "cat-hr" ||
+		d.ShopProduct != "m365-eintritt" || d.ShopRecipient.Expr == nil || d.ShopAnswers.Expr == nil ||
+		d.ShopResultVar != "auftrag" || d.Retries != 1 {
+		t.Fatalf("detail = %+v", d)
+	}
+	if len(cp.ShopOutcomePoints()) != 0 {
+		t.Error("an order task was listed as answering an action")
+	}
+	if _, err := compiler.Parse(1, 1, strings.NewReader(shopModel(`mode="order" catalog="c" product="p" recipient="usr_1"`, false))); err != nil {
+		t.Errorf("a literal recipient and no answers: %v", err)
+	}
+	for name, attrs := range map[string]string{
+		"no catalogue":         `mode="order" product="p" recipient="= r"`,
+		"no product":           `mode="order" catalog="c" recipient="= r"`,
+		"a product with space": `mode="order" catalog="c" product="a b" recipient="= r"`,
+		"no recipient":         `mode="order" catalog="c" product="p"`,
+		"an action":            `mode="order" catalog="c" product="p" recipient="= r" action="provision"`,
+		"an outcome":           `mode="order" catalog="c" product="p" recipient="= r" outcome="completed"`,
+		"an order":             `mode="order" catalog="c" product="p" recipient="= r" order="= o"`,
+		"a bad expression":     `mode="order" catalog="c" product="p" recipient="= (("`,
+	} {
+		if _, err := compiler.Parse(1, 1, strings.NewReader(shopModel(attrs, false))); err == nil {
+			t.Errorf("%s: compiled", name)
+		}
+	}
+}

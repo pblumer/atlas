@@ -1,6 +1,6 @@
 # ADR-0429: A product declares its actions, each a command whose outcome is a fact published beyond Atlas
 
-- **Status:** Accepted (amended 2026-10-01 — the points left open are decided at acceptance; see §10)
+- **Status:** Accepted (amended 2026-10-01 — the points left open are decided at acceptance; see §10; amended 2026-11-03 — a third shop send task mode, `order`, admitted by `orderableBy`, ADR-draft-process-places-an-order)
 - **Implementation:** Partial
 - **Date:** 2026-09-30
 - **Deciders:** Atlas maintainers
@@ -827,3 +827,13 @@ Each is binding on the slice that builds it; none changes a slice already landed
 - relates to ADR-0305 (capabilities and their interfaces) and ADR-0407 (requirements)
 - relates to ADR-0239 and ADR-0382 (reads off the loop), ADR-0357 and ADR-0401 (node
   identity), ADR-0209 and ADR-0194 (roles and tokens)
+
+## Amendment 2026-11-03: a process may also order
+
+§10 let a process command an action on a position it does not carry. Its sibling — a
+process *ordering* a product for somebody, an HR joiner process ordering the starter
+package — is decided in ADR-draft-process-places-an-order: a third shop send task mode,
+`order`, on the command task's job type, admitted by a product field `orderableBy` that
+names applications as `commandedBy` does and is read from the newest release in the
+same way. The order then goes through the same placement code as a person's.
+

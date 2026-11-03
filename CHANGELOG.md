@@ -13,6 +13,18 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A process orders a product for somebody in the name of its application.** A shop
+  send task in the new mode `order` names a catalogue and a product, the recipient's
+  account id and the answers to the products' forms, and places the order through the
+  same checks a person's order meets — eligibility, conflicts, the orderable window,
+  answers, variants and the approval rule. Only a product whose new field `orderableBy`
+  lists the process's application may be ordered so; the list is read from the newest
+  release, so taking an application off it stops it at once, and the Console edits it
+  beside `commandedBy`. The order names `system:application:<key>` as its orderer, its
+  id comes from the task, so a retry finds the order instead of placing a second one,
+  and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
+  HR joiner process can order the starter package for a person who joins
+  (ADR-draft-process-places-an-order).
 - **An order form says while a name is typed whether it is still free.** A textfield
   carrying an `atlasAvailability` block names up to four sources — Entra groups and
   deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
