@@ -55,6 +55,11 @@ _Changed_ / _Removed_ for each version.
   opt in. The Modeler offers both settings (ADR-0523).
 
 ### Fixed
+
+- **An order window names its days in UTC.** A refusal outside a product's order window
+  named the day in the server's local zone, so a server east of Greenwich said a window
+  ending on 31 October had closed on 1 November. The day is now read in UTC, the zone the
+  window's edges are stored in (ADR-0397).
 - **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
   after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
   minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up
