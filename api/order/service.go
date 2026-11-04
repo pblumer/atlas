@@ -366,6 +366,13 @@ func (s *Service) place(orderer, recipient, id string, rel catalog.Release, req 
 		// twice, a basket placed across a boundary could be refused for a window
 		// that had already opened at the moment the order says it was placed.
 		at := s.now()
+		// A service is ordered only as part of a Marktleistung in a structured
+		// release (ADR-draft-marktleistung-and-service). Checked on what was asked
+		// for, before it is expanded: an included part arriving with its whole is
+		// the ordinary case, and asking for it alone is the one refused.
+		if stray = directServiceIn(rel, req.Items, has); stray != "" {
+			return
+		}
 		ordered := rel.Expand(req.Items)
 		if len(ordered) == 0 {
 			// Nothing the release carries was asked for. An order with no lines is

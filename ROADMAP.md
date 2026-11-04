@@ -2554,6 +2554,11 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
   [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
   [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **Marktleistung and service, filed under capabilities.** A catalogue switched to
+  `structured` declares every product a Marktleistung or a service; publishing proves a
+  Marktleistung is built from services only and a service is part of one, holds category
+  and product group to the capability register, and an order cannot ask for a service on
+  its own ([ADR-draft-marktleistung-and-service](docs/adr/draft-marktleistung-and-service.md)).
 - ✅ **The answers reach the approver and the processes.** The approver reads a position's
   configuration answers on the approval, labelled as the form labels them; the processes the
   product binds receive each answer as a variable of its own, sealed where the model declares

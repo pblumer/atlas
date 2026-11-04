@@ -1119,6 +1119,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
   return {
     ...was,
     id: productID, homeCatalog, state: f.get("state"), texts,
+    kind: f.get("kind") || "",
     descriptions: bound ? was.descriptions : descriptions,
     approval: approvalFrom(f),
     category: cg.key, categoryTexts: cg.texts,
@@ -1346,6 +1347,15 @@ export async function viewCatalogDetail({ api, apiBytes, toast, view, isSupersed
         <label class="field">Languages<input name="languages" value="${esc(langs.join(", "))}" autocomplete="off"></label>
         <label class="field">Rank<input name="rank" type="number" value="${cat.rank}"></label>
         ${audienceField(dir, cat.groups)}
+        <label class="field inline wide"><input type="checkbox" name="structured"
+          ${cat.structured ? "checked" : ""}> Structured: Marktleistungen and services
+          <span class="muted" style="display:block; margin:2px 0 6px">Every product then says
+            whether it is a <b>Marktleistung</b> &mdash; the whole somebody orders, built from
+            services &mdash; or a <b>service</b>, one building block with its own lifecycle
+            process. The shop offers Marktleistungen only, a service only inside one, and the
+            category and product group of a Marktleistung are <b>capability keys</b>: the
+            category a capability, the product group one it requires. Publishing refuses what
+            does not fit, so convert the products first and switch this on after.</span></label>
         <button class="btn" type="submit">Save</button>
       </form>
       </div>`)}
@@ -2344,6 +2354,18 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
       ${group("filing", "Where the shop files it",
     "The heading and group it is listed under, and the words it is found by.", `
       ${partOfNote(it, cat, items, langs)}
+      <label class="field wide">Kind
+        <span class="muted" style="display:block; margin:2px 0 6px">What this product is
+          ${cat && cat.structured ? "&mdash; <b>this catalogue is structured, so every product needs one</b>" : "&mdash; optional while the catalogue is not structured"}.
+          A <b>Marktleistung</b> is the whole somebody orders, assembled from services like a
+          house from bricks; it carries the category and product group. A <b>service</b> is one
+          brick: its own lifecycle process, no parts, no heading, ordered only as part of a
+          Marktleistung.</span>
+        <select name="kind">
+          <option value="" ${!v.kind ? "selected" : ""}>&mdash; not declared</option>
+          <option value="offering" ${v.kind === "offering" ? "selected" : ""}>Marktleistung</option>
+          <option value="service" ${v.kind === "service" ? "selected" : ""}>Service</option>
+        </select></label>
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
           shop groups this product under &mdash; <code>Arbeitsplatz</code>,
@@ -2956,7 +2978,7 @@ function wire({ api, apiBytes, toast, view }, cat, items, byID, langs, procIDs, 
     try {
       await patch({
         texts, languages: languageList(f.get("languages")), rank: Number(f.get("rank")),
-        groups: audienceFrom(f),
+        groups: audienceFrom(f), structured: f.get("structured") === "on",
       });
       toast("Saved");
       reload();
