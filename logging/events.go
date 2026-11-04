@@ -171,8 +171,12 @@ var (
 	AuthPasswordLinkUsed   = newEvent("auth.password_link_used")
 	AuthPasswordChanged    = newEvent("auth.password_changed")
 	AuthPasswordRecovery   = newEvent("auth.password_recovery")
-	AuthTokenMinted        = newEvent("auth.token_minted")
-	AuthTokenRevoked       = newEvent("auth.token_revoked")
+	// AuthPasswordRevoked is an administrator making an account's password stop working
+	// before its owner is sent a link (ADR-0526, amendment of
+	// 2026-11-04): the account awaits activation, its sessions end and its grants go.
+	AuthPasswordRevoked = newEvent("auth.password_revoked")
+	AuthTokenMinted     = newEvent("auth.token_minted")
+	AuthTokenRevoked    = newEvent("auth.token_revoked")
 	// AuthOIDCConfigured is said once at startup where an operator named an identity
 	// provider. It is the line that tells whoever reads the log after a failed login
 	// which issuer this server was asking, which is the first thing to check.

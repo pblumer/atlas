@@ -2764,6 +2764,27 @@ async function copyPasswordLink(u) {
   } catch (e) { toast("could not create the password link: " + e.message, "err"); }
 }
 
+// revokePassword makes the account's current password stop working and then has its
+// owner set a new one (ADR-0526, amendment of 2026-11-04) — for a password somebody
+// else knows: one an administrator typed, one that was mailed, one read off a log. A
+// link alone would leave it valid until the owner uses the link. The account then awaits
+// activation and is signed out everywhere; with an address the link is mailed, without
+// one it is handed to the administrator to pass on in person.
+async function revokePassword(u, reload) {
+  const how = u.email ? `then send them a link to set a new one, to ${u.email}` : "then hand you a link to give them in person";
+  if (!window.confirm(`Revoke the password of "${u.username}"? Their current password stops working at once and they are signed out everywhere; ${how}. Until they use the link, nobody can sign in as this account.`)) return;
+  try {
+    const r = await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password-link`, { send: !!u.email, revoke: true });
+    if (u.email) toast(`Password revoked; link sent to ${u.email}`, "ok");
+    else {
+      const link = r.url || (location.origin + r.path);
+      const until = r.expiresAt ? fmtDateTime(r.expiresAt * 1000) : "";
+      window.prompt(`Password revoked. Hand this link to "${u.username}" in person — not by an unencrypted channel. It sets their password once${until ? " and expires " + until : ""}.`, link);
+    }
+  } catch (e) { toast("could not revoke the password: " + e.message, "err"); }
+  reload();
+}
+
 async function toggleUserDisabled(u, reload) {
   try {
     await api("PATCH", `/api/v1/users/${encodeURIComponent(u.id)}`, { disabled: !u.disabled });
@@ -3313,6 +3334,10 @@ async function viewConsoleOrg() {
   const userMenu = (u) => [
     ...(localAccount(u) && !u.disabled && u.email ? [{ label: "Send password link…", icon: "✉", act: "pwsend" }] : []),
     ...(localAccount(u) && !u.disabled ? [{ label: "Copy password link…", icon: "🔑", act: "pwlink" }] : []),
+    // For a password somebody else knows. Not offered on your own account, which
+    // changes its password under the account menu, nor on one with none to revoke.
+    ...(localAccount(u) && !u.disabled && !u.awaitingActivation && !(me && u.id === me.id)
+      ? [{ label: "Revoke password…", icon: "⛔", act: "pwrevoke", danger: true }] : []),
     { label: u.disabled ? "Enable account" : "Disable account", icon: u.disabled ? "▶" : "⊘", act: "toggle" },
     { sep: true },
     { label: "Delete…", icon: "🗑", act: "delete", danger: true },
@@ -3469,6 +3494,7 @@ async function viewConsoleOrg() {
         break;
       case "pwsend": sendPasswordLink(u); break;
       case "pwlink": copyPasswordLink(u); break;
+      case "pwrevoke": revokePassword(u, reload); break;
       case "toggle": toggleUserDisabled(u, reload); break;
       case "delete": deleteUser(u, reload); break;
     }

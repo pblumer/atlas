@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An administrator can revoke a password somebody else knows.** "Revoke password…" in an account's menu (`POST /api/v1/users/{id}/password-link` with `"revoke": true`) makes the current password stop working at once, ends the account's sessions and OAuth grants, and sends its owner an activation link — or hands it over where the account has no address. A password link alone leaves the old password valid until the link is used, which is too long for one that was typed by an administrator, mailed or written to a log. Refused for one's own account and for the last administrator who can sign in, and nothing is revoked when no link could follow (ADR-0526, amended).
 - **A form can search Active Directory.** A directory field may name an AD Worker
   (`workerType: "ad"`) and search its `users` or `groups`, as it searches Entra's users:
   prefix search over name, mail and logon name, equality filters on `department` and
@@ -102,6 +103,12 @@ _Changed_ / _Removed_ for each version.
   (ADR-0526).
 
 ### Changed
+- **A product page in the tile layout is two columns and has one basket button.** The product's
+  description stands open in the wide column, and who it is for, what comes with it, approval and
+  price fold in the narrow column beside it. The page's own "Put in the basket" and "Go to the
+  basket" buttons are gone: the row along the bottom puts the product in and opens the basket, and its
+  "Back" leads to the tiles rather than out of the shop. That row now stays at the bottom of the
+  window on every shop screen, so its buttons are in reach however far down a page or basket goes.
 - **A password is set by its owner, never mailed.** Registration no longer asks the
   approving administrator for an initial password, which was a process variable — an
   event kept in the log — and was mailed in clear text. The requester first confirms
@@ -122,6 +129,8 @@ _Changed_ / _Removed_ for each version.
 - **The SharePoint team site diagram keeps its end label clear.** The fallback flow from the manual quota task to «Site bereit» crossed the event's label; the label now sits above the event (`m365-dienste` 1.0.11).
 - **The moving example no longer drifts into the past.** `umzug` started with the fixed moving date 2026-10-01, which has since passed, so the card's case — a move in two weeks against three months' notice — no longer held. Without a moving date the model now computes one two weeks from today, and "Install and start" passes none; a date given in the start form is used as before.
 - **Installing the workshop twice leaves one decision reference.** The handbook's workshop install added a `bw-vorpruefung` reference to the Bewerbermanagement application on every click, although the upload overwrites the model in place; it now checks for the reference first, as the examples chapter does, and names the model by the reference the upload reports.
+
+- **The SharePoint team site diagram keeps its end label clear.** The fallback flow from the manual quota task to «Site bereit» crossed the event's label; the label now sits above the event (`m365-dienste` 1.0.11).
 - **The AD and M365 examples no longer say a person sees one catalogue.** Their READMEs and install questions still described the rule before ADR-0522 (only the highest-ranked catalogue a person reaches); they now say every reached catalogue is shown and what rank still decides (`ad-dienste` 1.0.2, `m365-dienste` 1.0.8).
 - **The M365 test environment connects its Atlas server to the atlas hub.** `atlas_hub` (on by default) sets `ATLAS_BLUEPRINT_REGISTRY_URL` and the key from `examples/hub/releases.json`, so the Console offers the bundles of this repository, among them `ad-dienste` with its AD catalogue.
 - **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
