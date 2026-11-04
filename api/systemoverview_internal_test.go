@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"regexp"
 	"testing"
@@ -52,6 +53,43 @@ func TestTheSystemOverviewCarriesTheCurrentAtlasMark(t *testing.T) {
 	for _, s := range shapes {
 		if !bytes.Contains(overview, []byte(`d="`+string(s[1])+`"`)) {
 			t.Errorf("the system overview lacks the mark's shape %q from %s, so it shows an outdated logo", s[1], mark)
+		}
+	}
+}
+
+// Every page the Console serves names the atlas favicon, so a browser tab shows the
+// mark rather than a blank page icon or a former logo. The pages are buildless and
+// carry it inline as a data URI (docs/brand/README.md); this holds each to the four
+// shapes of docs/brand/favicon.svg, the heavier cut drawn for 16px.
+func TestEveryConsolePageCarriesTheAtlasFavicon(t *testing.T) {
+	const favicon = "../docs/brand/favicon.svg"
+	src, err := os.ReadFile(favicon)
+	if err != nil {
+		t.Fatalf("read %s: %v", favicon, err)
+	}
+	shapes := regexp.MustCompile(`<path fill="#fff" d="([^"]+)"/>`).FindAllSubmatch(src, -1)
+	if len(shapes) != 4 {
+		t.Fatalf("%s has %d white shapes, want the four of the mark", favicon, len(shapes))
+	}
+	pages, err := fs.Glob(webFS, "web/*.html")
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("list the Console pages: %v (found %d)", err, len(pages))
+	}
+	icon := regexp.MustCompile(`<link rel="icon" href="data:image/svg\+xml,[^"]+"`)
+	for _, page := range pages {
+		body, err := webFS.ReadFile(page)
+		if err != nil {
+			t.Fatalf("read %s: %v", page, err)
+		}
+		link := icon.Find(body)
+		if link == nil {
+			t.Errorf("%s names no inline favicon, so its tab shows no atlas mark", page)
+			continue
+		}
+		for _, s := range shapes {
+			if !bytes.Contains(link, s[1]) {
+				t.Errorf("%s: its favicon lacks the shape %q from %s, so it shows an outdated mark", page, s[1], favicon)
+			}
 		}
 	}
 }

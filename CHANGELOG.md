@@ -430,11 +430,18 @@ What changes on disk, and going back:
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
-- **The system overview shows the current atlas mark.** The architecture diagram that
-  the Console's welcome card, its help menu, the handbook and the architecture document
-  show still opened with the former logo, a triangle with a cross. It now carries the
-  mark from `docs/brand/atlas-mark.svg`, the lowercase a with the Swiss cross, and a
-  test holds the diagram to the mark's shapes.
+- **The current atlas mark everywhere, in place of the former logos.** The system
+  overview that the Console's welcome card, its help menu, the handbook and the
+  architecture document show still opened with the former logo, a triangle with a
+  cross; it now carries the mark from `docs/brand/atlas-mark.svg`, the lowercase a with
+  the Swiss cross. The handbook's training nuggets showed the former peak mark in every
+  top bar and are re-taken from the running product (`make nuggets`), which also brings
+  them up to the screens that had moved since. The README screenshots show the mark in
+  place of the former letter tile, the feature icons for *One binary* and *Made for AI
+  agents* are redrawn on the mark instead of the peak, the five Console pages that had
+  no favicon (the conformance gallery, the order-to-cash and travel-booking demos) now
+  carry it, and so does the Modeler top-bar design sketch. Tests hold the system
+  overview to the mark's shapes and every Console page to the favicon's.
 - **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
   rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
   thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
