@@ -183,6 +183,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
 .rz-status.err{color:var(--err);font-weight:600}
 .rz-status a{margin-left:8px}
 .rz-hint{margin:0 0 8px;font-size:13.5px;color:var(--muted)}
+.rz-try{margin:4px 0 10px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px}
+.rz-try-h{margin:0 0 4px;font-weight:700}
+.rz-try ol{margin:0;padding-left:20px}
+.rz-try li{margin:4px 0}
+.rz-acts{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 2px}
+.rz-acts .rz-btn{font-size:13px;padding:6px 12px}
+.bsp-msg-status{font-size:13.5px;margin-left:8px;align-self:center}
+.bsp-msg-status.ok{color:var(--ok);font-weight:600}
+.bsp-msg-status.err{color:var(--err);font-weight:600}
 .rz-xml{margin:2px 0 0}
 .rz-xml>summary{cursor:pointer;font-size:13.5px;color:var(--muted);padding:4px 0;list-style-position:inside}
 .rz-xml>summary:hover{color:var(--accent)}
@@ -1077,8 +1086,10 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <p class="lead" data-l="en">Ready-made building blocks for the essential BPMN patterns. Every recipe leads with its <b>diagram</b> — <b>try it</b> in one click (atlas deploys and starts it in this instance) or <b>open it in the Modeler</b> and rebuild it. The XML behind it is collapsed: you only need it if you edit models by hand.</p>
       <p class="muted" data-l="de">«Im Modeler öffnen» legt den Entwurf in deiner Application <b>atlas-samples</b> ab (wird bei Bedarf angelegt), nicht unter den ungruppierten Entwürfen. «Ausprobieren» deployt und startet den Prozess unabhängig davon.</p>
       <p class="muted" data-l="en">“Open in the Modeler” saves the draft in your <b>atlas-samples</b> application (created when needed), not among ungrouped drafts. “Try it” still deploys and starts the process separately.</p>
+      <p class="muted rz-lead-try" data-l="de">Jedes Rezept sagt unter <b>So probierst du es aus</b>, womit es startet und was danach zu tun ist. Liest ein Modell Eingabedaten, deklariert es sie als <b>Startvariablen mit Standardwert</b> – «Ausprobieren» braucht also keine Angaben. Wartet ein Rezept auf einen Worker, eine Nachricht oder eine Person, übernimmt ein Knopf diese Rolle. Dafür braucht dein Konto die Rollen <code>modeler</code> (Deploy) und <code>operator</code> (Instanz starten, Jobs, Nachrichten, Incidents).</p>
+      <p class="muted rz-lead-try" data-l="en">Under <b>How to try it</b> every recipe says what it starts with and what to do next. A model that reads input declares it as <b>start variables with a default</b> – so “Try it” needs no input. Where a recipe waits for a worker, a message or a person, a button plays that part. Your account needs the <code>modeler</code> role (deploy) and the <code>operator</code> role (start an instance, jobs, messages, incidents).</p>
       <h3 class="rz-group"><span data-l="de">Automatisieren</span><span data-l="en">Automate</span></h3>
-      <div class="recipe" id="rz-script-value" data-proc="recipe-script-value">
+      <div class="recipe" id="rz-script-value" data-proc="recipe-script-value" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🧮</span>
           <span data-l="de">Script-Task: einen Wert berechnen</span><span data-l="en">Script task: compute a value</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1091,13 +1102,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>gross = 119</code> – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>gross = 119</code> – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Sie läuft ohne Halt durch. Öffne <b>→ In Operations ansehen</b>: Unter den Variablen steht <code>net = 100</code>.</span><span data-l="en">It runs straight through. Open <b>→ Watch in Operations</b>: the variables show <code>net = 100</code>.</span></li>
+            <li><span data-l="de">Eigene Werte: <b>Im Modeler öffnen</b>, dann <b>Deployen &amp; starten</b> – das Startformular fragt nach den Startvariablen, vorbelegt mit den Standardwerten des Modells.</span><span data-l="en">Your own values: <b>Open in the Modeler</b>, then <b>Deploy &amp; run</b> – the start form asks for the start variables, prefilled with the model's defaults.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-script-value&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-script-value&quot; name=&quot;Netto berechnen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;gross&quot; type=&quot;number&quot; default=&quot;119&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;scriptTask id=&quot;net&quot; name=&quot;Netto&quot;&gt;
       &lt;extensionElements&gt;
@@ -1112,7 +1137,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Der <code>zeebe:script</code>-Ausdruck (FEEL, beginnt mit <code>=</code>) läuft in der Engine und schreibt sein Ergebnis nach <code>resultVariable</code>. Kein Token parkt – die Instanz läuft durch.</span><span data-l="en">The <code>zeebe:script</code> expression (FEEL, starts with <code>=</code>) runs inside the engine and writes its result to <code>resultVariable</code>. No token parks – the instance runs straight through.</span></p>
       </div>
-      <div class="recipe" id="rz-script-list" data-proc="recipe-script-list">
+      <div class="recipe" id="rz-script-list" data-proc="recipe-script-list" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">📊</span>
           <span data-l="de">Script-Task: Listen &amp; Objekte</span><span data-l="en">Script task: lists &amp; objects</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1125,13 +1150,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>positions</code>, drei Positionen (Buch 24.90, Monitor 189.00, 2 × Tasse 9.95) – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>positions</code>, three line items (book 24.90, monitor 189.00, 2 × mug 9.95) – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Sie läuft ohne Halt durch. Öffne <b>→ In Operations ansehen</b>: <code>cart</code> enthält <code>total: 233.8</code>, <code>count: 3</code> und unter <code>expensive</code> den Monitor.</span><span data-l="en">It runs straight through. Open <b>→ Watch in Operations</b>: <code>cart</code> holds <code>total: 233.8</code>, <code>count: 3</code> and, under <code>expensive</code>, the monitor.</span></li>
+            <li><span data-l="de">Eigene Werte: <b>Im Modeler öffnen</b>, dann <b>Deployen &amp; starten</b> – das Startformular fragt nach den Startvariablen, vorbelegt mit den Standardwerten des Modells.</span><span data-l="en">Your own values: <b>Open in the Modeler</b>, then <b>Deploy &amp; run</b> – the start form asks for the start variables, prefilled with the model's defaults.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-script-list&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-script-list&quot; name=&quot;Warenkorb summieren&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;positions&quot; type=&quot;json&quot; default=&quot;[{&amp;quot;name&amp;quot;: &amp;quot;Buch&amp;quot;, &amp;quot;price&amp;quot;: 24.90, &amp;quot;qty&amp;quot;: 1}, {&amp;quot;name&amp;quot;: &amp;quot;Monitor&amp;quot;, &amp;quot;price&amp;quot;: 189.00, &amp;quot;qty&amp;quot;: 1}, {&amp;quot;name&amp;quot;: &amp;quot;Tasse&amp;quot;, &amp;quot;price&amp;quot;: 9.95, &amp;quot;qty&amp;quot;: 2}]&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;scriptTask id=&quot;sum&quot; name=&quot;Summe&quot;&gt;
       &lt;extensionElements&gt;
@@ -1146,7 +1185,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">FEEL kann Listen durchlaufen (<code>for … return …</code>), filtern (<code>positions[price &gt; 100]</code>) und Objekte bauen (<code>{ … }</code>). Das Ergebnis landet als verschachteltes Objekt in <code>cart</code>.</span><span data-l="en">FEEL iterates lists (<code>for … return …</code>), filters them (<code>positions[price &gt; 100]</code>) and builds objects (<code>{ … }</code>). The result lands as a nested object in <code>cart</code>.</span></p>
       </div>
-      <div class="recipe" id="rz-service" data-proc="recipe-service">
+      <div class="recipe" id="rz-service" data-proc="recipe-service" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">⚙️</span>
           <span data-l="de">Service-Task: Arbeit auslagern</span><span data-l="en">Service task: offload work</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1159,6 +1198,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Der Token bleibt bei «Karte belasten» stehen: Er wartet auf einen Worker für Jobs vom Typ <code>payment</code>, und einen solchen gibt es auf dieser Installation nicht.</span><span data-l="en">Click <b>▶ Try it</b>. The token stops at «Karte belasten»: it waits for a worker for jobs of type <code>payment</code>, and this installation has none.</span></li>
+            <li><span data-l="de">Übernimm die Rolle des Workers. atlas schliesst den Job als manuellen Eingriff ab und vermerkt ihn im Audit-Trail der Instanz; die Instanz läuft bis zum End-Event.</span><span data-l="en">Play the worker. Atlas completes the job as a manual intervention and records it in the instance's audit trail; the instance runs to its end event.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="charge"><span data-l="de">✓ Job «Karte belasten» abschliessen</span><span data-l="en">✓ Complete the «Karte belasten» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1181,7 +1228,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Der Token parkt als <b>Job</b> vom Typ <code>payment</code>, bis ein Worker ihn abschliesst; scheitert er, wird bis <code>retries</code>-mal erneut versucht, danach entsteht ein Incident. Für REST, E-Mail, SharePoint &amp; Co. musst du keinen Worker selbst schreiben: nimm die fertigen Vorlagen der eingebauten <a href="#formulare">Worker-Typen</a> aus dem <a href="/#/modeler/repository">Repository</a>.</span><span data-l="en">The token parks as a <b>job</b> of type <code>payment</code> until a worker completes it; on failure it retries up to <code>retries</code> times, then raises an incident. For REST, e-mail, SharePoint &amp; co. you need not write a worker at all: use the ready-made templates of the built-in <a href="#formulare">worker types</a> in the <a href="/#/modeler/repository">Repository</a>.</span></p>
         <p class="rz-how"><span data-l="de"><b>Retries</b> hat jede Aufgabe, die als Job läuft — Service- und Send-Task, jede <a href="#formulare">Worker-Aufgabe</a> (Mail, REST, Jira …), Skript-Task (PowerShell &amp; Co.) und Business-Rule-Task. Im Modeler steht das Feld unter <i>Fehlerbehandlung</i>; leer bedeutet den Standard <code>3</code>, <code>1</code> heisst „ein Versuch, kein Retry“. Weniger als 1 lehnt der Deploy ab — ein Job ohne Versuch würde nie ausgeliefert.</span><span data-l="en"><b>Retries</b> is a property of every task that runs as a job — service and send tasks, every <a href="#formulare">worker task</a> (mail, REST, Jira …), script tasks (PowerShell &amp; co.) and business rule tasks. The Modeler shows the field under <i>Failure handling</i>; empty means the default of <code>3</code>, and <code>1</code> means "one attempt, no retry". Below 1 the deploy is refused — a job with no attempt would never be handed out.</span></p>
       </div>
-      <div class="recipe" id="rz-dmn" data-proc="recipe-dmn">
+      <div class="recipe" id="rz-dmn" data-proc="recipe-dmn" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">📐</span>
           <span data-l="de">Business-Rule-Task: Entscheidung via DMN</span><span data-l="en">Business rule task: decide via DMN</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1190,17 +1237,32 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span>
         </div>
         <div class="rz-actions">
+          <button class="rz-btn rz-run" type="button"><span data-l="de">▶ Ausprobieren</span><span data-l="en">▶ Try it</span></button>
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p class="rz-hint"><span data-l="de">Dieses Rezept braucht zusätzlich seine DMN-Entscheidung <code>discountTier</code> — lege sie an (siehe <a href="#dmn">DMN lernen</a>), dann läuft es.</span><span data-l="en">This recipe additionally needs its DMN decision <code>discountTier</code> — create it (see <a href="#dmn">Learn DMN</a>) and it will run.</span></p>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. atlas deployt zuerst die Entscheidungstabelle <code>discountTier</code> (unten unter <i>DMN anzeigen</i>) – nur wenn es noch keine Entscheidung dieses Namens gibt –, danach den Prozess. Die Instanz startet mit <code>customerType = &quot;Business&quot;</code> und <code>orderValue = 1200</code> aus <code>atlas:startForm</code>.</span><span data-l="en">Click <b>▶ Try it</b>. Atlas first deploys the decision table <code>discountTier</code> (below under <i>Show the DMN</i>) – only if no decision of that name exists yet – and then the process. The instance starts with <code>customerType = &quot;Business&quot;</code> and <code>orderValue = 1200</code> from <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Sie läuft ohne Halt durch. Öffne <b>→ In Operations ansehen</b>: <code>discount = 0.15</code> (Regel 1: Business ab 1000). Mit <code>orderValue = 500</code> trifft Regel 2 zu, und es kommt <code>0.1</code> heraus.</span><span data-l="en">It runs straight through. Open <b>→ Watch in Operations</b>: <code>discount = 0.15</code> (rule 1: Business from 1000). With <code>orderValue = 500</code> rule 2 matches and the result is <code>0.1</code>.</span></li>
+            <li><span data-l="de"><b>Im Modeler öffnen</b> setzt voraus, dass die Entscheidung schon deployt ist: Klicke vorher einmal <b>▶ Ausprobieren</b>, sonst lehnt der Deploy im Modeler das Modell ab.</span><span data-l="en"><b>Open in the Modeler</b> needs the decision deployed already: click <b>▶ Try it</b> once first, or the Modeler's deploy refuses the model.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-dmn&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-dmn&quot; name=&quot;Rabatt bestimmen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;customerType&quot; type=&quot;string&quot; default=&quot;Business&quot;/&gt;
+        &lt;atlas:startVariable name=&quot;orderValue&quot; type=&quot;number&quot; default=&quot;1200&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;businessRuleTask id=&quot;tier&quot; name=&quot;Rabattstufe&quot;&gt;
       &lt;extensionElements&gt;
@@ -1217,10 +1279,53 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Deploye die DMN gemeinsam mit dem Prozess in <b>einer Applikation</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. Deploy the DMN together with the process in <b>one application</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
+        <details class="rz-xml rz-dmn-xml">
+          <summary><span data-l="de">DMN anzeigen</span><span data-l="en">Show the DMN</span></summary>
+          <pre class="rz-dmn"><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;definitions xmlns=&quot;https://www.omg.org/spec/DMN/20191111/MODEL/&quot;
+             id=&quot;defs_discountTier&quot; name=&quot;Rabattstufe&quot; namespace=&quot;http://atlas/recipes&quot;&gt;
+  &lt;inputData id=&quot;id_type&quot; name=&quot;customerType&quot;/&gt;
+  &lt;inputData id=&quot;id_value&quot; name=&quot;orderValue&quot;/&gt;
+  &lt;decision id=&quot;discountTier&quot; name=&quot;discountTier&quot;&gt;
+    &lt;informationRequirement&gt;&lt;requiredInput href=&quot;#id_type&quot;/&gt;&lt;/informationRequirement&gt;
+    &lt;informationRequirement&gt;&lt;requiredInput href=&quot;#id_value&quot;/&gt;&lt;/informationRequirement&gt;
+    &lt;decisionTable id=&quot;dt_discountTier&quot; hitPolicy=&quot;FIRST&quot;&gt;
+      &lt;input id=&quot;in_type&quot; label=&quot;Kundentyp&quot;&gt;
+        &lt;inputExpression id=&quot;ie_type&quot; typeRef=&quot;string&quot;&gt;&lt;text&gt;customerType&lt;/text&gt;&lt;/inputExpression&gt;
+      &lt;/input&gt;
+      &lt;input id=&quot;in_value&quot; label=&quot;Bestellwert&quot;&gt;
+        &lt;inputExpression id=&quot;ie_value&quot; typeRef=&quot;number&quot;&gt;&lt;text&gt;orderValue&lt;/text&gt;&lt;/inputExpression&gt;
+      &lt;/input&gt;
+      &lt;output id=&quot;out_discount&quot; name=&quot;discount&quot; typeRef=&quot;number&quot;/&gt;
+      &lt;rule id=&quot;r1&quot;&gt;
+        &lt;inputEntry id=&quot;r1_t&quot;&gt;&lt;text&gt;&quot;Business&quot;&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;inputEntry id=&quot;r1_v&quot;&gt;&lt;text&gt;&amp;gt;= 1000&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;outputEntry id=&quot;r1_o&quot;&gt;&lt;text&gt;0.15&lt;/text&gt;&lt;/outputEntry&gt;
+      &lt;/rule&gt;
+      &lt;rule id=&quot;r2&quot;&gt;
+        &lt;inputEntry id=&quot;r2_t&quot;&gt;&lt;text&gt;&quot;Business&quot;&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;inputEntry id=&quot;r2_v&quot;&gt;&lt;text&gt;-&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;outputEntry id=&quot;r2_o&quot;&gt;&lt;text&gt;0.10&lt;/text&gt;&lt;/outputEntry&gt;
+      &lt;/rule&gt;
+      &lt;rule id=&quot;r3&quot;&gt;
+        &lt;inputEntry id=&quot;r3_t&quot;&gt;&lt;text&gt;-&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;inputEntry id=&quot;r3_v&quot;&gt;&lt;text&gt;&amp;gt;= 1000&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;outputEntry id=&quot;r3_o&quot;&gt;&lt;text&gt;0.05&lt;/text&gt;&lt;/outputEntry&gt;
+      &lt;/rule&gt;
+      &lt;rule id=&quot;r4&quot;&gt;
+        &lt;inputEntry id=&quot;r4_t&quot;&gt;&lt;text&gt;-&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;inputEntry id=&quot;r4_v&quot;&gt;&lt;text&gt;-&lt;/text&gt;&lt;/inputEntry&gt;
+        &lt;outputEntry id=&quot;r4_o&quot;&gt;&lt;text&gt;0&lt;/text&gt;&lt;/outputEntry&gt;
+      &lt;/rule&gt;
+    &lt;/decisionTable&gt;
+  &lt;/decision&gt;
+&lt;/definitions&gt;
+</code></pre>
+        </details>
+        <p class="rz-how"><span data-l="de"><code>calledDecision</code> verweist auf die DMN-Entscheidung <code>discountTier</code>; die <code>ioMapping</code>-Inputs füttern sie, das Ergebnis landet in <code>discount</code>. Die Tabelle steht unter <i>DMN anzeigen</i>: <code>FIRST</code> nimmt die erste passende Regel, <code>-</code> passt auf jeden Wert. In einem eigenen Projekt deployst du die DMN gemeinsam mit dem Prozess in <b>einer Applikation</b> (siehe <a href="#dmn">DMN lernen</a>).</span><span data-l="en"><code>calledDecision</code> points to the DMN decision <code>discountTier</code>; the <code>ioMapping</code> inputs feed it and the result lands in <code>discount</code>. The table is under <i>Show the DMN</i>: <code>FIRST</code> takes the first matching rule and <code>-</code> matches any value. In a project of your own, deploy the DMN together with the process in <b>one application</b> (see <a href="#dmn">Learn DMN</a>).</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Verzweigen &amp; Zusammenführen</span><span data-l="en">Branch &amp; merge</span></h3>
-      <div class="recipe" id="rz-xor" data-proc="recipe-xor">
+      <div class="recipe" id="rz-xor" data-proc="recipe-xor" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🔀</span>
           <span data-l="de">Exklusives Gateway: bedingtes Routing</span><span data-l="en">Exclusive gateway: conditional routing</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1233,13 +1338,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>amount = 1500</code>. 1500 ist grösser als 1000, also nimmt das Gateway den Fluss «&gt; 1000» zur User-Task «Manuell freigeben» – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>amount = 1500</code>. 1500 is greater than 1000, so the gateway takes the «&gt; 1000» flow to the user task «Manuell freigeben» – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Erledige die Aufgabe in der <a href="/#/tasks">Tasks-App</a> oder hier; danach endet die Instanz.</span><span data-l="en">Complete the task in the <a href="/#/tasks">Tasks app</a> or here; the instance then ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="approve"><span data-l="de">✓ Aufgabe «Manuell freigeben» erledigen</span><span data-l="en">✓ Complete the «Manuell freigeben» task</span></button></span></li>
+            <li><span data-l="de">Den anderen Zweig siehst du mit <code>amount = 500</code> (<b>Im Modeler öffnen</b> → <b>Deployen &amp; starten</b>): Dann wartet «Auto-Freigabe» auf einen Job vom Typ <code>autoApprove</code>.</span><span data-l="en">To see the other branch, start with <code>amount = 500</code> (<b>Open in the Modeler</b> → <b>Deploy &amp; run</b>): «Auto-Freigabe» then waits for a job of type <code>autoApprove</code>.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-xor&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-xor&quot; name=&quot;Freigabe nötig?&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;amount&quot; type=&quot;number&quot; default=&quot;1500&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;exclusiveGateway id=&quot;gw&quot; name=&quot;Betrag?&quot; default=&quot;f_auto&quot;/&gt;
     &lt;userTask id=&quot;approve&quot; name=&quot;Manuell freigeben&quot;/&gt;
@@ -1259,7 +1379,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Das Gateway prüft die <code>conditionExpression</code>-Ausdrücke der Ausgänge von oben und nimmt den ersten wahren; trifft keiner zu, greift der <code>default</code>-Fluss. <b>Setze immer einen Default</b>, sonst kann der Token stecken bleiben.</span><span data-l="en">The gateway evaluates the outgoing flows' <code>conditionExpression</code>s and takes the first true one; if none match, the <code>default</code> flow fires. <b>Always set a default</b>, or the token can get stuck.</span></p>
       </div>
-      <div class="recipe" id="rz-parallel" data-proc="recipe-parallel">
+      <div class="recipe" id="rz-parallel" data-proc="recipe-parallel" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">⏸️</span>
           <span data-l="de">Paralleles Gateway: gleichzeitig &amp; zusammenführen</span><span data-l="en">Parallel gateway: fork &amp; join</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1272,6 +1392,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Der Fork erzeugt zwei Token; «Bonität prüfen» und «Bestand prüfen» warten je auf ihren Job.</span><span data-l="en">Click <b>▶ Try it</b>. The fork creates two tokens; «Bonität prüfen» and «Bestand prüfen» each wait for their job.</span></li>
+            <li><span data-l="de">Schliesse den ersten Job ab. In Operations siehst du: Der Join hält den ersten Token fest und wartet auf den zweiten.</span><span data-l="en">Complete the first job. Operations shows the join holding the first token and waiting for the second.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="credit"><span data-l="de">✓ Job «Bonität prüfen» abschliessen</span><span data-l="en">✓ Complete the «Bonität prüfen» job</span></button></span></li>
+            <li><span data-l="de">Schliesse den zweiten ab – jetzt sind beide Token am Join, und die Instanz endet.</span><span data-l="en">Complete the second – both tokens are now at the join, and the instance ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="stock"><span data-l="de">✓ Job «Bestand prüfen» abschliessen</span><span data-l="en">✓ Complete the «Bestand prüfen» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1300,7 +1430,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Der <code>fork</code> erzeugt für jeden Ausgang einen Token; der <code>join</code> wartet, bis <b>alle</b> eingehenden Token da sind, und führt dann einen einzigen weiter. Fork und Join gehören paarweise zusammen.</span><span data-l="en">The <code>fork</code> creates a token per outgoing flow; the <code>join</code> waits until <b>all</b> incoming tokens have arrived, then continues a single one. Fork and join come in pairs.</span></p>
       </div>
-      <div class="recipe" id="rz-event-gateway" data-proc="recipe-event-gw">
+      <div class="recipe" id="rz-event-gateway" data-proc="recipe-event-gw" data-end="end_reply">
         <h4><span class="rz-emoji" aria-hidden="true">🎲</span>
           <span data-l="de">Event-based Gateway: erstes Ereignis gewinnt</span><span data-l="en">Event-based gateway: first event wins</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1313,6 +1443,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Beide Zweige werden scharf: «Antwort» wartet auf die Nachricht <code>go</code>, «Timeout» auf einen Timer. Damit du beide Ausgänge erleben kannst, steht der Timer hier auf 2&nbsp;Minuten (<code>PT2M</code>); in einem echten Prozess wären es eher Stunden oder Tage.</span><span data-l="en">Click <b>▶ Try it</b>. Both branches are armed: «Antwort» waits for the message <code>go</code>, «Timeout» for a timer. So that you can see both outcomes, the timer is set to 2&nbsp;minutes (<code>PT2M</code>) here; a real process would wait hours or days.</span></li>
+            <li><span data-l="de">Sende die Nachricht innerhalb von 2&nbsp;Minuten: Die Antwort gewinnt, der Timer wird verworfen, die Instanz endet bei <code>end_reply</code>.</span><span data-l="en">Send the message within 2&nbsp;minutes: the reply wins, the timer is discarded and the instance ends at <code>end_reply</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="msg" data-msg="go"><span data-l="de">✉ Nachricht «go» senden</span><span data-l="en">✉ Send the «go» message</span></button></span></li>
+            <li><span data-l="de">Oder sende nichts: Nach 2&nbsp;Minuten gewinnt der Timer, und die Instanz endet bei <code>end_timeout</code>.</span><span data-l="en">Or send nothing: after 2&nbsp;minutes the timer wins and the instance ends at <code>end_timeout</code>.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1327,7 +1466,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       &lt;messageEventDefinition messageRef=&quot;Msg_go&quot;/&gt;
     &lt;/intermediateCatchEvent&gt;
     &lt;intermediateCatchEvent id=&quot;timeout&quot; name=&quot;Timeout&quot;&gt;
-      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT1H&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT2M&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
     &lt;/intermediateCatchEvent&gt;
     &lt;endEvent id=&quot;end_reply&quot;/&gt;
     &lt;endEvent id=&quot;end_timeout&quot;/&gt;
@@ -1342,7 +1481,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Hinter dem Gateway stehen nur wartende Ereignisse (Nachricht, Timer, Signal). Es ist eine <i>deferred choice</i>: die Umgebung entscheidet, nicht die Daten. Klassisch für „warte auf Antwort, sonst Timeout“.</span><span data-l="en">Only waiting events (message, timer, signal) may follow the gateway. It's a <i>deferred choice</i>: the environment decides, not the data. The classic "wait for a reply, otherwise time out".</span></p>
         <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Beim Erreichen des Gateways macht die Engine <b>alle</b> Zweige gleichzeitig scharf — der Token wartet also nicht auf dem Gateway, sondern auf jedem Ereignis dahinter. Das Diagramm in <a href="/#/operations">Betrieb</a> zeigt es trotzdem als <i>ein</i> Warten: die grüne Zahl steht am Gateway (so viele Instanzen sind im Rennen), die Zweige sind nur gestrichelt umrandet (die Legende unter dem Diagramm sagt, was das heisst). Wer tatsächlich gewonnen hat, steht am Zweig selbst — <b>grau</b> = hier abgeschlossen und weitergelaufen, <b>bernstein</b> = hier abgebrochen, weil das andere Ereignis zuerst kam. Das <b>Replay</b> einer einzelnen Instanz zeichnet dasselbe Bild: ein Token am Gateway, die scharfen Zweige gestrichelt — und der Eintrag in der Token-Leiste unter dem Diagramm sagt, auf wie viele Ereignisse dieses eine Warten wartet.</span><span data-l="en"><b>At runtime:</b> on reaching the gateway the engine arms <b>every</b> branch at once — the token does not wait on the gateway but on each event behind it. The diagram in <a href="/#/operations">Operations</a> still shows it as <i>one</i> wait: the green count sits on the gateway (that many instances are in the race) and the branches are merely outlined dashed (the legend under the diagram says what that means). Which event actually won is on the branch itself — <b>gray</b> = completed here and moved on, <b>amber</b> = cancelled here because the other event came first. The <b>replay</b> of a single instance draws the same picture: one token on the gateway, the armed branches dashed — and the entry in the token bar under the diagram says how many events that one wait is waiting for.</span></p>
       </div>
-      <div class="recipe" id="rz-inclusive" data-proc="recipe-inclusive">
+      <div class="recipe" id="rz-inclusive" data-proc="recipe-inclusive" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🔱</span>
           <span data-l="de">Inklusives Gateway: mehrere Wege zugleich</span><span data-l="en">Inclusive gateway: several paths at once</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1355,13 +1494,28 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>customer</code> mit Name, E-Mail-Adresse und Handynummer. Beide Bedingungen sind wahr, das Gateway startet «E-Mail» und «SMS» – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>customer</code> with a name, an e-mail address and a mobile number. Both conditions are true, so the gateway starts «E-Mail» and «SMS» – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse beide Jobs ab. Der inklusive Join wartet genau auf diese zwei Zweige, nicht auf «Protokollieren»; danach endet die Instanz.</span><span data-l="en">Complete both jobs. The inclusive join waits for exactly these two branches, not for «Protokollieren»; the instance then ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="email"><span data-l="de">✓ Job «E-Mail» abschliessen</span><span data-l="en">✓ Complete the «E-Mail» job</span></button><button class="rz-btn rz-act" type="button" data-act="job" data-el="sms"><span data-l="de">✓ Job «SMS» abschliessen</span><span data-l="en">✓ Complete the «SMS» job</span></button></span></li>
+            <li><span data-l="de">Variante: Starte mit <code>customer = {&quot;name&quot;: &quot;Anna Muster&quot;}</code> – ohne E-Mail und Telefon greift nur der Default-Zweig «Protokollieren».</span><span data-l="en">Variant: start with <code>customer = {&quot;name&quot;: &quot;Anna Muster&quot;}</code> – with neither e-mail nor phone only the default branch «Protokollieren» runs.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-inclusive&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-inclusive&quot; name=&quot;Mehrfach-Benachrichtigung&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;customer&quot; type=&quot;json&quot; default=&quot;{&amp;quot;name&amp;quot;: &amp;quot;Anna Muster&amp;quot;, &amp;quot;email&amp;quot;: &amp;quot;anna@example.com&amp;quot;, &amp;quot;phone&amp;quot;: &amp;quot;+41 79 123 45 67&amp;quot;}&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;inclusiveGateway id=&quot;split&quot; name=&quot;Kanäle?&quot; default=&quot;f_log&quot;/&gt;
     &lt;serviceTask id=&quot;email&quot; name=&quot;E-Mail&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;email&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
@@ -1387,7 +1541,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Anders als das <a href="#rz-xor">exklusive</a> Gateway (genau einer) startet das inklusive <b>alle</b> Zweige, deren Bedingung wahr ist – hier E-Mail <i>und/oder</i> SMS. Der zugehörige inklusive <b>Join</b> wartet genau auf die Zweige, die tatsächlich gestartet wurden. Setze einen <code>default</code>, falls keine Bedingung greift.</span><span data-l="en">Unlike the <a href="#rz-xor">exclusive</a> gateway (exactly one), the inclusive one starts <b>every</b> branch whose condition is true – here e-mail <i>and/or</i> SMS. Its inclusive <b>join</b> waits for exactly the branches that actually started. Set a <code>default</code> in case no condition matches.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Warten &amp; Reagieren</span><span data-l="en">Wait &amp; react</span></h3>
-      <div class="recipe" id="rz-timer-wait" data-proc="recipe-timer">
+      <div class="recipe" id="rz-timer-wait" data-proc="recipe-timer" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">⏱️</span>
           <span data-l="de">Timer: warten / verzögern</span><span data-l="en">Timer: wait / delay</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1400,16 +1554,31 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>wartezeit = &quot;PT30S&quot;</code>. Der Timer liest seine Dauer aus dieser Variable (<code>= duration(wartezeit)</code>) und wartet 30&nbsp;Sekunden – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>wartezeit = &quot;PT30S&quot;</code>. The timer reads its duration from that variable (<code>= duration(wartezeit)</code>) and waits 30&nbsp;seconds – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Nach 30&nbsp;Sekunden steht der Token bei «Erinnern». Schliesse den Job ab; die Instanz endet. Klickst du früher, meldet die Seite, dass der Token noch beim Timer wartet.</span><span data-l="en">After 30&nbsp;seconds the token is at «Erinnern». Complete the job; the instance ends. Click earlier and the page says the token is still waiting at the timer.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="remind"><span data-l="de">✓ Job «Erinnern» abschliessen</span><span data-l="en">✓ Complete the «Erinnern» job</span></button></span></li>
+            <li><span data-l="de">Im Betrieb startest du mit <code>wartezeit = &quot;P2D&quot;</code> – dasselbe Modell erinnert dann nach zwei Tagen.</span><span data-l="en">In production, start with <code>wartezeit = &quot;P2D&quot;</code> – the same model then reminds after two days.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-timer&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
-  &lt;process id=&quot;recipe-timer&quot; name=&quot;Erinnerung nach 2 Tagen&quot; isExecutable=&quot;true&quot;&gt;
+  &lt;process id=&quot;recipe-timer&quot; name=&quot;Erinnerung nach einer Wartezeit&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;wartezeit&quot; type=&quot;string&quot; default=&quot;PT30S&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
-    &lt;intermediateCatchEvent id=&quot;wait&quot; name=&quot;2 Tage warten&quot;&gt;
-      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+    &lt;intermediateCatchEvent id=&quot;wait&quot; name=&quot;Wartezeit abwarten&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;= duration(wartezeit)&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
     &lt;/intermediateCatchEvent&gt;
     &lt;serviceTask id=&quot;remind&quot; name=&quot;Erinnern&quot;&gt;
       &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;notify&quot;/&gt;&lt;/extensionElements&gt;
@@ -1421,9 +1590,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (Dauer), <code>&lt;timeDate&gt;</code> (fixer Zeitpunkt) oder <code>&lt;timeCycle&gt;</code> (Wiederholung). Alle drei akzeptieren auch FEEL-Ausdrücke, z.&nbsp;B. <code>= duration(slaFrist)</code>. Im Modeler schaltet der <b>fx</b>-Schalter am Feld in den Ausdrucksmodus.</span><span data-l="en">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (duration), <code>&lt;timeDate&gt;</code> (a fixed instant) or <code>&lt;timeCycle&gt;</code> (repetition). All three also accept FEEL expressions, e.g. <code>= duration(slaLimit)</code>. In the Modeler, the field's <b>fx</b> switch turns it into an expression.</span></p>
+        <p class="rz-how"><span data-l="de">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (Dauer), <code>&lt;timeDate&gt;</code> (fixer Zeitpunkt) oder <code>&lt;timeCycle&gt;</code> (Wiederholung). Alle drei akzeptieren auch FEEL-Ausdrücke – dieses Rezept liest die Dauer mit <code>= duration(wartezeit)</code> aus einer Startvariable, damit dasselbe Modell zum Ausprobieren 30&nbsp;Sekunden und im Betrieb zwei Tage warten kann. Im Modeler schaltet der <b>fx</b>-Schalter am Feld in den Ausdrucksmodus.</span><span data-l="en">ISO-8601: <code>&lt;timeDuration&gt;P2D&lt;/timeDuration&gt;</code> (duration), <code>&lt;timeDate&gt;</code> (a fixed instant) or <code>&lt;timeCycle&gt;</code> (repetition). All three also accept FEEL expressions – this recipe reads its duration from a start variable with <code>= duration(wartezeit)</code>, so the same model can wait 30&nbsp;seconds while you try it and two days in production. In the Modeler, the field's <b>fx</b> switch turns it into an expression.</span></p>
       </div>
-      <div class="recipe" id="rz-timer-start" data-proc="recipe-timer-start">
+      <div class="recipe" id="rz-timer-start" data-proc="recipe-timer-start" data-start="none" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🌙</span>
           <span data-l="de">Timer-Start: geplant starten</span><span data-l="en">Timer start: run on a schedule</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1436,6 +1605,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Hier deployt der Knopf nur – eine Instanz startet der Timer selbst. <code>R3/PT1M</code> heisst: dreimal, im Abstand von einer Minute. Die erste Instanz erscheint etwa eine Minute nach dem Deploy.</span><span data-l="en">Click <b>▶ Try it</b>. Here the button only deploys – the timer starts the instances itself. <code>R3/PT1M</code> means: three times, one minute apart. The first instance appears about a minute after the deploy.</span></li>
+            <li><span data-l="de">Öffne <b>→ In Operations ansehen</b> und lade nach einer Minute neu: Jede Instanz läuft durch den Script-Task «Report bauen» und endet; die Variable <code>report</code> enthält den Zeitpunkt.</span><span data-l="en">Open <b>→ Watch in Operations</b> and reload after a minute: each instance runs through the script task «Report bauen» and ends; the variable <code>report</code> holds the time.</span></li>
+            <li><span data-l="de">Nach drei Läufen ist der Zyklus erschöpft; es entstehen keine weiteren Instanzen.</span><span data-l="en">After three runs the cycle is used up; no further instances are started.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1443,21 +1620,23 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
              id=&quot;defs_recipe-timer-start&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-timer-start&quot; name=&quot;Nächtlicher Report&quot; isExecutable=&quot;true&quot;&gt;
-    &lt;startEvent id=&quot;nightly&quot; name=&quot;Jede Nacht 02:00&quot;&gt;
-      &lt;timerEventDefinition&gt;&lt;timeCycle&gt;R/PT24H&lt;/timeCycle&gt;&lt;/timerEventDefinition&gt;
+    &lt;startEvent id=&quot;nightly&quot; name=&quot;Jede Minute, dreimal&quot;&gt;
+      &lt;timerEventDefinition&gt;&lt;timeCycle&gt;R3/PT1M&lt;/timeCycle&gt;&lt;/timerEventDefinition&gt;
     &lt;/startEvent&gt;
-    &lt;serviceTask id=&quot;report&quot; name=&quot;Report bauen&quot;&gt;
-      &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;buildReport&quot;/&gt;&lt;/extensionElements&gt;
-    &lt;/serviceTask&gt;
+    &lt;scriptTask id=&quot;report&quot; name=&quot;Report bauen&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:script expression=&quot;= &amp;quot;Report vom &amp;quot; + string(now())&quot; resultVariable=&quot;report&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
     &lt;endEvent id=&quot;end&quot;/&gt;
     &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;nightly&quot; targetRef=&quot;report&quot;/&gt;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;report&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R/PT24H</code> heisst „alle 24&nbsp;Stunden, unbegrenzt oft“.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R/PT24H</code> means "every 24 hours, indefinitely".</span></p>
+        <p class="rz-how"><span data-l="de">Ein Start-Event mit <code>timerEventDefinition</code> braucht kein <code>CreateInstance</code> – die Engine startet die Instanzen selbst. <code>R3/PT1M</code> heisst „dreimal, im Abstand von einer Minute“, <code>R/PT24H</code> „alle 24&nbsp;Stunden, unbegrenzt oft“. Für eine feste Uhrzeit nimmst du einen Cron-Ausdruck: <code>0 2 * * *</code> startet jede Nacht um 02:00.</span><span data-l="en">A start event with a <code>timerEventDefinition</code> needs no <code>CreateInstance</code> – the engine starts the instances itself. <code>R3/PT1M</code> means "three times, one minute apart", <code>R/PT24H</code> "every 24 hours, indefinitely". For a fixed time of day use a cron expression: <code>0 2 * * *</code> starts every night at 02:00.</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-timer" data-proc="recipe-boundary-timer">
+      <div class="recipe" id="rz-boundary-timer" data-proc="recipe-boundary-timer" data-end="done">
         <h4><span class="rz-emoji" aria-hidden="true">⏰</span>
           <span data-l="de">Boundary-Timer: Timeout &amp; Eskalation</span><span data-l="en">Boundary timer: timeout &amp; escalation</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1470,6 +1649,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die User-Task «Freigeben» wartet. Die Frist am Rand steht zum Ausprobieren auf 2&nbsp;Minuten (<code>PT2M</code>); im Betrieb wäre es eher ein Tag (<code>P1D</code>).</span><span data-l="en">Click <b>▶ Try it</b>. The user task «Freigeben» waits. The deadline on its border is set to 2&nbsp;minutes (<code>PT2M</code>) for trying; in production it would rather be a day (<code>P1D</code>).</span></li>
+            <li><span data-l="de">Erledige die Aufgabe innerhalb der Frist; die Instanz endet bei <code>done</code>. In der <a href="/#/tasks">Tasks-App</a> sehen die Aufgabe Mitglieder der Gruppe <code>approvers</code> sowie Konten mit der Rolle <code>operator</code> oder <code>admin</code>.</span><span data-l="en">Complete the task within the deadline; the instance ends at <code>done</code>. In the <a href="/#/tasks">Tasks app</a> members of the group <code>approvers</code> see it, and so do accounts with the <code>operator</code> or <code>admin</code> role.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="review"><span data-l="de">✓ Aufgabe «Freigeben» erledigen</span><span data-l="en">✓ Complete the «Freigeben» task</span></button></span></li>
+            <li><span data-l="de">Oder warte 2&nbsp;Minuten: Der Timer bricht die Aufgabe ab, die Instanz endet bei <code>escalated</code>.</span><span data-l="en">Or wait 2&nbsp;minutes: the timer cancels the task and the instance ends at <code>escalated</code>.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1482,7 +1670,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       &lt;extensionElements&gt;&lt;zeebe:assignmentDefinition candidateGroups=&quot;approvers&quot;/&gt;&lt;/extensionElements&gt;
     &lt;/userTask&gt;
     &lt;boundaryEvent id=&quot;overdue&quot; name=&quot;Frist abgelaufen&quot; attachedToRef=&quot;review&quot;&gt;
-      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;P1D&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT2M&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
     &lt;/boundaryEvent&gt;
     &lt;endEvent id=&quot;done&quot;/&gt;
     &lt;endEvent id=&quot;escalated&quot;/&gt;
@@ -1494,7 +1682,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>boundaryEvent</code> mit <code>attachedToRef</code> hängt an der Aufgabe. Interrupting (Standard) bricht sie beim Auslösen ab; mit <code>cancelActivity="false"</code> läuft die Aufgabe weiter und der Zweig startet zusätzlich.</span><span data-l="en">A <code>boundaryEvent</code> with <code>attachedToRef</code> attaches to the task. Interrupting (default) cancels it when it fires; with <code>cancelActivity="false"</code> the task keeps running and the branch fires alongside it.</span></p>
       </div>
-      <div class="recipe" id="rz-message-catch" data-proc="recipe-msg-catch">
+      <div class="recipe" id="rz-message-catch" data-proc="recipe-msg-catch" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">📨</span>
           <span data-l="de">Nachricht empfangen</span><span data-l="en">Receive a message</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1507,16 +1695,30 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>orderId = &quot;A-100&quot;</code>. Der Token wartet bei «Zahlung» auf die Nachricht <code>payment-received</code> mit dem Korrelationsschlüssel <code>A-100</code> – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>orderId = &quot;A-100&quot;</code>. The token waits at «Zahlung» for the message <code>payment-received</code> with the correlation key <code>A-100</code> – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Sende die Nachricht. Die Seite schickt dafür <code>POST /api/v1/messages</code> mit <code>{&quot;name&quot;: &quot;payment-received&quot;, &quot;correlationKey&quot;: &quot;A-100&quot;}</code> – genau das, was ein Zahlungssystem täte. Die Instanz endet. Eine Nachricht mit einem anderen Schlüssel erreicht sie nicht.</span><span data-l="en">Send the message. The page sends <code>POST /api/v1/messages</code> with <code>{&quot;name&quot;: &quot;payment-received&quot;, &quot;correlationKey&quot;: &quot;A-100&quot;}</code> – exactly what a payment system would do. The instance ends. A message with another key does not reach it.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="msg" data-msg="payment-received" data-key="orderId"><span data-l="de">✉ Nachricht «payment-received» senden</span><span data-l="en">✉ Send the «payment-received» message</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-msg-catch&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_paid&quot; name=&quot;payment-received&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
   &lt;process id=&quot;recipe-msg-catch&quot; name=&quot;Auf Zahlung warten&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;orderId&quot; type=&quot;string&quot; default=&quot;A-100&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;intermediateCatchEvent id=&quot;await&quot; name=&quot;Zahlung&quot;&gt;
       &lt;messageEventDefinition messageRef=&quot;Msg_paid&quot;/&gt;
@@ -1529,7 +1731,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Die <code>correlationKey</code>-Angabe bestimmt, welche wartende Instanz eine eingehende Nachricht bekommt (hier über <code>orderId</code>). Nachrichten werden per <code>Publish-Message</code> (REST/MCP) mit passendem Schlüssel eingespielt.</span><span data-l="en">The <code>correlationKey</code> decides which waiting instance an incoming message reaches (here via <code>orderId</code>). Messages are delivered with a matching key via <code>publish-message</code> (REST/MCP).</span></p>
       </div>
-      <div class="recipe" id="rz-message-start" data-proc="recipe-msg-start">
+      <div class="recipe" id="rz-message-start" data-proc="recipe-msg-start" data-start="message:order-placed" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🚪</span>
           <span data-l="de">Nachricht-Start: durch ein Ereignis starten</span><span data-l="en">Message start: start from an event</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1542,6 +1744,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Der Knopf deployt den Prozess und sendet dann die Nachricht <code>order-placed</code> – sie startet die Instanz, nicht ein «Instanz starten».</span><span data-l="en">Click <b>▶ Try it</b>. The button deploys the process and then sends the message <code>order-placed</code> – it starts the instance, not a «start instance».</span></li>
+            <li><span data-l="de">Die neue Instanz wartet bei «Ausliefern» auf einen Job. Schliesse ihn ab; die Instanz endet.</span><span data-l="en">The new instance waits at «Ausliefern» for a job. Complete it; the instance ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="fulfil"><span data-l="de">✓ Job «Ausliefern» abschliessen</span><span data-l="en">✓ Complete the «Ausliefern» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1564,7 +1774,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein Nachrichten-Start braucht keinen <code>correlationKey</code> – jede passende Nachricht startet eine <i>neue</i> Instanz. Ideal als Einstieg für ereignisgetriebene Prozesse.</span><span data-l="en">A message start needs no <code>correlationKey</code> – each matching message starts a <i>new</i> instance. Ideal as the entry point for event-driven processes.</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-message" data-proc="recipe-boundary-msg">
+      <div class="recipe" id="rz-boundary-message" data-proc="recipe-boundary-msg" data-end="done">
         <h4><span class="rz-emoji" aria-hidden="true">🔔</span>
           <span data-l="de">Boundary-Nachricht (nicht unterbrechend)</span><span data-l="en">Boundary message (non-interrupting)</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1577,16 +1787,32 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>caseId = &quot;F-100&quot;</code>. Die User-Task «Fall bearbeiten» wartet – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>caseId = &quot;F-100&quot;</code>. The user task «Fall bearbeiten» waits – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Hake nach: Die Nachricht <code>nudge</code> mit dem Schlüssel <code>F-100</code> startet den Nebenzweig «Nachgehakt», der bei <code>logged</code> endet – die Aufgabe bleibt offen. Das geht beliebig oft.</span><span data-l="en">Nudge it: the message <code>nudge</code> with the key <code>F-100</code> starts the side branch «Nachgehakt», which ends at <code>logged</code> – the task stays open. You can do this as often as you like.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="msg" data-msg="nudge" data-key="caseId"><span data-l="de">✉ Nachricht «nudge» senden</span><span data-l="en">✉ Send the «nudge» message</span></button></span></li>
+            <li><span data-l="de">Erledige die Aufgabe; die Instanz endet bei <code>done</code>.</span><span data-l="en">Complete the task; the instance ends at <code>done</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="work"><span data-l="de">✓ Aufgabe «Fall bearbeiten» erledigen</span><span data-l="en">✓ Complete the «Fall bearbeiten» task</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-boundary-msg&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_nudge&quot; name=&quot;nudge&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=caseId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
   &lt;process id=&quot;recipe-boundary-msg&quot; name=&quot;Bearbeiten mit Nachhaken&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;caseId&quot; type=&quot;string&quot; default=&quot;F-100&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;userTask id=&quot;work&quot; name=&quot;Fall bearbeiten&quot;&gt;
       &lt;extensionElements&gt;&lt;zeebe:assignmentDefinition candidateGroups=&quot;agents&quot;/&gt;&lt;/extensionElements&gt;
@@ -1604,7 +1830,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Mit <code>cancelActivity="false"</code> ist das Boundary-Event <b>nicht unterbrechend</b>: Jede eingehende Nachricht startet den Nebenzweig, während die Aufgabe unberührt weiterläuft – gut für „Zwischenstand melden“ oder Reminder.</span><span data-l="en">With <code>cancelActivity="false"</code> the boundary event is <b>non-interrupting</b>: each incoming message spawns the side branch while the task keeps running untouched – good for "send a status" or reminders.</span></p>
       </div>
-      <div class="recipe" id="rz-signal" data-proc="recipe-signal">
+      <div class="recipe" id="rz-signal" data-proc="recipe-signal" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">📡</span>
           <span data-l="de">Signal: Broadcast werfen &amp; fangen</span><span data-l="en">Signal: broadcast throw &amp; catch</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1617,6 +1843,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Nach dem Fork wartet «Stopp fangen» auf das Signal <code>stop-all</code>, und «Stopp werfen» wirft es. Die Instanz fängt ihr eigenes Signal und läuft ohne weiteres Zutun bis zum Ende.</span><span data-l="en">Click <b>▶ Try it</b>. After the fork «Stopp fangen» waits for the signal <code>stop-all</code> and «Stopp werfen» throws it. The instance catches its own signal and runs to the end with nothing else to do.</span></li>
+            <li><span data-l="de">Ein Signal erreicht nur Fänger, die beim Werfen schon warten. Darum steht im Modell der Fluss zum Fänger (<code>f2</code>) vor dem zum Werfer (<code>f3</code>): atlas startet die Zweige eines Forks in der Reihenfolge ihrer Flüsse. Stünde der Werfer zuerst, ginge das Signal ins Leere, und die Instanz bliebe beim Fänger stehen.</span><span data-l="en">A signal reaches only catchers that are already waiting when it is thrown. That is why the model lists the flow to the catcher (<code>f2</code>) before the one to the thrower (<code>f3</code>): Atlas starts a fork's branches in the order of their flows. With the thrower first, the signal would go nowhere and the instance would stay at the catcher.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1636,17 +1869,17 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;parallelGateway id=&quot;join&quot;/&gt;
     &lt;endEvent id=&quot;end&quot;/&gt;
     &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;fork&quot;/&gt;
-    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fork&quot; targetRef=&quot;raise&quot;/&gt;
-    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;fork&quot; targetRef=&quot;await&quot;/&gt;
-    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;raise&quot; targetRef=&quot;join&quot;/&gt;
-    &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;await&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;fork&quot; targetRef=&quot;await&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f3&quot; sourceRef=&quot;fork&quot; targetRef=&quot;raise&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f4&quot; sourceRef=&quot;await&quot; targetRef=&quot;join&quot;/&gt;
+    &lt;sequenceFlow id=&quot;f5&quot; sourceRef=&quot;raise&quot; targetRef=&quot;join&quot;/&gt;
     &lt;sequenceFlow id=&quot;f6&quot; sourceRef=&quot;join&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
         <p class="rz-how"><span data-l="de">Anders als eine Nachricht (1:1, korreliert) ist ein Signal ein <b>Broadcast</b> (1:n, ohne Schlüssel): ein geworfenes Signal erreicht alle wartenden Fänger – auch in anderen Prozessen.</span><span data-l="en">Unlike a message (1:1, correlated) a signal is a <b>broadcast</b> (1:n, keyless): one thrown signal reaches every waiting catcher – across processes too.</span></p>
       </div>
-      <div class="recipe" id="rz-boundary-error" data-proc="recipe-boundary-error">
+      <div class="recipe" id="rz-boundary-error" data-proc="recipe-boundary-error" data-end="handled">
         <h4><span class="rz-emoji" aria-hidden="true">🧯</span>
           <span data-l="de">Boundary-Fehler abfangen</span><span data-l="en">Catch an error with a boundary event</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1659,6 +1892,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. «Belasten» wartet auf einen Job vom Typ <code>payment</code>.</span><span data-l="en">Click <b>▶ Try it</b>. «Belasten» waits for a job of type <code>payment</code>.</span></li>
+            <li><span data-l="de">Spiele die Ablehnung: Der Knopf meldet für den Job den BPMN-Fehler <code>DECLINED</code>, wie es ein Worker täte. Das Boundary-Event «Abgelehnt» fängt ihn, und die User-Task «Andere Zahlart» entsteht – kein Incident.</span><span data-l="en">Play the decline: the button reports the BPMN error <code>DECLINED</code> for the job, as a worker would. The boundary event «Abgelehnt» catches it and the user task «Andere Zahlart» is created – no incident.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="error" data-el="charge" data-code="DECLINED"><span data-l="de">✗ Fehler «DECLINED» melden</span><span data-l="en">✗ Report the «DECLINED» error</span></button><button class="rz-btn rz-act ghost" type="button" data-act="job" data-el="charge" data-alt><span data-l="de">✓ Job «Belasten» abschliessen</span><span data-l="en">✓ Complete the «Belasten» job</span></button></span></li>
+            <li><span data-l="de">Erledige «Andere Zahlart»; die Instanz endet bei <code>handled</code>. Hättest du stattdessen den Job erfolgreich abgeschlossen (zweiter Knopf oben), endete sie bei <code>paid</code>.</span><span data-l="en">Complete «Andere Zahlart»; the instance ends at <code>handled</code>. Had you completed the job successfully instead (second button above), it would end at <code>paid</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="retry"><span data-l="de">✓ Aufgabe «Andere Zahlart» erledigen</span><span data-l="en">✓ Complete the «Andere Zahlart» task</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1686,7 +1929,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>); ein Entra-Task mit <code>get-user-manager</code> wirft <code>ENTRA_USER_NOT_FOUND</code>, wenn Entra ID die Person nicht kennt. Jeder dieser Codes wird nur geworfen, wenn der Prozess ihn fängt; sonst bleibt es ein Fehlschlag mit Wiederholungen.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>); an Entra task with <code>get-user-manager</code> throws <code>ENTRA_USER_NOT_FOUND</code> when Entra ID does not know the person. Each of these codes is thrown only when the process catches it; otherwise it stays a failure with its retries.</span></p>
       </div>
-      <div class="recipe" id="rz-escalation" data-proc="recipe-escalation">
+      <div class="recipe" id="rz-escalation" data-proc="recipe-escalation" data-end="done">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
           <span data-l="de">Escalation-Events: melden ohne zu stoppen</span><span data-l="en">Escalation events: raise without stopping</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1699,6 +1942,16 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Im Subprozess «Fall bearbeiten» wartet «Prüfen» auf seinen Job.</span><span data-l="en">Click <b>▶ Try it</b>. Inside the subprocess «Fall bearbeiten», «Prüfen» waits for its job.</span></li>
+            <li><span data-l="de">Schliesse «Prüfen» ab. «Eskalieren» wirft <code>NEEDS_MANAGER</code>; das nicht unterbrechende Boundary-Event startet «Manager informieren», und im Subprozess geht es mit «Abschliessen» weiter. Jetzt warten zwei Jobs gleichzeitig.</span><span data-l="en">Complete «Prüfen». «Eskalieren» throws <code>NEEDS_MANAGER</code>; the non-interrupting boundary event starts «Manager informieren», and the subprocess carries on with «Abschliessen». Two jobs now wait at once.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="assess"><span data-l="de">✓ Job «Prüfen» abschliessen</span><span data-l="en">✓ Complete the «Prüfen» job</span></button></span></li>
+            <li><span data-l="de">Schliesse beide ab; die Instanz endet.</span><span data-l="en">Complete both; the instance ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="notifyMgr"><span data-l="de">✓ Job «Manager informieren» abschliessen</span><span data-l="en">✓ Complete the «Manager informieren» job</span></button><button class="rz-btn rz-act" type="button" data-act="job" data-el="resolve"><span data-l="de">✓ Job «Abschliessen» abschliessen</span><span data-l="en">✓ Complete the «Abschliessen» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1712,7 +1965,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       &lt;startEvent id=&quot;hs&quot;/&gt;
       &lt;serviceTask id=&quot;assess&quot; name=&quot;Prüfen&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;assess&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
       &lt;intermediateThrowEvent id=&quot;raise&quot; name=&quot;Eskalieren&quot;&gt;&lt;escalationEventDefinition escalationRef=&quot;Esc_mgr&quot;/&gt;&lt;/intermediateThrowEvent&gt;
-      &lt;serviceTask id=&quot;resolve&quot; name=&quot;Abschließen&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;resolve&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
+      &lt;serviceTask id=&quot;resolve&quot; name=&quot;Abschliessen&quot;&gt;&lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;resolve&quot;/&gt;&lt;/extensionElements&gt;&lt;/serviceTask&gt;
       &lt;endEvent id=&quot;he&quot;/&gt;
       &lt;sequenceFlow id=&quot;h1&quot; sourceRef=&quot;hs&quot; targetRef=&quot;assess&quot;/&gt;
       &lt;sequenceFlow id=&quot;h2&quot; sourceRef=&quot;assess&quot; targetRef=&quot;raise&quot;/&gt;
@@ -1735,7 +1988,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Ein <code>&lt;escalation&gt;</code> mit <code>escalationCode</code> wird per <code>escalationEventDefinition</code> geworfen (Throw- oder End-Event, hier aus dem Subprozess) und an einem <b>Boundary-Event</b> am Subprozess gefangen. Mit <code>cancelActivity="false"</code> ist es <b>nicht unterbrechend</b>: „Manager informieren“ startet, die Bearbeitung läuft ungestört weiter. Das ist der Unterschied zum <a href="#rz-boundary-error">Fehler</a> (bricht ab) – und eine ungefangene Eskalation propagiert nach oben (z.&nbsp;B. aus einer <a href="#rz-call-activity">Call-Activity</a> zum Aufrufer), statt einen Incident zu erzeugen.</span><span data-l="en">An <code>&lt;escalation&gt;</code> with an <code>escalationCode</code> is thrown via an <code>escalationEventDefinition</code> (throw or end event, here from inside the subprocess) and caught on a <b>boundary event</b> of the subprocess. With <code>cancelActivity="false"</code> it is <b>non-interrupting</b>: "notify manager" starts while the work keeps running. That's the difference from an <a href="#rz-boundary-error">error</a> (which aborts) – and an uncaught escalation propagates upward (e.g. from a <a href="#rz-call-activity">call activity</a> to the caller) instead of raising an incident.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Strukturieren &amp; Wiederverwenden</span><span data-l="en">Structure &amp; reuse</span></h3>
-      <div class="recipe" id="rz-subprocess" data-proc="recipe-subprocess">
+      <div class="recipe" id="rz-subprocess" data-proc="recipe-subprocess" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">📦</span>
           <span data-l="de">Eingebetteter Subprozess</span><span data-l="en">Embedded subprocess</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1748,6 +2001,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Im Subprozess wartet «Verifizieren» auf seinen Job. Die gemeinsame Frist am Subprozess steht zum Ausprobieren auf 2&nbsp;Minuten (<code>PT2M</code>).</span><span data-l="en">Click <b>▶ Try it</b>. Inside the subprocess «Verifizieren» waits for its job. The shared deadline on the subprocess is set to 2&nbsp;minutes (<code>PT2M</code>) for trying.</span></li>
+            <li><span data-l="de">Schliesse den Job innerhalb der Frist ab; die Instanz endet bei <code>end</code>. Oder warte 2&nbsp;Minuten: Die Frist bricht den ganzen Subprozess ab, die Instanz endet bei <code>aborted</code>.</span><span data-l="en">Complete the job within the deadline; the instance ends at <code>end</code>. Or wait 2&nbsp;minutes: the deadline cancels the whole subprocess and the instance ends at <code>aborted</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="verify"><span data-l="de">✓ Job «Verifizieren» abschliessen</span><span data-l="en">✓ Complete the «Verifizieren» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1766,7 +2027,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       &lt;sequenceFlow id=&quot;i2&quot; sourceRef=&quot;verify&quot; targetRef=&quot;e2&quot;/&gt;
     &lt;/subProcess&gt;
     &lt;boundaryEvent id=&quot;tooLong&quot; name=&quot;Zu lange&quot; attachedToRef=&quot;checks&quot;&gt;
-      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT30M&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
+      &lt;timerEventDefinition&gt;&lt;timeDuration&gt;PT2M&lt;/timeDuration&gt;&lt;/timerEventDefinition&gt;
     &lt;/boundaryEvent&gt;
     &lt;endEvent id=&quot;end&quot;/&gt;
     &lt;endEvent id=&quot;aborted&quot;/&gt;
@@ -1778,7 +2039,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>subProcess</code> hat eigenes Start-/End-Event und kapselt seinen Inhalt. Ein Boundary-Event am Subprozess wirkt auf <b>alles darin</b> – praktisch für eine gemeinsame Frist über mehrere Schritte.</span><span data-l="en">A <code>subProcess</code> has its own start/end event and encapsulates its contents. A boundary event on the subprocess applies to <b>everything inside</b> – handy for one deadline across several steps.</span></p>
       </div>
-      <div class="recipe" id="rz-call-activity" data-proc="recipe-caller">
+      <div class="recipe" id="rz-call-activity" data-proc="recipe-caller" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🔗</span>
           <span data-l="de">Call-Activity: Prozess wiederverwenden</span><span data-l="en">Call activity: reuse a process</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1791,7 +2052,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
-        <p class="rz-hint"><span data-l="de">Der aufgerufene Prozess <code>kyc-check</code> muss ebenfalls deployt sein — sonst wartet die Instanz still an der Call-Activity: kein Kind-Prozess, <b>kein Incident</b>, in Operations nur ein Token, das nicht weitergeht. Deploye <code>kyc-check</code> und starte neu.</span><span data-l="en">The called process <code>kyc-check</code> must be deployed too — otherwise the instance waits quietly at the call activity: no child instance, <b>no incident</b>, just a token in Operations that never moves on. Deploy <code>kyc-check</code> and start again.</span></p>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Das XML enthält zwei Prozesse – den Aufrufer und den aufgerufenen <code>recipe-kyc-check</code> –, und der Knopf deployt beide und startet den Aufrufer.</span><span data-l="en">Click <b>▶ Try it</b>. The XML holds two processes – the caller and the called <code>recipe-kyc-check</code> – and the button deploys both and starts the caller.</span></li>
+            <li><span data-l="de">Die Call-Activity startet eine Kind-Instanz von <code>recipe-kyc-check</code>. Deren Script-Task setzt <code>kycOk = true</code>, sie endet, und der Aufrufer läuft bis zu seinem Ende weiter. Zu tun ist nichts; in Operations stehen beide Instanzen.</span><span data-l="en">The call activity starts a child instance of <code>recipe-kyc-check</code>. Its script task sets <code>kycOk = true</code>, it ends, and the caller runs on to its end. Nothing to do; Operations lists both instances.</span></li>
+          </ol>
+        </div>
+        <p class="rz-hint"><span data-l="de">In deinen eigenen Modellen muss der aufgerufene Prozess ebenfalls deployt sein — sonst wartet die Instanz still an der Call-Activity: kein Kind-Prozess, <b>kein Incident</b>, in Operations nur ein Token, das nicht weitergeht. Dieses Rezept bringt <code>recipe-kyc-check</code> darum im selben XML mit.</span><span data-l="en">In your own models the called process must be deployed too — otherwise the instance waits quietly at the call activity: no child instance, <b>no incident</b>, just a token in Operations that never moves on. This recipe therefore ships <code>recipe-kyc-check</code> in the same XML.</span></p>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1801,18 +2069,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;process id=&quot;recipe-caller&quot; name=&quot;Aufrufer&quot; isExecutable=&quot;true&quot;&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;callActivity id=&quot;run&quot; name=&quot;KYC ausführen&quot;&gt;
-      &lt;extensionElements&gt;&lt;zeebe:calledElement processId=&quot;kyc-check&quot;/&gt;&lt;/extensionElements&gt;
+      &lt;extensionElements&gt;&lt;zeebe:calledElement processId=&quot;recipe-kyc-check&quot;/&gt;&lt;/extensionElements&gt;
     &lt;/callActivity&gt;
     &lt;endEvent id=&quot;end&quot;/&gt;
     &lt;sequenceFlow id=&quot;f1&quot; sourceRef=&quot;start&quot; targetRef=&quot;run&quot;/&gt;
     &lt;sequenceFlow id=&quot;f2&quot; sourceRef=&quot;run&quot; targetRef=&quot;end&quot;/&gt;
   &lt;/process&gt;
+  &lt;process id=&quot;recipe-kyc-check&quot; name=&quot;KYC prüfen&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;startEvent id=&quot;kyc_start&quot;/&gt;
+    &lt;scriptTask id=&quot;kyc_check&quot; name=&quot;Identität prüfen&quot;&gt;
+      &lt;extensionElements&gt;
+        &lt;zeebe:script expression=&quot;= true&quot; resultVariable=&quot;kycOk&quot;/&gt;
+      &lt;/extensionElements&gt;
+    &lt;/scriptTask&gt;
+    &lt;endEvent id=&quot;kyc_end&quot;/&gt;
+    &lt;sequenceFlow id=&quot;k1&quot; sourceRef=&quot;kyc_start&quot; targetRef=&quot;kyc_check&quot;/&gt;
+    &lt;sequenceFlow id=&quot;k2&quot; sourceRef=&quot;kyc_check&quot; targetRef=&quot;kyc_end&quot;/&gt;
+  &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de"><code>calledElement processId</code> verweist auf einen anderen deployten Prozess (hier <code>kyc-check</code>). Der Aufrufer wartet, bis die Kind-Instanz fertig ist. So teilst du wiederkehrende Abläufe zwischen mehreren Prozessen.</span><span data-l="en"><code>calledElement processId</code> points to another deployed process (here <code>kyc-check</code>). The caller waits until the child instance finishes. This shares recurring flows across processes.</span></p>
+        <p class="rz-how"><span data-l="de"><code>calledElement processId</code> verweist auf einen anderen deployten Prozess (hier <code>recipe-kyc-check</code>). Der Aufrufer wartet, bis die Kind-Instanz fertig ist. So teilst du wiederkehrende Abläufe zwischen mehreren Prozessen.</span><span data-l="en"><code>calledElement processId</code> points to another deployed process (here <code>recipe-kyc-check</code>). The caller waits until the child instance finishes. This shares recurring flows across processes.</span></p>
         <p class="rz-how"><span data-l="de"><b>Hineinspringen:</b> Das <b>＋</b> unten an der Call-Activity ist die Tür zum aufgerufenen Prozess – <b>Doppelklick</b> darauf öffnet ihn. Überall, wo das Symbol gezeichnet wird: im Modeler den Entwurf (sonst die neueste deployte Version), in der Live-Ansicht die gestartete Kind-Instanz und im Replay deren Ablauf. Beim Überfahren der Aufgabe zeigt ein Hinweis, wohin es geht.</span><span data-l="en"><b>Drilling in:</b> the <b>＋</b> at the bottom of a call activity is the door to the process it calls – <b>double-click it</b> to open it. Everywhere that marker is drawn: in the Modeler the callee's draft (or its newest deployed version), in the live view the child instance this caller started, and in the replay that child's own replay. Hovering the shape says where it goes.</span></p>
       </div>
-      <div class="recipe" id="rz-collaboration" data-proc="customer">
+      <div class="recipe" id="rz-collaboration" data-proc="customer" data-end="c_end">
         <h4><span class="rz-emoji" aria-hidden="true">🤝</span>
           <span data-l="de">Collaboration: Pools &amp; Message-Flows</span><span data-l="en">Collaboration: pools &amp; message flows</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1825,11 +2104,20 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>orderId = &quot;B-100&quot;</code> im Pool «Kunde». Er sendet <code>order</code>; diese Nachricht startet eine Instanz des Pools «Lieferant». Der Kunde wartet danach auf <code>confirm</code> – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>orderId = &quot;B-100&quot;</code> in the «Kunde» pool. It sends <code>order</code>; that message starts an instance of the «Lieferant» pool. The customer then waits for <code>confirm</code> – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse in der Lieferanten-Instanz den Job «Kommissionieren» ab. Der Lieferant sendet <code>confirm</code> mit <code>B-100</code>, der Kunde empfängt sie, und beide Instanzen enden.</span><span data-l="en">Complete the «Kommissionieren» job in the supplier instance. The supplier sends <code>confirm</code> with <code>B-100</code>, the customer receives it, and both instances end.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="s_pick"><span data-l="de">✓ Job «Kommissionieren» abschliessen</span><span data-l="en">✓ Complete the «Kommissionieren» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;recipe-collab&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;collaboration id=&quot;collab&quot;&gt;
     &lt;participant id=&quot;P_customer&quot; name=&quot;Kunde&quot; processRef=&quot;customer&quot;/&gt;
@@ -1844,6 +2132,11 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;= orderId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
   &lt;process id=&quot;customer&quot; name=&quot;Kunde&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;orderId&quot; type=&quot;string&quot; default=&quot;B-100&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;c_start&quot;/&gt;
     &lt;intermediateThrowEvent id=&quot;c_order&quot;&gt;&lt;messageEventDefinition messageRef=&quot;Msg_order&quot;/&gt;&lt;/intermediateThrowEvent&gt;
     &lt;intermediateCatchEvent id=&quot;c_confirm&quot;&gt;&lt;messageEventDefinition messageRef=&quot;Msg_confirm&quot;/&gt;&lt;/intermediateCatchEvent&gt;
@@ -1867,7 +2160,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>&lt;collaboration&gt;</code> bündelt mehrere <code>participant</code>-Pools (je ein eigener Prozess). Ein <code>&lt;messageFlow&gt;</code> verbindet ein Sende-Ereignis im einen Pool mit einem Empfangs-Ereignis im anderen – ausgeführt wird die Zustellung über korrelierte Nachrichten (throw → catch, hier auf <code>orderId</code>). Jeder Pool läuft als <b>eigene Instanz</b>; die <a href="/#/operations">Operations</a>-Ansicht zeigt beide und ihre Nachrichten.</span><span data-l="en">A <code>&lt;collaboration&gt;</code> groups several <code>participant</code> pools (each its own process). A <code>&lt;messageFlow&gt;</code> connects a sending event in one pool to a receiving event in the other – delivery runs via correlated messages (throw → catch, here on <code>orderId</code>). Each pool runs as its <b>own instance</b>; the <a href="/#/operations">Operations</a> view shows both and their messages.</span></p>
       </div>
-      <div class="recipe" id="rz-multi-instance" data-proc="recipe-mi">
+      <div class="recipe" id="rz-multi-instance" data-proc="recipe-mi" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🧵</span>
           <span data-l="de">Multi-Instance: pro Listenelement</span><span data-l="en">Multi-instance: once per list item</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1880,13 +2173,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>items</code> = drei Positionen (<code>A-1</code>, <code>B-2</code>, <code>C-3</code>). Für jede entsteht ein Job «Position versenden» – drei parallele Durchläufe, jeder mit seiner Variable <code>item</code> – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>items</code> = three line items (<code>A-1</code>, <code>B-2</code>, <code>C-3</code>). Each gets a «Position versenden» job – three parallel runs, each with its own <code>item</code> variable – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse alle drei Jobs ab. Der Knopf liefert je Job <code>label</code> zurück (<code>Etikett 1</code> bis <code>Etikett 3</code>), wie es ein Versand-Worker täte. Ergebnis: <code>labels</code> sammelt die drei Etiketten, die Instanz endet.</span><span data-l="en">Complete all three jobs. The button returns a <code>label</code> per job (<code>Etikett 1</code> to <code>Etikett 3</code>), as a shipping worker would. Result: <code>labels</code> collects the three labels and the instance ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="ship" data-vars='{"label": "Etikett {n}"}'><span data-l="de">✓ Alle Jobs «Position versenden» abschliessen</span><span data-l="en">✓ Complete every «Position versenden» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-mi&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-mi&quot; name=&quot;Jede Position bearbeiten&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;items&quot; type=&quot;json&quot; default=&quot;[{&amp;quot;sku&amp;quot;: &amp;quot;A-1&amp;quot;}, {&amp;quot;sku&amp;quot;: &amp;quot;B-2&amp;quot;}, {&amp;quot;sku&amp;quot;: &amp;quot;C-3&amp;quot;}]&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;ship&quot; name=&quot;Position versenden&quot;&gt;
       &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;ship&quot;/&gt;&lt;/extensionElements&gt;
@@ -1905,7 +2212,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de"><code>inputCollection</code> ist die Liste, <code>inputElement</code> der Name je Durchlauf; die <code>outputElement</code>-Werte werden in <code>outputCollection</code> gesammelt. Für seriell statt parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span><span data-l="en"><code>inputCollection</code> is the list, <code>inputElement</code> the per-iteration name; the <code>outputElement</code> values are gathered into <code>outputCollection</code>. For sequential instead of parallel: <code>&lt;multiInstanceLoopCharacteristics isSequential="true"&gt;</code>.</span></p>
       </div>
-      <div class="recipe" id="rz-loop" data-proc="recipe-loop">
+      <div class="recipe" id="rz-loop" data-proc="recipe-loop" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">↻</span>
           <span data-l="de">Loop: wiederholen, bis es passt</span><span data-l="en">Loop: repeat until it fits</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1918,6 +2225,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. «Zähler starten» setzt <code>versuche = 0</code>; «Prüfen» läuft, bis <code>versuche &lt; 3</code> nicht mehr gilt – also dreimal. Die Instanz läuft ohne Halt durch.</span><span data-l="en">Click <b>▶ Try it</b>. «Zähler starten» sets <code>versuche = 0</code>; «Prüfen» runs until <code>versuche &lt; 3</code> no longer holds – three times. The instance runs straight through.</span></li>
+            <li><span data-l="de">Öffne <b>→ In Operations ansehen</b>: <code>versuche = 3</code>, und das Replay zeigt die Durchläufe von «Prüfen».</span><span data-l="en">Open <b>→ Watch in Operations</b>: <code>versuche = 3</code>, and the replay shows the runs of «Prüfen».</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -1944,7 +2258,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Das <b>Loop</b>-Kennzeichen (↻) an einer Aktivität wiederholt sie, solange die <code>&lt;loopCondition&gt;</code> gilt – immer nur ein Durchlauf zur Zeit, jeder mit einem 1-basierten <code>loopCounter</code>. Ohne <code>testBefore="true"</code> wird erst <i>nach</i> dem Durchlauf geprüft, die Aktivität läuft also mindestens einmal; mit <code>testBefore="true"</code> vorher, sie kann also ganz übersprungen werden. <code>loopMaximum</code> ist die harte Obergrenze – mindestens eines von beidem muss gesetzt sein. Ohne Obergrenze stoppt die Engine nach <b>1000</b> Läufen mit einem Incident, den du auflösen kannst, um 1000 weitere freizugeben – ein Sicherheitsnetz für eine Bedingung, die nie falsch wird, keine Grenze für ein selbst gesetztes <code>loopMaximum</code>. Was ein Durchlauf schreibt, sieht der nächste (und der Prozess danach). Unterschied zur <a href="#rz-multi-instance">Multi-Instance</a>: die läuft <i>einmal pro Listenelement</i>, der Loop <i>so lange, bis es passt</i>.</span><span data-l="en">The <b>loop</b> marker (↻) on an activity repeats it while its <code>&lt;loopCondition&gt;</code> holds – one run at a time, each with a 1-based <code>loopCounter</code>. Without <code>testBefore="true"</code> the condition is checked <i>after</i> a run, so the activity always runs at least once; with it, before, so the activity may be skipped entirely. <code>loopMaximum</code> is the hard cap – at least one of the two must be set. Without a cap the engine stops the loop after <b>1000</b> runs with an incident you can resolve to grant 1000 more – a safety net for a condition that never turns false, not a limit on a cap you set yourself. What one run writes, the next run (and the rest of the process) sees. Unlike <a href="#rz-multi-instance">multi-instance</a>, which runs <i>once per list item</i>, a loop runs <i>until it fits</i>.</span></p>
       </div>
-      <div class="recipe" id="rz-event-sub" data-proc="recipe-event-sub">
+      <div class="recipe" id="rz-event-sub" data-proc="recipe-event-sub" data-end="cancelEnd">
         <h4><span class="rz-emoji" aria-hidden="true">🪝</span>
           <span data-l="de">Event-Subprozess: globaler Ereignis-Handler</span><span data-l="en">Event subprocess: a global event handler</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -1957,16 +2271,32 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>orderId = &quot;C-100&quot;</code>. «Ausführen» wartet auf seinen Job; der Event-Subprozess lauscht daneben auf die Nachricht <code>cancel</code> mit diesem Schlüssel – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>orderId = &quot;C-100&quot;</code>. «Ausführen» waits for its job; next to it the event subprocess listens for the message <code>cancel</code> with that key – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Storniere: Die Nachricht unterbricht «Ausführen» und startet «Aufräumen». (Schliesst du stattdessen den Job «Ausführen» ab – zweiter Knopf –, endet die Instanz regulär bei <code>end</code>.)</span><span data-l="en">Cancel: the message interrupts «Ausführen» and starts «Aufräumen». (Complete the «Ausführen» job instead – second button – and the instance ends normally at <code>end</code>.)</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="msg" data-msg="cancel" data-key="orderId"><span data-l="de">✉ Nachricht «cancel» senden</span><span data-l="en">✉ Send the «cancel» message</span></button><button class="rz-btn rz-act ghost" type="button" data-act="job" data-el="fulfil" data-alt><span data-l="de">✓ Job «Ausführen» abschliessen</span><span data-l="en">✓ Complete the «Ausführen» job</span></button></span></li>
+            <li><span data-l="de">Schliesse «Aufräumen» ab; die Instanz endet bei <code>cancelEnd</code>.</span><span data-l="en">Complete «Aufräumen»; the instance ends at <code>cancelEnd</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="rollback"><span data-l="de">✓ Job «Aufräumen» abschliessen</span><span data-l="en">✓ Complete the «Aufräumen» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-event-sub&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;message id=&quot;Msg_cancel&quot; name=&quot;cancel&quot;&gt;
     &lt;extensionElements&gt;&lt;zeebe:subscription correlationKey=&quot;=orderId&quot;/&gt;&lt;/extensionElements&gt;
   &lt;/message&gt;
   &lt;process id=&quot;recipe-event-sub&quot; name=&quot;Auftrag mit Abbruch-Handler&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;orderId&quot; type=&quot;string&quot; default=&quot;C-100&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;fulfil&quot; name=&quot;Ausführen&quot;&gt;
       &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;fulfil&quot;/&gt;&lt;/extensionElements&gt;
@@ -1991,7 +2321,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de">Ein <code>subProcess triggeredByEvent="true"</code> hat keinen eingehenden Fluss – er startet, wenn sein Start-Ereignis feuert. <b>Interrupting</b> (<code>isInterrupting="true"</code>) bricht den laufenden Prozess ab und übernimmt; <b>non-interrupting</b> (<code>false</code>, z.&nbsp;B. mit Timer) läuft nebenher und kann mehrfach auslösen – ideal für wiederkehrende Erinnerungen.</span><span data-l="en">A <code>subProcess triggeredByEvent="true"</code> has no incoming flow – it starts when its start event fires. <b>Interrupting</b> (<code>isInterrupting="true"</code>) aborts the running process and takes over; <b>non-interrupting</b> (<code>false</code>, e.g. with a timer) runs alongside and can fire repeatedly – ideal for recurring reminders.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Daten &amp; Variablen</span><span data-l="en">Data &amp; variables</span></h3>
-      <div class="recipe" id="rz-iomapping" data-proc="recipe-iomapping">
+      <div class="recipe" id="rz-iomapping" data-proc="recipe-iomapping" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🔧</span>
           <span data-l="de">ioMapping: Variablen rein &amp; raus</span><span data-l="en">ioMapping: variables in &amp; out</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -2004,13 +2334,27 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>applicant</code> = Anna Muster, Einkommen 85000, Alter 34. «Score berechnen» wartet; sein Job sieht dank <code>zeebe:input</code> nur <code>income</code> und <code>age</code> – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>applicant</code> = Anna Muster, income 85000, age 34. «Score berechnen» waits; thanks to <code>zeebe:input</code> its job sees only <code>income</code> and <code>age</code> – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse den Job ab. Der Knopf liefert <code>result = 720</code> zurück, wie es ein Scoring-Worker täte; <code>zeebe:output</code> macht daraus <code>scoring = {value: 720}</code>, und die Instanz endet.</span><span data-l="en">Complete the job. The button returns <code>result = 720</code>, as a scoring worker would; <code>zeebe:output</code> turns it into <code>scoring = {value: 720}</code> and the instance ends.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="score" data-vars='{"result": 720}'><span data-l="de">✓ Job «Score berechnen» abschliessen</span><span data-l="en">✓ Complete the «Score berechnen» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-iomapping&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-iomapping&quot; name=&quot;Ein-/Ausgabe-Mapping&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;applicant&quot; type=&quot;json&quot; default=&quot;{&amp;quot;name&amp;quot;: &amp;quot;Anna Muster&amp;quot;, &amp;quot;income&amp;quot;: 85000, &amp;quot;age&amp;quot;: 34}&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;score&quot; name=&quot;Score berechnen&quot;&gt;
       &lt;extensionElements&gt;
@@ -2030,7 +2374,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de"><code>zeebe:input</code> wertet <code>source</code> (FEEL) im Instanz-Kontext aus und legt es unter <code>target</code> <b>lokal für die Aufgabe</b> ab – so sieht der Worker nur <code>income</code>/<code>age</code> statt des ganzen <code>applicant</code>. <code>zeebe:output</code> schreibt das Ergebnis zurück in den Instanz-Kontext. Achtung: ein <code>target</code> ist ein <b>Variablenname, kein Pfad</b> – <code>scoring.value</code> legte eine Variable an, die wörtlich so heisst, statt ein Feld in <code>scoring</code> zu setzen, und der Deploy weist das darum ab (<code>variable.dotted-target</code>). Verschachtelt wird in der Expression: <code>{value: result}</code> nach <code>scoring</code> – das ergibt die Variable <code>scoring</code> mit dem Feld <code>value</code>, das <code>scoring.value</code> dann auch wirklich liest. So bleiben Aufgaben entkoppelt und wiederverwendbar.</span><span data-l="en"><code>zeebe:input</code> evaluates <code>source</code> (FEEL) in the instance scope and binds it under <code>target</code> <b>locally to the task</b> – so the worker sees only <code>income</code>/<code>age</code>, not the whole <code>applicant</code>. <code>zeebe:output</code> writes the result back into the instance scope. Careful: a <code>target</code> is a <b>variable name, not a path</b> – <code>scoring.value</code> would create a variable called literally that instead of setting a field inside <code>scoring</code>, which is why the deploy refuses it (<code>variable.dotted-target</code>). Nest in the expression instead: <code>{value: result}</code> into <code>scoring</code> – that yields a <code>scoring</code> variable with a <code>value</code> field, which <code>scoring.value</code> then really does read. This keeps tasks decoupled and reusable.</span></p>
       </div>
-      <div class="recipe" id="rz-dataobject" data-proc="recipe-dataobject">
+      <div class="recipe" id="rz-dataobject" data-proc="recipe-dataobject" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🗂️</span>
           <span data-l="de">Datenobjekte: Daten im Prozess ablegen</span><span data-l="en">Data objects: hold data in the process</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -2043,6 +2387,13 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz läuft ohne Halt durch.</span><span data-l="en">Click <b>▶ Try it</b>. The instance runs straight through.</span></li>
+            <li><span data-l="de">Öffne <b>→ In Operations ansehen</b> und wechsle im Replay auf den Reiter <b>Data</b>: Das Datenobjekt <code>order</code> trägt <code>id = &quot;ORD-1&quot;</code> und <code>total = 100</code>, die Variable <code>order</code> denselben Wert.</span><span data-l="en">Open <b>→ Watch in Operations</b> and switch to the <b>Data</b> tab in the replay: the data object <code>order</code> carries <code>id = &quot;ORD-1&quot;</code> and <code>total = 100</code>, and the variable <code>order</code> the same value.</span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -2090,7 +2441,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <p class="rz-how"><span data-l="de"><b>Zur Laufzeit:</b> Öffne die Instanz unter Betrieb › Instanzen und wechsle im Replay auf den Reiter <b>Data</b>. Dort steht jedes Datenobjekt, das die Instanz trägt — mit der Klasse, die das Modell dafür nennt (<code>itemSubjectRef</code>), seinem Datenzustand und seinem Wert. Ein Klick auf den Namen öffnet die <b>Zustandsspur</b>: jeder Schreibvorgang, der Zustand, in den er das Objekt gebracht hat, und welche Aufgabe ihn gemacht hat. Genau dafür sind Datenobjekte ereignisbasiert — ein Datum hat hier eine Geschichte, nicht nur einen aktuellen Wert.</span><span data-l="en"><b>At runtime:</b> open the instance under Operations › Instances and switch the replay to the <b>Data</b> tab. It lists every data object the instance carries — with the class the model declares for it (<code>itemSubjectRef</code>), its data state and its value. Clicking the name opens the <b>state trail</b>: every write, the state it moved the object into, and which activity made it. That is what data objects are event-sourced for — here a datum has a history, not just a current value.</span></p>
       </div>
       <h3 class="rz-group"><span data-l="de">Robustheit</span><span data-l="en">Robustness</span></h3>
-      <div class="recipe" id="rz-incident" data-proc="recipe-incident">
+      <div class="recipe" id="rz-incident" data-proc="recipe-incident" data-end="end">
         <h4><span class="rz-emoji" aria-hidden="true">🚑</span>
           <span data-l="de">Incident &amp; Retry</span><span data-l="en">Incident &amp; retry</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -2103,6 +2454,18 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. «Externer Aufruf» wartet auf einen Job vom Typ <code>risky</code>.</span><span data-l="en">Click <b>▶ Try it</b>. «Externer Aufruf» waits for a job of type <code>risky</code>.</span></li>
+            <li><span data-l="de">Lass ihn scheitern: Der Knopf meldet den Job als fehlgeschlagen, ohne verbleibende Versuche – wie ein Worker nach dem letzten Retry. Es entsteht ein Incident, und der Token pausiert.</span><span data-l="en">Make it fail: the button reports the job as failed with no attempts left – like a worker after its last retry. An incident is raised and the token pauses.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="fail" data-el="risky"><span data-l="de">✗ Fehlschlag melden</span><span data-l="en">✗ Report a failure</span></button></span></li>
+            <li><span data-l="de">Löse den Incident in <a href="/#/operations">Operations → Incidents</a> oder hier auf. Der Job steht danach wieder mit einem Versuch bereit.</span><span data-l="en">Resolve the incident in <a href="/#/operations">Operations → Incidents</a> or here. The job is then available again with one attempt.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="resolve"><span data-l="de">↻ Incident auflösen</span><span data-l="en">↻ Resolve the incident</span></button></span></li>
+            <li><span data-l="de">Schliesse den Job ab; die Instanz endet. Nichts ist verloren gegangen.</span><span data-l="en">Complete the job; the instance ends. Nothing was lost.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="risky"><span data-l="de">✓ Job «Externer Aufruf» abschliessen</span><span data-l="en">✓ Complete the «Externer Aufruf» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
@@ -2122,7 +2485,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Scheitert der Job, zählt <code>retries</code> herunter; bei 0 entsteht ein <b>Incident</b> und der Token <i>pausiert sicher</i> – nichts geht verloren. Du behebst die Ursache und löst ihn in <a href="/#/operations/incidents">Operations → Incidents</a> auf; die Instanz läuft weiter.</span><span data-l="en">If the job fails, <code>retries</code> counts down; at 0 an <b>incident</b> is raised and the token <i>pauses safely</i> – nothing is lost. You fix the cause and resolve it in <a href="/#/operations/incidents">Operations → Incidents</a>; the instance resumes.</span></p>
       </div>
-      <div class="recipe" id="rz-compensation" data-proc="recipe-compensation">
+      <div class="recipe" id="rz-compensation" data-proc="recipe-compensation" data-end="failed">
         <h4><span class="rz-emoji" aria-hidden="true">↩️</span>
           <span data-l="de">Compensation: getane Arbeit rückgängig machen</span><span data-l="en">Compensation: undo work already done</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -2135,13 +2498,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>paymentOk = false</code>. «Hotel buchen» wartet auf seinen Job – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>paymentOk = false</code>. «Hotel buchen» waits for its job – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse die Buchung ab. Das Gateway findet keine Zahlung, «Rückabwicklung» wirft die Kompensation, und der Handler «Buchung stornieren» wartet auf seinen Job.</span><span data-l="en">Complete the booking. The gateway finds no payment, «Rückabwicklung» throws the compensation, and the handler «Buchung stornieren» waits for its job.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="book"><span data-l="de">✓ Job «Hotel buchen» abschliessen</span><span data-l="en">✓ Complete the «Hotel buchen» job</span></button></span></li>
+            <li><span data-l="de">Schliesse die Stornierung ab; erst dann geht der Wurf weiter, und die Instanz endet bei <code>failed</code>. Mit <code>paymentOk = true</code> endete sie gleich nach der Buchung bei <code>done</code>.</span><span data-l="en">Complete the cancellation; only then does the throw move on, and the instance ends at <code>failed</code>. With <code>paymentOk = true</code> it would end right after the booking at <code>done</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="cancelBooking"><span data-l="de">✓ Job «Buchung stornieren» abschliessen</span><span data-l="en">✓ Complete the «Buchung stornieren» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-compensation&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-compensation&quot; name=&quot;Buchung mit Storno&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;paymentOk&quot; type=&quot;boolean&quot; default=&quot;false&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;serviceTask id=&quot;book&quot; name=&quot;Hotel buchen&quot;&gt;
       &lt;extensionElements&gt;&lt;zeebe:taskDefinition type=&quot;book-hotel&quot; retries=&quot;3&quot;/&gt;&lt;/extensionElements&gt;
@@ -2171,7 +2550,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </details>
         <p class="rz-how"><span data-l="de">Ein <code>compensateEventDefinition</code>-<b>Boundary-Event</b> an der Aufgabe verweist per <code>association</code> auf einen <code>isForCompensation="true"</code>-Handler (das „Undo“). Wirft später ein <code>intermediateThrowEvent</code> mit <code>compensateEventDefinition</code> die Kompensation (hier für <code>book</code>), führt atlas den Handler für die bereits erledigte Arbeit aus. Der Undo-Task hängt an keinem normalen Fluss. Der Wurf wartet, bis alle Handler fertig sind, die er gestartet hat; erst dann geht der Fluss weiter (BPMN <code>waitForCompletion</code>, Standard <code>true</code>). Mit <code>waitForCompletion="false"</code> läuft der nächste Schritt sofort, neben der Rückabwicklung. Steht der Wurf direkt in einem Event-Subprozess, etwa in dem, der ein Storno behandelt, kompensiert er den Bereich, in dem dieser Event-Subprozess liegt.</span><span data-l="en">A <code>compensateEventDefinition</code> <b>boundary event</b> on the task links via an <code>association</code> to an <code>isForCompensation="true"</code> handler (the "undo"). When an <code>intermediateThrowEvent</code> with a <code>compensateEventDefinition</code> later throws compensation (here for <code>book</code>), atlas runs the handler for the work already done. The undo task sits on no normal flow. The throw waits until every handler it started has finished, and only then does the flow go on (BPMN <code>waitForCompletion</code>, default <code>true</code>). With <code>waitForCompletion="false"</code> the next step runs at once, beside the rollback. A throw directly in an event subprocess — the one handling a cancellation, say — compensates the scope that event subprocess sits in.</span></p>
       </div>
-      <div class="recipe" id="rz-transaction" data-proc="recipe-transaction">
+      <div class="recipe" id="rz-transaction" data-proc="recipe-transaction" data-end="handled">
         <h4><span class="rz-emoji" aria-hidden="true">⚛️</span>
           <span data-l="de">Transaktion &amp; Cancel-End-Event: alles oder nichts</span><span data-l="en">Transaction &amp; cancel end event: all or nothing</span></h4>
         <p class="rz-when"><span class="lbl" data-l="de">Wann</span><span class="lbl" data-l="en">When</span>
@@ -2184,13 +2563,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
           <button class="rz-btn ghost rz-open" type="button"><span data-l="de">✏️ Im Modeler öffnen</span><span data-l="en">✏️ Open in the Modeler</span></button>
         </div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Ausprobieren</b>. Die Instanz startet mit <code>paid = false</code>. In der Transaktion wartet «Sitz reservieren» auf seinen Job – dem Standardwert, den das Modell in <code>atlas:startForm</code> deklariert.</span><span data-l="en">Click <b>▶ Try it</b>. The instance starts with <code>paid = false</code>. Inside the transaction «Sitz reservieren» waits for its job – the default the model declares in <code>atlas:startForm</code>.</span></li>
+            <li><span data-l="de">Schliesse die Reservierung ab. «Bezahlt?» führt auf das Cancel-End-Event, die Transaktion wird abgebrochen, und der Handler «Sitz freigeben» wartet auf seinen Job.</span><span data-l="en">Complete the reservation. «Bezahlt?» leads to the cancel end event, the transaction is cancelled, and the handler «Sitz freigeben» waits for its job.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="seat"><span data-l="de">✓ Job «Sitz reservieren» abschliessen</span><span data-l="en">✓ Complete the «Sitz reservieren» job</span></button></span></li>
+            <li><span data-l="de">Schliesse die Freigabe ab; der Abbruch-Pfad am Rand führt die Instanz zu <code>handled</code>. Mit <code>paid = true</code> committet die Transaktion, und die Instanz endet bei <code>done</code>.</span><span data-l="en">Complete the release; the cancel path on the border takes the instance to <code>handled</code>. With <code>paid = true</code> the transaction commits and the instance ends at <code>done</code>.</span>
+              <span class="rz-acts"><button class="rz-btn rz-act" type="button" data-act="job" data-el="release"><span data-l="de">✓ Job «Sitz freigeben» abschliessen</span><span data-l="en">✓ Complete the «Sitz freigeben» job</span></button></span></li>
+          </ol>
+        </div>
         <details class="rz-xml">
           <summary><span data-l="de">XML anzeigen</span><span data-l="en">Show the XML</span></summary>
           <pre><code>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;definitions xmlns=&quot;http://www.omg.org/spec/BPMN/20100524/MODEL&quot;
              xmlns:zeebe=&quot;http://camunda.org/schema/zeebe/1.0&quot;
+             xmlns:atlas=&quot;http://atlas/schema/1.0&quot;
              id=&quot;defs_recipe-transaction&quot; targetNamespace=&quot;http://atlas/recipes&quot;&gt;
   &lt;process id=&quot;recipe-transaction&quot; name=&quot;Reservierung als Transaktion&quot; isExecutable=&quot;true&quot;&gt;
+    &lt;extensionElements&gt;
+      &lt;atlas:startForm&gt;
+        &lt;atlas:startVariable name=&quot;paid&quot; type=&quot;boolean&quot; default=&quot;false&quot;/&gt;
+      &lt;/atlas:startForm&gt;
+    &lt;/extensionElements&gt;
     &lt;startEvent id=&quot;start&quot;/&gt;
     &lt;transaction id=&quot;reserve&quot; name=&quot;Reservieren&quot;&gt;
       &lt;startEvent id=&quot;ts&quot;/&gt;
@@ -2961,14 +3356,20 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             reached its end</b>. That coexistence is exactly the difference between an interrupting and a
             non-interrupting boundary, and the timeline shows both tokens.</p>
           <p data-l="de">Den anderen Weg zeigt eine Nachricht: veröffentliche <code>zahlung.eingegangen</code> mit dem
-            Korrelationsschlüssel <code>RE-2026-0042</code> (Operations, oder per MCP), und der Mahnlauf wird
-            abgebrochen – Ende <i>„Bezahlt"</i>. Entscheidend ist der Korrelationsschlüssel: Die Nachricht trifft <b>genau diese
+            Korrelationsschlüssel <code>RE-2026-0042</code> – mit dem Knopf unten, per MCP oder mit
+            <code>POST /api/v1/messages</code> –, und der Mahnlauf wird
+            abgebrochen – Ende <i>„Bezahlt"</i>. Sende sie <b>innerhalb von etwa 20&nbsp;Sekunden</b> nach dem Start, solange
+            der Mahnlauf noch läuft: Danach ist der Teilprozess zu Ende, niemand wartet mehr auf die Zahlung, und die
+            Nachricht verfällt ohne Wirkung. Entscheidend ist der Korrelationsschlüssel: Die Nachricht trifft <b>genau diese
             eine</b> Rechnung. Ein Signal träfe alle – die Gegenprobe steht in
             <a href="#bsp-preisaenderung">Preisänderung</a>.</p>
           <p data-l="en">A message shows the other path: publish <code>zahlung.eingegangen</code> with the correlation
-            key <code>RE-2026-0042</code> (in Operations, or over MCP) and the dunning run is cancelled – ending in
-            <i>"Bezahlt"</i>. The key is the point: the message hits <b>exactly this one</b> invoice. A signal would
+            key <code>RE-2026-0042</code> – with the button below, over MCP or with <code>POST /api/v1/messages</code> –
+            and the dunning run is cancelled – ending in <i>"Bezahlt"</i>. Send it <b>within about 20&nbsp;seconds</b> of
+            the start, while the dunning run is still going: after that the subprocess has ended, nothing waits for the
+            payment any more, and the message lapses without effect. The key is the point: the message hits <b>exactly this one</b> invoice. A signal would
             hit all of them – the counter-experiment is <a href="#bsp-preisaenderung">Price change</a>.</p>
+          <p class="bsp-msg-row"><button class="rz-btn bsp-msg" type="button" data-msg="zahlung.eingegangen" data-key="RE-2026-0042"><span data-l="de">✉ Nachricht «zahlung.eingegangen» senden</span><span data-l="en">✉ Send the «zahlung.eingegangen» message</span></button> <span class="bsp-msg-status" role="status" aria-live="polite"></span></p>
         </details>
       </div>
 
@@ -3242,6 +3643,14 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </div>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b>.</span><span data-l="en">Click <b>⬇ Install</b>.</span></li>
+            <li><span data-l="de">Öffne <a href="/#/tasks/start">Tasks-App → <i>Start process</i></a>, wähle <b>Reisebuchung</b> und klicke unten auf <i>Publish public link</i>. Die Masken eines öffentlichen Wizards erscheinen in keinem Posteingang – gestartet wird über diesen Link.</span><span data-l="en">Open the <a href="/#/tasks/start">Tasks app → <i>Start process</i></a>, pick <b>Reisebuchung</b> and click <i>Publish public link</i> at the bottom. A public wizard's screens appear in no inbox – it is started through that link.</span></li>
+            <li><span data-l="de">Öffne den Link in einem privaten Browserfenster, so wie es eine Kundin ohne Konto täte. Für „Fernreise“ und ein Geburtsdatum unter 18 Jahren öffnen sich beide Zusatzmasken; für „Inland“ und eine volljährige Person geht es direkt zur Bestätigung.</span><span data-l="en">Open the link in a private browser window, as a customer without an account would. For “long-haul” and a birth date under 18 both extra screens open; for “domestic” and an adult it goes straight to confirmation.</span></li>
+          </ol>
+        </div>
         <details class="bsp-more">
           <summary><span data-l="de">Die Merkregel, und was daneben liegt</span><span data-l="en">The rule of thumb, and what lies beside it</span></summary>
           <ul>
@@ -3332,6 +3741,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </div>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b>.</span><span data-l="en">Click <b>⬇ Install</b>.</span></li>
+            <li><span data-l="de">Öffne <a href="/#/tasks/start">Tasks-App → <i>Start process</i></a> (Rolle <code>operator</code>) und wähle <b>Arbeitsplatz-Ausstattung</b>. Das Startformular fragt nach der neuen Person, dem Eintrittsdatum und der vorgesetzten Person. Trage als vorgesetzte Person <b>deinen eigenen Benutzernamen</b> ein und klicke <i>Start process</i>.</span><span data-l="en">Open the <a href="/#/tasks/start">Tasks app → <i>Start process</i></a> (role <code>operator</code>) and pick <b>Arbeitsplatz-Ausstattung</b>. The start form asks for the new person, the start date and the supervisor. Enter <b>your own user name</b> as the supervisor and click <i>Start process</i>.</span></li>
+            <li><span data-l="de">Die erste Maske «Gerät» liegt jetzt in deinem <a href="/#/tasks">Posteingang</a>. Sobald du sie abschickst, führt dich die Tasks-App durch die weiteren Masken (Laptop oder Desktop, Software, Zusammenfassung).</span><span data-l="en">The first screen, «Gerät», is now in your <a href="/#/tasks">inbox</a>. As soon as you submit it, the Tasks app carries you through the next screens (laptop or desktop, software, summary).</span></li>
+            <li><span data-l="de">Zum Schluss wartet «Arbeitsplatz bereitstellen» bei der Gruppe <code>it</code>; mit der Rolle <code>operator</code> siehst du sie ebenfalls und schliesst die Instanz damit ab.</span><span data-l="en">Finally «Arbeitsplatz bereitstellen» waits with the group <code>it</code>; with the <code>operator</code> role you see it too and complete the instance with it.</span></li>
+          </ol>
+        </div>
         <details class="bsp-more">
           <summary><span data-l="de">Wer geführt wird, und was daneben liegt</span><span data-l="en">Who is carried, and what lies beside it</span></summary>
           <ul>
@@ -3489,16 +3907,15 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
             <p data-l="de">Vollständig <b>in-process</b>, ohne Ingest-Endpunkt und ohne eigenen Bildschirm: Die
               Instanz startet und parkt an einem <b>User-Task „CSV hochladen"</b> – die Tasks-App schickt den
-              Dateiinhalt als <code>csvText</code>. Ein Script-Task hält das Spaltenlayout
-              (<code>columnConfig</code>), ein <b>CSV-Import-Service-Task</b> (<code>io.atlas.csv-import</code>)
-              macht daraus <code>rows</code>, und ein <b>Multi-Instance-Subprozess</b> lässt je Zeile einen
+              Dateiinhalt als <code>csvText</code>. Ein <b>CSV-Service-Task</b> (<code>atlas:csvConnector</code>) liest ihn mit dem Spaltenlayout
+              <code>columns="email,group,license"</code> und macht daraus <code>rows</code>, und ein <b>Multi-Instance-Subprozess</b> lässt je Zeile einen
               <b>Business-Rule-Task</b> gegen die Entscheidung <code>RowValid</code> laufen (E-Mail, Gruppe, Lizenz).
               Eine gültige Zeile sammelt ihr <code>verdict</code> ein; eine ungültige parkt auf einem
               <b>Korrektur-User-Task</b> und wird nach der Korrektur erneut geprüft – Schleife, bis sie gültig ist.</p>
             <p data-l="en">Fully <b>in-process</b>, with no ingestion endpoint and no screen of its own: the instance
               starts and parks at a <b>"upload CSV" user task</b> – the Tasks app submits the file content as
-              <code>csvText</code>. A script task holds the column layout (<code>columnConfig</code>), a <b>CSV import
-              service task</b> (<code>io.atlas.csv-import</code>) turns it into <code>rows</code>, and a
+              <code>csvText</code>. A <b>CSV service task</b> (<code>atlas:csvConnector</code>) reads it with the column layout
+              <code>columns="email,group,license"</code> and turns it into <code>rows</code>, and a
               <b>multi-instance subprocess</b> runs a <b>business rule task</b> per row against the decision
               <code>RowValid</code> (email, group, licence). A valid row collects its <code>verdict</code>; an invalid
               one parks on a <b>correction user task</b> and is re-checked after the fix – looping until it is
@@ -3507,13 +3924,25 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </div>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>⬇ Installieren</b> und starte <b>prüfe Datensätze</b> in der <a href="/#/tasks/start">Tasks-App → <i>Start process</i></a>. Die Instanz wartet bei «CSV hochladen» (Gruppe <code>quality</code>; mit der Rolle <code>operator</code> siehst du die Aufgabe ebenfalls).</span><span data-l="en">Click <b>⬇ Install</b> and start <b>prüfe Datensätze</b> in the <a href="/#/tasks/start">Tasks app → <i>Start process</i></a>. The instance waits at «CSV hochladen» (group <code>quality</code>; with the <code>operator</code> role you see the task too).</span></li>
+            <li><span data-l="de">Speichere diese drei Zeilen als <code>test.csv</code> und lade die Datei in der Aufgabe hoch:</span><span data-l="en">Save these lines as <code>test.csv</code> and upload the file in the task:</span>
+              <pre><code>email,group,license
+ada@example.org,users,PRO
+bob-at-example,users,PRO
+carla@example.org,admins,GOLD</code></pre></li>
+            <li><span data-l="de">Die Regeln aus <code>RowValid</code>: Die E-Mail-Adresse enthält ein <code>@</code>, die Gruppe ist <code>users</code>, die Lizenz ist <code>PRO</code> oder <code>BASIC</code>. Ada ist gültig; für Bob (keine gültige Adresse) und Carla (Gruppe und Lizenz) entsteht je eine Korrektur-Aufgabe im Posteingang. Korrigiere die Werte – die Zeile wird erneut geprüft, und sind alle gültig, endet die Instanz.</span><span data-l="en">The rules in <code>RowValid</code>: the e-mail address contains an <code>@</code>, the group is <code>users</code>, the licence is <code>PRO</code> or <code>BASIC</code>. Ada is valid; Bob (no valid address) and Carla (group and licence) each get a correction task in the inbox. Fix the values – the row is checked again, and once all are valid the instance ends.</span></li>
+          </ol>
+        </div>
         <details class="bsp-more">
           <summary><span data-l="de">Selbst anpassen</span><span data-l="en">Make it yours</span></summary>
           <ul>
-            <li data-l="de"><b>Eigene Spalten.</b> <code>columnConfig</code> im ersten Script-Task beschreibt das
+            <li data-l="de"><b>Eigene Spalten.</b> <code>columns</code> am CSV-Service-Task «CSV einlesen» beschreibt das
               Layout; die DMN-Tabelle <code>RowValid</code> prüft es. Beide müssen zusammenpassen – das ist die eine
               Stelle, an der ein Umbau schiefgeht.</li>
-            <li data-l="en"><b>Your own columns.</b> <code>columnConfig</code> in the first script task describes the
+            <li data-l="en"><b>Your own columns.</b> <code>columns</code> on the CSV service task «CSV einlesen» describes the
               layout; the DMN table <code>RowValid</code> checks it. The two have to match – that is the one place a
               rebuild goes wrong.</li>
             <li data-l="de"><b>Parallel oder seriell?</b> Der Subprozess läuft parallel über die Zeilen. Das ist
@@ -3758,18 +4187,22 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               <code>published</code>) nach <code>schlagzeilen</code>; <code>maxItems="15"</code> begrenzt ohne
               Folge-Skript. Entscheidend ist, <b>wer das Format festlegt</b>: das Modell beim Deployment, nicht die
               Antwort zur Laufzeit – ein Server, der seinen Feed als <code>application/xml</code> ausliefert, ändert
-              damit nicht die Gestalt einer Prozessvariablen. Der Filter ist bewusst
-              <code>for e in … return …</code> und <b>kein</b> Listenfilter: ein Filter wertet jeden freien Namen
-              gegen den <i>Eintrag</i> aus, und <code>suchwort</code> würde still zu <code>null</code>. Läuft ohne
+              damit nicht die Gestalt einer Prozessvariablen. Das Skript baut mit
+              <code>for e in … return …</code> zuerst neue Einträge mit deutschen Feldnamen und einem Feld
+              <code>treffer</code> und filtert erst dann auf dieses Feld. Ein Listenfilter
+              <code>schlagzeilen[contains(title, suchwort)]</code> sähe <code>suchwort</code> ebenfalls – Namen, die
+              der Eintrag nicht hat, löst FEEL im äusseren Kontext auf –, behielte aber die englischen Feldnamen. Läuft ohne
               Konfiguration – <code>webscrape</code> ist ein Worker-Typ, für den atlas die Instanz selbst startet.</p>
             <p data-l="en">A web-scraping task with <code>format="rss"</code> fetches the feed and writes
               <b>structured entries</b> (<code>title</code>, <code>link</code>, <code>description</code>,
               <code>published</code>) into <code>schlagzeilen</code>; <code>maxItems="15"</code> bounds it with no
               follow-up script. The lesson is <b>who picks the format</b>: the model at deploy time, not the response
               at runtime – a server that serves its feed as <code>application/xml</code> does not thereby change the
-              shape of a process variable. The filter is deliberately <code>for e in … return …</code> and <b>not</b>
-              a list filter: a filter evaluates every free name against the <i>entry</i>, and <code>suchwort</code>
-              would silently become <code>null</code>. It runs unconfigured – <code>webscrape</code> is a worker type
+              shape of a process variable. The script first builds new entries with
+              <code>for e in … return …</code>, with German field names and a <code>treffer</code> field, and only
+              then filters on that field. A list filter <code>schlagzeilen[contains(title, suchwort)]</code> would see
+              <code>suchwort</code> as well – FEEL resolves names the entry lacks in the outer context – but would keep
+              the English field names. It runs unconfigured – <code>webscrape</code> is a worker type
               whose instance atlas starts itself.</p>
           </div>
         </div>
@@ -5484,6 +5917,20 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         </div>
         <div class="rz-actions"></div>
         <div class="rz-status" role="status" aria-live="polite"></div>
+        <div class="rz-try bsp-try">
+          <p class="rz-try-h"><span data-l="de">So probierst du es aus</span><span data-l="en">How to try it</span></p>
+          <ol>
+            <li><span data-l="de">Klicke <b>▶ Installieren und starten</b>. Die Instanz startet für die Personalnummer <code>identityId = &quot;P10001&quot;</code> (Anna Muster) und wartet im Zustand «Erfasst». Alle Nachrichten korrelieren auf diese Nummer.</span><span data-l="en">Click <b>▶ Install and start</b>. The instance starts for the personnel number <code>identityId = &quot;P10001&quot;</code> (Anna Muster) and waits in the state «Erfasst». Every message correlates on that number.</span></li>
+            <li><span data-l="de">Melde den Eintritt: «Erfasst» → «Aktiv».</span><span data-l="en">Report the start: «Erfasst» → «Aktiv».</span>
+              <span class="rz-acts"><button class="rz-btn bsp-msg" type="button" data-msg="identitaet-eintritt" data-key="P10001" data-vars='{"zeitpunkt": "2026-10-01T08:00:00Z"}'><span data-l="de">✉ «identitaet-eintritt» senden</span><span data-l="en">✉ Send «identitaet-eintritt»</span></button><span class="bsp-msg-status" role="status" aria-live="polite"></span></span></li>
+            <li><span data-l="de">Verbuche einen Service. Spur B nimmt das Ereignis an und wartet danach wieder – beliebig oft; im Reiter <b>Data</b> der Instanz steht der Service im Register <code>services</code>.</span><span data-l="en">Book a service. Lane B takes the event and then waits again – as often as you like; the instance's <b>Data</b> tab shows the service in the <code>services</code> register.</span>
+              <span class="rz-acts"><button class="rz-btn bsp-msg" type="button" data-msg="service-ereignis" data-key="P10001" data-vars='{"serviceId": "m365-e5", "serviceName": "Microsoft 365 E5", "serviceStatus": "IN_BETRIEB", "zeitpunkt": "2026-10-01T09:00:00Z"}'><span data-l="de">✉ «service-ereignis» senden</span><span data-l="en">✉ Send «service-ereignis»</span></button><span class="bsp-msg-status" role="status" aria-live="polite"></span></span></li>
+            <li><span data-l="de">Melde den Austritt: «Aktiv» → «Gesperrt», alle Services auf <code>GEKUENDIGT</code>.</span><span data-l="en">Report the exit: «Aktiv» → «Gesperrt», every service set to <code>GEKUENDIGT</code>.</span>
+              <span class="rz-acts"><button class="rz-btn bsp-msg" type="button" data-msg="identitaet-austritt" data-key="P10001" data-vars='{"zeitpunkt": "2027-03-31T17:00:00Z", "grund": "Kündigung"}'><span data-l="de">✉ «identitaet-austritt» senden</span><span data-l="en">✉ Send «identitaet-austritt»</span></button><span class="bsp-msg-status" role="status" aria-live="polite"></span></span></li>
+            <li><span data-l="de">Lass die Löschfrist ablaufen: «Archiviert», und die Instanz endet bei «Identität gelöscht».</span><span data-l="en">Let the retention period expire: «Archiviert», and the instance ends at «Identität gelöscht».</span>
+              <span class="rz-acts"><button class="rz-btn bsp-msg" type="button" data-msg="identitaet-loeschfrist" data-key="P10001" data-vars='{"zeitpunkt": "2037-03-31T00:00:00Z"}'><span data-l="de">✉ «identitaet-loeschfrist» senden</span><span data-l="en">✉ Send «identitaet-loeschfrist»</span></button><span class="bsp-msg-status" role="status" aria-live="polite"></span></span></li>
+          </ol>
+        </div>
         <details class="bsp-more">
           <summary><span data-l="de">Warum es so gebaut ist – und wo die Grenze wirklich liegt</span><span data-l="en">Why it is built this way – and where the limit really is</span></summary>
           <p data-l="de">Die naheliegende Bauform – ein nicht-unterbrechender <b>Ereignis-Subprozess</b> je
@@ -5895,10 +6342,21 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
         <div id="tut-done" class="note tip" hidden style="margin:14px 0 0">
           <a class="pilllink" href="/#/tasks"><span data-l="de">&rarr; Zum Posteingang</span><span data-l="en">&rarr; Go to the inbox</span></a>
           <a class="pilllink ghost" href="/#/operations"><span data-l="de">&rarr; In Operations ansehen</span><span data-l="en">&rarr; Watch in Operations</span></a>
-          <p style="margin:.6em 0 0" data-l="de">Betrag &uuml;ber 1000: die Freigabe-Aufgabe wartet im Posteingang. Sonst l&auml;uft der
+          <p style="margin:.6em 0 0" data-l="de">Betrag &uuml;ber 1000: die Freigabe-Aufgabe wartet im Posteingang &ndash; sichtbar f&uuml;r
+            die Gruppe <code>approvers</code> und f&uuml;r Konten mit der Rolle <code>operator</code> oder <code>admin</code>. Sonst l&auml;uft der
             automatische Weg &ndash; sichtbar in Operations.</p>
-          <p style="margin:.6em 0 0" data-l="en">Amount over 1000: the approval task waits in the inbox. Otherwise the automatic
-            path runs &ndash; visible in Operations.</p>
+          <p style="margin:.6em 0 0" data-l="en">Amount over 1000: the approval task waits in the inbox &ndash; visible to the
+            <code>approvers</code> group and to accounts with the <code>operator</code> or <code>admin</code> role. Otherwise the
+            automatic path runs &ndash; visible in Operations.</p>
+          <p style="margin:.6em 0 0" data-l="de">Nach der Entscheidung bleibt die Instanz bei &bdquo;Bestellung anlegen&ldquo; (bzw.
+            &bdquo;Ablehnung melden&ldquo;) stehen: Das sind Service-Tasks, die auf einen Worker vom Typ <code>create-order</code>
+            bzw. <code>notify</code> warten, und auf dieser Installation gibt es keinen. &Uuml;bernimm seine Rolle mit dem Knopf;
+            dann endet die Instanz bei &bdquo;Bestellt&ldquo; bzw. &bdquo;Abgelehnt&ldquo;.</p>
+          <p style="margin:.6em 0 0" data-l="en">After the decision the instance stops at &ldquo;Bestellung anlegen&rdquo; (or
+            &ldquo;Ablehnung melden&rdquo;): these are service tasks waiting for a worker of type <code>create-order</code> or
+            <code>notify</code>, and this installation has none. Play that worker with the button; the instance then ends at
+            &ldquo;Bestellt&rdquo; or &ldquo;Abgelehnt&rdquo;.</p>
+          <p style="margin:.6em 0 0"><button id="tut-jobs" class="rz-btn" type="button"><span data-l="de">&check; Wartenden Job abschliessen</span><span data-l="en">&check; Complete the waiting job</span></button></p>
         </div>
       </div>
 
@@ -13809,6 +14267,34 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
     }
     return text ? JSON.parse(text) : {};
   }
+  // The instance the last click started. The jobs button acts on it only: it plays the
+  // worker for the service task the run waits at, so the tutorial reaches its end event
+  // on an installation that runs no create-order or notify worker. A user task is left to
+  // the inbox — that step is the point of the tutorial.
+  let tutInstance = 0;
+  const jobsBtn = $("tut-jobs");
+  if (jobsBtn) jobsBtn.addEventListener("click", async () => {
+    if (!tutInstance) return;
+    jobsBtn.disabled = true;
+    try {
+      const jobs = (await apiCall("GET", "/api/v1/instances/" + tutInstance + "/jobs")) || [];
+      const service = jobs.filter((j) => j.jobType !== "io.atlas.user-task");
+      if (!service.length){
+        const open = jobs.length ? T("Die Instanz wartet auf die Freigabe-Aufgabe im Posteingang.",
+                                     "The instance waits for the approval task in the inbox.")
+                                 : T("Gerade wartet kein Job.", "No job is waiting right now.");
+        setStatus(open, "ok");
+        return;
+      }
+      for (const j of service){
+        await apiCall("POST", "/api/v1/jobs/" + j.key + "/complete", { reason: "Handbuch-Tutorial: von Hand ausgeführt", variables: {} });
+      }
+      setStatus(T("\u2713 Job abgeschlossen \u2013 die Instanz ist zu Ende gelaufen.",
+                  "\u2713 Job completed \u2013 the instance ran to its end."), "ok");
+    } catch (e){
+      setStatus(T("Fehler: ", "Error: ") + e.message, "err");
+    } finally { jobsBtn.disabled = false; }
+  });
   btn.addEventListener("click", async () => {
     btn.disabled = true; doneEl.hidden = true;
     try {
@@ -13821,7 +14307,8 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       if (!match) throw new Error(T("Deploy lieferte keine Prozessdefinition.", "Deploy returned no process definition."));
       setStatus(T("Instanz starten\u2026", "Starting an instance\u2026"));
       const amount = Number($("tut-amount").value || 2000);
-      await apiCall("POST", "/api/v1/processes/" + match.key + "/instances", { variables: { item: "Beispiel-Artikel", amount } });
+      const made = await apiCall("POST", "/api/v1/processes/" + match.key + "/instances", { variables: { item: "Beispiel-Artikel", amount } });
+      tutInstance = made && made.instanceKey;
       setStatus(T("\u2713 Bestellfreigabe l\u00e4uft \u2013 Betrag " + amount + " \u20ac.",
                   "\u2713 Purchase approval is running \u2013 amount " + amount + " EUR."), "ok");
       doneEl.hidden = false;
@@ -14193,24 +14680,221 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
   }
 
   // --- actions ---
+  // A 401 is "not signed in"; a 403 is a session whose roles do not reach this call,
+  // and the server's reason names which — telling that reader to sign in again would
+  // send them in a circle.
+  function failed(card, e){
+    if (e.status === 401){
+      setStatus(card, T("Bitte melde dich zuerst in der App an.", "Please sign in to the app first."), "err");
+    } else if (e.status === 403){
+      setStatus(card, T("Dein Konto darf das nicht: ", "Your account may not do this: ") + e.message, "err");
+    } else {
+      setStatus(card, T("Fehler: ", "Error: ") + e.message, "err");
+    }
+  }
+
+  // The element names of a card's model, so a status line can say «Karte belasten»
+  // rather than an id the reader never sees in the diagram.
+  function elementNames(card){
+    if (card._names) return card._names;
+    const out = {};
+    try {
+      const doc = new DOMParser().parseFromString(xmlOf(card), "application/xml");
+      for (const el of doc.querySelectorAll("[id]")) out[el.getAttribute("id")] = el.getAttribute("name") || "";
+    } catch (e) { /* ids then stand in for names */ }
+    card._names = out;
+    return out;
+  }
+  const nameOf = (card, id) => "«" + (elementNames(card)[id] || id) + "»";
+
+  // A recipe whose model calls a DMN decision carries that decision in its own block.
+  // It is deployed only when no decision of that id exists yet: an installation that
+  // already has one keeps it, and the recipe then runs against that.
+  async function deployDecision(card){
+    const el = card.querySelector("pre.rz-dmn code");
+    if (!el) return;
+    const xml = el.textContent;
+    const m = /<decision\s+id="([^"]+)"/.exec(xml);
+    const id = m ? m[1] : "";
+    const have = id ? await call("GET", "/api/v1/decision-deployments?decisionId=" + encodeURIComponent(id)) : [];
+    if (Array.isArray(have) && have.length) return;
+    setStatus(card, T("Entscheidung deployen…", "Deploying the decision…"));
+    await call("POST", "/api/v1/decision-deployments", xml, true);
+  }
+
+  // The instances this card's last run started: those of the definitions it deployed
+  // whose key lies above the floor taken when it started. Keys only grow, so an
+  // instance a message or a call activity started after the run is above it too, and
+  // one left over from an earlier click is below it.
+  async function runInstances(card){
+    const out = [];
+    for (const key of card._defs || []){
+      const page = await call("GET", "/api/v1/instances?process=" + key + "&limit=200");
+      for (const i of (page && page.items) || []) if (i.key > card._floor) out.push(i);
+    }
+    return out.sort((a, b) => a.key - b.key);
+  }
+
+  async function keyFloor(defs){
+    let floor = 0;
+    for (const key of defs){
+      const page = await call("GET", "/api/v1/instances?process=" + key + "&limit=500");
+      for (const i of (page && page.items) || []) floor = Math.max(floor, i.key);
+    }
+    return floor;
+  }
+
+  // Where the run stands, in one line: done and where it ended, or what it waits at,
+  // or the incident that stopped it. Boundary events and subprocess scopes are open in
+  // the timeline too, but nothing waits *at* them, so they are not named.
+  const WAITS = /Task$|CatchEvent$|CallActivity$/;
+  async function progress(card){
+    const insts = await runInstances(card);
+    if (!insts.length) return { text: T("Noch keine Instanz.", "No instance yet."), insts };
+    const keys = new Set(insts.map((i) => i.key));
+    const incPage = await call("GET", "/api/v1/incidents");
+    const incs = ((incPage && incPage.items) || []).filter((x) => keys.has(x.processInstanceKey));
+    if (incs.length){
+      return { text: T("Incident bei ", "Incident at ") + nameOf(card, incs[0].elementId) + ": " + incs[0].message, insts, err: true };
+    }
+    const waiting = [], ends = [];
+    for (const i of insts){
+      const tl = await call("GET", "/api/v1/instances/" + i.key + "/timeline");
+      for (const st of (tl && tl.steps) || []){
+        if (!st.endAt && WAITS.test(st.type || "")) waiting.push(nameOf(card, st.elementId));
+        if (st.endAt && /EndEvent$/.test(st.type || "")) ends.push(nameOf(card, st.elementId));
+      }
+    }
+    if (insts.every((i) => i.state === "completed")){
+      return { text: T("✓ Abgeschlossen – Ende bei ", "✓ Completed – ended at ") + [...new Set(ends)].join(", "), insts, done: true };
+    }
+    return { text: T("Wartet bei: ", "Waiting at: ") + ([...new Set(waiting)].join(", ") || "…"), insts };
+  }
+
+  async function report(card, prefix){
+    const p = await progress(card);
+    // A finished run says so on its own; the prefix only frames a run still under way.
+    setStatus(card, (prefix && !p.done ? prefix + " " : "") + p.text, p.err ? "err" : "ok");
+    if (card._defs && card._defs.length) {
+      addLink(card, "/#/operations/p/" + card._defs[0], T("→ In Operations ansehen", "→ Watch in Operations"));
+    }
+    return p;
+  }
+
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
   async function runRecipe(card, btn){
     const proc = card.dataset.proc;
+    const start = card.dataset.start || "";
     btn.disabled = true;
-    setStatus(card, T("Deployen…", "Deploying…"));
     try {
+      await deployDecision(card);
+      setStatus(card, T("Deployen…", "Deploying…"));
       const dep = await call("POST", "/api/v1/deployments", xmlOf(card), true);
-      const match = (dep.deployments || []).find((d) => d.processId === proc) || (dep.deployments || [])[0];
+      const defs = (dep.deployments || []);
+      const match = defs.find((d) => d.processId === proc) || defs[0];
       if (!match) throw new Error(T("Deploy lieferte keine Prozessdefinition.", "Deploy returned no process definition."));
-      setStatus(card, T("Instanz starten…", "Starting an instance…"));
-      await call("POST", "/api/v1/processes/" + match.key + "/instances", { variables: {} });
-      setStatus(card, T("✓ Läuft! Sieh dir die Instanz an:", "✓ Running! Inspect the instance:"), "ok");
-      addLink(card, "/#/operations/p/" + match.key, T("→ In Operations ansehen", "→ Watch in Operations"));
-    } catch (e) {
-      if (e.status === 401 || e.status === 403){
-        setStatus(card, T("Bitte melde dich zuerst in der App an.", "Please sign in to the app first."), "err");
-      } else {
-        setStatus(card, T("Fehler: ", "Error: ") + e.message, "err");
+      card._defs = [match.key].concat(defs.filter((d) => d !== match).map((d) => d.key));
+      if (start === "none"){
+        // A timer start: the engine starts the instances itself.
+        card._floor = await keyFloor(card._defs);
+        setStatus(card, T("✓ Deployt. Der Timer startet die erste Instanz in etwa einer Minute.",
+                          "✓ Deployed. The timer starts the first instance in about a minute."), "ok");
+        addLink(card, "/#/operations/p/" + match.key, T("→ In Operations ansehen", "→ Watch in Operations"));
+        return;
       }
+      if (start.startsWith("message:")){
+        card._floor = await keyFloor(card._defs);
+        setStatus(card, T("Nachricht senden…", "Sending the message…"));
+        await call("POST", "/api/v1/messages", { name: start.slice(8) });
+      } else {
+        setStatus(card, T("Instanz starten…", "Starting an instance…"));
+        // No variables: what the model reads, it declares as start variables with a
+        // default (ADR-0455), and the engine seeds those defaults on this start too.
+        const made = await call("POST", "/api/v1/processes/" + match.key + "/instances", { variables: {} });
+        card._floor = (made && made.instanceKey ? made.instanceKey : 1) - 1;
+      }
+      await pause(400);
+      await report(card, T("✓ Läuft.", "✓ Running."));
+    } catch (e) {
+      failed(card, e);
+    } finally { btn.disabled = false; }
+  }
+
+  // One step of "How to try it": play the worker, the person, the sender or the
+  // operator the recipe waits for, on this run's instances only.
+  const REASON = "Handbuch-Rezept: von Hand ausgeführt";
+  async function jobsAt(card, elementId){
+    const found = [];
+    for (const i of await runInstances(card)){
+      if (i.state !== "active") continue;
+      const jobs = await call("GET", "/api/v1/instances/" + i.key + "/jobs");
+      for (const j of jobs || []) if (j.elementId === elementId) found.push(j);
+    }
+    return found.sort((a, b) => a.key - b.key);
+  }
+
+  async function variableOf(card, name){
+    for (const i of await runInstances(card)){
+      const v = (i.variables || []).find((x) => x.name === name);
+      if (v) return v.value;
+    }
+    return null;
+  }
+
+  async function act(card, btn){
+    if (!card._defs){
+      setStatus(card, T("Klicke zuerst ▶ Ausprobieren – dieser Schritt wirkt auf die Instanz, die es startet.",
+                        "Click ▶ Try it first – this step acts on the instance it starts."), "err");
+      return;
+    }
+    const d = btn.dataset;
+    btn.disabled = true;
+    try {
+      if (d.act === "msg"){
+        const body = { name: d.msg };
+        if (d.key){
+          const key = await variableOf(card, d.key);
+          if (key == null) throw new Error(T("Die Instanz hat keine Variable ", "The instance has no variable ") + d.key);
+          body.correlationKey = String(key);
+        }
+        await call("POST", "/api/v1/messages", body);
+      } else if (d.act === "resolve"){
+        const keys = new Set((await runInstances(card)).map((i) => i.key));
+        const page = await call("GET", "/api/v1/incidents");
+        const incs = ((page && page.items) || []).filter((x) => keys.has(x.processInstanceKey));
+        if (!incs.length){
+          await report(card, T("Kein offener Incident.", "No open incident."));
+          return;
+        }
+        for (const inc of incs) await call("POST", "/api/v1/incidents/" + inc.elementInstanceKey + "/resolve", {});
+      } else {
+        const jobs = await jobsAt(card, d.el);
+        if (!jobs.length){
+          await report(card, T("Bei ", "No open job at ") + nameOf(card, d.el) + T(" wartet gerade nichts.", " right now."));
+          return;
+        }
+        let n = 0;
+        for (const j of jobs){
+          n++;
+          if (d.act === "job"){
+            const vars = d.vars ? JSON.parse(d.vars.split("{n}").join(String(n))) : {};
+            if (j.jobType === "io.atlas.user-task"){
+              await call("POST", "/api/v1/tasks/" + j.key + "/complete", { variables: vars });
+            } else {
+              await call("POST", "/api/v1/jobs/" + j.key + "/complete", { reason: REASON, variables: vars });
+            }
+          } else if (d.act === "error"){
+            await call("POST", "/api/v1/jobs/" + j.key + "/error", { errorCode: d.code, reason: REASON });
+          } else if (d.act === "fail"){
+            await call("POST", "/api/v1/jobs/" + j.key + "/fail", { retries: 0, message: "Handbuch-Rezept: Fehlschlag simuliert" });
+          }
+        }
+      }
+      await pause(400);
+      await report(card, T("✓ Erledigt.", "✓ Done."));
+    } catch (e) {
+      failed(card, e);
     } finally { btn.disabled = false; }
   }
 
@@ -14240,6 +14924,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
     if (!card) return;
     if (ev.target.closest(".rz-run")) runRecipe(card, ev.target.closest(".rz-run"));
     else if (ev.target.closest(".rz-open")) openInModeler(card, ev.target.closest(".rz-open"));
+    else if (ev.target.closest(".rz-act")) act(card, ev.target.closest(".rz-act"));
   });
 
   // ---- examples chapter -------------------------------------------------
@@ -14423,7 +15108,24 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
     eio.observe(section);
     if (location.hash.startsWith("#bsp-") || location.hash === "#beispiele") equipAll();
 
-    section.addEventListener("click", (ev) => {
+    section.addEventListener("click", async (ev) => {
+      // A message a card's text asks the reader to send: the button sends exactly that,
+      // so the step needs neither MCP nor a hand-written request.
+      const msg = ev.target.closest(".bsp-msg");
+      if (msg){
+        const out = msg.parentElement.querySelector(".bsp-msg-status");
+        const say = (text, kind) => { if (out){ out.textContent = text; out.className = "bsp-msg-status " + kind; } };
+        msg.disabled = true;
+        try {
+          await call("POST", "/api/v1/messages", { name: msg.dataset.msg, correlationKey: msg.dataset.key,
+                                                  variables: msg.dataset.vars ? JSON.parse(msg.dataset.vars) : {} });
+          say(T("✓ Nachricht gesendet.", "✓ Message sent."), "ok");
+        } catch (e) {
+          say(e.status === 401 ? T("Bitte melde dich zuerst in der App an.", "Please sign in to the app first.")
+                               : T("Fehler: ", "Error: ") + e.message, "err");
+        } finally { msg.disabled = false; }
+        return;
+      }
       const card = ev.target.closest(".bsp");
       if (!card || !card._example) return;
       const run = ev.target.closest(".bsp-run");

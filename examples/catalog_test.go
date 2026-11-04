@@ -270,8 +270,14 @@ var catalogSources = []catalogSource{
 	// instead.
 	{ID: "benutzerverwaltung", Dir: "benutzerverwaltung", NoInstall: true,
 		Main: "benutzerverwaltung/benutzer-aufnahme.bpmn"},
+	// Started for one personnel number, it waits in "Erfasst" for messages; the card's
+	// buttons send them, keyed on the same number, and walk it to its terminate end.
 	{ID: "identitaet-lebenszyklus", App: "Beispiel: Identitäts-Lebenszyklus", Dir: "identitaet-lebenszyklus",
-		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn"},
+		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn",
+		Start: &catalogStart{"identitaet-lebenszyklus", map[string]any{
+			"identityId": "P10001", "nachname": "Muster", "vorname": "Anna",
+			"orgEinheit": "IT-Betrieb", "funktion": "Systemtechnikerin", "eintritt": "2026-10-01",
+		}}},
 	{ID: "ad-objektmodell", Dir: "ad-objektmodell", NoInstall: true},
 	// A whole shop: two catalogues, three products in both process forms, bilingual.
 	// It installs from the shop handbook, which asks the reader for the audience
