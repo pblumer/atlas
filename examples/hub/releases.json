@@ -141,6 +141,48 @@
       "version": "1.0.7",
       "digest": "sha256:362998bfde7a14fa6149f0e1428039142914c95a9922741785b209776a153dbe",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.2",
+      "digest": "sha256:4bde186786b1128c8485d53441cdc2e5a6c8647e84965453ba9c12f635709fca",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.8",
+      "digest": "sha256:1fb83b62aaa8e152b4e20b9db5249de7510c9502416e6f490c4c91c9e506b351",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.9",
+      "digest": "sha256:a3a524203cea79302537da20ef37c49edffc5883c442257d404fded3b80f890b",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.10",
+      "digest": "sha256:8f8ad4d214ee9babbdcc363bb93e49eff755d26f068da3ed5a1f3159a1bca00e",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.3",
+      "digest": "sha256:53fe29ff81d739febb3142cfb4bac9a0395c4315a2b99706627466207c3509dd",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.4",
+      "digest": "sha256:0caa0cd3b318d2da5dc7bf09b555b3d63df169412e99db13a8596cd337a1d2aa",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.11",
+      "digest": "sha256:2370e73f0db0b74d76dfa518f3fb1241f9871a95d3af241427f8596627a08c3a",
+      "minAtlas": "0.22.0-0"
     }
   ]
 }

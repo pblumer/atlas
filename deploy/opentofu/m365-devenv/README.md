@@ -218,6 +218,15 @@ SharePoint:
 | `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
 | Zugangsdaten | `credential_validity_days` frei | höchstens 7 Tage |
 
+**Speicherkontingent automatisch setzen (`sharepoint_admin_quota`, Vorgabe `false`).** Der
+Katalogschritt `set-site-quota` setzt das Kontingent einer Site über den Admin-Endpunkt von
+SharePoint (`<tenant>-admin.sharepoint.com`, ADR-0141). Dieser verlangt die SharePoint-Online-
+Anwendungsberechtigung `Sites.FullControl.All` (nicht die von Graph) und eine Anmeldung mit
+Zertifikat (`sharepoint_credential = "certificate"`). Die Berechtigung gilt für **jede** Site des
+Tenants, auch für echte; ein engeres Recht gibt es für diesen Endpunkt nicht. Ohne den Schalter
+fällt der Katalog auf die Aufgabe «Speicherkontingent von Hand setzen» zurück. Nachträglich
+anwenden, ohne die Atlas-VM anzufassen: `tofu apply -target=module.sharepoint`.
+
 Der **Management Scope** umfasst alle Empfänger, deren Alias mit dem Präfix der Umgebung
 beginnt (`Alias -like 'atlas-test-<zufall>*'`): die Testpersonen und alles, was die Worker
 unter diesem Namen anlegen. Ein Testprozess, der ein Funktionspostfach oder eine Verteilerliste
@@ -273,6 +282,12 @@ als echtes Postfach nicht).
 - **Dienst:** `atlas serve --addr 127.0.0.1:8080 --auth` als systemd-Dienst nach
   [`docs/install.md`](../../../docs/install.md), davor Caddy für TLS. Atlas startet und
   überwacht die Worker selbst; sie erben dessen Umgebung.
+- **atlas hub:** Mit `atlas_hub = true` (Vorgabe) zeigt die Console unter «atlas hub» die
+  Bundles dieses Repositorys (`examples/hub`), etwa `ad-dienste` mit dem AD-Katalog. Der
+  Schlüssel kommt aus `examples/hub/releases.json` des eigenen Checkouts. Die Einstellung
+  steht in `/etc/atlas/atlas.env` und damit in `custom_data`: Auf einer laufenden VM ändert
+  sie ein `tofu apply` nur durch Ersetzen der VM. Dort trägt man die beiden Zeilen von Hand
+  nach und startet `atlas` neu.
 - **Einrichtung der Worker** (`scripts/atlas-bootstrap.py`): meldet sich als
   Administrator an, legt je Worker das Credential-Bundle im Vault ab
   (`PUT /api/v1/secrets/m365-<name>`), erstellt den Console-Worker

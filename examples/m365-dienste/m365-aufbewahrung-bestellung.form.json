@@ -8,11 +8,34 @@
     },
     {
       "key": "upn",
-      "type": "textfield",
-      "label": "Postfach der betroffenen Person (UPN) · Mailbox of the person concerned (UPN)",
+      "type": "select",
+      "label": "Postfach der betroffenen Person · Mailbox of the person concerned",
       "validate": {
-        "required": true,
-        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "entra",
+        "worker": "ucc_entra",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "surname",
+          "mail",
+          "userPrincipalName"
+        ],
+        "option": {
+          "value": "userPrincipalName",
+          "label": "displayName",
+          "description": "userPrincipalName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2,
+        "activeOnly": false
       }
     },
     {
