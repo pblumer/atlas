@@ -449,6 +449,17 @@ What changes on disk, and going back:
   (ADR-0510).
 
 ### Changed
+- **Operations shortens long variable values and opens them in a window.** An instance card in
+  the overview lists at most five values, the variables the process declares searchable first,
+  and opens the rest with "+ N more". A long text, such as a CSV upload held in one variable, is
+  shown as one line with its size in bytes and lines, and a list or object as its shape. A click
+  opens the whole value in a window that copies it and saves it as a file. The single-instance view
+  and the replay's Variables tab show the first lines of a long text and open the same window.
+  The overview's 1.5-second poll no longer carries every value whole: `GET /api/v1/instances` and
+  `GET /api/v1/instances/search` take `?values=preview`, which cuts each value longer than 512 bytes
+  to its beginning and marks it with `truncated`, `size`, and `lines` or `shape` and `count`. The
+  default stays `values=full`. The MCP tools `atlas_list_instances` and `atlas_search_instances` take
+  the same `values` argument. The whole value is read with the instance's point read when it is opened.
 - **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
 - **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.

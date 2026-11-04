@@ -232,6 +232,12 @@ func listInstancesPath(args map[string]any) (string, error) {
 	if before := optString(args, "before"); before != "" {
 		q.Set("before", before)
 	}
+	// "preview" cuts long variable values to their beginning on the server, so a page of
+	// instances holding uploaded files does not cost an agent its context. Passed through
+	// as given; the server refuses a mode it does not know.
+	if values := optString(args, "values"); values != "" {
+		q.Set("values", values)
+	}
 	if len(q) == 0 {
 		return "/api/v1/instances", nil
 	}
@@ -255,10 +261,13 @@ func listInstancesPage(c *Client, args map[string]any) (string, error) {
 	return asText(c.get(path))
 }
 
-func searchInstancesPath(q, process string) string {
+func searchInstancesPath(q, process, values string) string {
 	path := "/api/v1/instances/search?q=" + url.QueryEscape(q)
 	if process != "" {
 		path += "&process=" + url.QueryEscape(process)
+	}
+	if values != "" {
+		path += "&values=" + url.QueryEscape(values)
 	}
 	return path
 }
@@ -364,6 +373,17 @@ func messageBody(name string, args map[string]any) ([]byte, error) {
 
 func stringProp(desc string) map[string]any {
 	return map[string]any{"type": "string", "description": desc}
+}
+
+// valuesProp is the 'values' argument of the instance listing and search tools: the
+// server's ?values= mode, which cuts long variable values when it is "preview".
+var valuesProp = map[string]any{
+	"type": "string",
+	"enum": []any{"full", "preview"},
+	"description": "Optional: \"preview\" cuts every variable value longer than 512 bytes to its beginning and marks it " +
+		"truncated, with its size in bytes and its line count (a text) or its shape and element count (JSON). " +
+		"\"full\", the default, returns values whole. Use preview to scan many instances; read one whole with " +
+		"atlas_search_instances and its bare key.",
 }
 
 // authoringTools are the design-time and human-task tools that let an agent set a

@@ -57,6 +57,16 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   could not be read are left out rather than shown as none, and a process with a single
   version offers no migration at all.
 
+- **`long-values.spec.mjs`**: a variable value longer than its place in Operations — a
+  whole CSV upload in one string, a list of every record read — is shown as its beginning
+  and its size and opened whole in one value window that copies and saves it. Covered on
+  the overview card (one line, no value in the markup, at most five values with the
+  declared searchable ones first, the rest behind "+ N more" across the poll), in the
+  single-instance view and in the replay's Variables tab. The harness cuts values the way
+  `?values=preview` does, so the spec also holds that the overview asks for previews, that
+  opening a cut value reads the instance whole by its key, and that the single-instance
+  view copies whole values.
+
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the catalogue app's Building blocks page offers the sources the server names, shows each wiki

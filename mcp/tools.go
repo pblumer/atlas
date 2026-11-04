@@ -344,6 +344,7 @@ func runtimeTools() []Tool {
 						"description": "Optional maximum rows to return (default 1000, max 10000).",
 					},
 					"before": stringProp("Optional cursor: the nextCursor of a previous page, passed back verbatim, to fetch the next (older) page. Requires 'process' and a single 'state' — the two halves are ordered differently, so one cursor cannot address both."),
+					"values": valuesProp,
 				},
 			},
 			Handler: func(c *Client, args map[string]any) (string, error) {
@@ -373,6 +374,7 @@ func runtimeTools() []Tool {
 				"properties": map[string]any{
 					"q":       stringProp("The query: a bare instance key, or \"name=value\" (name exact), or a term over variable names/values. The term is matched whole; use * for any run of characters and ? for exactly one, and \\* or \\? for those characters themselves. When 'process' names a definition that declares the variable atlas:searchable, the value index answers it — exactly for a literal term, and from the pattern's literal head for a wild one."),
 					"process": stringProp("Optional process definition key: narrows the search to that version, which also makes it read that version's index instead of every instance."),
+					"values":  valuesProp,
 				},
 				"required": []any{"q"},
 			},
@@ -381,7 +383,7 @@ func runtimeTools() []Tool {
 				if err != nil {
 					return "", err
 				}
-				return asText(c.get(searchInstancesPath(q, optString(args, "process"))))
+				return asText(c.get(searchInstancesPath(q, optString(args, "process"), optString(args, "values"))))
 			},
 		},
 		{
