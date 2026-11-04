@@ -243,6 +243,11 @@ func catalogItemProps() map[string]any {
 				"a house from bricks; \"service\" for one brick, with its own lifecycle process, provisioned " +
 				"autonomously and ordered only as part of a Marktleistung. Leave it empty outside a " +
 				"structured catalogue, where the level is read off the graph."},
+		"icon": map[string]any{"type": "string", "enum": productIconEnum(),
+			"description": "The symbol the shop's tile layout draws on the product's tile and " +
+				"page — a NAME the shop carries, not a picture. Empty draws a parcel. Publishing " +
+				"refuses a name outside this list. Only a catalogue whose theme layout is " +
+				"\"tiles\" shows it."},
 		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
 			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
 			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
@@ -1066,6 +1071,26 @@ func stringList(v any) []string {
 		if s, ok := e.(string); ok && s != "" {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// productIconNames are the symbols the shop draws (api/catalog.Icons). Repeated
+// here because this package does not import the server's; a test holds the two
+// lists equal, so a symbol added to the shop reaches the schema or fails the build.
+var productIconNames = []string{
+	"user-cog", "users-group", "users", "user-shield", "user-search", "user-circle",
+	"user-plus", "door-exit", "sitemap", "affiliate", "network", "server-2", "database",
+	"fingerprint", "lock", "folder-cog", "device-laptop", "device-desktop", "device-mobile",
+	"device-sim", "devices", "keyboard", "printer", "headset", "mail-cog", "mail-forward",
+	"message-2", "id-badge-2", "shopping-cart-plus", "disc", "list-check",
+	"presentation-analytics", "settings-cog", "chevrons-right", "file-text", "package",
+}
+
+func productIconEnum() []any {
+	out := []any{""}
+	for _, n := range productIconNames {
+		out = append(out, n)
 	}
 	return out
 }

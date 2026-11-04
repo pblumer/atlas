@@ -328,7 +328,8 @@
         { "name": "store", "type": "String", "isAttr": true },
         { "name": "bucket", "type": "String", "isAttr": true },
         { "name": "key", "type": "String", "isAttr": true },
-        { "name": "answerTask", "type": "String", "isAttr": true }
+        { "name": "answerTask", "type": "String", "isAttr": true },
+        { "name": "passwordFor", "type": "String", "isAttr": true }
       ]
     },
     {

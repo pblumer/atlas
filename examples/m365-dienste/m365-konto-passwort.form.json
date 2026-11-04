@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "m365-konto-passwort",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Initialpasswort festlegen · Set the initial password**\n\nKonto (hybrid) für {{vorname}} {{nachname}}, Kennung {{kennung}}, Personalnummer {{personalnummer}}. Das Konto ist im Active Directory angelegt und gesperrt; nach dieser Aufgabe setzt der Prozess das Passwort und aktiviert es. Ob die Person es bei der ersten Anmeldung ändern muss, regelt die Kennwortrichtlinie der Domäne. · Hybrid account for {{vorname}} {{nachname}}, identifier {{kennung}}, employee number {{personalnummer}}. The account exists in Active Directory, disabled; after this task the process sets the password and enables it."
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initialpasswort · Initial password",
+      "description": "Nach der Kennwortrichtlinie der Domäne, mindestens 12 Zeichen. · As the domain's password policy demands, at least 12 characters.",
+      "validate": {
+        "required": true,
+        "minLength": 12
+      }
+    }
+  ]
+}

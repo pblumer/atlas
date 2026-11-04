@@ -210,6 +210,19 @@ func (s *sessionStore) destroyUser(userID string) {
 	s.mu.Unlock()
 }
 
+// destroyUserExcept drops every live session of a user but the one whose token is
+// keep — the session a person changed their own password in stays open, every other
+// one ends (ADR-0526).
+func (s *sessionStore) destroyUserExcept(userID, keep string) {
+	s.mu.Lock()
+	for tok, sess := range s.byToken {
+		if sess.userID == userID && tok != keep {
+			delete(s.byToken, tok)
+		}
+	}
+	s.mu.Unlock()
+}
+
 // setUserGroupMembership reflects a group-membership change into every live session
 // of a user, so adding or removing them from a group takes effect on their next
 // request without a re-login (ADR-0185). Sessions are the only

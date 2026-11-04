@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -3074,6 +3075,16 @@ type variableView struct {
 	// value was written by the model itself or the override carried no identity (auth
 	// off). It is populated only by the timeline fold, which has the audit trail.
 	Actor string `json:"actor,omitempty"`
+	// Truncated marks a value a listing asked for with ?values=preview cut to its
+	// beginning (variablepreview.go). Size is the whole value's length in bytes, Lines
+	// its line count (a text), and Shape and Count what a structure is and how many
+	// elements or fields it holds — what a reader of the preview needs to know about
+	// the part it does not have. All are absent on a whole value.
+	Truncated bool   `json:"truncated,omitempty"`
+	Size      int    `json:"size,omitempty"`
+	Lines     int    `json:"lines,omitempty"`
+	Shape     string `json:"shape,omitempty"`
+	Count     int    `json:"count,omitempty"`
 }
 
 func toVariableView(v *model.VariableValue) variableView {
@@ -6733,6 +6744,13 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			if scanErr != nil {
 				return
 			}
+			// A mail that carries a password link goes out only through a worker the
+			// server itself runs (ADR-0526): the resolved
+			// message is the link, and a lease by any other credential — an operator's
+			// session, an API token they minted — would hand it to whoever holds that.
+			if jobType == compiler.MailJobTypeIndex && !s.ownWorker(r) {
+				keys = slices.DeleteFunc(keys, s.carriesPasswordLink)
+			}
 			for _, k := range keys {
 				s.proc.ActivateJob(k, body.Worker, int64(lease))
 			}
@@ -6968,6 +6986,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// Why the task could not be resolved — the answer link a mail is for
 			// (ADR-0523); the worker fails the job with it.
 			"resolveError": j.ResolveError,
+			// What a preview must not keep: a password link
+			// (ADR-0526).
+			"withhold": j.Withhold,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service

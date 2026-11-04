@@ -16,9 +16,31 @@
 // otherwise reach a customer, who cannot act on a review signal.
 
 import { applyAccent } from './theme.js';
+import { drawIcon } from './shop-icons.js';
 
 const STRINGS = {
   de: {
+    'tile.find': "Wie können wir Ihnen helfen?",
+    'tile.categories': "Alle Kategorien",
+    'tile.groups': "Alle Produktgruppen",
+    'tile.showAll': "Alle {n} Elemente anzeigen",
+    'tile.showLess': "Weniger anzeigen",
+    'tile.package': "Paket",
+    'tile.parts': "Paket enthält {n} Elemente",
+    'tile.none': "Keine Marktleistung passt zu dieser Auswahl.",
+    'tile.scroll': "Weitere anzeigen",
+    'page.back': "Katalog",
+    'page.title': "Bestellen",
+    'page.summary': "Bestellung für",
+    'page.scope': "Leistungsumfang",
+    'page.details': "Spezifikation",
+    'page.included': "Immer enthalten",
+    'page.options': "Optional verfügbar",
+    'page.approval': "Genehmigung",
+    'page.more': "Zusatzinformationen",
+    'page.basket': "Zum Warenkorb",
+    'page.form': "Optionen wählen Sie im Warenkorb dazu; dort erfassen Sie auch die Angaben zur Bestellung.",
+    'page.favourite': "Favorit",
     'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
@@ -250,8 +272,30 @@ const STRINGS = {
     'signin.or': 'oder mit Benutzername und Passwort',
     'signin.register': 'Noch kein Konto?',
     'signin.registerLink': 'Registrieren',
+    'signin.forgot': 'Passwort vergessen?',
   },
   en: {
+    'tile.find': "How can we help you?",
+    'tile.categories': "All categories",
+    'tile.groups': "All product groups",
+    'tile.showAll': "Show all {n} items",
+    'tile.showLess': "Show fewer",
+    'tile.package': "Bundle",
+    'tile.parts': "Bundle contains {n} items",
+    'tile.none': "No offering matches this choice.",
+    'tile.scroll': "Show more",
+    'page.back': "Catalogue",
+    'page.title': "Order",
+    'page.summary': "Order for",
+    'page.scope': "Scope of service",
+    'page.details': "Specification",
+    'page.included': "Always included",
+    'page.options': "Optionally available",
+    'page.approval': "Approval",
+    'page.more': "Additional information",
+    'page.basket': "Go to the basket",
+    'page.form': "You add options in the basket, where you also fill in the order details.",
+    'page.favourite': "Favourite",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
@@ -478,11 +522,33 @@ const STRINGS = {
     'signin.or': 'or sign in with a username and password',
     'signin.register': 'No account yet?',
     'signin.registerLink': 'Register',
+    'signin.forgot': 'Forgot password?',
   },
   // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
   // dans l’allemand : le shop s’adresse à une personne qui commande pour son
   // travail, pas à un compte.
   fr: {
+    'tile.find': "Comment pouvons-nous vous aider ?",
+    'tile.categories': "Toutes les catégories",
+    'tile.groups': "Tous les groupes de produits",
+    'tile.showAll': "Afficher les {n} éléments",
+    'tile.showLess': "Afficher moins",
+    'tile.package': "Paquet",
+    'tile.parts': "Le paquet contient {n} éléments",
+    'tile.none': "Aucune prestation ne correspond à ce choix.",
+    'tile.scroll': "Afficher plus",
+    'page.back': "Catalogue",
+    'page.title': "Commander",
+    'page.summary': "Commande pour",
+    'page.scope': "Étendue des prestations",
+    'page.details': "Spécification",
+    'page.included': "Toujours inclus",
+    'page.options': "Disponible en option",
+    'page.approval': "Approbation",
+    'page.more': "Informations complémentaires",
+    'page.basket': "Aller au panier",
+    'page.form': "Vous ajoutez les options dans le panier, où vous saisissez aussi les détails de la commande.",
+    'page.favourite': "Favori",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
@@ -709,10 +775,32 @@ const STRINGS = {
     'signin.or': 'ou avec un nom d’utilisateur et un mot de passe',
     'signin.register': 'Pas encore de compte ?',
     'signin.registerLink': 'S’inscrire',
+    'signin.forgot': 'Mot de passe oublié ?',
   },
   // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
   // nelle altre lingue.
   it: {
+    'tile.find': "Come possiamo aiutarla?",
+    'tile.categories': "Tutte le categorie",
+    'tile.groups': "Tutti i gruppi di prodotti",
+    'tile.showAll': "Mostra tutti i {n} elementi",
+    'tile.showLess': "Mostra meno",
+    'tile.package': "Pacchetto",
+    'tile.parts': "Il pacchetto contiene {n} elementi",
+    'tile.none': "Nessuna prestazione corrisponde a questa scelta.",
+    'tile.scroll': "Mostra altri",
+    'page.back': "Catalogo",
+    'page.title': "Ordinare",
+    'page.summary': "Ordine per",
+    'page.scope': "Ambito del servizio",
+    'page.details': "Specifica",
+    'page.included': "Sempre incluso",
+    'page.options': "Disponibile come opzione",
+    'page.approval': "Approvazione",
+    'page.more': "Informazioni aggiuntive",
+    'page.basket': "Vai al carrello",
+    'page.form': "Le opzioni si aggiungono nel carrello, dove si inseriscono anche i dettagli dell’ordine.",
+    'page.favourite': "Preferito",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
@@ -939,6 +1027,7 @@ const STRINGS = {
     'signin.or': 'oppure con nome utente e password',
     'signin.register': 'Non ha ancora un conto?',
     'signin.registerLink': 'Registrarsi',
+    'signin.forgot': 'Password dimenticata?',
   },
 };
 
@@ -1293,6 +1382,10 @@ function paintFromCache() {
 }
 
 const state = {
+  // The tile layout (ADR-0525): the catalogue whose row is open
+  // in full, and the product whose page is open. Empty is the start page.
+  tileSection: '',
+  productPage: '',
   // tasks are the open tasks of the orders on this page (ADR-0416); taskOpen is
   // the one whose form is open, and taskError what answering it last said.
   tasks: [],
@@ -1361,6 +1454,10 @@ const state = {
   // registerURL is where somebody with no account starts, empty where the
   // instance does not offer that (ADR-0126).
   registerURL: '',
+  // recovery is whether the instance mails a link to set a new password
+  // (ADR-0526); the sign-in offers "forgot password" only
+  // where it does.
+  recovery: false,
   // signinError is what the last attempt is waiting to say, as a catalogue key.
   // A key and not a sentence: the page is redrawn on every keystroke of state and
   // a sentence captured in one locale would survive the language switch.
@@ -1853,6 +1950,7 @@ function forgetTheReader() {
 async function loadSignInOptions() {
   state.providers = [];
   state.registerURL = '';
+  state.recovery = false;
   try {
     const list = await api('/api/v1/auth/providers');
     state.providers = Array.isArray(list) ? list : [];
@@ -1861,6 +1959,10 @@ async function loadSignInOptions() {
     const cfg = await api('/api/v1/settings/registration');
     if (cfg && cfg.enabled && cfg.url) state.registerURL = cfg.url;
   } catch { /* registration off or unreachable — the line stays hidden */ }
+  try {
+    const rec = await api('/api/v1/auth/password-recovery');
+    state.recovery = !!(rec && rec.enabled);
+  } catch { /* recovery off or unreachable — the line stays hidden */ }
 }
 
 // loadCatalogue reads every catalogue this person is the audience for and their
@@ -1904,6 +2006,9 @@ async function loadCatalogue() {
     if (releases && releases.length) newest.push(releases[0]);
   }
   state.release = newest.length ? mergeReleases(newest) : null;
+  // Kept apart as well: the tile layout draws one row per catalogue, and a merged
+  // release no longer says which catalogue offered what.
+  state.newest = newest;
 }
 
 // mergeReleases lays releases over one another, highest-ranked first, into the one
@@ -2193,6 +2298,9 @@ function renderSignIn() {
       : null,
     el('button', { class: 'primary', type: 'submit', disabled: state.signinBusy },
       state.signinBusy ? t('signin.busy') : t('signin.submit')),
+    state.recovery
+      ? el('p', { class: 'muted' }, el('a', { href: '/public/password' }, t('signin.forgot')))
+      : null,
     state.registerURL
       ? el('p', { class: 'muted' }, `${t('signin.register')} `,
         el('a', { href: state.registerURL }, t('signin.registerLink')))
@@ -2964,6 +3072,7 @@ function rootOf(rel, id) {
 }
 
 function renderCatalogue() {
+  if (state.catalog && state.release && tileLayout()) return renderTiles();
   if (!state.catalog) {
     return el('div', { class: 'empty' },
       el('p', {}, t('portal.none')),
@@ -3097,6 +3206,179 @@ function renderCatalogue() {
       unresolved
         ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
     catalogueBodyNode);
+}
+
+// --- The tile layout (ADR-0525) ---------------------------
+//
+// A second way to lay the same release out, chosen per catalogue by its theme:
+// a start page with a search, the categories as a menu and one row of tiles per
+// catalogue the reader reaches, and a page per Marktleistung. The basket, the
+// forms and the order are the cascade's own; only the way there differs.
+
+function tileLayout() {
+  return ((state.catalog && state.catalog.theme) || {}).layout === 'tiles';
+}
+
+// productIcon draws a product's symbol from the shop's icon set, or the default
+// one. The outlines are the shop's own module, never anything a catalogue supplied,
+// and they are built element by element rather than parsed.
+function productIcon(item) {
+  const svg = drawIcon((item && item.icon) || '', 1.5);
+  return el('span', { class: 'tile-icon' }, svg);
+}
+
+// partCount is how many services a Marktleistung brings, included and optional:
+// what the tile calls a bundle's elements. A Marktleistung of one service is not
+// called a bundle.
+function partCount(rel, id) {
+  return (((rel.includes || {})[id]) || []).length + (((rel.options || {})[id]) || []).length;
+}
+
+function fill(text, n) { return text.replace('{n}', String(n)); }
+
+function tile(rel, item) {
+  const parts = partCount(rel, item.id);
+  return el('button', {
+    class: 'tile',
+    onclick: () => { state.productPage = item.id; render(); window.scrollTo(0, 0); },
+  },
+  productIcon(item),
+  el('span', { class: 'tile-text' },
+    parts > 1 ? el('span', { class: 'tile-kind' }, t('tile.package')) : null,
+    el('span', { class: 'tile-name' }, textOf(item.texts, item.id)),
+    parts > 1 ? el('span', { class: 'tile-parts' }, fill(t('tile.parts'), parts)) : null));
+}
+
+// tileMatches is the start page's filter: the category and product group chosen
+// in the menu, and the words typed into the search.
+function tileMatches(item) {
+  if (!inCategory(item) || !inGroup(item)) return false;
+  const q = state.query.trim().toLowerCase();
+  return q === '' || searchable(item).includes(q);
+}
+
+function renderTiles() {
+  const rel = state.release;
+  const by = itemsById(rel);
+  if (state.productPage && by[state.productPage]) return renderProductPage(rel, by[state.productPage]);
+
+  const headings = categoriesOf(rel);
+  const groups = groupsOf(rel);
+  const categoryMenu = el('select', {
+    class: 'tile-menu', 'aria-label': t('col.category'),
+    onchange: (e) => { state.category = e.target.value || null; state.group = null; render(); },
+  },
+  el('option', { value: '' }, t('tile.categories')),
+  headings.map((h) => el('option', {
+    value: h.key, ...(state.category === h.key ? { selected: 'selected' } : {}),
+  }, h.text || t('cat.none'))));
+  const groupMenu = state.category === null ? null : el('select', {
+    class: 'tile-menu', 'aria-label': t('col.group'),
+    onchange: (e) => { state.group = e.target.value || null; render(); },
+  },
+  el('option', { value: '' }, t('tile.groups')),
+  groups.map((g) => el('option', {
+    value: g.key, ...(state.group === g.key ? { selected: 'selected' } : {}),
+  }, g.text || t('group.none'))));
+
+  const sections = (state.newest || []).map((r) => {
+    const cat = (state.catalogs || []).find((c) => c.id === r.catalogId) || {};
+    const offered = products(r).map((i) => by[i.id] || i).filter(tileMatches);
+    const open = state.tileSection === r.catalogId;
+    const track = el('div', { class: open ? 'tile-grid' : 'tile-track' },
+      offered.map((i) => tile(rel, i)));
+    return el('section', { class: 'tile-section' },
+      el('div', { class: 'tile-head' },
+        el('h3', {}, textOf(cat.texts, cat.id || '')),
+        offered.length > 8 || open
+          ? el('button', {
+            class: 'linkish',
+            onclick: () => { state.tileSection = open ? '' : r.catalogId; render(); },
+          }, open ? t('tile.showLess') : `${fill(t('tile.showAll'), offered.length)} ›`)
+          : null),
+      offered.length
+        ? el('div', { class: 'tile-row' }, track,
+          open || offered.length <= 8 ? null : el('button', {
+            class: 'tile-next', 'aria-label': t('tile.scroll'),
+            onclick: () => track.scrollBy({ left: track.clientWidth, behavior: 'smooth' }),
+          }, '›'))
+        : el('p', { class: 'muted' }, t('tile.none')));
+  });
+
+  return el('div', { class: 'tiles' },
+    el('div', { class: 'tile-bar' },
+      categoryMenu, groupMenu,
+      el('input', {
+        type: 'search', id: 'find', class: 'tile-find', value: state.query,
+        placeholder: t('tile.find'), 'aria-label': t('find.label'),
+        onchange: (e) => { state.query = e.target.value; render(); },
+        onkeyup: (e) => { if (e.key === 'Enter') { state.query = e.target.value; render(); } },
+      })),
+    sections);
+}
+
+// renderProductPage is one Marktleistung on a page of its own: what it is, what
+// comes with it and what can be added, who approves it, and the button that puts
+// it in the basket. The order details are asked in the basket, as in the cascade.
+function renderProductPage(rel, item) {
+  const back = () => { state.productPage = ''; render(); };
+  const inIt = inBasketNow(rel, item.id);
+  const included = offeringParts(rel, item, 'includes');
+  const optional = offeringParts(rel, item, 'options');
+  const approval = item.approval && item.approval.kind && item.approval.kind !== 'none'
+    ? item.approval.kind : t('info.none');
+  const section = (title, open, ...body) => el('details', {
+    class: 'page-section', ...(open ? { open: 'open' } : {}),
+  }, el('summary', {}, title), el('div', { class: 'page-body' }, ...body));
+
+  return el('div', { class: 'product-page' },
+    el('div', { class: 'page-top' },
+      el('button', { class: 'linkish', onclick: back }, `‹ ${t('page.back')}`),
+      el('strong', {}, t('page.title')),
+      el('span', { class: 'page-fav' }, starButton(item.id), ' ', t('page.favourite'))),
+    el('div', { class: 'page-banner' },
+      productIcon(item),
+      el('h2', {}, textOf(item.texts, item.id))),
+    el('div', { class: 'page-columns' },
+      el('div', { class: 'page-main' },
+        // Who it is for, then what comes with it (open, because that is what a
+        // reader compares), then the product's own specification (closed: it is
+        // long and only some readers need it).
+        section(t('page.summary'), false, el('p', {}, whoLabel())),
+        included.length || optional.length
+          ? section(t('page.scope'), true,
+            included.length ? el('p', {}, el('strong', {}, t('page.included'))) : null,
+            included.length ? el('ul', {}, included.map((i) => el('li', {}, textOf(i.texts, i.id)))) : null,
+            optional.length ? el('p', {}, el('strong', {}, t('page.options'))) : null,
+            // Listed, not offered: an option ordered from here would land in the
+            // basket without the Marktleistung it belongs to. The basket offers each
+            // one beside its Marktleistung, where taking it means taking it with that.
+            optional.length ? el('ul', {}, optional.map((o) => el('li', {}, textOf(o.texts, o.id)))) : null,
+            el('p', { class: 'muted' }, t('page.form')))
+          : null,
+        section(t('page.details'), false, descriptionView(item)),
+        section(t('page.approval'), false, el('p', {}, approval)),
+        section(t('page.more'), false,
+          el('p', { class: 'muted' }, `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
+          el('p', { class: 'muted' },
+            `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
+          windowNote(item) ? el('p', { class: 'muted' }, windowNote(item)) : null)),
+      el('div', { class: 'page-side' },
+        state.canOrder && orderableNow(item)
+          ? el('button', {
+            class: inIt ? 'secondary page-cta' : 'page-cta',
+            onclick: () => {
+              if (state.basket.has(item.id)) state.basket.delete(item.id); else state.basket.add(item.id);
+              render();
+            },
+          }, inIt ? t('act.remove') : t('act.add'))
+          : null,
+        state.basket.size
+          ? el('button', {
+            class: 'secondary page-cta',
+            onclick: () => { state.productPage = ''; state.inBasket = true; render(); },
+          }, `${t('page.basket')} (${state.basket.size})`)
+          : null)));
 }
 
 // stepper is the cascade's way back on a narrow screen (ADR-0417), where one

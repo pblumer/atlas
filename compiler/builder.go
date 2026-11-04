@@ -696,6 +696,7 @@ type Builder struct {
 	invalidWizards     []int32                     // subprocess nodes whose atlas:wizard named no kind (RuleWizardValue, ADR-0449)
 	invalidAnsweredBy  []int32                     // user task nodes whose atlas:answeredBy named no way (RuleAnswerValue)
 	answerTasks        map[int32]int32             // mail task node → interned BPMN id of the task it carries the link of
+	passwordFor        map[int32]RestExpr          // mail task node → the account whose password link it carries
 	versionTag         int32                       // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64                       // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64                       // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1919,6 +1920,9 @@ type MailConfig struct {
 	// answerLink (ADR-0523); "" for none. It is judged in
 	// stage 5, not here, so it may name a task added after this one.
 	AnswerTask string
+	// PasswordFor names the account whose password link the message carries as
+	// passwordLink (ADR-0526); the zero value for none.
+	PasswordFor RestExpr
 }
 
 // AddMailConnectorTask adds an outbound mail task and returns its element
@@ -1973,6 +1977,12 @@ func (b *Builder) AddMailConnectorTask(cfg MailConfig) int32 {
 	id := b.addNode(TypeConnectorTask, detail)
 	if cfg.AnswerTask != "" {
 		b.setAnswerTask(id, cfg.AnswerTask)
+	}
+	if cfg.PasswordFor.Literal != "" || cfg.PasswordFor.Expr != nil {
+		if b.passwordFor == nil {
+			b.passwordFor = map[int32]RestExpr{}
+		}
+		b.passwordFor[id] = cfg.PasswordFor
 	}
 	return id
 }
@@ -3763,6 +3773,7 @@ func (b *Builder) Build() (*CompiledProcess, error) {
 		invalidWizards:     b.invalidWizards,
 		invalidAnsweredBy:  b.invalidAnsweredBy,
 		answerTasks:        b.answerTasks,
+		passwordFor:        b.passwordFor,
 		versionTag:         b.versionTag,
 		instanceTtlNanos:   b.instanceTtlNanos,
 		historyTtlNanos:    b.historyTtlNanos,

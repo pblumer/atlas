@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
@@ -35,7 +36,15 @@ type Theme struct {
 	// operator in public administration cannot accept on a customer-facing
 	// surface.
 	Typeface string `json:"typeface,omitempty"`
+	// Layout is how the shop lays this catalogue out (ADR-0525):
+	// "cascade" (the columns Kategorie, Produktgruppe, Produkt, Services) or
+	// "tiles" (a start page of tiles, one row of them per catalogue, and a page per
+	// product). Empty is the cascade, as every catalogue was before the field.
+	Layout string `json:"layout,omitempty"`
 }
+
+// Layouts are the shop layouts a catalogue may choose.
+var Layouts = []string{"cascade", "tiles"}
 
 // Typefaces are the font stacks the binary ships. Each names a fallback, because
 // a stack of one is a stack that fails on the machine without that font.
@@ -65,6 +74,10 @@ func (t Theme) Valid() error {
 				t.Typeface, strings.Join(names, ", "))
 		}
 	}
+	if t.Layout != "" && !slices.Contains(Layouts, t.Layout) {
+		return fmt.Errorf("catalog: %q is not a shop layout; choose one of %s",
+			t.Layout, strings.Join(Layouts, ", "))
+	}
 	return nil
 }
 
@@ -86,6 +99,7 @@ func (s *Service) HandleSetTheme(w http.ResponseWriter, r *http.Request) {
 	}
 	in.Accent = strings.ToLower(strings.TrimSpace(in.Accent))
 	in.Typeface = strings.TrimSpace(in.Typeface)
+	in.Layout = strings.TrimSpace(in.Layout)
 	if err := in.Valid(); err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return

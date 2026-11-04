@@ -1,6 +1,6 @@
 # ADR-0111: Completing the incident model — retry backoff and timer-FEEL failure incidents
 
-- **Status:** Accepted
+- **Status:** Accepted (amended 2026-11-04: the in-process runner backs off too; see «Amendment (2026-11-04)»)
 - **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
@@ -172,6 +172,38 @@ evaluate at deploy (no instance, no hot path).
 - **Follow-ups / risks to watch:** a per-task-definition default/exponential backoff (the delay
   is worker-supplied for now); the Operations incidents view (Phase 3); extending
   `rearmTimerElement` coverage if more timer-bearing element types gain FEEL schedules.
+
+## Amendment (2026-11-04): the in-process runner backs off too
+
+**Context.** The decision left the in-process runner at backoff 0 and named "a default backoff"
+a follow-up. The built-in connectors (Entra, Exchange, SharePoint, REST, AD and the others) all
+run on that runner, so every connector job retried three times within about one second. On a
+Microsoft 365 test tenant this turned replication delay into incidents: `add-group-owner` right
+after `create-group` answered HTTP 404 `Request_ResourceNotFound`, and `create-team` right after
+`add-group-owner` answered "must have one or more owners". Both faults clear by themselves within
+a minute; the examples had started to model timers around them.
+
+**Decision.** `job.Runner` gains `SetRetryBackoff(func(retriesLeft int32) int64)`. `Submit` asks
+it for the delay of every failure that leaves retries and passes it to `FailJob`; everything
+after that is the mechanism above, unchanged — the job is held off the index, a retry timer
+re-activates it, the due date is frozen into the event (I6), and recovery replays it. The server
+installs `job.DefaultRetryBackoff`, or what `api.WithJobRetryBackoff` names instead:
+
+| Retries left after the failure | Delay |
+|---|---|
+| 2 or more | 15 s |
+| 1 | 60 s |
+| 0 | none — the incident is raised at once |
+
+With the default of three retries a fault has 75 seconds to clear before it reaches an operator.
+
+**Not decided here.** No per-task setting: the compiler reads no `retryBackoff` attribute, and
+adding one is a modelling change of its own. No classification of failures into retryable and
+final: no connector reports one today, so a validation error waits the same 75 seconds before its
+incident as a transient one. A runner built without `SetRetryBackoff` — the library default, and
+what tests that drive a failing handler to its incident rely on — retries at once as before; the
+API test helpers pass `WithJobRetryBackoff(nil)` for the same reason.
+External workers keep supplying their own backoff through the fail endpoint.
 
 ## Links
 

@@ -1688,6 +1688,7 @@ type CompiledProcess struct {
 	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
 	invalidAnsweredBy  []int32             // user task nodes whose atlas:answeredBy named no way; read by stage 5 only
 	answerTasks        map[int32]int32     // mail task node → interned BPMN id of the task answered by its link
+	passwordFor        map[int32]RestExpr  // mail task node → the account whose password link it carries
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1810,6 +1811,15 @@ func (p *CompiledProcess) AnswerTask(id int32) (string, bool) {
 		return "", false
 	}
 	return p.Intern(ref), true
+}
+
+// PasswordFor returns the account — a username, literal or FEEL — whose password link
+// the mail task node id carries, and false when it carries none
+// (ADR-0526). Whether the process may mint one at all, and to
+// whom the mail may go, is decided when the mail is resolved, not here.
+func (p *CompiledProcess) PasswordFor(id int32) (RestExpr, bool) {
+	e, ok := p.passwordFor[id]
+	return e, ok
 }
 
 // Wizard reports the wizard kind of node id (ADR-0449): WizardNone for every node but

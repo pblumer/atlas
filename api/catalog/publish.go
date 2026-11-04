@@ -359,6 +359,7 @@ func checkItems(in Input, add func(Problem)) {
 				"the shop would show its id, and there is nothing to fall back to"})
 		}
 		checkBindings(it, add)
+		checkIcon(it, add)
 		switch it.Approval.Kind {
 		case KindFixed, KindRole:
 			if it.Approval.Ref == "" {
