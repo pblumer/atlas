@@ -303,9 +303,16 @@ können im selben Augenblick «frei» lesen. Verbindlich prüft die Bereitstellu
 5. Warten auf die Site: höchstens zehnmal im Abstand von zwei Minuten `get-site`. Erscheint sie
    nicht, erhält `M365-SharePoint` die Aufgabe «Site-Erstellung prüfen».
 6. Ein Eintrag in der Liste «Site-Inventar» (siehe Voraussetzungen), dann `done`.
-7. Aufgabe «Speicherkontingent setzen» für `M365-SharePoint`: **Microsoft Graph hat keine
-   Schnittstelle für das Speicherkontingent einer Site.** Gesetzt wird es im SharePoint Admin
-   Center (oder mit `Set-SPOSite -StorageQuota`); die Aufgabe sagt es so.
+7. `set-site-quota` setzt das bestellte Kontingent (Warnung bei 90 Prozent). **Microsoft Graph
+   hat dafür keine Schnittstelle**; der SharePoint-Worker geht deshalb an die SharePoint-Verwaltung
+   des Tenants (`https://<tenant>-admin.sharepoint.com`, dieselbe Schnittstelle wie
+   `Set-SPOSite -StorageQuota`). Das braucht am Worker `ucc_sharepoint` ein **Zertifikat** und
+   die SharePoint-Anwendungsberechtigung **`Sites.FullControl.All`** (siehe Voraussetzungen).
+   Fehlt das (`SHAREPOINT_ADMIN_NOT_PERMITTED`) oder lehnt der Tenant ab
+   (`SHAREPOINT_QUOTA_REFUSED`, etwa bei automatischer Speicherverwaltung), fangen zwei
+   Fehlerränder das ab: `M365-SharePoint` erhält die Aufgabe «Speicherkontingent von Hand setzen»
+   und setzt es im SharePoint Admin Center. Ein Tenant ohne diese Berechtigung arbeitet also wie
+   bisher.
 
 **Aktionen:**
 
@@ -314,7 +321,7 @@ können im selben Augenblick «frei» lesen. Verbindlich prüft die Bereitstellu
 | Site endgültig zurückgeben (`deprovision`) | – | Gruppe suchen, `delete-group`, Inventar auf Returned | `returned` |
 | Externe Person einladen (`gast`) | `m365-sharepoint-gast` | `get-site` für die Adresse, `invite-guest` (Einladung führt auf die Site, Microsoft verschickt sie), `add-group-member` mit dem eingeladenen Konto | `completed` |
 | Site-Besitzer ändern (`besitzer`) | `m365-sharepoint-besitzer` | neuen Besitzer eintragen, auf Wunsch danach den bisherigen austragen | `completed` |
-| Speicherkontingent erhöhen (`kontingent`) | `m365-sharepoint-kontingent` | `get-site` liest die Belegung, `M365SiteKontingent` entscheidet, `M365-SharePoint` setzt das Kontingent (und prüft über 25 GB den Antrag), Inventar nachführen | `completed`, bei Ablehnung `rejected` |
+| Speicherkontingent erhöhen (`kontingent`) | `m365-sharepoint-kontingent` | `get-site` liest die Belegung, `M365SiteKontingent` entscheidet; bis 25 GB setzt `set-site-quota` das Kontingent selbst, darüber prüft und setzt `M365-SharePoint` (ebenso, wenn `set-site-quota` mit `SHAREPOINT_ADMIN_NOT_PERMITTED` oder `SHAREPOINT_QUOTA_REFUSED` endet), Inventar nachführen | `completed`, bei Ablehnung `rejected` |
 | Site löschen (`loeschen`) | – | `delete-group`, Inventar auf Removed; das Recht bleibt | `completed` |
 | Gelöschte Site wiederherstellen (`wiederherstellen`) | – | `list-deleted-groups`, `restore-group`, Inventar auf Active | `completed`, wenn nichts mehr im Papierkorb liegt `rejected` |
 
@@ -780,6 +787,14 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
      `ucc_sharepoint` (Microsoft SharePoint) mit `Sites.ReadWrite.All` oder mit
      `Sites.Selected` und Schreibrecht auf der Inventar-Site, dazu `Sites.Read.All` für
      `get-site` auf beliebigen Sites (Existenz und Belegung).
+   - **Kontingent automatisch setzen** (`set-site-quota`, optional): Die App von `ucc_sharepoint`
+     braucht die **SharePoint**-Anwendungsberechtigung `Sites.FullControl.All` (API «SharePoint»,
+     nicht «Microsoft Graph») mit Admin-Zustimmung, und das Vault-Bündel ein `certificate` oder
+     `certificateThumbprint` an Stelle des `clientSecret`: Die SharePoint-Verwaltung nimmt eine App
+     nur mit Zertifikat an. Der Admin-Host wird aus der Site abgeleitet
+     (`contoso.sharepoint.com` → `contoso-admin.sharepoint.com`); bei einer eigenen Domain nennt
+     ihn `"adminUrl"` im Bündel. `Sites.FullControl.All` gilt für alle Sites des Tenants; wer das
+     nicht vergeben will, lässt es weg, und die Kontingente setzt weiter `M365-SharePoint`.
    - **Live-Prüfung der URL** im Bestellformular: Bei den drei Workern `ucc_entra`,
      `ucc_sharepoint` und `ucc_exchange` in der Console den Schalter «formLookups»
      (Formular-Abfragen erlauben) einschalten. `ucc_exchange` ist dabei, weil die Gruppe der Site
@@ -1102,10 +1117,15 @@ Governance-Prüfung, die Gruppen mit einem Anzeigenamen «EC-…» nicht mehr me
 - **Output-Mappings auf Business-Rule-Tasks** wertet Atlas nicht aus. Die Modelle lesen das
   Ergebnis einer Entscheidung deshalb direkt (`regel.alias`) und bilden Einzelwerte, die ein
   Formular anzeigen soll, mit einer Script-Task.
-- **Kein Speicherkontingent über eine Schnittstelle.** Microsoft Graph kennt keinen Aufruf,
-  der das Speicherkontingent einer Site setzt; das geht nur im SharePoint Admin Center oder mit
-  PowerShell (`Set-SPOSite -StorageQuota`). Beide Kontingent-Schritte sind deshalb Aufgaben
-  für `M365-SharePoint`, und ob ein gesetztes Kontingent stimmt, prüft niemand nach. Was
+- **Speicherkontingent nur über die SharePoint-Verwaltung.** Microsoft Graph kennt keinen
+  Aufruf, der das Speicherkontingent einer Site setzt. `set-site-quota` nutzt deshalb das
+  Client-Objektmodell der SharePoint-Verwaltung (`ProcessQuery` auf dem Admin-Host, wie
+  `Set-SPOSite -StorageQuota`); gegen einen Tenant ist das **nicht geprüft**, nur gegen ein
+  nachgebautes Gegenstück in den Tests und gegen das Mockup. Verwaltet der Tenant den Speicher
+  automatisch (Voreinstellung neuer Tenants), hat eine Site kein eigenes Kontingent, und
+  SharePoint lehnt ab; die Aufgabe für `M365-SharePoint` hat dann ebenfalls nichts zu setzen,
+  bis der Tenant im Admin Center auf manuelle Speicherverwaltung umgestellt ist. Über 25 GB
+  bleibt das Setzen bei der prüfenden Person. Was
   `get-site` als Belegung liest, ist das Kontingent der Standardbibliothek; dass das dem
   Kontingent der Site im Admin Center entspricht, ist Microsofts Dokumentation und nicht an
   einem Tenant geprüft.

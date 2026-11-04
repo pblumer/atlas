@@ -4775,6 +4775,7 @@ const SERVICE_TASK_KINDS = [
           { v: "create-folder", l: "Create folder" },
           { v: "delete-file", l: "Delete file or folder" },
           { v: "get-site", l: "Read site and storage" },
+          { v: "set-site-quota", l: "Set site storage quota" },
         ],
       },
       {
@@ -4852,6 +4853,16 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
         hint: "How many entries one page holds. Empty uses 100; at most 999.",
       },
+      {
+        key: "quotaGB", label: "Storage quota (GB)", placeholder: "=number(kontingent)", fx: true,
+        showIf: (v) => v.operation === "set-site-quota",
+        hint: "The storage the site may use, in gigabytes; at most 25600. This step goes to SharePoint's tenant administration rather than Graph: the Worker needs a certificate credential and the SharePoint application permission Sites.FullControl.All. Catch SHAREPOINT_ADMIN_NOT_PERMITTED and SHAREPOINT_QUOTA_REFUSED with an error boundary to hand the quota to a person where the tenant does not allow it.",
+      },
+      {
+        key: "warningPercent", label: "Warn at (%)", placeholder: "90", fx: true,
+        showIf: (v) => v.operation === "set-site-quota",
+        hint: "Optional. The share of the quota at which SharePoint warns the site's owners; empty means 90.",
+      },
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: () => "object", placeholder: "antwort",
@@ -4875,6 +4886,8 @@ const SERVICE_TASK_KINDS = [
               return "=antwort.exists says whether it is there; when it is, =antwort.webUrl, =antwort.size and its properties under =antwort.listItem.fields come with it.";
             case "get-site":
               return "=antwort.exists says whether there is a site at that address; when there is, =antwort.id, =antwort.webUrl, =antwort.displayName and its storage in bytes under =antwort.quota.used, =antwort.quota.total and =antwort.quota.remaining come with it.";
+            case "set-site-quota":
+              return "Optional. The quota as set lands here: =antwort.quotaGB, =antwort.warningPercent, and SharePoint's own values in megabytes under =antwort.storageMaximumLevelMB and =antwort.storageWarningLevelMB.";
             case "create-folder":
               return "Optional. The folder lands here, with =antwort.created false when it was already there.";
             default:

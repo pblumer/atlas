@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A SharePoint task can set a site's storage quota.** The new operation `set-site-quota`
+  (`quotaGB`, optional `warningPercent`, default 90) goes where Microsoft Graph cannot: to
+  SharePoint's tenant administration on the admin host, through the client object model's
+  `ProcessQuery` — the request `Set-SPOSite -StorageQuota` sends. It needs a certificate
+  credential and the SharePoint application permission `Sites.FullControl.All`; the admin
+  host is derived from the site, or named by `adminUrl` in the credential bundle. A tenant
+  that does not allow it ends the task with `SHAREPOINT_ADMIN_NOT_PERMITTED` or
+  `SHAREPOINT_QUOTA_REFUSED`, BPMN errors a process catches to hand the quota to a person.
+  The Modeler offers the operation, the mockup records the quota and `get-site` reports it.
+  `examples/m365-dienste` (1.0.9) sets an ordered quota this way, and a quota raise up to
+  25 GB, with the previous tasks as the fallback (ADR-0141, amended 2026-11-04). Not yet
+  run against a tenant.
 - **A catalogue can declare Marktleistungen and services.** A catalogue switched to
   `structured` states for every product whether it is a Marktleistung (`kind: offering`),
   the whole somebody orders, or a service (`kind: service`), one building block with its

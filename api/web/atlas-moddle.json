@@ -363,6 +363,8 @@
         { "name": "select", "type": "String", "isAttr": true },
         { "name": "pageToken", "type": "String", "isAttr": true },
         { "name": "maxResults", "type": "String", "isAttr": true },
+        { "name": "quotaGB", "type": "String", "isAttr": true },
+        { "name": "warningPercent", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true },
         { "name": "fields", "type": "ItemField", "isMany": true }

@@ -175,6 +175,8 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.SharePointItemID.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SharePointPageToken.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SharePointPath.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.SharePointQuotaGB.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.SharePointWarnPct.Expr":   "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SharePointSelect.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SheetsFolder.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SheetsID.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

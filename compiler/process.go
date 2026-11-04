@@ -689,6 +689,11 @@ type ConnectorTaskDetail struct {
 	SharePointSelect     RestExpr
 	SharePointPageToken  RestExpr
 	SharePointMaxResults int32
+	// SharePointQuotaGB and SharePointWarnPct are what set-site-quota sets: the storage
+	// in gigabytes and the share of it, in percent, at which SharePoint warns (ADR-0141,
+	// amended 2026-11-04).
+	SharePointQuotaGB RestExpr
+	SharePointWarnPct RestExpr
 	// Remedy worker fields (JobType == RemedyJobType, ADR-0106). Worker (above)
 	// names the server-registered BMC Remedy instance; ResultVar (above), if set,
 	// receives the created entry's id. RemedyForm is the Remedy form the entry is

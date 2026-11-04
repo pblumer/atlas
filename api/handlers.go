@@ -7156,7 +7156,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"list": j.List, "itemId": j.ItemID, "path": j.Path, "fields": j.Fields,
 			"content": j.Content, "encoding": j.Encoding, "filter": j.Filter,
 			"select": j.Select, "pageToken": j.PageToken, "maxResults": j.MaxResults,
+			"quotaGB": j.QuotaGB, "warningPercent": j.WarningPercent,
 			"requestId": j.RequestID, "resultVariable": j.Result,
+			// The codes the process catches travel, because a worker has no compiled
+			// process to ask whether a refusal is a path or a failure (ADR-0461).
+			"errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ScimJobTypeIndex:
 		// The authored operation and its operands travel, not the method and URL
