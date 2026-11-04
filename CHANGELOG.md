@@ -85,6 +85,7 @@ _Changed_ / _Removed_ for each version.
   (ADR-0526).
 
 ### Fixed
+- **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
 
 - **A failed connector job waits before it is tried again.** The in-process runner, on which
   every built-in connector runs, retried a failed job at once, so a task's three retries were
