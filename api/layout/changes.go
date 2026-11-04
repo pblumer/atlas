@@ -167,6 +167,19 @@ func Changes(a, b []byte) ([]Change, error) {
 	return out, nil
 }
 
+// Compare answers both questions about two versions of a model at once: where they
+// first part, as Difference names it ("" when they are the same model), and every
+// element that differs, as Changes lists them. aName and bName name the two sides in
+// the first difference. An error means one of the documents is not well-formed XML.
+func Compare(a, b []byte, aName, bName string) (string, []Change, error) {
+	diff, err := Difference(a, b, aName, bName)
+	if err != nil {
+		return "", nil, err
+	}
+	changes, err := Changes(a, b)
+	return diff, changes, err
+}
+
 // diffFacets lists the fields two states of one element disagree on: the element's
 // kind and container first, then its own fields in b's order, then those only a has.
 func diffFacets(a, b *modelElement) []Detail {
@@ -273,12 +286,11 @@ type modelElement struct {
 	facets map[string]facet
 }
 
+// put records one field. Every key is put once: a repeated part's name is unique
+// among its kind (partNaming), and an attribute's key extends its part's.
 func (e *modelElement) put(key, label, value string) {
 	if e.facets == nil {
 		e.facets = map[string]facet{}
-	}
-	if _, ok := e.facets[key]; ok {
-		return
 	}
 	e.order = append(e.order, key)
 	e.facets[key] = facet{label: label, value: value}

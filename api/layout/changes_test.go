@@ -248,7 +248,10 @@ func TestChangesReportsTheDocumentsOwnParts(t *testing.T) {
 
 func TestChangesRefusesMalformedXML(t *testing.T) {
 	if _, err := Changes([]byte(changesV1), []byte("<definitions><process>")); err == nil {
-		t.Fatal("Changes of a truncated document: no error")
+		t.Fatal("Changes of a truncated newer document: no error")
+	}
+	if _, err := Changes([]byte("<definitions><process>"), []byte(changesV1)); err == nil {
+		t.Fatal("Changes of a truncated older document: no error")
 	}
 }
 
@@ -261,4 +264,56 @@ func dumpChanges(cs []Change) string {
 		}
 	}
 	return b.String()
+}
+
+// A document with nothing in it has no elements: everything the other one holds is
+// added, or removed, and what its root holds beside its elements is a change of the
+// document either way.
+func TestChangesAgainstAnEmptyDocument(t *testing.T) {
+	full := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
+	  <import importType="http://www.w3.org/2001/XMLSchema" location="a.xsd" namespace="urn:a"/>
+	  <process id="p"/></definitions>`
+	got, err := Changes(nil, []byte(full))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "" || got[0].Details[0].Kind != ChangeAdded || got[1].Kind != ChangeAdded || got[1].ID != "p" {
+		t.Fatalf("Changes from nothing = %s, want the document's import added and p added", dumpChanges(got))
+	}
+	got, err = Changes([]byte(full), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].ID != "" || got[0].Details[0].Kind != ChangeRemoved || got[1].Kind != ChangeRemoved || got[1].ID != "p" {
+		t.Fatalf("Changes to nothing = %s, want the document's import removed and p removed", dumpChanges(got))
+	}
+}
+
+// A namespace declared on an inner element is a spelling, not a field, and a namespace
+// Atlas does not know is named by the prefix the document gave it.
+func TestChangesNamesNamespacesAsTheDocumentDoes(t *testing.T) {
+	a := `<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"><process id="p">
+	  <task id="t"><extensionElements xmlns:c="urn:custom"><c:hint level="1"/></extensionElements></task>
+	</process></definitions>`
+	b := strings.Replace(a, `level="1"`, `level="2"`, 1)
+	got, err := Changes([]byte(a), []byte(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Change{{Kind: ChangeChanged, ID: "t", Type: "task", Parent: "p", Details: []Detail{
+		{Field: "extensionElements/c:hint@level", Kind: ChangeChanged, Before: "1", After: "2"},
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Changes =\n%s\nwant\n%s", dumpChanges(got), dumpChanges(want))
+	}
+}
+
+func TestCompareAnswersBothQuestions(t *testing.T) {
+	diff, changes, err := Compare([]byte(changesV1), []byte(changesV2), "v1", "v2")
+	if err != nil || diff == "" || len(changes) != 8 {
+		t.Fatalf("Compare = %q, %d changes, %v; want a first difference and the eight changes", diff, len(changes), err)
+	}
+	if _, _, err := Compare([]byte("<definitions>"), []byte(changesV2), "v1", "v2"); err == nil {
+		t.Fatal("Compare of a truncated document: no error")
+	}
 }

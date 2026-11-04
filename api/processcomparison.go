@@ -168,12 +168,7 @@ func (s *Server) handleProcessComparison(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Off the loop: parses of two documents that grow with the model.
-	diff, err := layout.Difference(from.xml, to.xml, fmt.Sprintf("version %d", from.ref.Version), fmt.Sprintf("version %d", to.ref.Version))
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "compare the versions: "+err.Error())
-		return
-	}
-	changes, err := layout.Changes(from.xml, to.xml)
+	diff, changes, err := layout.Compare(from.xml, to.xml, fmt.Sprintf("version %d", from.ref.Version), fmt.Sprintf("version %d", to.ref.Version))
 	if err != nil {
 		httpapi.Error(w, http.StatusInternalServerError, "compare the versions: "+err.Error())
 		return

@@ -143,7 +143,7 @@ func (s *Server) handleDraftComparison(w http.ResponseWriter, r *http.Request) {
 	}
 	if dep.ok {
 		// Off the loop: two parses of documents that grow with the model.
-		diff, err := layout.Difference(dep.xml, []byte(rec.XML), "the deployed version", "the draft")
+		diff, changes, err := layout.Compare(dep.xml, []byte(rec.XML), "the deployed version", "the draft")
 		if err != nil {
 			httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf("compare the draft with version %d: %v", dep.version, err))
 			return
@@ -152,11 +152,6 @@ func (s *Server) handleDraftComparison(w http.ResponseWriter, r *http.Request) {
 		resp.Key, resp.Version, resp.DeployedAt = dep.key, dep.version, dep.at
 		resp.DeployedBy, resp.DeployedByName = dep.by, name(dep.by)
 		resp.SameModel, resp.Difference = diff == "", diff
-		changes, err := layout.Changes(dep.xml, []byte(rec.XML))
-		if err != nil {
-			httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf("compare the draft with version %d: %v", dep.version, err))
-			return
-		}
 		counts := countChanges(changes)
 		resp.Changes, resp.Counts = changes, &counts
 	}

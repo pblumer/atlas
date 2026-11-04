@@ -257,12 +257,10 @@ func (plan *migrationPlanResp) withChanges() {
 	if plan.fromXML == nil || plan.toXML == nil {
 		return
 	}
-	changes, err := layout.Changes(plan.fromXML, plan.toXML)
-	if err != nil {
-		return
+	if changes, err := layout.Changes(plan.fromXML, plan.toXML); err == nil {
+		counts := countChanges(changes)
+		plan.Changes, plan.Counts = changes, &counts
 	}
-	counts := countChanges(changes)
-	plan.Changes, plan.Counts = changes, &counts
 }
 
 // readMigrationRequest decodes and sanity-checks the shared body.
