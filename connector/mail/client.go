@@ -55,6 +55,9 @@ type Message struct {
 	// bodies existed: one text/plain part.
 	HTML      string
 	MessageID string
+	// Withhold are strings a preview must not keep (see [Job.Withhold]); a provider that
+	// delivers sends the message as it is.
+	Withhold []string
 	// InReplyTo and References thread a reply under the message it answers (RFC 5322
 	// §3.6.4): the original's Message-ID, and its References followed by that id. Both
 	// are empty for every message that is not a reply (ADR-0438).

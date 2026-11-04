@@ -339,6 +339,14 @@ func TestRunMapsEveryOperation(t *testing.T) {
 				owners, _ := m["owners@odata.bind"].([]any)
 				return ok && m["displayName"] == "Lernende" && len(owners) == 1 && owners[0] == "https://graph.microsoft.com/v1.0/users/u1"
 			}},
+		// The source of authority of a synchronised user (syncbehavior_test.go covers
+		// the refused bodies).
+		{op: "get-sync-behavior", job: Job{UserID: "u1"},
+			method: "GET", path: "/users/u1/onPremisesSyncBehavior?$select=isCloudManaged",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "set-sync-behavior", job: Job{UserID: "u1", Attributes: map[string]any{"isCloudManaged": true}},
+			method: "PATCH", path: "/users/u1/onPremisesSyncBehavior",
+			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); return ok && m["isCloudManaged"] == true }},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			var res any = map[string]any{"id": "x"}
@@ -374,7 +382,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 32 {
+	if len(Ops) != 34 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }

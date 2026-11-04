@@ -98,6 +98,12 @@ type Job struct {
 	// runs the job fails it with this message, before any worker is looked up, so the
 	// incident says what is wrong wherever the job ran.
 	ResolveError string `json:"resolveError,omitempty"`
+	// Withhold are strings of the message a preview must not keep: the password link a
+	// system process mails to an account's owner
+	// (ADR-0526). A real provider sends them — they are what
+	// the mail is for — but the preview outbox is read by operators, and an operator who
+	// could read a reset link off it could take over the account it resets.
+	Withhold []string `json:"withhold,omitempty"`
 }
 
 // AnswerLinker mints the link of a user task answered by link: the task with BPMN id
@@ -108,6 +114,16 @@ type Job struct {
 // — an address, and a link signed with the installation's key.
 type AnswerLinker interface {
 	AnswerLink(piKey, scopeKey uint64, task string) (string, error)
+}
+
+// PasswordLinker mints the one-time link through which the owner of the account named
+// username sets their password (ADR-0526). It is handed the
+// process the mail belongs to and the recipients the task resolved, because whether a
+// link may be minted at all is decided by both: only a system process may carry one, and
+// only to the account's own address with nobody beside it. A [Directory] that can
+// implements it.
+type PasswordLinker interface {
+	PasswordLink(processID, username string, to, cc, bcc []string) (string, error)
 }
 
 // DocumentStore puts a document into an object store a named Worker reaches. It is how
@@ -231,6 +247,25 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		}
 		scopeVars[compiler.AnswerLinkVariable] = model.VariableValue{Name: compiler.AnswerLinkVariable, Kind: model.VarString, Text: link}
 	}
+	// A message that names an account with passwordFor reads its owner's password link as
+	// passwordLink. Like the answer link it lives in this resolution's variables and
+	// nowhere else; unlike it, the recipients decide whether it may be minted at all.
+	var withhold []string
+	if acct, ok := cp.PasswordFor(ei.ElementId); ok {
+		username := strings.TrimSpace(resolveValue(acct, piKey, scopeVars))
+		linker, ok := dir.(PasswordLinker)
+		if !ok {
+			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
+				ResolveError: fmt.Sprintf("mail: this task carries the password link of %q, and nothing here mints password links", username)}, nil
+		}
+		link, err := linker.PasswordLink(cp.ProcessId(), username, to, cc, bcc)
+		if err != nil {
+			return Job{Connector: cp.Intern(detail.Connector), MessageID: strconv.FormatUint(jobKey, 10),
+				ResolveError: fmt.Sprintf("mail: the password link of %q: %v", username, err)}, nil
+		}
+		scopeVars[compiler.PasswordLinkVariable] = model.VariableValue{Name: compiler.PasswordLinkVariable, Kind: model.VarString, Text: link}
+		withhold = append(withhold, link)
+	}
 	return Job{
 		Connector: cp.Intern(detail.Connector),
 		From:      resolveValue(detail.From, piKey, scopeVars),
@@ -241,6 +276,7 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		Body:      mailText(detail.BodyTmpl, detail.Body, piKey, scopeVars, nil),
 		HTML:      mailText(detail.BodyHTMLTmpl, detail.BodyHTML, piKey, scopeVars, html.EscapeString),
 		MessageID: strconv.FormatUint(jobKey, 10),
+		Withhold:  withhold,
 	}, nil
 }
 
@@ -291,6 +327,7 @@ func run(ctx context.Context, j Job, reg *Registry, docs DocumentStore) (any, er
 			Body:      j.Body,
 			HTML:      j.HTML,
 			MessageID: j.MessageID,
+			Withhold:  j.Withhold,
 		})
 	}
 	mb, err := MailboxOf(client)

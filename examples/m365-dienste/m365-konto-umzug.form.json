@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-konto-umzug",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Postfach nach Exchange Online verschieben · Move the mailbox to Exchange Online**\n\nDas Konto {{upn}} soll künftig in der Cloud verwaltet werden. Sein Postfach liegt noch auf dem Exchange Server; Microsoft verlangt für die Übernahme, dass keine Exchange-Workloads mehr lokal laufen.\n\n1. Im Exchange Admin Center (Exchange Online) unter Migration einen Batch «Remote move migration» für das Postfach anlegen, über den Migrationsendpunkt der hybriden Konfiguration.\n2. Den Batch starten und abschliessen lassen.\n3. Diese Aufgabe abschliessen, sobald der Umzug läuft.\n\nDer Prozess prüft danach selbst im Active Directory, ob das Konto ein Remote-Postfach trägt, und übernimmt es erst dann. · Move the mailbox with a remote move migration batch in Exchange Online, then complete this task; the process checks Active Directory for the remote mailbox itself and continues only then."
+    }
+  ]
+}

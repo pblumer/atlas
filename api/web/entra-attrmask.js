@@ -78,6 +78,11 @@ export const ENTRA_ATTR_SPECS = {
     { key: "description", label: "pnl.ops.entra.field.description", kind: "text", hint: "pnl.ops.entra.hint.create-community.description" },
     { key: "privacy", label: "pnl.ops.entra.field.privacy", kind: "select", options: ["public", "private"], hint: "pnl.ops.entra.hint.create-community.privacy" },
   ],
+  // The source of authority of a synchronised user: one property, and the worker
+  // refuses any other (ADR-0172, amended 2026-11-04).
+  "set-sync-behavior": [
+    { key: "isCloudManaged", label: "pnl.ops.entra.field.isCloudManaged", kind: "bool", hint: "pnl.ops.entra.hint.set-sync-behavior.isCloudManaged" },
+  ],
 };
 
 // hasMask reports whether an operation has a structured mask. Operations without one
@@ -115,6 +120,8 @@ export function entraResultShape(operation) {
       return t("pnl.ops.entra.result.inviteGuest");
     case "create-community":
       return t("pnl.ops.entra.result.createCommunity");
+    case "get-sync-behavior":
+      return t("pnl.ops.entra.result.syncBehavior");
     case "delta-users":
     case "delta-groups":
       return t("pnl.ops.entra.result.delta");
@@ -136,6 +143,7 @@ export function entraResultShape(operation) {
     case "add-team-member":
     case "add-team-owner":
     case "archive-team":
+    case "set-sync-behavior":
       return t("pnl.ops.entra.result.none");
     default:
       return t("pnl.ops.entra.result.default");
@@ -167,6 +175,7 @@ export function entraResultType(operation) {
     case "add-team-member":
     case "add-team-owner":
     case "archive-team":
+    case "set-sync-behavior":
       return "";
     default:
       return "object";

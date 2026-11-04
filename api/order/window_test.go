@@ -162,3 +162,24 @@ func TestTheSameBasketIsRefusedTheSameWayTwice_Window(t *testing.T) {
 		t.Errorf("refused %q and then %q for one basket", first.ItemID, second.ItemID)
 	}
 }
+
+// TestTheRefusalNamesTheDayInUTCWhateverTheServerZone.
+//
+// The window is stored as instants at the edges of UTC days, so the day it names
+// must be read in UTC too: a server east of Greenwich would otherwise say a window
+// ending on the 31st closed on the 1st.
+func TestTheRefusalNamesTheDayInUTCWhateverTheServerZone(t *testing.T) {
+	saved := time.Local
+	time.Local = time.FixedZone("UTC+14", 14*60*60)
+	t.Cleanup(func() { time.Local = saved })
+
+	rel := aReleaseWith(windowed("aktion",
+		at("2026-10-01T00:00:00Z"), at("2026-10-31T23:59:59Z")))
+	late := closedIn(rel, []string{"aktion"}, at("2026-11-01T00:00:00Z"))
+	if late == nil {
+		t.Fatal("a product was ordered the day after its window closed")
+	}
+	if reason := late.reason(); !contains(reason, "2026-10-31") {
+		t.Errorf("the refusal names the server's local day, not the window's: %q", reason)
+	}
+}
