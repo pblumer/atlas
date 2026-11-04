@@ -57,6 +57,11 @@ type GraphClient struct {
 
 	mu    sync.Mutex
 	sites map[string]string
+
+	// admin reaches SharePoint's tenant administration for set-site-quota; nil when the
+	// Worker's credential cannot (a client secret or a refresh token), which
+	// set-site-quota answers with CodeAdminNotPermitted.
+	admin *adminAccess
 }
 
 // NewGraphClient builds a SharePoint Graph client. baseURL defaults to the Graph
@@ -78,8 +83,11 @@ func (c *GraphClient) Do(ctx context.Context, req Request) (any, error) {
 		return nil, err
 	}
 	op, spec, path := p.op, p.spec, p.path
-	if op == OpGetSite {
+	switch op {
+	case OpGetSite:
 		return c.getSite(ctx, op, req.Site)
+	case OpSetSiteQuota:
+		return c.setSiteQuota(ctx, op, req)
 	}
 	site, err := c.siteBase(ctx, op, req.Site)
 	if err != nil {
@@ -483,6 +491,11 @@ func prepare(req Request) (prepared, error) {
 	}
 	if spec.NeedsItemID && strings.TrimSpace(req.ItemID) == "" {
 		return prepared{}, fmt.Errorf("sharepoint: %s has no itemId", op)
+	}
+	if spec.NeedsQuota {
+		if _, err := readQuota(op, req); err != nil {
+			return prepared{}, err
+		}
 	}
 	p := prepared{op: op, spec: spec}
 	if spec.NeedsPath || spec.TakesPath {

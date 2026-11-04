@@ -1,0 +1,95 @@
+{
+  "type": "default",
+  "id": "ad-unpersoenliches-konto-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Unpersönliches Konto · Non-personal account**\n\nEin Funktions-, Rollen- oder Schulungskonto (Kontotyp F, R oder E; die Variante wählt ihn). Die empfangende Person ist für das Konto verantwortlich, setzt das Initialpasswort und bestätigt es bei der Rezertifizierung. Die Informationssicherheit (ISBO) genehmigt; Identity Management nimmt das Konto zur Kenntnis. · A function, role or training account (type F, R or E; the variant chooses it). The recipient is responsible for the account, sets the initial password and confirms it at recertification. Information security (ISBO) approves; identity management takes note."
+    },
+    {
+      "key": "auftragstitel",
+      "type": "textfield",
+      "label": "Auftragstitel · Order title",
+      "description": "Kurz, worum es geht. · Briefly what it is about.",
+      "validate": {
+        "required": true,
+        "maxLength": 80
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bezeichnung",
+      "type": "textfield",
+      "label": "Bezeichnung · Name",
+      "description": "2 bis 16 Zeichen: Buchstaben, Ziffern, Bindestrich. Das Konto heisst f-, r- oder e-<Bezeichnung>. · 2 to 16 letters, digits or hyphens. The account is called f-, r- or e-<name>.",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9-]{2,16}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Verwendungszweck (Begründung für die Genehmigung) · Purpose (justification for the approval)",
+      "description": "Wofür das Konto gebraucht wird und warum ein persönliches Konto nicht genügt. Die Informationssicherheit entscheidet darüber. · What the account is for and why a personal account is not enough. Information security decides on it.",
+      "validate": {
+        "required": true,
+        "maxLength": 300
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mfaAusnahme",
+      "type": "radio",
+      "label": "2FA dauerhaft deaktivieren · Disable 2FA permanently",
+      "description": "Nur mit Begründung im Verwendungszweck. Identity Management nimmt das Konto in die Ausnahme der Mehrfaktor-Anmeldung auf. · Only with a justification in the purpose. Identity management adds the account to the multi-factor exception.",
+      "values": [
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        },
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "clientDeforcieren",
+      "type": "radio",
+      "label": "Client deforcieren · Unenforce the client",
+      "description": "Identity Management hebt die Bindung an verwaltete Clients für dieses Konto auf. · Identity management lifts the binding to managed clients for this account.",
+      "values": [
+        {
+          "label": "Nein · No",
+          "value": "nein"
+        },
+        {
+          "label": "Ja · Yes",
+          "value": "ja"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

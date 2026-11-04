@@ -44,6 +44,19 @@ const (
 	// application, and the caller needs the editor role on the application it leaves.
 	// Unadopted, it stops the import like a change nobody decided.
 	Elsewhere = "elsewhere"
+	// Gap is a capability or value stream an import needs and this server's map does
+	// not have (ADR-draft-application-bundle-architecture). The map is the
+	// organisation's, so an import never files one silently: the caller adopts the
+	// bundle's proposal, maps the key onto one the map has, or omits it. Undecided, it
+	// stops the import like a change nobody decided.
+	Gap = "gap"
+	// Linked is a proposal for a key the map already has: the import files what it
+	// brings under that key and never writes over the map's record. Compared says
+	// whether the proposal reads like the record. Nothing to decide.
+	Linked = "linked"
+	// Owned is a record only imports write — an application's realizations — which an
+	// import replaces as the tree states it. Nothing to decide.
+	Owned = "owned"
 )
 
 // Hash is the fingerprint an artifact is compared by: the parts that make it what it
@@ -87,6 +100,12 @@ const (
 	Updated   = "updated"
 	Kept      = "kept"
 	Undecided = "undecided"
+	// Mapped is a gap the caller settled with a key the map already has: what the
+	// bundle named under its own key is filed under that one, and nothing is created.
+	Mapped = "mapped"
+	// Omitted is a gap the caller left out: nothing is created, and what named it is
+	// not filed.
+	Omitted = "omitted"
 )
 
 // Artifact is one artifact of an import. Ref names it as the overwrite and keep
@@ -106,6 +125,14 @@ type Artifact struct {
 	// Adopted says the artifact moves into the importing application from the one
 	// that held it, as the caller decided under adopt.
 	Adopted bool `json:"adopted,omitempty"`
+	// Proposed says a gap comes with the bundle's proposal, which adopt files in the
+	// map; a gap without one can only be mapped or omitted.
+	Proposed bool `json:"proposed,omitempty"`
+	// MappedTo is the existing key a gap was mapped onto.
+	MappedTo string `json:"mappedTo,omitempty"`
+	// Detail says in words why an artifact is planned as it is, where the status alone
+	// does not: a proposal for a key the map has is never written over the map's record.
+	Detail string `json:"detail,omitempty"`
 }
 
 // Holder is the application an artifact belongs to before an import adopts it.
@@ -127,14 +154,22 @@ type Decisions struct {
 	// takes into the importing one. There is no * for it: moving an artifact out of
 	// somebody's application is decided artifact by artifact.
 	Adopt map[string]bool
+	// Map settles gaps with keys the map already has: ref (capability:<key>) to the
+	// existing key.
+	Map map[string]string
+	// Omit names gaps left out; OmitAll leaves out every gap no other decision names.
+	Omit    map[string]bool
+	OmitAll bool
 }
 
-// Parse reads ?dryRun=, ?overwrite=, ?keep= and ?adopt=. Each list is refs separated by
-// commas, a parameter may repeat, and * stands for every changed artifact the other
-// list does not name. A ref in both lists, or * in both, contradicts itself and is
-// refused.
+// Parse reads ?dryRun=, ?overwrite=, ?keep=, ?adopt=, ?map= and ?omit=. Each list is
+// refs separated by commas, a parameter may repeat, and * stands for every changed
+// artifact the other list does not name. A ref in both lists, or * in both, contradicts
+// itself and is refused. ?map= takes ref=key pairs, such as capability:konten=identitaet;
+// ?omit=* leaves out every gap no other decision names.
 func Parse(q url.Values) (Decisions, error) {
-	d := Decisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}, Adopt: map[string]bool{}}
+	d := Decisions{Overwrite: map[string]bool{}, Keep: map[string]bool{}, Adopt: map[string]bool{},
+		Map: map[string]string{}, Omit: map[string]bool{}}
 	d.DryRun = q.Get("dryRun") == "true" || q.Get("dryRun") == "1"
 	read := func(param string, refs map[string]bool, all *bool) {
 		for _, v := range q[param] {
@@ -158,6 +193,33 @@ func Parse(q url.Values) (Decisions, error) {
 	}
 	if d.OverwriteAll && d.KeepAll {
 		return d, errors.New("overwrite=* and keep=* contradict each other")
+	}
+	read("omit", d.Omit, &d.OmitAll)
+	for _, v := range q["map"] {
+		for _, pair := range strings.Split(v, ",") {
+			if pair = strings.TrimSpace(pair); pair == "" {
+				continue
+			}
+			ref, key, ok := strings.Cut(pair, "=")
+			ref, key = strings.TrimSpace(ref), strings.TrimSpace(key)
+			if !ok || ref == "" || key == "" || ref == "*" {
+				return d, fmt.Errorf("map takes ref=key pairs, such as capability:konten=identitaet, not %q", pair)
+			}
+			if prev, dup := d.Map[ref]; dup && prev != key {
+				return d, fmt.Errorf("%s is mapped onto both %s and %s", ref, prev, key)
+			}
+			d.Map[ref] = key
+		}
+	}
+	for ref := range d.Map {
+		if d.Omit[ref] || d.Adopt[ref] {
+			return d, fmt.Errorf("%s is mapped and also named under adopt or omit", ref)
+		}
+	}
+	for ref := range d.Omit {
+		if d.Adopt[ref] {
+			return d, fmt.Errorf("%s is named under both adopt and omit", ref)
+		}
 	}
 	for ref := range d.Overwrite {
 		if d.Keep[ref] {
@@ -192,6 +254,25 @@ func (d Decisions) Outcome(ref, status string) string {
 	}
 	return Undecided
 }
+
+// GapOutcome is what becomes of a gap under these decisions: Created when the caller
+// adopts the bundle's proposal, Mapped (with the key) when it names an existing key,
+// Omitted when it leaves the gap out, Undecided otherwise. A ref named under adopt with
+// no proposal to adopt is the caller's mistake, reported by the importer.
+func (d Decisions) GapOutcome(ref string) (outcome, mappedTo string) {
+	switch {
+	case d.Map[ref] != "":
+		return Mapped, d.Map[ref]
+	case d.Adopt[ref]:
+		return Created, ""
+	case d.Omit[ref] || d.OmitAll:
+		return Omitted, ""
+	}
+	return Undecided, ""
+}
+
+// GapProblem is what an import stopped for an undecided gap says of it.
+const GapProblem = "is not in this server's capability map; name it under adopt to file the bundle's proposal, under map as ref=key to use a key the map has, or under omit to leave it out"
 
 // Compare is the status of an artifact this server already holds.
 func Compare(same bool) string {

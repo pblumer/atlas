@@ -104,6 +104,7 @@ var persistentStores = []storeEntry{
 	{name: "panorama-models", class: classDesignTime, why: "landscape models"},
 	{name: "capabilities", class: classDesignTime, why: "the business capabilities the organisation must be able to perform, and how each is currently done"},
 	{name: "value-streams", class: classDesignTime, why: "the value streams whose stages those capabilities perform"},
+	{name: "capability-realizations", class: classDesignTime, why: "which capabilities each application's bundle says its processes and Workers realize (ADR-draft-application-bundle-architecture)"},
 	{name: "releases", class: classDesignTime, why: "published application versions"},
 	{name: "dmnrefs", class: classDesignTime, why: "decision references"},
 	{name: "dmn-models", class: classDesignTime, onDemand: true, why: "decision models"},

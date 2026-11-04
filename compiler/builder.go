@@ -2116,8 +2116,12 @@ type SharePointConfig struct {
 	Select     RestExpr
 	PageToken  RestExpr
 	MaxResults int32
-	ResultVar  string
-	Retries    int32
+	// QuotaGB and WarningPercent are what set-site-quota sets: the storage in
+	// gigabytes and the share of it at which SharePoint warns.
+	QuotaGB        RestExpr
+	WarningPercent RestExpr
+	ResultVar      string
+	Retries        int32
 }
 
 // sharePointCreateItem is the operation a SharePoint task performs when it names
@@ -2167,6 +2171,8 @@ func (b *Builder) AddSharePointConnectorTask(cfg SharePointConfig) int32 {
 		SharePointSelect:     cfg.Select,
 		SharePointPageToken:  cfg.PageToken,
 		SharePointMaxResults: cfg.MaxResults,
+		SharePointQuotaGB:    cfg.QuotaGB,
+		SharePointWarnPct:    cfg.WarningPercent,
 		Retries:              cfg.Retries,
 	})
 	return b.addNode(TypeConnectorTask, detail)

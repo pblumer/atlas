@@ -3,6 +3,7 @@ package capability
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -117,6 +118,9 @@ func NormalizeCapability(c *Capability) {
 		c.Resources[i].Name = strings.TrimSpace(c.Resources[i].Name)
 		c.Resources[i].Ref = strings.TrimSpace(c.Resources[i].Ref)
 	}
+	// A realization an application's bundle brought is read into the record, never
+	// written on it: the application owns it (bundled.go).
+	c.Realizations = slices.DeleteFunc(c.Realizations, func(r Realization) bool { return strings.TrimSpace(r.BundledBy) != "" })
 	for i := range c.Realizations {
 		r := &c.Realizations[i]
 		r.Kind = strings.TrimSpace(r.Kind)

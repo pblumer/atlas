@@ -69,6 +69,12 @@ type packageManifestFile struct {
 	// Constants names the file a tree carries its constants in, as a Console
 	// download with its constants does.
 	Constants string `json:"constants"`
+	// InformationModels and Architecture name what a format-4 tree carries of the
+	// architecture (ADR-draft-application-bundle-architecture).
+	InformationModels []struct {
+		Path string `json:"path"`
+	} `json:"informationModels"`
+	Architecture string `json:"architecture"`
 }
 
 // packageQuestion is one entry of fragen.json.
@@ -115,7 +121,13 @@ func runImport(args []string, out io.Writer) error {
 	fs.Var(keep, "keep", "leave artifacts that differ from the server's as the server has them: refs, comma-separated, or all; repeatable")
 	adopt := newRefFlag()
 	fs.Var(adopt, "adopt",
-		"take artifacts another application on the server holds into this one: refs such as process:ID, form:ID or decision:ID, comma-separated; repeatable. Needs the editor role on the application they leave")
+		"take artifacts another application on the server holds into this one: refs such as process:ID, form:ID or decision:ID; and file the package's proposal for a capability or value stream the server's map lacks: capability:KEY, valuestream:KEY. Comma-separated; repeatable. Taking from another application needs the editor role on the application they leave")
+	omit := newRefFlag()
+	fs.Var(omit, "omit",
+		"leave out a capability or value stream the server's map lacks, and what the package files under it: capability:KEY or valuestream:KEY, comma-separated, or all; repeatable")
+	var mapped mapFlag
+	fs.Var(&mapped, "map",
+		"file what the package names under a capability the server's map lacks under a key the map has instead: capability:KEY=EXISTING, comma-separated; repeatable")
 	dryRun := fs.Bool("dry-run", false, "show what the import would create, leave and change, and write nothing")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -123,7 +135,7 @@ func runImport(args []string, out io.Writer) error {
 	if fs.NArg() != 1 {
 		return errors.New("name the package: atlas import [flags] DIR")
 	}
-	decide, err := decisions(overwrite, keep, adopt)
+	decide, err := decisionsWithGaps(overwrite, keep, adopt, omit, mapped)
 	if err != nil {
 		return err
 	}
@@ -318,6 +330,14 @@ func readImportPackage(dir string) (importPackage, error) {
 	}
 	if man.Constants != "" {
 		paths = append(paths, man.Constants)
+	}
+	for _, m := range man.InformationModels {
+		if m.Path != "" && !slices.Contains(paths, m.Path) {
+			paths = append(paths, m.Path)
+		}
+	}
+	if man.Architecture != "" && !slices.Contains(paths, man.Architecture) {
+		paths = append(paths, man.Architecture)
 	}
 	sort.Strings(paths)
 
