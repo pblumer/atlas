@@ -40,6 +40,9 @@ type instanceListQuery struct {
 	// it requires ?process= — an element id means nothing without the version that
 	// defines it, and the index it reads is keyed by that pair.
 	element string
+	// preview is ?values=preview: every long variable value cut to its beginning
+	// (variablepreview.go). Off by default.
+	preview bool
 }
 
 // parseInstanceListQuery reads the query string, reporting the first thing wrong
@@ -102,6 +105,10 @@ func parseInstanceListQuery(q map[string][]string) (instanceListQuery, error) {
 	}
 	if out.element = get("element"); out.element != "" && !out.hasDef {
 		return out, errors.New("element requires process=<definition key>: a BPMN element id is only meaningful within the version that defines it")
+	}
+	var err error
+	if out.preview, err = parseValuesMode(get("values")); err != nil {
+		return out, err
 	}
 	return out, nil
 }
@@ -405,6 +412,11 @@ func (s *Server) handleListInstances(w http.ResponseWriter, r *http.Request) {
 	case scanErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "list instances: "+scanErr.Error())
 		return
+	}
+	// Cut here, on the request goroutine and after the scan, so the run loop and the
+	// read view never see the difference.
+	if q.preview {
+		previewInstanceRows(page.rows)
 	}
 	// The page and what it came out of, in one object
 	// (ADR-0378). This used to be a

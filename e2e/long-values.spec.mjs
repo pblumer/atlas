@@ -122,7 +122,36 @@ test.describe("the overview's instance card", () => {
   });
 });
 
+test.describe("what the overview asks the server for", () => {
+  test("lists with previews, and reads one instance whole when a value is opened", async ({ page }) => {
+    const errors = await openLive(page);
+    await expect(bigCard(page)).toBeVisible();
+    const lists = await page.evaluate(() => window.__requests.filter((u) => u.startsWith("/api/v1/instances?")));
+    expect(lists.length).toBeGreaterThan(0);
+    for (const url of lists) expect(url).toContain("values=preview");
+
+    await page.evaluate(() => { window.__requests.length = 0; });
+    await bigCard(page).locator('.vp-inst-vars [data-var="csvText"]').click();
+    await expect(page.locator("#var-modal-body")).toContainText("P-1015;Chiara;Roth");
+    // The whole value came from the instance's point read — a bare key, no preview.
+    const reads = await page.evaluate(() => window.__requests.filter((u) => u.startsWith("/api/v1/instances/search")));
+    expect(reads).toContain("/api/v1/instances/search?q=281475062011074");
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe("the single-instance view", () => {
+  test("reads the instance whole, so its copy buttons carry whole values", async ({ page }) => {
+    const errors = await openLive(page, "281475062011074");
+    const csv = await page.evaluate(() => window.__CSV);
+    const field = page.locator('#var-panel .vfield[data-var="csvText"]');
+    await expect(field.locator(".vcopy")).toHaveAttribute("data-copy", csv);
+    await expect(page.locator("#var-panel .vcopy-all")).toBeVisible();
+    // A structure is laid out as JSON again, not shown as a cut preview.
+    await expect(page.locator('#var-panel .vj-toggle[data-name="pruefungen"]')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test("shows the start of a long text and opens the whole of it in the window", async ({ page }) => {
     const errors = await openLive(page, "281475062011074");
     const field = page.locator('#var-panel .vfield[data-var="csvText"]');

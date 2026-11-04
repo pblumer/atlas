@@ -94,6 +94,11 @@ _Changed_ / _Removed_ for each version.
   shown as one line with its size in bytes and lines, and a list or object as its shape. A click
   opens the whole value in a window that copies it and saves it as a file. The single-instance view
   and the replay's Variables tab show the first lines of a long text and open the same window.
+  The overview's 1.5-second poll no longer carries every value whole: `GET /api/v1/instances` and
+  `GET /api/v1/instances/search` take `?values=preview`, which cuts each value longer than 512 bytes
+  to its beginning and marks it with `truncated`, `size`, and `lines` or `shape` and `count`. The
+  default stays `values=full`. The MCP tools `atlas_list_instances` and `atlas_search_instances` take
+  the same `values` argument. The whole value is read with the instance's point read when it is opened.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
   back to its default. A TLS installation then comes back as plain HTTP on `127.0.0.1:8080`. The

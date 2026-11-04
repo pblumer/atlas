@@ -95,13 +95,42 @@
 
       const listing = (items, extra = {}) => ({ items, total: items.length, totalExact: true, truncated: false, ...extra });
 
+      // cut mirrors api/variablepreview.go for ?values=preview: a value past 512 bytes
+      // comes back as its beginning, marked, with what the whole weighs. (The harness
+      // cuts by characters; every long value here is ASCII up to the cut.)
+      const PREVIEW = 512;
+      const shapeOf = (text) => {
+        const v = JSON.parse(text);
+        return Array.isArray(v) ? { shape: "array", count: v.length } : { shape: "object", count: Object.keys(v).length };
+      };
+      const cut = (v) => {
+        const size = new TextEncoder().encode(v.value).length;
+        if (size <= PREVIEW) return v;
+        const out = { ...v, value: v.value.slice(0, PREVIEW), truncated: true, size };
+        if (v.kind === "json") Object.assign(out, shapeOf(v.value));
+        else out.lines = v.value.split("\n").length;
+        return out;
+      };
+      const previewed = (rows, url) => new URL(url, location.origin).searchParams.get("values") === "preview"
+        ? rows.map((r) => ({ ...r, variables: r.variables.map(cut) }))
+        : rows;
+      // Every instance request the view makes, so a test can see what it asked for.
+      window.__requests = [];
+
       const liveApi = async (method, url) => {
         if (method !== "GET") return {};
         if (url === "/api/v1/processes") return [{ key: DEF, processId: "csvimport", name: "CSV-Datensätze prüfen", version: 1 }];
         if (/\/processes\/\d+\/xml$/.test(url)) return XML;
         if (url.startsWith("/api/v1/instances?")) {
+          window.__requests.push(url);
           const state = new URL(url, location.origin).searchParams.get("state");
-          return listing(instances.filter((r) => (state === "finished") === (r.state !== "active")));
+          return listing(previewed(instances.filter((r) => (state === "finished") === (r.state !== "active")), url));
+        }
+        if (url.startsWith("/api/v1/instances/search")) {
+          window.__requests.push(url);
+          const q = new URL(url, location.origin).searchParams.get("q") || "";
+          const byKey = instances.filter((r) => String(r.key) === q);
+          return listing(previewed(byKey, url));
         }
         if (url.startsWith("/api/v1/tasks")) return listing([]);
         if (url.includes("/runtime")) {

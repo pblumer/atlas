@@ -77,6 +77,7 @@ import { fmtCount } from "./numfmt.js";
 import {
   CARD_CHARS, CARD_VARS, FIELD_CHARS, FIELD_LINES,
   isLongText, previewText, sizeText, searchableNames, cardOrder, downloadName,
+  variableSizeText, variableShape,
 } from "./varpreview.js";
 // The heatmap over the live view (ADR-0496): the strip that
 // chooses what the diagram shows, the shading, and the figures behind it.
@@ -521,6 +522,14 @@ function jsonPeek(text) {
   return s.length > 40 ? s.slice(0, 39) + "…" : s;
 }
 
+// shapeSummary words a structure's element count the way jsonSummary does, for a value
+// known only by its shape and count (a preview the server cut, varpreview.js).
+function shapeSummary({ shape, count }) {
+  return shape === "array"
+    ? `${count} item${count === 1 ? "" : "s"}`
+    : `${count} field${count === 1 ? "" : "s"}`;
+}
+
 // jsonSummary is the compact one-liner shown on a collapsed JSON card.
 function jsonSummary(text) {
   try {
@@ -638,19 +647,27 @@ function renderVarsBody(list, collapsed) {
       // takes the grid's full width, because a preview squeezed into one column of
       // three is not readable either. The window resolves the value from the instance
       // by name and scope (data-var, data-scope), so the markup carries no second copy.
-      const long = cls === "str" && isLongText(v.value, FIELD_CHARS, FIELD_LINES);
+      //
+      // A value the listing cut (v.truncated, values=preview) is long by definition,
+      // and offers no copy button: what it holds is not the value.
+      const long = v.truncated || (cls === "str" && isLongText(v.value, FIELD_CHARS, FIELD_LINES));
       const shown = long ? previewText(v.value, FIELD_CHARS, FIELD_LINES) : String(v.value);
-      const more = long
-        ? `<button class="v-show-all" type="button" data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}"
-            title="${esc(tr("ops.vars.open", { name: v.name }))}">${esc(tr("ops.vars.showAll"))} · ${esc(sizeText(v.value))}</button>`
-        : "";
+      const more = long ? showAllBtn(v) : "";
       return `<div class="vfield${long ? " long" : ""}" data-var="${esc(v.name)}"><div class="vf-head"><span class="vk" title="${esc(v.name)}">${esc(v.name)}</span></div>
         <div class="vf-val"><span class="vv ${cls}">${esc(shown)}</span><span class="vtag">${esc(v.kind)}</span></div>
         ${more}
-        ${copyBtn(v.value, "Copy value")}</div>`;
+        ${v.truncated ? "" : copyBtn(v.value, "Copy value")}</div>`;
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
+    // A structure the listing cut cannot be laid out: it is not valid JSON any more.
+    // It says what it is and opens whole in the value window instead.
+    if (v.truncated) {
+      return `<div class="vjson collapsed" data-var="${esc(v.name)}">
+        <div class="vj-head"><span class="vk">${esc(v.name)}</span><span class="vtag">json</span></div>
+        ${showAllBtn(v)}
+      </div>`;
+    }
     const isCollapsed = collapsed.has(v.name);
     return `<div class="vjson${isCollapsed ? " collapsed" : ""}">
       <div class="vj-head">
@@ -664,6 +681,13 @@ function renderVarsBody(list, collapsed) {
     </div>`;
   }).join("");
   return html;
+}
+
+// showAllBtn is the way from a value's preview to the whole of it in the value window,
+// named by variable and scope so the markup carries no second copy of the value.
+function showAllBtn(v) {
+  return `<button class="v-show-all" type="button" data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}"
+    title="${esc(tr("ops.vars.open", { name: v.name }))}">${esc(tr("ops.vars.showAll"))} · ${esc(variableSizeText(v))}</button>`;
 }
 
 // copyBtn renders a small clipboard button carrying the raw text to copy in a data
@@ -681,7 +705,8 @@ function copyBtn(text, title) {
 // the whole payload in one click, the shape an operator pastes into a ticket or a
 // re-run. Module-level so both the Live side panel and the replay inspector share it.
 function copyAllBtn(list) {
-  if (!list || !list.length) return "";
+  // A set the listing cut (values=preview) would copy beginnings as values.
+  if (!list || !list.length || list.some((v) => v.truncated)) return "";
   const obj = {};
   for (const v of list) {
     if (v.kind === "json") { try { obj[v.name] = JSON.parse(v.value); continue; } catch { /* keep raw */ } }
@@ -12888,7 +12913,11 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // the page; `Load more` walks the cursor, and the search box below reaches
   // anything the first page does not show.
   async function loadHalf(state, cursor) {
-    const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}` +
+    // values=preview: a long variable value comes back as its first 512 bytes and what
+    // the whole weighs (api/variablepreview.go). This page is re-read every 1.5 seconds
+    // for every listed instance, and a card shows one line of each value; the whole
+    // one is a point read when somebody opens it (fullInstance).
+    const q = `/api/v1/instances?process=${encodeURIComponent(key)}&state=${state}&limit=${PANEL_PAGE}&values=preview` +
       (cursor ? `&before=${encodeURIComponent(cursor)}` : "") +
       (elementFilter ? `&element=${encodeURIComponent(elementFilter)}` : "");
     // The page, its cap and its cursor all come off the body now
@@ -13071,7 +13100,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
       // the rows describe instances history retention has already deleted, which is
       // about what the rows *are*, not about how many of them came back.
       const { data, headers } = await apiRaw("GET",
-        `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}`);
+        `/api/v1/instances/search?process=${encodeURIComponent(key)}&q=${encodeURIComponent(q)}&values=preview`);
       rows = (data && data.items) || [];
       searchTruncated = !!(data && data.truncated);
       archiveState = headers.get("X-Archive-State") || "";
@@ -13102,18 +13131,21 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // panel is rebuilt every 1.5 seconds for every listed instance.
   const varChip = (inst, v) => {
     const at = `data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}" data-inst="${esc(String(inst.key))}"`;
-    const complex = isComplexVar(v);
-    const long = !complex && v.kind === "string" && isLongText(v.value, CARD_CHARS, 1);
-    if (!complex && !long) {
+    // The listing arrives with ?values=preview, so a long value is already cut and
+    // says what the whole is (truncated, size, lines, shape, count): variableShape and
+    // variableSizeText read it either way.
+    const shape = variableShape(v);
+    const long = !shape && (v.truncated || (v.kind === "string" && isLongText(v.value, CARD_CHARS, 1)));
+    if (!shape && !long) {
       return `<span class="chip" ${at}>${esc(v.name)}=${esc(v.value)}</span>`;
     }
-    const arr = complex && jsonTypeLabel(v.value) === "array";
-    const shown = complex
-      ? `<span class="vp-chip-sum">${arr ? "[" : "{"}${esc(jsonSummary(v.value))}${arr ? "]" : "}"}</span>`
+    const arr = shape && shape.shape === "array";
+    const shown = shape
+      ? `<span class="vp-chip-sum">${arr ? "[" : "{"}${esc(shapeSummary(shape))}${arr ? "]" : "}"}</span>`
       : `<code>${esc(previewText(v.value, CARD_CHARS, 1))}</code>`;
     return `<button type="button" class="chip vp-chip-open" ${at} title="${esc(tr("ops.vars.open", { name: v.name }))}">` +
       `<span class="vp-chip-k">${esc(v.name)}</span>=${shown}` +
-      `<span class="vp-chip-size">${esc(sizeText(v.value))}</span></button>`;
+      `<span class="vp-chip-size">${esc(variableSizeText(v))}</span></button>`;
   };
 
   // varChips lists an instance's values on its overview card: the declared searchable
@@ -13386,7 +13418,12 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           </div>`;
         }).join("")}</div>${more}`;
     } else {
-      const inst = instances.find((r) => String(r.key) === selected);
+      // The listing's row carries previews; the selected instance is read whole beside
+      // it (refreshSelectedFull), and that is what this view shows once it is in.
+      const listed = instances.find((r) => String(r.key) === selected);
+      const inst = listed && fullRow && String(fullRow.key) === selected
+        ? { ...listed, variables: fullRow.variables || [] }
+        : listed;
       if (!inst) {
         html = `<div class="vp-head"><span class="vp-title">Variables</span></div>
           <p class="muted" style="margin:0">Instance no longer available.</p>`;
@@ -13528,8 +13565,38 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (e.target.id === "heat-period") setHeat({ period: e.target.value });
   });
 
+  // fullRow is the selected instance read whole: the listing asks for previews
+  // (values=preview), and the single-instance view, its copy buttons and the value
+  // window need the values as stored. null while "All instances" is selected, or while
+  // nothing of the selected instance was cut.
+  let fullRow = null;
+
+  // fullInstance reads one instance with every variable whole. A bare instance key is a
+  // point read on the server — two reads and one scope's variables, whatever the size
+  // of the store — so it costs the instance, not the version.
+  async function fullInstance(instKey) {
+    const page = await api("GET", `/api/v1/instances/search?q=${encodeURIComponent(String(instKey))}`);
+    return ((page && page.items) || []).find((r) => String(r.key) === String(instKey)) || null;
+  }
+
+  async function refreshSelectedFull() {
+    const listed = selected === "all" ? null : instances.find((r) => String(r.key) === selected);
+    // An archived row is the event log's answer and arrives whole; a row with nothing
+    // cut is whole already. Neither needs the second read.
+    if (!listed || listed.archived || !(listed.variables || []).some((v) => v.truncated)) {
+      fullRow = null;
+      return;
+    }
+    const want = selected;
+    try {
+      const row = await fullInstance(want);
+      if (selected === want) fullRow = row;
+    } catch { /* transient; the next poll reads it again */ }
+  }
+
   async function poll() {
     await refreshInstances();
+    await refreshSelectedFull();
     await refreshTasks();
     await refreshDecisions();
     await refreshHeatStats();
@@ -13873,8 +13940,21 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const open = t.closest(".vp-chip-open, .v-show-all");
     if (open) {
       const instKey = open.dataset.inst || selected;
-      const inst = instances.find((r) => String(r.key) === String(instKey));
-      const v = inst && findVar(inst.variables, open.dataset.var, open.dataset.scope);
+      const name = open.dataset.var, scope = open.dataset.scope;
+      const shown = String(instKey) === selected && fullRow && String(fullRow.key) === selected
+        ? fullRow : instances.find((r) => String(r.key) === String(instKey));
+      let v = shown && findVar(shown.variables, name, scope);
+      // The listing carries only the beginning of a long value; the window shows the
+      // whole of it, read now with the instance's point read.
+      if (v && v.truncated) {
+        try {
+          const row = await fullInstance(instKey);
+          v = row && findVar(row.variables, name, scope);
+        } catch (err) {
+          toast(`Could not read ${name}: ${err.message}`, "err");
+          return;
+        }
+      }
       if (v) openValueWindow(root, v);
     }
   });

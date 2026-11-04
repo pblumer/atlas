@@ -95,3 +95,31 @@ export function downloadName(name, isJSON) {
   const base = String(name || "value").replace(/[\\/:*?"<>|\s]+/g, "_") || "value";
   return `${base}.${isJSON ? "json" : "txt"}`;
 }
+
+// A listing asked for with ?values=preview (api/variablepreview.go) cuts a long value
+// to its beginning and says what the whole is: truncated, size in bytes, lines for a
+// text, shape and count for a structure. The two functions below read a variable the
+// same way whether it arrived whole or cut, so a surface does not have to know which.
+
+// variableSizeText is sizeText for a variable: from the server's figures when the
+// value was cut, from the value itself when it is whole.
+export function variableSizeText(v) {
+  if (!v || !v.truncated) return sizeText(v ? v.value : "");
+  const parts = [fmtBytes(v.size)];
+  if (v.lines > 1) parts.push(plural("ops.vars.lines", v.lines));
+  return parts.join(" · ");
+}
+
+// variableShape is a structure's shape and element count — {shape: "array"|"object",
+// count} — or null for anything else. A cut JSON value cannot be parsed, so it is read
+// off the server's figures; a whole one off the value.
+export function variableShape(v) {
+  if (!v || v.kind !== "json") return null;
+  if (v.truncated) return v.shape ? { shape: v.shape, count: v.count || 0 } : null;
+  try {
+    const parsed = JSON.parse(v.value);
+    if (Array.isArray(parsed)) return { shape: "array", count: parsed.length };
+    if (parsed && typeof parsed === "object") return { shape: "object", count: Object.keys(parsed).length };
+  } catch { /* not a structure */ }
+  return null;
+}
