@@ -320,10 +320,10 @@ var Entries = []Entry{
 	{
 		Type: UserRequested, Kind: Domain,
 		Meaning: Text{
-			EN: "Somebody asked for an account, and the request now waits for an administrator to approve it.",
-			DE: "Jemand hat ein Konto beantragt; der Antrag wartet nun auf die Freigabe durch die Administration.",
+			EN: "Somebody asked for an account and confirmed their e-mail address, and the request now waits for an administrator to approve it.",
+			DE: "Jemand hat ein Konto beantragt und die E-Mail-Adresse bestätigt; der Antrag wartet nun auf die Freigabe durch die Administration.",
 		},
-		Moment:   Moment{Places: []Place{At("proc_benutzer_aufnahme", "beantragt_melden")}, Producer: "the intake process, before its approval waits"},
+		Moment:   Moment{Places: []Place{At("proc_benutzer_aufnahme", "beantragt_melden")}, Producer: "the intake process, once the address is confirmed and before its approval waits"},
 		Channels: []Channel{Signal},
 		Payload: []Field{
 			{Name: "atlasInstance", Type: "string", Always: true, Data: NotPersonal, Meaning: Text{EN: "The intake instance that emitted it, so a receiver can point back at the request.", DE: "Die Aufnahme-Instanz, die es ausgesendet hat, damit ein Empfänger auf den Antrag verweisen kann."}},

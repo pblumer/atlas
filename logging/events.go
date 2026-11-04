@@ -159,12 +159,20 @@ var (
 	// it under every unauthenticated probe on the internet.
 	AuthDenied = newEvent("auth.denied")
 	// The account lifecycle, and the credentials that are not accounts.
-	AuthUserCreated  = newEvent("auth.user_created")
-	AuthUserUpdated  = newEvent("auth.user_updated")
-	AuthUserDeleted  = newEvent("auth.user_deleted")
-	AuthPasswordSet  = newEvent("auth.password_set")
-	AuthTokenMinted  = newEvent("auth.token_minted")
-	AuthTokenRevoked = newEvent("auth.token_revoked")
+	AuthUserCreated = newEvent("auth.user_created")
+	AuthUserUpdated = newEvent("auth.user_updated")
+	AuthUserDeleted = newEvent("auth.user_deleted")
+	AuthPasswordSet = newEvent("auth.password_set")
+	// The password lifecycle of ADR-0526: a link minted
+	// (mailed by a system process, or handed to an administrator), a link used to set a
+	// password, a password changed by its signed-in owner, and a recovery requested on
+	// the login screen. Never the link and never the password.
+	AuthPasswordLinkIssued = newEvent("auth.password_link_issued")
+	AuthPasswordLinkUsed   = newEvent("auth.password_link_used")
+	AuthPasswordChanged    = newEvent("auth.password_changed")
+	AuthPasswordRecovery   = newEvent("auth.password_recovery")
+	AuthTokenMinted        = newEvent("auth.token_minted")
+	AuthTokenRevoked       = newEvent("auth.token_revoked")
 	// AuthOIDCConfigured is said once at startup where an operator named an identity
 	// provider. It is the line that tells whoever reads the log after a failed login
 	// which issuer this server was asking, which is the first thing to check.

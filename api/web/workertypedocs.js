@@ -464,7 +464,7 @@ export const WORKER_TYPE_DOCS = {
 
   userconnector: {
     anchor: "runbook-userprov", title: "workerDoc.userconnector.title",
-    checked: "2026-09",
+    checked: "2026-11",
     needs: "workerDoc.userconnector.needs",
     steps: [
       "workerDoc.userconnector.step1",

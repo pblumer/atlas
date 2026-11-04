@@ -17,6 +17,16 @@ _Changed_ / _Removed_ for each version.
 - **The Entra Worker reads and transfers a synchronised user's source of authority.** `get-sync-behavior` reads `onPremisesSyncBehavior` and `set-sync-behavior` sets its `isCloudManaged`, so a process can take an account that Entra Connect synchronises from Active Directory into the cloud. The body is held to that one boolean before anything is sent. Graph v1.0, permission `User-OnPremisesSyncBehavior.ReadWrite.All` (ADR-0172, amended).
 - **The Exchange Worker enables remote mailboxes on Exchange Server.** `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes` and `disable-remote-mailbox` run `Enable-`, `Get-` and `Disable-RemoteMailbox` for an Exchange hybrid organization, where the mail attributes of an account synchronised to the cloud are written on premises. On Exchange Online they are refused with what to do instead (ADR-0462, amended).
 - **The M365 example covers hybrid identity.** A catalogue `cat-m365-identitaet` for the administration with two products: «Konto (hybrid) anlegen» creates the account in AD, enables its remote mailbox, waits for Entra Connect with a bounded loop and orders the licence through the existing licence position; «Konto in die Cloud übernehmen» moves a still local mailbox first (a task) and then transfers the source of authority. The README explains the rules both follow and why the test environment, which synchronises nothing, leaves them out (`m365-dienste` 1.0.7).
+- **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
+  `cascade`, the default, or `tiles`, which draws a category menu and a search field above
+  one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and
+  a product page with a banner, the included services, the options and the approval rule.
+  The basket, the configuration form and the order are unchanged. A product may name an
+  `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
+  other name. The product editor offers the icon, the appearance card the layout, and the
+  OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
+  a later requirement (ADR-0525).
+
 - **A catalogue can declare Marktleistungen and services.** A catalogue switched to
   `structured` states for every product whether it is a Marktleistung (`kind: offering`),
   the whole somebody orders, or a service (`kind: service`), one building block with its
@@ -46,8 +56,46 @@ _Changed_ / _Removed_ for each version.
   vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
   multi-instance task, a mail that never shows the link and a link to a task that did not
   opt in. The Modeler offers both settings (ADR-0523).
+- **Forgotten passwords are recovered by their owner.** The login screen and the shop's
+  sign-in offer "Forgot password?" where the instance can mail a link (vault, external
+  URL, the system process `proc_passwort_link`): `POST /public/password/forgot` answers
+  202 alike for every input and mails an enabled local account with an address a
+  one-time link, at most once per account per five minutes. The link opens
+  `/public/password`, which sets the password and ends every session of the account. A
+  signed-in person changes their own password under the account menu ("Change
+  password…", `POST /api/v1/auth/password`), and an administrator sends an account its
+  link or takes it to hand over in person (`POST /api/v1/users/{id}/password-link`)
+  (ADR-0526).
+
+### Changed
+- **A password is set by its owner, never mailed.** Registration no longer asks the
+  approving administrator for an initial password, which was a process variable — an
+  event kept in the log — and was mailed in clear text. The requester first confirms
+  their address through a link (72 hours); only then is the request announced and
+  approved. The account is created without a password and its owner is mailed a
+  one-time activation link (7 days), signed with a vault-derived key over the account's
+  address and password hash, so it dies on use and when the address changes. The
+  preview outbox withholds the link, and only a worker the server runs itself is leased
+  a mail that carries one. `userConnector` refuses `password` and `set-password` at
+  deploy (`user.password`); the Organization page creates accounts without a password
+  ("awaiting activation"). `POST /api/v1/users/{id}/password` is deprecated and now ends
+  the account's sessions. The log of instances that ran the old intake still holds the
+  passwords typed there: send those accounts a password link, and migrate intake
+  instances still waiting at "Antrag freigeben" to the new version
+  (ADR-0526).
 
 ### Fixed
+
+- **An order window names its days in UTC.** A refusal outside a product's order window
+  named the day in the server's local zone, so a server east of Greenwich said a window
+  ending on 31 October had closed on 1 November. The day is now read in UTC, the zone the
+  window's edges are stored in (ADR-0397).
+- **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
+  after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
+  minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up
+  to ten minutes, and every other call keeps the thirty seconds.
+- **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
+- **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
 - **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
 - **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).

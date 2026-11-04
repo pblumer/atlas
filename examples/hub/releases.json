@@ -113,6 +113,30 @@
       "minAtlas": "0.22.0-0"
     },
     {
+      "bundle": "auftrag-finanzen",
+      "version": "1.0.1",
+      "digest": "sha256:35da1da5a1b8eb142c49c9a089e060eacff7339e27485a5aefe00cc917defd7f",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "einstieg",
+      "version": "1.0.1",
+      "digest": "sha256:b26955e7efa94169f89e04f0253df709f6fefb6ad7be15949e10dc1a0b8565eb",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "identitaet",
+      "version": "1.0.1",
+      "digest": "sha256:74bcaaff0106c4bfb6db91a10e1559d10ab8d1df35d10760aa3f1e82d974fea3",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "personal",
+      "version": "1.0.1",
+      "digest": "sha256:58215fde20d77198b4e988cca6b2c6e7eb0f8ce2a151564eec594060422ac2e1",
+      "minAtlas": "0.22.0-0"
+    },
+    {
       "bundle": "m365-dienste",
       "version": "1.0.7",
       "digest": "sha256:362998bfde7a14fa6149f0e1428039142914c95a9922741785b209776a153dbe",
