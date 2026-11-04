@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The payment fixtures illustrate the contracts ADR-draft-datatrans-payment-worker
+// The payment fixtures illustrate the contracts ADR-0529
 // proposes for a Datatrans Worker Type. Like every contract under testdata they
 // are examples of the envelope, not a published corpus or provider evidence
 // (ADR-0485). What these tests pin is the part of the proposal that must not

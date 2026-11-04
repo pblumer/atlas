@@ -1,4 +1,4 @@
-# ADR-DRAFT: Card payments through a Datatrans Worker Type
+# ADR-0529: Card payments through a Datatrans Worker Type
 
 - **Status:** Proposed
 - **Implementation:** Not started
