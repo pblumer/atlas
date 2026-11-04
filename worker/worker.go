@@ -218,6 +218,17 @@ type Options struct {
 	Queries map[string]QueryFunc
 	// MaxQueries is how many queries of one type this worker answers at once.
 	MaxQueries int
+	// RetryBackoff is how long a job this worker failed waits before it is offered
+	// again, given the attempts it has left after the failure, in nanoseconds; nil means
+	// job.DefaultRetryBackoff, the delay the server's in-process runner waits too
+	// (ADR-0111, amendment 2026-11-04). A Worker Type that runs out here meets the same
+	// replication delays as one that runs inside the server — a group Microsoft Graph
+	// created a moment earlier is not yet found — so it waits as long before it raises
+	// an incident. NoRetryBackoff retries at once.
+	RetryBackoff func(retriesLeft int32) int64
+	// NoRetryBackoff offers a failed job again at once, as before the amendment; tests
+	// that drive a failing job to its incident use it.
+	NoRetryBackoff bool
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
 }
@@ -503,7 +514,25 @@ func (w *Worker) fail(ctx context.Context, j Job, message string) error {
 		"worker": w.opts.ID, "leaseToken": j.LeaseToken,
 		"retries": retries, "message": message,
 	}
+	// The engine takes the delay in milliseconds and holds the job back until it has
+	// passed; a job with no attempts left raises its incident at once and waits for
+	// nothing.
+	if backoff := w.retryBackoff(int32(retries)); backoff > 0 {
+		body["retryBackoff"] = backoff / int64(time.Millisecond)
+	}
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/fail", body, nil)
+}
+
+// retryBackoff is the delay a failed job with retriesLeft attempts waits before it is
+// offered again (Options.RetryBackoff).
+func (w *Worker) retryBackoff(retriesLeft int32) int64 {
+	if w.opts.NoRetryBackoff || retriesLeft <= 0 {
+		return 0
+	}
+	if w.opts.RetryBackoff != nil {
+		return w.opts.RetryBackoff(retriesLeft)
+	}
+	return job.DefaultRetryBackoff(retriesLeft)
 }
 
 // throwError ends a job with a BPMN error (ADR-0089). It spends no attempt: whether the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -176,6 +177,8 @@ func TestWorkerFailsAJobWhenTheWorkFails(t *testing.T) {
 	w := worker.New(worker.Options{
 		Server: ts.URL,
 		ID:     "mailer-1",
+		// A failed job is to be back on offer at once, so the test can see it.
+		NoRetryBackoff: true,
 		Handlers: map[string]worker.Exec{
 			"send-email": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) {
 				return nil, errors.New("smtp: connection refused")
@@ -734,3 +737,67 @@ const adConnectorModel = `<?xml version="1.0" encoding="UTF-8"?>
     <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
   </bpmn:process>
 </bpmn:definitions>`
+
+// A job this worker fails waits before it is offered again, as one the server runs
+// itself does (ADR-0111, amendment 2026-11-04): a Microsoft Graph group created a
+// moment earlier is not found for a few seconds, and three attempts at once spend the
+// whole budget inside that window. The delay grows towards the last attempt, a job on
+// its last attempt asks for none because its failure is the incident, and a worker
+// told not to wait asks for none either.
+func TestAFailedJobAsksTheEngineToWaitBeforeTheNextAttempt(t *testing.T) {
+	cases := []struct {
+		name    string
+		retries int
+		opts    func(*worker.Options)
+		want    any // milliseconds, or nil for no field at all
+	}{
+		{"two attempts left wait fifteen seconds", 3, nil, float64(15000)},
+		{"the last attempt waits a minute", 2, nil, float64(60000)},
+		{"no attempt left raises the incident at once", 1, nil, nil},
+		{"a worker told not to wait does not", 3, func(o *worker.Options) { o.NoRetryBackoff = true }, nil},
+		{"a worker's own schedule wins", 3, func(o *worker.Options) {
+			o.RetryBackoff = func(left int32) int64 { return int64(left) * int64(time.Second) }
+		}, float64(2000)},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var (
+				mu       sync.Mutex
+				failBody map[string]any
+			)
+			stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case strings.HasSuffix(r.URL.Path, "/activate"):
+					_, _ = fmt.Fprintf(w, `{"jobs":[{"jobKey":7,"type":"io.atlas.entra","retries":%d,"leaseToken":42}]}`, c.retries)
+				case strings.HasSuffix(r.URL.Path, "/fail"):
+					mu.Lock()
+					defer mu.Unlock()
+					_ = json.NewDecoder(r.Body).Decode(&failBody)
+					_, _ = w.Write([]byte(`{}`))
+				default:
+					t.Errorf("unexpected call to %s", r.URL.Path)
+				}
+			}))
+			defer stub.Close()
+			opts := worker.Options{
+				Server: stub.URL, ID: "entra",
+				Handlers: map[string]worker.Exec{
+					"io.atlas.entra": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) {
+						return nil, errors.New("entra: HTTP 404 Request_ResourceNotFound")
+					}),
+				},
+			}
+			if c.opts != nil {
+				c.opts(&opts)
+			}
+			if err := worker.New(opts).RunOnce(context.Background()); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if got := failBody["retryBackoff"]; got != c.want {
+				t.Errorf("retryBackoff = %v, want %v (body %v)", got, c.want, failBody)
+			}
+		})
+	}
+}
