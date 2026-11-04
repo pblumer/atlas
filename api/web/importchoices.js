@@ -31,17 +31,36 @@ const GROUPS = [
 // after the dialog was shown is then refused instead of replaced on the strength of a
 // decision about something else. Behind and ahead are named only where the person
 // moved a box: left as it started, the server settles them again where it writes.
-export function decisionQuery({ overwrite = [], keep = [], adopt = [] }) {
+export function decisionQuery({ overwrite = [], keep = [], adopt = [], map = [], omit = [] }) {
   const q = new URLSearchParams();
   if (overwrite.length) q.set("overwrite", overwrite.join(","));
   if (keep.length) q.set("keep", keep.join(","));
   if (adopt.length) q.set("adopt", adopt.join(","));
+  // A gap in the capability map (ADR-0528): mapped
+  // as ref=key, or left out.
+  if (map.length) q.set("map", map.join(","));
+  if (omit.length) q.set("omit", omit.join(","));
   return q.toString();
 }
 
 // needsAsking reports whether a plan has anything the dialog lists.
 export function needsAsking(artifacts) {
-  return (artifacts || []).some((a) => a.status === "elsewhere" || GROUPS.some((g) => g.status === a.status));
+  return (artifacts || []).some((a) => a.status === "elsewhere" || a.status === "gap" ||
+    GROUPS.some((g) => g.status === a.status));
+}
+
+// gapChoices reads the dialog's gap rows: each adopted, mapped onto a key or left
+// out. A row set to map with no key is left out — nothing is filed under a key
+// nobody named.
+export function gapChoices(rows) {
+  const adopt = [], map = [], omit = [];
+  for (const { ref, choice, key } of rows) {
+    const k = String(key || "").trim();
+    if (choice === "adopt") adopt.push(ref);
+    else if (choice === "map" && k) map.push(`${ref}=${k}`);
+    else omit.push(ref);
+  }
+  return { adopt, map, omit };
 }
 
 // openImportChoices shows the plan and asks what to replace and what to take from
@@ -81,6 +100,28 @@ export function openImportChoices({ title, artifacts }) {
                 class="import-adopt-content" value="${esc(a.ref)}"> ${esc(t("choices.adoptContent"))}</label>` : ""}</li>`).join("")}</ul>
         </section>`;
     };
+    // Capabilities and value streams the server's map lacks: adopted, mapped onto a
+    // key the map has, or left out. Each starts as the package proposes it when it
+    // proposes one, and as left out otherwise.
+    const gaps = () => {
+      const items = artifacts.filter((a) => a.status === "gap");
+      if (!items.length) return "";
+      return `<section class="import-group" data-status="gap">
+          <h3>${esc(t("choices.gap"))} <span class="muted">(${items.length})</span></h3>
+          <p class="muted small">${esc(t("choices.gapHint"))}</p>
+          <ul class="import-changed">${items.map((a) => {
+            const isCap = a.ref.startsWith("capability:");
+            return `
+            <li class="import-gap" data-ref="${esc(a.ref)}">${label(a)}<br>
+              <select class="import-gap-choice" style="margin-left:1.6em">
+                ${a.proposed ? `<option value="adopt" selected>${esc(t("choices.gapAdopt"))}</option>` : ""}
+                ${isCap ? `<option value="map">${esc(t("choices.gapMap"))}</option>` : ""}
+                <option value="omit"${a.proposed ? "" : " selected"}>${esc(t("choices.gapOmit"))}</option>
+              </select>
+              ${isCap ? `<input type="text" class="import-gap-key small" placeholder="${esc(t("choices.gapKey"))}" hidden>` : ""}</li>`;
+          }).join("")}</ul>
+        </section>`;
+    };
     const ov = document.createElement("div");
     ov.className = "modal-ov";
     ov.innerHTML = `
@@ -99,6 +140,7 @@ export function openImportChoices({ title, artifacts }) {
             <button type="button" class="btn ghost small" data-none title="${esc(t("choices.tickNoneTitle"))}">${esc(t("choices.tickNone"))}</button>
           </div>
           ${elsewhere()}
+          ${gaps()}
           ${GROUPS.map(group).join("")}
           ${fresh.length ? `<details class="import-new fold-sub"><summary>${esc(t("choices.fresh", { n: fresh.length }))}</summary>
             <ul>${fresh.map((a) => `<li>${label(a)}</li>`).join("")}</ul></details>` : ""}
@@ -113,6 +155,11 @@ export function openImportChoices({ title, artifacts }) {
       </div>`;
     document.body.appendChild(ov);
     const picks = () => [...ov.querySelectorAll(".import-pick")];
+    ov.querySelectorAll(".import-gap").forEach((row) => {
+      const sel = row.querySelector(".import-gap-choice");
+      const key = row.querySelector(".import-gap-key");
+      if (sel && key) sel.addEventListener("change", () => { key.hidden = sel.value !== "map"; });
+    });
     const startsTicked = (p) => GROUPS.find((g) => g.status === p.dataset.status).ticked;
 
     let settled = false;
@@ -139,10 +186,17 @@ export function openImportChoices({ title, artifacts }) {
       const contentBox = (ref) => [...ov.querySelectorAll(".import-adopt-content")].find((p) => p.value === ref);
       const replaced = adopt.filter((ref) => contentBox(ref) && contentBox(ref).checked);
       const keptHere = adopt.filter((ref) => contentBox(ref) && !contentBox(ref).checked);
+      const gapped = gapChoices([...ov.querySelectorAll(".import-gap")].map((row) => ({
+        ref: row.dataset.ref,
+        choice: row.querySelector(".import-gap-choice").value,
+        key: row.querySelector(".import-gap-key") ? row.querySelector(".import-gap-key").value : "",
+      })));
       finish({
         overwrite: [...named.filter((p) => p.checked).map((p) => p.value), ...replaced],
         keep: [...named.filter((p) => !p.checked).map((p) => p.value), ...keptHere],
-        adopt,
+        adopt: [...adopt, ...gapped.adopt],
+        map: gapped.map,
+        omit: gapped.omit,
       });
     });
     ov.querySelector("[data-ok]").focus();
@@ -168,6 +222,8 @@ export function outcomeSummary(artifacts) {
   const n = (outcome) => (artifacts || []).filter((a) => a.outcome === outcome).length;
   const parts = [t("choices.outcome.created", { n: n("created") }), t("choices.outcome.updated", { n: n("updated") })];
   if (n("kept")) parts.push(t("choices.outcome.kept", { n: n("kept") }));
+  if (n("mapped")) parts.push(t("choices.mapped", { n: n("mapped") }));
+  if (n("omitted")) parts.push(t("choices.omitted", { n: n("omitted") }));
   parts.push(t("choices.outcome.unchanged", { n: n("unchanged") }));
   return parts.join(", ");
 }

@@ -32,6 +32,9 @@ function installMock(page, calls, over = {}) {
     if (path.startsWith("/api/v1/dmn-models")) {
       return route.fulfill({ json: { modelRef: "bw-vorpruefung", decisions: ["bw-vorpruefung"] } });
     }
+    if (path === "/api/v1/dmnrefs" && req.method() === "GET") {
+      return route.fulfill({ json: over.refs || [] });
+    }
     if (path === "/api/v1/dmnrefs") {
       return route.fulfill({ json: { id: "ref-1", name: "bw-vorpruefung" } });
     }
@@ -99,6 +102,7 @@ test("the install button walks the application in the order a process developer 
     "GET /api/v1/applications",
     "POST /api/v1/applications",
     "POST /api/v1/dmn-models?handle=bw-vorpruefung",
+    "GET /api/v1/dmnrefs",
     "POST /api/v1/dmnrefs",
     "POST /api/v1/forms",
     "POST /api/v1/forms",
@@ -121,6 +125,22 @@ test("installing twice reuses the application instead of leaving an empty copy b
   await expect(page.locator("#wk-status")).toHaveClass(/ok/);
   expect(calls).not.toContain("POST /api/v1/applications");
   expect(calls).toContain("POST /api/v1/drafts?projectId=already-here");
+});
+
+test("installing twice leaves one decision reference, not one per click", async ({ page }) => {
+  const calls = [];
+  installMock(page, calls, {
+    existing: [{ id: "already-here", name: "Bewerbermanagement", key: "bewerbermanagement" }],
+    refs: [{ id: "ref-1", name: "bw-vorpruefung", modelRef: "bw-vorpruefung", projectId: "already-here" }],
+  });
+  await openWorkshop(page);
+  await install(page);
+
+  // The model is overwritten in place under its handle, so the reference the first install
+  // made still points at it. A second one would list the decision twice in the application.
+  await expect(page.locator("#wk-status")).toHaveClass(/ok/);
+  expect(calls).toContain("POST /api/v1/dmn-models?handle=bw-vorpruefung");
+  expect(calls).not.toContain("POST /api/v1/dmnrefs");
 });
 
 test("the chosen data decides the number of interview rounds the reader is told about", async ({ page }) => {

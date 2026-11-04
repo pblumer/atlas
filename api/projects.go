@@ -432,6 +432,15 @@ func (s *Server) deleteApplicationRecordOnLoop(id string) error {
 	if err := s.appConstants.Delete(id); err != nil {
 		return err
 	}
+	// The realizations its bundle brought are the application's, not the map's
+	// (ADR-0528): gone with it, so the map stops
+	// claiming that an application nobody has realizes a capability. The capabilities
+	// themselves stay — they are the organisation's.
+	if s.bundledRealizations != nil {
+		if err := s.bundledRealizations.Delete(id); err != nil {
+			return err
+		}
+	}
 	s.forgetApplication(id)
 	if err := s.projects.Delete(id); err != nil {
 		return err

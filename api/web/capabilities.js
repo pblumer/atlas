@@ -319,7 +319,11 @@ export async function mountCapabilityDetail(root, { api, toast, key }) {
         r.inactive ? `<span class="pill warn">${esc(t("ba.detail.inactive"))}</span>` : "",
       ].filter(Boolean).join(" · ");
     }
-    return `<li>${kind} ${target} ${facts ? `<span class="muted">${facts}</span>` : ""}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ""}</li>`;
+    // A realization an application's bundle brought is the application's: it is
+    // shown, and changes only with the next import of that application.
+    const bundled = r.bundledBy
+      ? ` <span class="pill" title="${esc(t("ba.detail.bundledHint"))}">${esc(t("ba.detail.bundled", { application: r.bundledBy }))}</span>` : "";
+    return `<li>${kind} ${target}${bundled} ${facts ? `<span class="muted">${facts}</span>` : ""}${r.note ? `<div class="muted">${esc(r.note)}</div>` : ""}</li>`;
   };
 
   // A requirement the map does not have is only a key: there is no record to link to and

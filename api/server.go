@@ -489,6 +489,12 @@ type Server struct {
 	// the service there would re-enter the loop it is standing on.
 	capabilityRecords  *capability.Store
 	valueStreamRecords *capability.StreamStore
+	// bundledRealizations are the realizations application bundles brought, one record
+	// per application (ADR-0528). The source import
+	// writes them, deleting an application removes them, and every read of the map —
+	// the service, the release architecture sketch, Panorama — sees them beside the
+	// capability records' own.
+	bundledRealizations *capability.RealizationStore
 	// remoteNodes is what peer Atlas servers last said about themselves
 	// (ADR-0189 §6, P4c). It carries its own lock rather than living on the run
 	// loop, because it is written by goroutines waiting on the network and putting
@@ -1631,6 +1637,10 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	if err != nil {
 		return nil, err
 	}
+	bundledRealizationStore, err := capability.NewRealizationStore(filepath.Join(dataDir, "capability-realizations"))
+	if err != nil {
+		return nil, err
+	}
 	releases, err := newReleaseStore(filepath.Join(dataDir, "releases"))
 	if err != nil {
 		return nil, err
@@ -2165,6 +2175,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		time.Now,
 	)
 	s.capabilityRecords, s.valueStreamRecords = capabilityStore, valueStreamStore
+	s.bundledRealizations = bundledRealizationStore
+	s.capabilities.SetBundledRealizations(bundledRealizationStore)
 	// Measuring is the one capability read that walks instances, so it is wired
 	// separately and runs off the loop (ADR-0239). Everything else in that area is
 	// design-time size and runs on it.

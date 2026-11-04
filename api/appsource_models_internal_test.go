@@ -88,8 +88,8 @@ func TestParseSourceTreeDecisionModelRefusals(t *testing.T) {
 			"not a model handle"},
 		{"handle empty", []sourceFile{manifest(`[{"id":"d","path":"decisions/m.dmn"}]`), model},
 			"not a model handle"},
-		{"newer format", []sourceFile{{Path: manifestPath, Data: []byte(`{"formatVersion":4,"key":"a","name":"A"}`)}},
-			"unsupported format version 4"},
+		{"newer format", []sourceFile{{Path: manifestPath, Data: []byte(`{"formatVersion":5,"key":"a","name":"A"}`)}},
+			"unsupported format version 5"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -825,11 +825,23 @@ func shopSample(examplesDir, dir string) (hubSample, error) {
 		Decisions []struct {
 			Path string `json:"path"`
 		} `json:"decisions"`
+		// The architecture a format-4 tree carries
+		// (ADR-0528).
+		InformationModels []struct {
+			Path string `json:"path"`
+		} `json:"informationModels"`
+		Architecture string `json:"architecture"`
 	}
 	if err := json.Unmarshal(raw, &man); err != nil {
 		return hubSample{}, fmt.Errorf("%s: %w", packageManifest, err)
 	}
 	paths := map[string]bool{}
+	for _, m := range man.InformationModels {
+		paths[m.Path] = true
+	}
+	if man.Architecture != "" {
+		paths[man.Architecture] = true
+	}
 	for _, p := range man.Processes {
 		paths[p.Path] = true
 	}
