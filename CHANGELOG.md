@@ -12,6 +12,94 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-11-04
+
+**A password is set by its owner, never typed by an administrator or mailed.** Registration
+first confirms the requester's address, an approved account is created without a password,
+and its owner is mailed a one-time activation link; the login screen recovers a forgotten
+password the same way, a signed-in person changes their own, and an administrator sends an
+account its link or revokes a password somebody else knows
+([ADR-0526](docs/adr/0526-password-set-by-its-owner.md)). A person without an account
+answers a user task marked `atlas:answeredBy="link"` from a signed link in a mail; opening
+the link answers nothing, and the token travels in the link's fragment and so in no server
+log ([ADR-0523](docs/adr/0523-user-task-answered-by-link.md)).
+
+**Two versions of a process are compared, and a migration says what it changes.**
+`GET /api/v1/processes/{key}/comparison`, Operations, the Modeler's version chip and MCP
+`atlas_compare_versions` list every element added, removed or changed with each field
+before and after, and the migration dialogs show what changed where instances stand
+([ADR-0530](docs/adr/0530-compare-process-versions.md)).
+
+**An application bundle carries its architecture, and a catalogue its structure.** Bundle
+format 4 brings the information model, the application's realizations and its proposals for
+the capability map, which stays the server's: a key it lacks stops the import until it is
+adopted, mapped or left out ([ADR-0528](docs/adr/0528-application-bundle-architecture.md)).
+A catalogue may declare Marktleistungen and services and have publishing prove the graph
+([ADR-0524](docs/adr/0524-marktleistung-and-service.md)), and the shop lays a catalogue out as
+tiles ([ADR-0525](docs/adr/0525-shop-tile-layout.md), proposed). A form searches Active Directory, a
+SharePoint task sets a site's storage quota, the Entra Worker transfers a synchronised
+user's source of authority, and the Exchange Worker enables remote mailboxes on Exchange
+Server; the M365 example covers hybrid identity.
+
+**Jobs reach the right worker and survive a passing fault.** With two workers of one type,
+such as Exchange Online and an Exchange Server, a job for one no longer goes to the other
+(ADR-0168, amended); a built-in connector waits before it retries a failed job instead of
+spending its retries within a second (ADR-0111, amended); and a process variable read only
+inside a FEEL filter is bound instead of null (ADR-0015, amended).
+
+**Read this before upgrading from 0.22.0.** These act on an existing installation as soon
+as it runs 0.23.0:
+
+- **Passwords (ADR-0526).** A `<atlas:userConnector>` task that carries a password or runs
+  `set-password` is refused at deploy (`user.password`). A definition deployed before is
+  reloaded at startup and reported with `deployment.reloaded_with_problems`, never refused
+  at boot, but at run time the worker refuses the password with an incident: change such
+  models before upgrading. The log of instances that ran the old registration still holds
+  the passwords typed there and cannot forget them; send those accounts a password link.
+  Migrate registration instances still waiting at "Antrag freigeben" to the new version,
+  or their account is created without a password and the old mail goes out without one.
+  `atlas.user.requested` is now announced only once the requester has confirmed their
+  address.
+- **What activation and recovery need.** Registration, activation and "Forgot password?"
+  need `--external-url`, the vault and a mail Worker; without them the mail task raises an
+  incident saying which is missing, and the login screen does not offer recovery. A mail
+  that carries a password link is leased only to a mail Worker the server runs itself,
+  and the preview outbox withholds the link. `POST /api/v1/users` no longer requires a
+  password, and `POST /api/v1/users/{id}/password` is deprecated and now ends the
+  account's sessions.
+- **New public routes.** `POST /public/password/forgot`, `/public/password`,
+  `GET /public/answer`, `GET /public/answer/task` and
+  `POST /public/answer/task/{taskKey}/complete`, rate limited per address like every
+  public route. A reverse proxy that allows public paths one by one needs them added
+  before the features are used. Rotating the vault's master key invalidates every
+  answer link sent so far.
+- **FEEL filters may now answer differently.** Deployed models are recompiled at startup
+  (ADR-0019), so the new scoping applies to every expression 0.23.0 evaluates, including
+  those of instances started under 0.22.0. A filter that reads a process variable used
+  nowhere else in the expression returned null or an empty list before and now returns
+  what the variable selects; a gateway condition or a check built on such a filter can
+  take another path. Where a name is both a process variable and a key of the filtered
+  elements, the element's key now wins where the variable used to. Check running models
+  for names used on both sides. A name declared personal (`atlas:personal`) and read only
+  in a filter stays the element's key (ADR-0314).
+- **A job for a worker name nobody serves now waits instead of failing.** A worker that
+  reports its names (`connectors`) is leased only jobs that name one of them, name none,
+  or name one by a FEEL expression. A job that names a worker which is not running stays
+  activatable until that worker polls, where 0.22.0 leased it to another worker of the
+  type, which failed it. Monitoring that relied on that failure should watch the age of
+  activatable jobs instead. Workers need no upgrade.
+- **A failing built-in connector reaches its incident later.** Retries of the in-process
+  runner are now spaced over more than a minute instead of one second; a failure that
+  leaves no retries is still an incident at once.
+- **The shipped approval form requires a reason to reject.** It is reseeded at startup,
+  so existing installations get it with the binary.
+- **Bundles of format 4 need 0.23.0.** An earlier server cannot import a bundle that
+  carries an information model or an architecture file.
+- **Observability.** Five log events are new: `auth.password_link_issued`,
+  `auth.password_link_used`, `auth.password_changed`, `auth.password_recovery` and
+  `auth.password_revoked`. The MCP tools grow from 180 to 181 with
+  `atlas_compare_versions`. `/metrics` and the Helm values are unchanged.
+
 ### Added
 
 - **The M365 example describes its data and its purpose.** `examples/m365-dienste/architektur` carries an information model (32 classes and enumerations with lifecycles, their associations, and seven data stores with the worker behind each), eleven capabilities realized by the example's processes, including those of the on-premises variant, and two value streams. Every process declares typed data objects and the data stores it reaches, and each step that creates, changes or returns a business object writes its data state through a data output association without an assignment, which changes the state only (ADR-0058). The model and the realizations travel in the application bundle (source-tree format 4), so every import — the hub in the Console, `atlas import`, `installieren.sh`/`.ps1`, the test environment's `install-m365-dienste.py` — brings them before the release is published and its architecture sketch shows the data and strategy layers; the capabilities and value streams are proposals the import asks about where the server's map lacks them (`LANDKARTE`/`-Landkarte` in the scripts; the test environment's installer adopts them through the API and names them). The on-premises variant is built with its own copy of the model and the realizations of its `*_onprem` processes. The data objects are drawn next to the task that writes them, each association one orthogonal edge, and every diagram passes the shipped-diagram checks again. `examples/m365architektur_test.go` keeps the processes, the model and the architecture file in step (`m365-dienste` 1.0.12).
@@ -17894,7 +17982,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/pblumer/atlas/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
