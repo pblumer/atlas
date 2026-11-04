@@ -286,6 +286,12 @@ variable "atlas_sso" {
   default     = true
 }
 
+variable "atlas_hub" {
+  description = "Connect the Atlas server to the atlas hub of this repository (examples/hub), so the Console offers its bundles. The registry key comes from examples/hub/releases.json in this checkout, never from the Pages site."
+  type        = bool
+  default     = true
+}
+
 variable "atlas_auto_shutdown_time" {
   description = "Daily auto-shutdown of the Atlas server (HHMM, UTC). Empty disables it."
   type        = string

@@ -210,6 +210,12 @@ locals {
       # Quoted: systemd keeps the value's spaces only inside quotes for certain.
       "ATLAS_OIDC_NAME=\"Microsoft (${local.initial_domain})\"",
     ] : [],
+    # The atlas hub (examples/hub/README.md, "Connecting an installation"): the key is
+    # pinned from this checkout, out of band from the Pages site that serves the index.
+    var.atlas_hub ? [
+      "ATLAS_BLUEPRINT_REGISTRY_URL=https://pblumer.github.io/atlas/hub/index.json",
+      "ATLAS_BLUEPRINT_REGISTRY_KEY=${jsondecode(file("${path.module}/../../../examples/hub/releases.json")).publicKey}",
+    ] : [],
     # Without a domain controller the AD worker serves a mock directory (ADR-0181).
     var.enable_ad_dc ? [] : ["ATLAS_AD_MOCK=1"],
     [""],

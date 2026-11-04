@@ -3,7 +3,7 @@
   AdNamensregel: die Namenskonvention für die Objekte des Katalogs «Active Directory», deren Name aus keinem
   Personendatum entsteht (Governance).
 
-  Eingaben: objekttyp   ("sicherheitsgruppe" | "service" | "test")
+  Eingaben: objekttyp   ("sicherheitsgruppe" | "service" | "test" | "funktion" | "rolle" | "schulung")
             bezeichnung (normalisiert: Kleinbuchstaben, Umlaute ausgeschrieben, nur a-z, 0-9 und Bindestriche;
                          der Prozess bildet sie im Input-Mapping)
             bereich     (Bereichskürzel, nur bei sicherheitsgruppe)
@@ -11,7 +11,8 @@
             gezeigt), cn, sAMAccountName, displayName
 
   Präfixe: SG-<BEREICH>-<bezeichnung> (Sicherheitsgruppe), svc-<bezeichnung> (Servicekonto),
-  tst-<bezeichnung> (Testkonto).
+  tst-<bezeichnung> (Testkonto), f-<bezeichnung> (Funktionskonto, Typ F), r-<bezeichnung> (Rollenkonto, Typ R),
+  e-<bezeichnung> (Schulungskonto, Typ E); die letzten drei bildet das Produkt «Unpersönliches Konto».
 
   Nicht hier: das Admin-Konto (adm-<Anmeldename>) und das Konto einer externen Person
   (ext-<vorname>.<nachname>). Ihre Namen entstehen aus Personendaten, die versiegelt sind, und eine
@@ -47,7 +48,7 @@
       <output id="out_displayName" label="displayName" name="displayName" typeRef="string"/>
       <rule id="r1">
         <description>Leere Bezeichnung: nichts, woraus sich ein Name bilden liesse</description>
-        <inputEntry id="r1_i0"><text>"sicherheitsgruppe", "service", "test"</text></inputEntry>
+        <inputEntry id="r1_i0"><text>"sicherheitsgruppe", "service", "test", "funktion", "rolle", "schulung"</text></inputEntry>
         <inputEntry id="r1_i1"><text>null, ""</text></inputEntry>
         <inputEntry id="r1_i2"><text>-</text></inputEntry>
         <inputEntry id="r1_i3"><text>-</text></inputEntry>
@@ -95,7 +96,7 @@
       </rule>
       <rule id="r5">
         <description>Konten: Name länger als 20 Zeichen (Grenze des sAMAccountName)</description>
-        <inputEntry id="r5_i0"><text>"service", "test"</text></inputEntry>
+        <inputEntry id="r5_i0"><text>"service", "test", "funktion", "rolle", "schulung"</text></inputEntry>
         <inputEntry id="r5_i1"><text>-</text></inputEntry>
         <inputEntry id="r5_i2"><text>-</text></inputEntry>
         <inputEntry id="r5_i3"><text>&gt; 20</text></inputEntry>
@@ -140,6 +141,42 @@
         <outputEntry id="r8_o2"><text>"tst-" + bezeichnung</text></outputEntry>
         <outputEntry id="r8_o3"><text>"tst-" + bezeichnung</text></outputEntry>
         <outputEntry id="r8_o4"><text>"Testkonto " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r10">
+        <description>Funktionskonto (F): f-&lt;bezeichnung&gt;</description>
+        <inputEntry id="r10_i0"><text>"funktion"</text></inputEntry>
+        <inputEntry id="r10_i1"><text>-</text></inputEntry>
+        <inputEntry id="r10_i2"><text>-</text></inputEntry>
+        <inputEntry id="r10_i3"><text>-</text></inputEntry>
+        <outputEntry id="r10_o0"><text>true</text></outputEntry>
+        <outputEntry id="r10_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r10_o2"><text>"f-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r10_o3"><text>"f-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r10_o4"><text>"Funktionskonto " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r11">
+        <description>Rollenkonto (R): r-&lt;bezeichnung&gt;</description>
+        <inputEntry id="r11_i0"><text>"rolle"</text></inputEntry>
+        <inputEntry id="r11_i1"><text>-</text></inputEntry>
+        <inputEntry id="r11_i2"><text>-</text></inputEntry>
+        <inputEntry id="r11_i3"><text>-</text></inputEntry>
+        <outputEntry id="r11_o0"><text>true</text></outputEntry>
+        <outputEntry id="r11_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r11_o2"><text>"r-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r11_o3"><text>"r-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r11_o4"><text>"Rollenkonto " + bezeichnung</text></outputEntry>
+      </rule>
+      <rule id="r12">
+        <description>Schulungskonto (E): e-&lt;bezeichnung&gt;</description>
+        <inputEntry id="r12_i0"><text>"schulung"</text></inputEntry>
+        <inputEntry id="r12_i1"><text>-</text></inputEntry>
+        <inputEntry id="r12_i2"><text>-</text></inputEntry>
+        <inputEntry id="r12_i3"><text>-</text></inputEntry>
+        <outputEntry id="r12_o0"><text>true</text></outputEntry>
+        <outputEntry id="r12_o1"><text>"Namensregel erfüllt"</text></outputEntry>
+        <outputEntry id="r12_o2"><text>"e-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r12_o3"><text>"e-" + bezeichnung</text></outputEntry>
+        <outputEntry id="r12_o4"><text>"Schulungskonto " + bezeichnung</text></outputEntry>
       </rule>
       <rule id="r9">
         <description>Auffangregel: ein Objekttyp ohne Regel wird abgelehnt (fail-closed)</description>

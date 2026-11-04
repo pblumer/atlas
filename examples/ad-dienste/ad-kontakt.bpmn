@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Active Directory: Kontakt (Kontotyp C) für eine externe Person, mit Rückgabe.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_ad_kontakt" targetNamespace="http://atlas/beispiel/ad-dienste">
+  <message id="m_kontakt_anlegen" name="ad.kontakt.anlegen"/>
+  <message id="m_kontakt_entfernen" name="ad.kontakt.entfernen"/>
+  <process id="proc_ad_kontakt" name="Active Directory: Kontakt" isExecutable="true" atlas:personal="vorname,nachname,firma,email" atlas:dataSubject="recipient">
+    <documentation>Lebenszyklus des Produkts ad-kontakt (Kontotyp C): ein Kontaktobjekt im Active Directory für eine Person ausserhalb der Organisation, damit sie im Adressbuch steht. Kein Konto, keine Anmeldung, kein Passwort. Die bestellende Person ist Sponsor; der Kontakt steht in ihrem Bestand, gilt 365 Tage und wird rezertifiziert. Die Angaben zur Person sind Personendaten (atlas:personal, dataSubject recipient). Worker: ad_verzeichnis.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/><atlas:constant name="AD_KONTAKT_OU" type="string" source="application" value="OU=Kontakte,OU=Atlas,DC=contoso,DC=local"/></atlas:constants></extensionElements>
+    <startEvent id="s_neu" name="Kontakt bestellt"><documentation>Start der Operation provision (ad.kontakt.anlegen).</documentation><outgoing>f_s_neu__st_anlegen</outgoing><messageEventDefinition messageRef="m_kontakt_anlegen"/></startEvent>
+    <serviceTask id="st_anlegen" name="Kontakt anlegen"><documentation>create-contact in AD_KONTAKT_OU. Der cn benennt niemanden (kontakt-&lt;Auftrag&gt;-&lt;Position&gt;); Name und Adresse stehen in displayName (mit der Firma), givenName, sn und mail. targetAddress (Exchange-Schema) setzt der Prozess nicht, damit er auch ohne Exchange-Schemaerweiterung läuft. Diese Werte sind Personendaten (atlas:personal); die Engine liest sie nicht, erst der AD-Worker wertet die Ausdrücke aus (ADR-0314).</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="create-contact" dn='="CN=kontakt-" + orderId + "-" + (if positionId = null then itemId else positionId) + "," + application.AD_KONTAKT_OU' attributes='{"displayName": "=vorname + \" \" + nachname + (if firma = null or firma = \"\" then \"\" else \" (\" + firma + \")\")", "givenName": "=vorname", "sn": "=nachname", "mail": "=email", "description": "=\"Kontakt (Atlas-Katalog, Auftrag \" + orderId + \")\"", "info": "=\"atlas-katalog \" + orderId + \"/\" + (if positionId = null then itemId else positionId)"}'/></extensionElements><incoming>f_s_neu__st_anlegen</incoming><outgoing>f_st_anlegen__st_done</outgoing></serviceTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit steht das Recht im Bestand der empfangenden Person. Braucht das Secret "atlas" (Rolle operator).</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_st_anlegen__st_done</incoming><outgoing>f_st_done__e_bereit</outgoing></serviceTask>
+    <endEvent id="e_bereit" name="Kontakt angelegt"><incoming>f_st_done__e_bereit</incoming></endEvent>
+    <startEvent id="s_weg" name="Rückgabe angefordert"><documentation>Start der Operation deprovision (ad.kontakt.entfernen).</documentation><outgoing>f_s_weg__st_finden</outgoing><messageEventDefinition messageRef="m_kontakt_entfernen"/></startEvent>
+    <serviceTask id="st_finden" name="Kontakt finden"><documentation>search unter AD_KONTAKT_OU nach der Herkunftskennzeichnung.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="search" baseDN="=application.AD_KONTAKT_OU" scope="sub" filter='="(&amp;(objectClass=contact)(info=" + "atlas-katalog " + orderId + "/" + (if positionId = null then itemId else positionId) + "))"' select="1.1" maxEntries="1" resultVariable="konto" foundVariable="kontoGefunden"/></extensionElements><incoming>f_s_weg__st_finden</incoming><outgoing>f_st_finden__gw_gef</outgoing></serviceTask>
+    <exclusiveGateway id="gw_gef" name="Kontakt vorhanden?" default="f_gw_gef__gw_join"><documentation>Ein schon gelöschter Kontakt ist zurückgegeben.</documentation><incoming>f_st_finden__gw_gef</incoming><outgoing>f_gw_gef__st_delete</outgoing><outgoing>f_gw_gef__gw_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_delete" name="Kontakt löschen"><documentation>delete.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="delete" dn="=konto.dn"/></extensionElements><incoming>f_gw_gef__st_delete</incoming><outgoing>f_st_delete__gw_join</outgoing></serviceTask>
+    <exclusiveGateway id="gw_join"><incoming>f_gw_gef__gw_join</incoming><incoming>f_st_delete__gw_join</incoming><outgoing>f_gw_join__st_returned</outgoing></exclusiveGateway>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Eine Rückgabe erhält atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_join__st_returned</incoming><outgoing>f_st_returned__e_weg</outgoing></serviceTask>
+    <endEvent id="e_weg" name="Kontakt entfernt"><incoming>f_st_returned__e_weg</incoming></endEvent>
+    <sequenceFlow id="f_s_neu__st_anlegen" sourceRef="s_neu" targetRef="st_anlegen"/>
+    <sequenceFlow id="f_st_anlegen__st_done" sourceRef="st_anlegen" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_bereit" sourceRef="st_done" targetRef="e_bereit"/>
+    <sequenceFlow id="f_s_weg__st_finden" sourceRef="s_weg" targetRef="st_finden"/>
+    <sequenceFlow id="f_st_finden__gw_gef" sourceRef="st_finden" targetRef="gw_gef"/>
+    <sequenceFlow id="f_gw_gef__st_delete" sourceRef="gw_gef" targetRef="st_delete" name="ja"><conditionExpression>=kontoGefunden = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_gef__gw_join" sourceRef="gw_gef" targetRef="gw_join" name="nein"/>
+    <sequenceFlow id="f_st_delete__gw_join" sourceRef="st_delete" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__st_returned" sourceRef="gw_join" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_weg" sourceRef="st_returned" targetRef="e_weg"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_ad_kontakt_diagram">
+    <bpmndi:BPMNPlane id="proc_ad_kontakt_plane" bpmnElement="proc_ad_kontakt">
+      <bpmndi:BPMNShape id="s_neu_di" bpmnElement="s_neu"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_anlegen_di" bpmnElement="st_anlegen"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="612" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_weg_di" bpmnElement="s_weg"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_finden_di" bpmnElement="st_finden"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_gef_di" bpmnElement="gw_gef" isMarkerVisible="true"><omgdc:Bounds x="455" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_delete_di" bpmnElement="st_delete"><omgdc:Bounds x="580" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true"><omgdc:Bounds x="755" y="385" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="880" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_weg_di" bpmnElement="e_weg"><omgdc:Bounds x="1062" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_neu__st_anlegen_di" bpmnElement="f_s_neu__st_anlegen"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_anlegen__st_done_di" bpmnElement="f_st_anlegen__st_done"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_bereit_di" bpmnElement="f_st_done__e_bereit"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="612" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_weg__st_finden_di" bpmnElement="f_s_weg__st_finden"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_finden__gw_gef_di" bpmnElement="f_st_finden__gw_gef"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="455" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__st_delete_di" bpmnElement="f_gw_gef__st_delete"><omgdi:waypoint x="505" y="410"/><omgdi:waypoint x="580" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="388" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__gw_join_di" bpmnElement="f_gw_gef__gw_join"><omgdi:waypoint x="480" y="435"/><omgdi:waypoint x="480" y="470"/><omgdi:waypoint x="780" y="470"/><omgdi:waypoint x="780" y="435"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="441" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_delete__gw_join_di" bpmnElement="f_st_delete__gw_join"><omgdi:waypoint x="680" y="410"/><omgdi:waypoint x="755" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="805" y="410"/><omgdi:waypoint x="880" y="410"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_weg_di" bpmnElement="f_st_returned__e_weg"><omgdi:waypoint x="980" y="410"/><omgdi:waypoint x="1062" y="410"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

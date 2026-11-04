@@ -34,6 +34,9 @@ func TestSharePointOpsMatchTheCompiler(t *testing.T) {
 		if spec.NeedsContent {
 			out = append(out, value{"content", `content`, "Hallo"})
 		}
+		if spec.NeedsQuota {
+			out = append(out, value{"quotaGB", `quotaGB`, "50"})
+		}
 		if spec.NeedsResult {
 			out = append(out, value{"result", `resultVariable`, "r"})
 		}
@@ -75,11 +78,12 @@ func TestSharePointOpsMatchTheCompiler(t *testing.T) {
 			}
 			// What the operation takes is accepted; what it does not take is refused.
 			for attr, takes := range map[string]bool{
-				`filter="x"`:        spec.TakesFilter,
-				`select="Title"`:    spec.TakesSelect,
-				`pageToken="x"`:     spec.TakesPaging,
-				`maxResults="5"`:    spec.TakesPaging,
-				`encoding="base64"`: spec.TakesEncoding,
+				`filter="x"`:          spec.TakesFilter,
+				`select="Title"`:      spec.TakesSelect,
+				`pageToken="x"`:       spec.TakesPaging,
+				`maxResults="5"`:      spec.TakesPaging,
+				`encoding="base64"`:   spec.TakesEncoding,
+				`warningPercent="80"`: spec.NeedsQuota,
 			} {
 				err := compileSharePoint(strings.Replace(model(op, spec, ""), ">", " "+attr+">", 1))
 				if takes && err != nil {

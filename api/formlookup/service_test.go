@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -410,8 +411,15 @@ func TestTheSourcesListingSaysWhatCanBeConfigured(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != 200 {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
-	if len(out.Providers) != 1 || out.Providers[0]["workerType"] != "entra" || out.Providers[0]["resource"] != "users" {
-		t.Errorf("providers = %v", out.Providers)
+	var sources []string
+	for _, p := range out.Providers {
+		sources = append(sources, fmt.Sprint(p["workerType"], "/", p["resource"]))
+		if _, ok := p["filterable"].([]any); !ok {
+			t.Errorf("%v/%v: filterable is %v, want a list (empty when nothing is)", p["workerType"], p["resource"], p["filterable"])
+		}
+	}
+	if strings.Join(sources, " ") != "entra/users ad/users ad/groups" {
+		t.Errorf("providers = %v", sources)
 	}
 	if len(out.Workers) != 2 || out.Workers[0]["name"] != "closed" || out.Workers[0]["formLookups"] != false {
 		t.Errorf("workers = %v, want both, sorted, each saying whether forms may use it", out.Workers)

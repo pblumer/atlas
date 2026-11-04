@@ -3124,6 +3124,8 @@ type xmlSharePointConnector struct {
 	Select         string      `xml:"select,attr"`
 	PageToken      string      `xml:"pageToken,attr"`
 	MaxResults     string      `xml:"maxResults,attr"`
+	QuotaGB        string      `xml:"quotaGB,attr"`
+	WarningPercent string      `xml:"warningPercent,attr"`
 	ResultVariable string      `xml:"resultVariable,attr"`
 	Fields         []xmlHTTPKV `xml:"itemField"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
