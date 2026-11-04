@@ -13,7 +13,336 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
-- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. Large histories still need the bounded query and replay work planned in OHS2/OHS3.
+
+- **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
+  `cascade`, the default, or `tiles`, which draws a category menu and a search field above
+  one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and
+  a product page with a banner, the included services, the options and the approval rule.
+  The basket, the configuration form and the order are unchanged. A product may name an
+  `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
+  other name. The product editor offers the icon, the appearance card the layout, and the
+  OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
+  a later requirement (ADR-0525).
+
+- **A catalogue can declare Marktleistungen and services.** A catalogue switched to
+  `structured` states for every product whether it is a Marktleistung (`kind: offering`),
+  the whole somebody orders, or a service (`kind: service`), one building block with its
+  own lifecycle process. Publishing then proves the graph agrees: a Marktleistung is
+  contained by nothing, includes at least one service and contains services only; a
+  service has no parts, carries no heading and is part of at least one Marktleistung. A
+  Marktleistung's category and product group are keys of the capability register — the
+  product group one the category capability requires — and are worded from the
+  capability's name where the product leaves a language unworded. An order can no longer
+  ask for a service on its own in such a release, except as an option of a Marktleistung
+  the recipient holds. Catalogues that are not switched on publish as before. The product
+  editor offers the kind, the catalogue settings the switch, and the MCP tools both
+  fields; `docs/catalogue/AGENTS.md` describes how products are created
+  (ADR-0524).
+
+- **A person without an account answers a task from a mail.** A user task marked
+  `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
+  that names it with `answerTask` is handed that link as `answerLink` for its subject and
+  bodies — before the task or beside it, and again from a reminder. The link opens a page
+  with the task's name, its documentation and its form, prefilled with what the instance
+  holds under the form's fields; submitting completes the task as the Tasks app would.
+  Opening the link answers nothing, so a link scanner cannot; the signed token is in the
+  link's fragment and so in no server log; it opens only that task while it is open — in
+  an event subprocess running several times, the task of the run that sent it — and the
+  task may still be answered in the Tasks app by whoever it is assigned to. The link
+  is built on the configured external URL (`--external-url`) and signed with a key the
+  vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
+  multi-instance task, a mail that never shows the link and a link to a task that did not
+  opt in. The Modeler offers both settings (ADR-0523).
+
+### Fixed
+- **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
+  after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
+  minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up
+  to ten minutes, and every other call keeps the thirty seconds.
+- **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
+- **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
+- **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
+- **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
+- **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
+- **A process variable read only inside a FEEL filter is no longer null.** `expr.CompileAuto` never declared a name that appears only in a filter predicate, because there an unknown name may be a key of the element, so `groups[starts with(alias, application.PREFIX)]` read the prefix as null and matched nothing; where the name was declared, it shadowed the element's key of the same name instead. The element's keys now take precedence and outer variables stay visible (DMN 10.3.2.5), through `github.com/pblumer/feel` with `CompileStringOpen` (ADR-0015, amended). A name declared personal (`atlas:personal`) that a filter alone reads stays the element's key and is not bound, so the filter never sees its ciphertext and a model that filters on such a key deploys as before (ADR-0314).
+
+## [0.22.0] — 2026-11-03
+
+**A multi-instance execution of 50,000 iterations is explored a page at a time.**
+Operations' Multi-Instance Explorer pages an execution's iterations by number, state and
+incident, opens one with the variables and decisions it recorded, replays it step by step
+on the diagram with its variables as they stood at each step, and lists the instance's own
+course with each loop collapsed to one row — every answer bounded, from indexes the single
+writer keeps as it applies the log
+([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). A history recorded before those
+indexes is rebuilt once at startup or said to be unavailable, never shown as empty
+([ADR-0518](docs/adr/0518-mi-history-legacy-rebuild.md)). Completing the iterations of a
+parallel multi-instance subprocess now costs linear instead of quadratic time on the
+single writer: 50,000 iterations finish in about 76 seconds, where they did not finish
+before.
+
+**Another system connects with one approval, and task users start what they are granted.**
+A system such as a wiki names itself by the URL of a client ID metadata document and signs
+its token requests, an administrator approves it once on the consent screen for the
+capabilities and projects chosen, and Console → Administration → Connected systems lists
+it, turns its pre-consent off and disconnects it
+([ADR-0512](docs/adr/0512-connected-systems.md)); an application can give its grant back
+(`POST /oauth/revoke`), somebody who signs in only through single sign-on can approve one,
+and the token endpoint has a throttle of its own. An administrator grants one process of
+one application to named people and groups, who then find Start in the Tasks app and
+start its newest version with values the server holds to its start form
+([ADR-0516](docs/adr/0516-scoped-authenticated-process-start.md)). Phones get a compact
+work menu and read-only incident triage, and multi-column forms stack at narrow widths
+([ADR-0514](docs/adr/0514-mobile-first-tasks-start-and-incident-triage.md)).
+
+**A process orders for somebody, forms take their options from a decision, the shop
+reports on its promise, and the examples ship through atlas hub.** A shop send task in the
+new mode `order` places an order in the name of its application, through every check a
+person's order meets, for a product whose `orderableBy` names that application — so an HR
+joiner process orders the starter package
+([ADR-0520](docs/adr/0520-process-places-an-order.md)), and a leaver process commands
+what a person holds by naming the person
+([ADR-0521](docs/adr/0521-command-by-recipient.md)); an order form says while a name is
+typed whether Entra, Exchange or SharePoint already use it
+([ADR-0519](docs/adr/0519-name-availability-check.md)); and the Entra Worker invites
+guests, restores deleted groups and creates Viva Engage communities, while the SharePoint
+Worker reads a site and its storage. The AD Worker writes the attributes a process keeps
+sealed, evaluating them itself, so logon names and DNs never reach the engine in plain
+text (ADR-0166, amended); an order form searches the directory for a person and checks
+the choice when the order is placed; and the shop shows every catalogue a person is the
+audience for, not only the highest-ranked
+([ADR-0522](docs/adr/0522-several-catalogues-per-person.md), proposed). A select, radio group, checklist or tag list shows what
+the newest version of a deployed decision answers, bound to the form's other fields, and
+the decision editor edits a DMN boxed list
+([ADR-0511](docs/adr/0511-form-options-from-a-decision.md)). A product promises a delivery
+time that is frozen into the order line and reported on per period, line managers and a
+catalogue's customer responsibles see what their people hold, and the catalogue app finds
+the wiki's pages as building blocks
+([ADR-0515](docs/adr/0515-service-reporting-and-customer-views.md)). `atlas hub build`
+publishes the examples as eleven signed packages by theme, a registry key rotates with two
+keys pinned at once, a new key is announced through one verifiable channel, and an
+agent installs a release over MCP as the Console does
+([ADR-0499](docs/adr/0499-blueprint-registry-and-distribution.md), amendment); an import
+takes another application's process, form or decision only when it is named one by one.
+Operations migrates an older version straight from the live view's heading, its version
+picker says which versions still hold work, and the migration dialogs speak the Console's language. An OpenTofu
+project builds a Microsoft 365 development environment for the Microsoft workers; it has
+not been applied to a real tenant yet.
+
+**Read this before upgrading from 0.21.0.** These act on an existing installation as soon
+as it runs 0.22.0:
+
+- The first start rebuilds the multi-instance history index before the server serves: it
+  replays the whole retained log from position 1 into a shadow store under
+  `<data-dir>/mi-history-rebuild`, swaps the index into the state store and deletes the
+  shadow store ([ADR-0518](docs/adr/0518-mi-history-legacy-rebuild.md)). That start takes
+  about as long as a recovery from genesis, and needs free disk space for a second state
+  store while it runs. An interrupted rebuild resumes at the next start. A log that was
+  compacted cannot prove the index: the server starts, the bounded multi-instance routes
+  answer that the history is unavailable, and the log line `server.mi_history_unavailable`
+  says why. A failed rebuild does not stop the server either; `server.mi_history_rebuilt`
+  reports a successful one.
+- The same start also seeds the new index of armed event-subprocess triggers once, from
+  one scan of the live element instances, before the processor reads it (#1494).
+- `POST /oauth/token` no longer shares the public forms' budget: it and the new
+  `POST /oauth/revoke` allow 300 requests at once and 10 a second per address. A proxy or
+  firewall rule that relied on the old, lower budget to slow token requests should be
+  checked; `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` and `_RATE` move it.
+- An authorization request whose `client_id` is an https URL now makes atlas fetch that
+  document, from public addresses only and within the new `ATLAS_LIMIT_CLIENT_METADATA*`
+  budgets. Anyone who can reach `/oauth/authorize` can trigger such a fetch; nothing is
+  saved before an administrator approved. An installation without outbound access sees
+  the consent screen say that the document could not be read.
+- A Worker that runs apart from the server needs 0.22.0 for the new Entra operations
+  `invite-guest`, `restore-group`, `list-deleted-groups` and `create-community`, for the
+  SharePoint operation `get-site`, and to answer a name field's availability check. The
+  Entra app registration needs `User.Invite.All` for `invite-guest` and
+  `Community.ReadWrite.All` for `create-community`; nothing else changes for a Worker
+  that uses neither. The AD Worker needs 0.22.0 for a connector task that authors its
+  entry as `attributes` or reads a search through `select` and `foundVariable`, and the
+  Exchange Worker for the fixes to Send As, compressed answers and long-running cmdlets.
+- A person in the audience of several catalogues now sees all of them in the shop,
+  highest rank first, where 0.21.0 showed only the highest-ranked
+  ([ADR-0522](docs/adr/0522-several-catalogues-per-person.md)). A catalogue kept at a lower
+  rank so that a wider audience would not see it is shown to them from the upgrade on:
+  check the audiences of overlapping catalogues before upgrading. A basket from several
+  catalogues becomes one order per release.
+- `ATLAS_BLUEPRINT_REGISTRY_KEY` accepts two keys separated by a comma. A value with three
+  keys, the same key twice or a malformed key stops the server at startup, as a malformed
+  single key already did.
+
+What changes on disk, and going back:
+
+- 0.22.0 reads the data directory 0.21.0 wrote. The directory gains one store,
+  `start-grants`, classified as a credential: it travels with a snapshot of this
+  installation and never with a portable export, so an import confers no permission. The
+  OAuth client and grant stores gain the fields of a connected system. The state store
+  gains the multi-instance history families, the instance outline, the steps inside
+  iterations, the index of armed event-subprocess triggers and an index from an ended user
+  task to the feed row that ended it, each with its marker. A catalogue product gains
+  `orderableBy`, frozen into its release, and an order placed by a process names
+  `system:application:<key>` as its orderer. The log gains no record type
+  and no intent, and no record it had changed. No system process and no event type
+  changed, so the first start deploys nothing new and `GET /api/v1/event-catalog` answers
+  as before.
+- New settings, all optional: `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`), and the limits
+  `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST`, `_RATE`, `ATLAS_LIMIT_CLIENT_METADATA`, `_SECONDS`,
+  `_HOST_BURST` and `_HOST_RATE`. The MCP tools grow from 167 to 180
+  (`atlas_catalog_building_blocks`, `atlas_catalog_delivery_report`,
+  `atlas_hub_import_release`, `atlas_hub_list_releases`, `atlas_hub_preview_release`,
+  `atlas_instance_multi_instances`, `atlas_instance_outline`, `atlas_multi_instance_body`,
+  `atlas_multi_instance_iteration`, `atlas_multi_instance_iteration_steps`,
+  `atlas_multi_instance_iteration_variables`, `atlas_multi_instance_iterations`,
+  `atlas_process_versions`).
+  `/metrics`, the event catalog and the Helm chart's values are unchanged.
+- Going back to 0.21.0 has not been tested end to end. By its code:
+  - 0.21.0 knows no system grant. It reads a connected system's grant as a grant without
+    confinement, so the system's tokens would reach everything the administrator who
+    approved it may. Disconnect every connected system under Console → Administration →
+    Connected systems before going back.
+  - 0.21.0 does not open `start-grants`: task users lose Start, and the grants come back
+    with 0.22.0.
+  - 0.21.0 refuses a shop send task in mode `order`, and one in mode `command` that names
+    a `recipient` instead of an order and a position, when it reloads the deployed
+    models, and a deployed model it cannot reload stops it from starting. It refuses an AD connector
+    task that creates or updates an entry from `attributes` instead of an
+    `entryVariable` the same way. Delete every deployed version that uses any of them —
+    the M365 example's `hr-eintritt` process uses both shop modes, and every
+    `ad-dienste` process from 1.0.1 on writes its entries inline — before going back. The atlas hub package `m365-dienste` requires 0.22.0 from 1.0.3
+    on, so the registry offers a 0.21.0 server nothing newer than 1.0.2; `ad-dienste` requires
+    it from 1.0.1 on.
+  - 0.21.0 shows a person only the highest-ranked catalogue they reach again. Orders
+    placed from the others stay as they are.
+  - 0.21.0 does not maintain the new indexes, but leaves their markers in place, so the
+    same data directory upgraded again to 0.22.0 is neither rebuilt nor reseeded. An
+    event-subprocess trigger armed while 0.21.0 ran is then missing from the trigger
+    index: it is not disarmed when its scope completes, and an error or escalation it
+    should catch is not found there. Multi-instance executions that ran under 0.21.0 are
+    missing from the bounded history. To upgrade again after going back, restore the
+    snapshot taken before the first upgrade, or do not go back.
+
+### Added
+- **An older version is migrated straight from the live view's heading.** Each version the heading lists as still running instances carries a *Migrate…* button that opens the batch migration with that version as the source and the newest as the target, its picker counting what every version holds from the per-version reading the view already has; after the move the diagram and the counts are read again at once, so the drained version leaves the list.
+- **The version picker says which versions still hold work.** In an Operations live view the *Version* dropdown labels every version with what it still holds — running instances, tokens parked behind an incident, finished instances, and whether it is inactive — and the heading names the other versions that still run instances, each a link to its live view, so the versions with work left no longer have to be found by opening one after another. The counts come from `GET /api/v1/processes/{key}/versions`, which answers for every deployed version of a definition's process from the maintained counters and the shared incident reading, never an instance scan; agents read the same through the new MCP tool `atlas_process_versions`.
+- **An order form searches the directory for a person.** A shop product's `configForm` may carry the directory field of ADR-0473: `POST /api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query` searches through the field's Worker for a caller who may order from the release's catalogue, and placing the order and correcting its details look the chosen person up again, so a value the search would not have offered is refused with 422 (ADR-0473 amendment). The basket and the correction form show the search, and a task form in the shop now does too. `option.value` lets a field submit an Entra user's `userPrincipalName` instead of the object id.
+- **`examples/m365-dienste` runs in a shared tenant, and asks for people by search.** A new application constant `NAME_PREFIX` (empty by default: names unchanged) goes in front of every name and alias the naming rule builds and of a partner account's UPN, and limits the governance check to objects with that prefix. The owner, manager and recipient fields of the order forms search Entra and submit the user principal name. `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` installs the package into the environment, ready to order.
+- **The AD Worker writes attributes a process keeps sealed.** An `<atlas:adConnector>`
+  that creates a user, group or contact or updates attributes may author its entry
+  inline as `attributes` — a JSON template whose `=…` values are FEEL, as Entra's are —
+  instead of naming an `entryVariable` the engine has to build. The Worker evaluates it
+  when it is handed the job, so it may read variables the process declares personal
+  (ADR-0314): a string is one value, a list several, a number or boolean its LDAP text,
+  and `null` leaves the attribute out of a create and clears it on an update. A `search`
+  takes `select`, the attributes it returns, and `foundVariable`, which receives `found`
+  on its own as a boolean, so the result — names and DNs — can be declared personal while
+  a gateway still branches; a search with only a `foundVariable` writes nothing else. The
+  Modeler's AD panel offers all three, and `examples/ad-dienste` now seals logon names,
+  names, addresses and found DNs and names external accounts `ext-<vorname>.<nachname>`
+  again (ADR-0166, amended 2026-11-03).
+- **An import takes another application's artifact when asked.** A process, form or decision that another existing application holds no longer refuses the import. The plan lists it as `elsewhere`, with the application that holds it and how its content compares, and `?adopt=` moves it into the importing application, ref by ref and never as `*` (ADR-0467). Adopting needs the editor role on the application the artifact leaves, and a protected application gives nothing up. The Console's import dialog lists such artifacts unticked in their own group, `atlas import` takes `--adopt REF` or asks at a terminal, and `atlas_hub_import_release` passes `adopt`, so a hub bundle installs on a server that already filed some of its processes elsewhere.
+- **Agents install atlas hub releases over MCP.** `atlas_hub_list_releases`, `atlas_hub_preview_release` and `atlas_hub_import_release` read and install releases of the operator-pinned signed registry exactly as the Console's atlas hub dialog does (ADR-0499). The import runs through the new `POST /api/v1/blueprints/{id}/releases/{version}/import`: the server fetches the verified release itself, refuses it unless `?digest=` is the one the preview reported, and imports it through the ordinary source import, with the same plan, `?overwrite=`/`?keep=` decisions, editor rule and needs. The MCP tool is a dry run unless asked otherwise. It does not publish, and it names a package's catalogues under `cataloguesNotImported` for a person to import in the Console.
+- **A process commands what a person holds without reading what they hold.** A shop
+  send task in mode `command` may name a `recipient` instead of an order and a position;
+  the server finds that person's position of the product in the inventory and commands
+  it under the product's `commandedBy`, so a leaver process returns an admin account by
+  naming the person — the inventory stays the administrators' to read. Holding nothing
+  completes the task with an empty result, and a refused command, in either shape, is
+  thrown as `SHOP_COMMAND_REFUSED` when the process catches it
+  (ADR-0521).
+- **A process orders a product for somebody in the name of its application.** A shop
+  send task in the new mode `order` names a catalogue and a product, the recipient's
+  account id and the answers to the products' forms, and places the order through the
+  same checks a person's order meets — eligibility, conflicts, the orderable window,
+  answers, variants and the approval rule. Only a product whose new field `orderableBy`
+  lists the process's application may be ordered so; the list is read from the newest
+  release, so taking an application off it stops it at once, and the Console edits it
+  beside `commandedBy`. The order names `system:application:<key>` as its orderer, its
+  id comes from the task, so a retry finds the order instead of placing a second one,
+  and a refusal is thrown as `SHOP_ORDER_REFUSED` when the process catches it — so an
+  HR joiner process can order the starter package for a person who joins
+  (ADR-0520).
+- **An order form says while a name is typed whether it is still free.** A textfield
+  carrying an `atlasAvailability` block names up to four sources — Entra groups and
+  deleted groups by alias (`mailNickname`), Exchange recipients by alias or by the local
+  part of any SMTP address, a SharePoint site at the field's host and managed path — and
+  the shop asks
+  `POST /api/v1/forms/{id}/fields/{field}/availability` with the typed value, debounced,
+  and writes "«dev-huda» ist bereits vergeben" under the form; a name known to be taken
+  stops the order, a check that could not run does not. Each source is a value lookup
+  over the form-lookup worker query, answered by a Worker Instance with the Worker's own
+  credential, so nothing is written and the engine holds no Microsoft credential. Only a
+  signed-in person may ask, at most 10 in a burst and 2 a second, and only through a
+  Worker whose editors switched on `formLookups`, which the Console now offers for
+  SharePoint and Exchange Workers too. The save refuses a block this server cannot serve
+  (ADR-0519).
+- **The Entra Worker invites guests and restores deleted groups.** `invite-guest`
+  sends a B2B invitation from its attributes (`inviteRedirectUrl` defaults to
+  https://myapps.microsoft.com, which Graph requires) and answers the invitation with the
+  new guest's id; `restore-group` restores a Microsoft 365 group deleted less than 30
+  days ago, and with it its SharePoint site; `list-deleted-groups` lists deleted groups
+  like `list-groups` lists live ones. Two lookup resources, `groups` and
+  `deletedGroups`, answer whether an alias (`mailNickname`) is taken, for a name field's
+  availability check. `invite-guest` needs `User.Invite.All` (ADR-0172, amended).
+- **The Entra Worker creates a Viva Engage community.** `create-community` sends the
+  community from its attributes (`displayName`, `description`, `privacy` public or
+  private) with the task's user bound as its first owner, and answers the community with
+  its `groupId`, on which `add-group-member` and `add-group-owner` then manage members and
+  admins. Graph accepts the creation with `202` and an operation to follow; the worker
+  follows it within the job for up to 90 seconds and, if the community is not ready by
+  then, completes with `id` null and the operation's status rather than failing, so a
+  retry never creates a second community and a model can route `= community.id = null`
+  to a person. A failed operation fails the job with Graph's reason. It needs
+  `Community.ReadWrite.All` and, as Microsoft documents, a Viva Engage network in native
+  mode (ADR-0172, amended).
+- **The SharePoint Worker reads a site and its storage.** `get-site` answers the site's
+  id, name, display name and web URL with its default library's quota (`used`, `total`,
+  `remaining` in bytes), and `exists=false` for an address where there is no site, so a
+  process can show a site's usage before somebody asks for more room. The mockup answers
+  it too (ADR-0141, amended).
+- **Each step of an iteration's replay shows its variables as they stood then.** Under the replay window in the Multi-Instance Explorer, *Variables at this step* lists the iteration's own scopes — the iteration and whatever ran inside it at that moment — with each variable's latest value up to that step, read from the recorded history (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables?at=…`, MCP tool `atlas_multi_instance_iteration_variables`). At 50,000 iterations it answers in under a millisecond. The variables of the multi-instance execution and of the instance are not included.
+- **A new atlas hub key is announced through one fixed, verifiable channel.** `atlas hub announce` writes a statement naming the registry's next signing key, signed with the current one, to `examples/hub/key-rotation.json`; operators check it with `atlas hub verify-announcement` against the key they already pin, which prints the two-key line to set (ADR-0499 amendment). A statement needs at least seven days between announcement and switch, so an announcement the owner did not make is noticed in time. A compromised or lost key is never rotated this way: `examples/hub/README.md` requires a personal confirmation of the fingerprint over a contact agreed beforehand.
+- **Another system is connected with one approval.** A system such as a wiki that shows
+  atlas's processes and mirrors people's tasks names itself by the https URL of a client
+  ID metadata document it publishes and signs its token requests with a key from it
+  (`private_key_jwt`, EdDSA or ES256), so no token, client secret or redirect URI is
+  copied by hand. An administrator starts the connection in the system and approves it
+  on the consent screen, which shows the system's host above the name it claims, for the
+  new resource `<origin>/system`: the capabilities `diagrams`, `tasklist` and `events`,
+  each optionally narrowed to projects — `tasklist` then lists only those projects' tasks
+  and `events` carries only their task facts — and, if chosen, pre-consent, which
+  connects the system's people to their own `…/tasks` grants without a consent page once
+  they are signed in; `prompt=none` answers `login_required` or `consent_required`. A
+  person who withdraws such a grant declines the system until they approve it
+  themselves. `GET /api/v1/auth/me` tells a system what was approved, and
+  `GET /api/v1/tasks/{key}` answers it `410 Gone` for a task that ended while the feed
+  still holds its end. Console → Administration → Connected systems lists each system
+  with its approver, reach, people and last use, turns pre-consent off and disconnects
+  it; Connected accounts lists each person's systems. Atlas reads such a document from
+  public addresses only unless `--client-metadata-allow-private`
+  (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`) is set, within the new budgets
+  `ATLAS_LIMIT_CLIENT_METADATA*`, and saves nothing before an administrator approved.
+  New routes `GET /api/v1/connected-systems`,
+  `PUT /api/v1/connected-systems/{id}/preconsent`, `DELETE /api/v1/connected-systems/{id}`,
+  `GET /api/v1/me/connected-systems` and `POST /api/v1/me/connected-systems/withdraw`;
+  audit events `system.connect`, `system.change` and `system.disconnect`
+  (ADR-0512).
+- **An atlas hub signing key rotates without interruption.** `ATLAS_BLUEPRINT_REGISTRY_KEY` pins one registry key or, during a rotation, two separated by a comma, and an index signed by either is accepted (ADR-0499 amendment). The server logs the pinned fingerprints at startup (`hub.registry_keys_pinned`), as a warning while two are pinned. Three keys, a key twice or a malformed one stop the server at startup. `examples/hub/README.md` gives the order: pin both, switch the signer, unpin the old key. A compromised key is replaced outright, never pinned beside its successor.
+- **One iteration replays step by step on the diagram.** In the Multi-Instance Explorer, *Replay this iteration* plays what ran inside one iteration — its start, the elements inside it, a nested execution as one step, its end — on the diagram, step by step or with *Play*, from a new bounded route (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps`, MCP tool `atlas_multi_instance_iteration_steps`). Iteration 37,421 of a 50,000-iteration instance answers in about a millisecond. Servers whose history predates it rebuild it once at startup.
+- **A large instance shows its whole course, with its loops collapsed.** Operations' bounded view of an instance with a large multi-instance execution now lists the instance's own steps — start, gateways, tasks, end — in the order they happened, with each loop as one collapsed row between them, from a new outline of the history that leaves out what runs inside iterations (`GET /api/v1/instances/{key}/outline`, MCP tool `atlas_instance_outline`). An instance with 50,000 iterations answers in under a millisecond with a few hundred bytes.
+- **The examples are published through atlas hub, by theme.** `atlas hub build` turns the installable examples into ten deterministic, signed Blueprint Registry v1 packages (ADR-0499): five theme applications — Einstieg, Auftrag & Finanzen, Personal & Mitarbeitende, Umsysteme, Identität & Verzeichnis — the handbook's workshop, guiding case and tutorial as their own applications, and the two shop packages with their catalogues (`examples/hub/bundles.json`). The Pages workflow publishes them under `hub/` once the repository secret `ATLAS_HUB_SIGNING_KEY` is set; an installation that sets `ATLAS_BLUEPRINT_REGISTRY_URL` and `ATLAS_BLUEPRINT_REGISTRY_KEY` imports them from the Console through the ordinary package import, without a binary upgrade. `atlas hub keygen` creates the signing key, `atlas hub fingerprint` checks a backup against the recorded public key, and `atlas hub lock` records a new version in `examples/hub/releases.json` whenever a bundle changes — a test fails when one changed without it, so a published version never changes its content. `examples/hub/README.md` describes the key ceremony, the offline backup and planned and emergency key rotation. Only the latest version of each bundle is listed, and installation provenance (#1422) is not yet recorded.
+- **atlas hub releases carry tags, and the Console filters by them.** A signed registry index may give each release up to 16 lower-case tags (ADR-0499 amendment); the Console's atlas hub dialog shows them and filters the listing by one. Tags only steer the listing. A server from before this change refuses an index that carries them.
+- **Older histories become explorable after one restart.** A server whose history was recorded before the multi-instance index existed rebuilds the index at startup by replaying its whole retained log into a shadow store and swapping the result in; the startup takes as long as that replay, and an interrupted rebuild resumes. A log that was compacted cannot prove the index, so its bounded multi-instance history stays unavailable and the startup log says why.
+- **What one iteration saw and decided.** Opening an iteration in the Multi-Instance Explorer shows the variables of its own scope as they were recorded — its iteration number, its item and what it wrote — and the DMN decisions it evaluated with the inputs and result frozen in the log, rule traces on request (`GET /api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}`, `technical=true`). History recorded before decisions were attributed to iterations says so instead of showing an empty list.
+- **Multi-Instance Explorer in Operations.** A grouped multi-instance row in the replay offers *Explore iterations*: one page of 100 iterations in iteration-number order, a jump to a number such as 37421, filters by state and by iterations that had an incident, and each iteration's element instance, log positions and incidents (open, resolved, replaced, or ended without resolution). An instance with an execution of more than 500 iterations opens without loading the full step-by-step timeline, which grows with the square of the iteration count, and shows its executions as collapsed groups with the server's counts instead; its own steps come from the instance outline, and the diagram replay of the whole instance is not shown in that view. A history recorded before the index is explained as not yet verifiable, never shown as empty.
+- **The M365 development environment can share a tenant used for real work.** With `shared_tenant = true`, `deploy/opentofu/m365-devenv` grants the mail and Exchange worker apps no tenant-wide rights in Entra: Exchange RBAC for Applications limits Mail.Send, and a role group with a write scope limits the Exchange worker, to recipients whose alias carries the environment's prefix; SharePoint gets Sites.Selected on the test site only. Teams Phone, whose administrator role cannot be scoped, is refused, and credentials live at most seven days. A setup script makes the Exchange and SharePoint grants, a cleanup script removes them by prefix, and an emergency script finds and deletes the environment's Entra objects and Azure resource groups without the OpenTofu state. The Entra worker's Graph permissions stay tenant-wide, which the README states. Not yet run against a tenant.
+- **A turnkey Microsoft 365 development environment.** `deploy/opentofu/m365-devenv` is an OpenTofu project that builds, with one `tofu apply`, everything the Microsoft workers need in a Microsoft 365 test tenant - one least-privilege app registration each for the Entra, Exchange, SharePoint, Teams Phone and mail workers, test users with a manager, groups and a Microsoft 365 group - and an Atlas server in Azure behind Caddy, whose supervised workers are already created in its Console with their bundles in the vault, test users signing in through Entra ID, and optionally an Active Directory domain controller reached over LDAPS inside the same network. `tofu destroy` removes it again. It refuses to run unless the signed-in tenant matches both the configured tenant id and initial domain; its offline tests run with every provider mocked, and its bootstrap is checked against a locally built server. It has not yet been applied to a real tenant.
+- **Bounded multi-instance history API.** `GET /api/v1/instances/{key}/multi-instances` lists an instance's multi-instance body executions with seeded, active, completed and terminated iterations and their incidents, and `.../{bodyKey}/iterations` pages one execution's iterations by signed cursor — jump to an iteration number, find one element instance, filter by lifecycle state or by iterations that had an incident — from event-derived indexes read off the single writer, so a loop of 50,000 iterations answers in milliseconds with a page, never the whole history (MCP tools `atlas_instance_multi_instances`, `atlas_multi_instance_body`, `atlas_multi_instance_iterations`, `atlas_multi_instance_iteration`). A server whose history predates the index answers "history unavailable" instead of an incomplete list.
+- **The Start view offers task users what they may start.** A signed-in person without the operator role now finds Start in the Tasks app — top bar, phone menu and mobile switcher — as soon as an administrator granted them a process, picks it by name and application, fills its start form and is told when the process has durably started, with its reference (ADR-0516). Refused values, a revoked grant, a replaced version, an expired session and a broken connection each say what happened; a broken connection says the outcome is unknown instead of offering a second start. Operators keep their Start view unchanged.
+- **Task users start the processes granted to them.** `POST /api/v1/me/processes/{key}/instances` starts the newest version of a process an administrator granted to the signed-in person, through the same engine start the operator routes use: it checks the grant and the version again in the turn that submits the start, refuses superseded, deactivated and foreign keys, holds the values to the start form on the server — only its fields, required values, types, bounds and listed options — and answers after the start is durable, with the person recorded as its initiator (ADR-0516). API tokens and connected applications are refused. The operator start routes are unchanged.
+- **Task users see the processes they may start.** `GET /api/v1/me/startable-processes` lists, for a person signed in with their own session, exactly the processes an administrator granted to them or to one of their groups — only the newest deployed version, only in the grant's application, and only while it can be started — sorted by application and name (ADR-0516). API tokens are refused and a server without authentication offers no such list. The Start view shows it.
+- **Administrators decide who may start a process.** An administrator, signed in with their own session, grants one process of one application to named user and group ids, previews whether a person or group would be offered it and why not, and revokes it, with every change durable and audited (`/api/v1/applications/{id}/start-grants`, ADR-0516). Grants are checked against the directory and the application's newest deployed version; API tokens, application owners and servers without authentication cannot change them. A grant is what the self-service start honours; nothing else confers it.
+- **Grouped multi-instance replay history.** Operations now shows one collapsed row per multi-instance body with an iteration count; expand it to inspect individual rounds, with durable token lineage keeping separate executions distinct. A large execution opens in the Multi-Instance Explorer instead.
 - **Read-only mobile incident triage.** On phones and tablets, operators can inspect incident causes and bounded read-only samples; denied roles and expired sessions cannot reveal incident details, and desktop remediation remains unchanged.
 - **Mobile work navigation.** Phones get a compact role-aware menu with task/incident hints and a foreground ten-second update interval; task forms and their inputs are preserved while working, and desktop navigation remains unchanged.
 - **Responsive form-js fields.** Multi-column Tasks and Process Start forms stack at narrow widths, while preserving form data and authored wide-screen layout on resize.
@@ -99,12 +428,42 @@ _Changed_ / _Removed_ for each version.
   to its beginning and marks it with `truncated`, `size`, and `lines` or `shape` and `count`. The
   default stays `values=full`. The MCP tools `atlas_list_instances` and `atlas_search_instances` take
   the same `values` argument. The whole value is read with the instance's point read when it is opened.
+- **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
+- **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
+- **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
   back to its default. A TLS installation then comes back as plain HTTP on `127.0.0.1:8080`. The
   Windows section of `docs/install.md` now lists which start parameters to repeat, which the update
   ignores, why `-Version` alone keeps the old binary, and how to go back. The script's help gains a
   TLS update example and names the folder the release archive unpacks to.
+
+- **A fold inside a section draws the same caret as the section.** A release and a
+  change in the release notes, a group of the product form, an outbox message, an entry
+  or the operations of a mockup, a policy's versions and the other folds inside a
+  section open as before, and now show the caret every section shows, turning the same
+  way when they open.
+
+- **The last folds of their own fold like every other section.** Console › Events, the
+  cards of Operations › Mockups, Mock directory and Mock database, the dashboard's
+  release notes and key features, and the sections of a catalogue's own page folded with
+  controls of their own, each looking and remembering differently. They now fold with
+  the same caret and are remembered the same way as every other section
+  ([ADR-0505](docs/adr/0505-every-topic-folds.md)): a mockup card stays folded through a
+  refresh and across a visit, and a catalogue's sections still start folded and say what
+  they hold. What those sections were remembered under before is not carried over, so
+  each starts in its default state once.
+
+- **Every page with two or more sections folds each of them.** The sections the
+  folding of [ADR-0505](docs/adr/0505-every-topic-folds.md) did not find now fold under
+  their headings and are remembered like the rest: every card of Operations › Workers
+  (the job types the same way as the others now, still folded at first), the
+  dashboard's notices and storage card, the lists of Connected
+  accounts and Approvals, both topics of Backup (under one page title now), the choices
+  of Display settings, both lists of an application's Constants tab, a business object's
+  sections, both sides of Planned against built, each type on Data › Instances, and the
+  sections below the catalogue list, its delivery report among them. A section drawn outside a card asks to fold with
+  class `fold-topic`.
 
 - **The OAuth token endpoint has a throttle of its own.** `POST /oauth/token` and the new
   `POST /oauth/revoke` no longer share the public forms' budget of 20 requests at once and
@@ -115,7 +474,53 @@ _Changed_ / _Removed_ for each version.
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **The current atlas mark everywhere, in place of the former logos.** The system
+  overview that the Console's welcome card, its help menu, the handbook and the
+  architecture document show still opened with the former logo, a triangle with a
+  cross; it now carries the mark from `docs/brand/atlas-mark.svg`, the lowercase a with
+  the Swiss cross. The handbook's training nuggets showed the former peak mark in every
+  top bar and are re-taken from the running product (`make nuggets`), which also brings
+  them up to the screens that had moved since. The README screenshots show the mark in
+  place of the former letter tile, the feature icons for *One binary* and *Made for AI
+  agents* are redrawn on the mark instead of the peak, the five Console pages that had
+  no favicon (the conformance gallery, the order-to-cash and travel-booking demos) now
+  carry it, and so does the Modeler top-bar design sketch. Tests hold the system
+  overview to the mark's shapes and every Console page to the favicon's.
+- **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
+  rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
+  thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and
+  the cancellation was recorded as `the content source cannot be reached: … context canceled`. That
+  quarantined products whose wiki pages were fine, and the catalogue could not be published until
+  each was refreshed again. A recheck cut off by its caller now records and writes nothing (503 for a
+  single product), and `POST /api/v1/catalogs/{id}/content/refresh` runs to its end even when the
+  caller has gone, so asking again finds the products refreshed.
+- **Send As on Exchange Server finds the mailbox by its address.** On-premises, `add-send-as` and `remove-send-as` run `Add-`/`Remove-ADPermission`, which look for an Active Directory object and answered "…@contoso.com wasn't found" for the address every model passes. The worker now looks the recipient up with `Get-Recipient` and passes its distinguished name; Exchange Online is unchanged. Found by a smoke test against a real Exchange Server SE.
+- **Exchange Online answers are read uncompressed.** The Exchange worker asked for gzip implicitly, and Exchange Online's admin API was observed answering with a body labelled gzip that was not (`gzip: invalid header` instead of the cmdlet's answer).
+- **An Exchange Online cmdlet may take two minutes.** The worker sent every cmdlet with the shared ten-second bound of a REST call; `Add-MailboxPermission` on a shared mailbox created a minute before took longer, the job failed, and the permission had been set all the same. Cmdlets now wait up to two minutes, as against Exchange Server; the token request keeps the shorter bound.
+- **A change waits for an object Exchange Online has just created.** A `Set-` or `Add-` cmdlet answered 404 NotFound is sent again for about a minute; observed four seconds after `New-DistributionGroup`.
+- **`examples/m365-dienste` against a real tenant:** a distribution list is created without `-Type` (not granted to a worker scoped to distribution lists), and a team's owner is added after the replication wait rather than before it (`add-group-owner` answered 404 23 seconds after `create-group`). People are found by given name and surname too.
+- **Deleting an application no longer blocks importing it again.** A plain delete leaves the application's processes, forms and decisions tagged with its id, to read as Ungrouped (ADR-0034), but the source import treated them as another application's and refused every later import of the same package with "already belongs to another application". It now takes them as Ungrouped artifacts and files them into the imported application, content unchanged or not. An application that still exists keeps its artifacts as before.
+- **A provisioning that reports at once keeps its report.** A provisioning process
+  that reported its position done (or failed) before the order's start came back to
+  mark the line running had its report overwritten with running, and the position
+  stayed running with nothing left to report on it. The start now marks a line
+  running only while it is still pending or blocked.
+- **An action is told the variant its position was ordered in.** The provision and
+  the return were given `variantId`; an action that starts its own instance was not,
+  so a decision over the licence tier it changed saw null — as the M365 example's
+  mailbox quota decision did.
+- **Large parallel multi-instance subprocesses complete in linear time.** Completing each iteration of a parallel multi-instance subprocess walked every live element of the instance to disarm the iteration's event-subprocess triggers, so N iterations cost N² reads on the single writer: 1,000 iterations took 41 seconds and 50,000 never finished. Each scope's armed triggers are now indexed under it (seeded once at startup from the triggers a store already holds); 1,000 iterations take half a second and 50,000 about 76 seconds.
 
+- **A server that recorded multi-instance history before its schema v2 starts again.** On a server that ran a build of `main` between 0.21.0 and 0.22.0, a multi-instance execution that began under the first version of the index and ended, or raised an incident, after the upgrade stopped recovery with `state: invalid MI history value (version, role or size; 46 bytes)`, and the server restarted at the same log position forever; recovery commits nothing when it fails, so the data was intact. The engine now leaves such a v1 row as it is, as it does an activation recorded before the index existed: the store's bounded multi-instance history stays unavailable until a verified rebuild, and any other malformed row still stops recovery.
+- **A terminate end event ends its scope in the token simulation.** The Design view's
+  simulation treated a terminate end like a plain end: only the token that reached it
+  stopped. A token still waiting beside it — a message catch on a parallel branch, say —
+  kept its subprocess running, so the outer token never continued and the walk-through
+  stalled on "An event is waiting". A terminate now tears down every other token in its
+  enclosing scope, as the engine does (ADR-0116): inside a subprocess the subprocess then
+  completes and the flow continues on its outgoing flow; at the top it ends the process,
+  and in a pool only that pool. Cancelling a subprocess through an interrupting boundary
+  no longer stops the dots still travelling elsewhere in the diagram either.
 - **Operations Live views identify the process.** A dedicated heading now keeps the full process name and deployed version visible above the BPMN diagram, even with a crowded toolbar or on a narrow screen.
 - **Handbook Modeler examples no longer pile up as ungrouped drafts.** Opening a recipe or an
   example in the Modeler saves it in the reader's reusable `atlas-samples` application,
@@ -17373,7 +17778,8 @@ Not for production use.
 - Recovery replays the log from genesis; log compaction / snapshotting is not
   yet implemented (Milestone 4).
 
-[Unreleased]: https://github.com/pblumer/atlas/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/pblumer/atlas/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/pblumer/atlas/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/pblumer/atlas/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/pblumer/atlas/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/pblumer/atlas/compare/v0.18.0...v0.19.0

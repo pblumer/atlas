@@ -31,8 +31,31 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   Operations instance replay groups the iterations of one multi-instance body by
   default, expands them on demand and still selects an exact iteration. The grouping
   uses persisted parent-token lineage so repeated bodies and orphaned rounds are not
-  accidentally merged. This is a UI/DOM slice only: the timeline payload is not yet
-  bounded (OHS2/OHS3).
+  accidentally merged. A small instance keeps this classic replay and opens the
+  Multi-Instance Explorer from the grouped row.
+- **`mi-explorer.spec.mjs`** ([OHS2](../docs/planning/operations-history-at-scale-program.md),
+  [ADR-0517](../docs/adr/0517-scalable-instance-replay.md)): an instance with 50,000
+  iterations opens without requesting `/timeline`, shows its loop as one collapsed group
+  with the server's counts, and the explorer pages iterations (never more than one page
+  of rows in the DOM), jumps to iteration 37,421 by asking the server for that position,
+  sends state and incident filters to the server, supports keyboard selection, retries a
+  failed page and stays within a narrow screen. The bounded view lists the instance's own steps
+  from the outline route around the collapsed loop, and says so when no outline is available. One
+  iteration's steps replay on the diagram (visited and active markers, previous/next, play to the end,
+  a second page of steps, a fresh start for another iteration) and an unavailable replay window is
+  explained. Each step shows the iteration's variables as they stood then, read once per step position,
+  and a failed read is shown as an error at its step. The harness computes each page from the
+  iteration number, as the server's index does, instead of holding 50,000 rows.
+
+- **`migration-wiring.spec.mjs`** (ADR-0162): where the Operations surfaces open the
+  batch migration, against the real console and a mocked server — the ⋯ menu of a process
+  row (also after the list is redrawn), the live view's *Migrate instances…* button for the
+  version on screen, and the *Migrate…* button beside each older version the live view's
+  heading lists as still running instances, which opens the dialog with that version as the
+  source and the newest as the target, uses the per-version counts the heading already holds,
+  re-reads them after the migration, and keeps working after the list is redrawn. Counts that
+  could not be read are left out rather than shown as none, and a process with a single
+  version offers no migration at all.
 
 - **`long-values.spec.mjs`**: a variable value longer than its place in Operations — a
   whole CSV upload in one string, a list of every record read — is shown as its beginning
@@ -181,6 +204,11 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   message **delivers to a waiting catch** (both pools complete), a message with **nothing
   waiting is not buffered** (the later catch still parks), and a parked catch **still fires
   manually** (the ⚡ / `step()` path).
+- **`terminate.spec.mjs`** ([ADR-0116](../docs/adr/0116-terminate-end-events.md)): a
+  terminate end **ends its enclosing scope** — inside a subprocess it takes the message
+  catch waiting beside it along and completes the subprocess, so the outer token continues
+  while a branch outside the subprocess keeps waiting; at the process level it leaves no
+  token behind.
 - **`playground.spec.mjs`** ([ADR-0215](../docs/adr/0215-modeler-playground.md)):
   the **Playground tab** — a mode rather than a level of detail, so it takes the control
   strip and a side panel and gives the properties panel's width back to the diagram;
@@ -1084,6 +1112,17 @@ include new tasks, incident counts and open-task preservation using a
 controlled clock, on the production DOM with mocked HTTP responses.
 
 The 1024x768 landscape-tablet regression checks that the inbox uses a full-width folder strip plus a readable list/detail split (not the old fixed three-column 180/300/remaining squeeze); rotating to portrait and back retains the selected task. Start remains a real two-pane grid. This is Chromium geometry evidence, **not** real Android tablet acceptance.
+
+`mfe1-self-start.spec.mjs` ([ADR-0516](../docs/adr/0516-scoped-authenticated-process-start.md))
+holds the task user's Start view against a mocked server: Start is offered only when
+`GET /api/v1/me/startable-processes` lists something, a process is picked by name and
+application, its start form is filled and sent once (the POST body is checked), and the
+answer is said — started with its reference, refused values with the data kept, a grant
+revoked while the form is open, a replaced version, an expired session, a double tap that
+sends one start, and a broken connection whose outcome is unknown. It runs at 320, 390 and
+768px and on desktop, and checks that an operator keeps the operator Start view. What the
+server allows is the Go tests' (`api/selfstart_http_test.go`); this is not device
+acceptance either.
 
 This is neither Web Push nor MFE3 alarm delivery/escalation. Playwright's
 Chromium viewport checks cannot validate Safari, Android, real-keyboard/zoom

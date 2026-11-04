@@ -100,9 +100,11 @@ import (
 	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/decisiondoc"
 	"github.com/pblumer/atlas/api/feelgen"
+	"github.com/pblumer/atlas/api/formavailability"
 	"github.com/pblumer/atlas/api/formdecision"
 	"github.com/pblumer/atlas/api/formgen"
 	"github.com/pblumer/atlas/api/formlookup"
+	"github.com/pblumer/atlas/api/mihistory"
 	"github.com/pblumer/atlas/api/order"
 	playgroundapi "github.com/pblumer/atlas/api/playground"
 	"github.com/pblumer/atlas/api/processdoc"
@@ -156,11 +158,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.21.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.22.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.21.0-dev"
+var Version = "0.22.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -284,6 +286,9 @@ type Server struct {
 	// stopped, the HTTP half of the rotation the in-process runner keeps for itself.
 	// See [Server.scanHeldCandidates].
 	gateResume map[int32]uint64
+	// serveResume is where a worker's scan for the jobs it serves last stopped, per job
+	// type and worker. See [Server.scanServedCandidates].
+	serveResume map[serveResumeKey]uint64
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
@@ -355,6 +360,9 @@ type Server struct {
 	// loop it was given (ADR-0143/0147).
 	processDocs  *processdoc.Service
 	decisionDocs *decisiondoc.Service
+	// miHistory serves the bounded multi-instance history (ADR-0517). It reads
+	// only through read views taken off the run loop (miHistoryView).
+	miHistory *mihistory.Service
 	// identity holds linked external accounts and delegated connections and brokers
 	// their credentials; policies is the policy administration point; governed is the
 	// in-memory view of which Workers carry an identity policy, read by the
@@ -408,6 +416,9 @@ type Server struct {
 	// startFavourites serves the processes each person starred on the Tasks app's
 	// Start view (ADR-0466).
 	startFavourites *startfavourites.Service
+	// startGrantAdmin serves the administration of ADR-0516's process-scoped start
+	// grants over startGrants, on the run loop.
+	startGrantAdmin *startgrant.Service
 	// formGen writes a form from a description and from the process it belongs to
 	// (ADR-0260). It is the one area service that holds no run
 	// loop, because it owns no state: it stores nothing, and the three closures in
@@ -427,6 +438,10 @@ type Server struct {
 	// (ADR-0511). It owns no state and holds no run
 	// loop: formdecisions.go is its whole reach into this server.
 	formDecision *formdecision.Service
+	// formAvailability answers a name field's live check whether a name is still free
+	// (ADR-0519), through the same broker as the form lookups. It owns no state;
+	// formavailability.go is its whole reach into this server.
+	formAvailability *formavailability.Service
 	// feelGen writes a FEEL expression from a conversation with the author
 	// (ADR-0445). Like formGen it owns no state and holds no run
 	// loop; feelgeneration.go is its whole reach into this server.
@@ -969,6 +984,16 @@ type Server struct {
 	// advertises it cannot disagree. Set once before Handler is mounted; read-only
 	// thereafter.
 	dynamicRegistration bool
+
+	// Connected systems (ADR-0512 §1): the client ID metadata documents read for
+	// authorization requests, held in memory only, and the client assertions already
+	// spent at the token and revocation endpoints. clientMetadataPrivate lets the
+	// documents be read from private addresses (WithClientMetadataPrivateAddresses).
+	// Both are built after the options, so the budgets an installation configured are
+	// the ones they hold.
+	clientMetadataPrivate bool
+	clientMetadata        *clientMetadataFetcher
+	assertionReplay       *assertionReplayCache
 
 	// externalURL is the origin this server is reachable under from outside, when an
 	// operator stated one (WithExternalURL). It is what the RFC 9728 discovery
@@ -1767,6 +1792,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		workers:             newWorkerRegistry(nil),
 		breakers:            newWorkerBreakers(nil),
 		gateResume:          map[int32]uint64{},
+		serveResume:         map[serveResumeKey]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -1880,6 +1906,12 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.feelGen = feelgen.New(s.agentWorkersForFeel, s.dialAgentWorker)
 	s.feelGen.Observe = s.observeFeelAssistant
 	s.releaseNotes = releasenotes.New(atlas.Changelog, atlas.ADRIndex)
+	if s.miHistory, err = mihistory.New(s.miHistoryView, time.Now, func(v *model.VariableValue) (string, string) {
+		view := toVariableView(v)
+		return view.Kind, view.Value
+	}); err != nil {
+		return nil, err
+	}
 	s.processDocs = processdoc.New(
 		s.runLoop,
 		processDocStore,
@@ -2049,6 +2081,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.startFavourites = startfavourites.New(s.runLoop, startFavouritesStore,
 		func(processID string) bool { _, ok := s.versions[processID]; return ok },
 		func() int { return int(s.budgets().StartFavourites) })
+	// Start grants (ADR-0516) are checked against the directory and the deployment
+	// registry in the same loop turn that writes them. Whether authentication is on is
+	// read per request: the options that turn it on are applied below.
+	s.startGrantAdmin = startgrant.NewService(s.runLoop, s.startGrants, s.startGrantDirectory(),
+		s.startGrantTarget, func() bool { return s.authEnabled }, func() int64 { return time.Now().Unix() })
 	// Panorama reuses the process-application scope rather than inventing an ACL.
 	// The resolver is called only from the service's run-loop turn, so reading the
 	// project store here keeps both authorization and model persistence under the
@@ -2120,12 +2157,15 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.storage = s.newStorageMonitor()
 	s.newFormLookups()
 	s.newFormDecisions()
+	s.newFormAvailability()
 	// The OAuth token and revocation endpoints draw on a bucket of their own, sized
 	// for a confidential server-side client renewing many people's tokens from one
 	// address rather than for a person at a public form (limits.TokenEndpointBurst,
 	// ADR-0510). Built after the options, so the budgets an installation configured
 	// are the ones it holds.
 	s.tokenRate = newRateLimiter(float64(s.budgets().TokenEndpointBurst), float64(s.budgets().TokenEndpointRate))
+	s.clientMetadata = s.newClientMetadataFetcher()
+	s.assertionReplay = newAssertionReplayCache(maxAssertionReplay)
 	// The Playground's sandboxes are engines of their own, so the registry is not
 	// behind this server's run loop — but *finding* the model a session runs is
 	// design-time state and authorization, and both stay here
@@ -2145,6 +2185,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.formGen.Limits = s.budgets()
 	s.feelGen.Limits = s.budgets()
 	s.processDocs.Limits = s.budgets()
+	s.startGrantAdmin.Limits = s.budgets()
 	s.decisionDocs.Limits = s.budgets()
 	s.taskFolders.Limits = s.budgets()
 	s.panorama.Limits = s.budgets()
@@ -2160,6 +2201,8 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Deployer = catalogDeployer{s: s}
 	s.catalogs.Baselines = catalogBaselines{s: s}
 	s.catalogs.Personal = processLookup{s: s}
+	// And what a structured catalogue's headings name: the capability register.
+	s.catalogs.Capabilities = catalog.Register{Loop: s.runLoop, Store: s.capabilityRecords}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	// The content sources: the credential is resolved on the loop like every
 	// Worker's, the fetches and the recheck run off it (I3).
@@ -2172,6 +2215,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.OnChange(s.contentRunner.Reload)
 	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
+	s.orders.CheckAnswers = s.checkOrderAnswers
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
 	// (ADR-0429 §3).
@@ -3719,6 +3763,9 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	// A person's tasks as a resource of their own, for a client that works them and
 	// nothing else (ADR-0510 §3).
 	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthTasksResource, s.handleProtectedResourceMetadata)
+	// A connected system's own reading of this server, for the system grant an
+	// administrator approves (ADR-0512 §2).
+	mountFunc(accessPublic, roleAny, "GET "+protectedResourceMetadataPath+oauthSystemResource, s.handleProtectedResourceMetadata)
 	// The authorization server (ADR-0200). Its metadata is public for the same
 	// reason: a client reads it before it holds anything. /oauth/authorize is public
 	// because an unauthenticated *browser* has to be able to land there — a 401 is
@@ -3847,6 +3894,12 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicWizardFieldOptions)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicFormPreflight)
+	// A user task answered through the link a mail carries
+	// (ADR-0523). The page is static; the signed token in an
+	// Authorization header is the whole authorization, and it opens one open task.
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)
+	mountFunc(accessPublic, roleAny, "POST "+answerPagePath+"/task/{taskKey}/complete", s.handlePublicAnswerComplete)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a

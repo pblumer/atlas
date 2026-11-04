@@ -3601,7 +3601,7 @@ function legendHTML(graph, layoutMs, notation, peak = 0, band = null, offersNoth
   // picture in somebody else's vocabulary that does not name the vocabulary is a
   // picture claiming to be a model of it, and the loss list is the difference
   // between a projection and a lie of omission.
-  const projection = spoken.projection ? `<details class="mesh-projection">
+  const projection = spoken.projection ? `<details class="mesh-projection fold-sub">
     <summary><b>Projected into ${esc(spoken.label)}</b>
       <span class="muted">mapping v${esc(spoken.mappingVersion)} · read-only · what it drops</span></summary>
     <p class="mesh-note">Atlas's own resources, drawn in ${esc(spoken.short)}'s vocabulary.

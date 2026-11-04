@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "ad-gruppe-leeren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Die Gruppe hat noch Mitglieder · The group still has members**\n\nDu hast die Sicherheitsgruppe zurückgegeben, sie hat aber noch Mitglieder. Wer Mitglied ist, verliert mit dem Löschen die Zugänge, die über die Gruppe laufen. · You returned the security group, but it still has members. Whoever is a member loses the access that runs through the group when it is deleted."
+    },
+    {
+      "key": "leeren",
+      "type": "radio",
+      "label": "Was soll geschehen? · What should happen?",
+      "values": [
+        {
+          "label": "Nicht zurückgeben, die Gruppe bleibt · Do not return, the group stays",
+          "value": "nein"
+        },
+        {
+          "label": "Alle Mitglieder entfernen und die Gruppe löschen · Remove all members and delete the group",
+          "value": "ja"
+        }
+      ],
+      "defaultValue": "nein",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

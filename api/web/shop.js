@@ -16,9 +16,31 @@
 // otherwise reach a customer, who cannot act on a review signal.
 
 import { applyAccent } from './theme.js';
+import { drawIcon } from './shop-icons.js';
 
 const STRINGS = {
   de: {
+    'tile.find': "Wie können wir Ihnen helfen?",
+    'tile.categories': "Alle Kategorien",
+    'tile.groups': "Alle Produktgruppen",
+    'tile.showAll': "Alle {n} Elemente anzeigen",
+    'tile.showLess': "Weniger anzeigen",
+    'tile.package': "Paket",
+    'tile.parts': "Paket enthält {n} Elemente",
+    'tile.none': "Keine Marktleistung passt zu dieser Auswahl.",
+    'tile.scroll': "Weitere anzeigen",
+    'page.back': "Katalog",
+    'page.title': "Bestellen",
+    'page.summary': "Kurzbeschreibung der Anforderung",
+    'page.for': "Anforderung für",
+    'page.details': "Bestellinformationen",
+    'page.included': "Immer enthalten",
+    'page.options': "Optional dazu bestellbar",
+    'page.approval': "Genehmigung",
+    'page.more': "Zusatzinformationen",
+    'page.basket': "Zum Warenkorb",
+    'page.form': "Die Angaben zur Bestellung erfassen Sie im Warenkorb.",
+    'page.favourite': "Favorit",
     'portal.title': 'Shop',
     'portal.catalog': 'Katalog',
     'portal.orders': 'Meine Bestellungen',
@@ -150,6 +172,12 @@ const STRINGS = {
     'cfg.title': 'Angaben zu dieser Leistung',
     'cfg.loading': 'Formular wird geladen …',
     'cfg.failed': 'Dieses Formular lässt sich nicht laden. Bestellen ist weiterhin möglich; die Angaben fehlen dann.',
+    'cfg.taken': 'Ein Name in diesem Formular ist bereits vergeben. Bitte wählen Sie einen anderen.',
+    'avail.checking': '{label}: «{value}» wird geprüft …',
+    'avail.free': '{label}: «{value}» ist noch frei.',
+    'avail.taken': '{label}: «{value}» ist bereits vergeben. Bitte wählen Sie einen anderen Namen.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: Ob «{value}» frei ist, lässt sich gerade nicht prüfen. Bestellen ist möglich; die Bereitstellung prüft es erneut.',
     'cfg.invalid': 'Einige Angaben sind noch nicht vollständig. Bitte korrigieren Sie sie vor dem Bestellen.',
     'line.withdraw': 'Position zurückziehen',
     'line.withdrawing': 'Wird zurückgezogen …',
@@ -246,6 +274,27 @@ const STRINGS = {
     'signin.registerLink': 'Registrieren',
   },
   en: {
+    'tile.find': "How can we help you?",
+    'tile.categories': "All categories",
+    'tile.groups': "All product groups",
+    'tile.showAll': "Show all {n} items",
+    'tile.showLess': "Show fewer",
+    'tile.package': "Bundle",
+    'tile.parts': "Bundle contains {n} items",
+    'tile.none': "No offering matches this choice.",
+    'tile.scroll': "Show more",
+    'page.back': "Catalogue",
+    'page.title': "Order",
+    'page.summary': "Summary of the request",
+    'page.for': "Requested for",
+    'page.details': "Order information",
+    'page.included': "Always included",
+    'page.options': "Optional add-ons",
+    'page.approval': "Approval",
+    'page.more': "Additional information",
+    'page.basket': "Go to the basket",
+    'page.form': "You fill in the order details in the basket.",
+    'page.favourite': "Favourite",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'My orders',
@@ -377,6 +426,12 @@ const STRINGS = {
     'cfg.title': 'Details for this service',
     'cfg.loading': 'Loading the form …',
     'cfg.failed': 'This form cannot be loaded. Ordering still works; the details will be missing.',
+    'cfg.taken': 'A name in this form is already taken. Please choose another one.',
+    'avail.checking': '{label}: checking “{value}” …',
+    'avail.free': '{label}: “{value}” is still free.',
+    'avail.taken': '{label}: “{value}” is already taken. Please choose another name.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: whether “{value}” is free cannot be checked right now. You can still order; provisioning checks it again.',
     'cfg.invalid': 'Some details are not complete yet. Please correct them before ordering.',
     'line.withdraw': 'Withdraw this position',
     'line.withdrawing': 'Withdrawing …',
@@ -471,6 +526,27 @@ const STRINGS = {
   // dans l’allemand : le shop s’adresse à une personne qui commande pour son
   // travail, pas à un compte.
   fr: {
+    'tile.find': "Comment pouvons-nous vous aider ?",
+    'tile.categories': "Toutes les catégories",
+    'tile.groups': "Tous les groupes de produits",
+    'tile.showAll': "Afficher les {n} éléments",
+    'tile.showLess': "Afficher moins",
+    'tile.package': "Paquet",
+    'tile.parts': "Le paquet contient {n} éléments",
+    'tile.none': "Aucune prestation ne correspond à ce choix.",
+    'tile.scroll': "Afficher plus",
+    'page.back': "Catalogue",
+    'page.title': "Commander",
+    'page.summary': "Résumé de la demande",
+    'page.for': "Demande pour",
+    'page.details': "Informations de commande",
+    'page.included': "Toujours inclus",
+    'page.options': "En option",
+    'page.approval': "Approbation",
+    'page.more': "Informations complémentaires",
+    'page.basket': "Aller au panier",
+    'page.form': "Vous saisissez les détails de la commande dans le panier.",
+    'page.favourite': "Favori",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogue',
     'portal.orders': 'Mes commandes',
@@ -602,6 +678,12 @@ const STRINGS = {
     'cfg.title': 'Informations sur cette prestation',
     'cfg.loading': 'Chargement du formulaire …',
     'cfg.failed': 'Ce formulaire ne peut pas être chargé. La commande reste possible ; les informations manqueront.',
+    'cfg.taken': 'Un nom de ce formulaire est déjà pris. Veuillez en choisir un autre.',
+    'avail.checking': '{label} : vérification de « {value} » …',
+    'avail.free': '{label} : « {value} » est encore libre.',
+    'avail.taken': '{label} : « {value} » est déjà pris. Veuillez choisir un autre nom.',
+    'avail.invalid': '{label} : {message}',
+    'avail.unknown': '{label} : impossible de vérifier pour l’instant si « {value} » est libre. La commande reste possible ; la mise à disposition le vérifie à nouveau.',
     'cfg.invalid': 'Certaines informations sont incomplètes. Veuillez les corriger avant de commander.',
     'line.withdraw': 'Retirer cette position',
     'line.withdrawing': 'Retrait en cours …',
@@ -695,6 +777,27 @@ const STRINGS = {
   // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
   // nelle altre lingue.
   it: {
+    'tile.find': "Come possiamo aiutarla?",
+    'tile.categories': "Tutte le categorie",
+    'tile.groups': "Tutti i gruppi di prodotti",
+    'tile.showAll': "Mostra tutti i {n} elementi",
+    'tile.showLess': "Mostra meno",
+    'tile.package': "Pacchetto",
+    'tile.parts': "Il pacchetto contiene {n} elementi",
+    'tile.none': "Nessuna prestazione corrisponde a questa scelta.",
+    'tile.scroll': "Mostra altri",
+    'page.back': "Catalogo",
+    'page.title': "Ordinare",
+    'page.summary': "Riepilogo della richiesta",
+    'page.for': "Richiesta per",
+    'page.details': "Informazioni sull’ordine",
+    'page.included': "Sempre incluso",
+    'page.options': "Opzionali",
+    'page.approval': "Approvazione",
+    'page.more': "Informazioni aggiuntive",
+    'page.basket': "Vai al carrello",
+    'page.form': "I dettagli dell’ordine si inseriscono nel carrello.",
+    'page.favourite': "Preferito",
     'portal.title': 'Shop',
     'portal.catalog': 'Catalogo',
     'portal.orders': 'I miei ordini',
@@ -826,6 +929,12 @@ const STRINGS = {
     'cfg.title': 'Indicazioni su questa prestazione',
     'cfg.loading': 'Caricamento del modulo …',
     'cfg.failed': 'Questo modulo non può essere caricato. È comunque possibile ordinare; le indicazioni mancheranno.',
+    'cfg.taken': 'Un nome di questo modulo è già in uso. Sceglierne un altro.',
+    'avail.checking': '{label}: verifica di «{value}» …',
+    'avail.free': '{label}: «{value}» è ancora libero.',
+    'avail.taken': '{label}: «{value}» è già in uso. Scegliere un altro nome.',
+    'avail.invalid': '{label}: {message}',
+    'avail.unknown': '{label}: al momento non è possibile verificare se «{value}» è libero. È comunque possibile ordinare; la fornitura lo verifica di nuovo.',
     'cfg.invalid': 'Alcune indicazioni non sono complete. La preghiamo di correggerle prima di ordinare.',
     'line.withdraw': 'Ritirare questa posizione',
     'line.withdrawing': 'Ritiro in corso …',
@@ -1269,6 +1378,10 @@ function paintFromCache() {
 }
 
 const state = {
+  // The tile layout (ADR-0525): the catalogue whose row is open
+  // in full, and the product whose page is open. Empty is the start page.
+  tileSection: '',
+  productPage: '',
   // tasks are the open tasks of the orders on this page (ADR-0416); taskOpen is
   // the one whose form is open, and taskError what answering it last said.
   tasks: [],
@@ -1281,6 +1394,10 @@ const state = {
   taskOpen: '',
   taskError: '',
   catalog: null,
+  // every catalogue this person reaches, highest rank first, and which release each
+  // product in the merged release came from (ADR-0522)
+  catalogs: [],
+  releaseOf: {},
   release: null,
   orders: [],
   // held is what the inventory says this person already has, as itemId -> since.
@@ -1468,8 +1585,10 @@ const state = {
   // survive its container being replaced. What was typed is captured back into here
   // before each redraw and handed to the form again as its prefill.
   config: {},
-  // configError names the product whose form is not valid yet, empty for none.
+  // configError names the product whose form is not valid yet, empty for none;
+  // configTaken says the reason is a name already taken (ADR-0519).
   configError: '',
+  configTaken: false,
   // editing names the position whose details are open for correction, as
   // "<orderId>|<itemId>", empty for none (ADR-0359).
   editing: '',
@@ -1803,7 +1922,9 @@ async function readMe() {
 function forgetTheReader() {
   state.loaded = false;
   state.catalog = null;
+  state.catalogs = [];
   state.release = null;
+  state.releaseOf = {};
   state.orders = [];
   state.held = new Map();
   state.favourites = new Set();
@@ -1831,18 +1952,32 @@ async function loadSignInOptions() {
   } catch { /* registration off or unreachable — the line stays hidden */ }
 }
 
-// loadCatalogue reads the catalogue assigned to this person and its newest release.
+// loadCatalogue reads every catalogue this person is the audience for and their
+// newest releases, and lays the releases over one another
+// (ADR-0522): the shop offers what all of them offer.
+// The highest-ranked catalogue is the one whose name, theme and languages the page
+// wears.
 async function loadCatalogue() {
-  let catalog = null;
+  let catalogs = [];
   try {
-    catalog = await api('/api/v1/shop/catalog');
+    catalogs = await api('/api/v1/shop/catalogs');
   } catch (e) {
-    // 404 here is the ordinary "you are the audience for nothing" answer, not a
-    // failure: the page says so rather than showing an error. Anything else is a
-    // failure, and is said as one — read as "none assigned", a server that could
-    // not answer told people they had no catalogue.
+    // A server without the route answers 404: it still knows one catalogue per
+    // person, and that one is asked for as before.
     if (!e || e.status !== 404) throw e;
+    try {
+      const one = await api('/api/v1/shop/catalog');
+      catalogs = one ? [one] : [];
+    } catch (e2) {
+      // 404 here is the ordinary "you are the audience for nothing" answer, not a
+      // failure: the page says so rather than showing an error. Anything else is a
+      // failure, and is said as one — read as "none assigned", a server that could
+      // not answer told people they had no catalogue.
+      if (!e2 || e2.status !== 404) throw e2;
+    }
   }
+  state.catalogs = Array.isArray(catalogs) ? catalogs : [];
+  const catalog = state.catalogs[0] || null;
   state.catalog = catalog;
   applyTheme(state.catalog);
   // The catalogue decides which languages there are to choose between, so the
@@ -1851,10 +1986,54 @@ async function loadCatalogue() {
   // chosen.
   settleLocale();
   state.release = null;
-  if (state.catalog) {
-    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
-    state.release = releases && releases.length ? releases[0] : null;
+  state.releaseOf = {};
+  const newest = [];
+  for (const c of state.catalogs) {
+    const releases = await api(`/api/v1/catalogs/${encodeURIComponent(c.id)}/releases`);
+    if (releases && releases.length) newest.push(releases[0]);
   }
+  state.release = newest.length ? mergeReleases(newest) : null;
+  // Kept apart as well: the tile layout draws one row per catalogue, and a merged
+  // release no longer says which catalogue offered what.
+  state.newest = newest;
+}
+
+// mergeReleases lays releases over one another, highest-ranked first, into the one
+// release the rest of the page reads. A product several of them carry is taken from
+// the first; what makes it up (includes, options and every other map keyed by product)
+// comes with it from that same release. Categories are headings over this list, so two
+// catalogues' "Mail" become one heading. state.releaseOf remembers which release each
+// product came from: an order names one release, so a basket is placed per release.
+function mergeReleases(releases) {
+  const owner = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (!(it.id in owner)) owner[it.id] = r.id;
+    }
+  }
+  state.releaseOf = owner;
+  if (releases.length === 1) return releases[0];
+  const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  const out = { ...releases[0], items: [], withoutApproval: [] };
+  const mapKeys = new Set();
+  for (const r of releases) {
+    for (const [key, value] of Object.entries(r)) if (isMap(value)) mapKeys.add(key);
+  }
+  for (const key of mapKeys) out[key] = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (owner[it.id] === r.id && !out.items.some((x) => x.id === it.id)) out.items.push(it);
+    }
+    for (const id of r.withoutApproval || []) {
+      if (owner[id] === r.id && !out.withoutApproval.includes(id)) out.withoutApproval.push(id);
+    }
+    for (const key of mapKeys) {
+      for (const [id, v] of Object.entries(r[key] || {})) {
+        if (owner[id] === r.id && !(id in out[key])) out[key][id] = v;
+      }
+    }
+  }
+  return out;
 }
 
 // loadOrdersAndTasks reads this person's orders and the open tasks on orders at once,
@@ -2152,6 +2331,18 @@ async function order() {
     try { ({ errors } = form.submit()); } catch { continue; }
     if (errors && Object.keys(errors).length) {
       state.configError = itemID;
+      state.configTaken = false;
+      render();
+      return;
+    }
+  }
+  // And whether a name somebody is about to take is known to be taken already. Only a
+  // definite "taken" stops the order: a check that could not run is the provisioning
+  // process's to repeat, not a reason to refuse.
+  for (const [itemID, watch] of availability) {
+    if (watch.taken().length) {
+      state.configError = itemID;
+      state.configTaken = true;
       render();
       return;
     }
@@ -2182,17 +2373,40 @@ async function order() {
       if (taken.length) variants[c.id] = [...taken];
     }
 
-    await api('/api/v1/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        releaseId: state.release.id,
-        items: [...state.basket],
-        ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
-        ...(Object.keys(config).length ? { config } : {}),
-        ...(Object.keys(variants).length ? { variants } : {}),
-      }),
-    });
+    // An order names one release (ADR-0312): a basket from several catalogues is
+    // placed as one order per release, each with its own products and what they are
+    // made of, their answers and their shapes.
+    const byRelease = new Map();
+    for (const id of state.basket) {
+      const rid = (state.releaseOf || {})[id] || state.release.id;
+      if (!byRelease.has(rid)) byRelease.set(rid, []);
+      byRelease.get(rid).push(id);
+    }
+    for (const [rid, ids] of byRelease) {
+      const part = new Set();
+      const walk = (id) => {
+        if (part.has(id)) return;
+        part.add(id);
+        for (const p of (rel.includes || {})[id] || []) walk(p);
+      };
+      ids.forEach(walk);
+      const partConfig = Object.fromEntries(Object.entries(config).filter(([id]) => part.has(id)));
+      const partVariants = Object.fromEntries(Object.entries(variants).filter(([id]) => part.has(id)));
+      await api('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: rid,
+          items: ids,
+          ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
+          ...(Object.keys(partConfig).length ? { config: partConfig } : {}),
+          ...(Object.keys(partVariants).length ? { variants: partVariants } : {}),
+        }),
+      });
+      // Placed: out of the basket, so a failure on the next release does not offer
+      // to order these a second time.
+      ids.forEach((id) => state.basket.delete(id));
+    }
     state.basket.clear();
     state.chosen.clear();
     state.config = {};
@@ -2842,6 +3056,7 @@ function rootOf(rel, id) {
 }
 
 function renderCatalogue() {
+  if (state.catalog && state.release && tileLayout()) return renderTiles();
   if (!state.catalog) {
     return el('div', { class: 'empty' },
       el('p', {}, t('portal.none')),
@@ -2975,6 +3190,173 @@ function renderCatalogue() {
       unresolved
         ? el('span', { class: 'muted' }, `${t('fav.unresolved')}: ${unresolved}`) : null),
     catalogueBodyNode);
+}
+
+// --- The tile layout (ADR-0525) ---------------------------
+//
+// A second way to lay the same release out, chosen per catalogue by its theme:
+// a start page with a search, the categories as a menu and one row of tiles per
+// catalogue the reader reaches, and a page per Marktleistung. The basket, the
+// forms and the order are the cascade's own; only the way there differs.
+
+function tileLayout() {
+  return ((state.catalog && state.catalog.theme) || {}).layout === 'tiles';
+}
+
+// productIcon draws a product's symbol from the shop's icon set, or the default
+// one. The outlines are the shop's own module, never anything a catalogue supplied,
+// and they are built element by element rather than parsed.
+function productIcon(item) {
+  const svg = drawIcon((item && item.icon) || '', 1.5);
+  return el('span', { class: 'tile-icon' }, svg);
+}
+
+// partCount is how many services a Marktleistung brings, included and optional:
+// what the tile calls a bundle's elements. A Marktleistung of one service is not
+// called a bundle.
+function partCount(rel, id) {
+  return (((rel.includes || {})[id]) || []).length + (((rel.options || {})[id]) || []).length;
+}
+
+function fill(text, n) { return text.replace('{n}', String(n)); }
+
+function tile(rel, item) {
+  const parts = partCount(rel, item.id);
+  return el('button', {
+    class: 'tile',
+    onclick: () => { state.productPage = item.id; render(); window.scrollTo(0, 0); },
+  },
+  productIcon(item),
+  el('span', { class: 'tile-text' },
+    parts > 1 ? el('span', { class: 'tile-kind' }, t('tile.package')) : null,
+    el('span', { class: 'tile-name' }, textOf(item.texts, item.id)),
+    parts > 1 ? el('span', { class: 'tile-parts' }, fill(t('tile.parts'), parts)) : null));
+}
+
+// tileMatches is the start page's filter: the category and product group chosen
+// in the menu, and the words typed into the search.
+function tileMatches(item) {
+  if (!inCategory(item) || !inGroup(item)) return false;
+  const q = state.query.trim().toLowerCase();
+  return q === '' || searchable(item).includes(q);
+}
+
+function renderTiles() {
+  const rel = state.release;
+  const by = itemsById(rel);
+  if (state.productPage && by[state.productPage]) return renderProductPage(rel, by[state.productPage]);
+
+  const headings = categoriesOf(rel);
+  const groups = groupsOf(rel);
+  const categoryMenu = el('select', {
+    class: 'tile-menu', 'aria-label': t('col.category'),
+    onchange: (e) => { state.category = e.target.value || null; state.group = null; render(); },
+  },
+  el('option', { value: '' }, t('tile.categories')),
+  headings.map((h) => el('option', {
+    value: h.key, ...(state.category === h.key ? { selected: 'selected' } : {}),
+  }, h.text || t('cat.none'))));
+  const groupMenu = state.category === null ? null : el('select', {
+    class: 'tile-menu', 'aria-label': t('col.group'),
+    onchange: (e) => { state.group = e.target.value || null; render(); },
+  },
+  el('option', { value: '' }, t('tile.groups')),
+  groups.map((g) => el('option', {
+    value: g.key, ...(state.group === g.key ? { selected: 'selected' } : {}),
+  }, g.text || t('group.none'))));
+
+  const sections = (state.newest || []).map((r) => {
+    const cat = (state.catalogs || []).find((c) => c.id === r.catalogId) || {};
+    const offered = products(r).map((i) => by[i.id] || i).filter(tileMatches);
+    const open = state.tileSection === r.catalogId;
+    const track = el('div', { class: open ? 'tile-grid' : 'tile-track' },
+      offered.map((i) => tile(rel, i)));
+    return el('section', { class: 'tile-section' },
+      el('div', { class: 'tile-head' },
+        el('h3', {}, textOf(cat.texts, cat.id || '')),
+        offered.length > 8 || open
+          ? el('button', {
+            class: 'linkish',
+            onclick: () => { state.tileSection = open ? '' : r.catalogId; render(); },
+          }, open ? t('tile.showLess') : `${fill(t('tile.showAll'), offered.length)} ›`)
+          : null),
+      offered.length
+        ? el('div', { class: 'tile-row' }, track,
+          open || offered.length <= 8 ? null : el('button', {
+            class: 'tile-next', 'aria-label': t('tile.scroll'),
+            onclick: () => track.scrollBy({ left: track.clientWidth, behavior: 'smooth' }),
+          }, '›'))
+        : el('p', { class: 'muted' }, t('tile.none')));
+  });
+
+  return el('div', { class: 'tiles' },
+    el('div', { class: 'tile-bar' },
+      categoryMenu, groupMenu,
+      el('input', {
+        type: 'search', id: 'find', class: 'tile-find', value: state.query,
+        placeholder: t('tile.find'), 'aria-label': t('find.label'),
+        onchange: (e) => { state.query = e.target.value; render(); },
+        onkeyup: (e) => { if (e.key === 'Enter') { state.query = e.target.value; render(); } },
+      })),
+    sections);
+}
+
+// renderProductPage is one Marktleistung on a page of its own: what it is, what
+// comes with it and what can be added, who approves it, and the button that puts
+// it in the basket. The order details are asked in the basket, as in the cascade.
+function renderProductPage(rel, item) {
+  const back = () => { state.productPage = ''; render(); };
+  const inIt = inBasketNow(rel, item.id);
+  const included = offeringParts(rel, item, 'includes');
+  const optional = offeringParts(rel, item, 'options');
+  const approval = item.approval && item.approval.kind && item.approval.kind !== 'none'
+    ? item.approval.kind : t('info.none');
+  const section = (title, open, ...body) => el('details', {
+    class: 'page-section', ...(open ? { open: 'open' } : {}),
+  }, el('summary', {}, title), el('div', { class: 'page-body' }, ...body));
+
+  return el('div', { class: 'product-page' },
+    el('div', { class: 'page-top' },
+      el('button', { class: 'linkish', onclick: back }, `‹ ${t('page.back')}`),
+      el('strong', {}, t('page.title')),
+      el('span', { class: 'page-fav' }, starButton(item.id), ' ', t('page.favourite'))),
+    el('div', { class: 'page-banner' },
+      productIcon(item),
+      el('h2', {}, textOf(item.texts, item.id))),
+    el('div', { class: 'page-columns' },
+      el('div', { class: 'page-main' },
+        section(t('page.summary'), false,
+          el('p', { class: 'muted' }, `${t('page.for')}: ${whoLabel()}`)),
+        section(t('page.details'), true,
+          descriptionView(item),
+          included.length ? el('p', {}, el('strong', {}, t('page.included'))) : null,
+          included.length ? el('ul', {}, included.map((i) => el('li', {}, textOf(i.texts, i.id)))) : null,
+          optional.length ? el('p', {}, el('strong', {}, t('page.options'))) : null,
+          optional.map((o) => el('div', { class: 'page-option' },
+            toggle(rel, o.id, false), ' ', textOf(o.texts, o.id))),
+          el('p', { class: 'muted' }, t('page.form'))),
+        section(t('page.approval'), false, el('p', {}, approval)),
+        section(t('page.more'), false,
+          el('p', { class: 'muted' }, `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
+          el('p', { class: 'muted' },
+            `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
+          windowNote(item) ? el('p', { class: 'muted' }, windowNote(item)) : null)),
+      el('div', { class: 'page-side' },
+        state.canOrder && orderableNow(item)
+          ? el('button', {
+            class: inIt ? 'secondary page-cta' : 'page-cta',
+            onclick: () => {
+              if (state.basket.has(item.id)) state.basket.delete(item.id); else state.basket.add(item.id);
+              render();
+            },
+          }, inIt ? t('act.remove') : t('act.add'))
+          : null,
+        state.basket.size
+          ? el('button', {
+            class: 'secondary page-cta',
+            onclick: () => { state.productPage = ''; state.inBasket = true; render(); },
+          }, `${t('page.basket')} (${state.basket.size})`)
+          : null)));
 }
 
 // stepper is the cascade's way back on a narrow screen (ADR-0417), where one
@@ -3235,10 +3617,15 @@ function renderBasket() {
       ? el('div', { style: 'margin-top:18px' }, asking.map((x) => el('div', { class: 'card cfg' },
         el('h3', {}, `${t('cfg.title')}: ${textOf((by[x.id] || {}).texts, x.id)}`),
         state.configError === x.id
-          ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
+          ? el('p', { class: 'error' }, t(state.configTaken ? 'cfg.taken' : 'cfg.invalid')) : null,
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
+          // What a directory field in the form searches through: this item in the
+          // release it is offered from — with several catalogues laid over one another
+          // (ADR-0522) that is not always the first.
+          'data-release': (state.releaseOf || {})[x.id] || (rel && rel.id),
+          'data-item': x.id,
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
       : null,
     // What the "i" on a basket row opens. The button was drawn here from the
@@ -3285,6 +3672,20 @@ const mounted = new Map();
 // schemas caches a form definition per id, so redrawing the basket does not refetch
 // what has not changed.
 const schemas = new Map();
+// availability holds the live name checks of the mounted forms, by the same key.
+const availability = new Map();
+
+// availabilitySay words one name field's state (formviewer.js, ADR-0519).
+function availabilitySay(status, { label, value, message }) {
+  const fill = (key) => t(key).replace('{label}', label).replace('{value}', value).replace('{message}', message);
+  switch (status) {
+    case 'checking': return fill('avail.checking');
+    case 'free': return fill('avail.free');
+    case 'taken': return fill('avail.taken');
+    case 'invalid': return fill('avail.invalid');
+    default: return fill('avail.unknown');
+  }
+}
 
 // harvest reads what is currently typed into every mounted form back into state.
 // Called before the page is redrawn, because a form does not survive its container
@@ -3381,14 +3782,17 @@ async function mountConfigForms() {
     try { form.destroy(); } catch { /* already gone with its container */ }
   }
   mounted.clear();
+  for (const [, watch] of availability) watch.destroy();
+  availability.clear();
   if (!hosts.length) return;
 
-  let Form, decisionOptions;
+  let Form, decisionOptions, attachAvailabilityChecks, remote;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
-    ({ decisionOptions } = mod);
+    ({ decisionOptions, attachAvailabilityChecks } = mod);
+    remote = await import('./remote-select.js');
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3404,12 +3808,27 @@ async function mountConfigForms() {
       }
       const schema = schemas.get(formID);
       if (!schema) throw new Error('no schema');
-      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: formID }) });
+      // A directory field searches through the context the server authorizes: the
+      // release's item for an order form, the task for a task's (ADR-0473). A form
+      // with no such context — an action's — gets no search, as before.
+      let transport = null;
+      if (host.dataset.task) transport = remote.taskTransport(host.dataset.task);
+      else if (host.dataset.release && host.dataset.item) {
+        transport = remote.orderFormTransport(host.dataset.release, host.dataset.item);
+      }
+      const opts = { container: host, atlasDecisions: decisionOptions({ formId: formID }) };
+      if (transport) opts.atlasRemote = remote.remoteAdapter({ transport, data: state.config[itemID] || {} });
+      const form = new Form(opts);
       // Handed back what was typed before the last redraw, which is what makes the
       // basket survivable: adding a second product must not empty the first's form.
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
       await form.importSchema(parsed, fromText(parsed, state.config[itemID] || {}));
       mounted.set(itemID, form);
+      // A name field says while it is typed whether the name is still free
+      // (ADR-0519); one known to be taken stops the order below.
+      availability.set(itemID, attachAvailabilityChecks({
+        form, host, schema: parsed, formId: formID, say: availabilitySay,
+      }));
     } catch {
       // A form id that no longer resolves is a stale binding in the catalogue, not
       // a broken basket. Say so and leave the order possible: refusing it here
@@ -4066,7 +4485,7 @@ function taskPanel(task) {
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.taskError ? el('p', { class: 'error' }, state.taskError) : null,
     task.formId
-      ? el('div', { 'data-configkey': key, 'data-formid': task.formId },
+      ? el('div', { 'data-configkey': key, 'data-formid': task.formId, 'data-task': task.key },
         el('p', { class: 'note' }, t('cfg.loading')))
       : el('p', { class: 'note' }, t('task.noForm')),
     el('div', { class: 'row', style: 'margin-top:10px' },
@@ -4202,8 +4621,10 @@ function detailsPanel(order, line) {
   if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
-    el('div', { 'data-configkey': key, 'data-formid': line.configForm },
-      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', {
+      'data-configkey': key, 'data-formid': line.configForm,
+      'data-release': order.releaseId, 'data-item': line.itemId,
+    }, el('p', { class: 'note' }, t('cfg.loading'))),
     el('div', { class: 'row', style: 'margin-top:10px' },
       el('button', {
         class: 'primary', disabled: state.busy,

@@ -173,6 +173,86 @@ func (s *Server) scanHeldCandidates(jobType int32, want int, keys *[]uint64) err
 	return nil
 }
 
+// servedConnectors is the set of worker names a polling worker reported, or nil when it
+// reported none. A worker that names what it holds is leased only jobs for those names
+// (see [Server.scanServedCandidates]); one that names nothing — a job worker serving a
+// plain job type, an older worker — is leased as before.
+func servedConnectors(names []string) map[string]bool {
+	var out map[string]bool
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string]bool{}
+		}
+		out[n] = true
+	}
+	return out
+}
+
+// jobServedBy reports whether a worker holding serves may take this job: the task names
+// one of those workers, or names none, or names one only a FEEL expression decides at
+// call time (entra, ADR-0172), which this engine cannot resolve here and leaves to the
+// worker as before.
+//
+// Before this check one Worker Type's jobs went to whichever worker of that type polled
+// first. With two of them — Exchange Online and an Exchange Server, each serving its own
+// name — a job for one was leased to the other and failed there with "no worker
+// registered as …". Found against a real tenant and server.
+func (s *Server) jobServedBy(jobKey uint64, serves map[string]bool) bool {
+	k, _, ok := s.breakerTargetOf(jobKey)
+	if !ok {
+		return false // completed or re-leased since the scan saw it
+	}
+	name := strings.TrimSpace(k.connector)
+	return name == "" || strings.HasPrefix(name, "=") || serves[name]
+}
+
+// serveResumeKey is where one worker's filtered scan of one job type stopped.
+type serveResumeKey struct {
+	jobType int32
+	worker  string
+}
+
+// scanServedCandidates collects up to want jobs of jobType that a worker holding serves
+// may take, and that an open breaker does not hold back when held. Like
+// [Server.scanHeldCandidates] it filters while it scans, newest first and within
+// job.GatedScanBudget candidates a round, resuming where this worker's last round
+// stopped: a page filled with another worker's jobs would hand back nothing, and a
+// backlog for a name nobody serves must not hide this worker's jobs behind it.
+func (s *Server) scanServedCandidates(jobType int32, worker string, serves map[string]bool, held bool, want int, keys *[]uint64) error {
+	var (
+		last  uint64
+		seen  int
+		atEnd = true
+	)
+	rk := serveResumeKey{jobType: jobType, worker: worker}
+	gate := jobGate{s}
+	err := unlessTruncated(s.store.ActivatableJobsDesc(jobType, s.serveResume[rk], func(k uint64) error {
+		last, seen = k, seen+1
+		// Served first: an open breaker's yes is a probe slot, not to be spent on a
+		// job this worker would not take.
+		if s.jobServedBy(k, serves) && (!held || gate.Allow(jobType, k)) {
+			*keys = append(*keys, k)
+		}
+		if len(*keys) >= want || seen >= job.GatedScanBudget {
+			atEnd = false
+			return errListTruncated
+		}
+		return nil
+	}))
+	if err != nil {
+		return err
+	}
+	if atEnd {
+		delete(s.serveResume, rk)
+		return nil
+	}
+	s.serveResume[rk] = last
+	return nil
+}
+
 // closeBreakerReq is the operator's override, and deliberately the only way a person may
 // touch a breaker. There is no matching "open this": judging a target down is a
 // conclusion the engine draws from what workers report, and letting a person assert it

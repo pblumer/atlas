@@ -78,6 +78,12 @@ func tString() map[string]any  { return map[string]any{"type": "string"} }
 func tInteger() map[string]any { return map[string]any{"type": "integer"} }
 func tBool() map[string]any    { return map[string]any{"type": "boolean"} }
 func tObject() map[string]any  { return map[string]any{"type": "object"} }
+
+// tStrings is an array of strings — ids, mostly.
+func tStrings() map[string]any {
+	return map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
+}
+
 func tArray() map[string]any {
 	return map[string]any{"type": "array", "items": map[string]any{"type": "object"}}
 }
@@ -387,6 +393,11 @@ func (s *Server) apiRoutes() []apiRoute {
 				"instances": tInteger(), "finished": tInteger(), "tokens": tInteger(), "elements": tArray(),
 				"incidentTotal": tInteger(), "incidentCountsExact": tBool(),
 			}))}},
+		{"GET", "/api/v1/processes/{key}/versions", s.handleProcessVersions, apiOp{
+			summary: "Read what every deployed version of a definition's process still holds: for each version, newest first, its key, number, version tag, deploy time and active flag, and how many of its instances are running, how many have finished and how many tokens are parked behind an incident. A version with nothing in it is listed with zeroes. The cost is the number of versions, not of instances: the instance counts are maintained counters, the incident counts one shared reading of the incident family (incidentCountsExact false when it could not be taken)", tag: "Processes", role: roleAny,
+			resp: jsonBody("Versions and their counts", schemaObj(map[string]any{
+				"processId": tString(), "incidentCountsExact": tBool(), "versions": tArray(),
+			}))}},
 		{"PUT", "/api/v1/processes/{key}/active", s.handleSetProcessActive, apiOp{
 			summary: "Activate or deactivate a deployed process (a deactivated process stays deployed but does not auto-start new instances from its timer/message/signal start events)", tag: "Processes", role: RoleOperator,
 			req:  jsonBody("Active flag", schemaObj(map[string]any{"active": tBool()})),
@@ -463,6 +474,27 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/instances/{key}/timeline", s.handleInstanceTimeline, apiOp{
 			summary: "Read a process instance's step-by-step replay timeline — each step's variables carry an actor when the value was set by an external operator override (ADR-0098)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Instance timeline", tObject())}},
+		{"GET", "/api/v1/instances/{key}/outline", s.miHistory.HandleOutline, apiOp{
+			summary: "Page through a process instance's step history without the steps inside multi-instance iterations — each element activation and end in the order it happened, a multi-instance body execution as one activation and one end — so a client can draw the history of an instance whose full timeline is too large to load. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's outline is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Instance outline page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances", s.miHistory.HandleBodies, apiOp{
+			summary: "List a process instance's multi-instance body executions — each concrete activation of a multi-instance activity, never merged by BPMN element, with its mode, lifecycle state and iteration counters (seeded, active, completed, terminated, historical incidents). Bounded and cursor-paged: query limit (1-200, default 100), cursor, parentIteration (the iteration whose nested bodies to list; omitted lists the bodies no iteration encloses). 409 history_unavailable while this installation's history index is not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body executions", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}", s.miHistory.HandleBody, apiOp{
+			summary: "Read one multi-instance body execution with its iteration counters and its currently open incidents, verified against the current incident table within a bounded number of reads (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Multi-instance body execution", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations", s.miHistory.HandleIterations, apiOp{
+			summary: "Page through the iterations of one multi-instance body execution in loopCounter order, by indexed seeks whose cost does not grow with the iteration count: query limit (1-200, default 100), cursor (opaque, signed, bound to the instance, body and filters, with a frozen high-water position), state (active, completed, terminated), incidents=true (iterations that had an incident), iteration (exact iteration number), from (start at an iteration number), elementInstanceKey (exact lookup). A state-filtered cursor answers 409 cursor_stale once the body changed (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iterations page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}", s.miHistory.HandleIteration, apiOp{
+			summary: "Read one multi-instance iteration: its iteration number, lifecycle state and log positions, the incidents attributed to it (open, resolved, superseded, or cleared because its element ended) and the multi-instance bodies nested in it (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration detail", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/steps", s.miHistory.HandleIterationSteps, apiOp{
+			summary: "Page through the replay window of one multi-instance iteration — its own activation, every element that ran inside it (a nested multi-instance body as one step) and its end, in the order they happened — without reading the rest of the instance. Query limit (1-200, default 100) and cursor. 409 history_unavailable while this installation's iteration steps are not verified complete (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration steps page", tObject())}},
+		{"GET", "/api/v1/instances/{key}/multi-instances/{bodyKey}/iterations/{iterationKey}/variables", s.miHistory.HandleIterationVariables, apiOp{
+			summary: "Read one multi-instance iteration's variables as they stood at a log position (query at, required) — a step of its replay window: the iteration's own scope and every scope running inside it then, each folded to the latest change per name at or before that position, rendered as the instance's other variable views render them. The body's and the instance's scopes are not included. Bounded per scope and per value (truncated flags) (ADR-0517)", tag: "Instances", role: RoleOperator,
+			resp: jsonBody("Iteration variables at a step", tObject())}},
 		{"GET", "/api/v1/instances/{key}/decisions", s.handleInstanceDecisions, apiOp{
 			summary: "Read the DMN decision evaluations a process instance made — each with its inputs, outputs, and trace", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
@@ -742,6 +774,12 @@ func (s *Server) apiRoutes() []apiRoute {
 				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
 			})),
 			resp: jsonBody("Options and the cursor of the next page", tObject())}},
+		{"POST", "/api/v1/shop/releases/{release}/items/{item}/form-data/{field}/query", s.formLookup.HandleOrderFormQuery, apiOp{
+			summary: "Search the remote data source of one directory field of a product's order form while the basket is filled in: the task form's search (ADR-0473), for a caller who may order from the release's catalogue, against the form the release's item names. A person chosen here is looked up again when the order is placed or its details are corrected, so a value the search would not have offered is refused there (ADR-0473, amended)", tag: "Order", role: RoleUser,
+			req: jsonBody("Search term, bound filter values, cursor, value to resolve, page size", schemaObj(map[string]any{
+				"search": tString(), "filters": tObject(), "cursor": tString(), "value": tString(), "limit": tInteger(),
+			})),
+			resp: jsonBody("Options and the cursor of the next page", tObject())}},
 		{"POST", "/api/v1/tasks/{key}/claim", s.handleClaimTask, apiOp{
 			summary: "Claim a user task (self, or assign a named user)", tag: "Tasks", role: RoleUser,
 			req:  jsonBody("Optional assignee (empty claims for the signed-in user)", schemaObj(map[string]any{"assignee": tString()})),
@@ -790,6 +828,17 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Rewrite the signed-in person's display preferences. The whole record is written, so a field sent empty is a field cleared back to the default — which is how the screen's reset works. A region outside the offered list, a language with no catalogue, a time zone the IANA database does not know, or an appearance other than light, dark, system or cockpit is refused rather than stored, because the browser is what formats and draws with it", tag: "Preferences", role: RoleUser,
 			req:  jsonBody("Region, time zone, language and appearance", schemaObj(map[string]any{"region": tString(), "timeZone": tString(), "language": tString(), "appearance": tString()})),
 			resp: jsonBody("The stored preferences", tObject())}},
+		// The processes the signed-in person may start themselves (ADR-0516): what an
+		// administrator granted them or a group they are in, newest version only. The
+		// user role is the coarse gate; the handler also demands the person's own
+		// session and reads the grants on every request.
+		{"GET", "/api/v1/me/startable-processes", s.handleMyStartableProcesses, apiOp{
+			summary: "The processes you may start yourself, now (ADR-0516): each one an administrator granted to you or to a group you are in, as its newest deployed version filed under the grant's application, executable, active and startable by hand — with its definition key, process id, name, version, application id and name, and whether it starts from a form (startForm.available, startForm.formId). Never a superseded version, another application's process or anything not granted, and nothing about who else may start it. Sorted by application, then name; at most 200, with total and truncated. Needs your own signed-in session: an API token or connected application is refused with 403 even when it carries the user role. 404 on a server without authentication, 503 while the grants cannot be trusted after a failed write. The key is not a permission: starting checks again", tag: "Tasks", role: RoleUser,
+			resp: jsonBody("The processes you may start", tPage())}},
+		{"POST", "/api/v1/me/processes/{key}/instances", s.handleMyProcessStart, apiOp{
+			summary: "Start one instance of a process you may start yourself (ADR-0516), named by the definition key GET /api/v1/me/startable-processes lists — which is not a permission: every request is checked again. Body {\"variables\": {…}} holding only what the version's start form submits, or nothing for a process without one; any other field, a value the form has no field for, a field it only shows, a missing required value, a wrong type, a number or length outside its bounds or an option not on its list is refused with 400 and nothing is started. 403 for a definition you may not start, 404 for a key no definition has, 409 for a version that is superseded or cannot be started now (deactivated, not executable, start form missing). The grant and the version are checked again in the turn that submits the start, so a revocation already durable then refuses it. Answered after the start is durable — written and fsynced — with the definition key, the instance key and the live counts; the instance records you as its initiator. Needs your own signed-in session: an API token or connected application is refused with 403 even when it carries the user role; 404 on a server without authentication. A timed-out or broken connection leaves the outcome unknown, not failed", tag: "Tasks", role: RoleUser,
+			req:  jsonBody("Start form values", schemaObj(map[string]any{"variables": tObject()})),
+			resp: jsonBody("The started instance", schemaObj(map[string]any{"definitionKey": tInteger(), "instanceKey": tInteger(), "stats": tObject(), "wizard": tObject()}, "definitionKey", "instanceKey"))}},
 		// The processes the signed-in person starred on the Tasks app's Start view
 		// (ADR-0466). Keyed on the principal like the
 		// preferences above; the path names a process, never a person. roleAny rather than
@@ -939,6 +988,12 @@ func (s *Server) apiRoutes() []apiRoute {
 		// roleAny, like GET /api/v1/forms/{id}: whoever may read the form may ask what one
 		// of its fields offers. Which decision and which inputs is the stored form's; the
 		// request carries only the values of the fields it binds.
+		// roleAny, like the options route above, but only for a signed-in person: the
+		// check asks a Worker's credential, so nobody anonymous reaches it (ADR-0519).
+		{"POST", "/api/v1/forms/{id}/fields/{field}/availability", s.handleFormFieldAvailability, apiOp{
+			summary: "Whether the name typed into one field of a stored form is still free: every source the field's atlasAvailability block names — Entra groups and deleted groups by alias, a SharePoint site at the field's host and managed path — is asked through its Worker, and the answer is available=true only when none holds it. The request names only the value; which Workers and where is the stored form's. Nothing is written anywhere. 400 invalid_value for a name the sources cannot hold, 403 forbidden for a Worker that does not allow forms to ask through it, 404 not_found, 429 rate_limited, 503/504 when no Worker Instance answers (ADR-0519)", tag: "Forms", role: roleAny,
+			req:  jsonBody("The typed value", schemaObj(map[string]any{"value": tString()})),
+			resp: jsonBody("Availability", tObject())}},
 		{"POST", "/api/v1/forms/{id}/fields/{field}/options", s.handleFormFieldOptions, apiOp{
 			summary: "The options one field of a stored form takes from a decision, for the values chosen in the fields its inputs are bound to — a group, then its members. The request names only those fields' values; a value from a field with fixed choices must be one of them. 404 not_found, 400 invalid_query, 422 as the decision cannot answer (ADR-0511)", tag: "Forms", role: roleAny,
 			req:  jsonBody("The values of the bound fields", schemaObj(map[string]any{"values": tObject()})),
@@ -1305,11 +1360,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "One product catalogue", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("The catalogue", tObject())}},
 		{"PATCH", "/api/v1/catalogs/{id}", s.catalogs.HandleUpdateCatalog, apiOp{
-			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience. Only the fields you send are changed — but `items`, `edges` and `members` are each replaced **whole**, so send the complete list and not an addition. Because that list is normally computed from one you read, optionally state the `revision` you read it at: the write is then refused with 409 unless the catalogue is still on it, which is what stops two maintainers adding a product a second apart from one erasing the other. Omitting it changes unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Change what a catalogue offers: its products, the edges between them, its languages, rank and audience. Only the fields you send are changed — but `items`, `edges` and `members` are each replaced **whole**, so send the complete list and not an addition. Because that list is normally computed from one you read, optionally state the `revision` you read it at: the write is then refused with 409 unless the catalogue is still on it, which is what stops two maintainers adding a product a second apart from one erasing the other. `structured` opts the catalogue in to declared structure (ADR-0524): every product says whether it is a Marktleistung (`kind: offering`) or a service (`kind: service`), a Marktleistung includes at least one service and contains services only, a service has no parts and is offered only inside a Marktleistung, and a Marktleistung's `category` and `productGroup` are keys of the capability register, the product group one the category requires. Publishing refuses a structured catalogue that breaks any of it. Omitting it changes unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Catalogue changes", schemaObj(map[string]any{
 				"texts": tObject(), "rank": tInteger(), "languages": tArray(),
 				"items": tArray(), "groups": tArray(), "edges": tArray(),
-				"members": tArray(), "revision": tInteger(),
+				"members": tArray(), "revision": tInteger(), "structured": tBool(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
 		// Deleting for good (ADR-0469): ADR-0312 gives the catalogue
@@ -1431,7 +1486,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"source": tString(), "primary": tString(), "pages": tObject(), "revision": tInteger()}, "source", "pages")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/refresh", s.catalogs.HandleContentRefresh, apiOp{
-			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
+			summary: "Recheck, then fetch every bound page of a product again and write the result into the draft, all or nothing: a refresh that cannot read a page names it and the reason and leaves the product as it was. It is the only act that ends a quarantine. A request whose caller goes away before the recheck finishes answers 503 and records and writes nothing — a departed caller is no finding about the source. Optionally states the product's `revision`", tag: "Catalogue", role: RoleProductManager,
 			req:  jsonBody("The precondition", schemaObj(map[string]any{"revision": tInteger()})),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalog-products/{id}/content/unlink", s.catalogs.HandleContentUnlink, apiOp{
@@ -1440,7 +1495,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
-			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped", tag: "Catalogue", role: RoleProductManager,
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("One line per bound product", tArray())}},
 		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
 			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,
@@ -1467,7 +1522,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Ask the source for its technical account's standing: whether it is reachable with its credential, the token's scope, the spaces it holds viewer in, and every problem — a scope other than read, any system role, any space role other than viewer. Answers 200 either way. Admin-only", tag: "Catalogue", role: RoleAdmin,
 			resp: jsonBody("Reachability and standing", tObject())}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. `orderableBy` lists the applications whose processes may order the product for somebody with a shop order task (ADR-0520), read the same way. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `kind` says what it is in a structured catalogue: `offering` for a Marktleistung, the whole a person orders, or `service` for one building block with its own lifecycle, ordered only as part of a Marktleistung; empty outside one (ADR-0524). `icon` names one of the symbols the shop's tile layout draws (publishing refuses any other name); empty draws a parcel. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1480,13 +1535,14 @@ func (s *Server) apiRoutes() []apiRoute {
 				"maxDays": tInteger(), "revision": tInteger(),
 				"lifecycleProcess": tString(), "lifecycleForm": tString(),
 				"operations": tObject(), "actions": tArray(), "commandedBy": tArray(),
+				"kind": tString(), "icon": tString(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
 		{"PUT", "/api/v1/catalogs/{id}/theme", s.catalogs.HandleSetTheme, apiOp{
-			summary: "Set or clear a catalogue's appearance: the source accent colour and one of the shipped typefaces. Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
+			summary: "Set or clear a catalogue's appearance: the source accent colour, one of the shipped typefaces and the shop layout (`cascade`, the default, or `tiles`: one row of tiles per catalogue with icons, a category menu and search). Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
 			req: jsonBody("Theme", schemaObj(map[string]any{
-				"accent": tString(), "typeface": tString(),
+				"accent": tString(), "typeface": tString(), "layout": tString(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleGetLogo, apiOp{
@@ -1580,6 +1636,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/shop/catalog", s.catalogs.HandleMyCatalog, apiOp{
 			summary: "The catalogue assigned to you: the highest-ranked one your groups reach (404 when none is)", tag: "Catalogue", role: RoleUser,
 			resp: jsonBody("Your catalogue", tObject())}},
+		{"GET", "/api/v1/shop/catalogs", s.catalogs.HandleMyCatalogs, apiOp{
+			summary: "Every catalogue your groups reach, highest rank first (ADR-0522): the shop offers what all of them offer, a product in several from the highest-ranked, and an order goes to one catalogue's release, so a basket from two is placed as two orders. Reaching none is an empty list", tag: "Catalogue", role: RoleUser,
+			resp: jsonBody("Your catalogues", tArray())}},
 		// Shop orders (ADR-0312). An order names
 		// exactly one release and carries the schedule that release computed, so
 		// fulfilment reads one record and never recomputes a graph — and what was
@@ -1724,6 +1783,9 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/blueprints/{id}/releases/{version}/package", s.handleBlueprintPackage, apiOp{
 			summary: "Return verified gzip application package bytes only with If-Match equal to the digest from its preview; import is a separate authorized operation", tag: "Applications", role: RoleModeler,
 			resp: &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "Signed and inspected application package"}}},
+		{"POST", "/api/v1/blueprints/{id}/releases/{version}/import", s.handleBlueprintImport, apiOp{
+			summary: "Install the application of a signed atlas hub release: the server fetches it from its operator-pinned registry, refuses it unless ?digest= equals the digest the preview reported, inspects it and imports it through the same source import POST /api/v1/applications/source performs — the same plan, ?dryRun=true, ?overwrite= and ?keep= decisions (undecided stops with 409 and the plan), editor rule and needs. The package's catalogues are named under cataloguesNotImported and imported in the Console, where a person answers their questions (ADR-0499, ADR-0467).", tag: "Applications", role: RoleModeler,
+			resp: jsonBody("Import result with the release it came from", tObject())}},
 
 		// Process applications (ADR-0128) are the ADR-0034 project reframed as the
 		// design-time unit of bundling, versioning, and portability. The canonical
@@ -1800,6 +1862,30 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("The plan and what was set", tObject())}},
 		{"GET", "/api/v1/applications/{id}/deployments", s.handleApplicationDeployments, apiOp{
 			summary: "What this application currently has deployed on this server, with per-definition instance counts (ADR-0128)", tag: "Applications", role: roleAny, resp: jsonBody("Application deployments", tObject())}},
+
+		// Process-scoped start grants (ADR-0516): who besides an operator may start a
+		// process of an application, through the self-service routes that record
+		// approves. Administration is an administrator's alone, from their own
+		// session; none of these routes lets anybody start anything.
+		{"GET", "/api/v1/applications/{id}/start-grants", s.startGrantAdmin.HandleList, apiOp{
+			summary: "Every process of an application that was ever granted for a self-service start, revoked ones included, by process id: the current revision, whether it is granted, and the user and group ids it names (ADR-0516). Admin only; refused with 403 on a server without authentication", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Start grants", schemaObj(map[string]any{"items": tArray()}, "items"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleGet, apiOp{
+			summary: "One process's start grant within an application (ADR-0516). A process never granted answers revision 0 and an empty audience: nobody may start it, which is the default. 404 for an application that does not exist and has no grant record. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant", schemaObj(map[string]any{"applicationId": tString(), "processId": tString(), "revision": tInteger(), "granted": tBool(), "userIds": tStrings(), "groupIds": tStrings(), "changedAt": tInteger(), "changedBy": tString()}, "applicationId", "processId", "revision", "granted", "userIds", "groupIds"))}},
+		{"PUT", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandlePut, apiOp{
+			summary: "Grant, or wholly replace, who may start a process of an application through the self-service routes (ADR-0516): explicit user ids and group ids of this server's directory, never names. expectedRevision is required (0 for a scope never granted) and a stale one answers 409 with currentRevision. The application must exist and not be a protected system application, the newest deployed version of the process must be filed under it, and every id must name an existing account or group; ids are sorted and must not repeat. The actor and the time are the server's: a body naming them is refused. Durable — written and fsynced — before the answer, and audited. Granting exactly the audience already granted writes nothing (changed false). Admin only, from their own signed-in session; 403 on a server without authentication. A grant is not the user role: a person also needs that role and a signed-in session", tag: "Applications", role: RoleAdmin,
+			req:  jsonBody("The audience", schemaObj(map[string]any{"userIds": tStrings(), "groupIds": tStrings(), "expectedRevision": tInteger(), "applicationId": tString(), "processId": tString()}, "expectedRevision")),
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"DELETE", "/api/v1/applications/{id}/start-grants/{processId}", s.startGrantAdmin.HandleDelete, apiOp{
+			summary: "Revoke a process's start grant within an application (ADR-0516). ?expectedRevision= is required; a stale one answers 409 with currentRevision. Every authorization check after the durable revocation refuses; a start that passed its check before may still finish. Works whether or not the application and process still exist, and revoking what is already revoked writes nothing (changed false). Admin only, from their own signed-in session", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The start grant as it now stands, and whether this request changed it", tObject())}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/history", s.startGrantAdmin.HandleHistory, apiOp{
+			summary: "Every audited change of a process's start grant, newest first: revision, time, the administrator who made it, grant or revoke, and the whole audience it left (ADR-0516). Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("Audited changes", schemaObj(map[string]any{"items": tArray(), "total": tInteger()}, "items", "total"))}},
+		{"GET", "/api/v1/applications/{id}/start-grants/{processId}/preview", s.startGrantAdmin.HandlePreview, apiOp{
+			summary: "Whether one account (?userId=) or one group (?groupId=) would be offered a process for a self-service start now, and why not (ADR-0516): granted and matchedBy (user, group:<id>, from the directory's current membership), accountIssues (disabled, missing-user-role), and blockers on the process's newest version (application-missing, application-protected, not-deployed, newest-version-in-other-application, not-executable, inactive, trigger-only, constants-missing). Writes nothing. Admin only", tag: "Applications", role: RoleAdmin,
+			resp: jsonBody("The preview", tObject())}},
 
 		{"POST", "/api/v1/applications/import", s.handleImportBundle, apiOp{
 			summary: "Receive a published application bundle from a peer atlas: validate and deploy it all-or-nothing, then record the publisher's release (ADR-0129). The only operation a deploy token may reach.", tag: "Applications", role: RoleModeler,
@@ -1885,6 +1971,23 @@ func (s *Server) apiRoutes() []apiRoute {
 			resp: jsonBody("OAuth grants", tArray())}},
 		{"DELETE", "/api/v1/oauth-grants/{id}", s.handleRevokeOAuthGrant, apiOp{
 			summary: "Withdraw an OAuth approval, effective on the next request. Your own, or anyone's for an administrator (ADR-0200)", tag: "OAuth", role: roleAny,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/connected-systems", s.handleListConnectedSystems, apiOp{
+			summary: "List the connected systems (ADR-0512): per system its host and name, who approved it and when, its capabilities with their reach of projects, whether its people may connect without being asked (pre-consent), how many people are connected, when it last used Atlas, and for one no longer connected when and why it was disconnected (admin-only)", tag: "OAuth", role: RoleAdmin,
+			resp: jsonBody("Connected systems", tArray())}},
+		{"PUT", "/api/v1/connected-systems/{id}/preconsent", s.handleSetSystemPreconsent, apiOp{
+			summary: "Turn a connected system's pre-consent off, so its people are asked on the consent screen before they connect; only {\"preconsent\": false} is accepted — pre-consent is given by approving the system (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			req:    jsonBody("Pre-consent", schemaObj(map[string]any{"preconsent": tBool()}, "preconsent")),
+			status: http.StatusNoContent}},
+		{"DELETE", "/api/v1/connected-systems/{id}", s.handleDisconnectSystem, apiOp{
+			summary: "Disconnect a connected system: its system grant is withdrawn, and with ?people=withdraw every person's grant of the same client too (admin-only, ADR-0512)", tag: "OAuth", role: RoleAdmin,
+			status: http.StatusNoContent}},
+		{"GET", "/api/v1/me/connected-systems", s.handleMyConnectedSystems, apiOp{
+			summary: "The connected systems you are connected to, and those an administrator pre-approved for you, with whether you declined them (ADR-0512)", tag: "OAuth", role: roleAny,
+			resp: jsonBody("Your connected systems", tArray())}},
+		{"POST", "/api/v1/me/connected-systems/withdraw", s.handleWithdrawFromSystem, apiOp{
+			summary: "Withdraw your own grants of a connected system and decline it, so pre-consent does not connect you to it again without your asking (ADR-0512)", tag: "OAuth", role: roleAny,
+			req:    jsonBody("The system's client id", schemaObj(map[string]any{"clientId": tString()}, "clientId")),
 			status: http.StatusNoContent}},
 		{"GET", "/api/v1/oauth/authorize-context", s.handleAuthorizeContext, apiOp{
 			summary: "What the consent screen is being asked to approve: the client, the resource, and who is signed in (ADR-0200)", tag: "OAuth", role: roleAny,

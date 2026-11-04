@@ -27,15 +27,16 @@ function targets(kind, dir, accounts) {
 }
 
 // mappingsCard renders the table. mappings is GET /api/v1/catalogs/import/mappings,
-// anything but a list when it could not be read.
+// anything but a list when it could not be read. It folds under its heading like the
+// list page's other sections (fold-topic, fold.js).
 export function mappingsCard(mappings, dir, accounts) {
   const intro = `<p class="muted" style="max-width:62ch">When an application package names a group, a
       person or an approver this server does not know by that name, the choice made on import is kept
       here, and the next import takes it without asking. Correct or remove an entry, or add one before
       the first import.</p>`;
   if (!Array.isArray(mappings)) {
-    return `<section class="cat-mappings" style="margin-top:26px">
-      <h3 style="margin:0 0 10px">Names from other installations</h3>${intro}
+    return `<section class="cat-mappings fold-topic" data-fold="mappings" style="margin-top:26px">
+      <h2 style="margin:0 0 10px">Names from other installations</h2>${intro}
       <p class="muted">The table could not be read.</p></section>`;
   }
   const rows = mappings.map((m) => `<tr data-kind="${esc(m.kind)}" data-answer="${esc(m.answer)}">
@@ -47,8 +48,8 @@ export function mappingsCard(mappings, dir, accounts) {
     </tr>`).join("");
   const kindOptions = Object.entries(KINDS).map(([k, label]) => `<option value="${k}">${esc(label)}</option>`).join("");
   const first = targets("group", dir, accounts);
-  return `<section class="cat-mappings" style="margin-top:26px">
-    <h3 style="margin:0 0 10px">Names from other installations</h3>${intro}
+  return `<section class="cat-mappings fold-topic" data-fold="mappings" style="margin-top:26px">
+    <h2 style="margin:0 0 10px">Names from other installations</h2>${intro}
     <div class="card" style="max-width:860px">
       ${mappings.length ? `<table class="mapping-table">
         <thead><tr><th>Kind</th><th>Name in the package</th><th>Means here</th><th></th></tr></thead>

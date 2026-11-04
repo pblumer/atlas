@@ -120,6 +120,17 @@ func (s *Server) handleAmendLine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A corrected answer is held to its form as a placed one is: a directory field's
+	// person is looked up again (ADR-0473, amended). Off the loop, because the lookup
+	// asks a Worker; the stores are read directly for the reason approvals.go reads
+	// them, and only for an order this caller may correct, so the check is no oracle.
+	if ord, got, err := s.orderStore.Get(id); err == nil && got && s.mayCancelOrder(p, ord) {
+		if rel, ok, err := s.catalogStore.Release(ord.ReleaseID); err == nil && ok &&
+			s.checkOrderAnswers(w, r, rel, map[string]map[string]string{item: req.Config}) {
+			return
+		}
+	}
+
 	var (
 		out      order.Order
 		found    bool

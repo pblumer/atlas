@@ -1,0 +1,51 @@
+{
+  "type": "default",
+  "id": "m365-sharepoint-kontingent",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Speicherkontingent erhöhen · Increase the storage quota**\n\nBis 25 GB wird das Kontingent ohne Prüfung gesetzt, darüber prüft M365-SharePoint den Antrag; mehr als 250 GB vergibt der Katalog nicht. · Up to 25 GB the quota is set without review; above that M365-SharePoint reviews the request; the catalogue does not grant more than 250 GB."
+    },
+    {
+      "key": "neuesKontingent",
+      "type": "select",
+      "label": "Neues Kontingent (GB) · New quota (GB)",
+      "values": [
+        {
+          "label": "10 GB",
+          "value": "10"
+        },
+        {
+          "label": "25 GB",
+          "value": "25"
+        },
+        {
+          "label": "50 GB",
+          "value": "50"
+        },
+        {
+          "label": "100 GB",
+          "value": "100"
+        },
+        {
+          "label": "250 GB",
+          "value": "250"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontingentBegruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "validate": {
+        "required": true
+      }
+    }
+  ]
+}

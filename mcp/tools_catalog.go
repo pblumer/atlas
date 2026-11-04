@@ -89,6 +89,15 @@ func catalogRecordProps() map[string]any {
 		"members": arrayProp("Who else maintains this catalogue: [{ref: {type: \"user\"|\"group\", id}, " +
 			"role: \"viewer\"|\"editor\"}]. Only the OWNER may change this; an editor changing the " +
 			"catalogue and its member list would be a grant that amplifies itself. THE COMPLETE LIST."),
+		"structured": map[string]any{"type": "boolean",
+			"description": "Opt the catalogue in to DECLARED STRUCTURE (ADR-0524). " +
+				"Every product it offers must then carry `kind`: a Marktleistung (\"offering\") is the " +
+				"whole a person orders — contained by nothing, including at least one service, containing " +
+				"services only, filed under a `category` and a `productGroup` that are CAPABILITY KEYS, the " +
+				"product group one the category capability requires; a service (\"service\") is one " +
+				"building block with its own lifecycle process, no parts, no heading, and is offered only " +
+				"inside a Marktleistung. Publishing refuses a structured catalogue that breaks any of it, " +
+				"and an order cannot ask for a service on its own. Convert the products first, then switch it on."},
 		"revision": integerProp("THE REVISION YOU READ, as a precondition. Because `items`, `edges` " +
 			"and `members` are replaced whole, the list you send is normally one you read and " +
 			"changed — and without this, a change somebody made in between is erased by yours " +
@@ -165,6 +174,12 @@ func catalogItemProps() map[string]any {
 			"issued so, never the provision. Empty (the default) means no process may command it. It is " +
 			"read from the newest release when a task commands, so removing a key and publishing stops " +
 			"that application at once for every right already held."),
+		"orderableBy": arrayProp("The keys of the process applications whose processes may ORDER this " +
+			"product for somebody with a shop order task (<atlas:shopTask mode=\"order\">), e.g. " +
+			"[\"hr-eintritte\"] for an HR joiner process ordering the starter package. The order meets " +
+			"every check a person's order meets. Empty (the default) means no process may order it. It " +
+			"is read from the newest release when a task orders, so removing a key and publishing stops " +
+			"that application at once."),
 		"lifecycleForm": stringProp("For a lifecycleProcess: how it runs. \"per-operation\" (the default, " +
 			"also what empty means) starts an instance for every operation. \"per-position\" starts ONE " +
 			"instance per order position at provisioning and DELIVERS every later operation to it: the " +
@@ -222,13 +237,27 @@ func catalogItemProps() map[string]any {
 				"nameTexts":    map[string]any{"type": "object", "description": "The name per language tag"},
 				"deliveryDays": map[string]any{"type": "integer", "minimum": 1, "maximum": 365},
 			}},
+		"kind": map[string]any{"type": "string", "enum": []any{"", "offering", "service"},
+			"description": "What it is in a STRUCTURED catalogue (ADR-0524): " +
+				"\"offering\" for a Marktleistung, the whole a person orders, assembled from services like " +
+				"a house from bricks; \"service\" for one brick, with its own lifecycle process, provisioned " +
+				"autonomously and ordered only as part of a Marktleistung. Leave it empty outside a " +
+				"structured catalogue, where the level is read off the graph."},
+		"icon": map[string]any{"type": "string", "enum": productIconEnum(),
+			"description": "The symbol the shop's tile layout draws on the product's tile and " +
+				"page — a NAME the shop carries, not a picture. Empty draws a parcel. Publishing " +
+				"refuses a name outside this list. Only a catalogue whose theme layout is " +
+				"\"tiles\" shows it."},
 		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
 			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
 			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
 			"heading already in the catalogue rather than inventing a second spelling of it. A " +
 			"heading and nothing else: no ordering and no entity behind it. It is read off the " +
 			"products NOTHING CONTAINS: on a product that is a part of another one the shop " +
-			"never reads it, so set it on the offering and not on the services behind it."),
+			"never reads it, so set it on the offering and not on the services behind it. In a " +
+			"STRUCTURED catalogue it is the key of a capability (\"arbeitsalltag-bewaeltigen\"), " +
+			"checked against the register at publish and worded from the capability's name " +
+			"where `categoryTexts` has no wording."),
 		"categoryTexts": objectProp("The heading per language tag, where `category` above is what " +
 			"the shop groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
 			"Leave it out and the key renders in every language, which is the ordinary state for " +
@@ -241,7 +270,8 @@ func catalogItemProps() map[string]any {
 			"above is, with `productGroupTexts` for the wording, and read off the same products — " +
 			"the group has no record and therefore no category of its own, so the chain is " +
 			"assembled per product and a group whose products sit in two categories appears " +
-			"under both."),
+			"under both. In a STRUCTURED catalogue it is the key of a capability that the " +
+			"category capability lists in its `requires`."),
 		"productGroupTexts": objectProp("The product group per language tag, exactly as " +
 			"`categoryTexts` is the heading's — same key-and-wording split, same all-or-nothing " +
 			"rule at publication. See that property."),
@@ -1041,6 +1071,26 @@ func stringList(v any) []string {
 		if s, ok := e.(string); ok && s != "" {
 			out = append(out, s)
 		}
+	}
+	return out
+}
+
+// productIconNames are the symbols the shop draws (api/catalog.Icons). Repeated
+// here because this package does not import the server's; a test holds the two
+// lists equal, so a symbol added to the shop reaches the schema or fails the build.
+var productIconNames = []string{
+	"user-cog", "users-group", "users", "user-shield", "user-search", "user-circle",
+	"user-plus", "door-exit", "sitemap", "affiliate", "network", "server-2", "database",
+	"fingerprint", "lock", "folder-cog", "device-laptop", "device-desktop", "device-mobile",
+	"device-sim", "devices", "keyboard", "printer", "headset", "mail-cog", "mail-forward",
+	"message-2", "id-badge-2", "shopping-cart-plus", "disc", "list-check",
+	"presentation-analytics", "settings-cog", "chevrons-right", "file-text", "package",
+}
+
+func productIconEnum() []any {
+	out := []any{""}
+	for _, n := range productIconNames {
+		out = append(out, n)
 	}
 	return out
 }

@@ -549,7 +549,7 @@ function renderDoc(doc) {
     : "";
   return `<div class="wtdoc">
     <p class="wtdoc-needs">${t(doc.needs, places)}</p>
-    <details class="wtdoc-more">
+    <details class="wtdoc-more fold-sub">
       <summary>${t("workerDoc.howTo")}</summary>
       <ol class="wtdoc-steps">${steps}</ol>
       ${trap}

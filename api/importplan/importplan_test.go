@@ -100,3 +100,15 @@ func TestThreeWay(t *testing.T) {
 		t.Error("Asks")
 	}
 }
+
+// adopt is named artifact by artifact: refs are read like the other lists, * is
+// refused.
+func TestParseReadsAdoptRefByRef(t *testing.T) {
+	d, err := Parse(url.Values{"adopt": {"process:a, form:b", "decision:c"}})
+	if err != nil || !d.Adopt["process:a"] || !d.Adopt["form:b"] || !d.Adopt["decision:c"] {
+		t.Fatalf("adopt = %+v, %v", d.Adopt, err)
+	}
+	if _, err := Parse(url.Values{"adopt": {"process:a,*"}}); err == nil {
+		t.Fatal("adopt=* was accepted")
+	}
+}

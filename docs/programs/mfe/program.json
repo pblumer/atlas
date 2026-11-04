@@ -4,10 +4,10 @@
   "summary": "Adaptive, role-aware human-work experience across desktop, tablet, phone and future watches: BPMN tasks/process start, incident triage/alarms, field evidence, safe continuation and optional tablet authoring; one authoritative engine and API.",
   "status": "active",
   "owner": "pblumer",
-  "last_reviewed": "2026-11-01",
+  "last_reviewed": "2026-11-02",
   "plan": "../../planning/mobile-field-experience-program.md",
   "milestone": "../../../ROADMAP.md#milestone-s--single-binary-server--web-ui-",
-  "next_action": "Review MFE1 durable audited grant-store PR #1489 (ADR-0516) for sidecar/restart, fail-closed revocation, backup classification and CI. Next implement admin-only grant/revoke/preview and authenticated self-service start API with security/recovery tests. MFE0 physical-device acceptance #1451 remains open; MFE2 PR #1479 is merged.",
+  "next_action": "MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the \"published\" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1.",
   "slices": [
     {
       "id": "MFE0",
@@ -48,9 +48,14 @@
         1470,
         1472,
         1486,
-        1489
+        1489,
+        1492,
+        1495,
+        1497,
+        1498,
+        1500
       ],
-      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged a deny-by-default process-scoped grant evaluator with negative tests and an MFE0 device acceptance matrix. Draft PR #1489 adds audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart, without exposing any new endpoint. Admin-only grant management, effective identity checks, self-service GET/POST, form validation, durable startedBy/replay tests and physical-device acceptance remain open. Existing operator rights are unchanged."
+      "note": "MFE1 mobile Tasks/Start UI PRs #1468/#1469/#1470/#1472 are merged. ADR-0516 is accepted; PR #1486 merged the deny-by-default process-scoped grant evaluator and PR #1489 merged audited immutable grant/revoke revisions persisted atomically in the sidecar and recovered on restart. The admin-only start-grant management API (list/get/put/delete/history/preview, admin's own session, directory/application/newest-version checks, 409 revisions, fail-closed after a failed write) is merged (PR #1492); it enables no start by itself. GET /api/v1/me/startable-processes (own session, newest eligible version only, sorted and capped) is merged (PR #1495). POST /api/v1/me/processes/{key}/instances (grant and version re-checked as a guard in the command turn, server-side start-form constraints, reuse of the operator start path, startedBy and WAL-replay recovery test over the safety-inspection example) is merged (PR #1497). The Tasks Start view for task users (offered only with a grant, all outcome states including unknown outcome, 320/390/768px Playwright E2E) completes ADR-0516's slices (merged, PR #1498). The owner decided on 2026-11-02 that \"published\" means the newest deployed version within the application (no release-membership requirement); ADR-0516 records it. A bilingual handbook section for administrators and task users is in PR #1500. MFE1 stays active: the issue #1456 acceptance list still needs real iOS/Android evidence (MFE0 #1451). Existing operator rights are unchanged."
     },
     {
       "id": "MFE2",

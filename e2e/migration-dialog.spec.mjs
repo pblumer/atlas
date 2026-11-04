@@ -12,7 +12,9 @@ test.beforeEach(async ({ page }) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
-  await page.goto("/migration-dialog-harness.html");
+  // The tests below read the English wording; German, the console's default, is the
+  // last describe's, which reloads the harness without the parameter.
+  await page.goto("/migration-dialog-harness.html?lang=en");
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
 });
 
@@ -265,4 +267,41 @@ test("a flood of refusals is listed up to a bound and counted beyond it", async 
   await expect(page.locator(".mig-unlisted")).toContainText("50 more");
   await expect(page.locator(".mig-unlisted")).toContainText("v1");
   expect(page.__errors, "page errors").toEqual([]);
+});
+
+test.describe("in German, the console's default", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/migration-dialog-harness.html?lang=de");
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  });
+
+  test("the instance dialog and its plan speak German", async ({ page }) => {
+    await page.locator("#mig-bad").click();
+    const modal = page.locator(".mig-modal");
+    await expect(modal.locator("#mig-title")).toContainText("Instanz migrieren");
+    await expect(modal).toContainText("Verschieben nach");
+    await expect(modal.locator(".mig-verdict.bad")).toContainText("kann nicht nach v");
+    await expect(modal.locator("#mig-reason")).toHaveAttribute("placeholder", "Warum diese Instanz verschoben wird");
+    await expect(modal.locator("[data-mig-go]")).toHaveText("Migrieren");
+    await expect(modal.locator("[data-mig-cancel]")).toHaveText("Abbrechen");
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the batch dialog and its outcome speak German", async ({ page }) => {
+    await page.locator("#mig-batch").click();
+    const modal = page.locator(".mig-modal");
+    await expect(modal.locator("#migb-title")).toContainText("Laufende Instanzen migrieren");
+    await expect(modal).toContainText("Von");
+    await expect(modal).toContainText("Nach");
+    await expect(modal.locator("#migb-from")).toContainText("3 laufen");
+    await expect(modal.locator("#migb-from")).toContainText("keine laufen");
+    await expect(modal.locator("[data-migb-go]")).toHaveText("Instanzen migrieren");
+
+    await modal.locator("#migb-reason").fill("v1 auslaufen lassen");
+    await modal.locator("[data-migb-go]").click();
+    await expect(page.locator("#migo-title")).toContainText("3 migriert");
+    await expect(page.locator("#migo-title")).toContainText("1 zurückgeblieben");
+    await expect(page.locator("[data-migo-ok]")).toHaveText("Schliessen");
+    expect(page.__errors).toEqual([]);
+  });
 });

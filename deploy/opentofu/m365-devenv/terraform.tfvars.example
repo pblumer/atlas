@@ -1,0 +1,60 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
+
+# The TEST tenant - named twice on purpose (id and initial domain).
+tenant_id               = "00000000-0000-0000-0000-000000000000"
+expected_initial_domain = "contoso.onmicrosoft.com"
+
+# The tenant is also used for real work: scope the mail, Exchange and SharePoint apps
+# to the test objects (README.md, "Geteilter Tenant"). Needs teamsphone = false and
+# credential_validity_days <= 7.
+# shared_tenant            = true
+# credential_validity_days = 3
+
+# name_prefix = "atlas-test"
+# usage_location = "CH"
+
+# --- Atlas server in Azure (default: on) -------------------------------------
+azure_subscription_id = "00000000-0000-0000-0000-000000000000"
+atlas_allowed_cidrs   = ["203.0.113.7/32"] # your own public IP (HTTPS and SSH)
+# azure_location      = "switzerlandnorth"
+# atlas_install       = "release"            # or "source" (builds atlas_source_ref)
+# atlas_version       = "0.21.0"
+# atlas_source_ref    = "main"
+# atlas_tls           = "internal"           # or "letsencrypt" (opens 80/443 to the Internet)
+# atlas_sso           = true                 # test users sign in with Entra
+# atlas_auto_shutdown_time = "1900"          # UTC, "" disables
+# enable_atlas_server = false                # Entra objects and apps only
+
+# Which Worker Types get an app registration (all true by default).
+# workers = {
+#   entra      = true
+#   exchange   = true
+#   sharepoint = true
+#   teamsphone = true
+#   mail       = true
+# }
+# mail_sender = ""   # default: the manager test user (needs a licence with a mailbox)
+
+# Worker names as the models address them (defaults: examples/m365-dienste).
+# worker_names = {
+#   entra      = "ucc_entra"
+#   exchange   = "ucc_exchange"
+#   sharepoint = "ucc_sharepoint"
+#   teamsphone = "ucc_teams"
+#   ad         = "ucc_ad"
+#   mail       = "mail"
+# }
+
+# Licences for the test users (GET https://graph.microsoft.com/v1.0/subscribedSkus),
+# so they get a mailbox and Teams. Needs the Azure CLI signed in to the tenant.
+# license_sku_ids = ["<skuId of e.g. Microsoft 365 E5 (developer)>"]
+
+# credential_validity_days = 14
+
+# azure_tenant_id = ""   # when the subscription is in another tenant
+
+# --- Optional Active Directory domain controller in Azure -------------------
+# enable_ad_dc          = true
+# ad_allowed_cidrs      = []                     # only for workers OUTSIDE the server built here
+# ad_allow_rdp          = false
+# ad_auto_shutdown_time = "1900"                 # UTC, "" disables

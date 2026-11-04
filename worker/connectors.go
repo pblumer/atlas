@@ -17,6 +17,7 @@ import (
 	"github.com/pblumer/atlas/connector/csvimport"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/envname"
+	"github.com/pblumer/atlas/connector/exchange"
 	"github.com/pblumer/atlas/connector/ldap"
 	"github.com/pblumer/atlas/connector/ldif"
 	"github.com/pblumer/atlas/connector/lookup"
@@ -26,6 +27,7 @@ import (
 	"github.com/pblumer/atlas/connector/s3"
 	"github.com/pblumer/atlas/connector/scim"
 	"github.com/pblumer/atlas/connector/script"
+	"github.com/pblumer/atlas/connector/sharepoint"
 	"github.com/pblumer/atlas/connector/soap"
 	"github.com/pblumer/atlas/connector/sqldb"
 	"github.com/pblumer/atlas/connector/webscrape"
@@ -377,6 +379,14 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 					return runSharePointJob(ctx, j, reg, brokered)
 				})
 			}
+			// The sites the Worker's own credential reaches answer an order form's
+			// question whether a site name is free (ADR-0519), on the operations job
+			// type, which every worker that knows get-site leases. A brokered Worker is
+			// not in reg and answers worker_unconfigured: a lookup has no job to
+			// authorize a person's token for.
+			built.Queries[compiler.SharePointOpsJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return sharepoint.RunLookup(ctx, connector, q, reg)
+			}
 		case "googlesheets":
 			reg, names, err := googleSheetsRegistryFromEnv(env)
 			if err != nil {
@@ -481,6 +491,11 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.ExchangeJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunExchangeJob(ctx, j, reg)
 			})
+			// The same organizations answer a name field's question whether an alias is
+			// still free (ADR-0519), with the same credential.
+			built.Queries[compiler.ExchangeJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+				return exchange.RunLookup(ctx, connector, q, reg)
+			}
 		case "googlecontacts":
 			reg, names, err := googleContactsRegistryFromEnv(env)
 			if err != nil {

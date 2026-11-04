@@ -2,7 +2,7 @@
 # Agents and CI: prefer these targets so the canonical commands live in one place.
 
 .PHONY: all build test race vet fmt fmt-check lint check cover tidy clean run server \
-        nuggets nuggets-check postman-smoke adr-number docker docker-powershell docker-buildx helm-lint helm-template helm-package
+        nuggets nuggets-check postman-smoke adr-number hub-lock docker docker-powershell docker-buildx helm-lint helm-template helm-package
 
 all: check
 
@@ -75,8 +75,22 @@ postman-smoke:
 # "the next free number" has one answer. .github/workflows/adr-number.yml does it
 # automatically after a merge; this target is the same thing by hand. No-op when
 # there are no drafts. See docs/adr/README.md § Writing a record.
+#
+# The citation rewrite reaches examples/, so the numbering is followed by hub-lock,
+# exactly as the workflow does — the manual path must produce the commit the job
+# would (ADR-0170, amendment of 2026-11-03).
 adr-number:
 	go run ./docs/adr/cmd/adrnum
+	$(MAKE) hub-lock
+
+# Bring the examples' derived files up to date with the files: regenerate the served
+# example catalogue, then record a new atlas hub version for every bundle whose
+# content changed. It is what TestExampleCatalogMatchesTheFiles and
+# TestHubReleasesAreCurrent ask for after an example changed. Idempotent: with
+# nothing changed it writes nothing.
+hub-lock:
+	go test ./examples -run TestExampleCatalogMatchesTheFiles -update
+	go run ./cmd/atlas hub lock
 
 tidy:
 	go mod tidy

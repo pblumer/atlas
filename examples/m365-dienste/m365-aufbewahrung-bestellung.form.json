@@ -1,0 +1,41 @@
+{
+  "type": "default",
+  "id": "m365-aufbewahrung-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Aufbewahrung (Litigation Hold) · Litigation hold**\n\nSolange die Aufbewahrung gilt, bewahrt Exchange Online jede Nachricht des Postfachs auf, auch was die Person löscht. Die Compliance genehmigt jede Bestellung. · While the hold applies, Exchange Online keeps every message of the mailbox, including what the person deletes. Compliance approves every order."
+    },
+    {
+      "key": "upn",
+      "type": "textfield",
+      "label": "Postfach der betroffenen Person (UPN) · Mailbox of the person concerned (UPN)",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    },
+    {
+      "key": "aufbewahrungGrund",
+      "type": "textarea",
+      "label": "Grund · Reason",
+      "description": "Verfahren, Aktenzeichen oder Anordnung. Wird der betroffenen Person nicht angezeigt. · Case, reference or order. Not shown to the person concerned.",
+      "validate": {
+        "required": true
+      }
+    },
+    {
+      "key": "dauerTage",
+      "type": "textfield",
+      "label": "Dauer in Tagen · Duration in days",
+      "description": "1 bis 99999 Tage ab Eingang einer Nachricht, oder «unbegrenzt». · 1 to 99999 days from when a message arrives, or «unbegrenzt» (unlimited).",
+      "validate": {
+        "required": true,
+        "pattern": "^([1-9][0-9]{0,4}|unbegrenzt)$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -61,9 +61,9 @@ way: `/healthz` and `/readyz` answer whoever can reach the port. See
 If you only want to see it run, and will throw the directory away afterwards:
 
 ```bash
-curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.21.0/atlas_0.21.0_linux_amd64.tar.gz
-tar -xzf atlas_0.21.0_linux_amd64.tar.gz
-./atlas_0.21.0_linux_amd64/atlas serve
+curl -fsSLO https://github.com/pblumer/atlas/releases/download/v0.22.0/atlas_0.22.0_linux_amd64.tar.gz
+tar -xzf atlas_0.22.0_linux_amd64.tar.gz
+./atlas_0.22.0_linux_amd64/atlas serve
 ```
 
 Then open <http://127.0.0.1:8080/>. Authentication is off, so there is no login —
@@ -85,7 +85,7 @@ the transfer. Substitute the version and architecture you want — `linux_amd64`
 `linux_arm64`, or `linux_arm` (ARMv6, for a 32-bit Raspberry Pi OS).
 
 ```bash
-VERSION=0.21.0
+VERSION=0.22.0
 ARCH=linux_amd64
 BASE=https://github.com/pblumer/atlas/releases/download/v${VERSION}
 
@@ -94,7 +94,7 @@ curl -fsSLO ${BASE}/SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-`sha256sum` must print `atlas_0.21.0_linux_amd64.tar.gz: OK`. If it prints
+`sha256sum` must print `atlas_0.22.0_linux_amd64.tar.gz: OK`. If it prints
 anything else, stop — do not unpack the archive.
 
 ### 2. Put the binary on the system
@@ -682,6 +682,23 @@ page as on the Console's sign-in, and comes back to the same request to approve 
 Registering a client is not the same as being able to use it: an application may
 *ask*, and only a person can say yes.
 
+#### Connecting another system
+
+A system such as a wiki that shows atlas's processes and mirrors people's tasks does not
+need a client entered here, nor API tokens copied into its environment: an administrator
+starts the connection in that system and approves it on atlas's consent screen, choosing
+what it may read — `diagrams`, `tasklist`, `events`, each optionally narrowed to projects
+— and whether its people may connect without a consent screen of their own
+([ADR-0512](adr/0512-connected-systems.md)). The system names itself by the URL of a
+document it publishes and signs its token requests with a key from it, so no secret
+exists to copy. **Console → Administration → Connected systems** lists the connected
+systems and disconnects them; each person sees theirs under **Connected accounts**.
+
+atlas reads that document from public addresses only. A system inside the same network
+needs `--client-metadata-allow-private` (`ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on`); the
+read uses no outbound proxy. What a system implements is in
+[Connecting a system to atlas](integrations/connected-systems.md).
+
 #### Letting connectors register themselves
 
 If entering each client by hand is more ceremony than you want, `--oauth-dynamic-registration`
@@ -718,7 +735,7 @@ Windows — Windows *containers* are not supported.
 In an elevated PowerShell:
 
 ```powershell
-$Version = '0.21.0'
+$Version = '0.22.0'
 $Base = "https://github.com/pblumer/atlas/releases/download/v$Version"
 Invoke-WebRequest "$Base/atlas_${Version}_windows_amd64.zip" -OutFile atlas.zip
 Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
@@ -734,7 +751,7 @@ New-Item -ItemType Directory -Force -Path C:\Atlas\data | Out-Null
 ### 2. Try it in the foreground
 
 ```powershell
-C:\Atlas\atlas_0.21.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
+C:\Atlas\atlas_0.22.0_windows_amd64\atlas.exe serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data
 ```
 
 ### 3. Run it as a Windows service
@@ -750,7 +767,7 @@ next to the wrapper executable:
   <id>atlas</id>
   <name>Atlas BPMN workflow engine</name>
   <description>Durable BPMN 2.x workflow engine.</description>
-  <executable>C:\Atlas\atlas_0.21.0_windows_amd64\atlas.exe</executable>
+  <executable>C:\Atlas\atlas_0.22.0_windows_amd64\atlas.exe</executable>
   <arguments>serve --addr 127.0.0.1:8080 --data-dir C:\Atlas\data --auth</arguments>
   <workingdirectory>C:\Atlas</workingdirectory>
   <onfailure action="restart" delay="5 sec"/>
@@ -915,6 +932,7 @@ Flags are listed with their defaults; `atlas serve -h` prints the same list.
 | `--data-dir` | `atlas-data` | WAL, state store, and every other durable file |
 | `--auth` | `true` | Require login for the API, the UI and `/mcp`. `--auth=false` runs the server open — development and demos only; it logs a warning (`auth.disabled`) at startup. Sign-in attempts are throttled per address and per account, and every one is recorded (see [Logs](#logs)) |
 | `--oauth-dynamic-registration` | `false` | Let an OAuth client register itself ([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591.html)), so a hosted MCP connector can be connected with nothing but this server's URL. Off by default: it is the only unauthenticated endpoint that writes durable state, and anyone who can reach the port could then appear on your people's consent screens under a name they chose — where such a client is labelled as self-registered ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). Also `ATLAS_OAUTH_DYNAMIC_REGISTRATION=1` |
+| `--client-metadata-allow-private` | `false` | Let atlas read a connected system's client ID metadata document from a private, loopback or link-local address ([ADR-0512](adr/0512-connected-systems.md)). Off by default: anyone can send an authorization request naming a URL, so with this on anyone could make atlas send a GET to a host inside its network. For a connected system that runs beside atlas in one network. Also `ATLAS_CLIENT_METADATA_ALLOW_PRIVATE=on` |
 | `--external-url` | *(derived)* | Public origin this server is reachable under, e.g. `https://atlas.example.com`. **Set this behind a reverse proxy:** the scheme such a request arrives with is `http`, so every absolute URL atlas publishes — the OAuth discovery documents, the `WWW-Authenticate` challenge, the authorization and token endpoints — would name something no client can use ([ADR-0200](adr/0200-mcp-oauth-resource-server.md)). With `--tls-cert` and clients reaching the server by the name on its certificate, the derived origin is already right; set it anyway if they reach it by anything else. Also `ATLAS_EXTERNAL_URL` |
 | `--tls-cert` | *(none)* | PEM certificate chain to serve `--addr` with. With `--tls-key`, this server terminates TLS 1.3 itself instead of a proxy doing it; unset, it serves plain HTTP. Both or neither — one alone refuses to start. The pair is re-read when either file changes, so a renewal needs no restart ([ADR-0191](adr/0191-built-in-tls-listener.md)). Also `ATLAS_TLS_CERT` |
 | `--tls-key` | *(none)* | PEM private key for `--tls-cert`. Also `ATLAS_TLS_KEY` |
@@ -1036,6 +1054,10 @@ away.
 | `ATLAS_LIMIT_COLLECTION` | 16 MiB | How large a multi-instance activity's assembled output collection may be — a separate, larger budget, because a legitimate loop accumulates more than one record weighs |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_BURST` | 300 | How many requests one address may make at once to the OAuth token and revocation endpoints — enough for a server-side client, such as a wiki, to renew all its people's tokens after its own restart |
 | `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` | 10 | How many of those requests per second the address earns back |
+| `ATLAS_LIMIT_CLIENT_METADATA` | 64 KiB | How much of a connected system's client ID metadata document atlas reads ([ADR-0512](adr/0512-connected-systems.md)) |
+| `ATLAS_LIMIT_CLIENT_METADATA_SECONDS` | 5 | How long atlas waits for that document before it tells the person on the consent screen that it could not be read |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_BURST` | 10 | How many such documents atlas reads from one host at once — a document is cached, so a working system needs one read an hour |
+| `ATLAS_LIMIT_CLIENT_METADATA_HOST_RATE` | 1 | How many of those reads per second the host earns back |
 
 `TOKEN_STEPS` and `ITERATIONS` are counts, not bytes, and they are different guards: a
 hundred thousand iterations are a hundred thousand tokens taking one step each, which

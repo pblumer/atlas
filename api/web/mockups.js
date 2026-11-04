@@ -70,7 +70,7 @@ function listSection(l) {
   const what = l.library
     ? plural(held, "file or folder", "files and folders")
     : plural(held, "item", "items");
-  return `<details class="spmock-list" data-k="list:${esc(l.title)}" open>
+  return `<details class="spmock-list fold-sub" data-k="list:${esc(l.title)}" open>
     <summary>
       <b>${esc(l.title)}</b>
       <span class="muted">${l.library ? "document library" : "list"} · ${what}${
@@ -99,21 +99,18 @@ function sharePointCard(r) {
   const journal = w.journal || [];
   const lists = sites.reduce((n, s) => n + (s.lists || []).length, 0);
   const refused = journal.filter((op) => op.error).length;
-  return `<div class="card admock-worker" data-worker="${esc(r.target)}" data-kind="sharepoint">
-    <details class="admock-card" data-k="card" open>
-      <summary>
-        <span class="admock-card-head">
-          <h2>${esc(r.target)}</h2>
-          <span class="tag">SharePoint</span>
-          <span class="muted">${plural(sites.length, "site", "sites")} · ${plural(lists, "list or library", "lists and libraries")} ·
-          ${esc(bytes(w.storedBytes))} of file content${refused ? ` · <b>${refused}</b> refused` : ""}</span>
-        </span>
+  return `<div class="card admock-worker" data-worker="${esc(r.target)}" data-kind="sharepoint" data-fold="${esc(r.target)}">
+      <div class="admock-head">
+        <h2>${esc(r.target)}</h2>
+        <span class="tag">SharePoint</span>
+        <span class="muted">${plural(sites.length, "site", "sites")} · ${plural(lists, "list or library", "lists and libraries")} ·
+        ${esc(bytes(w.storedBytes))} of file content${refused ? ` · <b>${refused}</b> refused` : ""}</span>
         <span class="admock-card-state">
           <span class="pill warn"><span class="dot"></span>mockup</span>
           <button class="btn ghost danger" data-spmock-clear="${esc(r.target)}"
             title="Empty this Worker's site and its journal, for the next trial run">Empty site</button>
         </span>
-      </summary>
+      </div>
       ${sites.length
         ? sites.map((s) => `<div class="admock-forest">
             <h3>${esc(s.url)}</h3>
@@ -122,11 +119,10 @@ function sharePointCard(r) {
         : `<p class="empty">The site is empty. A list or a library appears here the first time a task
            writes to it — create-item, upload-file or create-folder — as it would have been made by a
            person on a real site.</p>`}
-      <details class="admock-ops" data-k="ops" ${refused ? "open" : ""}>
+      <details class="admock-ops fold-sub" data-k="ops" ${refused ? "open" : ""}>
         <summary>Operations (${journal.length}${journal.length >= 200 ? ", the newest 200" : ""})</summary>
         ${journalTable(journal)}
       </details>
-    </details>
   </div>`;
 }
 
@@ -134,18 +130,14 @@ function sharePointCard(r) {
 // data as the server served it. Plainer than a written card, which is the honest sign
 // that nobody has written one yet (ADR-0216).
 function genericCard(r) {
-  return `<div class="card admock-worker" data-worker="${esc(r.target || "")}" data-kind="${esc(r.kind || "")}">
-    <details class="admock-card" data-k="card" open>
-      <summary>
-        <span class="admock-card-head">
-          <h2>${esc(r.target || r.kind || "?")}</h2>
-          <span class="tag">${esc(r.kind || "?")}</span>
-          <span class="muted">${esc(r.summary || "")}</span>
-        </span>
+  return `<div class="card admock-worker" data-worker="${esc(r.target || "")}" data-kind="${esc(r.kind || "")}" data-fold="${esc(r.target || r.kind || "?")}">
+      <div class="admock-head">
+        <h2>${esc(r.target || r.kind || "?")}</h2>
+        <span class="tag">${esc(r.kind || "?")}</span>
+        <span class="muted">${esc(r.summary || "")}</span>
         <span class="admock-card-state"><span class="pill warn"><span class="dot"></span>mockup</span></span>
-      </summary>
+      </div>
       <pre class="mockups-data">${esc(JSON.stringify(r.data, null, 2))}</pre>
-    </details>
   </div>`;
 }
 

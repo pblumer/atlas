@@ -689,15 +689,10 @@ main { padding: 22px; max-width: 1120px; margin: 0 auto; }
 .publish-needs li.missing .publish-need { color: var(--danger); text-decoration: underline; }
 .publish-needs-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .product-form > .form-group > summary.form-sec {
-  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
   font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted);
   margin: 0; padding: 4px 0; user-select: none;
 }
-.product-form > .form-group > summary.form-sec::-webkit-details-marker { display: none; }
-.product-form > .form-group > summary.form-sec::before {
-  content: "\25B8"; display: inline-block; transition: transform 0.12s ease;
-}
-.product-form > .form-group[open] > summary.form-sec::before { transform: rotate(90deg); }
 .product-form > .form-group > summary.form-sec:hover { color: var(--text); }
 .product-form > .form-group > .form-sec-hint { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
 .form-group-body { display: grid; grid-template-columns: 1fr 1fr; gap: 0 18px; }
@@ -2170,6 +2165,12 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
    deployed (ADR-0251). Quiet on purpose: it is a caveat about
    the picture, not a state of the process. */
 .live-layout-note { margin-left: 8px; font-size: 11px; }
+/* The other versions of a live view's process that still run instances, so an operator
+   sees where work is left without opening every version in the picker. */
+.live-other-versions { font-size: 12px; }
+.live-other-versions a { font-weight: 600; }
+.live-other-versions .err { color: var(--danger, #c0392b); }
+.live-other-versions .live-migrate-other { padding: 1px 8px; font-size: 12px; margin-left: 4px; }
 
 /* The three annotation badges below are deliberately the size of the token count and
    not of the word they used to spell out (ADR-0252).
@@ -2820,6 +2821,88 @@ a.c-ref:hover .c-ref-name { text-decoration: underline; }
   font-size: 11px; font-weight: 500; color: var(--muted);
   background: var(--bg); border: 1px solid var(--border);
 }
+.ops-mi-explore { margin-left: 4px; flex-shrink: 0; font-weight: 500; }
+.ops-hrow.mi-bounded { flex-wrap: wrap; cursor: default; }
+.mi-bounded-hint { font-size: 12px; }
+
+/* The Multi-Instance Explorer (ADR-0517): one page of one body execution's iterations.
+   The list never holds more than a page, so it needs no virtualisation — the server
+   cut it. */
+.mi-explorer-host { overflow: auto; flex: 1; min-height: 0; }
+.mi-bounded-note { padding: 12px 14px; font-size: 13px; }
+.mi-bounded-note h3 { margin: 0 0 6px; font-size: 14px; }
+.mi-explorer { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; font-size: 13px; }
+.mi-ex-head { display: flex; align-items: flex-start; gap: 10px; }
+.mi-ex-titles { flex: 1; min-width: 0; }
+.mi-ex-title { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.mi-ex-sub { font-size: 12px; }
+.mi-ex-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; }
+.mi-stat {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  display: flex; flex-direction: column; gap: 2px; background: var(--surface);
+}
+.mi-stat span { font-size: 11px; color: var(--muted); }
+.mi-stat b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mi-stat.incidents b, .mi-stat.open b { color: var(--danger); }
+.mi-ex-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.mi-ex-field { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted); }
+.mi-ex-field input, .mi-ex-field select { font-size: 13px; min-width: 7em; }
+.mi-ex-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.mi-ex-notice { font-size: 12px; padding: 6px 8px; border-radius: 6px; background: var(--warn-soft); color: var(--text); }
+.mi-ex-list { border: 1px solid var(--border); border-radius: 6px; max-height: 340px; overflow: auto; }
+.mi-ex-list:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mi-ex-list[aria-busy="true"] { opacity: .65; }
+.mi-row {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.mi-row:last-child { border-bottom: 0; }
+.mi-row:hover, .mi-row:focus { background: var(--bg); outline: none; }
+.mi-row.sel { background: var(--accent-soft); }
+.mi-row-n { min-width: 6em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mi-row-state { font-size: 11px; border-radius: 4px; padding: 1px 6px; border: 1px solid var(--border); }
+.mi-row-state.active { color: var(--accent-text); }
+.mi-row-state.terminated { color: var(--warn); }
+.mi-row-inc { margin-left: auto; font-size: 11px; color: var(--muted); }
+.mi-row-inc.open { color: var(--danger); font-weight: 600; }
+.mi-ex-error { color: var(--danger); padding: 8px 10px; }
+.mi-ex-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mi-ex-range { flex: 1; text-align: center; font-size: 12px; }
+.mi-ex-detail h4 { margin: 4px 0 6px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.mi-ex-detail h5 { margin: 10px 0 4px; font-size: 12px; }
+.mi-facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+.mi-facts dt { color: var(--muted); }
+.mi-facts dd { margin: 0; }
+.mi-inc-list, .mi-nested { margin: 0; padding-left: 18px; }
+.mi-inc-list li.open b { color: var(--danger); }
+.mi-nested li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0; }
+.mi-summary { font-size: 11px; color: var(--muted); font-weight: 400; }
+.mi-vars { border-collapse: collapse; width: 100%; font-size: 12px; }
+.mi-vars th, .mi-vars td { text-align: left; padding: 2px 6px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.mi-vars th { color: var(--muted); font-weight: 500; }
+.mi-dec-list { margin: 0; padding-left: 18px; }
+.mi-dec-list li { margin: 4px 0; }
+.mi-dec-io { font-size: 12px; overflow-wrap: anywhere; }
+.mi-dec-io span { color: var(--muted); }
+.mi-dec-trace { font-size: 11px; max-height: 180px; overflow: auto; background: var(--bg); padding: 6px; border-radius: 4px; }
+.mi-ex-technical { margin-top: 8px; }
+.mi-replay { display: flex; flex-direction: column; gap: 6px; }
+.mi-rp-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mi-rp-pos { font-size: 11px; }
+.mi-rp-steps { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 6px; max-height: 260px; overflow: auto; }
+.mi-rp-step { display: flex; gap: 8px; align-items: baseline; padding: 3px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+.mi-rp-step:last-child { border-bottom: 0; }
+.mi-rp-step:hover { background: var(--bg); }
+.mi-rp-step.cur { background: var(--accent-soft); }
+.mi-rp-step.terminated .mi-rp-act { color: var(--warn); }
+.mi-rp-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.mi-rp-at { font-size: 11px; }
+.mi-rp-vars h6 { margin: 6px 0 2px; font-size: 12px; font-weight: 600; }
+.mi-rp-vars-note { font-size: 11px; }
+@media (max-width: 720px) {
+  .mi-ex-controls { flex-direction: column; align-items: stretch; }
+  .mi-ex-list { max-height: 50vh; }
+}
 
 /* Two different facts, so two different marks. ".cur" is where the *playhead* stands —
    a position on the timeline — and ".sel" is the element instance the inspector is
@@ -3299,19 +3382,35 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 }
 .section-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
 .section-body[hidden] { display: none !important; }
+/* A fold inside a topic — a release, a list entry, a message, a group of a form, a
+   note — draws the caret the topics draw (.section-toggle above), before its summary,
+   turning when it opens. It is a <details> marked fold-sub; a <details> a library
+   draws (form-js, the API reference) is not marked and keeps its own look. */
+details.fold-sub > summary { cursor: pointer; list-style: none; }
+details.fold-sub > summary::-webkit-details-marker { display: none; }
+details.fold-sub > summary::before {
+  content: ""; display: inline-block; flex: none; width: 0; height: 0; margin-right: 6px;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  vertical-align: middle; transition: transform 0.15s ease;
+}
+details.fold-sub[open] > summary::before { transform: rotate(90deg); }
 /* A folding heading with the count beside it, which is what a folded section still
    says about what it holds (sectionHead in app.js): Console › Workers and an
    application's Deployments tab. */
 .sec-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-/* Every card headed by an <h2> folds the same way (fold.js): folded, it keeps its
-   heading row, the title and the card's own actions, and nothing else. */
-.card[data-folded] > :not(.fold-head) { display: none !important; }
+/* Every card headed by an <h2> folds the same way (fold.js), and so does a headed
+   section drawn outside a card that asks with .fold-topic: folded, it keeps its
+   heading row, the title and its own actions, and nothing else. */
+.card[data-folded] > :not(.fold-head),
+.fold-topic[data-folded] > :not(.fold-head) { display: none !important; }
 .card[data-folded] > .fold-head,
-.card[data-folded] > .fold-head h2 { margin-bottom: 0; }
+.card[data-folded] > .fold-head h2,
+.fold-topic[data-folded] > .fold-head,
+.fold-topic[data-folded] > .fold-head h2 { margin-bottom: 0; }
 .card.fold-flush[data-folded] > .fold-head { padding-bottom: 16px !important; }
 .sec-head h2 { margin: 0; }
-#pd-deployments .sec-head { margin: 22px 0 10px; }
-#pd-deployments .sec-head h2 { font-size: 15px; }
+#pd-deployments .sec-head, #pd-constants .sec-head { margin: 22px 0 10px; }
+#pd-deployments .sec-head h2, #pd-constants .sec-head h2 { font-size: 15px; }
 
 /* ---------- Tasks (Outlook-style inbox, ADR-0028) ---------- */
 .tasks-mode main { max-width: none; }
@@ -3780,6 +3879,19 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
 
 /* ---------- Public start link (ADR-0029) ---------- */
 .tasks-publish { margin-top: 26px; max-width: 640px; padding-top: 20px; border-top: 1px solid var(--border); }
+/* The task user's Start view (ADR-0516): one status line that says what became of a
+   start, and actions large enough to hit with a thumb. */
+.selfstart-app-line { margin: -6px 0 14px; }
+.selfstart-status { max-width: 640px; margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+  border: 1px solid var(--border); overflow-wrap: anywhere; }
+.selfstart-status p { margin: 0 0 8px; }
+.selfstart-status p:last-child { margin-bottom: 0; }
+.selfstart-status.err { border-color: var(--danger); }
+.selfstart-status.ok { border-color: var(--ok); background: var(--ok-soft); }
+.selfstart-status .btn, .selfstart-actions .btn { min-height: 44px; }
+.selfstart-actions { margin-top: 16px; max-width: 640px; }
+.selfstart-actions .btn { min-width: 44px; }
+.selfstart-app { cursor: default; }
 .tasks-publish .publish-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tasks-publish .publish-hint { margin: 0 0 12px; max-width: 60ch; font-size: 13px; }
 .tasks-publish .chip.ok { color: var(--ok, #2d8a4e); border-color: #bfe3cb; background: #eaf7ef; }
@@ -4296,25 +4408,15 @@ tr[hidden] { display: none; }
 .cat-steps-intro { max-width: 72ch; margin: 0 0 6px; }
 .cat-section { border-top: 1px solid var(--border); padding: 10px 0 4px; }
 .cat-section:last-child { border-bottom: 1px solid var(--border); }
-.cat-section > summary {
-  cursor: pointer; list-style: none; user-select: none;
-  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 0;
-}
-.cat-section > summary::-webkit-details-marker { display: none; }
-.cat-section > summary::before {
-  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
-}
-.cat-section[open] > summary::before { transform: rotate(90deg); }
-.cat-section > summary h3 { margin: 0; font-size: 15px; }
-.cat-section > summary:hover h3 { color: var(--accent-text); }
-.cat-section > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.cat-sec-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 4px 0; }
+.cat-sec-head h2 { margin: 0; font-size: 15px; }
 .cat-sec-step {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 50%;
   background: var(--accent-soft); color: var(--accent-text); font-size: 12px; font-weight: 600;
 }
 .cat-sec-sum { font-size: 13px; }
-.cat-section.danger > summary h3 { color: var(--danger); }
+.cat-section.danger > .cat-sec-head h2 { color: var(--danger); }
 .cat-more-head {
   margin: 28px 0 0; padding-bottom: 6px; font-size: 13px; letter-spacing: 0.02em;
   text-transform: uppercase; color: var(--muted);
@@ -4333,22 +4435,13 @@ tr[hidden] { display: none; }
   .cat-sec-about { border-left: 1px solid var(--border); padding-left: 16px; }
 }
 
-/* The Events page (events.js): each of its two sections is a <details> that folds away,
-   its summary the section's heading with a caret that turns, and beside it a line saying
-   what the section holds and warns about — readable while the section is folded. A row's
-   detail is a dialog wide enough for the tables in it. */
+/* The Events page (events.js): each of its two sections folds under its heading like
+   every topic (fold-topic, fold.js), and beside the heading a line says what the section
+   holds and warns about — readable while the section is folded. A row's detail is a
+   dialog wide enough for the tables in it. */
 .ev-section { margin-top: 18px; }
-.ev-section > summary {
-  cursor: pointer; list-style: none; user-select: none;
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px;
-}
-.ev-section > summary::-webkit-details-marker { display: none; }
-.ev-section > summary::before {
-  content: "\25B8"; display: inline-block; font-size: 12px; color: var(--muted); transition: transform .12s ease;
-}
-.ev-section[open] > summary::before { transform: rotate(90deg); }
-.ev-section > summary h2 { margin: 0; }
-.ev-section > summary:hover h2 { color: var(--accent-text); }
+.ev-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 10px; }
+.ev-head h2 { margin: 0; }
 .ev-sum-warn { color: var(--warn); font-weight: 600; }
 .modal.ev-modal { width: min(960px, 100%); }
 .modal.ev-modal:focus { outline: none; }
@@ -4977,7 +5070,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .ob-msg { border-bottom: 1px solid var(--border); padding: 10px 14px; }
 .ob-msg:last-child { border-bottom: 0; }
 .ob-msg > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ob-msg > summary::marker { color: var(--muted); }
 .ob-body { padding: 10px 2px 4px; }
 .ob-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
 .ob-head { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
@@ -5000,16 +5092,11 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    entry opening to its attributes. Containers the mock never got an entry for are
    rendered muted, because they exist only because something below them does. */
 .admock-worker { margin-top: 14px; }
-/* The card is one collapsible section: its summary is the worker line, so collapsing
-   leaves the identity and the freshness stamp on screen and puts the forests away. */
-.admock-card > summary {
-  cursor: pointer; display: flex; align-items: baseline; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.admock-card > summary::marker { color: var(--muted); }
-.admock-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.admock-card-head h2 { margin: 0; }
-.admock-card-state { white-space: nowrap; }
+/* The card folds under its heading row (fold.js): the worker line, so folding leaves
+   the identity and the freshness stamp on screen and puts the forests away. */
+.admock-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.admock-head h2 { margin: 0; }
+.admock-card-state { white-space: nowrap; margin-left: auto; }
 .admock-forest { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; }
 .admock-forest:first-of-type { border-top: 0; }
 .admock-forest h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
@@ -5019,7 +5106,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .admock-tree ul { border-left: 1px solid var(--border); }
 .admock-node { font: 12.5px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .admock-entry > summary { cursor: pointer; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.admock-entry > summary::marker { color: var(--muted); }
 .admock-detail { padding: 4px 0 8px 14px; }
 .admock-dn { font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; }
 /* width:auto against the global table{width:100%}: an attribute list is two narrow
@@ -5058,7 +5144,6 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
    and a journal, drawn as the mock database draws its sequence. */
 .spmock-list { margin-top: 8px; }
 .spmock-list > summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.spmock-list > summary::marker { color: var(--muted); }
 .spmock-table { width: 100%; margin: 4px 0 0; }
 .spmock-table thead th { border-bottom: 1px solid var(--border); padding: 2px 12px 2px 0; }
 .spmock-table td { padding: 2px 12px 2px 0; }
@@ -5097,42 +5182,18 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 /* ---------- Release notes (Console landing page) ----------
    The CHANGELOG as this binary was built from it, release by release (see
    renderReleaseNotes in app.js). Everything is theme-variable driven so it follows
-   the accent and any theme. The section, each release and each change is a native
-   <details>. */
+   the accent and any theme. The card folds under its heading like every topic
+   (fold.js); each release and each change is a native <details>. */
 .release-notes { margin-top: 18px; }
-/* The section header doubles as the collapse toggle. A caret marks open/closed in
-   place of the default marker. */
-.release-notes .rn-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; cursor: pointer; list-style: none;
-}
-.release-notes .rn-head::-webkit-details-marker { display: none; }
-.release-notes .rn-title {
-  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
-}
-.release-notes .rn-title::before {
-  content: "▸"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
-}
-.release-notes .rn-root[open] .rn-title::before { transform: rotate(90deg); }
+.release-notes .rn-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.release-notes .rn-title { font-size: 18px; font-weight: 650; margin: 0; }
 
 .release-notes .rn-list { margin-top: 10px; }
 
 /* One release. The row with its version, date and size is always visible. */
 .release-notes .rn-release { border-top: 1px solid var(--border); padding: 10px 2px; }
 .release-notes .rn-release:first-child { border-top: 0; }
-.release-notes .rn-release > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; list-style: none;
-}
-/* A flex summary loses its marker, so a release and a change draw the caret the
-   section header draws: a row that opens should say so before it is clicked. */
-.release-notes .rn-release > summary::-webkit-details-marker,
-.release-notes .rn-change > summary::-webkit-details-marker { display: none; }
-.release-notes .rn-release > summary::before,
-.release-notes .rn-change > summary::before {
-  content: "▸"; color: var(--muted); font-size: 11px; flex: none; transition: transform .12s ease;
-}
-.release-notes .rn-release[open] > summary::before,
-.release-notes .rn-change[open] > summary::before { transform: rotate(90deg); }
+.release-notes .rn-release > summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .release-notes .rn-version { font-weight: 650; }
 .release-notes .rn-date,
 .release-notes .rn-count { font: 12px/1.6 ui-monospace, monospace; color: var(--muted); }
@@ -5148,9 +5209,7 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 .release-notes .rn-changes { margin-top: 4px; }
 .release-notes .rn-change { border-top: 1px solid var(--border); padding: 7px 0; }
 .release-notes .rn-change:first-child { border-top: 0; }
-.release-notes .rn-change > summary {
-  cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none;
-}
+.release-notes .rn-change > summary { display: flex; align-items: baseline; gap: 8px; }
 .release-notes .rn-cat { flex: none; }
 .release-notes .rn-change-title { font-weight: 600; }
 .release-notes .rn-change-body { margin: 6px 0 2px; padding-left: 18px; }
@@ -5168,23 +5227,13 @@ input[type="text"].theme-hex:focus { outline: none; border-color: var(--accent);
 
 /* ---------- Key features (Console landing page) ----------
    A short statement of what Atlas is, below the dashboard's own tiles (see
-   key-features.js). Bilingual, and collapsible like the release notes above it:
+   key-features.js). Bilingual, and folding like the release notes above it:
    someone who has read it once should be able to fold it away. The
    entries are a responsive two-column grid that collapses to one on a narrow
    window, so fourteen short items stay scannable instead of becoming a wall. */
 .key-features { margin-top: 18px; }
-.key-features .kf-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; cursor: pointer; list-style: none;
-}
-.key-features .kf-head::-webkit-details-marker { display: none; }
-.key-features .kf-title {
-  font-size: 18px; font-weight: 650; display: inline-flex; align-items: center; gap: 8px;
-}
-.key-features .kf-title::before {
-  content: "\25B8"; color: var(--muted); font-size: 12px; transition: transform .12s ease;
-}
-.key-features .kf-root[open] .kf-title::before { transform: rotate(90deg); }
+.key-features .kf-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.key-features .kf-title { font-size: 18px; font-weight: 650; margin: 0; }
 
 /* Segmented EN/DE toggle. It sets the language of the whole landing page. */
 .key-features .kf-lang { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
@@ -5239,16 +5288,12 @@ tr.wk-stale > td { background: var(--warn-soft); }
 /* Tables sit flush inside their card, so the card pads only its header. */
 .wk-card { padding: 0; overflow: hidden; }
 .wk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; }
-/* The job-type table folds away, closed by default: an installation runs a handful of
-   types and the table lists every one it has ever seen, so the page opens on the
-   question rather than on rows of answer. What must survive the fold is the alarm —
-   hence .wk-unserved in the summary. */
-summary.wk-head { cursor: pointer; list-style: none; user-select: none; }
-summary.wk-head::-webkit-details-marker { display: none; }
-summary.wk-head:hover { background: var(--bg); }
-.wk-caret { display: inline-block; font-size: 10px; color: var(--muted); transition: transform .12s ease; }
-.wk-fold[open] > summary .wk-caret { transform: rotate(90deg); }
-.wk-fold:not([open]) > summary.wk-head { padding-bottom: 15px; }
+/* A card's heading is its <h2>, which is what folds it (fold.js). */
+.wk-head h2 { margin: 0; }
+/* The job-type table starts folded: an installation runs a handful of types and the
+   table lists every one it has ever seen, so the page opens on the question rather
+   than on rows of answer. What must survive the fold is the alarm — hence
+   .wk-unserved in the heading row. */
 .wk-unserved { color: var(--danger); font-weight: 600; }
 /* Which process a job type belongs to. Without it a table of fifty types is fifty
    names with no way back to the model that needs them. */
@@ -5338,10 +5383,7 @@ tr.wk-log-row > td { padding: 6px 12px 12px; }
   border: 1px solid var(--border); border-radius: 0; background: var(--surface);
   font-size: 12.5px; line-height: 1.5;
 }
-.wtdoc-more > summary {
-  padding: 6px 10px; cursor: pointer; font-weight: 600; color: var(--accent-text);
-  list-style-position: inside;
-}
+.wtdoc-more > summary { padding: 6px 10px; font-weight: 600; color: var(--accent-text); }
 .wtdoc-more[open] > summary { border-bottom: 1px solid var(--border); }
 .wtdoc-steps { margin: 8px 0; padding: 0 10px 0 26px; }
 .wtdoc-steps li { margin: 0 0 7px; }
@@ -7171,6 +7213,7 @@ table.do-trail-table { width: 100%; border-collapse: collapse; font-size: 12.5px
   margin-top: 18px; padding: 12px 16px; border: 1px solid var(--border);
   border-radius: 10px; background: var(--bg); font-size: 12.5px;
 }
+.md-excluded h2 { font-size: inherit; margin: 0 0 6px; }
 .md-excluded ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); line-height: 1.5; }
 .md-excluded li { margin: 4px 0; }
 
@@ -7390,6 +7433,8 @@ button.im-problem:hover { background: var(--accent-soft); }
 .im-resolved { color: #0a7c5a; border: 1px solid color-mix(in srgb, #0a7c5a 35%, transparent); }
 .im-unresolved { color: var(--muted); border: 1px solid var(--border); }
 .im-group-head .muted { margin-left: auto; font-size: 12px; }
+.im-group-head h2 { margin: 0; font-size: inherit; font-weight: inherit; display: flex; align-items: center; gap: 10px; }
+.card[data-folded] > .im-group-head { border-bottom: 0; }
 
 /* ---- The object diagram: the Data tab's second reading ---------------------
    (ADR-0230, slice 4)

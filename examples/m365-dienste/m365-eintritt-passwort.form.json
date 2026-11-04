@@ -1,0 +1,20 @@
+{
+  "type": "default",
+  "id": "m365-eintritt-passwort",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Initialpasswort festlegen · Set the initial password**\n\nEintritt von {{vorname}} {{nachname}} (Personalnummer {{personalnummer}}, Organisationseinheit {{oe}}, Eintritt am {{eintrittsdatum}}). Nach dieser Aufgabe legt der Prozess das Konto in Entra ID an; die Person muss das Passwort bei der ersten Anmeldung ändern. · Joiner {{vorname}} {{nachname}} (employee number {{personalnummer}}, unit {{oe}}, starting on {{eintrittsdatum}}). After this task the process creates the account in Entra ID; the person must change the password at first sign-in."
+    },
+    {
+      "key": "initialpasswort",
+      "type": "textfield",
+      "label": "Initialpasswort · Initial password",
+      "description": "Mindestens 12 Zeichen und nach der Kennwortrichtlinie des Tenants. · At least 12 characters and as the tenant's password policy demands.",
+      "validate": {
+        "required": true,
+        "minLength": 12
+      }
+    }
+  ]
+}

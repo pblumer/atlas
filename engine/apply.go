@@ -151,6 +151,12 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, state.ReplayActivated); err != nil {
 				return err
 			}
+			// The same step in the instance outline, unless it runs inside a
+			// multi-instance iteration (ADR-0517): the bounded overview of a large
+			// instance reads the outline instead of every iteration's steps.
+			if err := tx.RecordOutlineStep(h.Key, &v.element, h.Timestamp, h.Position, state.ReplayActivated); err != nil {
+				return err
+			}
 			// Persist MI body/round lineage as a deterministic read projection of
 			// the same activation fact, including body activation position (ADR-0517).
 			if err := tx.RecordMIActivation(h.Key, &v.element, h.Position); err != nil {
@@ -197,6 +203,9 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 				}
 			}
 			if err := tx.RecordElementReplay(v.element.ProcessInstanceKey, h.Timestamp, h.Position, v.element.ElementId, h.Key, v.element.TokenID, v.element.ParentTokenID, v.element.SourceFlowId, action); err != nil {
+				return err
+			}
+			if err := tx.RecordOutlineStep(h.Key, &v.element, h.Timestamp, h.Position, action); err != nil {
 				return err
 			}
 			// Preserve completed/terminated MI rounds after live element cleanup;
@@ -382,12 +391,22 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			if err := tx.PutIncident(&v.incident); err != nil {
 				return err
 			}
+			// Attribute the incident to the innermost multi-instance iteration or
+			// body its element belongs to, so the MI history can count and filter
+			// iterations that had incidents (ADR-0517). The scope chain is live
+			// state, so live and replay attribute identically (I4).
+			if err := tx.RecordMIIncidentRaised(&v.incident, h.Position); err != nil {
+				return err
+			}
 			return putIncidentFeedRow(tx, h, state.FeedIncidentRaised, &v.incident)
 		case model.IntentIncidentResolved:
 			// The row first: it reads the element the incident parked, which the
 			// resolution leaves in place, and the incident it names is the one the
 			// event carries.
 			if err := putIncidentFeedRow(tx, h, state.FeedIncidentResolved, &v.incident); err != nil {
+				return err
+			}
+			if err := tx.RecordMIIncidentResolved(&v.incident, h.Position); err != nil {
 				return err
 			}
 			return tx.DeleteIncident(v.incident.ElementInstanceKey)
@@ -654,7 +673,14 @@ func applyToState(tx *stateTx, h model.RecordHeader, v *inflightValue) error {
 			// record what the event carries (header timestamp/position plus the frozen
 			// evaluation), so replay rebuilds it without re-evaluating — invariants
 			// I4/I6.
-			return tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval)
+			if err := tx.RecordDecisionEvaluation(h.Timestamp, h.Position, &v.decisionEval); err != nil {
+				return err
+			}
+			// Name the evaluation under the multi-instance iteration that made it, so
+			// one iteration's decisions are read without the instance's others
+			// (ADR-0517). The element is live when its job completes, so its scope
+			// chain is state and replay attributes identically (I4).
+			return tx.RecordMIDecision(&v.decisionEval, h.Timestamp, h.Position)
 		}
 
 	case model.VTCompensable:

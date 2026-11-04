@@ -139,6 +139,140 @@ export function decisionOptions({ formId = "", url = null, headers = {}, ttlMs =
   };
 }
 
+// ---------- A name field's live availability check (ADR-0519) ----------------
+//
+// A textfield carrying an atlasAvailability block is a name somebody is about to take —
+// a SharePoint site, a Microsoft 365 group. While it is typed, the stored form's route
+// POST /api/v1/forms/{formId}/fields/{field}/availability is asked whether the name is
+// still free, and the answer is written under the form.
+//
+// Under the form and not inside it: form-js owns its fields' DOM and redraws it, and a
+// node slipped between them would be moved or dropped on the next redraw. The line
+// names the field by its label, so it reads as belonging to it.
+//
+// The answer is a courtesy. The process that creates the object asks again; a person
+// told "free" can still be told "taken" by the time it runs, and one whose check could
+// not run is not stopped from ordering.
+
+// availabilityFields lists the fields of a schema that carry an availability block.
+export function availabilityFields(schema) {
+  const out = [];
+  const walk = (comps) => {
+    for (const c of comps || []) {
+      if (!c || typeof c !== "object") continue;
+      if (Array.isArray(c.components)) walk(c.components);
+      const block = c.atlasAvailability;
+      if (!block || typeof c.key !== "string" || !c.key.trim()) continue;
+      out.push({
+        key: c.key.trim(),
+        label: c.label || c.key,
+        minLength: Number.isInteger(block.minLength) ? block.minLength : 3,
+      });
+    }
+  };
+  if (schema && Array.isArray(schema.components)) walk(schema.components);
+  return out;
+}
+
+// attachAvailabilityChecks watches the availability fields of a mounted form. `say`
+// words a field's state for the page's language: say(status, {label, value, message})
+// with status one of "checking", "free", "taken", "invalid", "unknown". It answers
+// { taken(), destroy() }: taken() lists the labels of fields whose current value is
+// known to be taken, which a page may refuse to submit.
+export function attachAvailabilityChecks({ form, host, schema, formId, say, delayMs = 400 }) {
+  const fields = availabilityFields(schema);
+  if (!fields.length || !formId || !form || !host) return { taken: () => [], destroy() {} };
+  const box = document.createElement("div");
+  box.className = "atlas-availability";
+  box.setAttribute("aria-live", "polite");
+  host.appendChild(box);
+  const seen = new Map(); // key -> { value, status, message }
+  const timers = new Map();
+  const asking = new Map();
+  let gone = false;
+
+  const paint = () => {
+    if (gone) return;
+    box.replaceChildren();
+    for (const f of fields) {
+      const st = seen.get(f.key);
+      if (!st || !st.status) continue;
+      const line = document.createElement("p");
+      line.className = `atlas-availability-${st.status} ` + (st.status === "taken" || st.status === "invalid" ? "error" : "note");
+      line.textContent = say(st.status, { label: f.label, value: st.value, message: st.message || "" });
+      box.appendChild(line);
+    }
+  };
+
+  const ask = (f, value) => {
+    const prior = asking.get(f.key);
+    if (prior) prior.abort();
+    const ctl = new AbortController();
+    asking.set(f.key, ctl);
+    seen.set(f.key, { value, status: "checking" });
+    paint();
+    fetch(`/api/v1/forms/${encodeURIComponent(formId)}/fields/${encodeURIComponent(f.key)}/availability`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+      signal: ctl.signal,
+    }).then(async (res) => {
+      const reply = await res.json().catch(() => ({}));
+      if ((seen.get(f.key) || {}).value !== value) return; // typed on meanwhile
+      if (res.ok) {
+        seen.set(f.key, { value, status: reply.available ? "free" : "taken" });
+      } else if (reply && reply.code === "invalid_value") {
+        seen.set(f.key, { value, status: "invalid", message: reply.error || "" });
+      } else {
+        seen.set(f.key, { value, status: "unknown", message: (reply && reply.error) || `HTTP ${res.status}` });
+      }
+      paint();
+    }).catch((e) => {
+      if (e && e.name === "AbortError") return;
+      if ((seen.get(f.key) || {}).value !== value) return;
+      seen.set(f.key, { value, status: "unknown", message: String((e && e.message) || e) });
+      paint();
+    });
+  };
+
+  const consider = (data) => {
+    for (const f of fields) {
+      const value = String((data || {})[f.key] ?? "").trim();
+      const was = seen.get(f.key);
+      if (was && was.value === value) continue;
+      clearTimeout(timers.get(f.key));
+      const prior = asking.get(f.key);
+      if (prior) prior.abort();
+      if (value.length < f.minLength) {
+        seen.set(f.key, { value, status: "" });
+        paint();
+        continue;
+      }
+      seen.set(f.key, { value, status: "checking" });
+      paint();
+      timers.set(f.key, setTimeout(() => ask(f, value), delayMs));
+    }
+  };
+
+  const onChanged = (event) => consider(event && event.data);
+  form.on("changed", onChanged);
+  // A form mounted again with what was typed before — the basket redraws — is checked
+  // at once rather than when the next key is pressed.
+  try { consider((form._getState && form._getState().data) || {}); } catch { /* nothing typed yet */ }
+
+  return {
+    taken: () => fields.filter((f) => (seen.get(f.key) || {}).status === "taken").map((f) => f.label),
+    destroy() {
+      gone = true;
+      try { form.off("changed", onChanged); } catch { /* the form went first */ }
+      for (const tm of timers.values()) clearTimeout(tm);
+      for (const ctl of asking.values()) ctl.abort();
+      box.remove();
+    },
+  };
+}
+
 // ---------- Answering a form that refused to submit --------------------------
 //
 // form-js validates on submit and marks the fields it rejected, and every surface that

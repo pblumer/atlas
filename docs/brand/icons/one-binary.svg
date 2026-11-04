@@ -1,4 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
-  <!-- Everything Atlas is, inside the mark's own peak — three bars cut out of it. -->
-  <path fill="#6E7781" fill-rule="evenodd" d="M128 30 238 214 18 214ZM128 172 160 214 96 214ZM116 70H140V92H116ZM96 104H160V126H96ZM75 138H181V160H75Z"/>
+  <!-- Everything atlas is, in one piece: the mark itself, its tile with the a and
+       the cross cut out of it (the shapes of docs/brand/atlas-mark.svg). -->
+  <g transform="translate(24 24) scale(0.8125)">
+    <path fill="#6E7781" fill-rule="evenodd" d="M56 0H200A56 56 0 0 1 256 56V200A56 56 0 0 1 200 256H56A56 56 0 0 1 0 200V56A56 56 0 0 1 56 0ZM146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9ZM40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4ZM133 93H162V211H133ZM184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>
+  </g>
 </svg>

@@ -29,6 +29,12 @@ Upstream references:
 - `zeebe-bpmn-moddle` **1.17.0**: the bundled BPMN `zeebe.json` descriptor is byte-identical to the [tagged upstream resource](https://github.com/camunda/zeebe-bpmn-moddle/blob/v1.17.0/resources/zeebe.json). Its MIT notice and copyright are retained in [ZEEBE-BPMN-MODDLE-LICENSE](api/web/vendor/bpmn/ZEEBE-BPMN-MODDLE-LICENSE), separately from the bpmn.io licence.
 - `camunda-dmn-moddle` **1.3.1**: integrated into the prebuilt DMN editor; its MIT copyright and permission notice is retained in [CAMUNDA-DMN-MODDLE-LICENSE](api/web/vendor/dmn/CAMUNDA-DMN-MODDLE-LICENSE). Source identification and bundle inclusion do **not** yet constitute an audited rebuild.
 
+## DMN editor fork and npm dependency evidence
+
+- `pblumer/dmn-js`, commit [`481cc5a`](https://github.com/pblumer/dmn-js/tree/481cc5a02ffa855689b59d81181478b84b25f9a5): its original bpmn.io licence with the required watermark condition is retained at [DMN LICENSE](api/web/vendor/dmn/LICENSE).
+- `pblumer/dmn-moddle`, commit [`ac76928`](https://github.com/pblumer/dmn-moddle/tree/ac76928df99382c36833d9300fd98acc604dc673): its independent MIT copyright/permission notice is retained at [DMN-MODDLE-LICENSE](api/web/vendor/dmn/DMN-MODDLE-LICENSE).
+- The DMN vendor build's npm lockfile records **68** package entries declaring 67 MIT and 1 ISC (`semver@7.8.5`). This is a **build dependency metadata inventory**, not a verified list of bundled/shipped modules or complete licence notices.
+
 All other bundled dependencies and transitive notices remain subject to the incomplete inventory and release checks.
 
 ## Go modules and other assets
@@ -36,6 +42,22 @@ All other bundled dependencies and transitive notices remain subject to the inco
 Dependencies in `go.mod` and `go.sum`, and vendored JavaScript, CSS, fonts, icons, images, schemas and generated bundles, retain their respective licences. Required upstream `NOTICE` and attribution files must be preserved.
 
 An automated licence report and SPDX or CycloneDX SBOM must be generated and reviewed before release.
+
+## Tabler Icons (shop tile layout)
+
+- **Component and version:** Tabler Icons 3.19.0, outline set, 36 icons (`@tabler/icons` on npm).
+- **Canonical source:** https://github.com/tabler/tabler-icons
+- **Licence:** MIT.
+- **Copyright:** Copyright (c) 2020-2024 Paweł Kuna.
+- **Distributed form:** modified. `api/web/shop-icons.js` carries the inner SVG markup of each icon, without its outer `<svg>` element and the empty bounding path; the drawing itself is unchanged. The list of names is repeated in `api/catalog/icons.go`.
+
+MIT licence text:
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Camunda and Zeebe interoperability
 

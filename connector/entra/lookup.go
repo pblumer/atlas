@@ -34,8 +34,12 @@ type LookupResource struct {
 	// Path is the collection under the tenant's Graph root.
 	Path string
 	// ValueProperty identifies a record: what a form submits and what a value lookup
-	// reads by.
+	// reads by, unless a query names another of ValueProperties.
 	ValueProperty string
+	// ValueProperties are the properties a query may name as the value instead: each is
+	// unique in the directory and addresses the record by its path, so a value lookup
+	// reads it the same way.
+	ValueProperties []string
 	// Searchable are the properties a term may be a prefix of. Each supports
 	// startsWith without advanced query support, so a lookup stays strongly consistent.
 	Searchable []string
@@ -44,44 +48,109 @@ type LookupResource struct {
 	// Readable are the properties a lookup may return. Nothing outside it is selected
 	// from Graph, and nothing outside what a query names is passed on.
 	Readable []string
-	// ActiveProperty is the boolean an ActiveOnly query requires to be true.
+	// ActiveProperty is the boolean an ActiveOnly query requires to be true. Empty means
+	// the collection has no such flag, and [CheckLookup] refuses an ActiveOnly query on
+	// it rather than ignoring the request.
 	ActiveProperty string
 }
 
-// LookupResources are the collections a form may search. One today: users. A group
-// lookup is a row here and a value check, when somebody needs one.
+// LookupResources are the collections a form may search: users, and — for a value
+// lookup answering "does a group with this alias exist, live or in the recycle bin" —
+// groups and deletedGroups (ADR-0172, amended 2026-11-03). The two group rows are read
+// by mailNickname, so their value lookup is a filtered read rather than a read by path
+// (see [lookupByValue]); they search nothing and filter on nothing, and have no active
+// flag.
 //
 // Every operator these rows lead to — startsWith on the searchable properties, eq on
-// the filterable ones and on accountEnabled — is one Graph's property tables mark as
-// supported by default, so the request needs neither ConsistencyLevel: eventual nor
-// $count, and what a person is shown is the directory as it is, not as an index last
-// saw it.
+// the filterable ones and on accountEnabled, eq on a group's mailNickname — is one
+// Graph's property tables mark as supported by default, so the request needs neither
+// ConsistencyLevel: eventual nor $count, and what a person is shown is the directory as
+// it is, not as an index last saw it.
 var LookupResources = map[string]LookupResource{
 	"users": {
-		Path:           "/users",
-		ValueProperty:  "id",
-		Searchable:     []string{"displayName", "givenName", "surname", "mail", "userPrincipalName"},
-		Filterable:     []string{"department", "jobTitle"},
-		Readable:       []string{"id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"},
-		ActiveProperty: "accountEnabled",
+		Path:          "/users",
+		ValueProperty: "id",
+		// A user principal name is unique and Graph reads /users/{upn} as it reads
+		// /users/{id}; processes that address people by name take it without a lookup.
+		ValueProperties: []string{"id", "userPrincipalName"},
+		Searchable:      []string{"displayName", "givenName", "surname", "mail", "userPrincipalName"},
+		Filterable:      []string{"department", "jobTitle"},
+		Readable:        []string{"id", "displayName", "givenName", "surname", "mail", "userPrincipalName", "department", "jobTitle"},
+		ActiveProperty:  "accountEnabled",
+	},
+	"groups": {
+		Path:          "/groups",
+		ValueProperty: "mailNickname",
+		Readable:      []string{"id", "displayName", "mailNickname"},
+	},
+	// A deleted group keeps its mailNickname for the 30 days it can be restored, and a
+	// new group cannot take the alias while it does — which is why "is this alias free"
+	// has to ask the recycle bin as well as the live directory.
+	"deletedGroups": {
+		Path:          "/directory/deletedItems/microsoft.graph.group",
+		ValueProperty: "mailNickname",
+		Readable:      []string{"id", "displayName", "mailNickname"},
 	},
 }
 
 // objectID is the shape of an Entra object id: a GUID.
 var objectID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+// principalName is the shape of a user principal name: one "@" with a local part and a
+// domain, no white space and nothing a path segment would have to carry escaped.
+var principalName = regexp.MustCompile(`^[A-Za-z0-9.!#$%&'*+=?^_{|}~-]+@[A-Za-z0-9.-]+$`)
+
+// mailNickname is the shape of a group alias a value lookup accepts: a letter or digit,
+// then up to 63 letters, digits, dots, underscores or hyphens. It is narrower than
+// what Graph stores, on purpose — it admits no quote, space or OData punctuation, so the
+// value cannot reach the $filter as anything but a plain literal, and it is the shape a
+// process creating a group would author anyway.
+var mailNickname = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+
 // ValidLookupValue reports whether v has the shape of a record's value in resource —
-// an object id for users. It is what a submission is checked against before anything
-// is asked of Graph, and what a value lookup refuses to send otherwise.
+// an object id for users, an alias for groups. It is what a submission is checked
+// against before anything is asked of Graph, and what a value lookup refuses to send
+// otherwise.
 func ValidLookupValue(resource, v string) bool {
 	res, ok := LookupResources[resource]
 	if !ok {
 		return false
 	}
-	if res.ValueProperty == "id" {
-		return objectID.MatchString(v)
+	return ValidLookupValueAs(resource, res.ValueProperty, v)
+}
+
+// ValidLookupValueAs is ValidLookupValue for a value read by property: an object id is
+// a GUID, a user principal name and a group alias have theirs. A property the resource does not admit
+// as a value holds no valid value.
+func ValidLookupValueAs(resource, property, v string) bool {
+	res, ok := LookupResources[resource]
+	if !ok || (property != res.ValueProperty && !slices.Contains(res.ValueProperties, property)) {
+		return false
 	}
-	return v != "" && utf8.RuneCountInString(v) <= lookup.MaxValueLength && lookup.CleanText(v)
+	if utf8.RuneCountInString(v) > lookup.MaxValueLength || !lookup.CleanText(v) {
+		return false
+	}
+	switch property {
+	case "id":
+		return objectID.MatchString(v)
+	case "userPrincipalName":
+		return principalName.MatchString(v)
+	case "mailNickname":
+		return mailNickname.MatchString(v)
+	}
+	return v != ""
+}
+
+// valueProperty is the property a query identifies records by: its own choice when the
+// resource admits it, the resource's identifier when it names none, and "" otherwise.
+func (res LookupResource) valueProperty(q lookup.Query) string {
+	switch {
+	case q.ValueProperty == "":
+		return res.ValueProperty
+	case q.ValueProperty == res.ValueProperty || slices.Contains(res.ValueProperties, q.ValueProperty):
+		return q.ValueProperty
+	}
+	return ""
 }
 
 // CheckLookup holds a query to its resource's allowlist and to the bounds every lookup
@@ -93,7 +162,8 @@ func CheckLookup(q lookup.Query) (LookupResource, error) {
 	if !ok {
 		return res, lookup.Fail(lookup.CodeInvalid)
 	}
-	if len(q.Properties) == 0 || !slices.Contains(q.Properties, res.ValueProperty) {
+	vp := res.valueProperty(q)
+	if vp == "" || len(q.Properties) == 0 || !slices.Contains(q.Properties, vp) {
 		return res, lookup.Fail(lookup.CodeInvalid)
 	}
 	for _, p := range q.Properties {
@@ -114,8 +184,15 @@ func CheckLookup(q lookup.Query) (LookupResource, error) {
 			return res, lookup.Fail(lookup.CodeInvalid)
 		}
 	}
+	// ActiveOnly on a collection with no active flag is refused rather than ignored. A
+	// form that asked for active records only believes it got them; answering every
+	// record instead would be the silent wrong answer, and writing the clause anyway
+	// would send Graph " eq true" with no property in front of it.
+	if q.ActiveOnly && res.ActiveProperty == "" {
+		return res, lookup.Fail(lookup.CodeInvalid)
+	}
 	if q.Value != "" {
-		if !ValidLookupValue(q.Resource, q.Value) {
+		if !ValidLookupValueAs(q.Resource, vp, q.Value) {
 			return res, lookup.Fail(lookup.CodeInvalid)
 		}
 		return res, nil
@@ -169,7 +246,7 @@ func RunLookup(ctx context.Context, connector string, q lookup.Query, reg *Regis
 		if !ok {
 			return lookup.Page{}, lookup.Fail(lookup.CodeUnavailable)
 		}
-		if v, _ := rec[res.ValueProperty].(string); v == "" {
+		if v, _ := rec[res.valueProperty(q)].(string); v == "" {
 			// A record without its value cannot be chosen, so it is not offered.
 			continue
 		}
@@ -236,7 +313,13 @@ func continues(baseURL, path, next string) bool {
 // lookupByValue reads the one record by its value and holds it to the query's filters.
 // Graph has no $filter on a user's id, so the record is read by its path and the
 // filters are compared here; what was read only to compare it is not passed on.
+//
+// A resource identified by anything but its id cannot be read by path, so it is read
+// as a filtered collection instead — see [lookupByFilter].
 func lookupByValue(ctx context.Context, client Client, res LookupResource, q lookup.Query) (lookup.Page, error) {
+	if res.ValueProperty != "id" {
+		return lookupByFilter(ctx, client, res, q)
+	}
 	sel := slices.Clone(q.Properties)
 	for _, f := range q.Filters {
 		if !slices.Contains(sel, f.Property) {
@@ -270,6 +353,54 @@ func lookupByValue(ctx context.Context, client Client, res LookupResource, q loo
 		}
 	}
 	return lookup.Page{Items: []map[string]any{project(rec, q.Properties)}}, nil
+}
+
+// lookupByFilter answers a value lookup on a resource whose value property is not its
+// path segment — a group's mailNickname: one page of at most one record, filtered by
+// value-property eq the value, and-ed with the query's equality filters and its active
+// flag, so Graph applies every constraint and nothing is compared here. The value has
+// passed [ValidLookupValue] and still goes through odataString, the one defence every
+// literal in this file shares.
+//
+// The answer is zero or one projected record. A second record would mean the value
+// does not identify one, which an alias does in a tenant; only the first is offered.
+//
+// Unverified against a tenant: Graph documents eq on a group's mailNickname as
+// supported by default on /groups, but whether /directory/deletedItems/microsoft.graph.group
+// accepts the same $filter without advanced query support (ConsistencyLevel: eventual
+// and $count) has not been tried. If it does not, Graph answers 400 and the lookup
+// reports CodeRefused — a visible failure, not a wrong "no such group".
+func lookupByFilter(ctx context.Context, client Client, res LookupResource, q lookup.Query) (lookup.Page, error) {
+	clauses := []string{res.ValueProperty + " eq " + odataString(q.Value)}
+	for _, f := range q.Filters {
+		clauses = append(clauses, f.Property+" eq "+odataString(f.Value))
+	}
+	if q.ActiveOnly {
+		clauses = append(clauses, res.ActiveProperty+" eq true")
+	}
+	path := res.Path +
+		"?$filter=" + url.QueryEscape(strings.Join(clauses, " and ")) +
+		"&$select=" + url.QueryEscape(strings.Join(q.Properties, ",")) +
+		"&$top=1"
+	answer, err := client.Call(ctx, Request{Method: http.MethodGet, Path: path})
+	if err != nil {
+		return lookup.Page{}, lookupFailure(err)
+	}
+	batch, _, err := collectionPage(answer, "lookup")
+	if err != nil {
+		return lookup.Page{}, lookup.Fail(lookup.CodeUnavailable)
+	}
+	for _, raw := range batch {
+		rec, ok := raw.(map[string]any)
+		if !ok {
+			return lookup.Page{}, lookup.Fail(lookup.CodeUnavailable)
+		}
+		if v, _ := rec[res.ValueProperty].(string); v == "" {
+			continue
+		}
+		return lookup.Page{Items: []map[string]any{project(rec, q.Properties)}}, nil
+	}
+	return lookup.Page{Items: []map[string]any{}}, nil
 }
 
 // project keeps exactly the properties a query named. One Graph did not send reads as

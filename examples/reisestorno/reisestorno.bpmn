@@ -53,9 +53,9 @@ zahlungOk (true erzwingt den Erfolgsweg, false den Storno-Weg).</documentation>
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="reiseziel" type="string" required="true" default="&quot;Lissabon&quot;"/>
+        <atlas:startVariable name="reiseziel" type="string" required="true" default="Lissabon"/>
         <atlas:startVariable name="reisende" type="number" required="true" default="2"/>
-        <atlas:startVariable name="abflug" type="string" required="false" default="&quot;2026-10-12&quot;"/>
+        <atlas:startVariable name="abflug" type="string" required="false" default="2026-10-12"/>
         <atlas:startVariable name="zahlungOk" type="boolean" required="false" default="false"/>
       </atlas:startForm>
     </extensionElements>

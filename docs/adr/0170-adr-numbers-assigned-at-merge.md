@@ -1,6 +1,6 @@
 # ADR-0170: ADR numbers are assigned at merge, not on a branch
 
-- **Status:** Accepted (amended 2026-08-24: the numbering commit also carries the regenerated What's New feed)
+- **Status:** Accepted (amended 2026-08-24: the numbering commit also carries the regenerated What's New feed; amended 2026-11-03: and the example catalogue and atlas hub versions its rewrite changes)
 - **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
@@ -177,6 +177,38 @@ staleness into a commit whose message says it assigns ADR numbers.
 The consequence for this record is narrow but real: the numbering commit is no
 longer confined to `docs/adr/` and citing files. It also carries
 `api/web/whats-new.json`, which is derived from a citing file rather than authored.
+
+### Amendment (2026-11-03): the numbering commit carries the examples' derived files
+
+The rewrite reaches `examples/` as well, and two files are derived from what is there:
+the served example catalogue (`api/web/examples-catalog.json`) and the atlas hub's
+version lock (`examples/hub/releases.json`), in which every bundle's latest version
+names the digest of its files. A version is immutable — an installation may have
+pinned it — so `TestHubReleasesAreCurrent` refuses a bundle whose files no longer
+match the digest recorded for it, and `TestExampleCatalogMatchesTheFiles` refuses a
+catalogue the files no longer produce.
+
+Both met the numbering commit the way the feed did. #1525 changed the `m365-dienste`
+example and recorded its new version, and was green; the numbering run after it
+rewrote ADR citations inside that bundle, so `main` held content under a version that
+named other content, and the next unrelated PRs went red in `cmd/atlas`. #1526 added
+`atlas hub lock` to the job and both guards to its self-check. That closed the hub
+half, but not the catalogue: a numbering that rewrites a citation inside an example
+leaves the catalogue stale, the self-check refuses it, and the job goes red with the
+records unnumbered — reproduced by numbering a draft cited in `m365-dienste/lizenz.bpmn`
+with the job's own steps.
+
+So the job now runs `make hub-lock`, which regenerates the catalogue and then records
+the hub versions, and `make adr-number` runs the same target, so the manual path
+produces the commit the job would. Unlike the feed's regeneration, it runs on every
+run, as #1526 placed it: both steps are idempotent, so a clean run writes nothing, and
+a staleness they do find is one `main` cannot carry either way.
+
+The consequence is the feed amendment's again, one directory wider: the numbering
+commit also carries the example catalogue and `examples/hub/releases.json`, both
+derived from citing files rather than authored. A hub version minted this way differs
+from its predecessor only in the text of a citation — the cost of a version being a
+digest, and the reason the lock records it rather than letting `main` drift.
 
 ## Pros and cons of the options
 

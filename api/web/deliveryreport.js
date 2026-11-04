@@ -85,10 +85,11 @@ export function productTable(products) {
     </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-// deliveryCard is the empty card the overview draws; wireDelivery fills it.
+// deliveryCard is the empty card the overview draws; wireDelivery fills it. Headed by
+// its <h2>, it folds like the overview's other sections (fold.js).
 export function deliveryCard() {
-  return `<div class="card dr-card" data-delivery style="margin-top:18px">
-    <h3 style="margin:0 0 6px">${esc(t("delivery.title"))}</h3>
+  return `<div class="card dr-card" data-delivery data-fold="delivery" style="margin-top:18px">
+    <h2 style="margin:0 0 6px">${esc(t("delivery.title"))}</h2>
     <p class="muted" style="max-width:70ch; margin:0 0 10px">${t("delivery.intro")}</p>
     <form class="dr-period">
       <label class="field">${esc(t("delivery.from"))}<input type="date" name="from"></label>

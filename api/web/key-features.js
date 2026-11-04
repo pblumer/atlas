@@ -47,22 +47,20 @@ export function paintKeyFeatures(slot, lang, onLang) {
     `<li class="kf-item"><b class="kf-item-title">${esc(text(f.title, lang))}</b>` +
     `<span class="kf-item-text">${esc(text(f.text, lang))}</span></li>`).join("");
 
+  // The tile folds under its heading like every topic of the Console (fold.js),
+  // remembered as "key-features" whatever the language it is read in.
   slot.innerHTML =
-    `<div class="card key-features"><details class="kf-root" open>` +
-    `<summary class="kf-head"><span class="kf-title">${esc(text(doc.title, lang))}</span>` +
+    `<div class="card key-features" data-fold="key-features">` +
+    `<div class="kf-head"><h2 class="kf-title">${esc(text(doc.title, lang))}</h2>` +
     `<span class="kf-lang">` +
     `<button type="button" data-lang="en" class="${lang === "en" ? "active" : ""}" title="Show these notes in English">EN</button>` +
     `<button type="button" data-lang="de" class="${lang === "de" ? "active" : ""}" title="Show these notes in German">DE</button>` +
-    `</span></summary>` +
+    `</span></div>` +
     `<p class="kf-intro muted">${esc(text(doc.intro, lang))}</p>` +
     `<ul class="kf-grid">${items}</ul>` +
-    `</details></div>`;
+    `</div>`;
 
-  // The language toggle lives inside the <summary>; stop the click from also
-  // toggling the section open/closed.
-  slot.querySelectorAll(".kf-lang button").forEach((b) => b.addEventListener("click", (ev) => {
-    ev.preventDefault();
-    ev.stopPropagation();
+  slot.querySelectorAll(".kf-lang button").forEach((b) => b.addEventListener("click", () => {
     if (onLang) onLang(b.dataset.lang);
   }));
 }

@@ -1118,10 +1118,19 @@ What it takes to run this for real.
   [issue #1481](https://github.com/pblumer/atlas/issues/1481)): default-collapsed
   Multi-Instance bodies in Operations Instance History are being delivered in OHS1
   (PR #1483), using durable parent-token lineage. OHS1 still receives the complete
-  timeline and is **not** a 50,000-iteration performance solution. OHS2 adds bounded
-  server-side iteration discovery, OHS3 scoped detail replay after an accepted
-  [query ADR](docs/adr/0517-scalable-instance-replay.md), recovery tests and 50k
-  memory/latency/writer-responsiveness evidence. UI integration is on Milestone S.
+  timeline and is **not** a 50,000-iteration performance solution. OHS2's bounded
+  server-side iteration discovery is built as an API: `GET /api/v1/instances/{key}/multi-instances`
+  and its body/iteration routes (MCP tools alike) page iterations by signed cursor, jump to an
+  iteration number, filter by lifecycle state and incident through event-derived indexes, and
+  read off the single writer; a 50,000-iteration end-to-end test holds every read to its page
+  ([ADR-0517](docs/adr/0517-scalable-instance-replay.md)). Operations shows a large instance
+  without the full timeline and browses its iterations in the Multi-Instance Explorer, which
+  replays one iteration's steps on the diagram with the variables of its own scopes at each step (OHS3). Not yet
+  built: per-instance readiness for compacted logs (stores written before the index are rebuilt
+  from the log at startup; a compacted log stays "history unavailable"),
+  job/user-task history per iteration (OHS3), and a
+  50,000-iteration acceptance through the HTTP server for a multi-instance *subprocess* (completing its
+  iterations is no longer quadratic, [issue #1494](https://github.com/pblumer/atlas/issues/1494)).
 
 - 🚧 Public API surface (deploy, create instance, publish message, complete job, queries): every route is in the served OpenAPI document with its role (`api/openapi.go`), with scoped API tokens ([ADR-0194](docs/adr/0194-api-tokens.md)) and a stated runtime contract ([ADR-0176](docs/adr/0176-standards-boundary-and-runtime-contract.md)). Deploy is still a sidecar store, not an event-sourced command ([ADR-0019](docs/adr/0019-durable-deployments.md))
 - ✅ API tokens are minted, listed and revoked in the Console (**Console → Administration → API tokens**, admin
@@ -1347,6 +1356,15 @@ Adoption and polish.
   provider conformance evidence; **T2** projects verified built-in operation claims
   without copying operation tables (see
   [implementation plan](docs/planning/technical-capability-contract.md)).
+- ✅ **Connected systems** ([ADR-0512](docs/adr/0512-connected-systems.md)): another
+  system — first Orbithek, formerly wikiwikibangbang — is connected with one
+  administrator's approval, naming itself by a client ID metadata document and signing
+  its token requests (`private_key_jwt`), with the capabilities `diagrams`, `tasklist` and
+  `events` narrowed to projects on the consent screen, pre-consent for its people's own
+  task grants, `prompt=none`, and Console → Administration → Connected systems. What a
+  system implements is in [`docs/integrations/connected-systems.md`](docs/integrations/connected-systems.md).
+  Still open: the draft the document follows may change (the record's open question), and
+  the other direction — a credential for a process writing into the system (§6).
 - 🔲 Worker SDKs in more languages
 - 🚧 BPMN modeler interoperability (import from common tools): the Zeebe dialect round-trips, and a MIM worksheet imports ([ADR-0292](docs/adr/0292-mim-import-worksheet.md)); importing from Camunda 7 or Signavio is not built
 - 🚧 **Model independence and third-party provenance (MIP):** verify licence/origin of vendored BPMN/DMN assets and implementation references; propose native `atlas:` authoring while preserving existing Zeebe BPMN import, stored-definition reload and deterministic recovery. Current stage MIP0 is **documentation/provenance and architecture review only**; native authoring and Camunda-specific DMN removal are not implemented. [Programme](docs/planning/model-independence-and-provenance-program.md) · [Proposed ADR](docs/adr/0513-native-model-dialect-and-vendor-compatibility.md) · [Initial audit](docs/legal/PROVENANCE_AUDIT.md). Milestone A owns the Modeler slice; Milestone 1 owns compiler compatibility; Milestone 6 owns interoperability and release evidence.
@@ -1378,7 +1396,7 @@ A parallel track (not strictly sequential with the engine milestones): make Atla
 something you *start*, not only something you *import*. Everything ships in one
 self-contained binary. See [ADR-0011](docs/adr/0011-single-binary-distribution-and-web-ui.md).
 
-**Mobile & Field Experience (MFE) programme — active (MFE0 architecture and device baseline)** ([programme plan](docs/planning/mobile-field-experience-program.md), [manifest](docs/programs/mfe/program.json)). Mobile is a **Tasks and Process Start first** surface, not a miniature admin Console. After an architecture and real-device baseline (MFE0), deliver accessible adaptive Tasks/Start (MFE1), operator-scoped mobile incident triage (MFE2), and modelled, deduplicated alerting and human acknowledgement/escalation from the existing incident CloudEvents feed (MFE3). Follow with field capture/evidence outside WAL variables (MFE4), safe offline drafts and idempotent completion reconciliation (MFE5), and optional bpmn-js authoring on large tablets (MFE6). **Proposed adaptive-workplace extension (MFE7):** Make atlas a coherent, role-aware personal workplace from desktop through tablet and phone, with an optional later watchOS/Wear OS companion limited to privacy-safe urgent status and authenticated phone handoff. This [cross-device product target](docs/planning/mfe-cross-device-workplace.md) is not shipped, does not imply full Watch/phone Modeler or administration, and requires a separate security/notification ADR after MFE1/MFE3 (unsent draft continuity requires MFE5). MFE0 must review the existing narrow-screen ADR-0417, incident ADR-0061/0169/0337, notification ADR-0343/0433/0435, security/roles and loss-of-response durability semantics. **MFE0's source audit and Chromium Tasks/Start/form-js regression checks are merged (PRs #1449, #1453, #1454), and ADR-0514 is Accepted (PR #1452). Real-device iOS/Android, complex-form/accessibility and handoff evidence remain open in issue #1451; MFE0 stays active. MFE1 navigation (#1468), server-confirmed completion (#1469), safety-inspection example (#1470) and compact mobile work shell (#1472) are merged. MFE0 iOS/Android hardware, accessibility and zoom acceptance remain open (#1451); no mobile release is claimed. Ordinary task users still cannot start processes under ADR-0209's operator-only rule; the [scoped authenticated process-start ADR](docs/adr/0516-scoped-authenticated-process-start.md) was accepted by the MFE owner on 2026-10-31 (PR #1471 / issue #1467). Least-privilege grants, new self-service routes, audit and revocation handling remain unimplemented pending sidecar design and security/recovery tests. MFE2 implementation contract PR #1477 is merged; the operator-only mobile incident cause triage UI is under review (draft PR #1479), preserving the existing desktop Operations remediation. The programme owner approved a limited three-slice parallel MFE0/MFE1/MFE2 exception; physical device/security acceptance and MFE3 alerting remain open.**
+**Mobile & Field Experience (MFE) programme — active (MFE0 architecture and device baseline)** ([programme plan](docs/planning/mobile-field-experience-program.md), [manifest](docs/programs/mfe/program.json)). Mobile is a **Tasks and Process Start first** surface, not a miniature admin Console. After an architecture and real-device baseline (MFE0), deliver accessible adaptive Tasks/Start (MFE1), operator-scoped mobile incident triage (MFE2), and modelled, deduplicated alerting and human acknowledgement/escalation from the existing incident CloudEvents feed (MFE3). Follow with field capture/evidence outside WAL variables (MFE4), safe offline drafts and idempotent completion reconciliation (MFE5), and optional bpmn-js authoring on large tablets (MFE6). **Proposed adaptive-workplace extension (MFE7):** Make atlas a coherent, role-aware personal workplace from desktop through tablet and phone, with an optional later watchOS/Wear OS companion limited to privacy-safe urgent status and authenticated phone handoff. This [cross-device product target](docs/planning/mfe-cross-device-workplace.md) is not shipped, does not imply full Watch/phone Modeler or administration, and requires a separate security/notification ADR after MFE1/MFE3 (unsent draft continuity requires MFE5). MFE0 must review the existing narrow-screen ADR-0417, incident ADR-0061/0169/0337, notification ADR-0343/0433/0435, security/roles and loss-of-response durability semantics. **MFE0's source audit and Chromium Tasks/Start/form-js regression checks are merged (PRs #1449, #1453, #1454), and ADR-0514 is Accepted (PR #1452). Real-device iOS/Android, complex-form/accessibility and handoff evidence remain open in issue #1451; MFE0 stays active. MFE1 navigation (#1468), server-confirmed completion (#1469), safety-inspection example (#1470) and compact mobile work shell (#1472) are merged. MFE0 iOS/Android hardware, accessibility and zoom acceptance remain open (#1451); no mobile release is claimed. Ordinary task users still cannot start processes under ADR-0209's operator-only rule; the [scoped authenticated process-start ADR](docs/adr/0516-scoped-authenticated-process-start.md) was accepted by the MFE owner on 2026-10-31 (PR #1471 / issue #1467). The deny-by-default grant evaluator (#1486) and the audited, fsync-durable grant store with restart recovery (#1489) are merged, and an admin-only grant/revoke/history/preview API follows them; none of these lets a task user start anything yet. The self-service list of startable processes and the self-service start, with server-side start-form checks and replay tests, follow them, and the Tasks Start view offers granted processes to task users; real-device acceptance of that flow stays open in MFE0 #1451. MFE2 implementation contract PR #1477 is merged; the operator-only mobile incident cause triage UI is under review (draft PR #1479), preserving the existing desktop Operations remediation. The programme owner approved a limited three-slice parallel MFE0/MFE1/MFE2 exception; physical device/security acceptance and MFE3 alerting remain open.**
 
 - ✅ `api` + `cmd/atlas`: single binary embedding the engine over an HTTP surface,
   serving an embedded web UI (`go:embed`). Deploy XML, create instance, stats,
@@ -1949,6 +1967,11 @@ the hand-written Details panel one vertical slice at a time:
   `POST /public/forms/{token}/start` bound to one process + start form, reusing the
   single-writer start path, rate-limited, checked against its form, and embeddable
   cross-origin ([ADR-0186](docs/adr/0186-embed-public-forms-cross-origin.md)).
+- ✅ A user task answered through the link a mail carries: `atlas:answeredBy="link"` on
+  the task, `answerTask` on the mail task that sends `answerLink`; a static page at
+  `/public/answer` shows the task's form and completes it, a signed token in the
+  fragment opens that one open task, and opening the link answers nothing
+  ([ADR-0523](docs/adr/0523-user-task-answered-by-link.md)).
 
 **Play mode** ([ADR-0030](docs/adr/0030-play-mode-simulation.md)):
 - ✅ An ephemeral engine sandbox: the real compiler + processor over an in-memory,
@@ -2531,6 +2554,18 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   [ADR-0358](docs/adr/0358-order-line-configuration.md), [ADR-0360](docs/adr/0360-product-category.md),
   [ADR-0361](docs/adr/0361-product-price.md), [ADR-0391](docs/adr/0391-product-picture.md),
   [ADR-0395](docs/adr/0395-product-construction-kit.md)).
+- ✅ **Marktleistung and service, filed under capabilities.** A catalogue switched to
+  `structured` declares every product a Marktleistung or a service; publishing proves a
+  Marktleistung is built from services only and a service is part of one, holds category
+  and product group to the capability register, and an order cannot ask for a service on
+  its own ([ADR-0524](docs/adr/0524-marktleistung-and-service.md)).
+- 🚧 **A tile layout for the shop.** A catalogue chooses `tiles` in its appearance; the
+  shop then draws a category menu, search and one tile row per catalogue, and a product
+  page, with an icon per product from a shipped symbol set. Still open: an
+  **accessibility audit against eCH-0059 / WCAG 2.1 AA** (keyboard order in the tile track,
+  names for the scroll button and icons, banner contrast, reflow at 200 %), resource tiles
+  (FAQ, guides), a shareable product link, and a favourite that persists
+  ([ADR-0525](docs/adr/0525-shop-tile-layout.md)).
 - ✅ **The answers reach the approver and the processes.** The approver reads a position's
   configuration answers on the approval, labelled as the form labels them; the processes the
   product binds receive each answer as a variable of its own, sealed where the model declares

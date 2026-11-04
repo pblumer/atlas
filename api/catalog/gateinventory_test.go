@@ -135,6 +135,8 @@ var catalogGates = []handlerGate{
 	{name: "HandleCatalogContentRefresh", kind: gated, want: http.StatusNotFound, method: "POST", id: true},
 	{name: "HandleMyCatalog", kind: ungated, method: "GET",
 		why: "is the visibility resolution itself: it answers from the caller's own groups and returns 404 when they reach none"},
+	{name: "HandleMyCatalogs", kind: ungated, method: "GET",
+		why: "is the visibility resolution itself, for every catalogue: it answers from the caller's own groups and lists only those they reach"},
 }
 
 // TestEveryHandlerIsClassified is the drift half. Reflection gives the handlers

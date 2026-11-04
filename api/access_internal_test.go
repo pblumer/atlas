@@ -54,6 +54,13 @@ var wantPublicRoutes = []string{
 	"OPTIONS /public/wizard/steps/{taskKey}/complete",
 	"POST /public/wizard/steps/{taskKey}/fields/{field}/options",
 	"OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options",
+	// A user task answered through the link a mail carries: a static page, and the two
+	// calls it makes, where the signed token in the Authorization header is the whole
+	// authorization and opens one open task (ADR-0523).
+	// Rate-limited in their handlers.
+	"GET /public/answer",
+	"GET /public/answer/task",
+	"POST /public/answer/task/{taskKey}/complete",
 
 	// What this server is, as an OAuth protected resource (RFC 9728, ADR-0200).
 	// These are read *after* a refusal, to find out what did the refusing — behind
@@ -64,6 +71,9 @@ var wantPublicRoutes = []string{
 	// A person's tasks as a resource of their own, the same document for the resource
 	// a client asks a tasks grant for (ADR-0510 §3).
 	"GET /.well-known/oauth-protected-resource/tasks",
+	// A connected system's own reading of this server, the document for the
+	// resource an administrator approves a system grant for (ADR-0512 §2).
+	"GET /.well-known/oauth-protected-resource/system",
 
 	// The authorization server (ADR-0200). Its metadata is read before a client
 	// holds anything at all, and its two endpoints have their own reasons:

@@ -122,6 +122,10 @@ github.com/microsoft/go-mssqldb v1.10.0 h1:pHEt+Qz6YFPWqREq10mqSE524QQo+/QremwTC
 github.com/microsoft/go-mssqldb v1.10.0/go.mod h1:mnG7lGa9iYJbzJqGCXyuQCegStKMr3kogDLD6+bmggg=
 github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d h1:RhlvDs1nToqucX5KO3qgLskgLeQQPYCpzYy/TF6I3H0=
 github.com/pblumer/feel v0.0.0-20260722114835-38f697db2c7d/go.mod h1:eayWuvmoZV7Cx/0P9ObYJzkcMuh+GBm1t4S+uwa7OuM=
+github.com/pblumer/feel v0.0.0-20261103131850-ffaf7810c01d h1:oeHwsKqgW3e5ZYLDZlQLe5M2HjXxkpgiuDcS86hmXa4=
+github.com/pblumer/feel v0.0.0-20261103131850-ffaf7810c01d/go.mod h1:eayWuvmoZV7Cx/0P9ObYJzkcMuh+GBm1t4S+uwa7OuM=
+github.com/pblumer/feel v0.0.0-20261103162457-c95ea3714cc4 h1:2crtlQ41uxnCQ1en7H6nPuWvuFLEfuEFa2xIY/k4mOo=
+github.com/pblumer/feel v0.0.0-20261103162457-c95ea3714cc4/go.mod h1:eayWuvmoZV7Cx/0P9ObYJzkcMuh+GBm1t4S+uwa7OuM=
 github.com/pblumer/temis v0.0.0-20260925145546-a3e1554b639a h1:jq8hPDsIEjuyKQadenURNwJ/sytLwqk7kdBYD2vpVIE=
 github.com/pblumer/temis v0.0.0-20260925145546-a3e1554b639a/go.mod h1:X+KLwy9w5iqXLVslw7VOf9LWHr11vcdlWFYIc0rG0ks=
 github.com/pblumer/temis v0.0.0-20260928055145-ac05be7a8b1e h1:xsofzokDlR05AdNMrM7lDnXLNv4HPZlpy2j2X3hM5VA=

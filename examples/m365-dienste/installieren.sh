@@ -4,9 +4,9 @@
 #   ATLAS_TOKEN=atlasat_… ./installieren.sh https://atlas.intern.example.ch antworten.json
 #
 # Schritte, in dieser Reihenfolge:
-#   1. die fünf Entscheidungsmodelle unter ihren Handles hochladen (die Applikation trägt
-#      nur Referenzen auf sie, und das Veröffentlichen prüft, dass es sie gibt);
-#   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungsreferenzen);
+#   1. die acht Entscheidungsmodelle unter ihren Handles hochladen (der Quellbaum trägt sie
+#      ebenfalls; der Import findet sie dann unverändert vor);
+#   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
 #   3. die Applikation veröffentlichen;
 #   4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
 #      Dokument importieren und veröffentlichen.
@@ -29,14 +29,14 @@ trap 'rm -rf "$WORK"' EXIT
 AUTH="Authorization: Bearer $TOKEN"
 
 echo "1. Entscheidungsmodelle"
-for m in m365-lizenzprofil m365-namensregel m365-postfachzugriff m365-telefonie m365-verteiler-zuordnung; do
+for m in m365-lizenzprofil m365-namensregel m365-oe-mitgliedschaften m365-postfachkontingent m365-postfachzugriff m365-site-kontingent m365-telefonie m365-verteiler-zuordnung; do
   curl -fsS -X POST "$SERVER/api/v1/dmn-models?handle=$m" -H "$AUTH" \
     -H 'Content-Type: application/xml' --data-binary "@$HERE/$m.dmn" > /dev/null
   echo "   $m"
 done
 
 echo "2. Applikation importieren"
-FILES=$(python3 -I -c 'import json,sys; m=json.load(open(sys.argv[1])); print(" ".join(["atlas.json"]+[p["path"] for p in m["processes"]]+[f["path"] for f in m["forms"]]))' "$HERE/atlas.json")
+FILES=$(python3 -I -c 'import json,sys; m=json.load(open(sys.argv[1])); print(" ".join(["atlas.json"]+[p["path"] for p in m["processes"]]+[f["path"] for f in m["forms"]]+sorted({d["path"] for d in m["decisions"] if d.get("path")})))' "$HERE/atlas.json")
 # shellcheck disable=SC2086
 tar -czf "$WORK/source.tar.gz" -C "$HERE" $FILES
 curl -fsS -X POST "$SERVER/api/v1/applications/source" -H "$AUTH" \

@@ -17,8 +17,10 @@ A number belongs to exactly one decision, and it is assigned **when the record l
 
 When the PR merges, a workflow on `main` runs `make adr-number`. That renames the
 file to `NNNN-<slug>.md`, rewrites the heading, appends the index row, and rewrites
-every citation of the draft to the number it just got. Nothing for you to remember;
-you can also run `make adr-number` by hand on `main`.
+every citation of the draft to the number it just got, then regenerates the example
+catalogue and records a new atlas hub version for any bundle that changed
+(`make hub-lock`). Nothing for you to remember; you can also run `make adr-number` by
+hand on `main`.
 
 Why the ceremony: the number used to be taken when the record was written, which is
 the earliest possible moment and the one with the least information. Two open
@@ -434,7 +436,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0346](0346-entitlement-history.md) | The remedy must not destroy the evidence, so a hold that ends leaves a row | Accepted | Landed |
 | [0347](0347-product-eligibility.md) | A product may narrow its catalogue's audience, because a person only ever sees one catalogue | Accepted | Landed |
 | [0348](0348-favourites.md) | A favourite is a bookmark, so it stores an id and resolves nothing | Accepted | Landed |
-| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted | Landed |
+| [0349](0349-ordering-for-others.md) | Whose name an order may carry is a question Atlas must ask, and a hierarchy it must not invent | Accepted (amended) | Landed |
 | [0350](0350-a-write-arrow-may-set-several-members.md) | A write arrow may set several members at once | Accepted | Landed |
 | [0351](0351-an-enumeration-says-which-values-a-member-may-take.md) | An «enumeration» says which values a member may take | Accepted | Landed |
 | [0352](0352-draw-a-relationship-from-the-class-it-starts-at.md) | Draw a relationship from the class it starts at | Accepted | Landed |
@@ -547,7 +549,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0459](0459-display-preferences-per-user.md) | How a person reads — number format, time zone and language, per user | Proposed | Not started |
 | [0460](0460-diagram-shortcuts.md) | Favourite and recent diagrams are one record per account, resolved at read time | Accepted | Landed |
 | [0461](0461-script-bpmn-errors.md) | A script throws a BPMN error by giving its error a code the process catches | Accepted | Landed |
-| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted | Landed |
+| [0462](0462-exchange-worker.md) | A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises | Accepted (amended) | Landed |
 | [0463](0463-teams-phone-worker.md) | A Microsoft Teams Phone Worker Type for voice apps and their resource accounts | Accepted (amended) | Landed |
 | [0464](0464-windows-system-proxy.md) | Outbound HTTP follows the Windows proxy settings, the way .NET does | Accepted | Landed |
 | [0465](0465-form-doors.md) | A step's form is opened from the step, and the way back links it | Accepted (amended) | Landed |
@@ -590,19 +592,27 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0502](0502-admin-profiling.md) | An administrator profiles the running server through the API | Accepted | Landed |
 | [0503](0503-mail-reply-routing.md) | A customer's reply finds the process that wrote to them | Proposed | Not started |
 | [0504](0504-what-a-mail-reply-proves.md) | What a mail reply proves, and what a decision may rest on | Proposed | Not started |
-| [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted | Landed |
+| [0505](0505-every-topic-folds.md) | Every topic of a Console page folds, the same way, and the browser remembers | Accepted (amended) | Landed |
 | [0506](0506-marketplace-catalogue-bundles-and-updates.md) | atlas hub catalogue bundles and opt-in updates | Proposed | Not started |
 | [0507](0507-ui-appearance-modes.md) | Appearance mode is a personal preference, not an organisation brand | Proposed | Partial |
 | [0508](0508-scope-aware-messaging-and-compensation.md) | Scope-aware messaging, event-subprocess runs and compensation from an event subprocess | Accepted | Landed |
 | [0509](0509-cockpit-appearance-skin.md) | A gamified cockpit skin as an opt-in appearance | Proposed | Partial |
 | [0510](0510-tasks-for-a-connected-system.md) | Tasks for a connected system — facts on the feed, a scope to list them, a grant to work them, and one's own groups | Proposed | Partial |
 | [0511](0511-form-options-from-a-decision.md) | A form field takes its options from a decision | Accepted | Landed |
-| [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Proposed | Not started |
+| [0512](0512-connected-systems.md) | Connected systems — an administrator connects another system with one approval, chooses what it may read, and its people follow without a consent screen of their own | Accepted | Landed |
 | [0513](0513-native-model-dialect-and-vendor-compatibility.md) | Native atlas authoring with versioned vendor-format compatibility | Proposed | Not started |
 | [0514](0514-mobile-first-tasks-start-and-incident-triage.md) | Mobile-first Tasks, Process Start and incident triage share one adaptive experience | Accepted | Partial |
 | [0515](0515-service-reporting-and-customer-views.md) | A product promises a delivery time, and three people may read how it was kept | Accepted | Partial |
-| [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Partial |
+| [0516](0516-scoped-authenticated-process-start.md) | Scoped authenticated process starts for task users | Accepted | Landed |
 | [0517](0517-scalable-instance-replay.md) | Bounded instance history and causal detail replay | Accepted | Partial |
+| [0518](0518-mi-history-legacy-rebuild.md) | Rebuilding the multi-instance history index for stores that predate it | Accepted | Landed |
+| [0519](0519-name-availability-check.md) | A name field checks live whether a name is still free | Accepted | Landed |
+| [0520](0520-process-places-an-order.md) | A process places an order in the name of its application | Accepted | Landed |
+| [0521](0521-command-by-recipient.md) | A process commands what a person holds, without reading what they hold | Accepted | Landed |
+| [0522](0522-several-catalogues-per-person.md) | A person sees every catalogue they are the audience for | Proposed | Partial |
+| [0523](0523-user-task-answered-by-link.md) | A user task can be answered through a link a mail carries | Accepted | Landed |
+| [0524](0524-marktleistung-and-service.md) | A structured catalogue declares Marktleistung and service, and files them under capabilities | Accepted | Landed |
+| [0525](0525-shop-tile-layout.md) | A catalogue chooses the shop's layout, and a product names its icon | Proposed | Partial |
 
 ## The two states of a record
 

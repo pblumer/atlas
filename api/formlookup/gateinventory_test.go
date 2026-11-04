@@ -28,6 +28,10 @@ const (
 	// taskGated: answered only to somebody who may work on the task the request
 	// names, and only through a Worker that allows forms to search it.
 	taskGated
+	// orderFormGated: answered only to somebody who may order the product from the
+	// catalogue the request names, and only through a Worker that allows forms to
+	// search it.
+	orderFormGated
 )
 
 type handlerGate struct {
@@ -39,6 +43,7 @@ type handlerGate struct {
 
 var lookupGates = []handlerGate{
 	{"HandleQuery", taskGated, "the Task collaborator asks mayWorkTask before the form is read, and usable() refuses a Worker whose editors have not opened it to forms"},
+	{"HandleOrderFormQuery", orderFormGated, "the OrderForm collaborator asks MayOrderFrom on the release's catalogue before the item's order form is read, and usable() refuses a Worker whose editors have not opened it to forms"},
 	{"HandleSources", roleGated, "names the remote data sources and the Workers of their types with two switches each — the catalog entry every author may see (ADR-0205), with no endpoint and no credential"},
 }
 

@@ -60,6 +60,61 @@ test("a folded topic hides its body and keeps its heading row, actions included"
   expect(page.__errors).toEqual([]);
 });
 
+// A topic drawn outside a card, an <h2> over a list of cards, asks to fold with
+// .fold-topic; a <section> that does not ask is left alone, and the cards in the list
+// are items, not topics.
+test("a topic outside a card folds when it asks to, and only then", async ({ page }) => {
+  await open(page);
+  await expect(toggle(page, "c-topic")).toHaveCount(1);
+  await expect(toggle(page, "c-topic")).toHaveText("Connections");
+  await expect(page.locator("#c-topic-item .section-toggle")).toHaveCount(0);
+  await expect(page.locator("#c-unasked .section-toggle")).toHaveCount(0);
+
+  await toggle(page, "c-topic").click();
+  await expect(page.locator("#c-topic-body")).toBeHidden();
+  await expect(page.locator("#c-topic h2")).toBeVisible();
+  // It has no frame, so it gets no padding to stand in for one.
+  await expect(page.locator("#c-topic")).not.toHaveClass(/fold-flush/);
+  await expect(page.locator("#c-unasked-body")).toBeVisible();
+  expect(page.__errors).toEqual([]);
+});
+
+// A topic whose heading row already answers what the page is for starts folded until
+// somebody opens it; from then on the browser remembers it like any other.
+test("a topic may start folded, and is remembered once opened", async ({ page }) => {
+  await open(page);
+  await expect(toggle(page, "c-closed")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#c-closed-body")).toBeHidden();
+  await toggle(page, "c-closed").click();
+  await expect(page.locator("#c-closed-body")).toBeVisible();
+  await page.reload();
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+  await expect(toggle(page, "c-closed")).toHaveAttribute("aria-expanded", "true");
+  expect(page.__errors).toEqual([]);
+});
+
+// A fold inside a topic — a release, an entry, a group of a form — stays a <details>,
+// but draws the caret a topic draws, and turns it the same way when it opens. A
+// <details> a library draws is not marked and keeps its own marker.
+test("a fold inside a topic draws the topics' caret", async ({ page }) => {
+  await open(page);
+  const caret = (sel) => page.evaluate((s) => {
+    const before = getComputedStyle(document.querySelector(s), "::before");
+    return { width: before.borderLeftWidth, transform: before.transform };
+  }, sel);
+  const topic = await caret("#c-plain [data-fold-toggle]");
+  const sub = await caret("#c-sub > summary");
+  expect(sub.width).toBe(topic.width);
+  expect(sub.transform).toBe("none");
+  await page.locator("#c-sub > summary").click();
+  // The caret turns over a short transition; what is compared is where it comes to rest.
+  await expect.poll(async () => (await caret("#c-sub > summary")).transform).toBe(topic.transform);
+  // The unmarked one keeps the browser's own marker.
+  const lib = await page.locator("#c-lib > summary").evaluate((el) => getComputedStyle(el).listStyleType);
+  expect(lib).not.toBe("none");
+  expect(page.__errors).toEqual([]);
+});
+
 test("the browser remembers each topic, per page", async ({ page }) => {
   await open(page);
   await toggle(page, "c-plain").click();

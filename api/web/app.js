@@ -176,6 +176,7 @@ async function loadAuth() {
   try {
     const m = await api("GET", "/api/v1/auth/me");
     AUTH = { enabled: !!(m && m.authEnabled), user: (m && m.user) || null, loaded: true };
+    SELF_START = { checked: false, available: false }; // a new identity asks again
   } catch {
     // A 401 from /auth/me means enforcement is on and nobody is signed in.
     AUTH = { enabled: true, user: null, loaded: true };
@@ -239,12 +240,18 @@ function loadLinking(force) {
   if (!who) return Promise.resolve();
   if (!force && LINKING.user === who && linkingAsked) return linkingAsked;
   LINKING.user = who;
+  // A connected system pre-approved for the person, or one they are connected to,
+  // is on the same page (ADR-0512 §4), so it offers the entry too — vault or not.
+  const systems = api("GET", "/api/v1/me/connected-systems")
+    .then((l) => Array.isArray(l) && l.length > 0, () => false);
   linkingAsked = api("GET", "/api/v1/me/connections").then((m) => {
     LINKING.offered = !!(m && ((m.linkable || []).length || (m.identities || []).length || (m.connections || []).length));
   }, (e) => {
     // Anything but 503 is no answer: keep the entry and ask on the next navigation.
     if (e && e.status === 503) LINKING.offered = false;
     else LINKING.user = null;
+  }).then(() => systems).then((any) => {
+    if (any) LINKING.offered = true;
   }).then(() => updateAccount());
   return linkingAsked;
 }
@@ -253,7 +260,35 @@ function loadLinking(force) {
 // the server serves the part of Atlas the entry opens. One predicate and not a second
 // condition beside each role check, because the next menu would be the one that
 // forgot it.
-const offered = (entry) => mayUse(entry.role) && !(entry.feature && FEATURES[entry.feature] === false);
+const offered = (entry) => (mayUse(entry.role) || (entry.selfStart && selfStartOffered()))
+  && !(entry.feature && FEATURES[entry.feature] === false);
+
+// SELF_START is what GET /api/v1/me/startable-processes said for a signed-in person
+// who does not hold the operator role (ADR-0516): whether an administrator granted
+// them at least one process they may start now. It decides one thing only — whether
+// the Start destination is offered to them. The server checks every list and every
+// start again; a stale answer here can show a link, never a right.
+let SELF_START = { checked: false, available: false };
+
+// selfStartOffered: the self-service Start view is for a signed-in person without the
+// operator role whose list is not empty. Operators (and admins) keep their own Start
+// view, and a server without authentication has no self-service at all.
+const selfStartOffered = () => SELF_START.available && AUTH.enabled && !!AUTH.user && !mayUse("operator");
+
+async function loadSelfStart(force) {
+  if (!AUTH.enabled || !AUTH.user || mayUse("operator") || !mayUse("user")) {
+    SELF_START = { checked: true, available: false };
+    return SELF_START;
+  }
+  if (SELF_START.checked && !force) return SELF_START;
+  try {
+    const page = await api("GET", "/api/v1/me/startable-processes");
+    SELF_START = { checked: true, available: !!(page && Array.isArray(page.items) && page.items.length) };
+  } catch {
+    SELF_START = { checked: true, available: false };
+  }
+  return SELF_START;
+}
 
 // isCatalogueRoute names the Console views of the area the switch removes — the same
 // four the menus mark with feature: "catalogue".
@@ -777,6 +812,9 @@ const TOPNAV = {
       // The credentials machines sign in with (ADR-0194). Admin, like the three routes
       // behind it: issuing one is the same class of act as creating an account.
       { name: "API tokens", route: "#/console/api-tokens", role: "admin" },
+      // The systems an administrator connected, what they read, and their people
+      // (ADR-0512 §4): beside the tokens they replace.
+      { name: "Connected systems", route: "#/console/connected-systems", role: "admin" },
       // The vault (ADR-0069): the credentials atlas signs in elsewhere with, where API
       // tokens are the ones machines sign in to atlas with. Admin, like every vault route.
       { name: "Secrets", route: "#/console/secrets", role: "admin" },
@@ -841,7 +879,9 @@ const TOPNAV = {
     // never opened Operations. Not one of the two shop pages either: those carry
     // the catalogue's brand and are written for people outside the tooling.
     { name: "Access review", route: "#/tasks/recertification", role: "user", feature: "catalogue" },
-    { name: "Start", route: "#/tasks/start", role: "operator" },
+    // Operators start any deployed process; a task user is offered Start only when an
+    // administrator granted them one (ADR-0516, selfStartOffered).
+    { name: "Start", route: "#/tasks/start", role: "operator", selfStart: true },
   ],
   panorama: [
     { name: "Starmap", route: "#/panorama/starmap", role: "modeler" },
@@ -1296,6 +1336,7 @@ function handbookHelp(path) {
   if (path.startsWith("#/console/ai-access")) return H("konten", "Connecting an AI assistant");
   if (path.startsWith("#/console/api-tokens")) return H("konten", "API tokens for machines");
   if (path.startsWith("#/console/connections")) return H("konten", "Connected accounts");
+  if (path.startsWith("#/console/connected-systems")) return H("konten", "Connected systems");
   if (path.startsWith("#/console/approvals")) return H("konten", "Approving an action");
   if (path.startsWith("#/console/security")) return H("konten", "Security: identities and policies");
   if (path.startsWith("#/console/audit")) return H("konten", "The audit log");
@@ -1602,7 +1643,7 @@ function paintMobileMenu(appId, route) {
     menu.append(link);
   };
   if (mayUse("user")) addLink({ name: "My tasks", route: "#/tasks", badge: "tasks" });
-  if (mayUse("operator")) addLink({ name: "Start process", route: "#/tasks/start" });
+  if (mayUse("operator") || selfStartOffered()) addLink({ name: "Start process", route: "#/tasks/start" });
   if (mayUse("operator")) addLink({ name: "Incidents", route: "#/operations/incidents", badge: "incidents" });
   for (const entry of (TOPNAV[appId] || [])) {
     if (entry.items) entry.items.forEach(addLink);
@@ -1801,7 +1842,7 @@ function rnFill(slot, version, lang) {
 
 function rnChangeHTML(c, t) {
   const cat = t.categories[c.category] || c.category || "";
-  return `<details class="rn-change"><summary>` +
+  return `<details class="rn-change fold-sub"><summary>` +
     (cat ? `<span class="chip rn-cat">${esc(cat)}</span>` : "") +
     `<span class="rn-change-title">${rnInline(c.title || "")}</span></summary>` +
     `<div class="rn-change-body">${c.text ? `<p>${rnInline(c.text)}</p>` : ""}` +
@@ -1826,7 +1867,7 @@ function rnBodyHTML(version, t) {
 
 function rnReleaseHTML(s, t) {
   const name = s.version === "Unreleased" ? t.unreleased : s.version;
-  return `<details class="rn-release" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
+  return `<details class="rn-release fold-sub" data-version="${esc(s.version)}"${rn.open.has(s.version) ? " open" : ""}>` +
     `<summary><span class="rn-version">${esc(name)}</span>` +
     (s.date ? `<span class="rn-date">${esc(s.date)}</span>` : "") +
     `<span class="rn-count">${esc(t.changes(s.changeCount || 0))}</span></summary>` +
@@ -1838,12 +1879,15 @@ function paintReleaseNotes(slot, lang) {
   const t = RN_STRINGS[lang] || RN_STRINGS.en;
   const shown = rn.older ? rn.index : rn.index.slice(0, RN_INITIAL_RELEASES);
   const hidden = rn.index.length - shown.length;
+  // The card folds under its heading like every topic (fold.js), remembered as
+  // "release-notes" whatever the language; each release inside it is a <details> of
+  // its own, opened to load its changes.
   slot.innerHTML =
-    `<div class="card release-notes"><details class="rn-root" open>` +
-    `<summary class="rn-head"><span class="rn-title">${esc(t.title)}</span></summary>` +
+    `<div class="card release-notes" data-fold="release-notes">` +
+    `<div class="rn-head"><h2 class="rn-title">${esc(t.title)}</h2></div>` +
     `<div class="rn-list">${shown.map((s) => rnReleaseHTML(s, t)).join("")}</div>` +
     (hidden > 0 ? `<button type="button" class="rn-more" data-older>${esc(t.older)} (${hidden})</button>` : "") +
-    `</details></div>`;
+    `</div>`;
 
   // A release loads its changes the first time it is opened.
   slot.querySelectorAll(".rn-release").forEach((d) => d.addEventListener("toggle", () => {
@@ -1920,6 +1964,15 @@ async function viewConsoleDashboard() {
     <div id="storage-card-slot"></div>
     <div id="key-features-slot"></div>`;
   view.querySelector("[data-system-overview]").addEventListener("click", () => openSystemOverview());
+  // These slots are filled after the route has folded the view, each when its module's
+  // answer arrives, and the storage card, the release notes and the key features are
+  // redrawn in place (a checkpoint, a language, older releases); a watch on each slot's
+  // own children folds what lands in it (fold.js), whenever it lands.
+  for (const id of ["storage-alert-slot", "catalogue-stranded-slot", "api-tokens-expiring-slot",
+    "approvals-waiting-slot", "storage-card-slot", "release-notes-slot", "key-features-slot"]) {
+    const slot = document.getElementById(id);
+    new MutationObserver(() => foldCards(slot, pageOf(location.hash))).observe(slot, { childList: true });
+  }
   // What switching the catalogue off strands (ADR-0434): asked only where it can have
   // an answer — the catalogue off, and an administrator looking — so nobody else pays a
   // request for it. Fills its own slot, and is silent when nothing is stranded.
@@ -2332,9 +2385,12 @@ async function viewConsoleAudit() {
 // authentication enabled both endpoints are admin-only.
 async function viewConsoleBackup() {
   const gen = navGen;
+  // Two topics under one title, each a card headed by its <h2> so it folds (fold.js):
+  // the design-time archive, and the whole-instance snapshot.
   view.innerHTML = `
-    <div class="card">
-      <h1>Backup &amp; restore</h1>
+    <h1>Backup &amp; restore</h1>
+    <div class="card" id="backup-design">
+      <h2>Design-time data</h2>
       <p class="muted">Download a single archive of your design-time data — projects, drafts,
       deployments, forms, decisions, workers — to keep or move to another instance.
       User accounts and the secret vault key are never included. With authentication enabled this is admin-only.</p>
@@ -2353,8 +2409,8 @@ async function viewConsoleBackup() {
       <p id="restore-status" class="muted" style="margin-top:10px" hidden></p>
     </div>
 
-    <div class="card" style="margin-top:16px">
-      <h1>Full snapshot</h1>
+    <div class="card" id="backup-full" style="margin-top:16px">
+      <h2>Full snapshot</h2>
       <p class="muted">A whole-instance snapshot for disaster recovery or migration: it also captures the
       <strong>WAL — every running instance</strong> — plus user accounts and the vault key, so a restore
       reconstitutes a complete, immediately-usable engine elsewhere. The derivable state store is rebuilt
@@ -4202,6 +4258,9 @@ function renderAppConstants(id) {
     intro: tr("constants.app.intro"),
     none: tr("constants.app.none"),
     held: tr("constants.app.held"),
+    // The tab's two lists fold under their headings, as the Deployments tab's do; on
+    // Admin → Engine they are parts of a card that folds as a whole.
+    fold: true,
   });
 }
 
@@ -4267,14 +4326,21 @@ async function renderHeldConstants(host, o) {
       <td>${canEdit ? `<button type="button" class="icon-btn hc-del" title="${esc(tr("constants.removeTitle"))}" aria-label="${esc(tr("constants.remove"))}">✕</button>` : ""}</td>
     </tr>`;
 
+  // A heading either folds what follows it (sectionHead, closed by the </div> after
+  // the part) or is a plain part heading inside a card that folds as a whole.
+  const partHead = (key, title, count, style) => o.fold
+    ? sectionHead(`${p}-sec-${key}`, esc(title), count) + sectionBody(`${p}-sec-${key}`)
+    : `<h3 style="${style}">${esc(title)}</h3>`;
+  const partEnd = o.fold ? "</div>" : "";
   host.innerHTML = `
     <p class="muted" style="padding:2px 2px 12px">${o.intro}</p>
-    <h3 style="margin:6px 0">${esc(tr("constants.required"))}</h3>
+    ${partHead("required", tr("constants.required"), trPlural("constants.count", view.required.length), "margin:6px 0")}
     ${view.required.length ? `<div class="card" style="padding:0"><table id="${p}-required">
         <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.processes"))}</th><th>${esc(tr("constants.th.here"))}</th></tr></thead>
         <tbody>${reqRows}</tbody></table></div>`
       : `<p class="muted">${esc(o.none)}</p>`}
-    <h3 style="margin:16px 0 6px">${esc(o.held)}</h3>
+    ${partEnd}
+    ${partHead("held", o.held, trPlural("constants.count", view.constants.length), "margin:16px 0 6px")}
     <div class="card" style="padding:0"><table id="${p}-table">
       <thead><tr><th>${esc(tr("constants.th.name"))}</th><th>${esc(tr("constants.th.type"))}</th><th>${esc(tr("constants.th.value"))}</th><th></th></tr></thead>
       <tbody id="${p}-rows">${rows.map(rowHTML).join("")}</tbody></table></div>
@@ -4286,7 +4352,9 @@ async function renderHeldConstants(host, o) {
       : `<p class="muted" style="margin-top:8px">${esc(tr("constants.adminOnly"))}</p>`}
     ${view.updatedAt ? `<p class="muted" style="font-size:12px">${esc(view.updatedBy
       ? tr("constants.lastChangedBy", { at: fmtTime(view.updatedAt), who: view.updatedByName || view.updatedBy })
-      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}`;
+      : tr("constants.lastChanged", { at: fmtTime(view.updatedAt) }))}</p>` : ""}
+    ${partEnd}`;
+  if (o.fold) wireSections(host);
   if (!canEdit) return;
 
   const tbody = host.querySelector(`#${p}-rows`);
@@ -7659,7 +7727,7 @@ async function viewWorkers() {
       queue depths come from durable state.</p>
     <div class="card wk-card" id="wk-collisions" hidden></div>
     <div class="card wk-card" id="wk-breakers" hidden></div>
-    <div class="card wk-card" id="wk-types"><p class="empty">Loading&hellip;</p></div>
+    <div class="card wk-card" id="wk-types" data-fold-default="closed"><p class="empty">Loading&hellip;</p></div>
     <div class="card wk-card" id="wk-workers"></div>
     <div class="card wk-card" id="wk-gaps" hidden></div>
     <div class="card wk-card" id="wk-supervised" hidden></div>`;
@@ -7699,16 +7767,6 @@ async function viewWorkers() {
   // lease is five minutes, so anything beyond it has let its work go back on offer.
   const STALE_MS = 5 * 60 * 1000;
   const isStale = (w) => w.lastSeen && Date.now() - w.lastSeen / 1e6 > STALE_MS;
-
-  // Whether the job-type table is unfolded. Default closed: the page's question is
-  // "is anything unserved?", which the summary answers, and the table is the detail
-  // behind it. try/catch because a locked-down browser can make storage throw.
-  const typesOpen = () => {
-    try { return localStorage.getItem("atlas.workers.types") === "1"; } catch { return false; }
-  };
-  const setTypesOpen = (open) => {
-    try { localStorage.setItem("atlas.workers.types", open ? "1" : "0"); } catch { /* not storable */ }
-  };
 
   const servedBy = (row, pullers) => {
     if (row.servedInProcess) {
@@ -7762,16 +7820,18 @@ async function viewWorkers() {
     const unserved = typeRows.filter(
       (t) => t.leasable && t.parked > 0 && !t.inFlight && !pullersOf(workerRows, t.type).length);
 
+    // The job-type table folds like every card here, but starts folded
+    // (data-fold-default): the page's question is "is anything unserved?", which the
+    // heading row answers, and the table is the detail behind it.
     types.innerHTML = `
-      <details class="wk-fold" id="wk-types-fold"${typesOpen() ? " open" : ""}>
-      <summary class="wk-head">
-        <b><span class="wk-caret" aria-hidden="true">&#9656;</span> Job types</b>
+      <div class="wk-head">
+        <h2>Job types</h2>
         <span class="muted small">${typeRows.length} shown${unserved.length
           ? ` &middot; <span class="wk-unserved" title="${esc(`${unserved.length} job type${unserved.length === 1
             ? " has" : "s have"} work queued and nothing pulling it`)}">${unserved.length} unserved</span>` : ""}${
           idleBuiltIns.length ? ` &middot; <a href="#" id="wk-toggle-all">${showAllTypes
             ? "hide" : "show"} ${idleBuiltIns.length} idle built-in${idleBuiltIns.length === 1 ? "" : "s"}</a>` : ""}</span>
-      </summary>
+      </div>
       ${typeRows.length ? `<table data-dt-key="wk-types">
         <thead><tr>
           <th>Type</th><th>Served by</th>
@@ -7798,12 +7858,11 @@ async function viewWorkers() {
         }).join("")}</tbody>
       </table>` : `<p class="empty">No job types yet &mdash; deploy a process with a service task.</p>`}
       <p class="wk-note">An <b>in-process</b> type is worked by atlas itself and cannot be leased from
-        outside; relocating it to a worker means turning that handler off.</p>
-      </details>`;
+        outside; relocating it to a worker means turning that handler off.</p>`;
 
     workers.innerHTML = `
       <div class="wk-head">
-        <b>Workers</b>
+        <h2>Workers</h2>
         <span class="muted small">${workerRows.length} seen this run</span>
       </div>
       ${workerRows.length ? `<table data-dt-key="wk-workers">
@@ -7910,7 +7969,7 @@ async function viewWorkers() {
     // Variables are shown collapsed: the list is for scanning outcomes, and a row of
     // JSON per job would bury the one that failed.
     const vars = (label, text) => text
-      ? `<details class="wkjob-vars"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
+      ? `<details class="wkjob-vars fold-sub"><summary>${label}</summary><pre>${esc(prettyJSON(text))}</pre></details>`
       : `<span class="muted small">${label}: none</span>`;
     body.innerHTML = `<div class="wkjob-list">${jobs.map((j) => {
       const took = j.settledAt && j.leasedAt
@@ -7998,7 +8057,7 @@ async function viewWorkers() {
     if (collided.length) {
       collisions.hidden = false;
       collisions.innerHTML = `
-        <div class="wk-head"><b>Job types on an index a built-in has taken</b>
+        <div class="wk-head"><h2>Job types on an index a built-in has taken</h2>
           <span class="muted small">${collided.length} type${collided.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Job type</th><th class="wk-num">Index</th><th>That index now means</th></tr></thead>
@@ -8027,7 +8086,7 @@ async function viewWorkers() {
     if (held.length) {
       breakers.hidden = false;
       breakers.innerHTML = `
-        <div class="wk-head"><b>Held back</b>
+        <div class="wk-head"><h2>Held back</h2>
           <span class="muted small">${held.length} target${held.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Target</th><th>Worker type</th><th>Since</th><th>Next attempt</th>
@@ -8082,7 +8141,7 @@ async function viewWorkers() {
     if (missing.length) {
       gaps.hidden = false;
       gaps.innerHTML = `
-        <div class="wk-head"><b>Workers nothing can serve</b>
+        <div class="wk-head"><h2>Workers nothing can serve</h2>
           <span class="muted small">${missing.length} name${missing.length === 1 ? "" : "s"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Worker type</th><th>Used by</th></tr></thead>
@@ -8113,7 +8172,7 @@ async function viewWorkers() {
     if (sup.length) {
       supervised.hidden = false;
       supervised.innerHTML = `
-        <div class="wk-head"><b>Supervised by this server</b>
+        <div class="wk-head"><h2>Supervised by this server</h2>
           <span class="muted small">${sup.length} process${sup.length === 1 ? "" : "es"}</span></div>
         <table class="no-enhance">
           <thead><tr><th>Worker</th><th>Serves</th><th>State</th><th class="wk-num">PID</th>
@@ -8155,12 +8214,14 @@ async function viewWorkers() {
 
     const toggle = document.getElementById("wk-toggle-all");
     if (toggle) {
-      // The link sits inside the <summary>, where a click would also fold the card.
-      toggle.onclick = (e) => { e.preventDefault(); e.stopPropagation(); showAllTypes = !showAllTypes; load(); };
+      // The link sits in the card's heading row; on a folded card, fold.js opens the
+      // card before it acts, so the rows it asks for are shown.
+      toggle.onclick = (e) => { e.preventDefault(); showAllTypes = !showAllTypes; load(); };
     }
-    const fold = document.getElementById("wk-types-fold");
-    if (fold) fold.addEventListener("toggle", () => setTypesOpen(fold.open));
     enhanceViewTables();
+    // A card that was empty when the route folded the view (no breaker held, every
+    // name served) gets its heading on a later Refresh, and only this finds it then.
+    foldCards(view, pageOf(location.hash));
   };
 
   document.getElementById("refresh").onclick = load;
@@ -8288,7 +8349,7 @@ async function viewMailOutbox() {
     }
     list.innerHTML = (data.truncated
       ? `<p class="muted" style="margin:10px 12px 0">Older messages have been dropped — the outbox keeps the newest ones.</p>`
-      : "") + msgs.map((m) => `<details class="ob-msg">
+      : "") + msgs.map((m) => `<details class="ob-msg fold-sub">
         <summary>
           <b>${esc(m.subject || "(no subject)")}</b>
           <span class="muted">· to ${esc(addrs(m.to)) || "—"}</span>
@@ -8414,7 +8475,7 @@ async function viewADMockDirectory() {
     // data-k is the entry's identity across renders: what you opened stays open when
     // the view refreshes under you. The DN is unique within a forest, and the forest
     // and worker are prefixed by the callers below.
-    return `<li><details class="admock-entry" data-k="e|${esc(node.entry.dn || "")}">
+    return `<li><details class="admock-entry fold-sub" data-k="e|${esc(node.entry.dn || "")}">
         <summary><span class="admock-node">${esc(node.rdn)}</span>
           <span class="muted">· ${count} attribute${count === 1 ? "" : "s"}</span></summary>
         <div class="admock-detail">
@@ -8445,32 +8506,29 @@ async function viewADMockDirectory() {
   const renderWorker = (w) => {
     const forests = w.forests || [];
     const ops = w.operations || [];
-    // The whole worker is one collapsible card: a mockup run against several forests
-    // is a lot of screen, and an operator watching two workers wants to put one away
-    // without losing it. Open by default — a card you have to open to learn there is
-    // anything in it is the state this view exists to end.
-    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="admock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
-            ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
-          </span>
+    // The whole worker is one card that folds under its heading (fold.js), remembered
+    // by the worker's name: a mockup run against several forests is a lot of screen, and
+    // an operator watching two workers wants to put one away without losing it. Open by
+    // default — a card you have to open to learn there is anything in it is the state
+    // this view exists to end.
+    return `<div class="card admock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} starting entr${(w.seeded || 0) === 1 ? "y" : "ies"} ·
+          ${forests.length} forest${forests.length === 1 ? "" : "s"} dialled</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${forests.length ? forests.map(renderForest).join("")
           : `<p class="empty">No directory dialled yet. This worker is in mockup mode and has served
              no Active Directory task since it started — the first one creates the forest it names.</p>`}
-        ${ops.length ? `<details class="admock-ops" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
+        ${ops.length ? `<details class="admock-ops fold-sub" data-k="ops"><summary>${ops.length} operation${ops.length === 1 ? "" : "s"}</summary>
           <table class="admock-attrs"><tbody>${ops.map((o) => `<tr>
             <th>${esc(o.op || "")}</th>
             <td><code>${esc(o.dn || "")}</code>${o.detail ? ` <span class="muted">${esc(o.detail)}</span>` : ""}</td>
           </tr>`).reverse().join("")}</tbody></table></details>` : ""}
-      </details>
     </div>`;
   };
 
@@ -8524,6 +8582,8 @@ async function viewADMockDirectory() {
     }
     list.innerHTML = workers.map(renderWorker).join("");
     refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8601,46 +8661,26 @@ async function viewSQLMockJournal() {
   const renderWorker = (w) => {
     const sts = w.statements || [];
     const failed = sts.filter((s) => s.failed).length;
-    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}">
-      <details class="sqlmock-card" data-k="card" open>
-        <summary>
-          <span class="admock-card-head">
-            <h2>${esc(w.worker || "?")}</h2>
-            <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
-            ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
-              failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
-          </span>
+    // One card per worker, folding under its heading (fold.js) and remembered by the
+    // worker's name, so a refresh does not reopen what somebody closed.
+    return `<div class="card sqlmock-worker" data-worker="${esc(w.worker || "?")}" data-fold="${esc(w.worker || "?")}">
+        <div class="admock-head">
+          <h2>${esc(w.worker || "?")}</h2>
+          <span class="muted">${w.seeded || 0} prepared answer${(w.seeded || 0) === 1 ? "" : "s"} ·
+          ${w.held || 0} statement${(w.held || 0) === 1 ? "" : "s"} asked${
+            failed ? ` · <b>${failed}</b> with no answer` : ""}</span>
           <span class="admock-card-state">
             <span class="pill warn"><span class="dot"></span>mockup</span>
             <span class="muted" style="margin-left:8px">reported ${esc(fmtNano(w.at))}</span>
           </span>
-        </summary>
+        </div>
         ${w.truncated ? `<p class="muted">Showing the newest ${sts.length} of ${w.held} — a run this
           long is past what this view carries.</p>` : ""}
         ${sts.length
           ? `<table class="admock-attrs sqlmock-table"><tbody>${sts.map(renderStatement).join("")}</tbody></table>`
           : `<p class="empty">Nothing asked yet. This worker is in mockup mode and has served no
              database task since it started.</p>`}
-      </details>
     </div>`;
-  };
-
-  // Which cards the reader has put away, addressed by worker rather than by position —
-  // a refresh must not reopen what somebody closed.
-  const keyOf = (d) => {
-    const w = d.closest("[data-worker]");
-    return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
-  };
-  const foldState = () => {
-    const state = new Map();
-    for (const d of list.querySelectorAll("details")) state.set(keyOf(d), d.open);
-    return state;
-  };
-  const refold = (state) => {
-    for (const d of list.querySelectorAll("details")) {
-      const was = state.get(keyOf(d));
-      if (was !== undefined) d.open = was;
-    }
   };
 
   // The last payload rendered. A poll that brings nothing new leaves the DOM alone: the
@@ -8658,7 +8698,6 @@ async function viewSQLMockJournal() {
     }
     const fresh = JSON.stringify(data);
     if (fresh === rendered) return;
-    const folds = foldState();
     rendered = fresh;
     const workers = (data && data.workers) || [];
     if (!workers.length) {
@@ -8669,7 +8708,8 @@ async function viewSQLMockJournal() {
       return;
     }
     list.innerHTML = workers.map(renderWorker).join("");
-    refold(folds);
+    // The cards are new, so they get their toggles and their remembered fold again.
+    foldCards(list, pageOf(location.hash));
   };
 
   await load();
@@ -8710,8 +8750,10 @@ async function viewMockups() {
     <div id="spmock-list"><p class="empty">Loading…</p></div>`;
   const list = document.getElementById("spmock-list");
 
-  // Folds are remembered by worker and section, both ways, so a refresh neither reopens
-  // what somebody closed nor closes what they opened.
+  // A card folds under its heading (fold.js), remembered by its worker. The sections
+  // inside it — a list, the operations — are remembered here by worker and section,
+  // both ways, so a refresh neither reopens what somebody closed nor closes what they
+  // opened.
   const keyOf = (d) => {
     const w = d.closest("[data-worker]");
     return `${w ? w.dataset.worker : ""}|${d.dataset.k || ""}`;
@@ -8744,12 +8786,14 @@ async function viewMockups() {
     rendered = fresh;
     list.innerHTML = mockupsHTML(data);
     refold(folds);
+    foldCards(list, pageOf(location.hash));
   };
 
   list.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-spmock-clear]");
     if (!btn) return;
-    // The button sits in the card's summary; without this the click would also fold it.
+    // The button sits in the card's heading row; on a folded card fold.js opens the card
+    // before this runs, so what it empties is in view.
     e.preventDefault();
     const worker = btn.dataset.spmockClear;
     if (!confirm(`Empty the mockup site of ${worker}? Its lists, libraries and journal are gone; nothing outside this server is touched.`)) return;
@@ -9078,8 +9122,9 @@ const wizardHistory = {
 const WIZARD_WAIT_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000, 60000];
 
 // MFE1: offer both primary work destinations without inventing a mobile router.
-// Start remains operator-only (ADR-0209); mobile navigation must use the same
-// role predicate as the desktop top bar, not a separate authorisation rule.
+// Start is the operator's, or a task user's once something is granted to them
+// (ADR-0516); mobile navigation uses the same predicate as the desktop top bar
+// (offered), never an authorisation rule of its own.
 // On task selection the list pane (and this navigation) hides on narrow screens,
 // so following a Start link cannot silently discard an in-progress form draft.
 function mobileWorkEntryHTML(active) {
@@ -9089,7 +9134,7 @@ function mobileWorkEntryHTML(active) {
     ${offered({ role: "user" })
       ? `<a class="mfe-entry-link${tasksCurrent ? " active" : ""}" href="#/tasks"${tasksCurrent}>${esc(tr("mfe.tasks"))}</a>`
       : ""}
-    ${offered({ role: "operator" })
+    ${offered({ role: "operator", selfStart: true })
       ? `<a class="mfe-entry-link${startCurrent ? " active" : ""}" href="#/tasks/start"${startCurrent}>${esc(tr("mfe.start"))}</a>`
       : ""}
   </nav>`;
@@ -10956,6 +11001,217 @@ async function viewStartProcess() {
   await load();
 }
 
+// ---------- Start a granted process yourself (ADR-0516) ----------
+// The task user's Start view. It lists what GET /api/v1/me/startable-processes
+// answers — the processes an administrator granted to this person or their groups —
+// and starts one through POST /api/v1/me/processes/{key}/instances. The person never
+// sees a deployment key, a version or a grant: they pick a process by its name and
+// application, fill its start form, and are told when the server has durably started
+// it. Every state a start can end in is said in words, including the one nobody can
+// know: a broken connection leaves the outcome unknown, and the view says so rather
+// than offering a second start as though the first had failed.
+async function viewSelfStart() {
+  const state = { procs: [], selected: null, form: null, submitting: false, query: "" };
+  view.innerHTML = `
+    <div class="tasks" id="selfstart-grid">
+      <section class="tasks-list-pane">
+        ${mobileWorkEntryHTML("start")}
+        <header class="tasks-list-head"><h2>${esc(tr("selfstart.title"))}</h2>
+          <button class="btn ghost small" id="selfstart-refresh">${esc(tr("selfstart.refresh"))}</button></header>
+        <ul class="tasks-list" id="selfstart-list" aria-busy="true"><li class="tasks-empty muted">${esc(tr("selfstart.loading"))}</li></ul>
+      </section>
+      <section class="tasks-detail" id="selfstart-detail"></section>
+    </div>`;
+  const listEl = view.querySelector("#selfstart-list");
+  const detailEl = view.querySelector("#selfstart-detail");
+
+  function destroyForm() {
+    if (state.form) { try { state.form.destroy(); } catch { /* noop */ } state.form = null; }
+  }
+
+  // status writes the one message the detail pane carries, in a live region so a
+  // screen reader hears it. kind is ok, err or info; actions are extra buttons.
+  function status(kind, text, actions = []) {
+    const host = detailEl.querySelector("#selfstart-status");
+    if (!host) return;
+    host.className = "selfstart-status " + kind;
+    host.hidden = !text;
+    host.innerHTML = text ? `<p>${esc(text)}</p>${actions.map((a) =>
+      a.href ? `<a class="btn ghost small" href="${esc(a.href)}">${esc(a.label)}</a>`
+        : `<button class="btn ghost small" data-act="${esc(a.id)}">${esc(a.label)}</button>`).join(" ")}` : "";
+    for (const a of actions) {
+      if (a.run) host.querySelector(`[data-act="${a.id}"]`).addEventListener("click", a.run);
+    }
+  }
+
+  function renderList() {
+    listEl.setAttribute("aria-busy", "false");
+    if (!state.procs.length) {
+      listEl.innerHTML = `<li class="tasks-empty muted" id="selfstart-empty">${esc(tr("selfstart.empty"))}</li>`;
+      return;
+    }
+    let lastApp = null;
+    listEl.innerHTML = state.procs.map((p) => {
+      const head = p.applicationId !== lastApp
+        ? `<li class="start-group"><span class="start-group-head selfstart-app">${esc(p.applicationName || tr("start.group.other"))}</span></li>` : "";
+      lastApp = p.applicationId;
+      const sel = p.key === state.selected ? " selected" : "";
+      return `${head}<li class="tasks-item${sel}" data-key="${p.key}" tabindex="0" role="button"
+          aria-pressed="${p.key === state.selected}">
+        <div class="tasks-item-top"><span class="tasks-item-title">${esc(p.name || p.processId)}</span></div>
+        <div class="tasks-item-sub muted">${esc(p.applicationName || "")}</div></li>`;
+    }).join("");
+    listEl.querySelectorAll(".tasks-item").forEach((li) => {
+      const open = () => { state.selected = Number(li.dataset.key); renderList(); renderDetail(); };
+      li.addEventListener("click", open);
+      li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+    });
+  }
+
+  function renderDetail() {
+    destroyForm();
+    const p = state.procs.find((x) => x.key === state.selected);
+    const grid = detailEl.closest(".tasks");
+    if (grid) grid.classList.toggle("has-selection", !!p);
+    if (!p) {
+      detailEl.innerHTML = `<div class="tasks-detail-empty muted">${esc(tr("selfstart.pick"))}</div>`;
+      return;
+    }
+    detailEl.innerHTML = `
+      <button class="btn ghost small tasks-back" id="selfstart-back">‹ ${esc(tr("selfstart.back"))}</button>
+      <header class="tasks-detail-head">
+        <h1>${esc(p.name || p.processId)}</h1>
+      </header>
+      <p class="muted selfstart-app-line">${esc(p.applicationName || "")}</p>
+      <div class="tasks-form" id="selfstart-form">${p.startForm && p.startForm.available
+        ? `<p class="muted">${esc(tr("selfstart.formLoading"))}</p>`
+        : `<p class="muted">${esc(tr("selfstart.noForm"))}</p>`}</div>
+      <div class="selfstart-status" id="selfstart-status" role="status" aria-live="polite" hidden></div>
+      <div class="selfstart-actions"><button class="btn" id="selfstart-go">${esc(tr("selfstart.start"))}</button></div>`;
+    detailEl.querySelector("#selfstart-back").addEventListener("click", () => {
+      state.selected = null; renderList(); renderDetail();
+    });
+    detailEl.querySelector("#selfstart-go").addEventListener("click", () => submit(p));
+    if (p.startForm && p.startForm.available) mountForm(p);
+  }
+
+  async function mountForm(p) {
+    const host = detailEl.querySelector("#selfstart-form");
+    try {
+      const [{ Form }, def] = await Promise.all([
+        loadFormViewer(),
+        api("GET", "/api/v1/forms/" + encodeURIComponent(p.startForm.formId)),
+      ]);
+      if (state.selected !== p.key || !host.isConnected) return;
+      host.innerHTML = "";
+      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: p.startForm.formId }), atlasLocale: trLocale() });
+      await form.importSchema(def.schema, {});
+      state.form = form;
+    } catch (e) {
+      host.innerHTML = `<p class="muted err">${esc(tr("selfstart.formFailed", { error: e.message }))}</p>`;
+      const go = detailEl.querySelector("#selfstart-go");
+      if (go) go.disabled = true;
+    }
+  }
+
+  // submit starts the selected process once. The button and the in-flight flag stop a
+  // double tap from sending a second start; neither makes the start idempotent, and
+  // nothing here claims it is.
+  async function submit(p) {
+    if (state.submitting) return;
+    const btn = detailEl.querySelector("#selfstart-go");
+    let variables = {};
+    if (p.startForm && p.startForm.available) {
+      if (!state.form) return; // the form has not loaded, or could not
+      const { data, errors } = state.form.submit();
+      if (errors && Object.keys(errors).length > 0) {
+        status("err", formRefusalMessage(state.form, errors));
+        scrollToFirstInvalidField("selfstart-form");
+        return;
+      }
+      variables = data || {};
+    }
+    state.submitting = true;
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    status("info", tr("selfstart.submitting"));
+    let res;
+    try {
+      res = await api("POST", `/api/v1/me/processes/${p.key}/instances`, { variables });
+    } catch (err) {
+      state.submitting = false;
+      btn.removeAttribute("aria-busy");
+      refused(p, err, btn);
+      return;
+    }
+    state.submitting = false;
+    btn.removeAttribute("aria-busy");
+    const wz = res && res.wizard;
+    if (wz && wz.state === "step" && wz.task) { location.hash = "#/tasks/t/" + wz.task.key; return; }
+    destroyForm();
+    const form = detailEl.querySelector("#selfstart-form");
+    if (form) form.hidden = true;
+    btn.hidden = true;
+    status("ok", tr("selfstart.started", { name: p.name || p.processId, ref: String((res && res.instanceKey) || "") }), [
+      { id: "tasks", label: tr("selfstart.toTasks"), href: "#/tasks" },
+      { id: "again", label: tr("selfstart.another"), run: () => { state.selected = null; load(); } },
+    ]);
+  }
+
+  // refused says what an unsuccessful start means for the person. Only a refusal the
+  // server stated is a refusal; anything else — no answer, a broken connection, an
+  // error after the server took the request — may have started the process.
+  function refused(p, err, btn) {
+    const reload = { id: "reload", label: tr("selfstart.reload"), run: () => { state.selected = null; load(); } };
+    switch (err.status) {
+      case 400:
+        btn.disabled = false;
+        status("err", tr("selfstart.invalid", { error: err.message }));
+        return;
+      case 401:
+        status("err", tr("selfstart.session"), [{ id: "login", label: tr("selfstart.signIn"), run: () => location.reload() }]);
+        return;
+      case 403:
+      case 404:
+        status("err", tr("selfstart.revoked"), [reload]);
+        return;
+      case 409:
+        status("err", tr("selfstart.changed"), [reload]);
+        return;
+      case 503:
+        btn.disabled = false;
+        status("err", tr("selfstart.unavailable"));
+        return;
+      default:
+        status("err", tr("selfstart.unknown"), [
+          { id: "tasks", label: tr("selfstart.toTasks"), href: "#/tasks" },
+          { id: "retry", label: tr("selfstart.retryAnyway"), run: () => { btn.disabled = false; status("info", ""); } },
+        ]);
+    }
+  }
+
+  async function load() {
+    listEl.setAttribute("aria-busy", "true");
+    try {
+      const page = await api("GET", "/api/v1/me/startable-processes");
+      state.procs = (page && Array.isArray(page.items)) ? page.items : [];
+      SELF_START = { checked: true, available: state.procs.length > 0 };
+      if (!state.procs.some((p) => p.key === state.selected)) state.selected = null;
+      renderList();
+      renderDetail();
+    } catch (e) {
+      listEl.setAttribute("aria-busy", "false");
+      if (e.status === 401) {
+        listEl.innerHTML = `<li class="tasks-empty err">${esc(tr("selfstart.session"))}</li>`;
+        return;
+      }
+      listEl.innerHTML = `<li class="tasks-empty err">${esc(tr("selfstart.loadFailed", { error: e.message }))}</li>`;
+    }
+  }
+  view.querySelector("#selfstart-refresh").addEventListener("click", load);
+  await load();
+}
+
 // startGroups buckets the Start view's processes by the application each was
 // deployed under, named as the listing names it (applicationName). A process filed
 // under no application, or under one the viewer may not see — the listing then
@@ -11310,8 +11566,9 @@ async function viewDataInstances() {
         : `<span class="im-unresolved" title="No class of this name exists in any information model you can see. Model it so the type means something across processes.">not modelled</span>`}`
       : `<span class="do-class none">untyped</span><span class="im-unresolved"
            title="This data object declares no itemSubjectRef, so nothing says what kind of thing it is.">no declared type</span>`;
-    return `<div class="card" style="padding:0; margin-top:16px">
-      <div class="im-group-head">${head}<span class="muted">${items.length}
+    // Each type's card folds under its heading (fold.js), remembered by the type.
+    return `<div class="card" style="padding:0; margin-top:16px" data-fold="${esc(type || "-untyped")}">
+      <div class="im-group-head"><h2>${head}</h2><span class="muted">${items.length}
         ${items.length === 1 ? "object" : "objects"}</span></div>
       <div class="im-groups">${identityBlock(items)}</div>
     </div>`;
@@ -12004,6 +12261,7 @@ function routeTitle(path) {
     [/^#\/operations\/event-log$/, "Event log · Operations"],
     [/^#\/console\/api-tokens$/, "API tokens · Console"],
     [/^#\/console\/connections/, "Connected accounts · Console"],
+    [/^#\/console\/connected-systems/, "Connected systems · Console"],
     [/^#\/console\/approvals$/, "Approvals · Console"],
     [/^#\/console\/security$/, "Security · Console"],
     [/^#\/modeler\/new/, "New diagram · Modeler"],
@@ -12088,6 +12346,8 @@ async function route() {
   startPresence(); // signed in, so this tab is somebody being here (presence.go)
   if (!FEATURES.loaded) await loadFeatures(); // before the menus are painted from it
   if (AUTH.user) loadLinking(); // not awaited: it only decides one entry of a closed menu
+  // Awaited once per identity: it decides whether Start is in the menus painted next.
+  if (AUTH.user && !SELF_START.checked) await loadSelfStart();
   setChrome(appId, path);
   setTitle(routeTitle(path));
   // A mark and a visit belong to an account, so both wait for somebody signed in.
@@ -12118,6 +12378,11 @@ async function route() {
       const gen = navGen;
       const { viewConnections } = await import("./connections.js");
       return await viewConnections({ api, toast, view, isSuperseded: () => superseded(gen), canConfigure: mayUse("admin") });
+    }
+    if (path === "#/console/connected-systems") {
+      const gen = navGen;
+      const { viewConnectedSystems } = await import("./connectedsystems.js");
+      return await viewConnectedSystems({ api, toast, view, isSuperseded: () => superseded(gen) });
     }
     if (path === "#/console/approvals") {
       const gen = navGen;
@@ -12244,7 +12509,10 @@ async function route() {
     const m = path.match(/^#\/modeler\/d\/(\d+)$/);
     if (m) return await viewEditor(Number(m[1]));
     if (path === "#/tasks") return await viewTasks();
-    if (path === "#/tasks/start") return await viewStartProcess();
+    // Operators keep their Start view; everybody else gets the processes granted to
+    // them (ADR-0516). Which one is a navigation choice — both views' calls are
+    // authorized by the server on their own.
+    if (path === "#/tasks/start") return mayUse("operator") ? await viewStartProcess() : await viewSelfStart();
     // A single task can be deep-linked (…/t/{jobKey}) — the Operations live view
     // links a running instance's active user task straight to its form here, so an
     // operator jumps from "where is the token" to "work the task" in one click.

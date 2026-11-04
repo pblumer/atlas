@@ -253,3 +253,54 @@ func TestStoreRefusesTruncatedAuditDocument(t *testing.T) {
 		t.Fatal("incomplete audit history accepted")
 	}
 }
+
+func TestStoreGrantedToFollowsTheLatestAudience(t *testing.T) {
+	s, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	alice := Principal{UserID: "alice", GroupIDs: []string{"field"}}
+	if got := s.GrantedTo(alice); len(got) != 0 {
+		t.Fatalf("deny by default: %+v", got)
+	}
+	for _, req := range []ChangeRequest{
+		testRequest("app-b", "credit", "admin", 0, []string{"alice"}, nil),
+		testRequest("app-a", "refund", "admin", 0, nil, []string{"field"}),
+		testRequest("app-a", "audit", "admin", 0, []string{"bob"}, nil),
+		testRequest("app-a", "credit", "admin", 0, []string{"alice"}, nil),
+	} {
+		if _, err := s.Set(req); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.Set(testRequest("app-a", "credit", "admin", 1, nil, nil)); err != nil {
+		t.Fatal(err)
+	}
+	got := s.GrantedTo(alice)
+	want := []string{"app-a/refund", "app-b/credit"}
+	if len(got) != len(want) {
+		t.Fatalf("granted = %+v, want %v", got, want)
+	}
+	for i, g := range got {
+		if g.ApplicationID+"/"+g.ProcessID != want[i] {
+			t.Fatalf("granted[%d] = %s/%s, want %s", i, g.ApplicationID, g.ProcessID, want[i])
+		}
+	}
+	if got := s.GrantedTo(Principal{UserID: "alice"}); len(got) != 1 || got[0].ProcessID != "credit" {
+		t.Fatalf("without the group = %+v", got)
+	}
+	if got := s.GrantedTo(Principal{GroupIDs: []string{"field"}}); len(got) != 0 {
+		t.Fatalf("a principal with no user id was granted: %+v", got)
+	}
+	got[1].UserIDs[0] = "mallory"
+	if s.Allowed("app-b", "credit", Principal{UserID: "mallory"}) || !s.Allowed("app-b", "credit", Principal{UserID: "alice"}) {
+		t.Fatal("caller mutated a stored grant through GrantedTo")
+	}
+	s.uncertain = true
+	if got := s.GrantedTo(alice); len(got) != 0 {
+		t.Fatalf("uncertain store granted %+v", got)
+	}
+	if got := s.ForApplication("app-a"); len(got) != 0 {
+		t.Fatalf("uncertain store listed %+v", got)
+	}
+}

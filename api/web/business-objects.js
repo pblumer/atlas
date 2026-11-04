@@ -204,7 +204,7 @@ export async function mountObjectDetail(root, { api, modelId, className }) {
 
     ${structureHTML(c, isEnum)}
 
-    <section class="bo-sec">
+    <section class="bo-sec fold-topic" data-fold="processes">
       <h2>Used in processes <span class="bo-count">${(u.processes || []).length}</span></h2>
       <p class="bo-meaning">Every deployed process that declares a data object of this class, and every
         element that reads it, writes it, moves its state, or names the store it is kept in. Only the
@@ -212,7 +212,7 @@ export async function mountObjectDetail(root, { api, modelId, className }) {
       ${processTableHTML(u.processes || [])}
     </section>
 
-    <section class="bo-sec">
+    <section class="bo-sec fold-topic" data-fold="model">
       <h2>Used in the model <span class="bo-count">${(u.model || []).length}</span></h2>
       <p class="bo-meaning">Where the vocabulary itself refers to this class. For an enumeration these
         are usually the only uses there are: nothing declares a data object of it, and everything is
@@ -266,7 +266,8 @@ function structureHTML(c, isEnum) {
       <code>${esc(t.to)}</code>${t.name ? ` <span class="muted">· ${esc(t.name)}</span>` : ""}</li>`).join("")}</ul>
   </div>`;
 
-  return `<section class="bo-sec">
+  // Each of the page's sections folds under its heading (fold-topic, fold.js).
+  return `<section class="bo-sec fold-topic" data-fold="structure">
     <h2>What it is</h2>
     <div class="card" style="padding:0">${members}</div>
     ${life}

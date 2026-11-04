@@ -1,6 +1,6 @@
 # ADR-0172: A Microsoft Entra ID connector
 
-- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`. Amended 2026-10-19: on Windows the certificate may stay in the certificate store, named by its thumbprint — `_CLIENT_CERTIFICATE_THUMBPRINT`, or a bundle's `certificateThumbprint` — and its key signs there through CNG without ever being read, so a non-exportable key serves as it serves PowerShell. Amended 2026-10-22: `get-user-manager` reads a person's manager — through the user, as `$expand=manager`, so a person without one reads as null while an id that is nobody's still fails the job, or ends it with the BPMN error `ENTRA_USER_NOT_FOUND` when the process catches that code.)
+- **Status:** Accepted (amended 2026-08-24: a listing operation, `list-users`, which follows Graph's paging itself; and advanced query support, so a listing can use `endsWith`, `ne`, `not` and `$search`. Amended 2026-08-25: group lifecycle (`create-group`, `get-group`, `list-groups`, `update-group`, `delete-group`) and ownership (`add-group-owner`, `remove-group-owner`) beside the existing membership operations; a dedicated `reset-password` that wraps a literal-or-FEEL secret in a `passwordProfile`; Teams (`create-team` on a group, `add-team-member`, `add-team-owner`, `create-channel`, `archive-team`), a Team being addressed by its group's id; and `assign-license` / `assign-role`. Amended 2026-08-25: a supervised Entra worker can take its client secret from the engine vault — `ATLAS_ENTRA_<NAME>_CLIENT_SECRET_REF` names a vault key the server resolves and hands the child under `_CLIENT_SECRET`, the AD bind-secret story with a connector name in place of a reference, so an operator can type the secret into the Console instead of onto the worker host; the worker stays worker-only and the engine builds no client. Amended 2026-08-25: the attributes body can be authored inline as JSON in the modeler instead of naming a variable — a string value beginning with `=` is a FEEL expression evaluated per field at runtime, and the compiler turns the whole template into one FEEL context compiled once at deploy (I5); the two ways of supplying the body are mutually exclusive. Amended 2026-08-25: an Entra tenant is now an operator-managed connector in the Console — a worker-only managed kind whose `credentialsRef` names a vault OAuth bundle `{tenantId, clientId, clientSecret}` (as SharePoint's does), read only by `superviseEnv` so the engine still builds no client and holds no tenant credential; and the Entra worker is supervised by default, starting parked with nothing to serve and brought up by the same refresh that already restarts mail/AD workers the moment a tenant is added — so adding a tenant is a Console entry, not a deployment change. Amended 2026-08-25: the `connector` name may itself be a literal-or-FEEL value — a leading `=` resolves the tenant from the instance's variables at call time, so one process can serve several tenants; this is entra-only because the kind is worker-only and no engine-side credential lookup keys off a fixed name. Amended 2026-08-25: the body-carrying operations get a per-operation capture mask in the Modeler (named fields for the important attributes plus a Weitere-Attribute JSON escape hatch) assembled into the same `attributes` JSON — UI-only, no moddle/compiler change; and the result variable gets an operation-aware hint describing what it receives. Amended 2026-10-17: the app may prove itself with a certificate instead of a client secret — a client assertion signed with the certificate's private key, still the client-credentials grant — configured as `_CLIENT_CERTIFICATE` (or `_CLIENT_CERTIFICATE_REF`) or as a bundle's `certificate` field; and `get-user` / `get-group` take a `select`, because Graph's default property set leaves out `assignedLicenses` and `employeeId`. Amended 2026-10-19: on Windows the certificate may stay in the certificate store, named by its thumbprint — `_CLIENT_CERTIFICATE_THUMBPRINT`, or a bundle's `certificateThumbprint` — and its key signs there through CNG without ever being read, so a non-exportable key serves as it serves PowerShell. Amended 2026-10-22: `get-user-manager` reads a person's manager — through the user, as `$expand=manager`, so a person without one reads as null while an id that is nobody's still fails the job, or ends it with the BPMN error `ENTRA_USER_NOT_FOUND` when the process catches that code. Amended 2026-11-03: `invite-guest` invites an external person as a guest (`POST /invitations`, with `inviteRedirectUrl` defaulted to `https://myapps.microsoft.com` when unset), `restore-group` takes a deleted group back out of the recycle bin, and `list-deleted-groups` lists what is in it; and two value-lookup resources, `groups` and `deletedGroups`, read by `mailNickname`, let a form check whether a group alias is taken; and `create-community` creates a Viva Engage community (`POST /employeeExperience/communities`, the task's user bound as its first owner), following the `202 Accepted` operation Graph answers within the job, bounded, and completing with a null id rather than failing when the bound is reached first, so a retry never posts a second community.)
 - **Implementation:** Landed
 - **Date:** 2026-08-21
 - **Deciders:** Atlas maintainers
@@ -522,6 +522,89 @@ gateway asks with `= chef = null`. It costs no second call.
   it did when a PowerShell script read the manager there.
 - Written from Graph's documentation and tested against a recorded Graph; it has not yet
   run against a live tenant.
+
+### Amendment (2026-11-03): guests, the group recycle bin, and an alias check for forms
+
+**Why.** Three questions an identity process asks the directory had no named operation:
+inviting an external person as a guest, taking back a group deleted by mistake, and
+seeing what is in the recycle bin before deciding to. Each fell back to the REST Worker
+Type with a hand-built Graph URL and a second credential. And a form that lets a person
+order a new group had no way to say, before the order is submitted, that the alias it
+asks for is already taken — by a live group, or by a deleted one still holding it.
+
+**What.** Three operations, each a row in the `Ops` table and its compiler mirror:
+
+- `invite-guest` — `POST /invitations`, the body authored as attributes
+  (`invitedUserEmailAddress`, `invitedUserDisplayName`, `inviteRedirectUrl`,
+  `sendInvitationMessage`, …), with a capture mask in the Modeler. Graph answers the
+  invitation object; the new guest's object id is its `invitedUser.id`. Graph refuses an
+  invitation without `inviteRedirectUrl`, and most processes have no landing page of their
+  own, so the worker sets `https://myapps.microsoft.com` when the attributes leave it unset
+  (absent, null or empty) — the same merge `assign-role` makes for `directoryScopeId`. An
+  authored value always wins. Permission: `User.Invite.All`.
+- `restore-group` — `POST /directory/deletedItems/{groupId}/restore`, addressed by the
+  group's id; Graph answers the restored group. Microsoft documents that a group deleted
+  less than 30 days ago can be restored, and that restoring a Microsoft 365 group also
+  restores its SharePoint site; that is Microsoft's stated behaviour, not verified against
+  a tenant here. Permission: `Group.ReadWrite.All`.
+- `list-deleted-groups` — a listing over `/directory/deletedItems/microsoft.graph.group`
+  on the same machinery as `list-groups`: `filter`, `search`, `advancedQuery`, `select`,
+  `pageSize`, `maxUsers`, every page followed, and a required `resultVariable`.
+  Permission: `Group.Read.All` (or `Directory.Read.All`).
+
+**Two value-lookup resources.** The form lookup ([ADR-0473](0473-form-remote-data-sources.md))
+gains `groups` (`/groups`) and `deletedGroups` (`/directory/deletedItems/microsoft.graph.group`),
+both identified by `mailNickname` and readable as `id`, `displayName`, `mailNickname`.
+They answer one question — does a group with this alias exist — and so search nothing,
+filter on nothing, and have no active flag. Graph cannot read a group by its alias as a
+path, so a value lookup on them is one filtered page,
+`$filter=mailNickname eq '…'&$select=…&$top=1`, answering zero or one record. Only an
+alias's shape is sent — `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` — and the literal is still
+written through the same quote-doubling every lookup filter uses. A query asking for
+active records only on a resource without an active flag is refused (`invalid`) rather
+than answered with every record. They are not offered to a form's directory search
+field; another provider consumes them. Permission: `Group.Read.All`.
+
+- Written from Graph's documentation and tested against a recorded Graph; none of it has
+  run against a live tenant. In particular, whether Graph accepts
+  `$filter=mailNickname eq '…'` on `deletedItems` without advanced query support is
+  unverified. If it does not, the lookup reports Graph's 400 as `refused` — a visible
+  failure, never an empty answer that reads as "the alias is free".
+
+**A Viva Engage community (also 2026-11-03).** `create-community` — the fourth operation
+of this amendment — creates a community: `POST /employeeExperience/communities` with the
+attributes as the community (`displayName`, which Graph requires, `description`,
+`privacy` `public` or `private`; a capture mask in the Modeler) and the task's `userId`
+bound as its first owner (`owners@odata.bind`, unless the attributes already carry one).
+Microsoft documents that a community created with application permissions must name an
+owner, which is why the user is required. A community is backed by a Microsoft 365 group,
+its `groupId`, as a Team is, so members and admins are then `add-group-member` and
+`add-group-owner` on that group; there are deliberately no community member operations.
+Permission: `Community.ReadWrite.All`; Microsoft documents that the tenant's Viva Engage
+network must be in native mode.
+
+Graph's documentation (v1.0) says the POST is answered `202 Accepted`, empty, with a
+`Location` naming an `engagementAsyncOperation` (`status` `notStarted`, `running`,
+`succeeded` or `failed`; `resourceId` the community's id; `statusDetail`). So the client
+gained `Request.WantLocation`, which returns the `Location` of a bodiless 2xx — absolute,
+confined to the worker's own endpoint exactly as a paging continuation is, a relative one
+taken against the base — and the worker follows the operation inside the job: a look
+every 3 s for at most 90 s (both a choice, not a documented figure), waiting out a 429 or
+5xx. `succeeded` reads the community by its id and answers it, `groupId` included.
+`failed` fails the job with Graph's `statusDetail`; Microsoft describes a failed operation
+as having created nothing, so the retry is a second try rather than a duplicate. Still
+`notStarted` or `running` at the bound, the job **completes** with
+`{"id": null, "status": …, "operation": <Location>}`: delivery is at least once, a failed
+job is retried, and a retry would POST again while the first community may still be on its
+way. A model routes `= community.id = null` to a person. A `resultVariable` is therefore
+required — the one write that needs one, because the answer is the only place the id lands.
+A `Location` on another host fails the job without being followed.
+
+- Written from Graph's documentation and tested against a recorded Graph only. The 202
+  shape, the operation's properties, the owner requirement, the native-mode precondition
+  and "a failed operation created nothing" are Microsoft's statements, none verified
+  against a tenant; how long provisioning takes in practice is unknown, which is what
+  the null-id completion is for.
 
 ## Pros and cons of the options
 

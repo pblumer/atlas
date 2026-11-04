@@ -134,6 +134,12 @@ type Release struct {
 	// It is a standing list rather than a report somebody has to think to run,
 	// because the role that defines approval rules is the role that publishes them.
 	WithoutApproval []string `json:"withoutApproval"`
+	// Structured says the catalogue was published under declared structure, so
+	// every item carries its kind and the order may hold the shop's rule: a service
+	// is ordered only as part of a Marktleistung. Carried on the release rather than
+	// read from the catalogue, because an order is placed against the release and
+	// the switch may have moved since.
+	Structured bool `json:"structured,omitempty"`
 }
 
 // Publish validates a catalogue set and computes its release. A non-empty problem
@@ -151,6 +157,7 @@ func Publish(in Input) (Release, []Problem) {
 	checkCatalogs(in, byID, add)
 	checkItems(in, add)
 	checkEdges(in, byID, add)
+	structuredRelease := checkStructure(in, byID, add)
 
 	// Both graphs must be acyclic. Structure is checked over containment alone;
 	// precedence over requires alone.
@@ -175,6 +182,7 @@ func Publish(in Input) (Release, []Problem) {
 		Requires:        preconditions(in),
 		Excludes:        incompatibilities(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
+		Structured:      structuredRelease,
 	}, nil
 }
 
@@ -351,6 +359,7 @@ func checkItems(in Input, add func(Problem)) {
 				"the shop would show its id, and there is nothing to fall back to"})
 		}
 		checkBindings(it, add)
+		checkIcon(it, add)
 		switch it.Approval.Kind {
 		case KindFixed, KindRole:
 			if it.Approval.Ref == "" {
@@ -392,6 +401,23 @@ func checkItems(in Input, add func(Problem)) {
 				break
 			}
 			seenCommander[key] = true
+		}
+		// And the applications that may order it (ADR-0520),
+		// under the same rule and for the same reasons.
+		seenOrderer := map[string]bool{}
+		for _, k := range it.OrderableBy {
+			key := strings.TrimSpace(k)
+			if key == "" {
+				add(Problem{Item: it.ID, Message: "names a blank application among those that may " +
+					"order it; an application is named by its key"})
+				break
+			}
+			if seenOrderer[key] {
+				add(Problem{Item: it.ID, Message: "names application " + key + " twice among those " +
+					"that may order it"})
+				break
+			}
+			seenOrderer[key] = true
 		}
 		// A category of nothing but spaces is a heading nobody can read and nobody
 		// can group by: the shop would render an empty column head, and a second
@@ -913,6 +939,9 @@ func freeze(items []Item) []Item {
 		}
 		if len(it.CommandedBy) > 0 {
 			it.CommandedBy = append([]string(nil), it.CommandedBy...)
+		}
+		if len(it.OrderableBy) > 0 {
+			it.OrderableBy = append([]string(nil), it.OrderableBy...)
 		}
 		// The binding travels too: the release says which pages its content was
 		// copied from, and the recheck reads it to decide whether it may still be

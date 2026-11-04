@@ -242,6 +242,12 @@ type entraOp struct {
 	// user — get-user-manager (ADR-0172, amended 2026-10-22). Like a listing, it needs a
 	// resultVariable: reading the manager to discard it is a read nothing asked for.
 	expands bool
+	// async marks a create Graph answers 202 Accepted with an operation the worker
+	// follows — create-community (ADR-0172, amended 2026-11-03). It is the one write that
+	// needs a resultVariable: the object it answers is the only place the new id lands,
+	// and a community whose id nobody kept cannot have its members added, the follow-up
+	// it is created for.
+	async bool
 }
 
 var entraOps = map[string]entraOp{
@@ -273,6 +279,13 @@ var entraOps = map[string]entraOp{
 	"archive-team":        {needsGroup: true},
 	"assign-license":      {needsUser: true, needsAttributes: true},
 	"assign-role":         {needsUser: true, needsAttributes: true},
+	// The guest and group-recycle-bin operations (ADR-0172, amended 2026-11-03).
+	"invite-guest":        {needsAttributes: true},
+	"restore-group":       {needsGroup: true},
+	"list-deleted-groups": {isList: true},
+	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
+	// owner (ADR-0172, amended 2026-11-03).
+	"create-community": {needsUser: true, needsAttributes: true, async: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -343,7 +356,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		return 0, fmt.Errorf("compiler: entra task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
 	}
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
-		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update and create-channel)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update, create-channel, create-community, invite-guest, assign-license and assign-role)", st.Id, op)
 	}
 	attrs, err := entraAttributesExpr(b.gate(), st.Id, cn.Attributes)
 	if err != nil {
@@ -354,6 +367,9 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 	}
 	if !spec.needsPassword && strings.TrimSpace(cn.NewPassword) != "" {
 		return 0, fmt.Errorf("compiler: entra task %q sets newPassword on operation %q, which sets no password (newPassword applies to reset-password)", st.Id, op)
+	}
+	if spec.async && strings.TrimSpace(cn.ResultVariable) == "" {
+		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (what it creates is known only by the id it answers, and an id nobody keeps cannot be followed up)", st.Id, op)
 	}
 	if (spec.isList || spec.isDelta || spec.isBinary || spec.expands) && strings.TrimSpace(cn.ResultVariable) == "" {
 		return 0, fmt.Errorf("compiler: entra task %q operation %q needs a resultVariable (a directory read that discards its result is one nothing asked for)", st.Id, op)
@@ -457,8 +473,9 @@ func entraAdvancedQuery(taskID string, cn *xmlEntraConnector) (bool, error) {
 // task is filtered, and a get-user that quietly ignores it addresses whatever userId
 // happens to say instead. There are three classes:
 //
-//   - filter, search, advancedQuery — a listing only (list-users, list-groups). Graph's
-//     delta endpoint runs none of them, so they are an error on a delta op too.
+//   - filter, search, advancedQuery — a listing only (list-users, list-groups,
+//     list-deleted-groups). Graph's delta endpoint runs none of them, so they are an
+//     error on a delta op too.
 //   - select — a listing, a delta query, or a single-object read (get-user, get-group,
 //     get-user-manager): each returns something whose properties can be projected.
 //   - deltaLink — a delta query alone; a resume cursor has nothing to resume elsewhere.
@@ -472,11 +489,11 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 		{"advancedQuery", cn.AdvancedQuery},
 	} {
 		if strings.TrimSpace(a.raw) != "" && !spec.isList {
-			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users and list-groups)", taskID, a.what, op, a.what)
+			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users, list-groups and list-deleted-groups)", taskID, a.what, op, a.what)
 		}
 	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
@@ -501,7 +518,7 @@ func entraListBound(taskID, op string, isList bool, what, raw string, def, max i
 		return 0, nil
 	}
 	if !isList {
-		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups and the delta operations)", taskID, what, op, what)
+		return 0, fmt.Errorf("compiler: entra task %q sets %s on operation %q, which returns no collection (%s applies to list-users, list-groups, list-deleted-groups and the delta operations)", taskID, what, op, what)
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
@@ -633,7 +650,7 @@ func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
 // the same directory, which is a worse answer than a little overlap (ADR-0166,
 // amended).
 type adOp struct {
-	needsEntry    bool // an entryVariable naming the attribute object
+	needsEntry    bool // an entry: inline attributes or an entryVariable naming the object
 	needsPassword bool
 	needsMember   bool
 	needsNewDN    bool
@@ -698,7 +715,8 @@ func adOpNames() []string {
 // Directory operation against a model-authored server via the job path (ADR-0166), not
 // an external service-task worker. AD speaks LDAP, so the server URL and DNs live in
 // the model and the bind password never does (a secret reference, ADR-0041). Most
-// operations target a dn: create-user takes an attribute variable, set-password a new
+// operations target a dn: the creates and update-attributes take an entry (inline
+// attributes or an entry variable), set-password a new
 // password, the group operations a member dn. The two reading operations — sync and
 // search — take a baseDN and a result variable instead.
 func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
@@ -746,8 +764,11 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		if strings.TrimSpace(cn.BaseDN) == "" {
 			return 0, fmt.Errorf("compiler: ad task %q operation search needs a baseDN (where in the tree to look)", st.Id)
 		}
-		if strings.TrimSpace(cn.ResultVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad task %q operation search needs a resultVariable to receive what it found; a directory read that discards its result is one nothing asked for", st.Id)
+		// A foundVariable alone is enough: "is this name taken?" is a whole question,
+		// and its answer is the boolean — writing the entries somewhere too would only
+		// put a person's data in a variable nothing reads.
+		if strings.TrimSpace(cn.ResultVariable) == "" && strings.TrimSpace(cn.FoundVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad task %q operation search needs a resultVariable to receive what it found, or a foundVariable for whether it found anything; a directory read that discards its result is one nothing asked for", st.Id)
 		}
 	default:
 		if strings.TrimSpace(cn.DN) == "" {
@@ -762,8 +783,44 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if err != nil {
 		return 0, err
 	}
-	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
-		return 0, fmt.Errorf("compiler: ad task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	// An entry comes inline (attributes, evaluated by the worker, so it may read a
+	// personal variable) or from a variable the engine built (entryVariable). Both at
+	// once is refused for the reason a worker and a url are: whichever won, half the
+	// readers of the model would assume the other.
+	hasInlineEntry := strings.TrimSpace(cn.Attributes) != ""
+	hasEntryVar := strings.TrimSpace(cn.EntryVariable) != ""
+	switch {
+	case hasInlineEntry && hasEntryVar:
+		return 0, fmt.Errorf("compiler: ad task %q sets both inline attributes and an entryVariable; use one, not both", st.Id)
+	case spec.needsEntry && !hasInlineEntry && !hasEntryVar:
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs its entry — inline attributes, or an entryVariable naming the attribute object", st.Id, op)
+	case !spec.needsEntry && hasInlineEntry:
+		return 0, fmt.Errorf("compiler: ad task %q sets attributes on operation %q, which writes no entry (attributes apply to create-user, create-group, create-contact and update-attributes)", st.Id, op)
+	}
+	entry, err := attributesTemplateExpr(b.gate(), "ad", st.Id, cn.Attributes, adEntryShape)
+	if err != nil {
+		return 0, err
+	}
+	// select and foundVariable shape what a search returns, so they mean nothing on
+	// any other operation — refused rather than ignored, like scope.
+	if !spec.isSearch && strings.TrimSpace(cn.Select) != "" {
+		return 0, fmt.Errorf("compiler: ad task %q sets select on operation %q; select narrows what a search returns and applies to search only", st.Id, op)
+	}
+	if !spec.isSearch && strings.TrimSpace(cn.FoundVariable) != "" {
+		return 0, fmt.Errorf("compiler: ad task %q sets foundVariable on operation %q; it receives whether a search found anything and applies to search only", st.Id, op)
+	}
+	selectList, err := adSelectList(st.Id, cn.Select)
+	if err != nil {
+		return 0, err
+	}
+	foundVar := strings.TrimSpace(cn.FoundVariable)
+	if foundVar != "" {
+		if !validVariableName(foundVar) {
+			return 0, fmt.Errorf("compiler: ad task %q foundVariable %q is not a variable name (a letter or underscore, then letters, digits and underscores)", st.Id, foundVar)
+		}
+		if foundVar == strings.TrimSpace(cn.ResultVariable) {
+			return 0, fmt.Errorf("compiler: ad task %q writes found and the result into the same variable %q; foundVariable exists to be a separate one, so the result can be declared personal while a gateway reads the boolean", st.Id, foundVar)
+		}
 	}
 	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
 		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newPassword", st.Id, op)
@@ -826,6 +883,9 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		MaxEntries:     maxEntries,
 		ObjectSecurity: strings.EqualFold(strings.TrimSpace(cn.ObjectSecurity), "true"),
 		Retries:        retries,
+		Attributes:     entry,
+		Select:         selectList,
+		FoundVar:       foundVar,
 	}), nil
 }
 
@@ -1435,6 +1495,10 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, err
 		}
 	}
+	// The task to answer is kept by its BPMN id and judged in stage 5 — whether it exists,
+	// opted in, and whether the mail shows its link — so a model deployed before the rules
+	// comes back on restart (ADR-0523, ADR-0177).
+	cfg.AnswerTask = strings.TrimSpace(cn.AnswerTask)
 	return b.AddMailConnectorTask(cfg), nil
 }
 
@@ -1659,8 +1723,8 @@ type sharePointOp struct {
 
 // sharePointOps is the operation table: the steps a process takes in a SharePoint site
 // — record a row, read it back, change it, find rows, take one away; put a document in
-// a library, read it, ask whether it is there, list a folder, make one, delete one. It
-// mirrors connector/sharepoint.Ops, which the drift test keeps honest.
+// a library, read it, ask whether it is there, list a folder, make one, delete one; and
+// read the site itself with its storage (get-site). It mirrors connector/sharepoint.Ops, which the drift test keeps honest.
 var sharePointOps = map[string]sharePointOp{
 	"create-item":   {needsList: true, takesFields: true, takesResult: true},
 	"get-item":      {needsList: true, needsItemID: true, takesSelect: true, needsResult: true, takesResult: true},
@@ -1673,6 +1737,7 @@ var sharePointOps = map[string]sharePointOp{
 	"list-folder":   {takesList: true, takesPath: true, takesPaging: true, needsResult: true, takesResult: true},
 	"create-folder": {takesList: true, needsPath: true, takesResult: true},
 	"delete-file":   {takesList: true, needsPath: true, takesResult: true},
+	"get-site":      {needsResult: true, takesResult: true},
 }
 
 // sharePointOpNames lists the operations, sorted, for the messages that have to say what

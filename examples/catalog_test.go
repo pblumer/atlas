@@ -270,8 +270,14 @@ var catalogSources = []catalogSource{
 	// instead.
 	{ID: "benutzerverwaltung", Dir: "benutzerverwaltung", NoInstall: true,
 		Main: "benutzerverwaltung/benutzer-aufnahme.bpmn"},
+	// Started for one personnel number, it waits in "Erfasst" for messages; the card's
+	// buttons send them, keyed on the same number, and walk it to its terminate end.
 	{ID: "identitaet-lebenszyklus", App: "Beispiel: Identitäts-Lebenszyklus", Dir: "identitaet-lebenszyklus",
-		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn"},
+		Main: "identitaet-lebenszyklus/identitaet-lebenszyklus.bpmn",
+		Start: &catalogStart{"identitaet-lebenszyklus", map[string]any{
+			"identityId": "P10001", "nachname": "Muster", "vorname": "Anna",
+			"orgEinheit": "IT-Betrieb", "funktion": "Systemtechnikerin", "eintritt": "2026-10-01",
+		}}},
 	{ID: "ad-objektmodell", Dir: "ad-objektmodell", NoInstall: true},
 	// A whole shop: two catalogues, three products in both process forms, bilingual.
 	// It installs from the shop handbook, which asks the reader for the audience
@@ -279,11 +285,17 @@ var catalogSources = []catalogSource{
 	{ID: "verwaltung-dienstleistungen", Dir: "verwaltung-dienstleistungen", NoInstall: true,
 		Main: "verwaltung-dienstleistungen/zutrittsbadge-lebenszyklus.bpmn",
 		Shop: true},
-	// A shop for Microsoft 365: nine products over the Entra, Exchange and Teams Phone
-	// Worker Types, five decisions, two public forms and a governance check. It installs
+	// A shop for Microsoft 365: sixteen products over the Entra, Exchange, Teams Phone and
+	// SharePoint Worker Types, eight decisions, two public forms and a governance check. It installs
 	// with `atlas import` once its decision models are uploaded (its README says how).
 	{ID: "m365-dienste", Dir: "m365-dienste", NoInstall: true,
 		Main: "m365-dienste/funktionspostfach.bpmn",
+		Shop: true},
+	// A shop for Active Directory: groups, permissions as group memberships, admin, service,
+	// test and external accounts and a transfer, over the AD Worker Type, with three decisions.
+	// It installs with `atlas import` once its decision models are uploaded (its README says how).
+	{ID: "ad-dienste", Dir: "ad-dienste", NoInstall: true,
+		Main: "ad-dienste/ad-sicherheitsgruppe.bpmn",
 		Shop: true},
 }
 

@@ -18,18 +18,18 @@ export default defineConfig({
     viewport: { width: 900, height: 520 },
     trace: "retain-on-failure",
     // The catalogue page folds every section until a browser opens it, and remembers
-    // which ones it did (catalog-admin.js pageSection). Every spec but the one about
-    // that fold drives controls inside the sections, so each starts as a maintainer
-    // who keeps them all open; catalog-sections.spec.mjs starts from nothing.
+    // which ones it did (catalog-admin.js pageSection, fold.js). Every spec but the one
+    // about that fold drives controls inside the sections, so each starts as a
+    // maintainer who keeps them all open — on the page's own route and in the harness,
+    // which mounts it with no route (fold.js names that page "console");
+    // catalog-sections.spec.mjs starts from nothing.
     storageState: {
       cookies: [],
       origins: [{
         origin: baseURL,
-        localStorage: [{
-          name: "atlas.catalog.pageSections",
-          value: JSON.stringify(Object.fromEntries(["products", "content", "relations", "publish",
-            "settings", "appearance", "sharing", "transfer", "purge"].map((k) => [k, true]))),
-        }],
+        localStorage: ["catalog/c", "console"].flatMap((page) => ["products", "content", "relations",
+          "publish", "settings", "appearance", "sharing", "reporting", "transfer", "purge"]
+          .map((k) => ({ name: `atlas.sec.${page}/${k}`, value: "1" }))),
       }],
     },
   },

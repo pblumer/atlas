@@ -4,6 +4,7 @@
 
 import { attachFeelEditor } from "./feel.js";
 import { groupReplayHistory } from "./replay-history.js";
+import { loadMIBodies, loadOutline, largestBody, mountMIExplorer, bodySummaryHTML, BOUNDED_HISTORY_THRESHOLD } from "./mi-explorer.js";
 import { t as tr, plural as trPlural } from "./i18n.js";
 import { translateModule } from "./lib-translate.js";
 import { DIAGRAM_RENDERER } from "./appearance.js";
@@ -1944,6 +1945,23 @@ function wizardHTML(bo) {
     <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; the visitor of a public start link is carried the same way on the public page.</p>`;
 }
 
+// answeredByHTML is a user task's choice of who may answer it
+// (ADR-0523): the people it is assigned to, or also whoever
+// holds the link a mail task carries for it. A value the panel does not know is shown as
+// it stands; the Problems panel says why it is refused.
+function answeredByHTML(bo) {
+  const v = bo.answeredBy || "";
+  const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
+  const unknown = v && v !== "link" ? `<option value="${esc(v)}" selected>${esc(v)}</option>` : "";
+  return `<label class="field"><span>${esc(tr("pnl.main.ut.answeredBy"))}</span>
+      <select id="f-answeredby">
+        ${opt("", esc(tr("pnl.main.ut.answeredBy.people")))}
+        ${opt("link", esc(tr("pnl.main.ut.answeredBy.link")))}
+        ${unknown}
+      </select></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.main.ut.answeredByHint")}</p>`;
+}
+
 // shopOwners holds, per diagram instance, which message names product actions own: a Map
 // from name to [{ product, action }], set when the listing arrives. Present but null means
 // it was asked for and has not answered — or failed, which leaves it so: no receive task is
@@ -1990,7 +2008,8 @@ function shopBadgeOf(bo, owners) {
   if (bo.$type === "bpmn:SendTask") {
     const shop = findExt(bo, SEND_SHOP_KIND.ext);
     if (!shop) return null;
-    return tr(shop.mode === "command" ? "bpmn.mark.shopCommand" : "bpmn.mark.shopOutcome");
+    const mode = shopTaskMode(shop.mode).v;
+    return tr(mode === "command" ? "bpmn.mark.shopCommand" : mode === "order" ? "bpmn.mark.shopOrder" : "bpmn.mark.shopOutcome");
   }
   if (bo.$type === "bpmn:ReceiveTask") {
     const name = ((bo.messageRef && bo.messageRef.name) || "").trim();
@@ -4087,6 +4106,11 @@ const SERVICE_TASK_KINDS = [
           : "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
       },
       {
+        key: "select", label: "Attributes returned", placeholder: "cn,mail,sAMAccountName",
+        showIf: (v) => v.operation === "search",
+        hint: "The attributes the search returns, comma-separated — an LDAP attribute selection such as cn,mail. Empty returns the directory's default set: every attribute the account may read. Ask only for what the process needs, because whatever the search returns lands in the result variable.",
+      },
+      {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
         showIf: (v) => v.operation === "sync",
         hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
@@ -4110,8 +4134,18 @@ const SERVICE_TASK_KINDS = [
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
+        key: "attributes", label: "Attributes", type: "json", rows: 8,
+        // The inline entry and the entry variable are the two ways to supply an entry,
+        // and the compiler refuses both at once: the editor shows until a variable is
+        // named, and vice versa — the Entra panel's arrangement (ADR-0166, amended
+        // 2026-11-03).
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.entryVariable,
+        placeholder: '{\n  "sAMAccountName": "=konto",\n  "givenName": "=vorname",\n  "sn": "=nachname",\n  "displayName": "=vorname + \\" \\" + nachname",\n  "mail": "=email",\n  "telephoneNumber": null\n}',
+        hint: "The entry, authored here as JSON: attribute names to values. A string value beginning with = is a FEEL expression the Worker evaluates when it is handed the job, so it may read a variable the process declares personal — an attributes variable cannot, because the engine has to build it. A string is one value, a list several, a number or boolean its LDAP text; null leaves the attribute out of a create and clears it on an update. On a create, the object classes are supplied unless you set them.",
+      },
+      {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.attributes,
         hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
       },
       {
@@ -4137,6 +4171,11 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => v.operation === "search"
           ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
           : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+      },
+      {
+        key: "foundVariable", label: "Found variable", placeholder: "gefunden",
+        showIf: (v) => v.operation === "search",
+        hint: "Receives found on its own, as a boolean, so a gateway branches on =gefunden while the result variable — names and DNs of people — is declared personal and stays sealed. With only this set, the search writes nothing else.",
       },
     ],
   },
@@ -4169,7 +4208,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, members and owners), Teams (create, add members and owners, channels, archive), and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -4202,6 +4241,8 @@ const SERVICE_TASK_KINDS = [
           { v: "delta-groups", l: "Delta groups (Änderungen)" },
           { v: "update-group", l: "Update group" },
           { v: "delete-group", l: "Delete group" },
+          { v: "list-deleted-groups", l: "List deleted groups (Papierkorb)" },
+          { v: "restore-group", l: "Restore deleted group" },
           { v: "add-group-owner", l: "Add group owner" },
           { v: "remove-group-owner", l: "Remove group owner" },
           { v: "create-team", l: "Create team" },
@@ -4209,21 +4250,27 @@ const SERVICE_TASK_KINDS = [
           { v: "add-team-owner", l: "Add team owner" },
           { v: "create-channel", l: "Create channel" },
           { v: "archive-team", l: "Archive team" },
+          { v: "create-community", l: "Create Engage community" },
           { v: "assign-license", l: "Assign licence" },
           { v: "assign-role", l: "Assign directory role" },
+          { v: "invite-guest", l: "Invite guest user" },
         ],
       },
       {
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role"].includes(v.operation),
-        hint: "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
+        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "create-community"].includes(v.operation),
+        hint: (v) => v.operation === "create-community"
+          ? "The community's first owner — a user principal name or object id. Microsoft documents that a community created with application permissions must name an owner, so the worker binds this user as owners@odata.bind. Further members and admins are added afterwards with Add group member / Add group owner on the community's groupId. May be a FEEL expression (fx)."
+          : "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
       {
         key: "groupId", label: "Group / Team", placeholder: "8f9a…-object-id", fx: true,
-        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team"].includes(v.operation),
-        hint: "The group's object id — which is also the id of the Team stood up on it, so the team operations take it here too. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
+        showIf: (v) => ["add-group-member", "remove-group-member", "delete-group", "restore-group", "get-group", "update-group", "add-group-owner", "remove-group-owner", "create-team", "add-team-member", "add-team-owner", "create-channel", "archive-team"].includes(v.operation),
+        hint: (v) => v.operation === "restore-group"
+          ? "The deleted group's object id — the id it had before deletion, as List deleted groups returns it. A group deleted less than 30 days ago can be restored; Microsoft documents that restoring a Microsoft 365 group also restores its SharePoint site. May be a FEEL expression (fx)."
+          : "The group's object id — which is also the id of the Team stood up on it, so the team operations take it here too. Entra addresses groups by id, not by display name. May be a FEEL expression (fx).",
       },
       {
         key: "newPassword", label: "New password", placeholder: "=tempPassword", fx: true,
@@ -4234,7 +4281,7 @@ const SERVICE_TASK_KINDS = [
         key: "attributes", label: "Attribute", type: "json", rows: 8,
         // The two ways to supply the body are mutually exclusive (the compiler refuses
         // both): the inline editor shows until a variable is named, and vice versa.
-        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributesVariable,
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community"].includes(v.operation) && !v.attributesVariable,
         placeholder: '{\n  "accountEnabled": true,\n  "displayName": "=vorname + \\" \\" + nachname",\n  "userPrincipalName": "=upn",\n  "passwordProfile": { "password": "=tempPasswort", "forceChangePasswordNextSignIn": true }\n}',
         // The operations that carry a capture mask (create/update user & group, channel,
         // role) get a short note — the mask renders the fields; the rest keep the full
@@ -4245,22 +4292,22 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
-        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role"].includes(v.operation) && !v.attributes,
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community"].includes(v.operation) && !v.attributes,
         hint: "Alternative to the inline JSON above: a process variable holding the JSON object to send as the request body. Use one or the other, not both.",
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
         hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
       },
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
         hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Worker kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
-        showIf: (v) => v.operation === "list-users" || v.operation === "list-groups",
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
         options: [
           { v: "", l: "Aus (streng konsistent)" },
           { v: "true", l: "Ein (ConsistencyLevel: eventual)" },
@@ -4269,7 +4316,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: (v) => v.operation === "get-user-manager"
           ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
           : ["get-user", "get-group"].includes(v.operation)
@@ -4278,12 +4325,12 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "How many objects to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole read, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
         key: "maxUsers", label: "Maximum objects", placeholder: "1000",
-        showIf: (v) => ["list-users", "list-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
       },
       {
@@ -4674,6 +4721,7 @@ const SERVICE_TASK_KINDS = [
           ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
           : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
       },
+      { key: "answerTask", label: "Link to answer", placeholder: "the id of a user task answered by link", showIf: (v) => !v.operation || v.operation === "send", hint: "Optional. A user task of this process whose \"Answered by\" is \"also whoever holds the link\": the message is handed that task's link as answerLink — put it in the body, as =\"…\" + answerLink or {{answerLink}}. Whoever opens it sees the task's form and answers it without an account; opening the link alone answers nothing. The server's external URL must be configured." },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
@@ -4849,6 +4897,7 @@ const SERVICE_TASK_KINDS = [
           { v: "list-folder", l: "List folder" },
           { v: "create-folder", l: "Create folder" },
           { v: "delete-file", l: "Delete file or folder" },
+          { v: "get-site", l: "Read site and storage" },
         ],
       },
       {
@@ -4947,6 +4996,8 @@ const SERVICE_TASK_KINDS = [
               return "The file lands in =antwort.content, with =antwort.contentType and =antwort.size beside it. A file larger than a process variable's budget fails the task rather than arriving cut short — hand a person its webUrl instead.";
             case "get-file":
               return "=antwort.exists says whether it is there; when it is, =antwort.webUrl, =antwort.size and its properties under =antwort.listItem.fields come with it.";
+            case "get-site":
+              return "=antwort.exists says whether there is a site at that address; when there is, =antwort.id, =antwort.webUrl, =antwort.displayName and its storage in bytes under =antwort.quota.used, =antwort.quota.total and =antwort.quota.remaining come with it.";
             case "create-folder":
               return "Optional. The folder lands here, with =antwort.created false when it was already there.";
             default:
@@ -6235,16 +6286,17 @@ const SEND_MESSAGE_KIND = {
 };
 
 // SEND_SHOP_KIND is the send task's Shop kind (ADR-0429 §4): the point where a product's
-// process states how the action it is carrying out ended, or where a process asks a held
-// position of a product for an action of its own. Like the Message kind it is not a Worker
-// Type — the server serves its job itself, so there is no Worker to name and no credential to
-// hold — and a service task cannot carry it, so it too lives outside SERVICE_TASK_KINDS and
-// has its own fields (shopTaskFieldsHTML). Unlike the Message kind it is declared rather than
-// inferred: the <atlas:shopTask> extension is the whole of it, and exactly what the compiler
-// parses.
+// process states how the action it is carrying out ended, where a process asks a held
+// position of a product for an action of its own, or where a process orders a product for
+// somebody in its application's name (ADR-0520). Like the Message
+// kind it is not a Worker Type — the server serves its job itself, so there is no Worker to
+// name and no credential to hold — and a service task cannot carry it, so it too lives
+// outside SERVICE_TASK_KINDS and has its own fields (shopTaskFieldsHTML). Unlike the Message
+// kind it is declared rather than inferred: the <atlas:shopTask> extension is the whole of it,
+// and exactly what the compiler parses.
 const SEND_SHOP_KIND = {
   id: "shop", name: "Shop", icon: "S", group: "Messaging & events",
-  desc: "Reports how a product action ended, or asks a held position for one (ADR-0429).",
+  desc: "Reports how a product action ended, asks a held position for one, or orders a product for somebody (ADR-0429).",
   glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#c2298a"/><path d="M4.2 6.2h7.6l-.6 6.3H4.8z" fill="#fff"/><path d="M6.3 6.2V5a1.7 1.7 0 0 1 3.4 0v1.2" fill="none" stroke="#fff" stroke-width="1.1"/></svg>`,
   ext: "atlas:ShopTask",
 };
@@ -6271,13 +6323,20 @@ const SHOP_OUTCOMES = [
 // SHOP_TASK_MODES are the modes a shop send task can be in (ADR-0429 §4), each with the
 // fields it carries beside `mode` itself, in the order the panel shows them. The select, the
 // fields and the save all read this list, and a save clears every field the chosen mode does
-// not carry: the compiler refuses a command that states an outcome, and the other mode's
-// leftovers would only look like configuration.
+// not carry: the compiler refuses a command that states an outcome, and an order that names
+// an action, an outcome, an order or a position, and the other modes' leftovers would only
+// look like configuration.
 //
 // A field marked fx holds a literal or an '=' expression, like the Worker Types' fx fields.
 // A command's order and position are such values because the instance computes them — a
 // leaver process finds them in the inventory — while its product and action are literals, so
 // the task names exactly one thing it may ask for (§10, decision 1).
+//
+// An order (ADR-0520) names its catalogue and product as literals
+// for the same reason — the task names exactly what it may order — while its recipient and
+// its answers are computed by the instance: a joiner process finds the account id in HR's
+// record and the answers in what HR said. It states no action and no outcome: the order's
+// own fulfilment says how it ended. compileShopOrder is the authority on these attributes.
 const SHOP_TASK_MODES = [
   {
     v: "outcome", l: "Outcome — report how the action ended",
@@ -6314,10 +6373,43 @@ const SHOP_TASK_MODES = [
         hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
       },
       {
+        key: "recipient", label: "Or: recipient", fx: true, placeholder: "= account.id",
+        hint: "Instead of order and position: the account id of the person whose position of the product is asked. The server finds it in the inventory, so the process never reads what the person holds. When they hold none, the task completes and the result variable is empty. Fill either this or order and position.",
+      },
+      {
         key: "resultVariable", label: "Result variable", placeholder: "commandId",
-        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+        hint: "Receives the id of the command the action runs under, or an empty text when a recipient holds nothing to command. Leave empty to discard it.",
       },
     ],
+    after: "A refusal a retry will not change — the product does not list this application, the action is not an operator's or a system's, the position is not held — is thrown as the BPMN error SHOP_COMMAND_REFUSED when the process catches that code: put an error boundary event catching SHOP_COMMAND_REFUSED on this task to route it. Uncaught, it fails the job and becomes an incident after the retries.",
+  },
+  {
+    v: "order", l: "Order — place an order for somebody in the application's name",
+    hint: "On reaching this send task the process orders the product for the recipient in the name of this process's application, and the token continues once the order is placed. The order goes through the same checks as a person's: what the recipient holds, eligibility, conflicts, the orderable window, the answers and the product's approval rule. A retry finds the order its first attempt placed instead of ordering again. It names no Worker and carries no credential.",
+    fields: [
+      {
+        key: "catalog", label: "Catalogue", placeholder: "cat-m365-hr",
+        hint: "The catalogue the product is ordered from, by its id. Its newest published release must offer the product.",
+      },
+      {
+        key: "product", label: "Product", placeholder: "m365-joiner",
+        hint: "The product ordered, by its id. It must list this process's application in Console → Catalogue → product → “Applications whose processes may order it”; empty, the default, means no process may order it, and the order is refused when the task runs.",
+      },
+      {
+        key: "recipient", label: "Recipient", fx: true, placeholder: "= account.id",
+        hint: "The account id of the person the order is for: a literal, or a FEEL expression (fx) over the instance's variables. The person must already have an Atlas account — for a joiner, the directory synchronisation has to have run first.",
+      },
+      {
+        key: "answers", label: "Answers", fx: true, placeholder: "= answers",
+        hint: "Optional: the answers to the products' order forms, as a context {product: {field: value}} — a literal or a FEEL expression (fx). Leave empty when the product asks nothing.",
+      },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "orderId",
+        hint: "Receives the id of the order. Leave empty to discard it.",
+      },
+    ],
+    // Said below the fields, because it is what the model has to do around the task.
+    after: "A refusal a retry will not change — the product does not list this application, the recipient has no account, the order breaks a rule — is thrown as the BPMN error SHOP_ORDER_REFUSED when the process catches that code: put an error boundary event catching SHOP_ORDER_REFUSED on this task to route a refusal to a person. Uncaught, it fails the job and becomes an incident after the retries.",
   },
 ];
 
@@ -6338,8 +6430,9 @@ function shopActionKeyProblem(v) {
 }
 
 // shopTaskFieldsHTML renders the Shop kind's fields over the task's <atlas:shopTask>: the
-// mode, then the fields that mode carries. The action key's problem is rendered from the
-// stored value too, so a key saved as typed is still flagged when the task is opened again.
+// mode, then the fields that mode carries, then what the mode does (and, for an order, how
+// the model routes a refusal). The action key's problem is rendered from the stored value
+// too, so a key saved as typed is still flagged when the task is opened again.
 function shopTaskFieldsHTML(bo) {
   const shop = findExt(bo, SEND_SHOP_KIND.ext) || {};
   const mode = shopTaskMode(shop.mode);
@@ -6362,7 +6455,11 @@ function shopTaskFieldsHTML(bo) {
     } else {
       // The action and the product suggest what the catalogue declares (ADR-0429 §6); the
       // lists are filled once the message sources arrive, and the fields stay free text.
-      const suggest = f.key === "action" || f.key === "product" ? ` list="f-shop-${f.key}-keys"` : "";
+      // An order's product is not suggested: the message sources list the products with
+      // actions, not the ones that list this application as one that may order them, and
+      // a list of the former would offer products the order is then refused.
+      const suggest = f.key === "action" || (f.key === "product" && mode.v === "command")
+        ? ` list="f-shop-${f.key}-keys"` : "";
       fields += `<label class="field"><span>${esc(kindText(f.label))}</span>
         <input type="text" id="f-shop-${f.key}" value="${esc(value)}" placeholder="${esc(f.placeholder || "")}" autocomplete="off" spellcheck="false"${suggest}/></label>`;
       if (suggest) fields += `<datalist id="f-shop-${f.key}-keys"></datalist>`;
@@ -6376,7 +6473,8 @@ function shopTaskFieldsHTML(bo) {
   return `<h3 data-group="Shop">${esc(tr("bpmn.group.shop"))}</h3>
     <label class="field"><span>${esc(tr("pnl.task.shop.mode"))}</span><select id="f-shop-mode">${modes}</select></label>
     ${fields}
-    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>`;
+    <p class="muted" style="font-size:12px">${esc(kindText(mode.hint))}</p>
+    ${mode.after ? `<p class="muted" id="f-shop-after" style="font-size:12px">${esc(kindText(mode.after))}</p>` : ""}`;
 }
 
 // shopActionSuggestions are the action keys and products a shop task may name, from the
@@ -9369,7 +9467,8 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         // mode decides the rest: an outcome is the one report of the one command its
         // instance carries out (ADR-0429 §3), so a second report changes nothing and there
         // is nothing to loop, while a command may well be asked once per position — a
-        // leaver process returning each right the leaver holds.
+        // leaver process returning each right the leaver holds — and an order once per
+        // product or per person.
         const sendKind = sendTaskKind(bo);
         const reportsOutcome = sendKind === SEND_SHOP_KIND &&
           shopTaskMode((findExt(bo, SEND_SHOP_KIND.ext) || {}).mode).v === "outcome";
@@ -9533,6 +9632,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>${esc(tr("pnl.main.ut.candidateGroups"))}</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
+            ${answeredByHTML(bo)}
             <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.ut.priority"))}</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
@@ -11606,6 +11706,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
       }));
     }
+    const fansweredby = body.querySelector("#f-answeredby");
+    if (fansweredby) {
+      fansweredby.addEventListener("change", () => savePreservingPanel(() => {
+        // Only "link" is written, so a task answered in the Tasks app alone stays attribute-free.
+        try { modeling.updateProperties(element, { answeredBy: fansweredby.value || undefined }); } catch { /* stale */ }
+      }));
+    }
     const fwizard = body.querySelector("#f-wizard");
     if (fwizard) {
       fwizard.addEventListener("change", () => savePreservingPanel(() => {
@@ -12653,7 +12760,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Live</span>
         <label class="bar-select"><span>Version</span>
-          <select id="version-sel">${versionOptions}</select></label>
+          <select id="version-sel" title="${esc(tr("ops.versions.pickerTitle"))}">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
@@ -12676,6 +12783,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <span class="live-process-version">${esc(versionLabel)}</span>
         </div>
         ${layoutNote}${frozenNote}
+        <span class="muted live-other-versions" id="other-versions" hidden></span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
@@ -12715,6 +12823,96 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const next = Number(e.target.value);
     if (next && next !== key) location.hash = `#/operations/p/${next}`;
   });
+
+  // The version picker says what each version still holds — running, stuck behind an
+  // incident, finished — and the heading names the other versions that still run
+  // instances. Without it, "which versions of this process still have work in them"
+  // was answered by opening every version in turn. One request answers for every
+  // version (GET /api/v1/processes/{key}/versions: counters and the shared incident
+  // reading, never an instance scan), and it is refreshed on a slower beat than the
+  // diagram: a count in a closed dropdown does not need 1.5 seconds. Best-effort, like
+  // the picker it labels — a failed read leaves the plain "v8" it was built with.
+  const versionSel = root.querySelector("#version-sel");
+  const otherVersions = root.querySelector("#other-versions");
+  const versionCountsEvery = 10000;
+  let versionCountsAt = 0;
+  // The last counts read, by definition key — what the migration dialog's picker says
+  // each version holds. Null until a reading arrived; the dialog then asks the summary.
+  let versionCounts = null;
+  // Migrating needs somewhere to move to; the deployed versions are fixed for the life
+  // of this view.
+  const canMigrate = !!(processId && versions.length > 1);
+
+  // openMigration drains one version — the one on screen from the toolbar, another one
+  // from the heading's list — onto another, by default the newest (ADR-0162). The
+  // picker's counts come from the reading this view already holds; only without one is
+  // the summary read, and a failed read leaves the picker without counts rather than
+  // with wrong ones.
+  async function openMigration(fromKey) {
+    let runningOf;
+    if (versionCounts) {
+      runningOf = (v) => (versionCounts.get(String(v.key)) || {}).running || 0;
+    } else {
+      try {
+        const running = runningByDefinition(await api("GET", "/api/v1/instances/summary"));
+        runningOf = (v) => running.get(String(v.key)) || 0;
+      } catch { /* best-effort: no counts rather than wrong ones */ }
+    }
+    await migrateProcessFlow({
+      api, toast, processId, processName: procName, versions, fromKey, runningOf,
+      // The moved instances leave one version's counts and arrive in another's, so both
+      // the diagram and the per-version counts are re-read now rather than on the next tick.
+      onDone: async () => { await poll(); await refreshVersionCounts(); },
+    });
+  }
+  const versionCountParts = (v) => {
+    const parts = [];
+    if (v.running) parts.push(trPlural("ops.versions.running", v.running));
+    if (v.incidents) parts.push(trPlural("ops.versions.incidents", v.incidents));
+    if (v.finished) parts.push(trPlural("ops.versions.finished", v.finished));
+    if (!parts.length) parts.push(tr("ops.versions.empty"));
+    if (!v.active) parts.push(tr("ops.versions.inactive"));
+    return parts;
+  };
+  async function refreshVersionCounts() {
+    versionCountsAt = Date.now();
+    let res;
+    try { res = await api("GET", `/api/v1/processes/${key}/versions`); }
+    catch { return; }
+    if (!versionSel.isConnected) return; // navigated away mid-flight
+    const listed = Array.isArray(res && res.versions) ? res.versions : [];
+    const byKey = new Map(listed.map((v) => [String(v.key), v]));
+    if (listed.length) versionCounts = byKey;
+    // Only the text of an option that changed is touched, so a refresh while the
+    // operator has the dropdown open does not rebuild it under the pointer.
+    for (const opt of versionSel.options) {
+      const v = byKey.get(opt.value);
+      if (!v) continue;
+      const label = [`v${v.version}`, ...versionCountParts(v)].join(" · ");
+      if (opt.textContent !== label) opt.textContent = label;
+    }
+    const others = listed.filter((v) => v.key !== key && v.running > 0);
+    otherVersions.hidden = others.length === 0;
+    otherVersions.innerHTML = others.length
+      ? `${esc(tr("ops.versions.othersRunning"))} ` + others.map((v) => {
+        const counts = [trPlural("ops.versions.running", v.running)];
+        if (v.incidents) counts.push(trPlural("ops.versions.incidents", v.incidents));
+        const migrate = canMigrate
+          ? ` <button type="button" class="btn ghost live-migrate-other" data-mig-from="${v.key}" title="${
+            esc(trPlural("ops.versions.migrateTitle", v.running, { version: v.version }))}">${esc(tr("ops.versions.migrate"))}</button>`
+          : "";
+        return `<a href="#/operations/p/${v.key}" title="${esc(tr("ops.versions.otherTitle", { version: v.version }))}">v${v.version}</a>` +
+          ` <span class="${v.incidents ? "err" : ""}">(${esc(counts.join(", "))})</span>${migrate}`;
+      }).join(", ")
+      : "";
+  }
+  // Delegated once: the list is rewritten on every reading, and a handler bound to the
+  // buttons it held would die with them.
+  otherVersions.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-mig-from]");
+    if (btn && otherVersions.contains(btn)) openMigration(Number(btn.dataset.migFrom));
+  });
+  refreshVersionCounts();
 
   // The legend's three count badges are switches as well as a key: each one takes its
   // own number off every shape and puts it back. Which counts an operator wants on the
@@ -13601,6 +13799,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     await refreshDecisions();
     await refreshHeatStats();
     updateCancelBtn();
+    if (Date.now() - versionCountsAt >= versionCountsEvery) refreshVersionCounts();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
     try { rt = await api("GET", `/api/v1/processes/${key}/runtime${q}`); }
@@ -14075,23 +14274,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // running count is not, and the dialog says per version what it holds (ADR-0162).
   const migrateBtn = root.querySelector("#migrate-version");
   const thisVersion = versions.find((v) => v.key === key);
-  if (processId && thisVersion && versions.length > 1) {
+  if (canMigrate && thisVersion) {
     migrateBtn.hidden = false;
     migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
-    migrateBtn.addEventListener("click", async () => {
-      // This view counts its own version only, and the picker has to say which of the
-      // others hold instances too. The summary is one row per definition, not a scan.
-      let running = null;
-      try { running = runningByDefinition(await api("GET", "/api/v1/instances/summary")); }
-      catch { /* best-effort: the picker then states no counts rather than wrong ones */ }
-      await migrateProcessFlow({
-        api, toast, processId, processName: procName, versions, fromKey: key,
-        runningOf: running ? (v) => running.get(String(v.key)) || 0 : undefined,
-        // The moved instances leave this version's counts and diagram, so re-read now
-        // rather than on the next tick.
-        onDone: poll,
-      });
-    });
+    migrateBtn.addEventListener("click", () => openMigration(key));
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
@@ -14812,6 +14998,201 @@ export async function mountTaskProcess(container, { api, instanceKey, activeElem
 // offering a reference as a link; left out, every link is offered — the answer the
 // Console gives when nothing is enforced, and the server refuses a page the caller
 // may not open either way.
+// needsBoundedHistory decides, from one page of the bounded history, whether the
+// full replay timeline would be too large to load (ADR-0517). It errs towards the
+// bounded view: more top-level bodies than one page also counts, because their sum
+// is then unknown. A probe that failed or found the index unavailable keeps the
+// classic replay, which is what every instance used before.
+function needsBoundedHistory(probe) {
+  if (!probe || !probe.available) return false;
+  const total = probe.bodies.reduce((n, b) => n + (Number(b.iterations) || 0), 0);
+  return largestBody(probe.bodies) > BOUNDED_HISTORY_THRESHOLD ||
+    total > 4 * BOUNDED_HISTORY_THRESHOLD || !!probe.nextCursor;
+}
+
+// mountBoundedReplay is the replay of an instance too large for the timeline: the
+// diagram, the instance's multi-instance executions as collapsed groups with the
+// server's counts, and the Multi-Instance Explorer. Nothing here grows with the
+// iteration count — the browser holds one page of bodies and one page of
+// iterations at a time.
+async function mountBoundedReplay(root, { api, key, lib, gen, probe }) {
+  const largest = largestBody(probe.bodies);
+  root.querySelector(".replay-bar").hidden = true;
+  root.querySelector("#rp-migrate").hidden = true;
+  root.querySelector("#rp-live").href = `#/operations/p/${probe.processDefinitionKey}/i/${key}`;
+  root.querySelector("#rp-instances").href = `#/operations/p/${probe.processDefinitionKey}`;
+  const stateEl = root.querySelector("#rp-state");
+  stateEl.textContent = probe.instanceState || "—";
+  const historyEl = root.querySelector("#history-list");
+  const detail = root.querySelector(".ops-detail");
+  root.querySelector("#rp-tabs").hidden = true;
+  detail.querySelectorAll(".ops-tab-body").forEach((el) => { el.hidden = true; });
+  const pane = document.createElement("div");
+  pane.className = "mi-explorer-host";
+  detail.appendChild(pane);
+  const noteHTML = `<div class="mi-bounded-note"><h3>${esc(tr("ops.mi.bounded.title"))}</h3>
+      <p>${esc(tr("ops.mi.bounded.note", { count: fmtCount(largest) }))}</p>
+      <p class="muted">${esc(tr("ops.mi.bounded.other"))}</p></div>`;
+  pane.innerHTML = noteHTML;
+
+  let viewer = null;
+  try {
+    viewer = newModeler(lib.BpmnJS, lib.moddle, root.querySelector("#canvas"));
+    current = viewer;
+    const xml = await api("GET", `/api/v1/processes/${probe.processDefinitionKey}/xml`);
+    if (gen !== generation) return;
+    await viewer.importXML(typeof xml === "string" ? xml : String(xml));
+    viewer.get("canvas").zoom("fit-viewport");
+  } catch (e) {
+    if (gen !== generation) return;
+    root.querySelector("#canvas").innerHTML =
+      `<div class="coming"><p>Could not render this instance's diagram.</p>
+       <p class="muted">${esc(e.message)}</p></div>`;
+    viewer = null;
+  }
+  if (gen !== generation) return;
+
+  // The bodies the overview already knows, by key: a body step in the outline
+  // takes its counters from here, or from its own route when it is not.
+  const bodyByKey = new Map(probe.bodies.map((b) => [String(b.bodyElementInstanceKey), b]));
+  const fmtClock = (ns) => (ns ? fmtTime(ns / 1e6) : "");
+  let bodiesNext = probe.nextCursor || "";
+  let steps = [];        // outline steps loaded so far, in the order they happened
+  let stepsNext = "";    // cursor of the next outline page, "" when none
+  let outlineAvailable = true;
+  let explorer = null;
+  let marked = "";
+  const registry = viewer ? viewer.get("elementRegistry") : null;
+  const nameOf = (elementId) => {
+    const el = registry && elementId ? registry.get(elementId) : null;
+    return (el && el.businessObject && el.businessObject.name) || elementId || "—";
+  };
+  const mark = (elementId) => {
+    if (!viewer) return;
+    const canvas = viewer.get("canvas");
+    if (marked) { try { canvas.removeMarker(marked, "atlas-selected"); } catch { /* gone */ } }
+    marked = "";
+    if (elementId && registry.get(elementId)) {
+      canvas.addMarker(elementId, "atlas-selected");
+      marked = elementId;
+    }
+  };
+  // The replay window of one iteration draws on the diagram: the elements it
+  // activated so far as visited, the element of the step shown as active.
+  let replayMarked = [];
+  const replay = ({ visited, current }) => {
+    if (!viewer) return;
+    const canvas = viewer.get("canvas");
+    for (const [id, cls] of replayMarked) { try { canvas.removeMarker(id, cls); } catch { /* gone */ } }
+    replayMarked = [];
+    for (const id of visited) {
+      if (id !== current && registry.get(id)) { canvas.addMarker(id, "atlas-visited"); replayMarked.push([id, "atlas-visited"]); }
+    }
+    if (current && registry.get(current)) { canvas.addMarker(current, "atlas-active"); replayMarked.push([current, "atlas-active"]); }
+  };
+  function open(body) {
+    if (explorer) explorer.destroy();
+    mark(body.elementId);
+    explorer = mountMIExplorer(pane, {
+      api, instanceKey: key, body, nameOf, onReplay: replay,
+      onOpenBody: (nested) => open(nested),
+      onClose: () => { explorer.destroy(); explorer = null; mark(""); pane.innerHTML = noteHTML; },
+    });
+  }
+  async function bodyFor(bodyKey) {
+    const known = bodyByKey.get(String(bodyKey));
+    if (known) return known;
+    const data = await api("GET", `/api/v1/instances/${key}/multi-instances/${bodyKey}`);
+    bodyByKey.set(String(bodyKey), data.body);
+    return data.body;
+  }
+  async function loadSteps() {
+    const page = await loadOutline(api, key, { cursor: stepsNext });
+    if (gen !== generation) return;
+    outlineAvailable = page.available;
+    steps = steps.concat(page.steps);
+    stepsNext = page.nextCursor || "";
+  }
+  function bodyRow(b) {
+    return `<div class="ops-hrow mi-group mi-bounded" data-body-key="${esc(b.bodyElementInstanceKey)}">
+        <span class="ops-hicon ${b.state === "active" ? "live" : "done"}">${b.state === "active" ? "&#9679;" : "&#10003;"}</span>
+        <span class="ops-hname">${esc(nameOf(b.elementId))}</span>
+        <span class="ops-mi-count">${esc(tr("ops.mi.count", { count: fmtCount(b.iterations) }))}</span>
+        ${bodySummaryHTML(b)}
+        <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(b.bodyElementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>
+      </div>`;
+  }
+  function draw() {
+    let rows;
+    if (outlineAvailable) {
+      // One row per activation, in the order they happened; its end is a later
+      // step of the same element instance, wherever it has been loaded.
+      const ended = new Map();
+      for (const st of steps) if (st.action !== "activated") ended.set(String(st.elementInstanceKey), st.action);
+      rows = steps.filter((st) => st.action === "activated").map((st) => {
+        const k = String(st.elementInstanceKey);
+        if (st.multiInstanceBody) {
+          const b = bodyByKey.get(k);
+          return b ? bodyRow(b)
+            : `<div class="ops-hrow mi-group mi-bounded" data-pending-body="${esc(k)}"><span class="ops-hicon live">&#9679;</span>
+                <span class="ops-hname">${esc(nameOf(st.elementId))}</span></div>`;
+        }
+        const end = ended.get(k);
+        const icon = end === "terminated" ? "&#10005;" : end ? "&#10003;" : "&#9679;";
+        return `<div class="ops-hrow mi-outline-step" data-eik="${esc(k)}">
+            <span class="ops-hicon ${end ? "done" : "live"}">${icon}</span>
+            <span class="ops-hname">${esc(nameOf(st.elementId))}</span>
+            <span class="ops-htime">${esc(fmtClock(st.at))}</span>
+          </div>`;
+      }).join("");
+    } else {
+      rows = [...bodyByKey.values()].map(bodyRow).join("") || `<p class="ops-empty">${esc(tr("ops.mi.bounded.none"))}</p>`;
+    }
+    const more = outlineAvailable
+      ? (stepsNext ? `<button type="button" class="btn neutral small mi-outline-more">${esc(tr("ops.outline.more"))}</button>` : "")
+      : (bodiesNext ? `<button type="button" class="btn neutral small mi-bodies-more">${esc(tr("ops.mi.bounded.more"))}</button>` : "");
+    historyEl.innerHTML = `${outlineAvailable ? "" : `<p class="ops-empty mi-bounded-hint">${esc(tr("ops.outline.unavailable"))}</p>`}${rows}${more}`;
+    historyEl.querySelectorAll(".ops-mi-explore").forEach((btn) => btn.addEventListener("click", () => {
+      const b = bodyByKey.get(btn.dataset.bodyKey);
+      if (b) open(b);
+    }));
+    historyEl.querySelectorAll(".mi-outline-step").forEach((row) => row.addEventListener("click", () => {
+      const st = steps.find((x) => String(x.elementInstanceKey) === row.dataset.eik);
+      historyEl.querySelectorAll(".mi-outline-step.sel").forEach((r) => r.classList.remove("sel"));
+      row.classList.add("sel");
+      if (st) mark(st.elementId);
+    }));
+    // A body the first page of the listing did not include is read on its own.
+    historyEl.querySelectorAll("[data-pending-body]").forEach((row) => {
+      bodyFor(row.dataset.pendingBody).then(() => { if (gen === generation) draw(); }).catch(() => {});
+    });
+    const moreSteps = historyEl.querySelector(".mi-outline-more");
+    if (moreSteps) moreSteps.addEventListener("click", async () => {
+      moreSteps.disabled = true;
+      try { await loadSteps(); } catch (e) { moreSteps.disabled = false; moreSteps.title = e.message; return; }
+      draw();
+    });
+    const moreBodies = historyEl.querySelector(".mi-bodies-more");
+    if (moreBodies) moreBodies.addEventListener("click", async () => {
+      moreBodies.disabled = true;
+      try {
+        const page = await loadMIBodies(api, key, { cursor: bodiesNext });
+        if (gen !== generation) return;
+        page.bodies.forEach((b) => bodyByKey.set(String(b.bodyElementInstanceKey), b));
+        bodiesNext = page.nextCursor || "";
+      } catch (e) {
+        moreBodies.disabled = false;
+        moreBodies.title = e.message;
+        return;
+      }
+      draw();
+    });
+  }
+  try { await loadSteps(); } catch { outlineAvailable = false; }
+  if (gen !== generation) return;
+  draw();
+}
+
 export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   cleanup();
   const gen = generation; // this mount's token; bail if a newer navigation supersedes it
@@ -14885,6 +15266,18 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     return;
   }
   if (gen !== generation) return; // a newer navigation took over while assets loaded
+
+  // Ask the bounded multi-instance history first (ADR-0517): it costs one page
+  // whatever the instance's size, and it says whether the full timeline is safe to
+  // load at all. The legacy timeline grows with the square of the iteration count,
+  // so an instance with a large loop is shown through the bounded view instead.
+  // A failure here is not fatal: the replay falls back to the timeline as before.
+  let miProbe = null;
+  try { miProbe = await loadMIBodies(api, key); } catch { miProbe = null; }
+  if (gen !== generation) return;
+  if (needsBoundedHistory(miProbe)) {
+    return mountBoundedReplay(root, { api, key, lib, gen, probe: miProbe });
+  }
 
   // The timeline resolves the instance's definition, which the diagram renders.
   let tl;
@@ -14987,6 +15380,45 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   let frames = [];   // complete logical token states, oldest first
   const expandedHistory = new Set(); // collapsed by default, scoped to this replay view
   let historyParents = new Map();
+  // The bounded history's bodies by element-instance key: which grouped rows can
+  // open the Multi-Instance Explorer. Empty when the index is unavailable.
+  const miBodyByKey = new Map(
+    (miProbe && miProbe.available ? miProbe.bodies : []).map((b) => [String(b.bodyElementInstanceKey), b]));
+  let explorer = null;
+  // openExplorer shows one body's iterations in the detail panel, in place of the
+  // tabs, until it is closed. It reads pages from the server; the timeline already
+  // loaded is not consulted, so the two can never disagree about what is shown.
+  function openExplorer(body) {
+    const host = root.querySelector(".ops-detail");
+    const tabs = root.querySelector("#rp-tabs");
+    let pane = host.querySelector(".mi-explorer-host");
+    if (!pane) {
+      pane = document.createElement("div");
+      pane.className = "mi-explorer-host";
+      host.appendChild(pane);
+    }
+    if (explorer) explorer.destroy();
+    tabs.hidden = true;
+    host.querySelectorAll(".ops-tab-body").forEach((el) => { el.dataset.miHidden = el.hidden ? "1" : ""; el.hidden = true; });
+    explorer = mountMIExplorer(pane, {
+      api, instanceKey: key, body,
+      onSelect: (d) => {
+        const at = steps.findIndex((st) => String(st.elementInstanceKey) === String(d.iteration.elementInstanceKey));
+        if (at >= 0) {
+          expandedHistory.add(groupReplayHistory(steps).parents.get(at));
+          renderHistory();
+          selectElement(steps[at].elementId, steps[at].elementInstanceKey);
+        }
+      },
+      onOpenBody: (nested) => openExplorer(nested),
+      onClose: () => {
+        explorer.destroy(); explorer = null;
+        pane.remove();
+        tabs.hidden = false;
+        host.querySelectorAll(".ops-tab-body").forEach((el) => { el.hidden = el.dataset.miHidden === "1"; });
+      },
+    });
+  }
   // Whether this instance's history records which element wrote each variable
   // (ADR-0219). False for an instance that ran before it
   // did — there the "out" side falls back to the old inference, and says so.
@@ -16769,6 +17201,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const button = isGroup
         ? `<button type="button" class="ops-mi-toggle" data-body="${i}" aria-expanded="${opened}" aria-label="${esc(toggleLabel)}" title="${esc(toggleLabel)}">${opened ? "&#9662;" : "&#9656;"}</button>`
         : "";
+      // The explorer pages this body's iterations from the bounded history, so it
+      // is offered wherever the server has the body indexed (ADR-0517).
+      const explore = isGroup && miBodyByKey.has(String(s.elementInstanceKey))
+        ? ` <button type="button" class="btn neutral small ops-mi-explore" data-body-key="${esc(s.elementInstanceKey)}">${esc(tr("ops.mi.explore"))}</button>`
+        : "";
       const summary = isGroup
         ? ` <span class="ops-mi-count" title="${esc(tr("ops.mi.summary", {
             completed: children.filter((idx) => steps[idx].endAt && steps[idx].loop?.outcome !== "terminated").length,
@@ -16780,7 +17217,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
         inc ? ` title="${esc(inc.message || "Incident")}"` : ""}>
         ${button}
         <span class="ops-hicon ${inc ? "inc" : done ? "done" : "live"}">${icon}</span>
-        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}
+        <span class="ops-hname">${esc(stepLabel(s))}${round}</span>${summary}${explore}
         <span class="ops-htime">${esc(when)}</span>
       </div>`;
     }).join("");
@@ -16809,6 +17246,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       const frame = frames.findIndex((f) => f.position >= s.position);
       setPlayhead(frame < 0 ? frames.length : frame + 1);
       animateStep(i);
+    }));
+    historyEl.querySelectorAll(".ops-mi-explore").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation(); // opening the explorer never moves the replay
+      const body = miBodyByKey.get(button.dataset.bodyKey);
+      if (body) openExplorer(body);
     }));
     historyEl.querySelectorAll(".ops-mi-toggle").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation(); // toggling a group never changes the replay position

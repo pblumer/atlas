@@ -107,3 +107,14 @@ func itemJSONFields(t *testing.T) []string {
 	}
 	return out
 }
+
+// TestTheIconEnumIsTheShopsIcons holds the schema's icon names to the ones a
+// publish accepts: an agent offered a name the shop does not draw would save it
+// and be refused only at publish, and a name the shop draws but the schema lacks
+// could never be chosen at all.
+func TestTheIconEnumIsTheShopsIcons(t *testing.T) {
+	if !reflect.DeepEqual(productIconNames, catalog.Icons) {
+		t.Fatalf("the MCP icon names differ from catalog.Icons:\n mcp:     %v\n catalog: %v",
+			productIconNames, catalog.Icons)
+	}
+}

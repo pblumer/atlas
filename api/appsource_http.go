@@ -194,14 +194,24 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	status, body := s.importSourceFiles(r, files, decide)
+	httpapi.JSON(w, status, body)
+}
+
+// importSourceFiles is the import a source tree takes once it is read, whether it
+// was uploaded (handleImportApplicationSource) or fetched from a verified atlas hub
+// release (handleBlueprintImport): one implementation, so a package installs the
+// same way whichever way it arrived. It answers the status and the body to write —
+// the import result, or the error envelope ({"error"}, with "undecided" and "plan"
+// when a changed artifact needs a decision).
+func (s *Server) importSourceFiles(r *http.Request, files []sourceFile, decide importplan.Decisions) (int, any) {
+	fail := func(status int, msg string) (int, any) { return status, map[string]any{"error": msg} }
 	man, byPath, err := parseSourceTree(files)
 	if err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
-		return
+		return fail(http.StatusBadRequest, err.Error())
 	}
 	if err := s.checkSourceModels(r.Context(), man, byPath); err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
-		return
+		return fail(http.StatusBadRequest, err.Error())
 	}
 
 	sources := make([]needSource, 0, len(man.Processes))
@@ -211,8 +221,7 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 	needs, unread := needsOf(sources)
 	offered, err := treeConstants(man, byPath)
 	if err != nil {
-		httpapi.Error(w, http.StatusBadRequest, err.Error())
-		return
+		return fail(http.StatusBadRequest, err.Error())
 	}
 
 	caller := sourceCaller{
@@ -228,6 +237,10 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 				msg = "no application with that key"
 			}
 			return code, msg
+		},
+		sees: func(app project) bool {
+			code, _ := s.checkProjectRole(r, app, ScopeRoleViewer)
+			return code == 0
 		},
 		admin: s.isAdmin(r),
 		audit: func(appID string, changes []constantChange) error {
@@ -262,15 +275,15 @@ func (s *Server) handleImportApplicationSource(w http.ResponseWriter, r *http.Re
 	)
 	switch {
 	case errors.As(applyErr, &refusal):
-		httpapi.Error(w, refusal.status, refusal.msg)
+		return fail(refusal.status, refusal.msg)
 	case errors.As(applyErr, &undecided):
-		httpapi.JSON(w, http.StatusConflict, map[string]any{
+		return http.StatusConflict, map[string]any{
 			"error": undecided.Error(), "undecided": undecided.refs, "plan": undecided.plan,
-		})
+		}
 	case applyErr != nil:
-		httpapi.Error(w, http.StatusInternalServerError, "import source: "+applyErr.Error())
+		return fail(http.StatusInternalServerError, "import source: "+applyErr.Error())
 	default:
-		httpapi.JSON(w, http.StatusOK, res)
+		return http.StatusOK, res
 	}
 }
 
