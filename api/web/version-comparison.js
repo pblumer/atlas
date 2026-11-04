@@ -132,7 +132,7 @@ export function migrationImpactHTML({ cmp, at, from, to }) {
   if (!cmp) return "";
   const versions = { from: `v${from}`, to: `v${to}` };
   const changes = Array.isArray(cmp.changes) ? cmp.changes : [];
-  const all = `<details class="vc-all"${at ? "" : " open"}>
+  const all = `<details class="fold-sub vc-all"${at ? "" : " open"}>
       <summary>${esc(tr("cmp.impact.all", versions))} <span class="muted">(${esc(countsText(cmp.counts))})</span></summary>
       ${changesHTML(cmp)}
     </details>`;
