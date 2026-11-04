@@ -3,7 +3,7 @@
   Benutzerverwaltung: Passwort-Link senden
 
   Sendet der Inhaberin oder dem Inhaber eines atlas-Kontos den einmaligen Link, ueber
-  den das Passwort gesetzt wird (ADR-draft-password-set-by-its-owner). Der Server
+  den das Passwort gesetzt wird (ADR-0526). Der Server
   startet diesen Prozess selbst:
 
     - anlass="vergessen"  : jemand hat auf der Anmeldeseite "Passwort vergessen"

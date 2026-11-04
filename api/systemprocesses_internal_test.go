@@ -107,7 +107,7 @@ func TestBootstrapDeploysSystemProcesses(t *testing.T) {
 // to end: start the bootstrap-deployed proc_benutzer_aufnahme, confirm the address
 // through its link, approve the "Antrag freigeben" task, and confirm the userConnector
 // created exactly that Atlas login — awaiting activation, with no password
-// (ADR-draft-password-set-by-its-owner).
+// (ADR-0526).
 func TestSystemIntakeProvisionsUser(t *testing.T) {
 	srv := passwordServer(t)
 	// The start form carries no role field (ADR-0126) — the requester never picks a

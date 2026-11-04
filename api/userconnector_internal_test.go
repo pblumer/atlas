@@ -58,7 +58,7 @@ const createInner = `<atlas:userConnector operation="create" username="=username
 // TestUserConnectorCreatesUser is the ADR-0123 happy path: a system process with a
 // create userConnector task, run with start variables, provisions exactly the
 // account an admin would — right username and roles — and no password: it awaits
-// activation by its owner (ADR-draft-password-set-by-its-owner).
+// activation by its owner (ADR-0526).
 func TestUserConnectorCreatesUser(t *testing.T) {
 	srv, _ := newSystemServer(t, WithUserProvisioning())
 	srv.systemPIDs = map[string]bool{"sysproc": true} // gate: treat this as a system process
@@ -225,7 +225,7 @@ func TestUserConnectorHandlerOpErrors(t *testing.T) {
 }
 
 // TestUserConnectorRefusesPasswords holds a process to the rule that it never carries
-// a password (ADR-draft-password-set-by-its-owner): a create that names one and a
+// a password (ADR-0526): a create that names one and a
 // set-password are refused at deploy, as RuleUserPassword problems — and disabling an
 // account still works.
 func TestUserConnectorRefusesPasswords(t *testing.T) {

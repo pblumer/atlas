@@ -1,4 +1,4 @@
-# ADR-DRAFT: A password is set by its owner, through a one-time link
+# ADR-0526: A password is set by its owner, through a one-time link
 
 - **Status:** Accepted
 - **Implementation:** Landed

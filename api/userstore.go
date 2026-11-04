@@ -235,7 +235,7 @@ type publicUser struct {
 	ManagerID          string `json:"managerId,omitempty"`
 	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
 	// AwaitingActivation is a local account whose owner has not set a password yet
-	// (ADR-draft-password-set-by-its-owner): nobody can sign in as it until they use
+	// (ADR-0526): nobody can sign in as it until they use
 	// the link they were sent. Whether a password is set says nothing secret; the hash
 	// itself never leaves the server.
 	AwaitingActivation bool  `json:"awaitingActivation,omitempty"`

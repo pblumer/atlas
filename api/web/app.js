@@ -341,7 +341,7 @@ function updateAccount() {
 }
 
 // openChangePassword lets the signed-in person change their own password
-// (ADR-draft-password-set-by-its-owner). It asks for the current one — an open session
+// (ADR-0526). It asks for the current one — an open session
 // on a shared screen must not be enough to take the account — and the server ends every
 // other session of the account once it is changed.
 function openChangePassword(returnTo = document.activeElement) {
@@ -530,7 +530,7 @@ function viewLogin() {
   })();
   const f = document.getElementById("login-form");
   // A forgotten password is recovered by its owner through a one-time link mailed to
-  // the account's address (ADR-draft-password-set-by-its-owner) — where the instance
+  // the account's address (ADR-0526) — where the instance
   // can mail one: it needs the vault, an external URL and the system process. Where it
   // cannot, the affordance says the path that exists instead: an administrator sends
   // the link, and still never learns the password.
@@ -2703,7 +2703,7 @@ const rolesFrom = (fd, u) => {
 };
 
 // createUser creates the account without a password and then has its owner set one
-// (ADR-draft-password-set-by-its-owner): with an address, by mailing them the
+// (ADR-0526): with an address, by mailing them the
 // activation link; without one, by handing the administrator the link to pass on in
 // person. The administrator never chooses or sees a password.
 async function createUser(fd, reload) {
@@ -3306,7 +3306,7 @@ async function viewConsoleOrg() {
   // 342px of the table's minimum width, which then no longer fitted the content column:
   // the card scrolled it, Delete was cut off at the card's edge, and the roles beside
   // them were squeezed to one per line.
-  // A password is set by its owner (ADR-draft-password-set-by-its-owner): the menu
+  // A password is set by its owner (ADR-0526): the menu
   // sends them a link, or hands it to the administrator to pass on — and offers
   // neither for an account that signs in through an identity provider.
   const localAccount = (u) => !u.source || u.source === "local";

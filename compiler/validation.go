@@ -203,7 +203,7 @@ const (
 	// it runs, and can be answered in the Tasks app, but nobody is sent its link.
 	RuleAnswerUnsent = "answer.unsent"
 
-	// The password rules (ADR-draft-password-set-by-its-owner). A
+	// The password rules (ADR-0526). A
 	// password is set by its owner through a one-time link; a process never carries one.
 	//
 	// RulePasswordOperation marks passwordFor on a mailbox operation other than send. An
@@ -389,7 +389,7 @@ func checkAnswerLinks(cp *CompiledProcess) []Problem {
 
 // passwordLinkVariable is the variable a mail task's subject and bodies read the password
 // link of the account its passwordFor names under
-// (ADR-draft-password-set-by-its-owner).
+// (ADR-0526).
 const passwordLinkVariable = "passwordLink"
 
 // PasswordLinkVariable is [passwordLinkVariable] for the packages that resolve a mail task.
@@ -398,7 +398,7 @@ const PasswordLinkVariable = passwordLinkVariable
 // checkPasswords holds the two places a password could enter a process to the rule that
 // it never does: a user-provisioning task carries none, and a mail task that names an
 // account shows its link and sends nothing else
-// (ADR-draft-password-set-by-its-owner).
+// (ADR-0526).
 func checkPasswords(cp *CompiledProcess) []Problem {
 	var ps []Problem
 	mails := make([]int32, 0, len(cp.passwordFor))

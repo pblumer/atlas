@@ -304,7 +304,7 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 // required and unique (case-insensitive); email, if given, is unique too. Roles
 // default to ["user"].
 //
-// The password is optional and deprecated (ADR-draft-password-set-by-its-owner):
+// The password is optional and deprecated (ADR-0526):
 // without one the account awaits activation, and its owner sets a password through
 // the link POST /api/v1/users/{id}/password-link sends them. It stays accepted for
 // scripts that provision accounts with a password of their own; given, it must meet
@@ -545,7 +545,7 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 
 // handleSetUserPassword replaces a user's password. Body: {"password":"..."}.
 //
-// Deprecated (ADR-draft-password-set-by-its-owner): it makes the administrator
+// Deprecated (ADR-0526): it makes the administrator
 // somebody who knows the password. The Console no longer offers it — it sends the
 // owner a link — and it stays for scripts. Like every password change it now ends the
 // account's sessions.

@@ -41,7 +41,7 @@ disable), der **nur** für Prozesse des geschützten System-Projekts
 Admin-API nutzt (Uniqueness, Last-Admin-Lockout).
 
 **Ein Passwort kommt in keinem Prozess vor**
-([ADR-draft-password-set-by-its-owner](../../docs/adr/draft-password-set-by-its-owner.md)).
+([ADR-0526](../../docs/adr/0526-password-set-by-its-owner.md)).
 Niemand ausser der Person, der das Konto gehört, legt es fest oder kennt es — auch
 kein Administrator. `create` legt das Konto ohne Passwort an; ein Mail-Task mit
 `passwordFor` schickt der Inhaberin oder dem Inhaber einen einmaligen Link, über den

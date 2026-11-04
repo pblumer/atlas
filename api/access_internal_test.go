@@ -33,7 +33,7 @@ var wantPublicRoutes = []string{
 	"GET /api/v1/settings/registration",
 	"GET /api/v1/auth/providers",
 	// Whether the login screen offers "forgot password"
-	// (ADR-draft-password-set-by-its-owner).
+	// (ADR-0526).
 	"GET /api/v1/auth/password-recovery",
 
 	// Share links, where the token in the URL is the whole authorization
@@ -67,7 +67,7 @@ var wantPublicRoutes = []string{
 	// A password set by its owner through a one-time link, and the request for one:
 	// a static page, the link's state and the set, where the signed token in the
 	// Authorization header is the whole authorization; and "forgot", which answers
-	// alike for every input (ADR-draft-password-set-by-its-owner). Rate-limited in
+	// alike for every input (ADR-0526). Rate-limited in
 	// their handlers — "forgot" twice over, because it makes the server send mail.
 	"GET /public/password",
 	"GET /public/password/link",

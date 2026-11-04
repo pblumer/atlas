@@ -5699,7 +5699,7 @@ const SERVICE_TASK_KINDS = [
           { v: "create", l: "Create user" },
           { v: "disable", l: "Disable user" },
         ],
-        // A process never carries a password (ADR-draft-password-set-by-its-owner):
+        // A process never carries a password (ADR-0526):
         // create makes an account awaiting activation, and a mail task naming the
         // account with "Password link for" sends its owner the link to set one.
         hint: "Create makes the account without a password. Its owner sets one through the link a mail task sends — name the account there under «Password link for».",

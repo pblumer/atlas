@@ -141,7 +141,7 @@ func (o *Outbox) Clear() {
 }
 
 // WithheldText is what the preview outbox shows where a message carried something it
-// must not keep — a password link (ADR-draft-password-set-by-its-owner).
+// must not keep — a password link (ADR-0526).
 const WithheldText = "[password link withheld by the preview]"
 
 // withheld returns m with every string it must not keep replaced, in the subject and

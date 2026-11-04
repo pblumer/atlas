@@ -8,7 +8,7 @@ import (
 // A service task bearing an <atlas:userConnector> extension is a user-provisioning
 // task (ADR-0123): it creates or disables an Atlas login through the in-process user
 // store via the job path. It never carries a password
-// (ADR-draft-password-set-by-its-owner): that is a stage-5 problem, RuleUserPassword. operation
+// (ADR-0526): that is a stage-5 problem, RuleUserPassword. operation
 // selects the action; the fields are model-authored literal-or-FEEL values, like
 // the mail worker's message.
 const userConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -127,7 +127,7 @@ func TestParseUserConnectorErrors(t *testing.T) {
 // TestUserConnectorNeverCarriesAPassword: a create that names a password and a
 // set-password are stage-5 errors (RuleUserPassword) — refused at deploy, reported on a
 // reload — and a create without one is what a process writes now
-// (ADR-draft-password-set-by-its-owner).
+// (ADR-0526).
 func TestUserConnectorNeverCarriesAPassword(t *testing.T) {
 	model := func(inner string) string {
 		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

@@ -62,7 +62,7 @@ _Changed_ / _Removed_ for each version.
   signed-in person changes their own password under the account menu ("Change
   password…", `POST /api/v1/auth/password`), and an administrator sends an account its
   link or takes it to hand over in person (`POST /api/v1/users/{id}/password-link`)
-  (ADR-draft-password-set-by-its-owner).
+  (ADR-0526).
 
 ### Changed
 - **A password is set by its owner, never mailed.** Registration no longer asks the
@@ -79,7 +79,7 @@ _Changed_ / _Removed_ for each version.
   the account's sessions. The log of instances that ran the old intake still holds the
   passwords typed there: send those accounts a password link, and migrate intake
   instances still waiting at "Antrag freigeben" to the new version
-  (ADR-draft-password-set-by-its-owner).
+  (ADR-0526).
 
 ### Fixed
 

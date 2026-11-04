@@ -21,7 +21,7 @@ import (
 )
 
 // A password is set by its owner, through a one-time link
-// (ADR-draft-password-set-by-its-owner).
+// (ADR-0526).
 //
 // Nobody chooses a password for somebody else any more: not an administrator approving a
 // registration, not a process, not a script mailing an initial one. An account is created

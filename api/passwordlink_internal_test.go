@@ -15,7 +15,7 @@ import (
 )
 
 // A password is set by its owner, through a one-time link
-// (ADR-draft-password-set-by-its-owner). These tests drive the shipped system
+// (ADR-0526). These tests drive the shipped system
 // processes end to end on a server with a preview mail Worker and an external URL.
 
 const passwordTestOrigin = "https://atlas.example.ch"

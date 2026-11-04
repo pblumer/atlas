@@ -2928,7 +2928,7 @@ type xmlMailConnector struct {
 	// the mail's subject and bodies are handed that task's link as answerLink.
 	AnswerTask string `xml:"answerTask,attr"`
 	// PasswordFor names the account whose password link the message carries as
-	// passwordLink (ADR-draft-password-set-by-its-owner): a username, literal or FEEL.
+	// passwordLink (ADR-0526): a username, literal or FEEL.
 	PasswordFor string `xml:"passwordFor,attr"`
 }
 

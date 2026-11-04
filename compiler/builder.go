@@ -1921,7 +1921,7 @@ type MailConfig struct {
 	// stage 5, not here, so it may name a task added after this one.
 	AnswerTask string
 	// PasswordFor names the account whose password link the message carries as
-	// passwordLink (ADR-draft-password-set-by-its-owner); the zero value for none.
+	// passwordLink (ADR-0526); the zero value for none.
 	PasswordFor RestExpr
 }
 

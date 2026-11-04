@@ -6735,7 +6735,7 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 				return
 			}
 			// A mail that carries a password link goes out only through a worker the
-			// server itself runs (ADR-draft-password-set-by-its-owner): the resolved
+			// server itself runs (ADR-0526): the resolved
 			// message is the link, and a lease by any other credential — an operator's
 			// session, an API token they minted — would hand it to whoever holds that.
 			if jobType == compiler.MailJobTypeIndex && !s.ownWorker(r) {
@@ -6977,7 +6977,7 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// (ADR-0523); the worker fails the job with it.
 			"resolveError": j.ResolveError,
 			// What a preview must not keep: a password link
-			// (ADR-draft-password-set-by-its-owner).
+			// (ADR-0526).
 			"withhold": j.Withhold,
 		}}
 	case compiler.RemedyJobTypeIndex:

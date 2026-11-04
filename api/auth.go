@@ -212,7 +212,7 @@ func (s *sessionStore) destroyUser(userID string) {
 
 // destroyUserExcept drops every live session of a user but the one whose token is
 // keep — the session a person changed their own password in stays open, every other
-// one ends (ADR-draft-password-set-by-its-owner).
+// one ends (ADR-0526).
 func (s *sessionStore) destroyUserExcept(userID, keep string) {
 	s.mu.Lock()
 	for tok, sess := range s.byToken {

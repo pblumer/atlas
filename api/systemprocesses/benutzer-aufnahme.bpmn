@@ -10,7 +10,7 @@
   Ist die Provisionierung abgeschaltet, parkt der userConnector-Task, bis ein
   Operator sie wieder einschaltet.
 
-  Ein Passwort kommt in diesem Prozess nicht vor (ADR-draft-password-set-by-its-owner):
+  Ein Passwort kommt in diesem Prozess nicht vor (ADR-0526):
   niemand ausser der Inhaberin oder dem Inhaber kennt es je. Das Konto entsteht ohne
   Passwort, und die Mail "Zugang aktivieren" traegt einen einmaligen Link
   (passwordFor / passwordLink), ueber den es gesetzt wird. Der Link entsteht erst beim

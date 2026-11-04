@@ -11,7 +11,7 @@ import (
 	"github.com/pblumer/atlas/api/httpapi"
 )
 
-// The refusals of ADR-draft-password-set-by-its-owner: every way a password link, a
+// The refusals of ADR-0526: every way a password link, a
 // password change or a recovery request is turned away, and the deprecated route an
 // administrator could still set a password through.
 

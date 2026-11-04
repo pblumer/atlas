@@ -1621,7 +1621,7 @@ func mailFlag(taskID, attr, raw string) (bool, error) {
 // the in-process user-provisioning worker via the job path (ADR-0123), which mutates
 // the internal user store. operation selects the action; username is always required.
 // A password is no longer something a process may carry
-// (ADR-draft-password-set-by-its-owner): create makes an account awaiting activation,
+// (ADR-0526): create makes an account awaiting activation,
 // and a password attribute or set-password is a stage-5 error (RuleUserPassword) rather
 // than a parse error here, so a definition deployed before comes back on restart and is
 // reported instead of failing the boot. set-password without a password still fails

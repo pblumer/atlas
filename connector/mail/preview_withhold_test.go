@@ -7,7 +7,7 @@ import (
 )
 
 // TestPreviewWithholdsWhatItMustNotKeep: a message that carries a password link
-// (ADR-draft-password-set-by-its-owner) reaches the outbox without it — in the subject,
+// (ADR-0526) reaches the outbox without it — in the subject,
 // both bodies and the framed raw message — and says so where it stood.
 func TestPreviewWithholdsWhatItMustNotKeep(t *testing.T) {
 	const link = "https://atlas.example.ch/public/password#dXNy.1999999999.00112233445566778899aabbccddeeff"

@@ -178,7 +178,7 @@ func TestATaskBelowTheMailsScopeIsReachable(t *testing.T) {
 }
 
 // A mail task that names an account with passwordFor carries its owner's one-time
-// password link as passwordLink (ADR-draft-password-set-by-its-owner).
+// password link as passwordLink (ADR-0526).
 func TestTheMailThatCarriesAPasswordLink(t *testing.T) {
 	ok := answerModel(`passwordFor="=benutzername" subject="Ihr Zugang" body="=&quot;Hier: &quot; + passwordLink"`, ``, ``)
 	cp := mustParse(t, ok)

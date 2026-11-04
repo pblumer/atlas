@@ -1455,7 +1455,7 @@ const state = {
   // instance does not offer that (ADR-0126).
   registerURL: '',
   // recovery is whether the instance mails a link to set a new password
-  // (ADR-draft-password-set-by-its-owner); the sign-in offers "forgot password" only
+  // (ADR-0526); the sign-in offers "forgot password" only
   // where it does.
   recovery: false,
   // signinError is what the last attempt is waiting to say, as a catalogue key.

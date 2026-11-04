@@ -102,7 +102,7 @@ test("Edit stays one click on the row; the rest are in its menu", async ({ page 
   const menu = await openMenu(page, OTHER.id);
   // Each entry opens with its icon, so the label is matched at the end.
   // A password is set by its owner: the menu sends them a link or hands it over, and
-  // never asks the administrator for one (ADR-draft-password-set-by-its-owner).
+  // never asks the administrator for one (ADR-0526).
   await expect(menu.locator("button[data-act]")).toHaveText([/Send password link…$/, /Copy password link…$/, /Disable account$/, /Delete…$/]);
   await expect(menu.locator("button[data-act='delete']")).toHaveClass(/danger/);
 });

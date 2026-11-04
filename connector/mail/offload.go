@@ -100,7 +100,7 @@ type Job struct {
 	ResolveError string `json:"resolveError,omitempty"`
 	// Withhold are strings of the message a preview must not keep: the password link a
 	// system process mails to an account's owner
-	// (ADR-draft-password-set-by-its-owner). A real provider sends them — they are what
+	// (ADR-0526). A real provider sends them — they are what
 	// the mail is for — but the preview outbox is read by operators, and an operator who
 	// could read a reset link off it could take over the account it resets.
 	Withhold []string `json:"withhold,omitempty"`
@@ -117,7 +117,7 @@ type AnswerLinker interface {
 }
 
 // PasswordLinker mints the one-time link through which the owner of the account named
-// username sets their password (ADR-draft-password-set-by-its-owner). It is handed the
+// username sets their password (ADR-0526). It is handed the
 // process the mail belongs to and the recipients the task resolved, because whether a
 // link may be minted at all is decided by both: only a system process may carry one, and
 // only to the account's own address with nobody beside it. A [Directory] that can

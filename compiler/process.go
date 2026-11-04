@@ -1810,7 +1810,7 @@ func (p *CompiledProcess) AnswerTask(id int32) (string, bool) {
 
 // PasswordFor returns the account — a username, literal or FEEL — whose password link
 // the mail task node id carries, and false when it carries none
-// (ADR-draft-password-set-by-its-owner). Whether the process may mint one at all, and to
+// (ADR-0526). Whether the process may mint one at all, and to
 // whom the mail may go, is decided when the mail is resolved, not here.
 func (p *CompiledProcess) PasswordFor(id int32) (RestExpr, bool) {
 	e, ok := p.passwordFor[id]

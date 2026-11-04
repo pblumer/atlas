@@ -163,7 +163,7 @@ var (
 	AuthUserUpdated = newEvent("auth.user_updated")
 	AuthUserDeleted = newEvent("auth.user_deleted")
 	AuthPasswordSet = newEvent("auth.password_set")
-	// The password lifecycle of ADR-draft-password-set-by-its-owner: a link minted
+	// The password lifecycle of ADR-0526: a link minted
 	// (mailed by a system process, or handed to an administrator), a link used to set a
 	// password, a password changed by its signed-in owner, and a recovery requested on
 	// the login screen. Never the link and never the password.

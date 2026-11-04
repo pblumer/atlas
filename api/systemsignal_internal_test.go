@@ -51,7 +51,7 @@ const intakeListenerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // itself still waits at "Antrag freigeben" — the notice must not hold up the request.
 // The approval that follows must not announce anything again: the throw sits before
 // the step where rolle and entscheidung come into being. And it waits for the
-// requester to confirm their address (ADR-draft-password-set-by-its-owner): an
+// requester to confirm their address (ADR-0526): an
 // unconfirmed request announces nothing.
 func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 	srv := passwordServer(t)
