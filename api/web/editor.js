@@ -4599,6 +4599,7 @@ const SERVICE_TASK_KINDS = [
           : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
       },
       { key: "answerTask", label: "Link to answer", placeholder: "the id of a user task answered by link", showIf: (v) => !v.operation || v.operation === "send", hint: "Optional. A user task of this process whose \"Answered by\" is \"also whoever holds the link\": the message is handed that task's link as answerLink — put it in the body, as =\"…\" + answerLink or {{answerLink}}. Whoever opens it sees the task's form and answers it without an account; opening the link alone answers nothing. The server's external URL must be configured." },
+      { key: "passwordFor", label: "Password link for", placeholder: "=benutzername", fx: true, showIf: (v) => !v.operation || v.operation === "send", hint: "Optional, system processes only. The atlas account (username) whose one-time password link the message carries as passwordLink — put it in the body, as =\"…\" + passwordLink or {{passwordLink}}. Its owner sets their password through it. The mail must go to that account's own address and nobody else, or it is refused at send time; the preview outbox withholds the link. Needs the server's external URL and the vault." },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
@@ -5682,7 +5683,7 @@ const SERVICE_TASK_KINDS = [
   ],
 },
   {
-    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create, set the password of, or disable an atlas login", icon: "U",
+    id: "userconnector", name: "User Provisioning", group: "Directory & identity", desc: "Create or disable an atlas login", icon: "U",
     // A person mark on a teal tile reads "user account" at a glance. The
     // drawImplBadges/stkind-icon CSS adds the round tile chrome; the SVG carries the
     // fill and the white figure strokes.
@@ -5696,9 +5697,12 @@ const SERVICE_TASK_KINDS = [
         key: "operation", label: "Operation", type: "select", reRender: true,
         options: [
           { v: "create", l: "Create user" },
-          { v: "set-password", l: "Set password" },
           { v: "disable", l: "Disable user" },
         ],
+        // A process never carries a password (ADR-draft-password-set-by-its-owner):
+        // create makes an account awaiting activation, and a mail task naming the
+        // account with "Password link for" sends its owner the link to set one.
+        hint: "Create makes the account without a password. Its owner sets one through the link a mail task sends — name the account there under «Password link for».",
       },
       { group: "Account" },
       { key: "username", label: "Username", placeholder: "=benutzername", fx: true, hint: "The atlas login to create, update, or disable. May be a FEEL expression (fx)." },
@@ -5708,12 +5712,6 @@ const SERVICE_TASK_KINDS = [
         key: "roles", label: "Roles", placeholder: "user", fx: true,
         showIf: (v) => !v.operation || v.operation === "create",
         hint: "Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.",
-      },
-      { group: "Credential", showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password" },
-      {
-        key: "password", label: "Initial password", placeholder: "=initialpasswort", fx: true,
-        showIf: (v) => !v.operation || v.operation === "create" || v.operation === "set-password",
-        hint: "At least 8 characters. Usually a FEEL reference to a variable an admin set on the approval form, so no password is written into the model.",
       },
     ],
   },

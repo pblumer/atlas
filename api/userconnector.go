@@ -25,7 +25,7 @@ type userConnStore interface {
 }
 
 // This file implements the user-provisioning worker (ADR-0123): the
-// in-process side of an <atlas:userConnector> task. It create/set-password/disables
+// in-process side of an <atlas:userConnector> task. It creates or disables
 // an Atlas login through the internal user store.
 //
 // It deliberately, and narrowly, reopens the ADR-0044/0049 boundary that no
@@ -84,8 +84,14 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 			email := strings.TrimSpace(userResolve(detail.UserEmail, piKey, scopeVars))
 			displayName := strings.TrimSpace(userResolve(detail.UserDisplayName, piKey, scopeVars))
 			roles := splitRoles(userResolve(detail.UserRoles, piKey, scopeVars))
-			password := userResolve(detail.UserPassword, piKey, scopeVars)
-			id, created, err := s.provisionCreateUser(username, email, displayName, roles, password, now)
+			// A process never carries a password (ADR-draft-password-set-by-its-owner).
+			// A version deployed before that rule may still name one; a value it resolves
+			// is refused, so the incident says what to do rather than the account being
+			// created with a password that sits in the log.
+			if userResolve(detail.UserPassword, piKey, scopeVars) != "" {
+				return fmt.Errorf("user worker: this task carries a password, and a process never does (ADR-draft-password-set-by-its-owner); migrate the instance to the current version of %s, which creates the account awaiting activation and mails its owner the link", cp.ProcessId())
+			}
+			id, created, err := s.provisionCreateUser(username, email, displayName, roles, now)
 			if err != nil {
 				return err
 			}
@@ -94,12 +100,10 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 				slog.String("userId", id), slog.Bool("created", created))
 			return nil
 		case "set-password":
-			if err := s.provisionSetPassword(username, userResolve(detail.UserPassword, piKey, scopeVars), now); err != nil {
-				return err
-			}
-			logging.Info(logging.UserProvisioningPasswordSet, "set a user password from a process instance",
-				slog.Uint64("instance", piKey), slog.String("username", username))
-			return nil
+			// Refused for the same reason: a password in a process is a password in the
+			// log. A model deployed before the rule reaches here; one deployed after is
+			// refused at deploy (RuleUserPassword).
+			return fmt.Errorf("user worker: set-password is refused; a process never carries a password (ADR-draft-password-set-by-its-owner). Mail the account its password link instead (a mail task with passwordFor)")
 		case "disable":
 			if err := s.provisionDisableUser(username, now); err != nil {
 				return err
@@ -113,19 +117,18 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 	}
 }
 
-// provisionCreateUser creates a local user, idempotently: an existing username is
-// treated as success (the account is already provisioned) so an at-least-once retry
-// never double-creates. It reuses the admin API's rails — password length and
-// username/email uniqueness — so a provisioned account is exactly what an admin
-// could create. Runs on the run-loop goroutine.
-func (s *Server) provisionCreateUser(username, email, displayName string, roles []string, password string, now int64) (string, bool, error) {
+// provisionCreateUser creates a local user awaiting activation, idempotently: an
+// existing username is treated as success (the account is already provisioned) so an
+// at-least-once retry never double-creates. It reuses the admin API's rails —
+// username/email uniqueness — so a provisioned account is exactly what an admin could
+// create. It carries no password: its owner sets one through the link a mail task
+// with passwordFor sends them (ADR-draft-password-set-by-its-owner). Runs on the
+// run-loop goroutine.
+func (s *Server) provisionCreateUser(username, email, displayName string, roles []string, now int64) (string, bool, error) {
 	if existing, ok, err := s.users.byUsername(username); err != nil {
 		return "", false, err
 	} else if ok {
 		return existing.ID, false, nil // idempotent: already provisioned
-	}
-	if len(password) < minPasswordLen {
-		return "", false, fmt.Errorf("user worker: password must be at least %d characters", minPasswordLen)
 	}
 	if email != "" {
 		if _, ok, err := s.users.byEmail(email); err != nil {
@@ -133,10 +136,6 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		} else if ok {
 			return "", false, fmt.Errorf("user worker: email %q already taken", email)
 		}
-	}
-	hash, err := hashPassword(password)
-	if err != nil {
-		return "", false, err
 	}
 	id, err := newUserID()
 	if err != nil {
@@ -149,7 +148,6 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		DisplayName:     displayName,
 		Roles:           normalizeRoles(roles),
 		Source:          SourceLocal,
-		PasswordHash:    hash,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 		RolesUpgradedAt: now,
@@ -158,28 +156,6 @@ func (s *Server) provisionCreateUser(username, email, displayName string, roles 
 		return "", false, err
 	}
 	return id, true, nil
-}
-
-// provisionSetPassword replaces an existing user's password (the set-password
-// operation). The user must exist; the minimum length applies.
-func (s *Server) provisionSetPassword(username, password string, now int64) error {
-	if len(password) < minPasswordLen {
-		return fmt.Errorf("user worker: password must be at least %d characters", minPasswordLen)
-	}
-	u, ok, err := s.users.byUsername(username)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("user worker: no user named %q", username)
-	}
-	hash, err := hashPassword(password)
-	if err != nil {
-		return err
-	}
-	u.PasswordHash = hash
-	u.UpdatedAt = now
-	return s.users.Save(u)
 }
 
 // provisionDisableUser disables a user, idempotently (already-disabled is success).

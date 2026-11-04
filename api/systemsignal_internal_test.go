@@ -50,9 +50,11 @@ const intakeListenerBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 // carrying what the requester typed and the proposed username, while the intake
 // itself still waits at "Antrag freigeben" — the notice must not hold up the request.
 // The approval that follows must not announce anything again: the throw sits before
-// the step where initialpasswort comes into being, and no listener may ever see it.
+// the step where rolle and entscheidung come into being. And it waits for the
+// requester to confirm their address (ADR-draft-password-set-by-its-owner): an
+// unconfirmed request announces nothing.
 func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
-	srv, _ := newSystemServer(t, WithSystemProcesses())
+	srv := passwordServer(t)
 	h := srv.Handler()
 
 	do := func(method, path, body, contentType string) (int, []byte) {
@@ -112,6 +114,10 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 
 	startInstance(t, h, intakeKey,
 		`{"vorname":"Neuer","nachname":"Kollege","email":"neuer@example.org","abteilung":"Informatik","begruendung":"Projektmitarbeit"}`)
+	if n := len(listeners()); n != 0 {
+		t.Fatalf("an unconfirmed request started %d listener instances, want none", n)
+	}
+	confirmIntake(t, srv)
 
 	rows := listeners()
 	if len(rows) != 1 {
@@ -133,7 +139,7 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 			t.Errorf("listener variable %s = %q, want it to carry %q", name, got[name], want)
 		}
 	}
-	for _, name := range []string{"initialpasswort", "rolle", "entscheidung"} {
+	for _, name := range []string{"rolle", "entscheidung"} {
 		if _, leaked := got[name]; leaked {
 			t.Errorf("listener received %s; the signal must be thrown before the approval decides it", name)
 		}
@@ -187,7 +193,7 @@ func TestSystemIntakeAnnouncesTheRequestAsASignal(t *testing.T) {
 
 	// Approving announces nothing further.
 	code, raw = do(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(taskKey, 10)+"/complete",
-		`{"variables":{"rolle":"user","benutzername":"neuer.kollege","entscheidung":"anlegen","initialpasswort":"willkommen1"}}`,
+		`{"variables":{"rolle":"user","benutzername":"neuer.kollege","entscheidung":"anlegen"}}`,
 		"application/json")
 	if code != http.StatusOK {
 		t.Fatalf("complete freigabe task: %d %s", code, raw)

@@ -2373,6 +2373,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
 			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
+		{"GET", "/api/v1/auth/password-recovery", s.handlePasswordRecovery, apiOp{
+			summary: "Whether the login screen offers \"forgot password\": the server can sign a password link (vault), build it (external URL) and mail it (the proc_passwort_link system process) (public; read before login)", tag: "Auth", role: roleAny,
+			resp: jsonBody("Password recovery", schemaObj(map[string]any{"enabled": tBool()}))}},
+		{"POST", "/api/v1/auth/password", s.handleChangeOwnPassword, apiOp{
+			summary: "Change the signed-in person's own password. Asks for the current one, is throttled like a login, and ends every other session of the account", tag: "Auth", role: roleAny,
+			req: jsonBody("Current and new password", schemaObj(map[string]any{
+				"currentPassword": tString(), "newPassword": tString(),
+			}, "currentPassword", "newPassword")),
+			resp: jsonBody("User id", tObject())}},
 		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
 			summary: "Report auth status and the current user, with the groups the user is a member of", tag: "Auth", role: roleAny,
 			resp: jsonBody("Auth status", schemaObj(map[string]any{
@@ -2389,11 +2398,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{
 			summary: "List principals (users; groups later) for member and assignee pickers — id-referenced, any authenticated caller (ADR-0073)", tag: "Users", role: roleAny, resp: jsonBody("Principals", tArray())}},
 		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
-			summary: "Create a user account", tag: "Users", role: RoleAdmin, status: http.StatusCreated,
+			summary: "Create a user account. Without a password the account awaits activation: send its owner a password link (POST /api/v1/users/{id}/password-link). The password field is deprecated", tag: "Users", role: RoleAdmin, status: http.StatusCreated,
 			req: jsonBody("New user", schemaObj(map[string]any{
 				"username": tString(), "email": tString(), "displayName": tString(),
 				"password": tString(), "roles": map[string]any{"type": "array", "items": tString()},
-			}, "username", "password")),
+			}, "username")),
 			resp: jsonBody("Created user", tObject())}},
 		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
 			summary: "Fetch a user account", tag: "Users", role: RoleAdmin, resp: jsonBody("User", tObject())}},
@@ -2406,9 +2415,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Updated user", tObject())}},
 		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
-			summary: "Set a user's password", tag: "Users", role: RoleAdmin,
+			summary: "Set a user's password, ending the account's sessions. Deprecated: a password is set by its owner — send them a link instead (POST /api/v1/users/{id}/password-link)", tag: "Users", role: RoleAdmin, deprecated: true,
 			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
 			resp: jsonBody("User id", tObject())}},
+		{"POST", "/api/v1/users/{id}/password-link", s.handleUserPasswordLink, apiOp{
+			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
+			req:  jsonBody("Send or hand over", schemaObj(map[string]any{"send": tBool()})),
+			resp: jsonBody("Sent, or the link and when it expires", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/users/{id}/avatar", s.handleGetAvatar, apiOp{

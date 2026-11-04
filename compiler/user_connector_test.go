@@ -6,8 +6,9 @@ import (
 )
 
 // A service task bearing an <atlas:userConnector> extension is a user-provisioning
-// task (ADR-0123): it creates, sets the password of, or disables an
-// Atlas login through the in-process user store via the job path. operation
+// task (ADR-0123): it creates or disables an Atlas login through the in-process user
+// store via the job path. It never carries a password
+// (ADR-draft-password-set-by-its-owner): that is a stage-5 problem, RuleUserPassword. operation
 // selects the action; the fields are model-authored literal-or-FEEL values, like
 // the mail worker's message.
 const userConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
@@ -19,7 +20,7 @@ const userConnectorBPMN = `<?xml version="1.0" encoding="UTF-8"?>
       <bpmn:extensionElements>
         <atlas:userConnector operation="create" username="erika.muster"
                              email="erika@example.org" displayName="Erika Muster"
-                             roles="user" password="initialpass1"/>
+                             roles="user"/>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:endEvent id="e"/>
@@ -54,7 +55,7 @@ func TestParseUserConnectorTask(t *testing.T) {
 	if d.UserEmail.Literal != "erika@example.org" || d.UserDisplayName.Literal != "Erika Muster" {
 		t.Errorf("email/displayName = %+v / %+v", d.UserEmail, d.UserDisplayName)
 	}
-	if d.UserRoles.Literal != "user" || d.UserPassword.Literal != "initialpass1" {
+	if d.UserRoles.Literal != "user" || d.UserPassword.Literal != "" || d.UserPassword.Expr != nil {
 		t.Errorf("roles/password = %+v / %+v", d.UserRoles, d.UserPassword)
 	}
 	// A user task leaves the mail/REST/clio-only fields unset.
@@ -72,7 +73,7 @@ func TestParseUserConnectorFeelFields(t *testing.T) {
       <bpmn:extensionElements>
         <atlas:userConnector operation="create" username="=benutzername"
                              email="=email" displayName="=vorname + &quot; &quot; + nachname"
-                             roles="user" password="=initialpasswort"/>
+                             roles="user"/>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:endEvent id="e"/>
@@ -86,8 +87,8 @@ func TestParseUserConnectorFeelFields(t *testing.T) {
 	}
 	task := cp.Flow(cp.Outgoing(cp.StartEvents()[0])[0]).Target
 	d := cp.ConnectorTask(cp.Node(task).Detail)
-	if d.UserName.Expr == nil || d.UserEmail.Expr == nil || d.UserDisplayName.Expr == nil || d.UserPassword.Expr == nil {
-		t.Errorf("username/email/displayName/password should be FEEL expressions")
+	if d.UserName.Expr == nil || d.UserEmail.Expr == nil || d.UserDisplayName.Expr == nil {
+		t.Errorf("username/email/displayName should be FEEL expressions")
 	}
 	if d.UserRoles.Expr != nil || d.UserRoles.Literal != "user" {
 		t.Errorf("roles should be a literal, got %+v", d.UserRoles)
@@ -111,7 +112,6 @@ func TestParseUserConnectorErrors(t *testing.T) {
 		"unknown operation":       `<atlas:userConnector operation="promote" username="u" password="p1"/>`,
 		"missing operation":       `<atlas:userConnector username="u" password="p1"/>`,
 		"missing username":        `<atlas:userConnector operation="create" password="p1"/>`,
-		"create missing password": `<atlas:userConnector operation="create" username="u"/>`,
 		"setpw missing password":  `<atlas:userConnector operation="set-password" username="u"/>`,
 		"malformed FEEL username": `<atlas:userConnector operation="disable" username="=("/>`,
 		"malformed FEEL password": `<atlas:userConnector operation="create" username="u" password="=("/>`,
@@ -121,5 +121,36 @@ func TestParseUserConnectorErrors(t *testing.T) {
 		if _, err := Parse(1, 1, strings.NewReader(wrap(inner))); err == nil {
 			t.Errorf("%s: want a compile error, got nil", name)
 		}
+	}
+}
+
+// TestUserConnectorNeverCarriesAPassword: a create that names a password and a
+// set-password are stage-5 errors (RuleUserPassword) — refused at deploy, reported on a
+// reload — and a create without one is what a process writes now
+// (ADR-draft-password-set-by-its-owner).
+func TestUserConnectorNeverCarriesAPassword(t *testing.T) {
+	model := func(inner string) string {
+		return `<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:atlas="http://atlas/schema/1.0">
+  <bpmn:process id="p">
+    <bpmn:startEvent id="s"/>
+    <bpmn:serviceTask id="t"><bpmn:extensionElements>` + inner + `</bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="e"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="s" targetRef="t"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="t" targetRef="e"/>
+  </bpmn:process>
+</bpmn:definitions>`
+	}
+	for name, inner := range map[string]string{
+		"create with a literal password": `<atlas:userConnector operation="create" username="u" password="geheim123"/>`,
+		"create with a FEEL password":    `<atlas:userConnector operation="create" username="u" password="=initialpasswort"/>`,
+		"set-password":                   `<atlas:userConnector operation="set-password" username="u" password="=pw"/>`,
+	} {
+		if p := findProblem(problemsOf(t, model(inner)), RuleUserPassword, "t"); p == nil || p.Severity != SeverityError {
+			t.Errorf("%s: want a %s error, got %+v", name, RuleUserPassword, p)
+		}
+	}
+	if p := findProblem(problemsOf(t, model(`<atlas:userConnector operation="create" username="u"/>`)), RuleUserPassword, "t"); p != nil {
+		t.Errorf("a create without a password is reported: %+v", p)
 	}
 }

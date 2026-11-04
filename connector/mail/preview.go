@@ -140,6 +140,25 @@ func (o *Outbox) Clear() {
 	o.msgs, o.dropped = nil, 0
 }
 
+// WithheldText is what the preview outbox shows where a message carried something it
+// must not keep — a password link (ADR-draft-password-set-by-its-owner).
+const WithheldText = "[password link withheld by the preview]"
+
+// withheld returns m with every string it must not keep replaced, in the subject and
+// both bodies, before it is framed — so the raw message does not carry it either.
+func withheld(m Message) Message {
+	for _, s := range m.Withhold {
+		if s == "" {
+			continue
+		}
+		m.Subject = strings.ReplaceAll(m.Subject, s, WithheldText)
+		m.Body = strings.ReplaceAll(m.Body, s, WithheldText)
+		m.HTML = strings.ReplaceAll(m.HTML, s, WithheldText)
+	}
+	m.Withhold = nil
+	return m
+}
+
 // clipField bounds one stored body. Truncation is marked in the text itself, so a
 // reader is never shown a silently shortened message and told it is what went out.
 func clipField(s string) string {
@@ -195,6 +214,7 @@ func (c *PreviewClient) Send(ctx context.Context, m Message) error {
 	if c.outbox == nil {
 		return fmt.Errorf("mail: preview: worker %q has no outbox", c.connector)
 	}
+	m = withheld(m)
 	return c.outbox.Deliver(OutboxMessage{
 		Connector: c.connector,
 		From:      from,

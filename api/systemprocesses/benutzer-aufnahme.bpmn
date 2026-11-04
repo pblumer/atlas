@@ -10,34 +10,50 @@
   Ist die Provisionierung abgeschaltet, parkt der userConnector-Task, bis ein
   Operator sie wieder einschaltet.
 
+  Ein Passwort kommt in diesem Prozess nicht vor (ADR-draft-password-set-by-its-owner):
+  niemand ausser der Inhaberin oder dem Inhaber kennt es je. Das Konto entsteht ohne
+  Passwort, und die Mail "Zugang aktivieren" traegt einen einmaligen Link
+  (passwordFor / passwordLink), ueber den es gesetzt wird. Der Link entsteht erst beim
+  Versand und steht in keiner Variable.
+
   Start (Formular ba-antrag: vorname, nachname, email, abteilung, begruendung)
    -> Script-Task "Zugangsdaten vorschlagen"  (FEEL schlaegt benutzername vor)
+   -> Service-Task "E-Mail bestaetigen lassen" (Mail mit answerLink, ADR-0523)
+   -> User-Task  "E-Mail bestaetigen"          (atlas:answeredBy="link", Formular
+                                                ba-bestaetigen; Frist 72 Stunden,
+                                                danach "Antrag verfallen")
    -> Signal     "Aufnahme beantragt"         (atlas.user.requested, siehe unten)
-   -> User-Task  "Antrag freigeben"           (Formular ba-konto; Admin entscheidet,
-                                               vergibt die Rolle, setzt Initialpasswort)
+   -> User-Task  "Antrag freigeben"           (Formular ba-konto; Admin entscheidet
+                                               und vergibt die Rolle)
 
   Die Rolle waehlt der Antragsteller bewusst NICHT selbst: das Start-Formular
   kennt kein Rollen-Feld, damit dieser Prozess auch als oeffentliches
   Registrierungs-Formular (ADR-0126) sicher ist. Der Admin vergibt die Rolle bei
   der Freigabe (ba-konto); der userConnector uebernimmt sie aus [rolle].
    -> (X) Gateway "Angelegt?"  (default -> anlegen; entscheidung="ablehnen" -> Bypass)
-        [anlegen]  -> Service-Task "Konto anlegen" (userConnector create)
-                   -> Service-Task "Zugangsdaten senden" (Mail-Connector)
-        [ablehnen] -> Service-Task "Ablehnung senden"    (Mail-Connector, unten)
+        [anlegen]  -> Service-Task "Konto anlegen" (userConnector create, ohne Passwort)
+                   -> Service-Task "Zugang aktivieren" (Mail mit passwordLink)
+        [ablehnen] -> Service-Task "Ablehnung senden"    (Mail-Worker, unten)
    -> (X) Join
    -> Ende "Aufnahme abgeschlossen"
 
+  Die Bestaetigung der Adresse steht vor allem anderen: ein Antrag erreicht die
+  Benutzerverwaltung erst, wenn jemand das Postfach haelt, an das spaeter der
+  Aktivierungslink geht. Wer eine fremde Adresse eintraegt, erreicht nichts; wer sich
+  vertippt, merkt es an der ausbleibenden Mail.
+
   Das Signal "atlas.user.requested" (ADR-0431)
-  meldet jeden eingegangenen Antrag, bevor die Freigabe wartet. Der Prozess kennt
+  meldet jeden bestaetigten Antrag, bevor die Freigabe wartet. Der Prozess kennt
   seine Empfaenger nicht: eine Installation, die davon erfahren will (Discord, Mail,
   Ticket), deployt einen eigenen Prozess mit einem Signal-Start "atlas.user.requested".
   Ohne Empfaenger bleibt der Wurf folgenlos. Das Signal traegt alle Variablen der
-  Instanz an dieser Stelle: vorname, nachname, email, abteilung, begruendung und
-  benutzername. Es steht bewusst VOR der Freigabe, denn erst dort entsteht
-  initialpasswort, und das darf nie in einer Meldung landen. Name und Stelle sind
+  Instanz an dieser Stelle: vorname, nachname, email, abteilung, begruendung,
+  benutzername und atlasInstance. Es steht nach der Bestaetigung und VOR der
+  Freigabe, denn erst dort entstehen rolle und entscheidung. Name und Stelle sind
   eine Schnittstelle: wer sie aendert, bricht die Empfaenger jeder Installation.
 
-  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120, Ablehnungs-Zweig bei y=260.
+  BPMN-DI von Hand gesetzt: gerade Hauptachse bei y=120, Ablehnungs- und
+  Verfalls-Zweig bei y=250/260.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
@@ -71,11 +87,45 @@
         </zeebe:ioMapping>
       </extensionElements>
       <incoming>f_start_vorschlag</incoming>
-      <outgoing>f_vorschlag_melden</outgoing>
+      <outgoing>f_vorschlag_bestaetigung</outgoing>
     </scriptTask>
 
+    <serviceTask id="bestaetigung_mail" name="E-Mail bestätigen lassen">
+      <documentation>Die Adresse, an die später der Aktivierungslink geht, wird zuerst bewiesen: der Antrag wartet, bis jemand den Link in dieser Mail öffnet und bestätigt.</documentation>
+      <extensionElements>
+        <atlas:mailConnector connector="mail"
+          to="=email"
+          answerTask="email_bestaetigen"
+          subject="Bitte bestätigen Sie Ihre E-Mail-Adresse"
+          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nSie haben einen Zugang zu atlas beantragt. Bitte bestätigen Sie, dass diese Adresse Ihnen gehört:\n\n&quot; + answerLink + &quot;\n\nDer Link ist 72 Stunden gültig. Haben Sie nichts beantragt, können Sie diese Nachricht ignorieren; der Antrag verfällt dann.\n\nFreundliche Grüsse\nIhre Benutzerverwaltung&quot;"/>
+      </extensionElements>
+      <incoming>f_vorschlag_bestaetigung</incoming>
+      <outgoing>f_bestaetigung_warten</outgoing>
+    </serviceTask>
+
+    <userTask id="email_bestaetigen" name="E-Mail bestätigen" atlas:answeredBy="link">
+      <documentation>Bitte bestätigen Sie, dass Sie den Zugang zu atlas beantragt haben.</documentation>
+      <extensionElements>
+        <zeebe:assignmentDefinition candidateGroups="benutzerverwaltung"/>
+        <zeebe:formDefinition formId="ba-bestaetigen"/>
+      </extensionElements>
+      <incoming>f_bestaetigung_warten</incoming>
+      <outgoing>f_bestaetigt_melden</outgoing>
+    </userTask>
+
+    <boundaryEvent id="bestaetigung_frist" name="72 Stunden" attachedToRef="email_bestaetigen">
+      <outgoing>f_frist_verfallen</outgoing>
+      <timerEventDefinition>
+        <timeDuration>PT72H</timeDuration>
+      </timerEventDefinition>
+    </boundaryEvent>
+
+    <endEvent id="verfallen" name="Antrag verfallen">
+      <incoming>f_frist_verfallen</incoming>
+    </endEvent>
+
     <intermediateThrowEvent id="beantragt_melden" name="Aufnahme beantragt">
-      <incoming>f_vorschlag_melden</incoming>
+      <incoming>f_bestaetigt_melden</incoming>
       <outgoing>f_melden_freigabe</outgoing>
       <signalEventDefinition signalRef="sig_user_requested"/>
     </intermediateThrowEvent>
@@ -96,24 +146,26 @@
     </exclusiveGateway>
 
     <serviceTask id="konto_anlegen" name="Konto anlegen">
+      <documentation>Das Konto entsteht ohne Passwort; niemand kann sich damit anmelden, bis die Inhaberin oder der Inhaber über den Link der nächsten Mail eines gesetzt hat.</documentation>
       <extensionElements>
         <atlas:userConnector operation="create"
           username="=benutzername"
           email="=email"
           displayName="=vorname + &quot; &quot; + nachname"
-          roles="=rolle"
-          password="=initialpasswort"/>
+          roles="=rolle"/>
       </extensionElements>
       <incoming>f_anlegen</incoming>
       <outgoing>f_anlegen_mail</outgoing>
     </serviceTask>
 
-    <serviceTask id="zugang_mail" name="Zugangsdaten senden">
+    <serviceTask id="zugang_mail" name="Zugang aktivieren">
+      <documentation>Trägt den einmaligen Link, über den das Passwort gesetzt wird. Die Mail geht an die Adresse des Kontos und an niemanden sonst; der Server lehnt alles andere ab.</documentation>
       <extensionElements>
         <atlas:mailConnector connector="mail"
-          to="=email"
-          subject="Ihr atlas-Zugang wurde angelegt"
-          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr atlas-Zugang wurde angelegt.\n\nBenutzername: &quot; + benutzername + &quot;\nInitiales Passwort: &quot; + initialpasswort + &quot;\n\nBitte aendern Sie das Passwort nach dem ersten Login.\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
+          to="=benutzername"
+          passwordFor="=benutzername"
+          subject="Ihr atlas-Zugang ist freigegeben"
+          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr atlas-Zugang wurde freigegeben. Ihr Benutzername: &quot; + benutzername + &quot;\n\nBitte legen Sie über diesen Link Ihr Passwort fest:\n\n&quot; + passwordLink + &quot;\n\nDer Link ist 7 Tage gültig und kann nur einmal verwendet werden. Ist er abgelaufen, fordern Sie auf der Anmeldeseite über «Passwort vergessen» einen neuen an.\n\nFreundliche Grüsse\nIhre Benutzerverwaltung&quot;"/>
       </extensionElements>
       <incoming>f_anlegen_mail</incoming>
       <outgoing>f_zugang_join</outgoing>
@@ -124,7 +176,7 @@
         <atlas:mailConnector connector="mail"
           to="=email"
           subject="Ihr Aufnahme-Antrag"
-          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Aufnahme-Antrag wurde nicht bewilligt.\n\nGrund: &quot; + ablehnungsgrund + &quot;\n\nViele Gruesse\nIhre Benutzerverwaltung&quot;"/>
+          body="=&quot;Hallo &quot; + vorname + &quot; &quot; + nachname + &quot;,\n\nIhr Aufnahme-Antrag wurde nicht bewilligt.\n\nGrund: &quot; + ablehnungsgrund + &quot;\n\nFreundliche Grüsse\nIhre Benutzerverwaltung&quot;"/>
       </extensionElements>
       <incoming>f_ablehnen</incoming>
       <outgoing>f_ablehnung_join</outgoing>
@@ -141,7 +193,10 @@
     </endEvent>
 
     <sequenceFlow id="f_start_vorschlag" sourceRef="start" targetRef="vorschlag"/>
-    <sequenceFlow id="f_vorschlag_melden" sourceRef="vorschlag" targetRef="beantragt_melden"/>
+    <sequenceFlow id="f_vorschlag_bestaetigung" sourceRef="vorschlag" targetRef="bestaetigung_mail"/>
+    <sequenceFlow id="f_bestaetigung_warten" sourceRef="bestaetigung_mail" targetRef="email_bestaetigen"/>
+    <sequenceFlow id="f_frist_verfallen" sourceRef="bestaetigung_frist" targetRef="verfallen"/>
+    <sequenceFlow id="f_bestaetigt_melden" sourceRef="email_bestaetigen" targetRef="beantragt_melden"/>
     <sequenceFlow id="f_melden_freigabe" sourceRef="beantragt_melden" targetRef="freigabe"/>
     <sequenceFlow id="f_freigabe_gw" sourceRef="freigabe" targetRef="entscheidung"/>
     <sequenceFlow id="f_anlegen" name="anlegen" sourceRef="entscheidung" targetRef="konto_anlegen"/>
@@ -163,69 +218,92 @@
       <bpmndi:BPMNShape id="vorschlag_di" bpmnElement="vorschlag">
         <omgdc:Bounds x="240" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bestaetigung_mail_di" bpmnElement="bestaetigung_mail">
+        <omgdc:Bounds x="390" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="email_bestaetigen_di" bpmnElement="email_bestaetigen">
+        <omgdc:Bounds x="540" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="bestaetigung_frist_di" bpmnElement="bestaetigung_frist">
+        <omgdc:Bounds x="572" y="142" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="612" y="180" width="60" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="verfallen_di" bpmnElement="verfallen">
+        <omgdc:Bounds x="572" y="232" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="548" y="275" width="84" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="beantragt_melden_di" bpmnElement="beantragt_melden">
-        <omgdc:Bounds x="390" y="102" width="36" height="36"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="366" y="145" width="84" height="27"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="690" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="666" y="145" width="84" height="27"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="freigabe_di" bpmnElement="freigabe">
-        <omgdc:Bounds x="476" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="776" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="entscheidung_di" bpmnElement="entscheidung" isMarkerVisible="true">
-        <omgdc:Bounds x="646" y="95" width="50" height="50"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="634" y="62" width="74" height="14"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="946" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="934" y="62" width="74" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="konto_anlegen_di" bpmnElement="konto_anlegen">
-        <omgdc:Bounds x="766" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="1066" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="zugang_mail_di" bpmnElement="zugang_mail">
-        <omgdc:Bounds x="916" y="80" width="100" height="80"/>
+        <omgdc:Bounds x="1216" y="80" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ablehnung_mail_di" bpmnElement="ablehnung_mail">
-        <omgdc:Bounds x="766" y="220" width="100" height="80"/>
+        <omgdc:Bounds x="1066" y="220" width="100" height="80"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
-        <omgdc:Bounds x="1076" y="95" width="50" height="50"/>
+        <omgdc:Bounds x="1376" y="95" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
-        <omgdc:Bounds x="1176" y="102" width="36" height="36"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="1152" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
+        <omgdc:Bounds x="1476" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1452" y="145" width="86" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNEdge id="f_start_vorschlag_di" bpmnElement="f_start_vorschlag">
         <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_vorschlag_melden_di" bpmnElement="f_vorschlag_melden">
+      <bpmndi:BPMNEdge id="f_vorschlag_bestaetigung_di" bpmnElement="f_vorschlag_bestaetigung">
         <omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="390" y="120"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_bestaetigung_warten_di" bpmnElement="f_bestaetigung_warten">
+        <omgdi:waypoint x="490" y="120"/><omgdi:waypoint x="540" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_frist_verfallen_di" bpmnElement="f_frist_verfallen">
+        <omgdi:waypoint x="590" y="178"/><omgdi:waypoint x="590" y="232"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_bestaetigt_melden_di" bpmnElement="f_bestaetigt_melden">
+        <omgdi:waypoint x="640" y="120"/><omgdi:waypoint x="690" y="120"/>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_melden_freigabe_di" bpmnElement="f_melden_freigabe">
-        <omgdi:waypoint x="426" y="120"/><omgdi:waypoint x="476" y="120"/>
+        <omgdi:waypoint x="726" y="120"/><omgdi:waypoint x="776" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_freigabe_gw_di" bpmnElement="f_freigabe_gw">
-        <omgdi:waypoint x="576" y="120"/><omgdi:waypoint x="646" y="120"/>
+        <omgdi:waypoint x="876" y="120"/><omgdi:waypoint x="946" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_anlegen_di" bpmnElement="f_anlegen">
-        <omgdi:waypoint x="696" y="120"/><omgdi:waypoint x="766" y="120"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="704" y="96" width="46" height="14"/></bpmndi:BPMNLabel>
+        <omgdi:waypoint x="996" y="120"/><omgdi:waypoint x="1066" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="1004" y="96" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_anlegen_mail_di" bpmnElement="f_anlegen_mail">
-        <omgdi:waypoint x="866" y="120"/><omgdi:waypoint x="916" y="120"/>
+        <omgdi:waypoint x="1166" y="120"/><omgdi:waypoint x="1216" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_zugang_join_di" bpmnElement="f_zugang_join">
-        <omgdi:waypoint x="1016" y="120"/><omgdi:waypoint x="1076" y="120"/>
+        <omgdi:waypoint x="1316" y="120"/><omgdi:waypoint x="1376" y="120"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnen_di" bpmnElement="f_ablehnen">
-        <omgdi:waypoint x="671" y="145"/>
-        <omgdi:waypoint x="671" y="260"/>
-        <omgdi:waypoint x="766" y="260"/>
-        <bpmndi:BPMNLabel><omgdc:Bounds x="678" y="200" width="46" height="14"/></bpmndi:BPMNLabel>
+        <omgdi:waypoint x="971" y="145"/>
+        <omgdi:waypoint x="971" y="260"/>
+        <omgdi:waypoint x="1066" y="260"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="978" y="200" width="46" height="14"/></bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ablehnung_join_di" bpmnElement="f_ablehnung_join">
-        <omgdi:waypoint x="866" y="260"/>
-        <omgdi:waypoint x="1101" y="260"/>
-        <omgdi:waypoint x="1101" y="145"/>
+        <omgdi:waypoint x="1166" y="260"/>
+        <omgdi:waypoint x="1401" y="260"/>
+        <omgdi:waypoint x="1401" y="145"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
-        <omgdi:waypoint x="1126" y="120"/><omgdi:waypoint x="1176" y="120"/>
+        <omgdi:waypoint x="1426" y="120"/><omgdi:waypoint x="1476" y="120"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

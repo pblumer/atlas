@@ -53,18 +53,19 @@ func startInstance(t *testing.T, h http.Handler, key uint64, varsJSON string) {
 	}
 }
 
-const createInner = `<atlas:userConnector operation="create" username="=username" email="=email" displayName="=displayName" roles="user" password="=password"/>`
+const createInner = `<atlas:userConnector operation="create" username="=username" email="=email" displayName="=displayName" roles="user"/>`
 
 // TestUserConnectorCreatesUser is the ADR-0123 happy path: a system process with a
 // create userConnector task, run with start variables, provisions exactly the
-// account an admin would — right username, roles, and a verifiable password.
+// account an admin would — right username and roles — and no password: it awaits
+// activation by its owner (ADR-draft-password-set-by-its-owner).
 func TestUserConnectorCreatesUser(t *testing.T) {
 	srv, _ := newSystemServer(t, WithUserProvisioning())
 	srv.systemPIDs = map[string]bool{"sysproc": true} // gate: treat this as a system process
 	h := srv.Handler()
 
 	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
-	startInstance(t, h, key, `{"username":"erika.muster","email":"erika@example.org","displayName":"Erika Muster","password":"initialpass1"}`)
+	startInstance(t, h, key, `{"username":"erika.muster","email":"erika@example.org","displayName":"Erika Muster"}`)
 
 	u, ok, err := srv.users.byUsername("erika.muster")
 	if err != nil || !ok {
@@ -76,8 +77,8 @@ func TestUserConnectorCreatesUser(t *testing.T) {
 	if !u.hasRole(RoleUser) {
 		t.Fatalf("roles = %v, want [user]", u.Roles)
 	}
-	if !checkPassword(u.PasswordHash, "initialpass1") {
-		t.Fatal("provisioned password does not verify")
+	if u.PasswordHash != "" || !u.toPublic().AwaitingActivation {
+		t.Fatal("a provisioned account carries a password; it must await activation by its owner")
 	}
 }
 
@@ -89,7 +90,7 @@ func TestUserConnectorIdempotent(t *testing.T) {
 	h := srv.Handler()
 	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
 
-	vars := `{"username":"dupe","email":"dupe@example.org","displayName":"Dupe","password":"initialpass1"}`
+	vars := `{"username":"dupe","email":"dupe@example.org","displayName":"Dupe"}`
 	startInstance(t, h, key, vars)
 	startInstance(t, h, key, vars)
 
@@ -116,7 +117,7 @@ func TestUserConnectorGatedToSystemProject(t *testing.T) {
 	h := srv.Handler()
 
 	key := deployBPMN(t, h, userConnBPMN("tenant", createInner))
-	startInstance(t, h, key, `{"username":"sneaky","email":"x@example.org","displayName":"X","password":"initialpass1"}`)
+	startInstance(t, h, key, `{"username":"sneaky","email":"x@example.org","displayName":"X"}`)
 
 	if _, ok, _ := srv.users.byUsername("sneaky"); ok {
 		t.Fatal("a non-system process provisioned a user; gating failed")
@@ -131,7 +132,7 @@ func TestUserConnectorRequiresOptIn(t *testing.T) {
 	h := srv.Handler()
 
 	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
-	startInstance(t, h, key, `{"username":"noworker","email":"x@example.org","displayName":"X","password":"initialpass1"}`)
+	startInstance(t, h, key, `{"username":"noworker","email":"x@example.org","displayName":"X"}`)
 
 	if _, ok, _ := srv.users.byUsername("noworker"); ok {
 		t.Fatal("provisioning happened without the opt-in")
@@ -139,33 +140,22 @@ func TestUserConnectorRequiresOptIn(t *testing.T) {
 }
 
 // TestProvisionOpsRails drives the provisioning operations' guards directly: the
-// reused admin-API rails (password length, email uniqueness, last-admin lockout)
+// reused admin-API rails (email uniqueness, last-admin lockout)
 // and the not-found / idempotent-disable branches.
 func TestProvisionOpsRails(t *testing.T) {
 	srv := newServerForErrors(t)
 	const now = 1000
 
-	// create: password too short is refused.
-	if _, _, err := srv.provisionCreateUser("a", "", "", nil, "short", now); err == nil {
-		t.Fatal("short password: want error")
-	}
 	// create u1 (as an admin, for the lockout test), then a second create is idempotent.
-	if _, created, err := srv.provisionCreateUser("u1", "u1@example.org", "U1", []string{RoleAdmin}, "longenough1", now); err != nil || !created {
+	if _, created, err := srv.provisionCreateUser("u1", "u1@example.org", "U1", []string{RoleAdmin}, now); err != nil || !created {
 		t.Fatalf("create u1: created=%v err=%v", created, err)
 	}
-	if _, created, err := srv.provisionCreateUser("u1", "", "", nil, "longenough1", now); err != nil || created {
+	if _, created, err := srv.provisionCreateUser("u1", "", "", nil, now); err != nil || created {
 		t.Fatalf("re-create u1: want created=false nil err, got created=%v err=%v", created, err)
 	}
 	// create with an already-taken email is refused.
-	if _, _, err := srv.provisionCreateUser("u2", "u1@example.org", "", nil, "longenough1", now); err == nil {
+	if _, _, err := srv.provisionCreateUser("u2", "u1@example.org", "", nil, now); err == nil {
 		t.Fatal("duplicate email: want error")
-	}
-	// set-password: no such user, and too-short.
-	if err := srv.provisionSetPassword("ghost", "longenough1", now); err == nil {
-		t.Fatal("set-password unknown user: want error")
-	}
-	if err := srv.provisionSetPassword("u1", "short", now); err == nil {
-		t.Fatal("set-password too short: want error")
 	}
 	// disable: unknown user, last-admin guard, then idempotent re-disable of a
 	// non-admin. u1 is the only enabled admin, so disabling it is refused.
@@ -176,7 +166,7 @@ func TestProvisionOpsRails(t *testing.T) {
 		t.Fatal("disable last admin: want error")
 	}
 	// A plain user disables, and disabling again is an idempotent no-op.
-	if _, _, err := srv.provisionCreateUser("plain", "", "", nil, "longenough1", now); err != nil {
+	if _, _, err := srv.provisionCreateUser("plain", "", "", nil, now); err != nil {
 		t.Fatalf("create plain: %v", err)
 	}
 	if err := srv.provisionDisableUser("plain", now); err != nil {
@@ -196,7 +186,7 @@ func TestUserConnectorEmptyUsername(t *testing.T) {
 	h := srv.Handler()
 
 	key := deployBPMN(t, h, userConnBPMN("sysproc",
-		`<atlas:userConnector operation="create" username="=fehlt" email="x@example.org" displayName="X" roles="user" password="longenough1"/>`))
+		`<atlas:userConnector operation="create" username="=fehlt" email="x@example.org" displayName="X" roles="user"/>`))
 	startInstance(t, h, key, `{}`)
 
 	all, err := srv.users.LoadAll()
@@ -208,21 +198,20 @@ func TestUserConnectorEmptyUsername(t *testing.T) {
 	}
 }
 
-// TestUserConnectorHandlerOpErrors drives the handler's three operation-error
-// branches end to end: a create that fails its rails (too-short password), and a
-// set-password / disable of a user that does not exist.
+// TestUserConnectorHandlerOpErrors drives the handler's operation-error branches end
+// to end: a create that fails its rails (an address already taken) and a disable of a
+// user that does not exist.
 func TestUserConnectorHandlerOpErrors(t *testing.T) {
 	srv, _ := newSystemServer(t, WithUserProvisioning())
 	srv.systemPIDs = map[string]bool{"sysproc": true}
 	h := srv.Handler()
 
+	if _, _, err := srv.provisionCreateUser("owner", "x@example.org", "", nil, 1); err != nil {
+		t.Fatalf("seed owner: %v", err)
+	}
 	badCreate := deployBPMN(t, h, userConnBPMN("sysproc",
-		`<atlas:userConnector operation="create" username="x" email="x@example.org" password="short"/>`))
+		`<atlas:userConnector operation="create" username="x" email="x@example.org"/>`))
 	startInstance(t, h, badCreate, `{}`)
-
-	missingSet := deployBPMN(t, h, userConnBPMN("sysproc",
-		`<atlas:userConnector operation="set-password" username="ghost" password="longenough1"/>`))
-	startInstance(t, h, missingSet, `{}`)
 
 	missingDisable := deployBPMN(t, h, userConnBPMN("sysproc",
 		`<atlas:userConnector operation="disable" username="ghost"/>`))
@@ -230,34 +219,34 @@ func TestUserConnectorHandlerOpErrors(t *testing.T) {
 
 	// None of these created an account; the point is the handler ran each op's
 	// error branch (the jobs fail and raise incidents, which is fine here).
-	if all, _ := srv.users.LoadAll(); len(all) != 0 {
-		t.Fatalf("op-error runs provisioned %d users, want 0", len(all))
+	if all, _ := srv.users.LoadAll(); len(all) != 1 {
+		t.Fatalf("op-error runs provisioned %d users, want only the seeded one", len(all))
 	}
 }
 
-// TestUserConnectorSetPasswordAndDisable exercises the other two operations against
-// an already-provisioned account.
-func TestUserConnectorSetPasswordAndDisable(t *testing.T) {
+// TestUserConnectorRefusesPasswords holds a process to the rule that it never carries
+// a password (ADR-draft-password-set-by-its-owner): a create that names one and a
+// set-password are refused at deploy, as RuleUserPassword problems — and disabling an
+// account still works.
+func TestUserConnectorRefusesPasswords(t *testing.T) {
 	srv, _ := newSystemServer(t, WithUserProvisioning())
 	srv.systemPIDs = map[string]bool{"sysproc": true}
 	h := srv.Handler()
 
-	// Provision, then change the password.
+	for name, inner := range map[string]string{
+		"create with a password": `<atlas:userConnector operation="create" username="bob" email="bob@example.org" password="=pw"/>`,
+		"set-password":           `<atlas:userConnector operation="set-password" username="bob" password="=newpw"/>`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(userConnBPMN("sysproc", inner)))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "user.password") {
+			t.Errorf("%s: deploy = %d %s, want it refused naming user.password", name, rec.Code, rec.Body.String())
+		}
+	}
+
 	createKey := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
-	startInstance(t, h, createKey, `{"username":"bob","email":"bob@example.org","displayName":"Bob","password":"initialpass1"}`)
-
-	setPwKey := deployBPMN(t, h, userConnBPMN("sysproc", `<atlas:userConnector operation="set-password" username="bob" password="=newpw"/>`))
-	startInstance(t, h, setPwKey, `{"newpw":"changedpass2"}`)
-
-	u, ok, _ := srv.users.byUsername("bob")
-	if !ok {
-		t.Fatal("bob missing")
-	}
-	if checkPassword(u.PasswordHash, "initialpass1") || !checkPassword(u.PasswordHash, "changedpass2") {
-		t.Fatal("set-password did not replace the password")
-	}
-
-	// Disable.
+	startInstance(t, h, createKey, `{"username":"bob","email":"bob@example.org","displayName":"Bob"}`)
 	disableKey := deployBPMN(t, h, userConnBPMN("sysproc", `<atlas:userConnector operation="disable" username="bob"/>`))
 	startInstance(t, h, disableKey, `{}`)
 	if u, ok, _ := srv.users.byUsername("bob"); !ok || !u.Disabled {

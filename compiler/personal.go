@@ -96,6 +96,10 @@ var engineEvaluatedExpressions = map[string]bool{
 // enciphering step lands without deciphering at that point, every entry here becomes a
 // worker evaluating FEEL over ciphertext — and this comment is where to come back to.
 var workerEvaluatedExpressions = map[string]string{
+	// A mail task's passwordFor names the account whose password link it carries
+	// (ADR-draft-password-set-by-its-owner). It is resolved beside the mail's recipients,
+	// in connector/mail/offload.go (Resolve), over the scope variables handed to that call.
+	"passwordFor.Expr":                        "evaluated where the mail task is resolved (connector/mail/offload.go, Resolve), beside its recipients — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdAttributes.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBaseDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBindDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",

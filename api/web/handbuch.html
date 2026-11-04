@@ -8485,22 +8485,30 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         </div>
         <div class="card" id="runbook-userprov">
           <b data-l="de">Benutzerbereitstellung (atlas-Logins)</b><b data-l="en">User provisioning (atlas logins)</b>
-          <p class="lead" data-l="de">Legt ein atlas-Login an, setzt sein Passwort oder deaktiviert es. Kein Worker
+          <p class="lead" data-l="de">Legt ein atlas-Login an oder deaktiviert es. Kein Worker
             und kein Credential – dieser Typ wirkt auf den <i>eigenen</i> Benutzerspeicher dieses Servers und ist
             deshalb eingezäunt statt konfiguriert: Er läuft <b>nur für Prozesse im geschützten System-Projekt</b>,
             dieselbe Aufgabe in einem gewöhnlichen Projekt weist der Deploy ab. Er ist standardmässig eingeschaltet;
             <code>--user-provisioning=false</code> schaltet ihn ab. Setze immer einen <b>menschlichen
-            Freigabeschritt</b> davor, in dem eine Administratorin Rollen und Initialpasswort bestimmt – niemals ein
-            öffentliches Startformular. Das Passwort kommt als FEEL-Referenz (<code>=initialpasswort</code>), damit
-            keines im Modell steht.</p>
-          <p class="lead" data-l="en">Creates an atlas login, sets its password, or disables it. No worker and no
+            Freigabeschritt</b> davor, in dem eine Administratorin die Rollen bestimmt – niemals ein
+            öffentliches Startformular. <b>Ein Passwort kommt in keinem Prozess vor:</b> <code>create</code> legt das
+            Konto ohne Passwort an, und ein Mail-Task mit <code>passwordFor</code> schickt der Inhaberin oder dem
+            Inhaber einen einmaligen Link (<code>passwordLink</code>), über den sie es selbst festlegen. Der Link steht
+            in keiner Variable, geht nur an die Adresse des Kontos und wird in der Vorschau-Outbox ausgeblendet; er
+            braucht die externe URL des Servers und den Vault. <code>set-password</code> und ein
+            <code>password</code>-Attribut weist der Deploy ab (<code>user.password</code>).</p>
+          <p class="lead" data-l="en">Creates an atlas login or disables it. No worker and no
             credential – this type acts on this server's <i>own</i> user store, which is why it is fenced instead of
             configured: it runs <b>only for processes in the protected system project</b>, and the same task in an
             ordinary project is refused at deploy. It is on by default; <code>--user-provisioning=false</code>
             switches it off. Always put a <b>human approval step</b> in front of it where an administrator decides
-            the roles and the initial password – never a public start form. The password arrives as a FEEL reference
-            (<code>=initialpasswort</code>), so none is written into the model.</p>
-          <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+            the roles – never a public start form. <b>No process ever carries a password:</b> <code>create</code>
+            makes the account without one, and a mail task with <code>passwordFor</code> sends its owner a one-time
+            link (<code>passwordLink</code>) to set it themselves. The link is in no variable, goes only to the
+            account's own address and is withheld from the preview outbox; it needs the server's external URL and the
+            vault. <code>set-password</code> and a <code>password</code> attribute are refused at deploy
+            (<code>user.password</code>).</p>
+          <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
         </div>
         <div class="card" id="runbook-mockup">
           <b data-l="de">Mockup – gar kein Worker</b><b data-l="en">Mockup – no worker at all</b>
@@ -13345,9 +13353,9 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
         </tbody>
       </table>
       <h3 id="ev-atlas-user-requested"><code>atlas.user.requested</code></h3>
-      <p data-l="de">Jemand hat ein Konto beantragt; der Antrag wartet nun auf die Freigabe durch die Administration.</p>
-      <p data-l="en">Somebody asked for an account, and the request now waits for an administrator to approve it.</p>
-      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br><code>proc_benutzer_aufnahme</code> / <code>beantragt_melden</code> — the intake process, before its approval waits</p>
+      <p data-l="de">Jemand hat ein Konto beantragt und die E-Mail-Adresse bestätigt; der Antrag wartet nun auf die Freigabe durch die Administration.</p>
+      <p data-l="en">Somebody asked for an account and confirmed their e-mail address, and the request now waits for an administrator to approve it.</p>
+      <p class="muted"><span data-l="de">Art</span><span data-l="en">Kind</span>: domain · <span data-l="de">Kanäle</span><span data-l="en">Channels</span>: signal · <span data-l="de">seit</span><span data-l="en">since</span> 0.9.0 · experimental<br><code>proc_benutzer_aufnahme</code> / <code>beantragt_melden</code> — the intake process, once the address is confirmed and before its approval waits</p>
       <table>
         <thead><tr><th data-l="de">Feld</th><th data-l="en">Field</th><th data-l="de">Typ</th><th data-l="en">Type</th><th></th><th data-l="de">Bedeutung</th><th data-l="en">Meaning</th></tr></thead>
         <tbody>

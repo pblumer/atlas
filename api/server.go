@@ -326,6 +326,8 @@ type Server struct {
 	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
 	tokenRate           *rateLimiter      // throttles the OAuth token and revocation endpoints, on their own budget
 	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
+	recoveryRate        *rateLimiter      // throttles "forgot password" per address (ADR-draft-password-set-by-its-owner)
+	passwordMails       *rateLimiter      // at most one password link mailed per account per five minutes
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
@@ -1812,8 +1814,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// everybody else. Burst enough for an operator wiring up several workers at
 		// once, then one every five seconds — slow enough that churning the bounded
 		// registry from outside is not worth anyone's time (ADR-0197, ADR-0200).
-		registerRate:      newRateLimiter(30, 0.2),
-		logins:            newLoginGuard(),
+		registerRate: newRateLimiter(30, 0.2),
+		logins:       newLoginGuard(),
+		// "Forgot password" mails somebody: a burst of five, then one every twenty
+		// seconds per address, and one mail per account per five minutes, so neither a
+		// script nor a prankster can turn the form into a mail cannon aimed at a person
+		// (ADR-draft-password-set-by-its-owner).
+		recoveryRate:      newRateLimiter(5, 0.05),
+		passwordMails:     newRateLimiter(1, 1.0/300),
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
@@ -3900,6 +3908,15 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)
 	mountFunc(accessPublic, roleAny, "POST "+answerPagePath+"/task/{taskKey}/complete", s.handlePublicAnswerComplete)
+	// A password set by its owner through a one-time link, and the request for one
+	// (ADR-draft-password-set-by-its-owner). The page is
+	// static; the signed token in an Authorization header is the whole authorization,
+	// and it opens one account until its password changes. "Forgot" answers alike for
+	// every input.
+	mountFunc(accessPublic, roleAny, "GET "+passwordPagePath, s.handlePasswordPage)
+	mountFunc(accessPublic, roleAny, "GET "+passwordPagePath+"/link", s.handlePasswordLinkState)
+	mountFunc(accessPublic, roleAny, "POST "+passwordPagePath+"/link", s.handlePasswordLinkSet)
+	mountFunc(accessPublic, roleAny, "POST "+passwordPagePath+"/forgot", s.handlePasswordForgot)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a
