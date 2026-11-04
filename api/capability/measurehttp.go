@@ -53,7 +53,7 @@ func (s *Service) HandleMeasurement(w http.ResponseWriter, r *http.Request) {
 		opErr  error
 	)
 	if !s.dispatch(func() {
-		target, found, opErr = s.caps.Get(r.PathValue("key"))
+		target, found, opErr = s.getMap(r.PathValue("key"))
 	}) {
 		writeShuttingDown(w)
 		return

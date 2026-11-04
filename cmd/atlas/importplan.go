@@ -150,11 +150,49 @@ func (f *refFlag) Set(v string) error {
 
 func newRefFlag() *refFlag { return &refFlag{refs: map[string]bool{}} }
 
+// mapFlag collects repeated --map ref=key values.
+type mapFlag []string
+
+func (f *mapFlag) String() string { return strings.Join(*f, ",") }
+
+func (f *mapFlag) Set(v string) error {
+	*f = append(*f, v)
+	return nil
+}
+
 // decisions is what the flags decided, in the server's terms. --adopt has no all:
 // taking an artifact out of another application is decided artifact by artifact.
 func decisions(overwrite, keep, adopt *refFlag) (importplan.Decisions, error) {
+	return decisionsWithGaps(overwrite, keep, adopt, newRefFlag(), nil)
+}
+
+// decisionsWithGaps is decisions with what --omit and --map say of the capability
+// map's gaps (ADR-draft-application-bundle-architecture). mapped holds ref=key pairs.
+func decisionsWithGaps(overwrite, keep, adopt, omit *refFlag, mapped []string) (importplan.Decisions, error) {
 	d := importplan.Decisions{Overwrite: overwrite.refs, Keep: keep.refs, OverwriteAll: overwrite.all, KeepAll: keep.all,
-		Adopt: adopt.refs}
+		Adopt: adopt.refs, Omit: omit.refs, OmitAll: omit.all, Map: map[string]string{}}
+	for _, pair := range mapped {
+		for _, one := range strings.Split(pair, ",") {
+			if one = strings.TrimSpace(one); one == "" {
+				continue
+			}
+			ref, key, ok := strings.Cut(one, "=")
+			if !ok || strings.TrimSpace(ref) == "" || strings.TrimSpace(key) == "" {
+				return d, fmt.Errorf("--map takes ref=key, such as capability:konten=identitaet, not %q", one)
+			}
+			d.Map[strings.TrimSpace(ref)] = strings.TrimSpace(key)
+		}
+	}
+	for ref := range d.Map {
+		if d.Adopt[ref] || d.Omit[ref] {
+			return d, fmt.Errorf("%s is mapped and also named under --adopt or --omit", ref)
+		}
+	}
+	for ref := range d.Omit {
+		if d.Adopt[ref] {
+			return d, fmt.Errorf("%s is named under both --adopt and --omit", ref)
+		}
+	}
 	if adopt.all {
 		return d, errors.New("--adopt names each artifact to take from another application, as process:ID, form:ID or decision:ID; all is not accepted")
 	}
@@ -303,6 +341,17 @@ func (c *importClient) planConstants(src sourceImportBody, consts []packageConst
 func (p *importPlan) decide(d importplan.Decisions) {
 	for i := range p.artifacts {
 		a := &p.artifacts[i]
+		switch a.Status {
+		case importplan.Linked, importplan.Owned:
+			// Nothing to decide: the server's outcome stands.
+			continue
+		case importplan.Gap:
+			// A key the capability map lacks: adopted, mapped or omitted as --adopt,
+			// --map and --omit say, and named to the server when they say anything.
+			a.Outcome, a.MappedTo = d.GapOutcome(a.Ref)
+			a.decided = a.Outcome != importplan.Undecided
+			continue
+		}
 		if a.Status == importplan.Elsewhere {
 			a.Outcome = importplan.Undecided
 			a.ifAdopted = d.Outcome(a.Ref, a.Compared)
@@ -336,8 +385,35 @@ func (p importPlan) show(out io.Writer, all bool) {
 	if n := count[importplan.Elsewhere]; n > 0 {
 		fmt.Fprintf(out, ", %d held by another application", n)
 	}
+	if n := count[importplan.Gap]; n > 0 {
+		fmt.Fprintf(out, ", %d missing from the capability map", n)
+	}
 	fmt.Fprintln(out)
 	for _, a := range p.artifacts {
+		switch a.Status {
+		case importplan.Gap:
+			line := fmt.Sprintf("  %-9s %s — ", a.Status, a.label())
+			switch a.Outcome {
+			case importplan.Created:
+				line += "the package's proposal is filed in the map"
+			case importplan.Mapped:
+				line += "filed under " + a.MappedTo
+			case importplan.Omitted:
+				line += "left out"
+			default:
+				if a.Proposed {
+					line += "--adopt " + a.Ref + " files the package's proposal, "
+				}
+				line += "--map " + a.Ref + "=KEY uses a key the map has, --omit " + a.Ref + " leaves it out"
+			}
+			fmt.Fprintln(out, line)
+			continue
+		case importplan.Linked:
+			if a.Compared == importplan.Changed {
+				fmt.Fprintf(out, "  %-9s %s — the map's record differs from the package's proposal and stays as it is\n", a.Status, a.label())
+			}
+			continue
+		}
 		if a.Status == importplan.Elsewhere {
 			line := fmt.Sprintf("  %-9s %s, held by %s — ", a.Status, a.label(), a.holder())
 			switch {
@@ -378,19 +454,33 @@ func (p importPlan) show(out io.Writer, all bool) {
 // artifact, whose default is to keep the server's version; in a pipeline, a
 // refusal that names every one and the flags that decide them.
 func (p *importPlan) ask(out io.Writer) error {
-	var held, open []int
+	var held, open, gaps []int
 	for i, a := range p.artifacts {
 		switch {
 		case a.held():
 			held = append(held, i)
+		case a.Status == importplan.Gap && a.Outcome == importplan.Undecided:
+			gaps = append(gaps, i)
 		case a.Outcome == importplan.Undecided:
 			open = append(open, i)
 		}
 	}
-	if len(held) == 0 && len(open) == 0 {
+	if len(held) == 0 && len(open) == 0 && len(gaps) == 0 {
 		return nil
 	}
 	in, interactive := decisionPrompt()
+	var sc *bufio.Scanner
+	if interactive {
+		sc = bufio.NewScanner(in)
+	}
+	if len(gaps) > 0 {
+		if err := p.askGaps(out, gaps, sc); err != nil {
+			return err
+		}
+		if len(held) == 0 && len(open) == 0 {
+			return nil
+		}
+	}
 	if !interactive && len(held) > 0 {
 		lines := make([]string, 0, len(held))
 		for _, i := range held {
@@ -399,10 +489,6 @@ func (p *importPlan) ask(out io.Writer) error {
 		return fmt.Errorf("%d artifacts belong to another application and were not taken; nothing was imported:\n  %s\n"+
 			"take each with --adopt REF, which needs the editor role on the application it leaves",
 			len(held), strings.Join(lines, "\n  "))
-	}
-	var sc *bufio.Scanner
-	if interactive {
-		sc = bufio.NewScanner(in)
 	}
 	// An artifact another application holds is asked about first: declined, the
 	// import cannot go on, and nothing is asked about its content.
@@ -467,12 +553,23 @@ func (p *importPlan) ask(out io.Writer) error {
 // changed after the plan was shown is refused rather than replaced on the strength
 // of a decision about something else.
 func (p importPlan) query() string {
-	var overwrite, keep, adopt []string
+	var overwrite, keep, adopt, mapped, omit []string
 	for _, a := range p.artifacts {
 		if a.Adopted {
 			adopt = append(adopt, a.Ref)
 		}
 		if !a.decided {
+			continue
+		}
+		if a.Status == importplan.Gap {
+			switch a.Outcome {
+			case importplan.Created:
+				adopt = append(adopt, a.Ref)
+			case importplan.Mapped:
+				mapped = append(mapped, a.Ref+"="+a.MappedTo)
+			case importplan.Omitted:
+				omit = append(omit, a.Ref)
+			}
 			continue
 		}
 		switch a.Outcome {
@@ -491,6 +588,12 @@ func (p importPlan) query() string {
 	}
 	if len(adopt) > 0 {
 		q.Set("adopt", strings.Join(adopt, ","))
+	}
+	if len(mapped) > 0 {
+		q.Set("map", strings.Join(mapped, ","))
+	}
+	if len(omit) > 0 {
+		q.Set("omit", strings.Join(omit, ","))
 	}
 	if len(q) == 0 {
 		return ""
