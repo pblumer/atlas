@@ -37,6 +37,8 @@ func runOnceWith(t *testing.T, server string, err error) {
 	w := worker.New(worker.Options{
 		Server: server,
 		ID:     "mailer-1",
+		// A failed job is to be back on offer at once, so the test can see it.
+		NoRetryBackoff: true,
 		Handlers: map[string]worker.Exec{
 			"send-email": worker.ExecFunc(func(context.Context, worker.Job) (map[string]any, error) {
 				return nil, err

@@ -241,6 +241,7 @@ as it runs 0.23.0:
   (ADR-0526).
 
 ### Fixed
+- **A connector job run by `atlas worker` waits before its next attempt, too.** The retry delay of ADR-0111's amendment (15 s, 60 s before the last attempt) applied only to jobs the server runs itself; a connector offloaded to a supervised or remote worker — Entra in the M365 test environment — still retried at once and raised `Request_ResourceNotFound` on the owner of a group created a moment earlier. The worker now sends the same delay with every failure that leaves retries (`worker.Options.RetryBackoff`, `NoRetryBackoff`).
 - **The SharePoint team site diagram keeps its end label clear.** The fallback flow from the manual quota task to «Site bereit» crossed the event's label; the label now sits above the event (`m365-dienste` 1.0.11).
 - **The moving example no longer drifts into the past.** `umzug` started with the fixed moving date 2026-10-01, which has since passed, so the card's case — a move in two weeks against three months' notice — no longer held. Without a moving date the model now computes one two weeks from today, and "Install and start" passes none; a date given in the start form is used as before.
 - **Installing the workshop twice leaves one decision reference.** The handbook's workshop install added a `bw-vorpruefung` reference to the Bewerbermanagement application on every click, although the upload overwrites the model in place; it now checks for the reference first, as the examples chapter does, and names the model by the reference the upload reports.
