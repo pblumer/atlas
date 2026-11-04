@@ -103,7 +103,7 @@ test("Edit stays one click on the row; the rest are in its menu", async ({ page 
   // Each entry opens with its icon, so the label is matched at the end.
   // A password is set by its owner: the menu sends them a link or hands it over, and
   // never asks the administrator for one (ADR-0526).
-  await expect(menu.locator("button[data-act]")).toHaveText([/Send password link…$/, /Copy password link…$/, /Disable account$/, /Delete…$/]);
+  await expect(menu.locator("button[data-act]")).toHaveText([/Send password link…$/, /Copy password link…$/, /Revoke password…$/, /Disable account$/, /Delete…$/]);
   await expect(menu.locator("button[data-act='delete']")).toHaveClass(/danger/);
 });
 
@@ -124,11 +124,19 @@ test("the menu's entries do what the row's buttons did", async ({ page }) => {
   await expect.poll(() => writes.length).toBe(2);
   expect(writes[1]).toEqual({ method: "POST", path: `${user}/password-link`, body: { send: true } });
 
+  // Revoking asks first, then stops the current password and mails the link.
+  page.once("dialog", (d) => d.dismiss());
+  await (await openMenu(page, OTHER.id)).locator("button[data-act='pwrevoke']").click();
+  page.once("dialog", (d) => d.accept());
+  await (await openMenu(page, OTHER.id)).locator("button[data-act='pwrevoke']").click();
+  await expect.poll(() => writes.length).toBe(3);
+  expect(writes[2]).toEqual({ method: "POST", path: `${user}/password-link`, body: { send: true, revoke: true } });
+
   // Delete asks before it deletes, and a refusal deletes nothing.
   page.once("dialog", (d) => d.dismiss());
   await (await openMenu(page, OTHER.id)).locator("button[data-act='delete']").click();
   page.once("dialog", (d) => d.accept());
   await (await openMenu(page, OTHER.id)).locator("button[data-act='delete']").click();
-  await expect.poll(() => writes.length).toBe(3);
-  expect(writes[2]).toEqual({ method: "DELETE", path: user, body: null });
+  await expect.poll(() => writes.length).toBe(4);
+  expect(writes[3]).toEqual({ method: "DELETE", path: user, body: null });
 });

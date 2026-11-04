@@ -14,6 +14,7 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **An administrator can revoke a password somebody else knows.** "Revoke password…" in an account's menu (`POST /api/v1/users/{id}/password-link` with `"revoke": true`) makes the current password stop working at once, ends the account's sessions and OAuth grants, and sends its owner an activation link — or hands it over where the account has no address. A password link alone leaves the old password valid until the link is used, which is too long for one that was typed by an administrator, mailed or written to a log. Refused for one's own account and for the last administrator who can sign in, and nothing is revoked when no link could follow (ADR-0526, amended).
 - **A form can search Active Directory.** A directory field may name an AD Worker
   (`workerType: "ad"`) and search its `users` or `groups`, as it searches Entra's users:
   prefix search over name, mail and logon name, equality filters on `department` and
