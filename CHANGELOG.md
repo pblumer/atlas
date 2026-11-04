@@ -102,6 +102,12 @@ _Changed_ / _Removed_ for each version.
   (ADR-0526).
 
 ### Changed
+- **A product page in the tile layout is two columns and has one basket button.** The product's
+  description stands open in the wide column, and who it is for, what comes with it, approval and
+  price fold in the narrow column beside it. The page's own "Put in the basket" and "Go to the
+  basket" buttons are gone: the row along the bottom puts the product in and opens the basket, and its
+  "Back" leads to the tiles rather than out of the shop. That row now stays at the bottom of the
+  window on every shop screen, so its buttons are in reach however far down a page or basket goes.
 - **A password is set by its owner, never mailed.** Registration no longer asks the
   approving administrator for an initial password, which was a process variable — an
   event kept in the log — and was mailed in clear text. The requester first confirms
