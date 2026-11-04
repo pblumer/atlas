@@ -1096,25 +1096,28 @@ var mcpOmittedRoutes = map[string]string{
 	"DELETE /api/v1/settings/registration": "registration config is a Console/login concern, not an agent action",
 
 	// Auth + user administration: security surface, deliberately off-limits.
-	"POST /api/v1/auth/login":    "auth flow is not an agent capability",
-	"POST /api/v1/auth/logout":   "auth flow is not an agent capability",
-	"GET /api/v1/auth/me":        "auth flow is not an agent capability",
-	"GET /api/v1/auth/providers": "what the login screen offers a browser; an agent holds a credential already",
+	"POST /api/v1/auth/login":            "auth flow is not an agent capability",
+	"POST /api/v1/auth/logout":           "auth flow is not an agent capability",
+	"GET /api/v1/auth/me":                "auth flow is not an agent capability",
+	"GET /api/v1/auth/providers":         "what the login screen offers a browser; an agent holds a credential already",
+	"GET /api/v1/auth/password-recovery": "whether the login screen offers \"forgot password\"; an agent holds a credential already",
+	"POST /api/v1/auth/password":         "a person changes their own password in a session of their own; a tool call carries a delegated credential, which the route refuses",
 	// Presence (ADR-0228). The beacon is a browser saying its own tab
 	// is open, and an agent holds a token rather than a session, so there is nothing
 	// for it to stamp. Reading who is signed in is account administration, and where
 	// a colleague is sitting is the last thing an agent should be able to fan out.
-	"POST /api/v1/auth/presence":        "a browser reporting its own tab; an agent holds no session to be present in",
-	"GET /api/v1/users/presence":        "who is signed in is user administration, and not an agent capability",
-	"GET /api/v1/settings/oidc-mapping": "who the identity provider's groups make an administrator here is not an agent decision",
-	"PUT /api/v1/settings/oidc-mapping": "who the identity provider's groups make an administrator here is not an agent decision",
-	"GET /api/v1/users":                 "user administration is not an agent capability",
-	"GET /api/v1/principals":            "user administration is not an agent capability",
-	"POST /api/v1/users":                "user administration is not an agent capability",
-	"GET /api/v1/users/{id}":            "user administration is not an agent capability",
-	"PATCH /api/v1/users/{id}":          "user administration is not an agent capability",
-	"POST /api/v1/users/{id}/password":  "user administration is not an agent capability",
-	"DELETE /api/v1/users/{id}":         "user administration is not an agent capability",
+	"POST /api/v1/auth/presence":            "a browser reporting its own tab; an agent holds no session to be present in",
+	"GET /api/v1/users/presence":            "who is signed in is user administration, and not an agent capability",
+	"GET /api/v1/settings/oidc-mapping":     "who the identity provider's groups make an administrator here is not an agent decision",
+	"PUT /api/v1/settings/oidc-mapping":     "who the identity provider's groups make an administrator here is not an agent decision",
+	"GET /api/v1/users":                     "user administration is not an agent capability",
+	"GET /api/v1/principals":                "user administration is not an agent capability",
+	"POST /api/v1/users":                    "user administration is not an agent capability",
+	"GET /api/v1/users/{id}":                "user administration is not an agent capability",
+	"PATCH /api/v1/users/{id}":              "user administration is not an agent capability",
+	"POST /api/v1/users/{id}/password":      "user administration is not an agent capability",
+	"POST /api/v1/users/{id}/password-link": "user administration is not an agent capability, and a password link is a credential",
+	"DELETE /api/v1/users/{id}":             "user administration is not an agent capability",
 
 	"GET /api/v1/groups":                          "group administration is not an agent capability",
 	"POST /api/v1/groups":                         "group administration is not an agent capability",

@@ -4093,7 +4093,6 @@ export default {
   "wt.E-mail": "E-mail",
   "wt.Roles": "Roles",
   "wt.Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.": "Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.",
-  "wt.Credential": "Credential",
   "wt.Let the engine simulate this task — random duration, scripted output, optional failures": "Let the engine simulate this task — random duration, scripted output, optional failures",
   "wt.Duration": "Duration",
   "wt.Min duration": "Min duration",

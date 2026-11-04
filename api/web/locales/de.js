@@ -4153,7 +4153,6 @@ export default {
   "wt.E-mail": "E-Mail",
   "wt.Roles": "Rollen",
   "wt.Comma-separated roles; empty defaults to the base user role. Never let a requester choose this on a public start form — an admin assigns it at approval.": "Rollen, durch Kommas getrennt; leer ergibt die einfache Benutzerrolle. Lass sie nie eine antragstellende Person auf einem öffentlichen Startformular wählen — ein Admin vergibt sie bei der Genehmigung.",
-  "wt.Credential": "Zugangsdaten",
   "wt.Let the engine simulate this task — random duration, scripted output, optional failures": "Lässt die Engine diese Task simulieren — zufällige Dauer, vorgegebene Ausgabe, optionale Fehlschläge",
   "wt.Duration": "Dauer",
   "wt.Min duration": "Min. Dauer",

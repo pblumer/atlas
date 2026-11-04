@@ -2759,7 +2759,7 @@ async function copyPasswordLink(u) {
   try {
     const r = await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password-link`, {});
     const link = r.url || (location.origin + r.path);
-    const until = r.expiresAt ? new Date(r.expiresAt * 1000).toLocaleString() : "";
+    const until = r.expiresAt ? fmtDateTime(r.expiresAt * 1000) : "";
     window.prompt(`Hand this link to "${u.username}" in person — not by an unencrypted channel. It sets their password once${until ? " and expires " + until : ""}.`, link);
   } catch (e) { toast("could not create the password link: " + e.message, "err"); }
 }
