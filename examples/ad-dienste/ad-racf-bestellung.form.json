@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "ad-racf-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**RACF-Konto · RACF account**\n\nEine User-ID auf dem Mainframe. Das Mainframe-Team legt sie an; du erhältst danach eine Rückmeldung mit der User-ID. · A user ID on the mainframe. The mainframe team creates it; you then receive a note with the user ID."
+    },
+    {
+      "key": "auftragstitel",
+      "type": "textfield",
+      "label": "Auftragstitel · Order title",
+      "validate": {
+        "required": true,
+        "maxLength": 80
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "racfGruppe",
+      "type": "textfield",
+      "label": "RACF-Gruppe oder Zugriff · RACF group or access",
+      "description": "z.B. die Default-Gruppe oder die Anwendung. · e.g. the default group or the application.",
+      "validate": {
+        "required": true,
+        "maxLength": 120
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zweck",
+      "type": "textarea",
+      "label": "Begründung · Justification",
+      "validate": {
+        "required": true,
+        "maxLength": 300
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

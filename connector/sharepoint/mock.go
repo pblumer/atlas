@@ -136,6 +136,7 @@ func (s *MockSites) Clear(worker string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.webs = map[string]*mockWeb{}
+	m.quotas = nil
 	m.journal, m.seq, m.stored = nil, 0, 0
 	return true
 }
@@ -172,6 +173,11 @@ type MockSite struct {
 	stored  int64 // bytes of file content held, against budget
 	budget  int64
 	fileSeq int
+	// quotas are the storage quotas set-site-quota set, in megabytes, by the site's
+	// normalized address. They are kept apart from webs: the mockup does not know which
+	// sites Microsoft made, so a quota is recorded for any address, and get-site reports
+	// it once the site exists there.
+	quotas map[string]int64
 }
 
 type mockWeb struct {
@@ -241,8 +247,11 @@ func (m *MockSite) prune() {
 }
 
 func (m *MockSite) do(p prepared, req Request) (any, error) {
-	if p.op == OpGetSite {
+	switch p.op {
+	case OpGetSite:
 		return m.getSite(req.Site), nil
+	case OpSetSiteQuota:
+		return m.setSiteQuota(req)
 	}
 	web := m.web(req.Site)
 	if p.spec.NeedsList {
@@ -305,6 +314,10 @@ func (m *MockSite) getSite(ref string) any {
 	if i := strings.LastIndex(p, "/"); i >= 0 {
 		name = p[i+1:]
 	}
+	total := int64(mockSiteQuota)
+	if mb, ok := m.quotas[address]; ok {
+		total = mb << 20
+	}
 	return map[string]any{
 		"exists":      true,
 		"id":          host + ",mock-" + address,
@@ -312,12 +325,33 @@ func (m *MockSite) getSite(ref string) any {
 		"displayName": name,
 		"webUrl":      w.url,
 		"quota": map[string]any{
-			"total":     json.Number(strconv.FormatInt(mockSiteQuota, 10)),
+			"total":     json.Number(strconv.FormatInt(total, 10)),
 			"used":      json.Number(strconv.FormatInt(used, 10)),
-			"remaining": json.Number(strconv.FormatInt(mockSiteQuota-used, 10)),
+			"remaining": json.Number(strconv.FormatInt(total-used, 10)),
 			"state":     "normal",
 		},
 	}
+}
+
+// setSiteQuota records the quota a task set and answers as the tenant administration
+// does. The quotaGB was checked by prepare. A Graph site id is refused, as the real
+// client would have to ask Graph for the site's URL and the mockup has no Graph to ask.
+func (m *MockSite) setSiteQuota(req Request) (any, error) {
+	q, err := readQuota(OpSetSiteQuota, req)
+	if err != nil {
+		return nil, err
+	}
+	ref := strings.TrimSpace(req.Site)
+	siteURL := siteURLOf(ref)
+	if siteURL == "" {
+		return nil, refuse(OpSetSiteQuota, "name the site by its URL or host:/sites/name; the mockup cannot look up a Graph site id")
+	}
+	host, p, _ := parseSite(ref)
+	if m.quotas == nil {
+		m.quotas = map[string]int64{}
+	}
+	m.quotas[strings.ToLower(host+p)] = q.maxMB
+	return q.answer(siteURL, true), nil
 }
 
 // web is the site a task names, made the first time it is named. Every form the Graph

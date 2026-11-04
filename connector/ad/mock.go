@@ -537,6 +537,9 @@ func (d *MockDirectory) search(f *mockForest, req SearchRequest) ([]Entry, error
 
 // searchLocked is the search itself. The caller holds the lock.
 func (d *MockDirectory) searchLocked(f *mockForest, req SearchRequest) ([]Entry, error) {
+	if strings.TrimSpace(req.BaseDN) == "" && strings.EqualFold(strings.TrimSpace(req.Scope), "base") {
+		return f.rootDSE(req.Attributes), nil
+	}
 	filter, err := parseFilter(req.Filter)
 	if err != nil {
 		return nil, err
@@ -559,7 +562,58 @@ func (d *MockDirectory) searchLocked(f *mockForest, req SearchRequest) ([]Entry,
 		return nil, fmt.Errorf("ad: mock: the search under %s returned more than the %d-entry cap; narrow the filter or raise maxEntries (truncating would be a wrong answer, not a partial one)", req.BaseDN, max)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].DN < out[j].DN })
+	if lim := int(req.Limit); lim > 0 && len(out) > lim {
+		out = out[:lim]
+	}
 	return out, nil
+}
+
+// rootDSE answers a base search at the empty DN the way a domain controller does: one
+// entry with no name, carrying defaultNamingContext. A reader that has to find the
+// domain before it can search it (a form lookup) asks this, and a mock that answered
+// nothing would make every such reader fail where the real directory works.
+//
+// The mock has no configured naming context, so it reads one off what it holds: the
+// trailing DC= components most of its entries share. A forest that holds nothing has
+// no domain to name, and answers an entry without the attribute.
+func (f *mockForest) rootDSE(sel []string) []Entry {
+	count := map[string]int{}
+	for _, e := range f.entries {
+		if e.deleted {
+			continue
+		}
+		if nc := domainSuffix(e.dn); nc != "" {
+			count[nc]++
+		}
+	}
+	best := ""
+	for nc, n := range count {
+		if n > count[best] || (n == count[best] && (best == "" || nc < best)) {
+			best = nc
+		}
+	}
+	attrs := map[string][]string{}
+	if best != "" {
+		attrs["defaultNamingContext"] = []string{best}
+	}
+	return []Entry{{DN: "", Attributes: selectAttrs(attrs, sel)}}
+}
+
+// domainSuffix is the run of DC= components a DN ends in, as the DN spells them.
+func domainSuffix(dn string) string {
+	parts := rdnComponents(dn)
+	i := len(parts)
+	for i > 0 && strings.HasPrefix(strings.ToUpper(strings.TrimSpace(parts[i-1])), "DC=") {
+		i--
+	}
+	if i == len(parts) {
+		return ""
+	}
+	trimmed := make([]string, 0, len(parts)-i)
+	for _, p := range parts[i:] {
+		trimmed = append(trimmed, strings.TrimSpace(p))
+	}
+	return strings.Join(trimmed, ",")
 }
 
 // selectAttrs is a search's attribute selection applied the way a directory applies it

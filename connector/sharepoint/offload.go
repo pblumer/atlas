@@ -48,6 +48,9 @@ type Job struct {
 	Select     string `json:"select,omitempty"`
 	PageToken  string `json:"pageToken,omitempty"`
 	MaxResults int32  `json:"maxResults,omitempty"`
+	// QuotaGB and WarningPercent are what set-site-quota sets.
+	QuotaGB        string `json:"quotaGB,omitempty"`
+	WarningPercent string `json:"warningPercent,omitempty"`
 	// RequestID is the job key, sent so an at-least-once retry is recognizable to
 	// Graph as the same request. It is frozen at resolve time rather than recomputed
 	// where the retry happens, so a retried job carries the key of the job it retries.
@@ -55,6 +58,11 @@ type Job struct {
 	// Result names the process variable what Graph answered is written to; empty
 	// discards it.
 	Result string `json:"resultVariable,omitempty"`
+	// ErrorCodes are the codes an error boundary or error event subprocess of the task's
+	// process catches. A refusal under one of them is thrown as a BPMN error; any other
+	// is a failure (ADR-0461). They travel with the job because a worker has no compiled
+	// process to ask.
+	ErrorCodes []string `json:"errorCodes,omitempty"`
 }
 
 // Result is what one operation produces: Graph's answer, and the variable it belongs
@@ -102,8 +110,12 @@ func Resolve(store state.Reader, cp *compiler.CompiledProcess, detail *compiler.
 		Select:     resolveValue(detail.SharePointSelect, piKey, scopeVars),
 		PageToken:  resolveValue(detail.SharePointPageToken, piKey, scopeVars),
 		MaxResults: detail.SharePointMaxResults,
-		RequestID:  strconv.FormatUint(jobKey, 10),
-		Result:     cp.Intern(detail.ResultVar),
+		// A number keeps its text form ("50"); the client reads it as a number.
+		QuotaGB:        resolveValue(detail.SharePointQuotaGB, piKey, scopeVars),
+		WarningPercent: resolveValue(detail.SharePointWarnPct, piKey, scopeVars),
+		RequestID:      strconv.FormatUint(jobKey, 10),
+		Result:         cp.Intern(detail.ResultVar),
+		ErrorCodes:     cp.CaughtErrorCodes(),
 	}, nil
 }
 
@@ -119,22 +131,24 @@ func Run(ctx context.Context, j Job, reg *Registry) (Result, error) {
 		return Result{}, reg.Unresolved("sharepoint", j.Connector)
 	}
 	item, err := client.Do(ctx, Request{
-		Operation:  j.Operation,
-		Site:       j.Site,
-		List:       j.List,
-		ItemID:     j.ItemID,
-		Path:       j.Path,
-		Fields:     j.Fields,
-		Content:    j.Content,
-		Encoding:   j.Encoding,
-		Filter:     j.Filter,
-		Select:     j.Select,
-		PageToken:  j.PageToken,
-		MaxResults: j.MaxResults,
-		RequestID:  j.RequestID,
+		Operation:      j.Operation,
+		Site:           j.Site,
+		List:           j.List,
+		ItemID:         j.ItemID,
+		Path:           j.Path,
+		Fields:         j.Fields,
+		Content:        j.Content,
+		Encoding:       j.Encoding,
+		Filter:         j.Filter,
+		Select:         j.Select,
+		PageToken:      j.PageToken,
+		MaxResults:     j.MaxResults,
+		QuotaGB:        j.QuotaGB,
+		WarningPercent: j.WarningPercent,
+		RequestID:      j.RequestID,
 	})
 	if err != nil {
-		return Result{}, err
+		return Result{}, thrown(j, err)
 	}
 	return Result{ResultVariable: j.Result, Item: item}, nil
 }
