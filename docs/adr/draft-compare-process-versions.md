@@ -97,11 +97,21 @@ leaves out, never "no changes".
   version, and a button in the live view of a version, comparing it with the one before.
 - Modeler: the version chip's panel offers the comparison with another version on a
   version, and the full list of differences on a draft or version whose draft differs.
+- Migration: the migration plan answers `at`, the element ids an instance has live
+  element instances on (the process itself left out, a multi-instance body and its
+  iterations once), and `changes`/`counts` from the instance's version to the target —
+  parsed after the run loop's turn, and only on the plan endpoint, never once per
+  instance of a batch; a batch refusal carries `at` alone. The migration dialogs lead
+  with the changed and removed elements instances stand on — for one instance its
+  positions, for a batch the source version's live token counts per element
+  (`GET /api/v1/processes/{key}/runtime/counts`) — and fold the whole comparison below.
+  A change at an element an instance stands on is the one it meets first; a removed one
+  is where it is refused unless mapped.
 
 ### Consequences
 
 - **Positive:** the question "what changed" has an answer in one request, on every
-  surface, that a formatting difference cannot pollute, and the same reading backs the
+  surface — and before a migration, at the places the instances stand — that a formatting difference cannot pollute, and the same reading backs the
   chip's "≠" and its list.
 - **Negative / trade-offs accepted:** matching by id means an element whose id was changed
   reads as removed and added. Field paths are technical (`extensionElements/zeebe:…`); they
@@ -110,8 +120,9 @@ leaves out, never "no changes".
   comparison of one pool's versions lists the other pools' changes too. Values are returned
   whole, a long script on both sides included.
 - **Follow-ups / risks to watch:** the diagram — two versions side by side, the changed
-  elements marked, a click in the list selecting the element — builds on this list. The
-  migration dialog could show which waiting instances stand on changed or removed elements.
+  elements marked, a click in the list selecting the element — builds on this list.
+  The migration dialogs name only the elements instances stand on; a change *ahead* of a
+  token — a rewired flow it has yet to take — is in the folded list, not singled out.
   Element types are shown as the document spells them (`userTask`), not translated.
 
 ## Pros and cons of the options

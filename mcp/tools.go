@@ -1691,7 +1691,10 @@ func runtimeTools() []Tool {
 				"is derived from two graphs and 'which of my tokens would be stranded' is not answerable by " +
 				"eye (ADR-0162). The answer also carries 'fork': what atlas_fork_instance would do instead " +
 				"— {resume, parked, candidates, variables, dataObjects, jobs, forkable, problems} — so a " +
-				"refused rebinding comes back with its next step rather than a dead end.",
+				"refused rebinding comes back with its next step rather than a dead end. 'at' names the " +
+				"elements the instance stands on, and 'changes'/'counts' list what the target version adds, " +
+				"removes or changes against the instance's (as atlas_compare_versions does): a change at an " +
+				"element in 'at' is the one the instance meets first.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

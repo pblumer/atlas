@@ -2963,6 +2963,17 @@ export default {
   "cmp.menu": "Versionen vergleichen…",
   "cmp.button": "Versionen vergleichen…",
   "cmp.buttonTitle": "Zeigt, was sich zwischen dieser und einer anderen Version des Prozesses geändert hat",
+  "cmp.impact.title": "Was die Migration von {from} nach {to} antrifft",
+  "cmp.impact.same": "{to} ist dasselbe Modell wie {from}; es ändert sich höchstens das Diagramm.",
+  "cmp.impact.none": "Keine Instanz steht auf einem Element, das {to} ändert oder entfernt. Die Änderungen betreffen Stellen, die die Instanzen erst noch erreichen.",
+  "cmp.impact.unread": "Wo die Instanzen stehen, konnte nicht gelesen werden. Die Liste zeigt alle Änderungen.",
+  "cmp.impact.lead.one": "{n} Element, auf dem Instanzen stehen, ist in {to} geändert oder entfernt:",
+  "cmp.impact.lead.other": "{n} Elemente, auf denen Instanzen stehen, sind in {to} geändert oder entfernt:",
+  "cmp.impact.tokens.one": "{n} Token",
+  "cmp.impact.tokens.other": "{n} Tokens",
+  "cmp.impact.removedNote": "{to} hat dieses Element nicht mehr. Eine Instanz, die hier steht, wird abgelehnt, solange das Element nicht einem Element in {to} zugeordnet ist.",
+  "cmp.impact.all": "Alle Änderungen von {from} nach {to}",
+  "cmp.impact.failed": "Der Vergleich der beiden Versionen konnte nicht gelesen werden.",
 
   // The process documentation PDF the BPMN editor publishes (process-doc.js).
   "processDoc.type.StartEvent": "Start-Ereignis",

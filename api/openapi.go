@@ -539,7 +539,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
-			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
+			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused, where the instance stands (at: the element ids it has live element instances on), and what the target version changes against the instance's (changes and counts, as GET /api/v1/processes/{key}/comparison lists them) — writing nothing (admin-only when auth is on, ADR-0162, ADR-draft-compare-process-versions)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, optional element-id overrides, and optional fork resume points", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "mapping": tArray(), "resume": tArray(),
 			}, "targetProcessDefKey")),

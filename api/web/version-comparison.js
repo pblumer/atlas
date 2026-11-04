@@ -68,8 +68,9 @@ function detailRows(details) {
 
 // changeHTML renders one element of the list: what happened to it, which element it
 // is — its name when it has one, its id always, since the id is what the two versions
-// were matched by — and where it sits.
-function changeHTML(c) {
+// were matched by — and where it sits. extraHead and extraBody are the caller's
+// additions, already HTML: how many tokens stand on the element, what that means.
+function changeHTML(c, extraHead = "", extraBody = "") {
   const kind = esc(tr(`cmp.kind.${c.kind}`));
   const who = c.id
     ? `${c.name ? `<b>${esc(c.name)}</b> ` : ""}<code class="vc-id">${esc(c.id)}</code>`
@@ -82,8 +83,8 @@ function changeHTML(c) {
       </table>`
     : "";
   return `<li class="vc-item vc-${esc(c.kind)}" data-element="${esc(c.id || "")}">
-      <div class="vc-head"><span class="vc-kind">${kind}</span> ${who} <span class="muted vc-type">${esc(c.type)}</span>${where}</div>
-      ${details}
+      <div class="vc-head"><span class="vc-kind">${kind}</span> ${who} <span class="muted vc-type">${esc(c.type)}</span>${where}${extraHead}</div>
+      ${extraBody}${details}
     </li>`;
 }
 
@@ -103,6 +104,54 @@ export function changesHTML(cmp) {
   }
   return `<p class="vc-summary">${esc(countsText(cmp.counts))}</p>
     <ul class="vc-list">${changes.map(changeHTML).join("")}</ul>`;
+}
+
+// What a migration meets (ADR-draft-compare-process-versions). An instance moved to
+// another version continues under that version's model, and the change it meets first
+// is the one at the element it stands on: a waiting task whose form or job type
+// changed, an armed event listening for another message. A removed element with an
+// instance on it is where a migration is refused unless the element is mapped.
+//
+// impactOf picks those out of a comparison: every changed or removed element that
+// instances stand on. at maps an element id to how many tokens stand there, or to null
+// when that is not known — one instance's positions carry no count.
+export function impactOf(changes, at) {
+  const touched = [];
+  for (const c of changes || []) {
+    if ((c.kind !== "changed" && c.kind !== "removed") || !c.id || !at.has(c.id)) continue;
+    touched.push({ change: c, tokens: at.get(c.id) });
+  }
+  return touched;
+}
+
+// migrationImpactHTML renders what a migration from one version to another meets:
+// the changed and removed elements instances stand on first, each with what changed,
+// then the whole comparison folded away. at is null when where the instances stand
+// could not be read; the list is then all there is, and it is said why.
+export function migrationImpactHTML({ cmp, at, from, to }) {
+  if (!cmp) return "";
+  const versions = { from: `v${from}`, to: `v${to}` };
+  const changes = Array.isArray(cmp.changes) ? cmp.changes : [];
+  const all = `<details class="vc-all"${at ? "" : " open"}>
+      <summary>${esc(tr("cmp.impact.all", versions))} <span class="muted">(${esc(countsText(cmp.counts))})</span></summary>
+      ${changesHTML(cmp)}
+    </details>`;
+  const head = `<h4>${esc(tr("cmp.impact.title", versions))}</h4>`;
+  if (cmp.sameModel && !changes.length) {
+    return `${head}<p class="vc-summary vc-same">${esc(tr("cmp.impact.same", versions))}</p>`;
+  }
+  if (!at) {
+    return `${head}<p class="muted vc-impact-lead">${esc(tr("cmp.impact.unread"))}</p>${all}`;
+  }
+  const touched = impactOf(changes, at);
+  if (!touched.length) {
+    return `${head}<p class="muted vc-impact-lead">${esc(tr("cmp.impact.none", versions))}</p>${all}`;
+  }
+  const items = touched.map(({ change, tokens }) => changeHTML(change,
+    tokens != null ? ` <span class="pill vc-tokens">${esc(trPlural("cmp.impact.tokens", tokens))}</span>` : "",
+    change.kind === "removed" ? `<p class="muted vc-note">${esc(tr("cmp.impact.removedNote", versions))}</p>` : "")).join("");
+  return `${head}<p class="vc-impact-lead warn">${esc(trPlural("cmp.impact.lead", touched.length, versions))}</p>
+    <ul class="vc-list">${items}</ul>${all}`;
 }
 
 // openModal puts a dialog on the page and answers its parts. It closes on the close

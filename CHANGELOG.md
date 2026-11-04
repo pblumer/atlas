@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The migration dialogs say what the target version changes.** Migrating one instance
+  or every instance of a version now shows, beside the plan, the changed and removed
+  elements instances stand on — with what changed in each and, for a batch, how many tokens
+  stand there — and the whole comparison of the two versions folded below. A removed
+  element says that an instance on it is refused unless it is mapped. The migration plan
+  (`POST /api/v1/instances/{key}/migrate/plan`, MCP `atlas_migration_plan`) answers `at`,
+  the elements the instance stands on, and `changes` and `counts` as the version
+  comparison lists them; each refusal of a batch carries `at` too
+  (ADR-draft-compare-process-versions).
+
 - **Two versions of a process can be compared.** `GET /api/v1/processes/{key}/comparison`
   lists what changed from the version `?with=` names — by default the one before — to the
   one in the path: every element added, removed or changed, matched by element id, with its
