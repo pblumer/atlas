@@ -89,6 +89,15 @@ func catalogRecordProps() map[string]any {
 		"members": arrayProp("Who else maintains this catalogue: [{ref: {type: \"user\"|\"group\", id}, " +
 			"role: \"viewer\"|\"editor\"}]. Only the OWNER may change this; an editor changing the " +
 			"catalogue and its member list would be a grant that amplifies itself. THE COMPLETE LIST."),
+		"structured": map[string]any{"type": "boolean",
+			"description": "Opt the catalogue in to DECLARED STRUCTURE (ADR-0524). " +
+				"Every product it offers must then carry `kind`: a Marktleistung (\"offering\") is the " +
+				"whole a person orders — contained by nothing, including at least one service, containing " +
+				"services only, filed under a `category` and a `productGroup` that are CAPABILITY KEYS, the " +
+				"product group one the category capability requires; a service (\"service\") is one " +
+				"building block with its own lifecycle process, no parts, no heading, and is offered only " +
+				"inside a Marktleistung. Publishing refuses a structured catalogue that breaks any of it, " +
+				"and an order cannot ask for a service on its own. Convert the products first, then switch it on."},
 		"revision": integerProp("THE REVISION YOU READ, as a precondition. Because `items`, `edges` " +
 			"and `members` are replaced whole, the list you send is normally one you read and " +
 			"changed — and without this, a change somebody made in between is erased by yours " +
@@ -228,13 +237,22 @@ func catalogItemProps() map[string]any {
 				"nameTexts":    map[string]any{"type": "object", "description": "The name per language tag"},
 				"deliveryDays": map[string]any{"type": "integer", "minimum": 1, "maximum": 365},
 			}},
+		"kind": map[string]any{"type": "string", "enum": []any{"", "offering", "service"},
+			"description": "What it is in a STRUCTURED catalogue (ADR-0524): " +
+				"\"offering\" for a Marktleistung, the whole a person orders, assembled from services like " +
+				"a house from bricks; \"service\" for one brick, with its own lifecycle process, provisioned " +
+				"autonomously and ordered only as part of a Marktleistung. Leave it empty outside a " +
+				"structured catalogue, where the level is read off the graph."},
 		"category": stringProp("The heading the shop groups it under — \"Arbeitsplatz\", " +
 			"\"Kommunikation\". THE KEY AND NOT THE WORDING: the shop groups by this value and " +
 			"renders `categoryTexts` beside it, so two spellings are two categories. Reuse a " +
 			"heading already in the catalogue rather than inventing a second spelling of it. A " +
 			"heading and nothing else: no ordering and no entity behind it. It is read off the " +
 			"products NOTHING CONTAINS: on a product that is a part of another one the shop " +
-			"never reads it, so set it on the offering and not on the services behind it."),
+			"never reads it, so set it on the offering and not on the services behind it. In a " +
+			"STRUCTURED catalogue it is the key of a capability (\"arbeitsalltag-bewaeltigen\"), " +
+			"checked against the register at publish and worded from the capability's name " +
+			"where `categoryTexts` has no wording."),
 		"categoryTexts": objectProp("The heading per language tag, where `category` above is what " +
 			"the shop groups by: {\"de\": \"Arbeitsplatz\", \"fr\": \"Poste de travail\"}. " +
 			"Leave it out and the key renders in every language, which is the ordinary state for " +
@@ -247,7 +265,8 @@ func catalogItemProps() map[string]any {
 			"above is, with `productGroupTexts` for the wording, and read off the same products — " +
 			"the group has no record and therefore no category of its own, so the chain is " +
 			"assembled per product and a group whose products sit in two categories appears " +
-			"under both."),
+			"under both. In a STRUCTURED catalogue it is the key of a capability that the " +
+			"category capability lists in its `requires`."),
 		"productGroupTexts": objectProp("The product group per language tag, exactly as " +
 			"`categoryTexts` is the heading's — same key-and-wording split, same all-or-nothing " +
 			"rule at publication. See that property."),

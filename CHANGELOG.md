@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue can declare Marktleistungen and services.** A catalogue switched to
+  `structured` states for every product whether it is a Marktleistung (`kind: offering`),
+  the whole somebody orders, or a service (`kind: service`), one building block with its
+  own lifecycle process. Publishing then proves the graph agrees: a Marktleistung is
+  contained by nothing, includes at least one service and contains services only; a
+  service has no parts, carries no heading and is part of at least one Marktleistung. A
+  Marktleistung's category and product group are keys of the capability register — the
+  product group one the category capability requires — and are worded from the
+  capability's name where the product leaves a language unworded. An order can no longer
+  ask for a service on its own in such a release, except as an option of a Marktleistung
+  the recipient holds. Catalogues that are not switched on publish as before. The product
+  editor offers the kind, the catalogue settings the switch, and the MCP tools both
+  fields; `docs/catalogue/AGENTS.md` describes how products are created
+  (ADR-0524).
+
 - **A person without an account answers a task from a mail.** A user task marked
   `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
   that names it with `answerTask` is handed that link as `answerLink` for its subject and
@@ -32,6 +47,8 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 - **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
 - **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
+- **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
+- **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
 - **A process variable read only inside a FEEL filter is no longer null.** `expr.CompileAuto` never declared a name that appears only in a filter predicate, because there an unknown name may be a key of the element, so `groups[starts with(alias, application.PREFIX)]` read the prefix as null and matched nothing; where the name was declared, it shadowed the element's key of the same name instead. The element's keys now take precedence and outer variables stay visible (DMN 10.3.2.5), through `github.com/pblumer/feel` with `CompileStringOpen` (ADR-0015, amended). A name declared personal (`atlas:personal`) that a filter alone reads stays the element's key and is not bound, so the filter never sees its ciphertext and a model that filters on such a key deploys as before (ADR-0314).
 

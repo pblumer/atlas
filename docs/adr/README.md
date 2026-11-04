@@ -611,6 +611,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0521](0521-command-by-recipient.md) | A process commands what a person holds, without reading what they hold | Accepted | Landed |
 | [0522](0522-several-catalogues-per-person.md) | A person sees every catalogue they are the audience for | Proposed | Partial |
 | [0523](0523-user-task-answered-by-link.md) | A user task can be answered through a link a mail carries | Accepted | Landed |
+| [0524](0524-marktleistung-and-service.md) | A structured catalogue declares Marktleistung and service, and files them under capabilities | Accepted | Landed |
 
 ## The two states of a record
 
