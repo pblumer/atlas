@@ -14,6 +14,9 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The Entra Worker reads and transfers a synchronised user's source of authority.** `get-sync-behavior` reads `onPremisesSyncBehavior` and `set-sync-behavior` sets its `isCloudManaged`, so a process can take an account that Entra Connect synchronises from Active Directory into the cloud. The body is held to that one boolean before anything is sent. Graph v1.0, permission `User-OnPremisesSyncBehavior.ReadWrite.All` (ADR-0172, amended).
+- **The Exchange Worker enables remote mailboxes on Exchange Server.** `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes` and `disable-remote-mailbox` run `Enable-`, `Get-` and `Disable-RemoteMailbox` for an Exchange hybrid organization, where the mail attributes of an account synchronised to the cloud are written on premises. On Exchange Online they are refused with what to do instead (ADR-0462, amended).
+- **The M365 example covers hybrid identity.** A catalogue `cat-m365-identitaet` for the administration with two products: «Konto (hybrid) anlegen» creates the account in AD, enables its remote mailbox, waits for Entra Connect with a bounded loop and orders the licence through the existing licence position; «Konto in die Cloud übernehmen» moves a still local mailbox first (a task) and then transfers the source of authority. The README explains the rules both follow and why the test environment, which synchronises nothing, leaves them out (`m365-dienste` 1.0.7).
 - **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
   `cascade`, the default, or `tiles`, which draws a category menu and a search field above
   one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and

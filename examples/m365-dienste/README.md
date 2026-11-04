@@ -16,8 +16,8 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 23 Prozesse, 50 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
-| `katalog.json` | Das Katalogdokument: drei Kataloge, sechzehn Produkte, vier Beziehungen |
+| `atlas.json` | Manifest der Applikation «Beispiel: Microsoft-365-Dienste» (Schlüssel `beispiel-m365-dienste`): 25 Prozesse, 57 Formulare, 8 Entscheidungen samt ihren Modellen (Format 2) |
+| `katalog.json` | Das Katalogdokument: vier Kataloge, achtzehn Produkte, vier Beziehungen |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppen, Genehmigende) |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
 | `*.dmn` | Die acht Entscheidungsmodelle |
@@ -32,6 +32,7 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 | Microsoft 365 für Mitarbeitende (`cat-m365-mitarbeitende`) | 500 | `{{zielgruppe}}` | Lizenz, Telefonie, Team, SharePoint-Teamwebsite, Viva-Engage-Community, Funktionspostfach, Verteiler, Postfachzugriff |
 | Microsoft 365: Kommunikation und Telefonie (`cat-m365-ucc`) | 510 | `{{zielgruppe-ucc}}` | die dreizehn Produkte des Shops |
 | Microsoft 365: HR-Eintritte (`cat-m365-hr`) | 520 | keine | Eintrittspaket, Lizenz mit Postfach (Eintritt), Mitgliedschaften der Organisationseinheit |
+| Microsoft 365: Identität (hybrid) (`cat-m365-identitaet`) | 530 | `{{zielgruppe-identitaet}}` | Konto (hybrid) anlegen, Konto in die Cloud übernehmen (siehe «Hybride Identität (Entra Connect)») |
 
 Eine Person sieht im Shop genau einen Katalog: den mit dem höchsten Rang unter denen, die
 ihre Gruppen erreichen. Der UCC-Katalog bietet deshalb auch die allgemeinen Produkte an.
@@ -58,6 +59,8 @@ Sein Rang muss trotzdem frei sein, weil das Veröffentlichen jeden Rang nur einm
 | Anrufwarteschlange (`m365-warteschlange`) | Teams Phone, Entra | `{{telefonie-team}}` | `warteschlange.bpmn` (Lebenszyklus) | entfernen, Agenten ändern |
 | Telefonzentrale (`m365-telefonzentrale`) | Teams Phone, Entra | `{{telefonie-team}}` | `telefonzentrale.bpmn` (Lebenszyklus) | entfernen |
 | Aufbewahrung eines Postfachs (`m365-aufbewahrung`, Litigation Hold) | Exchange | `{{compliance}}` | `aufbewahrung.bpmn` (Lebenszyklus) | Aufbewahrung aufheben |
+| Konto (hybrid) anlegen (`m365-konto-hybrid`) | AD, Exchange Server, Entra | keine | `konto-hybrid.bpmn` (Lebenszyklus) | Konto zurückgeben |
+| Konto in die Cloud übernehmen (`m365-konto-cloud`) | Entra, AD | keine | `konto-in-cloud.bpmn` (Lebenszyklus) | Verwaltung an das AD zurückgeben (Aufgabe) |
 | Eintrittspaket Microsoft 365 (`m365-eintritt`), Paket aus den beiden folgenden Produkten | – | keine | `eintritt-paket.bpmn` (Lebenszyklus) | Eintrittspaket zurückgeben (nur Betrieb und Eintrittsprozess) |
 | Microsoft 365: Lizenz mit Postfach (Eintritt) (`m365-eintritt-lizenz`), ohne Varianten | Entra, Exchange, im Modus `ad-gruppe` AD | keine | `lizenz.bpmn` (Lebenszyklus) | die Aktionen am Postfach wie bei `m365-lizenz`; Rückgabe nur durch den Betrieb |
 | Mitgliedschaften der Organisationseinheit (`m365-oe-mitgliedschaften`), setzt die Lizenz voraus | Entra, Exchange | keine | `oe-mitgliedschaften.bpmn` (Lebenszyklus) | Mitgliedschaften entfernen (nur Betrieb) |
@@ -678,6 +681,175 @@ gezeichnet), nicht gegen einen laufenden Server mit installiertem `ad-dienste`.
 - **Eine Paket-Lizenz neben einer bestellten.** Wer `m365-eintritt-lizenz` hält, kann im Shop
   zusätzlich `m365-lizenz` bestellen; die Bestellung kennt die beiden nicht als dasselbe Recht.
 - **Wird der Eintritt nach einer Ablehnung beendet**, bleibt das Konto in Entra ID bestehen.
+
+## Hybride Identität (Entra Connect)
+
+Viele Organisationen führen ihre Konten im **lokalen Active Directory** und synchronisieren sie
+mit **Microsoft Entra Connect** (Connect Sync oder Cloud Sync) nach Entra ID. Für sie entsteht ein
+Konto im AD und nicht in der Cloud, und ein synchronisiertes Konto lässt sich in Entra ID kaum
+ändern: Graph lehnt Änderungen an Eigenschaften ab, die das AD führt. Zwei Produkte im Katalog
+`cat-m365-identitaet` zeigen, wie Atlas damit arbeitet:
+
+- **A – Konto (hybrid) anlegen** (`m365-konto-hybrid`, `konto-hybrid.bpmn`): Das Konto entsteht
+  im AD, Entra Connect bringt es in die Cloud, dort erhält es Lizenz und Postfach.
+- **B – Konto in die Cloud übernehmen** (`m365-konto-cloud`, `konto-in-cloud.bpmn`): Ein
+  synchronisiertes Konto wird danach nur noch in Entra ID verwaltet (Source of Authority).
+
+Synchronisiert wird nie von Atlas. Atlas schreibt ins AD und in Entra ID, die Synchronisation
+dazwischen macht Entra Connect.
+
+### Regeln, die beide Prozesse befolgen
+
+- **Ein synchronisiertes Konto wird nie in Entra ID beschrieben**, ausser dort, wo Microsoft es
+  vorsieht (`usageLocation`, Lizenzen, Gruppen der Cloud). Stammdaten gehören ins AD. Auch
+  `lizenz.bpmn` fragt vor einer AD-Gruppe `onPremisesSyncEnabled` ab.
+- **Jede Warteschleife hat ein Ende.** Auf Entra Connect, die Kontenspiegelung und einen
+  Postfach-Umzug wird mit Zähler gewartet; danach entsteht eine Aufgabe für Menschen, nie ein
+  Warten ohne Ende.
+- **Das Konto wird über den Anmeldenamen aus dem AD gefunden, nicht über die UPN**:
+  `onPremisesSamAccountName eq '<Kennung>'`. Der bleibt gleich, auch wenn jemand die UPN ändert
+  oder ihr Suffix in Entra ID nicht verifiziert ist. Der Anker von Entra Connect
+  (`onPremisesImmutableId`, die Base64-Form der `objectGUID` oder von `ms-DS-ConsistencyGuid`)
+  wäre noch eindeutiger; der AD-Worker liefert binäre Attribute aber nicht so, dass ein Prozess
+  daraus die Base64-Form bilden könnte. Der Anmeldename ist nur innerhalb einer Domäne
+  eindeutig; ein Wald mit mehreren Domänen, die denselben Namen vergeben, braucht zusätzlich
+  `onPremisesDomainName` im Filter.
+- **Das Postfach entsteht mit `Enable-RemoteMailbox` auf dem Exchange Server**, nicht mit
+  `New-Mailbox` in Exchange Online. In einer hybriden Exchange-Organisation führt der Exchange
+  Server die Mail-Attribute eines Kontos; Entra Connect bringt sie in die Cloud, und Exchange
+  Online legt das Postfach an, sobald das Konto lizenziert ist. Dafür kennt der Exchange-Worker
+  seit dieser Änderung `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes`
+  und `disable-remote-mailbox`, nur auf dem Exchange Server ([ADR-0462](../../docs/adr/0462-exchange-worker.md),
+  Amendment 2026-11-04).
+
+### A – Konto (hybrid) anlegen
+
+Bestellt von der Administration (Zielgruppe `{{zielgruppe-identitaet}}`) mit Personalnummer,
+Vor- und Nachname, Kennung, Organisationseinheit und Lizenzvariante
+(`m365-konto-hybrid-bestellung`). Die Kennung ist der Anmeldename im AD
+(`^[a-z0-9][a-z0-9.-]{0,19}$`) und der erste Teil der UPN und der Mailadresse. Keine
+Namensregel: Die Entscheidung `M365Namensregel` wird von der Engine ausgewertet und dürfte die
+versiegelten Namen nicht lesen.
+
+1. **Freie Namen an beiden Orten:** im AD `sAMAccountName`, UPN, `mail` und `proxyAddresses`,
+   in Entra ID UPN, `mail`, `proxyAddresses` und `onPremisesSamAccountName` (erweiterte
+   Abfrage). Sonst bricht Entra Connect später mit einem Konflikt ab oder ordnet das Konto per
+   Soft-Match einem fremden Cloud-Konto zu, und das sähe man erst Stunden danach. Eine
+   ungültige Kennung gilt als vergeben.
+2. **Konto im AD** in `AD_SYNC_OU` (im Bereich von Entra Connect), gesperrt, UPN
+   `<Kennung>@AD_UPN_SUFFIX`, Herkunftskennzeichnung in `info`. Initialpasswort durch
+   M365-Administration, Passwort setzen und aus der Instanz entfernen, aktivieren – wie im
+   AD-Paket [`ad-dienste`](../ad-dienste/).
+3. **Remote-Postfach** mit `RemoteRoutingAddress <Kennung>@EXO_ROUTING_DOMAIN` (die Domäne
+   `mail.onmicrosoft.com` des Tenants) und der Adresse `<Kennung>@MAIL_DOMAIN`, Worker
+   `ucc_exchange_onprem`.
+4. **Auf Entra Connect warten:** höchstens `SYNC_PRUEFUNGEN` Prüfungen im Abstand
+   `SYNC_PRUEFINTERVALL` (Fallback 18 × 10 Minuten), danach die Aufgabe «Synchronisation
+   klären» für M365-Administration.
+5. **Nutzungsort** `USAGE_LOCATION` in Entra ID. Synchronisiert ein Kunde ihn aus dem AD
+   (`msExchUsageLocation`), gehört er stattdessen in Schritt 2.
+6. **Lizenz:** Der Prozess wartet auf das Atlas-Konto (Kontenspiegelung, wie im Eintritt) und
+   bestellt dann die Position `m365-eintritt-lizenz` für die Person (Shop-Aufgabe im Modus
+   `order`). Die Lizenz vergibt also `lizenz.bpmn`, in jedem seiner Modi, auch über eine
+   AD-Gruppe. Deshalb nennt `m365-eintritt-lizenz` jetzt die eigene Applikation in
+   `orderableBy`.
+
+**Rückgabe:** Lizenz-Position der Person zurückgeben (über die Person, ADR-0521), 30 Minuten
+warten, das AD-Konto sperren und nach `AD_AUSTRITT_OU` verschieben, ausserhalb des
+Sync-Bereichs. Entra Connect löscht danach das Entra-Konto (30 Tage im Papierkorb, mit ihm das
+Postfach). Das Remote-Postfach wird **nicht** deaktiviert: Holt man das Konto innert 30 Tagen in
+den Sync-Bereich zurück, findet es sein Postfach wieder. Die Gruppenmitgliedschaften im AD
+bleiben am gesperrten Konto stehen; sie gewähren nichts mehr, und eine Wiederherstellung
+braucht sie. Sie einzeln zu entfernen hiesse, `memberOf` in die Engine zu lesen, was die
+versiegelten DNs offenlegen würde.
+
+Die empfangende Person der Bestellung ist die bestellende Administration; die neue Person hat
+bei der Bestellung noch kein Atlas-Konto. Ihre Daten sind unter ihrer Personalnummer
+versiegelt (`atlas:dataSubject`).
+
+### B – Konto in die Cloud übernehmen
+
+Microsoft nennt das Übertragen der **Source of Authority** (SOA) eines Benutzers: Danach schreibt
+Entra Connect nicht mehr in das Konto, und es wird in Entra ID verwaltet. Graph v1.0:
+`PATCH /users/{id}/onPremisesSyncBehavior` mit `{"isCloudManaged": true}`. Der Entra-Worker kennt
+dafür `get-sync-behavior` und `set-sync-behavior` ([ADR-0172](../../docs/adr/0172-entra-id-connector.md),
+Amendment 2026-11-04).
+
+Voraussetzungen laut Microsoft (Stand der Dokumentation 2026-11-02), die die Schnittstelle nicht
+prüft:
+
+- Connect Sync ab 2.5.76.0 oder der Cloud-Sync-Agent ab 1.1.1370.0.
+- Die Berechtigung `User-OnPremisesSyncBehavior.ReadWrite.All` für die App des Workers
+  `ucc_entra` (eine Administratorin mit der Rolle Hybrid Administrator überträgt; die App
+  braucht die Anwendungsberechtigung).
+- **Keine Exchange-Workloads mehr auf dem Exchange Server**: die Postfächer in Exchange Online.
+- Keine Anmeldung über AD FS, und keine Anwendung, die sich mit dem Passwort der Person am AD
+  anmeldet (LDAP-Bind, Kerberos mit Passwort). Für Kerberos empfiehlt Microsoft passwortlos mit
+  Cloud Kerberos Trust.
+
+Ablauf:
+
+1. Konto in Entra ID lesen (`onPremisesSyncEnabled`) und `get-sync-behavior`. Ist es nicht
+   synchronisiert oder schon in der Cloud verwaltet, wird abgelehnt.
+2. **Liegt das Postfach noch lokal** (`msExchRecipientTypeDetails` 1 im AD), erhält
+   M365-Administration die Aufgabe «Postfach nach Exchange Online verschieben»: ein
+   Migrations-Batch (Remote-Move) im Exchange Admin Center. Das ist bewusst keine Operation:
+   `New-MoveRequest -Remote` braucht eine Anmeldung der lokalen Organisation, die nicht in ein
+   Modell gehört. Der Prozess prüft danach im AD, ob das Konto ein Remote-Postfach trägt
+   (`2147483648`), höchstens `UMZUG_PRUEFUNGEN` Mal im Abstand `UMZUG_PRUEFINTERVALL` (Fallback
+   48 × 30 Minuten), dann wieder die Aufgabe.
+3. `set-sync-behavior` mit `isCloudManaged` true, Kontrolle mit `get-sync-behavior`; liest
+   Graph die Übertragung nicht zurück, prüft M365-Administration.
+4. Das AD-Konto bleibt (`AD_NACH_SOA` `behalten`, Fallback) oder wird gesperrt (`deaktivieren`).
+   Eine Sperre im AD erreicht die Cloud danach nicht mehr.
+
+**Rückgabe = Rückübertragung an das AD**, als Aufgabe für M365-Administration mit Microsofts
+Ablauf im Formular: Cloud-Bezüge entfernen, die Tenant-Einstellung
+`blockCloudObjectTakeoverThroughHardMatchEnabled` ausschalten, `isCloudManaged` false, einen
+Lauf von Entra Connect abwarten, die Einstellung wieder einschalten. Der Prozess setzt
+`isCloudManaged` nicht selbst zurück: Die Einstellung gilt für den ganzen Tenant und gehört nicht
+in einen Shop-Prozess.
+
+### Die Testumgebung synchronisiert nichts
+
+Die Testumgebung [`deploy/opentofu/m365-devenv`](../../deploy/opentofu/m365-devenv/) hat einen
+Domänencontroller und einen Exchange Server, aber **kein Entra Connect**. AD und Entra ID sind
+dort zwei getrennte Verzeichnisse: Die Testpersonen bestehen in beiden, mit derselben UPN, als
+zwei unabhängige Konten. Eine Änderung im AD erreicht Entra ID nicht und umgekehrt.
+
+Entra Connect im geteilten Test-Tenant nachzurüsten ist **nicht** vorgesehen: Entra ordnete die
+AD-Testkonten über die gleiche UPN den bestehenden Cloud-Konten zu (Soft-Match), und diese würden
+dauerhaft zu synchronisierten Konten. Wer A und B ganz testen will, braucht einen eigenen
+Test-Tenant mit Cloud Sync, beschränkt auf eine OU mit neuen Konten ohne Gegenstück in Entra ID.
+`install-m365-dienste.py` nimmt die beiden Produkte deshalb aus den Katalogen.
+
+### Applikationskonstanten
+
+| Konstante | Fallback | Bedeutung |
+|---|---|---|
+| `AD_SYNC_OU` | `OU=Benutzer,OU=Synchronisiert,DC=contoso,DC=ch` | A: wo hybride Konten entstehen; muss im Bereich von Entra Connect liegen |
+| `AD_AUSTRITT_OU` | `OU=Ausgetreten,DC=contoso,DC=ch` | A: wohin ein zurückgegebenes Konto kommt; muss ausserhalb des Bereichs liegen |
+| `AD_UPN_SUFFIX` | `contoso.ch` | A: Suffix der UPN; in Entra ID verifiziert und im AD als UPN-Suffix eingetragen |
+| `EXO_ROUTING_DOMAIN` | `contoso.mail.onmicrosoft.com` | A: Domäne der `RemoteRoutingAddress` |
+| `SYNC_PRUEFINTERVALL`, `SYNC_PRUEFUNGEN` | `PT10M`, `18` | A: Warten auf Entra Connect |
+| `AD_NACH_SOA` | `behalten` | B: `deaktivieren` sperrt das AD-Konto nach der Übernahme |
+| `UMZUG_PRUEFINTERVALL`, `UMZUG_PRUEFUNGEN` | `PT30M`, `48` | B: Warten auf den Postfach-Umzug |
+
+Dazu wie in den übrigen Prozessen `AD_DOMAIN_DN`, `MAIL_DOMAIN`, `USAGE_LOCATION` und
+`ATLAS_API_BASE`. Worker: `ad_verzeichnis`, `ucc_exchange_onprem` (Exchange Server, Ziel
+`onprem`), `ucc_entra`.
+
+### Was geprüft ist und was nicht
+
+Geprüft: Beide Prozesse kompilieren mit den übrigen Modellen (`go test ./examples`), der Katalog
+veröffentlicht sich, und die neuen Operationen der Worker sind gegen einen aufgezeichneten Graph
+und den Katalog des Exchange-Workers getestet. **Nicht geprüft**, weder gegen ein AD noch gegen
+Entra ID oder einen Exchange Server: kein einziger Lauf von A oder B; ob Graph
+`onPremisesSamAccountName` in einer erweiterten Abfrage so filtert, wie beschrieben; wie lange
+Entra Connect braucht; ob `Enable-RemoteMailbox` auf einem eben angelegten Konto den richtigen
+Domänencontroller liest; ob `msExchRecipientTypeDetails` nach einem Umzug zuverlässig
+`2147483648` wird; die SOA-Übertragung selbst. Vor allem: **nichts davon ist gegen ein echtes
+Entra Connect gelaufen.** Die Testumgebung kann es nicht prüfen (siehe oben).
 
 ## Die Entscheidungen
 
