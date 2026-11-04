@@ -3,6 +3,9 @@ package catalog
 import (
 	"slices"
 	"strings"
+
+	"github.com/pblumer/atlas/api/capability"
+	"github.com/pblumer/atlas/api/runloop"
 )
 
 // Headings that are references (ADR-draft-marktleistung-and-service).
@@ -149,4 +152,42 @@ func cachedLookup(caps CapabilityLookup) func(string) (CapabilityHeading, bool, 
 		seen[key] = answer{h, found, err}
 		return h, found, err
 	}
+}
+
+// Register reads the capability register from its own store, on the run loop that
+// owns it. The server hands over the store and the loop; the catalogue keeps the
+// reading here, beside the rules that use it, so the server package gains no file
+// that reaches into the shop (ADR-0515).
+type Register struct {
+	Loop  *runloop.Loop
+	Store *capability.Store
+}
+
+// CapabilityHeading reads one capability. A key that names no record, or cannot
+// name one, is not found rather than an error: the store says so for a key that is
+// not a valid filename, and HeadingProblems reports both as "no capability".
+func (r Register) CapabilityHeading(key string) (CapabilityHeading, bool, error) {
+	key = strings.TrimSpace(key)
+	if key == "" || r.Store == nil || r.Loop == nil {
+		return CapabilityHeading{}, false, nil
+	}
+	var (
+		out   CapabilityHeading
+		found bool
+		err   error
+	)
+	r.Loop.Do(func() {
+		c, ok, e := r.Store.Get(key)
+		if e != nil || !ok {
+			found, err = ok, e
+			return
+		}
+		found = true
+		out = CapabilityHeading{
+			Name:       c.Name,
+			Requires:   append([]string(nil), c.Requires...),
+			Deprecated: c.State == capability.StateDeprecated,
+		}
+	})
+	return out, found, err
 }

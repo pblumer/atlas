@@ -2202,7 +2202,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	s.catalogs.Baselines = catalogBaselines{s: s}
 	s.catalogs.Personal = processLookup{s: s}
 	// And what a structured catalogue's headings name: the capability register.
-	s.catalogs.Capabilities = capabilityHeadings{s: s}
+	s.catalogs.Capabilities = catalog.Register{Loop: s.runLoop, Store: s.capabilityRecords}
 	s.catalogs.Remainders = remainderLookup{s: s}
 	// The content sources: the credential is resolved on the loop like every
 	// Worker's, the fetches and the recheck run off it (I3).

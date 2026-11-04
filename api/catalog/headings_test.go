@@ -3,6 +3,9 @@ package catalog
 import (
 	"errors"
 	"testing"
+
+	"github.com/pblumer/atlas/api/capability"
+	"github.com/pblumer/atlas/api/runloop"
 )
 
 // In a structured catalogue the two headings are references, not words
@@ -108,5 +111,43 @@ func TestWordingNeedsARegister(t *testing.T) {
 	WordHeadings(items, []string{"de"}, nil)
 	if items[0].CategoryTexts != nil {
 		t.Fatal("wording invented with no register to read")
+	}
+}
+
+func TestTheRegisterIsReadFromItsStoreOnTheLoop(t *testing.T) {
+	store, err := capability.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	quit := make(chan struct{})
+	loop := runloop.New(quit)
+	go loop.Run()
+	t.Cleanup(func() { close(quit) })
+	for _, c := range []capability.Capability{
+		{Key: "arbeitsalltag-bewaeltigen", Name: "Arbeitsalltag bewältigen", State: capability.StateProposed,
+			Requires: []string{"endgeraet-bereitstellen"}},
+		{Key: "altlast", Name: "Altlast", State: capability.StateDeprecated},
+	} {
+		if err := store.Save(c); err != nil {
+			t.Fatalf("save %s: %v", c.Key, err)
+		}
+	}
+	reg := Register{Loop: loop, Store: store}
+
+	h, found, err := reg.CapabilityHeading(" arbeitsalltag-bewaeltigen ")
+	if err != nil || !found || h.Name != "Arbeitsalltag bewältigen" || h.Deprecated ||
+		len(h.Requires) != 1 || h.Requires[0] != "endgeraet-bereitstellen" {
+		t.Fatalf("read = %+v, %v, %v", h, found, err)
+	}
+	if h, found, _ := reg.CapabilityHeading("altlast"); !found || !h.Deprecated {
+		t.Fatalf("a deprecated capability read as %+v, %v", h, found)
+	}
+	for _, key := range []string{"gibt-es-nicht", "Arbeitsplatz", ""} {
+		if _, found, err := reg.CapabilityHeading(key); found || err != nil {
+			t.Errorf("%q read as found=%v err=%v, want not found", key, found, err)
+		}
+	}
+	if _, found, err := (Register{}).CapabilityHeading("altlast"); found || err != nil {
+		t.Errorf("a register with no store answered found=%v err=%v", found, err)
 	}
 }
