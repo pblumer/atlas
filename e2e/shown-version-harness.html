@@ -60,6 +60,11 @@
           if (!window.__state.comparison) throw notFound();
           return window.__state.comparison;
         }
+        // The comparison of two versions the chip's panel opens (ADR-draft-compare-process-versions).
+        if (method === "GET" && /\/processes\/\d+\/comparison/.test(url)) {
+          window.__writes.push({ method, url });
+          return window.__state.versionComparison || { sameModel: true, changes: [], counts: {} };
+        }
         if (method === "GET" && /\/processes$/.test(url)) return window.__state.processes;
         if (method === "GET" && /\/forms$/.test(url)) return [];
         if (method === "POST" && /\/validate$/.test(url)) return { version: "test", problems: [] };

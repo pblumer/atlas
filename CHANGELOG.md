@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Two versions of a process can be compared.** `GET /api/v1/processes/{key}/comparison`
+  lists what changed from the version `?with=` names — by default the one before — to the
+  one in the path: every element added, removed or changed, matched by element id, with its
+  type, name and container, and for a changed element every field it states differently
+  (name, sourceRef/targetRef, condition, task definition, headers, input and output
+  mappings, script, form, event definition) before and after, plus counts by kind and
+  whether the two are the same model. The diagram, formatting, attribute order, attributes
+  at their schema default and the editor's incoming/outgoing hints are not compared.
+  Operations offers *Versionen vergleichen…* in the ⋯ menu of a process with more than one
+  version and in the live view of a version; the Modeler's version chip opens the
+  comparison with any other version and, for a draft that differs, *Alle Unterschiede
+  anzeigen*: `GET /api/v1/drafts/{id}/comparison` now carries the same `changes` and
+  `counts` beside its first difference. MCP `atlas_compare_versions`
+  (ADR-draft-compare-process-versions).
+
 - **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
   `cascade`, the default, or `tiles`, which draws a category menu and a search field above
   one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and

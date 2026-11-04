@@ -1282,6 +1282,41 @@ textarea::placeholder {
 .mig-moved { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.6; }
 .mig-err { color: var(--warn); }
 
+/* What changed between two versions of a process, as a list
+   (ADR-draft-compare-process-versions). One entry per element, its kind as a coloured
+   tag and a rule on its left edge, and for a changed element a table of the fields
+   before and after. Values that are long or span lines — a script, a condition — are
+   blocks that scroll inside their cell rather than widen the dialog. */
+.vc-modal.vc-wide { width: min(920px, calc(100vw - 32px)); max-width: none; }
+.vc-modal .modal-body { max-width: none; }
+.vc-pick .btn { margin-bottom: 2px; }
+.vc-result { margin-top: 12px; }
+.vc-summary { margin: 0 0 8px; font-weight: 600; font-size: 13px; }
+.vc-same { color: var(--ok); }
+.vc-error { color: var(--danger); margin: 0; }
+.vc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.vc-item { border: 1px solid var(--border); border-left-width: 3px; border-radius: 6px; padding: 8px 10px;
+  background: var(--surface); min-width: 0; }
+.vc-item.vc-added { border-left-color: var(--ok); }
+.vc-item.vc-removed { border-left-color: var(--danger); }
+.vc-item.vc-changed { border-left-color: var(--warn); }
+.vc-head { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.vc-kind { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px;
+  margin-right: 4px; color: var(--text); }
+.vc-added .vc-kind { background: var(--ok-soft); }
+.vc-removed .vc-kind { background: var(--danger-soft); }
+.vc-changed .vc-kind { background: var(--warn-soft); }
+.vc-id, .vc-val { font-size: 12px; }
+.vc-type, .vc-parent { font-size: 12px; }
+.vc-details { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+.vc-details th { text-align: left; font-weight: 600; color: var(--muted); padding: 2px 6px 2px 0; }
+.vc-details th:first-child { width: 34%; }
+.vc-details td { vertical-align: top; padding: 3px 6px 3px 0; border-top: 1px solid var(--border);
+  overflow-wrap: anywhere; min-width: 0; }
+.vc-field { color: var(--muted); }
+.vc-pre { margin: 0; padding: 4px 6px; max-height: 180px; overflow: auto; white-space: pre; font-size: 11.5px;
+  background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: 4px; }
+
 /* The fork alternative (ADR-0389). It sits below the in-place
    plan and reads as the second answer to the same question, not as a second dialog: the
    rebinding is what an operator wants whenever it holds, and a fork ends the instance it

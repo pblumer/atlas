@@ -872,6 +872,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("The diagram opened", schemaObj(map[string]any{
 				"kind": tString(), "id": tString(), "deploymentKey": tInteger(),
 			}, "kind")), status: http.StatusNoContent}},
+		{"GET", "/api/v1/processes/{key}/comparison", s.handleProcessComparison, apiOp{
+			summary: "Compare two deployed versions of a process: what changed from the version ?with= names — by default the one before — to the one in the path. Every element added, removed or changed, matched by element id, and for a changed one each field it states differently (name, condition, task definition, input and output mappings, script, form, event definition…) with its value before and after; plus whether the two are the same model and where they first differ. The diagram, formatting, attribute order, attributes at their default and the incoming/outgoing hints are not compared. Both must be versions of the same process (ADR-draft-compare-process-versions)", tag: "Processes", role: roleAny,
+			resp: jsonBody("The comparison", schemaObj(map[string]any{
+				"processId": tString(), "from": tObject(), "to": tObject(),
+				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
+			}))}},
 		{"GET", "/api/v1/drafts", s.handleListDrafts, apiOp{
 			summary: "List diagram drafts", tag: "Drafts", role: RoleModeler, resp: jsonBody("Drafts", tArray())}},
 		{"GET", "/api/v1/drafts/{id}/availability", s.handleDraftIDAvailability, apiOp{
@@ -879,13 +885,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"GET", "/api/v1/drafts/{id}/comparison", s.handleDraftComparison, apiOp{
-			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452)", tag: "Drafts", role: RoleModeler,
+			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, every element the draft adds, removes or changes against the version (as GET /api/v1/processes/{key}/comparison lists them), who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452, ADR-draft-compare-process-versions)", tag: "Drafts", role: RoleModeler,
 			resp: jsonBody("The comparison", schemaObj(map[string]any{
 				"processId": tString(), "ownerId": tString(), "ownerName": tString(),
 				"savedAt": tInteger(), "savedBy": tString(), "savedByName": tString(),
 				"deployed": tBool(), "key": tInteger(), "version": tInteger(), "latestVersion": tInteger(),
 				"deployedAt": tInteger(), "deployedBy": tString(), "deployedByName": tString(),
-				"sameModel": tBool(), "difference": tString(),
+				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
 			}))}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
 			summary: "Move a draft to a project", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},

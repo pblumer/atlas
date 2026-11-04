@@ -307,8 +307,6 @@ func nodeKindsAndNames(t *testing.T, src string) (map[string]int, map[string]str
 	return kinds, names
 }
 
-const bpmnModelNS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
-
 // onOutline reports whether p touches the outline of shape s drawn as kind, to
 // within a pixel — the DI is integers here, but a file bpmn-js saved is not.
 func onOutline(p point, s shapeBox, kind int) bool {

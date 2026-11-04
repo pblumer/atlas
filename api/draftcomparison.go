@@ -47,6 +47,11 @@ type draftComparisonResp struct {
 	SameModel bool `json:"sameModel"`
 	// Difference names where they first part, when they do.
 	Difference string `json:"difference,omitempty"`
+	// Changes is every element the draft adds, removes or changes against the
+	// version, and Counts their sums (ADR-draft-compare-process-versions). Absent
+	// when no version is deployed.
+	Changes []layout.Change `json:"changes,omitempty"`
+	Counts  *changeCounts   `json:"counts,omitempty"`
 }
 
 // handleDraftComparison compares a draft with a deployed version of its process.
@@ -147,6 +152,13 @@ func (s *Server) handleDraftComparison(w http.ResponseWriter, r *http.Request) {
 		resp.Key, resp.Version, resp.DeployedAt = dep.key, dep.version, dep.at
 		resp.DeployedBy, resp.DeployedByName = dep.by, name(dep.by)
 		resp.SameModel, resp.Difference = diff == "", diff
+		changes, err := layout.Changes(dep.xml, []byte(rec.XML))
+		if err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, fmt.Sprintf("compare the draft with version %d: %v", dep.version, err))
+			return
+		}
+		counts := countChanges(changes)
+		resp.Changes, resp.Counts = changes, &counts
 	}
 	httpapi.JSON(w, http.StatusOK, resp)
 }

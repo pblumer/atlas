@@ -216,6 +216,42 @@ func runtimeTools() []Tool {
 			},
 		},
 		{
+			Name: "atlas_compare_versions",
+			Description: "Compare two deployed versions of one process: what changed from the version `with` names — " +
+				"by default the one before — to the version `key` names. Lists every element added, removed or " +
+				"changed, matched by element id, each with its type, name and container; for a changed element every " +
+				"field it states differently (name, sourceRef/targetRef, condition, task definition, headers, input " +
+				"and output mappings, script, form, event definition…) with its value before and after, as a path " +
+				"like extensionElements/zeebe:ioMapping/zeebe:input[total]@source. Also whether the two are the " +
+				"same model, where they first differ, and counts by kind. The diagram, formatting, attribute order, " +
+				"attributes at their default and the incoming/outgoing hints are not compared. Use it before " +
+				"migrating instances to a newer version (with atlas_migration_plan) and to say what a deploy " +
+				"changed; compare a draft with a version with atlas_compare_draft.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"key":  map[string]any{"type": "integer", "description": "Definition key of the version to compare to — the newer one, usually (from atlas_list_processes or atlas_process_versions)."},
+					"with": map[string]any{"type": "integer", "description": "Optional definition key of the version to compare from, a version of the same process; defaults to the version before `key`."},
+				},
+				"required": []any{"key"},
+			},
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				path := "/api/v1/processes/" + strconv.FormatUint(key, 10) + "/comparison"
+				if _, ok := args["with"]; ok {
+					with, err := argUint(args, "with")
+					if err != nil {
+						return "", err
+					}
+					path += "?with=" + strconv.FormatUint(with, 10)
+				}
+				return asText(c.get(path))
+			},
+		},
+		{
 			Name: "atlas_process_statistics",
 			Description: "Get how one process definition's elements and sequence flows were used over a period, and " +
 				"where the time went — the figures behind the Operations heatmap. For every element and flow of the " +

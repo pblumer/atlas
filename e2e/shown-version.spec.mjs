@@ -233,3 +233,79 @@ test("a new diagram is not saved yet, and its first deploy saves it", async ({ p
   await expect.poll(() => page.evaluate(() =>
     window.__writes.some((w) => w.url === "/api/v1/drafts/order/comparison"))).toBe(true);
 });
+
+// The chip's panel opens the whole list of differences, not only the first one, and
+// on a version the comparison with any other version (ADR-draft-compare-process-versions).
+test("a draft that differs opens every difference against the version", async ({ page }) => {
+  await setState(page, {
+    comparison: {
+      processId: "order", savedAt: T0, deployed: true, key: 42, version: 2, latestVersion: 2,
+      deployedAt: T0 + 3600, sameModel: false, difference: '<serviceTask id="t"> differs',
+      counts: { added: 1, removed: 0, changed: 1 },
+      changes: [
+        { kind: "changed", id: "t", type: "serviceTask", name: "Versenden", parent: "order",
+          details: [{ field: "name", kind: "changed", before: "Senden", after: "Versenden" }] },
+        { kind: "added", id: "t2", type: "userTask", name: "Prüfen", parent: "order" },
+      ],
+    },
+  });
+  await page.evaluate(() => window.__mountDraft());
+  await page.locator("#sv-chip").click();
+  await page.locator("#sv-pop button", { hasText: "Alle Unterschiede anzeigen" }).click();
+
+  const modal = page.locator(".vc-modal");
+  await expect(modal.locator("h2")).toHaveText("Entwurf gegenüber v2");
+  await expect(modal.locator(".vc-summary")).toHaveText("1 neu · 1 geändert");
+  await expect(modal.locator(".vc-item")).toHaveCount(2);
+  await expect(modal.locator(".vc-item").first()).toContainText("Senden");
+  await expect(page.locator("#sv-pop")).toBeHidden();
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+});
+
+test("a draft that is the deployed model offers no list of differences", async ({ page }) => {
+  await setState(page, {
+    comparison: {
+      processId: "order", savedAt: T0, deployed: true, key: 42, version: 2, latestVersion: 2,
+      deployedAt: T0 - 60, sameModel: true, changes: [], counts: { added: 0, removed: 0, changed: 0 },
+    },
+  });
+  await page.evaluate(() => window.__mountDraft());
+  await page.locator("#sv-chip").click();
+  await expect(page.locator("#sv-pop")).toBeVisible();
+  await expect(page.locator("#sv-pop button", { hasText: "Alle Unterschiede anzeigen" })).toHaveCount(0);
+});
+
+test("a version opens the comparison with the version before it", async ({ page }) => {
+  await setState(page, {
+    processes: [
+      { key: 41, processId: "order", name: "Bestellung", version: 1, deployedAt: T0 },
+      { key: 42, processId: "order", name: "Bestellung", version: 2, deployedAt: T0 + 60 },
+    ],
+    versionComparison: {
+      processId: "order", sameModel: false, counts: { added: 0, removed: 1, changed: 0 },
+      changes: [{ kind: "removed", id: "old", type: "task", name: "Ablegen", parent: "order" }],
+    },
+  });
+  await page.evaluate(() => window.__mountVersion(42));
+  await page.locator("#sv-chip").click();
+  await page.locator("#sv-pop button", { hasText: "Mit anderer Version vergleichen" }).click();
+
+  const modal = page.locator(".vc-modal");
+  await expect(modal.locator("h2")).toHaveText("Versionen vergleichen: Bestellung");
+  await expect(modal.locator("#vc-from")).toHaveValue("41");
+  await expect(modal.locator("#vc-to")).toHaveValue("42");
+  await expect(modal.locator(".vc-item.vc-removed")).toContainText("Ablegen");
+  await expect.poll(() => page.evaluate(() =>
+    window.__writes.some((w) => w.url === "/api/v1/processes/42/comparison?with=41"))).toBe(true);
+});
+
+test("a process with one version offers no comparison of versions", async ({ page }) => {
+  await setState(page, {
+    processes: [{ key: 41, processId: "order", version: 1, deployedAt: T0 }],
+  });
+  await page.evaluate(() => window.__mountVersion(41));
+  await page.locator("#sv-chip").click();
+  await expect(page.locator("#sv-pop")).toBeVisible();
+  await expect(page.locator("#sv-pop button", { hasText: "Mit anderer Version vergleichen" })).toHaveCount(0);
+});

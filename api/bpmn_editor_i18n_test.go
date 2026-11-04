@@ -22,7 +22,7 @@ import (
 // typo in any of them otherwise reaches the author as a raw id in place of a button, a
 // hint or a page of the PDF.
 func TestEveryMessageTheBPMNEditorFrameAsksForExists(t *testing.T) {
-	const key = `((?:bpmn|pg|shown|processDoc|sim|idcheck|startvars|pnl|pgroup|feel|workerDoc|devView|drg)\.[A-Za-z0-9.]*[A-Za-z0-9])`
+	const key = `((?:bpmn|pg|shown|cmp|processDoc|sim|idcheck|startvars|pnl|pgroup|feel|workerDoc|devView|drg)\.[A-Za-z0-9.]*[A-Za-z0-9])`
 	lookups := regexp.MustCompile(`\b(?:t|tr)\("` + key + `"`)
 	plurals := regexp.MustCompile(`\b(?:plural|trPlural)\("` + key + `"`)
 	literals := regexp.MustCompile(`"` + key + `"`)
@@ -34,6 +34,7 @@ func TestEveryMessageTheBPMNEditorFrameAsksForExists(t *testing.T) {
 		"web/pgroup.js", "web/feel.js", "web/varrefs.js", "web/exchange-ops.js",
 		"web/googlecontacts-ops.js", "web/carddav-ops.js", "web/wikiwikibangbang-ops.js", "web/entra-attrmask.js",
 		"web/powershell.js", "web/workertypedocs.js", "web/dev-view.js", "web/decision-graph.js",
+		"web/version-comparison.js",
 	} {
 		src, err := os.ReadFile(file)
 		if err != nil {
