@@ -13,7 +13,7 @@ import (
 )
 
 // A source tree carries the application's information model and what it brings to the
-// capability map (format 4, ADR-draft-application-bundle-architecture). The map stays
+// capability map (format 4, ADR-0528). The map stays
 // the server's: a key it lacks is a gap the caller decides, a key it has is never
 // written over, and the application's realizations go with the application.
 

@@ -11,7 +11,7 @@ import (
 )
 
 // askGaps settles the capability map's gaps the flags left open
-// (ADR-draft-application-bundle-architecture): in a pipeline, a refusal that names
+// (ADR-0528): in a pipeline, a refusal that names
 // each and the flags that decide it; at a terminal, one question each, whose default
 // is to leave the gap out — the choice that files nothing in the organisation's map.
 func (p *importPlan) askGaps(out io.Writer, gaps []int, sc *bufio.Scanner) error {

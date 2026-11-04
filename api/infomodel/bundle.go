@@ -10,7 +10,7 @@ import (
 )
 
 // An application's information model as an application bundle carries it
-// (ADR-draft-application-bundle-architecture). The model already belongs to its
+// (ADR-0528). The model already belongs to its
 // application (applicationId); a bundle carries it in the JSON shape
 // POST /api/v1/infomodel/import reads, and an import files it under its name — created
 // the first time, replaced in place after that, keeping the stored model's id so a link

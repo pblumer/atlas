@@ -45,7 +45,7 @@ const (
 	// Unadopted, it stops the import like a change nobody decided.
 	Elsewhere = "elsewhere"
 	// Gap is a capability or value stream an import needs and this server's map does
-	// not have (ADR-draft-application-bundle-architecture). The map is the
+	// not have (ADR-0528). The map is the
 	// organisation's, so an import never files one silently: the caller adopts the
 	// bundle's proposal, maps the key onto one the map has, or omits it. Undecided, it
 	// stops the import like a change nobody decided.

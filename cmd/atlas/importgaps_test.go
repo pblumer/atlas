@@ -12,7 +12,7 @@ import (
 )
 
 // A package carries its application's information model and what it brings to the
-// capability map (ADR-draft-application-bundle-architecture). A key the server's map
+// capability map (ADR-0528). A key the server's map
 // lacks is a gap: in a pipeline the import refuses until a flag decides it, and the
 // flags decide it the way the server does.
 func TestImportDecidesTheCapabilityMapsGaps(t *testing.T) {

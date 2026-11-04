@@ -1,4 +1,4 @@
-# ADR-DRAFT: What an application bundle carries of the architecture, and where the capability map lives
+# ADR-0528: What an application bundle carries of the architecture, and where the capability map lives
 
 - **Status:** Accepted
 - **Implementation:** Landed

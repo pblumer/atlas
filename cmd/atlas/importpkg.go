@@ -70,7 +70,7 @@ type packageManifestFile struct {
 	// download with its constants does.
 	Constants string `json:"constants"`
 	// InformationModels and Architecture name what a format-4 tree carries of the
-	// architecture (ADR-draft-application-bundle-architecture).
+	// architecture (ADR-0528).
 	InformationModels []struct {
 		Path string `json:"path"`
 	} `json:"informationModels"`

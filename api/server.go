@@ -490,7 +490,7 @@ type Server struct {
 	capabilityRecords  *capability.Store
 	valueStreamRecords *capability.StreamStore
 	// bundledRealizations are the realizations application bundles brought, one record
-	// per application (ADR-draft-application-bundle-architecture). The source import
+	// per application (ADR-0528). The source import
 	// writes them, deleting an application removes them, and every read of the map —
 	// the service, the release architecture sketch, Panorama — sees them beside the
 	// capability records' own.

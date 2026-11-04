@@ -826,7 +826,7 @@ func shopSample(examplesDir, dir string) (hubSample, error) {
 			Path string `json:"path"`
 		} `json:"decisions"`
 		// The architecture a format-4 tree carries
-		// (ADR-draft-application-bundle-architecture).
+		// (ADR-0528).
 		InformationModels []struct {
 			Path string `json:"path"`
 		} `json:"informationModels"`

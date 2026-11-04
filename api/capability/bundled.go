@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/sidecar"
 )
 
-// Realizations an application bundle brings (ADR-draft-application-bundle-architecture).
+// Realizations an application bundle brings (ADR-0528).
 //
 // The capability map stays the server's: one flat register of what the organisation
 // can do (ADR-0305). An application does not own a capability; it realizes some. What

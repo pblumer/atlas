@@ -36,7 +36,7 @@ export function decisionQuery({ overwrite = [], keep = [], adopt = [], map = [],
   if (overwrite.length) q.set("overwrite", overwrite.join(","));
   if (keep.length) q.set("keep", keep.join(","));
   if (adopt.length) q.set("adopt", adopt.join(","));
-  // A gap in the capability map (ADR-draft-application-bundle-architecture): mapped
+  // A gap in the capability map (ADR-0528): mapped
   // as ref=key, or left out.
   if (map.length) q.set("map", map.join(","));
   if (omit.length) q.set("omit", omit.join(","));

@@ -71,7 +71,7 @@ import (
 const (
 	// sourceFormatVersion is the newest version this server writes and reads.
 	// Version 4 carries the application's information models and what it brings to
-	// the capability map (ADR-draft-application-bundle-architecture).
+	// the capability map (ADR-0528).
 	sourceFormatVersion = 4
 	// sourceFormatVersionConstants is version 3, which carries the application's
 	// constants as constants.json.

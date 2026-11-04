@@ -154,7 +154,7 @@ func (s *Server) strategyPart(appID string, shipped map[string]bool, deps []arch
 		return nil
 	}
 	// The realizations the application's bundle brought count as the records' own
-	// (ADR-draft-application-bundle-architecture): they are how an installed bundle's
+	// (ADR-0528): they are how an installed bundle's
 	// processes reach the strategy layer.
 	overlay, err := s.bundledRealizations.Overlay()
 	if err != nil {
