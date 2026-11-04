@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Active Directory: Allgemeine Anfrage zu einem Konto, als Aufgabe an Identity Management.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_ad_konto_anfrage" targetNamespace="http://atlas/beispiel/ad-dienste">
+  <message id="m_anfrage_anlegen" name="ad.anfrage.anlegen"/>
+  <message id="m_anfrage_entfernen" name="ad.anfrage.entfernen"/>
+  <process id="proc_ad_konto_anfrage" name="Active Directory: Allgemeine Anfrage – Account" isExecutable="true">
+    <documentation>Lebenszyklus des Produkts ad-konto-anfrage: eine Anfrage zu einem Konto, die in kein anderes Produkt passt, als Freitext an Identity Management. Keine Genehmigung vorab; Identity Management entscheidet in der Aufgabe. Nach der Ausführung erhält die bestellende Person eine Rückmeldung; die Anfrage gibt sich dann nicht selbst zurück, sondern bleibt im Bestand, bis sie zurückgegeben wird (Aufgabe an dieselbe Gruppe).</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/><atlas:constant name="AD_IM_GRUPPE" type="string" source="application" value="Identity Management"/></atlas:constants></extensionElements>
+    <startEvent id="s_neu" name="Bestellt"><documentation>Start der Operation provision (ad.anfrage.anlegen).</documentation><outgoing>f_s_neu__ut_ausf</outgoing><messageEventDefinition messageRef="m_anfrage_anlegen"/></startEvent>
+    <userTask id="ut_ausf" name="Anfrage bearbeiten"><documentation>Aufgabe an Identity Management (Kandidatengruppe aus der Konstante AD_IM_GRUPPE): die Freitext-Anfrage lesen, ausführen oder ablehnen, im Formular ad-auftrag-ausfuehren mit Bemerkung.</documentation><extensionElements><zeebe:formDefinition formId="ad-auftrag-ausfuehren"/><zeebe:assignmentDefinition candidateGroups="=application.AD_IM_GRUPPE"/></extensionElements><incoming>f_s_neu__ut_ausf</incoming><outgoing>f_ut_ausf__gw_erg</outgoing></userTask>
+    <exclusiveGateway id="gw_erg" name="Ausgeführt?" default="f_gw_erg__st_ablehnen"><documentation>ergebnis aus dem Formular; Default ist die Ablehnung (fail-closed).</documentation><incoming>f_ut_ausf__gw_erg</incoming><outgoing>f_gw_erg__ut_info</outgoing><outgoing>f_gw_erg__st_ablehnen</outgoing></exclusiveGateway>
+    <userTask id="ut_info" name="Anfrage erledigt"><documentation>Rückmeldung an die bestellende Person (assignee = orderer): was ausgeführt wurde und, wo es eines gibt, der Kontoname. Die Position wird erst danach erledigt gemeldet.</documentation><extensionElements><zeebe:formDefinition formId="ad-auftrag-rueckmeldung"/><zeebe:assignmentDefinition assignee="=orderer"/></extensionElements><incoming>f_gw_erg__ut_info</incoming><outgoing>f_ut_info__st_done</outgoing></userTask>
+    <serviceTask id="st_done" name="Position als erledigt melden"><documentation>Meldet die Position über POST /api/v1/orders/{orderId}/lines/{positionId} als erledigt (status "done"). Erst damit steht das Recht im Bestand der empfangenden Person. Braucht das Secret "atlas" (Rolle operator).</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="done"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_ut_info__st_done</incoming><outgoing>f_st_done__e_bereit</outgoing></serviceTask>
+    <endEvent id="e_bereit" name="Erledigt"><incoming>f_st_done__e_bereit</incoming></endEvent>
+    <serviceTask id="st_ablehnen" name="Ablehnung melden"><documentation>Lehnt die Position über …/decision ab, mit der Bemerkung aus der Aufgabe; die bestellende Person liest sie im Shop.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId) + "/decision"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="Anfrage bearbeiten"' target="by"/><zeebe:input source='=if bemerkung = null or bemerkung = "" then "Abgelehnt, ohne Begründung." else bemerkung' target="reason"/></zeebe:ioMapping></extensionElements><incoming>f_gw_erg__st_ablehnen</incoming><outgoing>f_st_ablehnen__e_abgelehnt</outgoing></serviceTask>
+    <endEvent id="e_abgelehnt" name="Abgelehnt"><incoming>f_st_ablehnen__e_abgelehnt</incoming></endEvent>
+    <startEvent id="s_weg" name="Rückgabe angefordert"><documentation>Start der Operation deprovision (ad.anfrage.entfernen). Ein Auftrag an ein anderes Team: die Rückgabe ist wieder eine Aufgabe.</documentation><outgoing>f_s_weg__ut_weg</outgoing><messageEventDefinition messageRef="m_anfrage_entfernen"/></startEvent>
+    <userTask id="ut_weg" name="Rückgabe ausführen"><documentation>Dieselbe Gruppe entfernt, was angelegt wurde, und bestätigt es im Formular.</documentation><extensionElements><zeebe:formDefinition formId="ad-auftrag-ausfuehren"/><zeebe:assignmentDefinition candidateGroups="=application.AD_IM_GRUPPE"/></extensionElements><incoming>f_s_weg__ut_weg</incoming><outgoing>f_ut_weg__st_returned</outgoing></userTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Eine Rückgabe erhält atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_ut_weg__st_returned</incoming><outgoing>f_st_returned__e_weg</outgoing></serviceTask>
+    <endEvent id="e_weg" name="Zurückgegeben"><incoming>f_st_returned__e_weg</incoming></endEvent>
+    <sequenceFlow id="f_s_neu__ut_ausf" sourceRef="s_neu" targetRef="ut_ausf"/>
+    <sequenceFlow id="f_ut_ausf__gw_erg" sourceRef="ut_ausf" targetRef="gw_erg"/>
+    <sequenceFlow id="f_gw_erg__ut_info" sourceRef="gw_erg" targetRef="ut_info" name="ja"><conditionExpression>=ergebnis = "ausgefuehrt"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_erg__st_ablehnen" sourceRef="gw_erg" targetRef="st_ablehnen" name="nein"/>
+    <sequenceFlow id="f_ut_info__st_done" sourceRef="ut_info" targetRef="st_done"/>
+    <sequenceFlow id="f_st_done__e_bereit" sourceRef="st_done" targetRef="e_bereit"/>
+    <sequenceFlow id="f_st_ablehnen__e_abgelehnt" sourceRef="st_ablehnen" targetRef="e_abgelehnt"/>
+    <sequenceFlow id="f_s_weg__ut_weg" sourceRef="s_weg" targetRef="ut_weg"/>
+    <sequenceFlow id="f_ut_weg__st_returned" sourceRef="ut_weg" targetRef="st_returned"/>
+    <sequenceFlow id="f_st_returned__e_weg" sourceRef="st_returned" targetRef="e_weg"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_ad_konto_anfrage_diagram">
+    <bpmndi:BPMNPlane id="proc_ad_konto_anfrage_plane" bpmnElement="proc_ad_konto_anfrage">
+      <bpmndi:BPMNShape id="s_neu_di" bpmnElement="s_neu"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_ausf_di" bpmnElement="ut_ausf"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_erg_di" bpmnElement="gw_erg" isMarkerVisible="true"><omgdc:Bounds x="455" y="105" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="383" y="74" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_info_di" bpmnElement="ut_info"><omgdc:Bounds x="580" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="730" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="912" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ablehnen_di" bpmnElement="st_ablehnen"><omgdc:Bounds x="580" y="230" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="762" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_weg_di" bpmnElement="s_weg"><omgdc:Bounds x="162" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_weg_di" bpmnElement="ut_weg"><omgdc:Bounds x="280" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="430" y="510" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_weg_di" bpmnElement="e_weg"><omgdc:Bounds x="612" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_neu__ut_ausf_di" bpmnElement="f_s_neu__ut_ausf"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_ausf__gw_erg_di" bpmnElement="f_ut_ausf__gw_erg"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="455" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_erg__ut_info_di" bpmnElement="f_gw_erg__ut_info"><omgdi:waypoint x="505" y="130"/><omgdi:waypoint x="580" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="108" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_erg__st_ablehnen_di" bpmnElement="f_gw_erg__st_ablehnen"><omgdi:waypoint x="480" y="155"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="580" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="161" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_info__st_done_di" bpmnElement="f_ut_info__st_done"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="730" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_done__e_bereit_di" bpmnElement="f_st_done__e_bereit"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="912" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="680" y="270"/><omgdi:waypoint x="762" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_weg__ut_weg_di" bpmnElement="f_s_weg__ut_weg"><omgdi:waypoint x="198" y="550"/><omgdi:waypoint x="280" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_weg__st_returned_di" bpmnElement="f_ut_weg__st_returned"><omgdi:waypoint x="380" y="550"/><omgdi:waypoint x="430" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_weg_di" bpmnElement="f_st_returned__e_weg"><omgdi:waypoint x="530" y="550"/><omgdi:waypoint x="612" y="550"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
