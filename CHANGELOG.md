@@ -15,6 +15,40 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **An administrator can revoke a password somebody else knows.** "Revoke password…" in an account's menu (`POST /api/v1/users/{id}/password-link` with `"revoke": true`) makes the current password stop working at once, ends the account's sessions and OAuth grants, and sends its owner an activation link — or hands it over where the account has no address. A password link alone leaves the old password valid until the link is used, which is too long for one that was typed by an administrator, mailed or written to a log. Refused for one's own account and for the last administrator who can sign in, and nothing is revoked when no link could follow (ADR-0526, amended).
+- **A form can search Active Directory.** A directory field may name an AD Worker
+  (`workerType: "ad"`) and search its `users` or `groups`, as it searches Entra's users:
+  prefix search over name, mail and logon name, equality filters on `department` and
+  `company`, only enabled accounts unless the field says otherwise, and the logon name
+  (`sAMAccountName`, or `userPrincipalName`) as the value. The AD Worker builds the LDAP
+  filter from its own table and escapes every term (RFC 4515), searches under the
+  domain's `defaultNamingContext`, and answers one page. The Console offers the
+  «Forms may search» switch on an AD Worker, and the mock forest answers the rootDSE. The
+  provider listing says whether a source has a disabled state (`activeFlag`); a group
+  field no longer asks for enabled records, and one that does is refused. The AD example's
+  order forms choose their people by search (ADR-0473, amended 2026-11-04).
+- **The AD example offers a customer's «Account verwalten» bundle.** `examples/ad-dienste`
+  gains the Marktleistung `ad-account-verwalten`, whose options (aggregation) are the account
+  products: admin, test and service account as before, and new a non-personal account with
+  the variants function (F), role (R) and training (E) approved by information security and
+  acknowledged by identity management, with change, delete, unlock and password actions; an
+  AD contact (C) through `create-contact`; a RACF account and a general account request, both
+  as tasks to a team with feedback to the orderer. `AdNamensregel` knows the prefixes `f-`,
+  `r-` and `e-`. The README maps the customer's account types to the products and names
+  what is not covered (other domains, the 2FA exception, unenforcing the client). Admin,
+  test and service account are now options of the bundle in the shop. Hub release
+  `ad-dienste` 1.0.3.
+- **A SharePoint task can set a site's storage quota.** The new operation `set-site-quota`
+  (`quotaGB`, optional `warningPercent`, default 90) goes where Microsoft Graph cannot: to
+  SharePoint's tenant administration on the admin host, through the client object model's
+  `ProcessQuery` — the request `Set-SPOSite -StorageQuota` sends. It needs a certificate
+  credential and the SharePoint application permission `Sites.FullControl.All`; the admin
+  host is derived from the site, or named by `adminUrl` in the credential bundle. A tenant
+  that does not allow it ends the task with `SHAREPOINT_ADMIN_NOT_PERMITTED` or
+  `SHAREPOINT_QUOTA_REFUSED`, BPMN errors a process catches to hand the quota to a person.
+  The Modeler offers the operation, the mockup records the quota and `get-site` reports it.
+  `examples/m365-dienste` (1.0.9) sets an ordered quota this way, and a quota raise up to
+  25 GB, with the previous tasks as the fallback (ADR-0141, amended 2026-11-04). Not yet
+  run against a tenant.
 - **The Entra Worker reads and transfers a synchronised user's source of authority.** `get-sync-behavior` reads `onPremisesSyncBehavior` and `set-sync-behavior` sets its `isCloudManaged`, so a process can take an account that Entra Connect synchronises from Active Directory into the cloud. The body is held to that one boolean before anything is sent. Graph v1.0, permission `User-OnPremisesSyncBehavior.ReadWrite.All` (ADR-0172, amended).
 - **The Exchange Worker enables remote mailboxes on Exchange Server.** `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes` and `disable-remote-mailbox` run `Enable-`, `Get-` and `Disable-RemoteMailbox` for an Exchange hybrid organization, where the mail attributes of an account synchronised to the cloud are written on premises. On Exchange Online they are refused with what to do instead (ADR-0462, amended).
 - **The M365 example covers hybrid identity.** A catalogue `cat-m365-identitaet` for the administration with two products: «Konto (hybrid) anlegen» creates the account in AD, enables its remote mailbox, waits for Entra Connect with a bounded loop and orders the licence through the existing licence position; «Konto in die Cloud übernehmen» moves a still local mailbox first (a task) and then transfers the source of authority. The README explains the rules both follow and why the test environment, which synchronises nothing, leaves them out (`m365-dienste` 1.0.7).
@@ -69,6 +103,12 @@ _Changed_ / _Removed_ for each version.
   (ADR-0526).
 
 ### Changed
+- **A product page in the tile layout is two columns and has one basket button.** The product's
+  description stands open in the wide column, and who it is for, what comes with it, approval and
+  price fold in the narrow column beside it. The page's own "Put in the basket" and "Go to the
+  basket" buttons are gone: the row along the bottom puts the product in and opens the basket, and its
+  "Back" leads to the tiles rather than out of the shop. That row now stays at the bottom of the
+  window on every shop screen, so its buttons are in reach however far down a page or basket goes.
 - **A password is set by its owner, never mailed.** Registration no longer asks the
   approving administrator for an initial password, which was a process variable — an
   event kept in the log — and was mailed in clear text. The requester first confirms
@@ -86,6 +126,9 @@ _Changed_ / _Removed_ for each version.
   (ADR-0526).
 
 ### Fixed
+- **The AD and M365 examples no longer say a person sees one catalogue.** Their READMEs and install questions still described the rule before ADR-0522 (only the highest-ranked catalogue a person reaches); they now say every reached catalogue is shown and what rank still decides (`ad-dienste` 1.0.2, `m365-dienste` 1.0.8).
+- **The M365 test environment connects its Atlas server to the atlas hub.** `atlas_hub` (on by default) sets `ATLAS_BLUEPRINT_REGISTRY_URL` and the key from `examples/hub/releases.json`, so the Console offers the bundles of this repository, among them `ad-dienste` with its AD catalogue.
+- **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
 
 - **A failed connector job waits before it is tried again.** The in-process runner, on which
   every built-in connector runs, retried a failed job at once, so a task's three retries were
@@ -103,6 +146,7 @@ _Changed_ / _Removed_ for each version.
   to ten minutes, and every other call keeps the thirty seconds.
 - **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
 - **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
+- **The M365 example asks for every person in an order form by search.** The owner and the secondary owner of a SharePoint team site, the owner of a Viva Engage community and the mailbox of a litigation hold were plain text fields for a UPN, so a typo surfaced only as a failed provisioning job. They are now selects that search Entra ID through `ucc_entra` and submit the user principal name, like the team, distribution list and licence fields already did; the processes read the same value. The litigation hold also finds disabled accounts. Action forms, the public partner request and the joiner package keep text fields, because a search is not offered or not useful there (`m365-dienste` 1.0.9).
 - **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
 - **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).

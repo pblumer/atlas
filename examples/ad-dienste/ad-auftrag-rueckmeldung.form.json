@@ -1,0 +1,21 @@
+{
+  "type": "default",
+  "id": "ad-auftrag-rueckmeldung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Rückmeldung · Feedback**\n\nAuftrag · Order: {{auftragstitel}}\n\n{{#if kontoname}}Kontoname oder User-ID · Account name or user ID: **{{kontoname}}**\n\n{{/if}}{{#if bemerkung}}Bemerkung · Remark: {{bemerkung}}\n\n{{/if}}Ein Initialpasswort erhältst du auf dem vereinbarten Weg, nie über Atlas. · You receive an initial password through the agreed channel, never through Atlas."
+    },
+    {
+      "key": "gelesen",
+      "type": "checkbox",
+      "label": "Gelesen · Read",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

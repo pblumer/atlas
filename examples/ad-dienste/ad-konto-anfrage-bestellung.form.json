@@ -1,0 +1,35 @@
+{
+  "type": "default",
+  "id": "ad-konto-anfrage-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Allgemeine Anfrage – Account · General account request**\n\nFür ein Anliegen zu einem Konto, das in kein anderes Produkt passt. Identity Management bearbeitet es und meldet sich bei dir. · For an account matter no other product covers. Identity management handles it and gets back to you."
+    },
+    {
+      "key": "auftragstitel",
+      "type": "textfield",
+      "label": "Auftragstitel · Order title",
+      "validate": {
+        "required": true,
+        "maxLength": 80
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "anfrage",
+      "type": "textarea",
+      "label": "Anfrage · Request",
+      "description": "Keine Passwörter oder anderen Geheimnisse eintragen. · Do not enter passwords or other secrets.",
+      "validate": {
+        "required": true,
+        "maxLength": 2000
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

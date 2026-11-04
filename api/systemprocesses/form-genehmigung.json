@@ -16,8 +16,10 @@
     {
       "type": "textarea",
       "key": "begruendung",
-      "label": "Begründung bei Ablehnung",
-      "description": "Wird der bestellenden Person mitgeteilt. Bei einer Ablehnung erforderlich.",
+      "label": "Begründung der Ablehnung",
+      "description": "Wird der bestellenden Person mitgeteilt.",
+      "conditional": { "hide": "=genehmigt = true" },
+      "validate": { "required": true },
       "id": "begruendung"
     }
   ],

@@ -282,6 +282,12 @@ als echtes Postfach nicht).
 - **Dienst:** `atlas serve --addr 127.0.0.1:8080 --auth` als systemd-Dienst nach
   [`docs/install.md`](../../../docs/install.md), davor Caddy für TLS. Atlas startet und
   überwacht die Worker selbst; sie erben dessen Umgebung.
+- **atlas hub:** Mit `atlas_hub = true` (Vorgabe) zeigt die Console unter «atlas hub» die
+  Bundles dieses Repositorys (`examples/hub`), etwa `ad-dienste` mit dem AD-Katalog. Der
+  Schlüssel kommt aus `examples/hub/releases.json` des eigenen Checkouts. Die Einstellung
+  steht in `/etc/atlas/atlas.env` und damit in `custom_data`: Auf einer laufenden VM ändert
+  sie ein `tofu apply` nur durch Ersetzen der VM. Dort trägt man die beiden Zeilen von Hand
+  nach und startet `atlas` neu.
 - **Einrichtung der Worker** (`scripts/atlas-bootstrap.py`): meldet sich als
   Administrator an, legt je Worker das Credential-Bundle im Vault ab
   (`PUT /api/v1/secrets/m365-<name>`), erstellt den Console-Worker
