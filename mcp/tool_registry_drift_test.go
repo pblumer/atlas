@@ -101,6 +101,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_process_runtime":            "GET /api/v1/processes/{key}/runtime",
 	"atlas_process_statistics":         "GET /api/v1/processes/{key}/statistics",
 	"atlas_process_versions":           "GET /api/v1/processes/{key}/versions",
+	"atlas_compare_versions":           "GET /api/v1/processes/{key}/comparison",
 	"atlas_call_activities":            "GET /api/v1/call-activities",
 
 	// The business architecture (ADR-0305):

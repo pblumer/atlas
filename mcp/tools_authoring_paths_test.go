@@ -143,6 +143,27 @@ func TestCompareDraftNamesAVersionOnlyWhenGiven(t *testing.T) {
 	wantCall(t, "atlas_compare_draft", c, http.MethodGet, "/api/v1/drafts/order/comparison", "key=2251799813685249")
 }
 
+// TestCompareVersionsNamesTheOtherVersionOnlyWhenGiven: without `with` the server
+// compares with the version before, so an omitted one must stay omitted.
+func TestCompareVersionsNamesTheOtherVersionOnlyWhenGiven(t *testing.T) {
+	rec := newAPIRecorder(t, http.StatusOK, `{"processId":"order","sameModel":false,"changes":[]}`)
+
+	text, isErr, c := rec.call(t, "atlas_compare_versions", map[string]any{})
+	wantRefusal(t, "atlas_compare_versions", text, isErr, c, "argument: key")
+
+	text, isErr, c = rec.call(t, "atlas_compare_versions", map[string]any{"key": 7})
+	if isErr || !strings.Contains(text, `"changes":[]`) {
+		t.Fatalf("atlas_compare_versions = (%q, isErr=%v), want the API body", text, isErr)
+	}
+	wantCall(t, "atlas_compare_versions", c, http.MethodGet, "/api/v1/processes/7/comparison", "")
+
+	_, _, c = rec.call(t, "atlas_compare_versions", map[string]any{"key": 7, "with": 5})
+	wantCall(t, "atlas_compare_versions", c, http.MethodGet, "/api/v1/processes/7/comparison", "with=5")
+
+	text, isErr, c = rec.call(t, "atlas_compare_versions", map[string]any{"key": 7, "with": -1})
+	wantRefusal(t, "atlas_compare_versions", text, isErr, c, "with")
+}
+
 // TestDeletesForceAndPurgeOnlyWhenAsked: force and purge are irreversible, so each
 // travels only when the agent sets it to true — an omitted or false flag is the plain
 // delete (ADR-0468).

@@ -305,3 +305,85 @@ test.describe("in German, the console's default", () => {
     expect(page.__errors).toEqual([]);
   });
 });
+
+// What the migration meets (ADR-0530): the dialogs set the
+// comparison of the two versions beside where the instances stand, so the change an
+// instance meets first — at the element it waits on — is read before it moves.
+test.describe("what the target version changes", () => {
+  test("one instance: the change at the task it waits on leads, the rest is folded", async ({ page }) => {
+    await page.locator("#mig-ok").click();
+    const impact = page.locator(".mig-modal #mig-impact");
+    await expect(impact).toBeVisible();
+    await expect(impact.locator("h4")).toHaveText("What the migration from v1 to v3 meets");
+    await expect(impact.locator(".vc-impact-lead.warn")).toContainText("1 element instances stand on is changed or removed in v3");
+    // Only the task the instance stands on is listed above the fold, with what changed.
+    const lead = impact.locator(":scope > .vc-list > .vc-item");
+    await expect(lead).toHaveCount(1);
+    await expect(lead).toContainText("Review twice");
+    await expect(lead).toContainText("review-form");
+    // One instance's positions carry no count.
+    await expect(lead.locator(".vc-tokens")).toHaveCount(0);
+    // The whole comparison is there, folded.
+    const all = impact.locator("details.vc-all");
+    await expect(all).not.toHaveAttribute("open", "");
+    await expect(all.locator("summary")).toContainText("Every change from v1 to v3");
+    await all.locator("summary").click();
+    await expect(all.locator(".vc-item")).toHaveCount(2);
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+
+  test("one instance on a removed element: the removal says it refuses without a mapping", async ({ page }) => {
+    await page.locator("#mig-bad").click();
+    const impact = page.locator(".mig-modal #mig-impact");
+    const lead = impact.locator(":scope > .vc-list > .vc-item.vc-removed");
+    await expect(lead).toHaveCount(1);
+    await expect(lead.locator(".vc-note")).toContainText("refused unless the element is mapped");
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+
+  test("a batch: the changed and removed elements instances stand on, with their tokens", async ({ page }) => {
+    await page.locator("#mig-batch").click();
+    const impact = page.locator("#migb-impact");
+    await expect(impact).toBeVisible();
+    await expect(impact.locator(".vc-impact-lead.warn")).toContainText("2 elements instances stand on");
+    const lead = impact.locator(":scope > .vc-list > .vc-item");
+    await expect(lead).toHaveCount(2);
+    await expect(lead.nth(0)).toContainText("review-v2");
+    await expect(lead.nth(0).locator(".vc-tokens")).toHaveText("3 tokens");
+    await expect(lead.nth(1)).toHaveClass(/vc-removed/);
+    await expect(lead.nth(1).locator(".vc-tokens")).toHaveText("2 tokens");
+    // done changed too, but no instance stands there: it is in the folded list only.
+    await expect(lead.filter({ hasText: "Done" })).toHaveCount(0);
+    expect(await page.evaluate(() => window.__reads)).toEqual([
+      "/api/v1/processes/103/comparison?with=101",
+      "/api/v1/processes/101/runtime/counts",
+    ]);
+
+    // Another pair is read afresh.
+    await page.locator("#migb-to").selectOption("102");
+    await expect.poll(() => page.evaluate(() => window.__reads.includes("/api/v1/processes/102/comparison?with=101"))).toBe(true);
+    // The same version on both sides is not compared at all.
+    await page.locator("#migb-from").selectOption("102");
+    await expect(impact).toBeHidden();
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+
+  test("a batch whose counts cannot be read shows every change, and says why", async ({ page }) => {
+    await page.locator("#mig-batch-nocounts").click();
+    const impact = page.locator("#migb-impact");
+    await expect(impact.locator(".vc-impact-lead")).toContainText("could not be read");
+    await expect(impact.locator("details.vc-all")).toHaveAttribute("open", "");
+    await expect(impact.locator("details.vc-all .vc-item")).toHaveCount(3);
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+
+  test("in German", async ({ page }) => {
+    await page.goto("/migration-dialog-harness.html?lang=de");
+    await page.waitForFunction(() => window.__ready === true, null, { timeout: 20000 });
+    await page.locator("#mig-batch").click();
+    const impact = page.locator("#migb-impact");
+    await expect(impact.locator("h4")).toHaveText("Was die Migration von v1 nach v3 antrifft");
+    await expect(impact.locator(".vc-tokens").first()).toHaveText("3 Tokens");
+    expect(page.__errors, "page errors").toEqual([]);
+  });
+});

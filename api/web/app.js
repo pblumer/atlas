@@ -38,6 +38,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { compareVersionsFlow } from "./version-comparison.js";
 import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
@@ -7047,6 +7048,11 @@ async function viewInstances() {
       // one click deeper, the same ⋯ pattern the Modeler's rows use).
       const openHref = `#/operations/p/${g.latest.key}`;
       const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+      // Reading what changed between two versions needs no role beyond seeing them
+      // (ADR-0530).
+      if (g.versions.length > 1) {
+        menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
+      }
       if (s.running) {
         // Migrating sits above terminating deliberately: both drain a version, but one
         // keeps the work and the other discards it, and the one that keeps it should be
@@ -7094,6 +7100,14 @@ async function viewInstances() {
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
   async function onRowAction(act, b) {
+    if (act === "compare") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await compareVersionsFlow({
+        api, processId: g.processId, processName: g.latest.name || g.processId, versions: g.versions,
+      });
+      return;
+    }
     // Move a version's running instances onto another version rather than discarding
     // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
     if (act === "migrate") {

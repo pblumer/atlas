@@ -28,6 +28,7 @@ import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
 import { beginFormTrip, fromTail } from "./form-return.js";
 import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { compareVersionsFlow } from "./version-comparison.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
@@ -12780,6 +12781,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
         <button class="btn neutral" id="migrate-version" hidden>&#8644; Migrate instances&hellip;</button>
+        <button class="btn neutral" id="compare-versions" hidden title="${esc(tr("cmp.buttonTitle"))}">${esc(tr("cmp.button"))}</button>
         <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
@@ -14291,6 +14293,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     migrateBtn.hidden = false;
     migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
     migrateBtn.addEventListener("click", () => openMigration(key));
+  }
+  // Comparing the version on screen with the one before it, or any other: what changed
+  // is the question before migrating onto a version and when a run behaves differently
+  // from last week's (ADR-0530). Reading, so offered to
+  // everyone who sees the view, whenever there is a second version.
+  const compareBtn = root.querySelector("#compare-versions");
+  if (thisVersion && versions.length > 1) {
+    compareBtn.hidden = false;
+    compareBtn.addEventListener("click", () => compareVersionsFlow({
+      api, processId, processName: procName, versions, toKey: key,
+    }));
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);

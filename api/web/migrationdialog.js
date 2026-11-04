@@ -13,6 +13,7 @@
 // Every sentence goes through the locale catalogue under "mig.*" (ADR-0267): the
 // parameters are escaped before they are put into a message that carries markup.
 import { t as tr, plural as trPlural } from "./i18n.js";
+import { migrationImpactHTML } from "./version-comparison.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -209,6 +210,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
             </select>
           </label>
           <div id="mig-plan" class="mig-plan"><p class="muted" style="margin:0;font-size:12px">${esc(tr("mig.one.readingPlan"))}</p></div>
+          <div id="mig-impact" class="mig-impact" hidden></div>
           <div id="mig-fork" class="mig-fork" hidden></div>
           <label class="field" style="margin-top:10px"><span>${esc(tr("mig.reason"))}</span>
             <input id="mig-reason" placeholder="${esc(tr("mig.one.reasonPlaceholder"))}" autocomplete="off"/>
@@ -227,6 +229,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
     const targetSel = ov.querySelector("#mig-target");
     const planEl = ov.querySelector("#mig-plan");
     const forkEl = ov.querySelector("#mig-fork");
+    const impactEl = ov.querySelector("#mig-impact");
     const reasonIn = ov.querySelector("#mig-reason");
     const goBtn = ov.querySelector("[data-mig-go]");
     const forkBtn = ov.querySelector("[data-mig-fork]");
@@ -259,6 +262,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       const seq = ++planSeq;
       plan = null;
       sync();
+      impactEl.hidden = true;
       planEl.innerHTML = `<p class="muted" style="margin:0;font-size:12px">${esc(tr("mig.one.readingPlan"))}</p>`;
       let got;
       try {
@@ -274,6 +278,18 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       if (seq !== planSeq) return;
       plan = got;
       planEl.innerHTML = planHTML(got);
+      // What the target version changes, and at the instance's own positions first
+      // (ADR-0530). The plan carries no "same model" flag: an
+      // empty list is read as one, which holds for everything the engine reads — the
+      // list leaves out only what the compiler ignores.
+      if (Array.isArray(got.changes)) {
+        impactEl.innerHTML = migrationImpactHTML({
+          cmp: { changes: got.changes, counts: got.counts, sameModel: got.changes.length === 0 },
+          at: new Map((got.at || []).map((id) => [id, null])),
+          from: got.fromVersion, to: got.toVersion,
+        });
+        impactEl.hidden = false;
+      }
       forkEl.innerHTML = forkHTML(got.fork);
       forkEl.hidden = !got.fork;
       // Dimmed while the instance could simply be rebound: the fork is the answer to a
@@ -341,7 +357,7 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
     toast(tr("mig.onlyOne"), "warn");
     return false;
   }
-  const choice = await askBatchMigration({ processId, processName, versions: deployed, runningOf, fromKey });
+  const choice = await askBatchMigration({ api, processId, processName, versions: deployed, runningOf, fromKey });
   if (!choice) return false;
 
   let migrated = 0;
@@ -402,7 +418,7 @@ export async function migrateProcessFlow({ api, toast, processId, processName, v
 // askBatchMigration picks the two versions and the reason. Source first: draining a
 // version is the act, and which one is holding instances is the thing an operator is
 // looking at.
-function askBatchMigration({ processId, processName, versions, runningOf, fromKey }) {
+function askBatchMigration({ api, processId, processName, versions, runningOf, fromKey }) {
   return new Promise((resolve) => {
     const running = (v) => (runningOf ? runningOf(v) : 0);
     // Without counts the options say nothing about them: "none running" on every
@@ -441,6 +457,7 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
             </label>
           </div>
           <p class="muted" style="margin:8px 0 0;font-size:12px">${esc(tr("mig.batch.checked"))}</p>
+          <div id="migb-impact" class="mig-impact" hidden></div>
           <label class="field" style="margin-top:10px"><span>${esc(tr("mig.reason"))}</span>
             <input id="migb-reason" placeholder="${esc(tr("mig.batch.reasonPlaceholder"))}" autocomplete="off"/>
           </label>
@@ -458,7 +475,42 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
     const reasonIn = ov.querySelector("#migb-reason");
     const goBtn = ov.querySelector("[data-migb-go]");
     const errEl = ov.querySelector(".mig-err");
+    const impactEl = ov.querySelector("#migb-impact");
     const byKey = new Map(versions.map((v) => [String(v.key), v]));
+
+    // What the target version changes, and where the source version's instances stand
+    // on a changed or removed element (ADR-0530): the
+    // comparison of the two versions beside the source's live token counts. Read
+    // afresh for every pair, and only the newest reading is shown.
+    let impactSeq = 0;
+    const loadImpact = async () => {
+      const mine = ++impactSeq;
+      const from = byKey.get(fromSel.value);
+      const to = byKey.get(toSel.value);
+      if (!api || !from || !to || from === to) {
+        impactEl.hidden = true;
+        return;
+      }
+      impactEl.hidden = false;
+      impactEl.innerHTML = `<p class="muted" style="margin:0;font-size:12px">${esc(tr("cmp.loading"))}</p>`;
+      const [cmp, counts] = await Promise.all([
+        api("GET", `/api/v1/processes/${encodeURIComponent(to.key)}/comparison?with=${encodeURIComponent(from.key)}`).catch(() => null),
+        api("GET", `/api/v1/processes/${encodeURIComponent(from.key)}/runtime/counts`).catch(() => null),
+      ]);
+      if (mine !== impactSeq || !ov.isConnected) return;
+      if (!cmp || typeof cmp !== "object" || Array.isArray(cmp)) {
+        impactEl.innerHTML = `<p class="muted" style="margin:0;font-size:12px">${esc(tr("cmp.impact.failed"))}</p>`;
+        return;
+      }
+      // Counts that could not be read are not "no instance anywhere": the list is then
+      // shown whole, and the dialog says why.
+      const at = counts && Array.isArray(counts.elements)
+        ? new Map(counts.elements
+          .filter((e) => e.tokens > 0 && e.elementId !== processId)
+          .map((e) => [e.elementId, e.tokens]))
+        : null;
+      impactEl.innerHTML = migrationImpactHTML({ cmp, at, from: from.version, to: to.version });
+    };
 
     fromSel.value = String(defaultFrom);
     toSel.value = String(versions[0].key);
@@ -471,8 +523,8 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
       goBtn.disabled = same || !reasonIn.value.trim();
     };
 
-    fromSel.addEventListener("change", sync);
-    toSel.addEventListener("change", sync);
+    fromSel.addEventListener("change", () => { sync(); loadImpact(); });
+    toSel.addEventListener("change", () => { sync(); loadImpact(); });
     reasonIn.addEventListener("input", sync);
     ov.querySelector("[data-migb-cancel]").addEventListener("click", () => close(null));
     ov.addEventListener("click", (e) => { if (e.target === ov) close(null); });
@@ -484,6 +536,7 @@ function askBatchMigration({ processId, processName, versions, runningOf, fromKe
     });
 
     sync();
+    loadImpact();
     setTimeout(() => reasonIn.focus(), 0);
   });
 }

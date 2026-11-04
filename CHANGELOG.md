@@ -15,6 +15,31 @@ _Changed_ / _Removed_ for each version.
 ### Added
 
 - **The M365 example describes its data and its purpose.** `examples/m365-dienste/architektur` carries an information model (32 classes and enumerations with lifecycles, their associations, and seven data stores with the worker behind each), eleven capabilities realized by the example's processes, including those of the on-premises variant, and two value streams. Every process declares typed data objects and the data stores it reaches, and each step that creates, changes or returns a business object writes its data state through a data output association without an assignment, which changes the state only (ADR-0058). The model and the realizations travel in the application bundle (source-tree format 4), so every import — the hub in the Console, `atlas import`, `installieren.sh`/`.ps1`, the test environment's `install-m365-dienste.py` — brings them before the release is published and its architecture sketch shows the data and strategy layers; the capabilities and value streams are proposals the import asks about where the server's map lacks them (`LANDKARTE`/`-Landkarte` in the scripts; the test environment's installer adopts them through the API and names them). The on-premises variant is built with its own copy of the model and the realizations of its `*_onprem` processes. The data objects are drawn next to the task that writes them, each association one orthogonal edge, and every diagram passes the shipped-diagram checks again. `examples/m365architektur_test.go` keeps the processes, the model and the architecture file in step (`m365-dienste` 1.0.12).
+- **The migration dialogs say what the target version changes.** Migrating one instance
+  or every instance of a version now shows, beside the plan, the changed and removed
+  elements instances stand on — with what changed in each and, for a batch, how many tokens
+  stand there — and the whole comparison of the two versions folded below. A removed
+  element says that an instance on it is refused unless it is mapped. The migration plan
+  (`POST /api/v1/instances/{key}/migrate/plan`, MCP `atlas_migration_plan`) answers `at`,
+  the elements the instance stands on, and `changes` and `counts` as the version
+  comparison lists them; each refusal of a batch carries `at` too
+  (ADR-0530).
+
+- **Two versions of a process can be compared.** `GET /api/v1/processes/{key}/comparison`
+  lists what changed from the version `?with=` names — by default the one before — to the
+  one in the path: every element added, removed or changed, matched by element id, with its
+  type, name and container, and for a changed element every field it states differently
+  (name, sourceRef/targetRef, condition, task definition, headers, input and output
+  mappings, script, form, event definition) before and after, plus counts by kind and
+  whether the two are the same model. The diagram, formatting, attribute order, attributes
+  at their schema default and the editor's incoming/outgoing hints are not compared.
+  Operations offers *Versionen vergleichen…* in the ⋯ menu of a process with more than one
+  version and in the live view of a version; the Modeler's version chip opens the
+  comparison with any other version and, for a draft that differs, *Alle Unterschiede
+  anzeigen*: `GET /api/v1/drafts/{id}/comparison` now carries the same `changes` and
+  `counts` beside its first difference. MCP `atlas_compare_versions`
+  (ADR-0530).
+
 - **An application bundle carries its information model and what it brings to the capability map.** Source-tree format 4 adds `informationModels` and an `architecture` file with the application's realizations (process or Worker → capability key) and proposals for capabilities and value streams. The capability map stays the server's: a key the map has is linked and never written over; a key it lacks is a gap that stops the import until the caller adopts the proposal, maps it onto an existing key or leaves it out (`?adopt=`, `?map=capability:K=EXISTING`, `?omit=`; the Console's import dialog, `atlas import --adopt/--map/--omit` and `atlas_hub_import_release` decide the same way). Realizations a bundle brings belong to the application: every read of the map and the release sketch sees them, marked `bundledBy`, writing a capability never stores them, and deleting the application removes them. An export carries the model, the realizations and the capabilities and value streams they name, so a hub import needs no extra script (ADR-0528).
 - **An administrator can revoke a password somebody else knows.** "Revoke password…" in an account's menu (`POST /api/v1/users/{id}/password-link` with `"revoke": true`) makes the current password stop working at once, ends the account's sessions and OAuth grants, and sends its owner an activation link — or hands it over where the account has no address. A password link alone leaves the old password valid until the link is used, which is too long for one that was typed by an administrator, mailed or written to a log. Refused for one's own account and for the last administrator who can sign in, and nothing is revoked when no link could follow (ADR-0526, amended).
 - **A form can search Active Directory.** A directory field may name an AD Worker

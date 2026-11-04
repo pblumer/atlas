@@ -617,6 +617,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0527](0527-business-object-capability-vocabulary.md) | A capability vocabulary for CRM, ERP and finance, with idempotent writes as its admission rule | Proposed | Not started |
 | [0528](0528-application-bundle-architecture.md) | What an application bundle carries of the architecture, and where the capability map lives | Accepted | Landed |
 | [0529](0529-datatrans-payment-worker.md) | Card payments through a Datatrans Worker Type | Proposed | Not started |
+| [0530](0530-compare-process-versions.md) | Comparing two versions of a process, element by element | Accepted | Landed |
 
 ## The two states of a record
 
