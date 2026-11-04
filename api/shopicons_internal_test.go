@@ -14,7 +14,7 @@ import (
 func TestTheShopDrawsExactlyTheIconsTheCatalogueAllows(t *testing.T) {
 	src := readWeb(t, "shop-icons.js")
 	var drawn []string
-	for _, m := range regexp.MustCompile(`(?m)^  "([a-z0-9-]+)": "`).FindAllStringSubmatch(src, -1) {
+	for _, m := range regexp.MustCompile(`(?m)^  "([a-z0-9-]+)": \[`).FindAllStringSubmatch(src, -1) {
 		drawn = append(drawn, m[1])
 	}
 	if !slices.Equal(drawn, catalog.Icons) {

@@ -16,7 +16,7 @@
 // otherwise reach a customer, who cannot act on a review signal.
 
 import { applyAccent } from './theme.js';
-import { PRODUCT_ICONS } from './shop-icons.js';
+import { drawIcon } from './shop-icons.js';
 
 const STRINGS = {
   de: {
@@ -3204,17 +3204,10 @@ function tileLayout() {
 }
 
 // productIcon draws a product's symbol from the shop's icon set, or the default
-// one. The markup is the shop's own module, never anything a catalogue supplied.
+// one. The outlines are the shop's own module, never anything a catalogue supplied,
+// and they are built element by element rather than parsed.
 function productIcon(item) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.5');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.innerHTML = PRODUCT_ICONS[(item && item.icon) || ''] || PRODUCT_ICONS.package;
+  const svg = drawIcon((item && item.icon) || '', 1.5);
   return el('span', { class: 'tile-icon' }, svg);
 }
 

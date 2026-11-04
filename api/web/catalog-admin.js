@@ -42,7 +42,7 @@ import { deliveryCard, wireDelivery } from "./deliveryreport.js";
 import { foldCards, pageOf } from "./fold.js";
 // The symbols the shop's tile layout draws (ADR-draft-shop-tile-layout); the keys are
 // the only names a product may carry as its icon.
-import { PRODUCT_ICONS } from "./shop-icons.js";
+import { PRODUCT_ICONS, drawIcon } from "./shop-icons.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1977,6 +1977,15 @@ function mayTheme(me, enforced) {
   return !!me && (me.roles || []).includes("admin");
 }
 
+// iconMarkup writes a product icon into the form's template from the shop's own
+// outline data, each outline escaped as an attribute value.
+function iconMarkup(name) {
+  const paths = PRODUCT_ICONS[name] || PRODUCT_ICONS.package;
+  return `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${
+  paths.map((d) => `<path d="${esc(d)}"></path>`).join("")}</svg>`;
+}
+
 function appearanceCard(cat, me, enforced) {
   const theme = cat.theme || {};
   const accent = theme.accent || "";
@@ -2385,9 +2394,8 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
             ${Object.keys(PRODUCT_ICONS).map((k) => `<option value="${esc(k)}"${
   v.icon === k ? " selected" : ""}>${esc(k)}</option>`).join("")}
           </select>
-          <svg class="icon-preview" viewBox="0 0 24 24" width="28" height="28" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round"
-            stroke-linejoin="round" aria-hidden="true">${PRODUCT_ICONS[v.icon] || PRODUCT_ICONS.package}</svg>
+          <span class="icon-preview" style="display:inline-flex; width:28px; height:28px">${
+  iconMarkup(v.icon)}</span>
         </span></label>
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
@@ -2765,7 +2773,11 @@ function wireAppearance({ api, toast, view }, id, reload) {
     const pick = e.target.closest('select[name="icon"]');
     if (!pick) return;
     const preview = pick.parentElement.querySelector(".icon-preview");
-    if (preview) preview.innerHTML = PRODUCT_ICONS[pick.value] || PRODUCT_ICONS.package;
+    if (!preview) return;
+    const svg = drawIcon(pick.value);
+    svg.setAttribute("width", "28");
+    svg.setAttribute("height", "28");
+    preview.replaceChildren(svg);
   }, { signal: viewListeners.signal });
 
   view.addEventListener("change", (e) => {
