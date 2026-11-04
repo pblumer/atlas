@@ -78,14 +78,14 @@ Worker: ucc_exchange. Konstante MAIL_DOMAIN.</documentation>
       <bpmndi:BPMNEdge id="f_st_kalender__st_tag_di" bpmnElement="f_st_kalender__st_tag"><omgdi:waypoint x="830" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_tag__st_done_di" bpmnElement="f_st_tag__st_done"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1030" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_done__e_di" bpmnElement="f_st_done__e"><omgdi:waypoint x="1130" y="130"/><omgdi:waypoint x="1212" y="130"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1112" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1080" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1122" y="170"/><omgdi:waypoint x="1130" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="662" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="672" y="310"/><omgdi:waypoint x="680" y="338"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_anlegen_di" bpmnElement="dor_st_anlegen"><omgdc:Bounds x="700" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="668" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_anlegen_di" bpmnElement="doa_st_anlegen"><omgdi:waypoint x="672" y="170"/><omgdi:waypoint x="718" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_kalender_di" bpmnElement="dor_st_kalender"><omgdc:Bounds x="812" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="780" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_kalender_di" bpmnElement="doa_st_kalender"><omgdi:waypoint x="822" y="170"/><omgdi:waypoint x="830" y="198"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1062" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1080" y="90"/><omgdi:waypoint x="1080" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="612" y="334" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="388" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="630" y="310"/><omgdi:waypoint x="630" y="334"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_anlegen_di" bpmnElement="dor_st_anlegen"><omgdc:Bounds x="612" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_anlegen_di" bpmnElement="doa_st_anlegen"><omgdi:waypoint x="630" y="90"/><omgdi:waypoint x="630" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_kalender_di" bpmnElement="dor_st_kalender"><omgdc:Bounds x="762" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_kalender_di" bpmnElement="doa_st_kalender"><omgdi:waypoint x="780" y="90"/><omgdi:waypoint x="780" y="66"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="480" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="535" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

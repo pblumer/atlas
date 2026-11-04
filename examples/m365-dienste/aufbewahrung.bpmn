@@ -71,14 +71,14 @@ Worker: ucc_exchange.</documentation>
       <bpmndi:BPMNEdge id="f_s_aus__st_aus_di" bpmnElement="f_s_aus__st_aus"><omgdi:waypoint x="198" y="270"/><omgdi:waypoint x="280" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_aus__st_returned_di" bpmnElement="f_st_aus__st_returned"><omgdi:waypoint x="380" y="270"/><omgdi:waypoint x="430" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_returned__e_aus_di" bpmnElement="f_st_returned__e_aus"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="612" y="270"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_hold_di" bpmnElement="dor_st_hold"><omgdc:Bounds x="362" y="360" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="330" y="412" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_hold_di" bpmnElement="doa_st_hold"><omgdi:waypoint x="372" y="170"/><omgdi:waypoint x="380" y="360"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_aus_di" bpmnElement="dor_st_aus"><omgdc:Bounds x="262" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="230" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_aus_di" bpmnElement="doa_st_aus"><omgdi:waypoint x="288" y="310"/><omgdi:waypoint x="280" y="338"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="550" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="518" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="522" y="170"/><omgdi:waypoint x="568" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="512" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="480" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="522" y="310"/><omgdi:waypoint x="530" y="338"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_hold_di" bpmnElement="dor_st_hold"><omgdc:Bounds x="312" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_hold_di" bpmnElement="doa_st_hold"><omgdi:waypoint x="330" y="90"/><omgdi:waypoint x="330" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_aus_di" bpmnElement="dor_st_aus"><omgdc:Bounds x="312" y="334" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="388" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_aus_di" bpmnElement="doa_st_aus"><omgdi:waypoint x="330" y="310"/><omgdi:waypoint x="330" y="334"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="462" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="430" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="480" y="90"/><omgdi:waypoint x="480" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="462" y="334" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="430" y="388" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="480" y="310"/><omgdi:waypoint x="480" y="334"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="502" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="557" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

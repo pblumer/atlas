@@ -4,15 +4,27 @@ Dieses Verzeichnis beschreibt, *was* die Prozesse des Beispiels bewegen und *wof
 
 | Datei | Inhalt | Wohin |
 |---|---|---|
-| `informationsmodell.json` | Klassen, Lebenszyklen, Beziehungen, Datenspeicher (ADR-0230, ADR-0259) | Informationsmodell der Applikation (`POST /api/v1/infomodel/import`) |
-| `capabilities.json` | Capabilities und Wertstroeme (ADR-0305) | serverweit (`/api/v1/capabilities`, `/api/v1/value-streams`) |
-| `einspielen.py` | legt beides an oder ersetzt es; `installieren.sh`/`.ps1` rufen es vor dem Veroeffentlichen auf | |
+| `informationsmodell.json` | Klassen, Lebenszyklen, Beziehungen, Datenspeicher (ADR-0230, ADR-0259) | Informationsmodell der Applikation |
+| `capabilities.json` | `realizations`: welche Prozesse dieser Applikation welche Capability realisieren; `capabilities` und `valueStreams`: Vorschlaege fuer die Capability-Landkarte (ADR-0305) | Realisierungen gehoeren der Applikation; die Landkarte gehoert dem Server |
+
+Beide Dateien reisen im Applikationsbuendel mit: `atlas.json` nennt sie im Quellbaum-Format 4 unter `informationModels` und `architecture` (ADR-draft-application-bundle-architecture). Jeder Import nimmt sie mit, ob ueber den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das Installationsskript der Testumgebung.
 
 In den Prozessen (`*.bpmn`) stehen dazu typisierte Datenobjekte und Datenspeicher (ADR-0053): Jeder Schritt, der ein Geschaeftsobjekt anlegt, aendert oder zurueckgibt, schreibt dessen Datenzustand ueber eine Datenausgabe-Assoziation **ohne Zuweisung**. Das ist nach ADR-0058 eine reine Zustandsaenderung: Sie setzt keine Prozessvariable und aendert den Ablauf nicht. Lesende Zugriffe sind bewusst nicht gezeichnet, weil eine Dateneingabe-Assoziation in Atlas eine Variable schreibt (ADR-0059).
 
 ## Reihenfolge beim Installieren
 
-Die Architektur-Skizze eines Release haelt fest, was beim **Veroeffentlichen** bekannt ist. Deshalb: Applikation importieren, dann Informationsmodell und Capabilities anlegen, dann veroeffentlichen. `installieren.sh`, `installieren.ps1` und `deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py` tun das in dieser Reihenfolge. Wer die Applikation ueber den Hub in der Console importiert, bekommt nur Prozesse, Formulare und Entscheidungen: Ein Applikationsbuendel (`atlas.json`, Format 3) traegt weder ein Informationsmodell noch Capabilities. Dann `einspielen.py` von Hand ausfuehren und ein neues Release veroeffentlichen.
+Die Architektur-Skizze eines Release haelt fest, was beim **Veroeffentlichen** bekannt ist. Der Import bringt Informationsmodell und Realisierungen mit, das Veroeffentlichen danach haelt sie fest; ein Zusatzschritt ist nicht noetig.
+
+Die **Capability-Landkarte gehoert dem Server**, nicht dem Beispiel:
+
+- Hat sie einen Schluessel schon (etwa aus einer frueheren Installation), verknuepft der Import nur. Ihr Eintrag wird nie ueberschrieben, auch wenn der Vorschlag hier anders lautet.
+- Fehlt ihr ein Schluessel, ist das eine **Luecke**. Der Import haelt an, bis jemand entscheidet: den Vorschlag des Beispiels **uebernehmen**, einem vorhandenen Schluessel **zuordnen** (dann landen die Realisierungen dort) oder **weglassen**.
+  - In der Console fragt der Import-Dialog im Abschnitt «Nicht in der Capability-Landkarte».
+  - `atlas import` kennt `--adopt`, `--map` und `--omit`.
+  - `installieren.sh`/`.ps1` uebernehmen mit `LANDKARTE=uebernehmen` (Vorgabe) die Vorschlaege und nennen sie; `weglassen` laesst sie weg, `fragen` bricht ab.
+  - Das Installationsskript der Testumgebung uebernimmt die Vorschlaege ueber die API und nennt sie im Log.
+
+Die OnPrem-Variante (`beispiel-m365-dienste-onprem`) baut `install-m365-dienste.py` mit einer eigenen Kopie des Modells (Speicher «Exchange Server: Empfaenger», Worker `ucc_exchange_onprem`) und den Realisierungen ihrer `*_onprem`-Prozesse; da die Online-Applikation vorher installiert wird, findet sie alle Schluessel schon vor.
 
 ## Informationsmodell
 
@@ -131,7 +143,7 @@ Personenbezogen sind `Konto`, `Partnerkonto`, `AdKonto`, `Postfach` und `Mailkon
 
 ## Capabilities
 
-Eigentuemerin aller Capabilities ist die Gruppe M365-Administration. Die Schluessel beginnen mit `m365-`, weil Capabilities serverweit gelten und nicht zu einer Applikation gehoeren.
+Eigentuemerin aller Capabilities ist die Gruppe M365-Administration. Die Schluessel beginnen mit `m365-`, weil Capabilities zur Landkarte des Servers gehoeren und nicht zu einer Applikation. Die Spalte «Realisiert durch» nennt auch die Prozesse der OnPrem-Variante; deren Realisierungen bringt die Variante selbst mit.
 
 | Schluessel | Capability | Realisiert durch | Braucht |
 |---|---|---|---|
@@ -170,7 +182,6 @@ Eigentuemerin aller Capabilities ist die Gruppe M365-Administration. Die Schlues
 
 ## Grenzen
 
-- Ein Applikationsbuendel (Hub, Quellbaum) traegt kein Informationsmodell und keine Capabilities; sie kommen ueber `einspielen.py` oder das Installationsskript der Testumgebung.
-- Capabilities und Wertstroeme sind serverweit. Zwei Installationen des Beispiels auf demselben Server teilen sie.
+- Capabilities und Wertstroeme gehoeren der Landkarte des Servers. Mehrere Applikationen, die dieselbe Capability realisieren, teilen ihren Eintrag; das ist gewollt (ADR-0305). Eine Landkarte, die mehrere Server teilen, ist als Ausblick in der ADR beschrieben (Variante C).
 - Gelesene Objekte sind nicht gezeichnet (siehe oben); die Skizze zeigt deshalb nur schreibende Zugriffe.
 - Die Zustaende sind die fachlichen Stationen, die ein Prozess erreicht, nicht der Zustand im Zielsystem. Ob ein Konto in Entra ID tatsaechlich gesperrt ist, weiss nur Entra ID.

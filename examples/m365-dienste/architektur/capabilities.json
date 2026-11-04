@@ -1,5 +1,132 @@
 {
-  "_comment": "Capabilities und Wertstroeme des Beispiels m365-dienste (ADR-0305). Atlas fuehrt sie serverweit, nicht pro Applikation; deploy/opentofu/m365-devenv/scripts/install-m365-dienste.py legt sie an oder aktualisiert sie. Realisierungen der OnPrem-Variante (applicationKey beispiel-m365-dienste-onprem) laesst das Skript weg, wenn diese Variante nicht installiert wird.",
+  "_comment": "Was die Applikation beispiel-m365-dienste zur Capability-Landkarte des Servers beitraegt (ADR-draft-application-bundle-architecture): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen). Die OnPrem-Variante baut install-m365-dienste.py daraus mit den Prozessen *_onprem.",
+  "realizations": [
+    {
+      "capability": "m365-aufbewahrung",
+      "kind": "process",
+      "processId": "proc_m365_aufbewahrung"
+    },
+    {
+      "capability": "m365-genehmigung",
+      "kind": "process",
+      "processId": "proc_m365_genehmigung_vorgesetzter"
+    },
+    {
+      "capability": "m365-governance",
+      "kind": "process",
+      "processId": "proc_m365_governance_pruefung"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_eintritt_paket"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_hr_eintritt"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_konto_hybrid"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_konto_in_cloud"
+    },
+    {
+      "capability": "m365-lizenzen",
+      "kind": "process",
+      "processId": "proc_m365_lizenz"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_funktionspostfach"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_verteiler"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_verteiler_anmeldung"
+    },
+    {
+      "capability": "m365-partner",
+      "kind": "process",
+      "processId": "proc_m365_partnerzugang"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_geraet_einrichten"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_geraet_entfernen"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_einrichten"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_entfernen"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_telefonie"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_telefonzentrale"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_warteschlange"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_oe_mitgliedschaften"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_postfachzugriff_entziehen"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_postfachzugriff_erteilen"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_engage_community"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_sharepoint_site"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_team"
+    }
+  ],
   "capabilities": [
     {
       "key": "m365-konten",
@@ -40,28 +167,6 @@
           "kind": "system",
           "name": "ad_verzeichnis",
           "ref": "ad_verzeichnis"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_hr_eintritt"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_eintritt_paket"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_konto_hybrid"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_konto_in_cloud"
         }
       ],
       "requires": [],
@@ -106,13 +211,6 @@
           "kind": "system",
           "name": "ucc_exchange",
           "ref": "ucc_exchange"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_lizenz"
         }
       ],
       "requires": [
@@ -161,33 +259,6 @@
           "ref": "ucc_exchange"
         }
       ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_postfachzugriff_erteilen"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_postfachzugriff_entziehen"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_oe_mitgliedschaften"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_postfachzugriff_erteilen_onprem"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_postfachzugriff_entziehen_onprem"
-        }
-      ],
       "requires": [
         "m365-konten"
       ],
@@ -227,13 +298,6 @@
           "kind": "system",
           "name": "ucc_entra",
           "ref": "ucc_entra"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_partnerzugang"
         }
       ],
       "requires": [
@@ -287,23 +351,6 @@
           "ref": "ucc_exchange"
         }
       ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_team"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_sharepoint_site"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_engage_community"
-        }
-      ],
       "requires": [
         "m365-konten"
       ],
@@ -349,33 +396,6 @@
           "ref": "ucc_exchange"
         }
       ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_funktionspostfach"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_verteiler"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_verteiler_anmeldung"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_funktionspostfach_onprem"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_verteiler_onprem"
-        }
-      ],
       "requires": [
         "m365-konten"
       ],
@@ -415,48 +435,6 @@
           "kind": "system",
           "name": "ucc_exchange",
           "ref": "ucc_exchange"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_raum_einrichten"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_raum_entfernen"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_geraet_einrichten"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_geraet_entfernen"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_raum_einrichten_onprem"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_raum_entfernen_onprem"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_geraet_einrichten_onprem"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste-onprem",
-          "processId": "proc_m365_geraet_entfernen_onprem"
         }
       ],
       "requires": [],
@@ -503,23 +481,6 @@
           "ref": "ucc_entra"
         }
       ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_telefonie"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_telefonzentrale"
-        },
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_warteschlange"
-        }
-      ],
       "requires": [
         "m365-lizenzen"
       ],
@@ -559,13 +520,6 @@
           "kind": "system",
           "name": "ucc_exchange",
           "ref": "ucc_exchange"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_aufbewahrung"
         }
       ],
       "requires": [],
@@ -612,13 +566,6 @@
           "ref": "mail"
         }
       ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_genehmigung_vorgesetzter"
-        }
-      ],
       "requires": [],
       "tags": [
         "m365",
@@ -661,13 +608,6 @@
           "kind": "system",
           "name": "ucc_exchange",
           "ref": "ucc_exchange"
-        }
-      ],
-      "realizations": [
-        {
-          "kind": "process",
-          "applicationKey": "beispiel-m365-dienste",
-          "processId": "proc_m365_governance_pruefung"
         }
       ],
       "requires": [],

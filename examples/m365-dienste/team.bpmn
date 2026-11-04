@@ -135,30 +135,30 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
       <bpmndi:BPMNShape id="st_team_di" bpmnElement="st_team"><omgdc:Bounds x="1180" y="90" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="1330" y="90" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="1512" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1480" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="s_arch_di" bpmnElement="s_arch"><omgdc:Bounds x="162" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="br_name2_di" bpmnElement="br_name2"><omgdc:Bounds x="280" y="370" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_suchen_di" bpmnElement="st_suchen"><omgdc:Bounds x="430" y="370" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_gef_di" bpmnElement="gw_gef" isMarkerVisible="true"><omgdc:Bounds x="605" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_archiv_di" bpmnElement="st_archiv"><omgdc:Bounds x="730" y="370" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true"><omgdc:Bounds x="905" y="385" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="1030" y="370" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_arch_di" bpmnElement="e_arch"><omgdc:Bounds x="1212" y="392" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="432" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="s_mitglied_di" bpmnElement="s_mitglied"><omgdc:Bounds x="162" y="672" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="712" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="br_name3_di" bpmnElement="br_name3"><omgdc:Bounds x="280" y="650" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_suchen3_di" bpmnElement="st_suchen3"><omgdc:Bounds x="430" y="650" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_person_di" bpmnElement="st_person"><omgdc:Bounds x="580" y="650" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_rolle_di" bpmnElement="gw_rolle" isMarkerVisible="true"><omgdc:Bounds x="755" y="665" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="683" y="634" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_member_di" bpmnElement="st_member"><omgdc:Bounds x="880" y="650" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_teamowner_di" bpmnElement="st_teamowner"><omgdc:Bounds x="880" y="790" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_rjoin_di" bpmnElement="gw_rjoin" isMarkerVisible="true"><omgdc:Bounds x="1055" y="665" width="50" height="50"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="sd_mitglied_di" bpmnElement="sd_mitglied"><omgdc:Bounds x="1180" y="650" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_mitglied_di" bpmnElement="e_mitglied"><omgdc:Bounds x="1362" y="672" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="712" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="s_kanal_di" bpmnElement="s_kanal"><omgdc:Bounds x="162" y="952" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="992" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="br_name4_di" bpmnElement="br_name4"><omgdc:Bounds x="280" y="930" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_suchen4_di" bpmnElement="st_suchen4"><omgdc:Bounds x="430" y="930" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_kanal_di" bpmnElement="st_kanal"><omgdc:Bounds x="580" y="930" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="sd_kanal_di" bpmnElement="sd_kanal"><omgdc:Bounds x="730" y="930" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_kanal_di" bpmnElement="e_kanal"><omgdc:Bounds x="912" y="952" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="992" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_arch_di" bpmnElement="s_arch"><omgdc:Bounds x="162" y="482" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="522" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_name2_di" bpmnElement="br_name2"><omgdc:Bounds x="280" y="460" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen_di" bpmnElement="st_suchen"><omgdc:Bounds x="430" y="460" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_gef_di" bpmnElement="gw_gef" isMarkerVisible="true"><omgdc:Bounds x="605" y="475" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="444" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_archiv_di" bpmnElement="st_archiv"><omgdc:Bounds x="730" y="460" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join" isMarkerVisible="true"><omgdc:Bounds x="905" y="475" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_returned_di" bpmnElement="st_returned"><omgdc:Bounds x="1030" y="460" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_arch_di" bpmnElement="e_arch"><omgdc:Bounds x="1212" y="482" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="522" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_mitglied_di" bpmnElement="s_mitglied"><omgdc:Bounds x="162" y="762" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="802" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_name3_di" bpmnElement="br_name3"><omgdc:Bounds x="280" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen3_di" bpmnElement="st_suchen3"><omgdc:Bounds x="430" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_person_di" bpmnElement="st_person"><omgdc:Bounds x="580" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_rolle_di" bpmnElement="gw_rolle" isMarkerVisible="true"><omgdc:Bounds x="755" y="755" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="683" y="724" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_member_di" bpmnElement="st_member"><omgdc:Bounds x="880" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_teamowner_di" bpmnElement="st_teamowner"><omgdc:Bounds x="880" y="880" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_rjoin_di" bpmnElement="gw_rjoin" isMarkerVisible="true"><omgdc:Bounds x="1055" y="755" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_mitglied_di" bpmnElement="sd_mitglied"><omgdc:Bounds x="1180" y="740" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_mitglied_di" bpmnElement="e_mitglied"><omgdc:Bounds x="1362" y="762" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="802" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_kanal_di" bpmnElement="s_kanal"><omgdc:Bounds x="162" y="1042" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="1082" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_name4_di" bpmnElement="br_name4"><omgdc:Bounds x="280" y="1020" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_suchen4_di" bpmnElement="st_suchen4"><omgdc:Bounds x="430" y="1020" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_kanal_di" bpmnElement="st_kanal"><omgdc:Bounds x="580" y="1020" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sd_kanal_di" bpmnElement="sd_kanal"><omgdc:Bounds x="730" y="1020" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_kanal_di" bpmnElement="e_kanal"><omgdc:Bounds x="912" y="1042" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="1082" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="f_gw_name__st_ablehnen_di" bpmnElement="f_gw_name__st_ablehnen"><omgdi:waypoint x="480" y="155"/><omgdi:waypoint x="480" y="270"/><omgdi:waypoint x="580" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="205" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="680" y="270"/><omgdi:waypoint x="762" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_s_neu__br_name_di" bpmnElement="f_s_neu__br_name"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
@@ -171,45 +171,45 @@ Personendaten: besitzer und person (UPNs) sowie die gelesenen Konten sind als Pe
       <bpmndi:BPMNEdge id="f_t_owner__st_team_di" bpmnElement="f_t_owner__st_team"><omgdi:waypoint x="1148" y="130"/><omgdi:waypoint x="1180" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_team__st_done_di" bpmnElement="f_st_team__st_done"><omgdi:waypoint x="1280" y="130"/><omgdi:waypoint x="1330" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_done__e_bereit_di" bpmnElement="f_st_done__e_bereit"><omgdi:waypoint x="1430" y="130"/><omgdi:waypoint x="1512" y="130"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_s_arch__br_name2_di" bpmnElement="f_s_arch__br_name2"><omgdi:waypoint x="198" y="410"/><omgdi:waypoint x="280" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_br_name2__st_suchen_di" bpmnElement="f_br_name2__st_suchen"><omgdi:waypoint x="380" y="410"/><omgdi:waypoint x="430" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_suchen__gw_gef_di" bpmnElement="f_st_suchen__gw_gef"><omgdi:waypoint x="530" y="410"/><omgdi:waypoint x="605" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_gef__st_archiv_di" bpmnElement="f_gw_gef__st_archiv"><omgdi:waypoint x="655" y="410"/><omgdi:waypoint x="730" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="388" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_gef__gw_join_di" bpmnElement="f_gw_gef__gw_join"><omgdi:waypoint x="630" y="435"/><omgdi:waypoint x="630" y="550"/><omgdi:waypoint x="930" y="550"/><omgdi:waypoint x="930" y="435"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="485" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_archiv__gw_join_di" bpmnElement="f_st_archiv__gw_join"><omgdi:waypoint x="830" y="410"/><omgdi:waypoint x="905" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="955" y="410"/><omgdi:waypoint x="1030" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_returned__e_arch_di" bpmnElement="f_st_returned__e_arch"><omgdi:waypoint x="1130" y="410"/><omgdi:waypoint x="1212" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_s_mitglied__br_name3_di" bpmnElement="f_s_mitglied__br_name3"><omgdi:waypoint x="198" y="690"/><omgdi:waypoint x="280" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_br_name3__st_suchen3_di" bpmnElement="f_br_name3__st_suchen3"><omgdi:waypoint x="380" y="690"/><omgdi:waypoint x="430" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_suchen3__st_person_di" bpmnElement="f_st_suchen3__st_person"><omgdi:waypoint x="530" y="690"/><omgdi:waypoint x="580" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_person__gw_rolle_di" bpmnElement="f_st_person__gw_rolle"><omgdi:waypoint x="680" y="690"/><omgdi:waypoint x="755" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_rolle__st_member_di" bpmnElement="f_gw_rolle__st_member"><omgdi:waypoint x="805" y="690"/><omgdi:waypoint x="880" y="690"/><bpmndi:BPMNLabel><omgdc:Bounds x="811" y="668" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_rolle__st_teamowner_di" bpmnElement="f_gw_rolle__st_teamowner"><omgdi:waypoint x="780" y="715"/><omgdi:waypoint x="780" y="830"/><omgdi:waypoint x="880" y="830"/><bpmndi:BPMNLabel><omgdc:Bounds x="786" y="765" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_member__gw_rjoin_di" bpmnElement="f_st_member__gw_rjoin"><omgdi:waypoint x="980" y="690"/><omgdi:waypoint x="1055" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_rjoin__sd_mitglied_di" bpmnElement="f_gw_rjoin__sd_mitglied"><omgdi:waypoint x="1105" y="690"/><omgdi:waypoint x="1180" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_sd_mitglied__e_mitglied_di" bpmnElement="f_sd_mitglied__e_mitglied"><omgdi:waypoint x="1280" y="690"/><omgdi:waypoint x="1362" y="690"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_teamowner__gw_rjoin_di" bpmnElement="f_st_teamowner__gw_rjoin"><omgdi:waypoint x="980" y="830"/><omgdi:waypoint x="1080" y="830"/><omgdi:waypoint x="1080" y="715"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_s_kanal__br_name4_di" bpmnElement="f_s_kanal__br_name4"><omgdi:waypoint x="198" y="970"/><omgdi:waypoint x="280" y="970"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_br_name4__st_suchen4_di" bpmnElement="f_br_name4__st_suchen4"><omgdi:waypoint x="380" y="970"/><omgdi:waypoint x="430" y="970"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_suchen4__st_kanal_di" bpmnElement="f_st_suchen4__st_kanal"><omgdi:waypoint x="530" y="970"/><omgdi:waypoint x="580" y="970"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_kanal__sd_kanal_di" bpmnElement="f_st_kanal__sd_kanal"><omgdi:waypoint x="680" y="970"/><omgdi:waypoint x="730" y="970"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_sd_kanal__e_kanal_di" bpmnElement="f_sd_kanal__e_kanal"><omgdi:waypoint x="830" y="970"/><omgdi:waypoint x="912" y="970"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1412" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1380" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1422" y="170"/><omgdi:waypoint x="1430" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="1112" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1080" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="1122" y="450"/><omgdi:waypoint x="1130" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="662" y="500" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="552" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="672" y="310"/><omgdi:waypoint x="680" y="500"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_gruppe_di" bpmnElement="dor_st_gruppe"><omgdc:Bounds x="812" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="780" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_gruppe_di" bpmnElement="doa_st_gruppe"><omgdi:waypoint x="822" y="170"/><omgdi:waypoint x="830" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_team_di" bpmnElement="dor_st_team"><omgdc:Bounds x="1262" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1230" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_team_di" bpmnElement="doa_st_team"><omgdi:waypoint x="1272" y="170"/><omgdi:waypoint x="1280" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_archiv_di" bpmnElement="dor_st_archiv"><omgdc:Bounds x="812" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="780" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_archiv_di" bpmnElement="doa_st_archiv"><omgdi:waypoint x="822" y="450"/><omgdi:waypoint x="830" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_kanal_di" bpmnElement="dor_st_kanal"><omgdc:Bounds x="662" y="1038" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="1090" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_kanal_di" bpmnElement="doa_st_kanal"><omgdi:waypoint x="672" y="1010"/><omgdi:waypoint x="680" y="1038"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="1180" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="1235" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="1180" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="1235" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_arch__br_name2_di" bpmnElement="f_s_arch__br_name2"><omgdi:waypoint x="198" y="500"/><omgdi:waypoint x="280" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_name2__st_suchen_di" bpmnElement="f_br_name2__st_suchen"><omgdi:waypoint x="380" y="500"/><omgdi:waypoint x="430" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen__gw_gef_di" bpmnElement="f_st_suchen__gw_gef"><omgdi:waypoint x="530" y="500"/><omgdi:waypoint x="605" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__st_archiv_di" bpmnElement="f_gw_gef__st_archiv"><omgdi:waypoint x="655" y="500"/><omgdi:waypoint x="730" y="500"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="478" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_gef__gw_join_di" bpmnElement="f_gw_gef__gw_join"><omgdi:waypoint x="630" y="525"/><omgdi:waypoint x="630" y="640"/><omgdi:waypoint x="930" y="640"/><omgdi:waypoint x="930" y="525"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="575" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_archiv__gw_join_di" bpmnElement="f_st_archiv__gw_join"><omgdi:waypoint x="830" y="500"/><omgdi:waypoint x="905" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="955" y="500"/><omgdi:waypoint x="1030" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_returned__e_arch_di" bpmnElement="f_st_returned__e_arch"><omgdi:waypoint x="1130" y="500"/><omgdi:waypoint x="1212" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_mitglied__br_name3_di" bpmnElement="f_s_mitglied__br_name3"><omgdi:waypoint x="198" y="780"/><omgdi:waypoint x="280" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_name3__st_suchen3_di" bpmnElement="f_br_name3__st_suchen3"><omgdi:waypoint x="380" y="780"/><omgdi:waypoint x="430" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen3__st_person_di" bpmnElement="f_st_suchen3__st_person"><omgdi:waypoint x="530" y="780"/><omgdi:waypoint x="580" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_person__gw_rolle_di" bpmnElement="f_st_person__gw_rolle"><omgdi:waypoint x="680" y="780"/><omgdi:waypoint x="755" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rolle__st_member_di" bpmnElement="f_gw_rolle__st_member"><omgdi:waypoint x="805" y="780"/><omgdi:waypoint x="880" y="780"/><bpmndi:BPMNLabel><omgdc:Bounds x="811" y="758" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rolle__st_teamowner_di" bpmnElement="f_gw_rolle__st_teamowner"><omgdi:waypoint x="780" y="805"/><omgdi:waypoint x="780" y="920"/><omgdi:waypoint x="880" y="920"/><bpmndi:BPMNLabel><omgdc:Bounds x="786" y="855" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_member__gw_rjoin_di" bpmnElement="f_st_member__gw_rjoin"><omgdi:waypoint x="980" y="780"/><omgdi:waypoint x="1055" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_rjoin__sd_mitglied_di" bpmnElement="f_gw_rjoin__sd_mitglied"><omgdi:waypoint x="1105" y="780"/><omgdi:waypoint x="1180" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_mitglied__e_mitglied_di" bpmnElement="f_sd_mitglied__e_mitglied"><omgdi:waypoint x="1280" y="780"/><omgdi:waypoint x="1362" y="780"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_teamowner__gw_rjoin_di" bpmnElement="f_st_teamowner__gw_rjoin"><omgdi:waypoint x="980" y="920"/><omgdi:waypoint x="1080" y="920"/><omgdi:waypoint x="1080" y="805"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_kanal__br_name4_di" bpmnElement="f_s_kanal__br_name4"><omgdi:waypoint x="198" y="1060"/><omgdi:waypoint x="280" y="1060"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_name4__st_suchen4_di" bpmnElement="f_br_name4__st_suchen4"><omgdi:waypoint x="380" y="1060"/><omgdi:waypoint x="430" y="1060"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_suchen4__st_kanal_di" bpmnElement="f_st_suchen4__st_kanal"><omgdi:waypoint x="530" y="1060"/><omgdi:waypoint x="580" y="1060"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_kanal__sd_kanal_di" bpmnElement="f_st_kanal__sd_kanal"><omgdi:waypoint x="680" y="1060"/><omgdi:waypoint x="730" y="1060"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sd_kanal__e_kanal_di" bpmnElement="f_sd_kanal__e_kanal"><omgdi:waypoint x="830" y="1060"/><omgdi:waypoint x="912" y="1060"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1362" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1380" y="90"/><omgdi:waypoint x="1380" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="1062" y="386" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="355" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="1080" y="460"/><omgdi:waypoint x="1080" y="436"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="612" y="334" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="388" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="630" y="310"/><omgdi:waypoint x="630" y="334"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_gruppe_di" bpmnElement="dor_st_gruppe"><omgdc:Bounds x="762" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_gruppe_di" bpmnElement="doa_st_gruppe"><omgdi:waypoint x="780" y="90"/><omgdi:waypoint x="780" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_team_di" bpmnElement="dor_st_team"><omgdc:Bounds x="1212" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_team_di" bpmnElement="doa_st_team"><omgdi:waypoint x="1230" y="90"/><omgdi:waypoint x="1230" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_archiv_di" bpmnElement="dor_st_archiv"><omgdc:Bounds x="762" y="386" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="355" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_archiv_di" bpmnElement="doa_st_archiv"><omgdi:waypoint x="780" y="460"/><omgdi:waypoint x="780" y="436"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_kanal_di" bpmnElement="dor_st_kanal"><omgdc:Bounds x="612" y="946" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="915" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_kanal_di" bpmnElement="doa_st_kanal"><omgdi:waypoint x="630" y="1020"/><omgdi:waypoint x="630" y="996"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="1270" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="1325" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="362" y="1270" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="1325" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

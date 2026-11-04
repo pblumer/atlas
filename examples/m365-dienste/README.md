@@ -23,7 +23,7 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 | `*.dmn` | Die acht Entscheidungsmodelle |
 | `*.form.json` | Bestell-, Aktions-, Aufgaben- und öffentliche Formulare |
 | `installieren.sh`, `installieren.ps1` | Installation in eine Atlas-Instanz: Entscheidungsmodelle, Applikation, Architektur, Veröffentlichung, Katalog |
-| `architektur/` | Informationsmodell, Capabilities und Wertströme, mit `einspielen.py` und einer Beschreibung (siehe «Architektur») |
+| `architektur/` | Informationsmodell, Realisierungen und Vorschläge für Capabilities und Wertströme, mit einer Beschreibung (siehe «Architektur»); reisen im Applikationsbündel mit |
 | `antworten.beispiel.json` | Vorlage für die Antworten auf `fragen.json` |
 
 ## Die Kataloge
@@ -960,12 +960,17 @@ Beispiel auch seine Daten und seinen Zweck. Alles Einzelne steht in
   realisiert, die sie tun, auch denen der OnPrem-Variante; dazu die Wertströme
   «Mitarbeitende arbeitsfähig machen» und «Zusammenarbeit ermöglichen».
 
-Ein Applikationsbündel (Hub, Quellbaum) trägt weder Informationsmodell noch Capabilities.
-`installieren.sh` und `installieren.ps1` legen sie deshalb in Schritt 2b an, zwischen Import
-und Veröffentlichung, weil die Skizze eines Release festhält, was beim Veröffentlichen
-bekannt ist. Wer das Beispiel über den Hub importiert, führt danach
-`ATLAS_TOKEN=… python3 architektur/einspielen.py SERVER APPLIKATIONS-ID` aus und
-veröffentlicht ein neues Release.
+Beides reist im Applikationsbündel mit (Quellbaum-Format 4, `informationModels` und
+`architecture` in `atlas.json`, ADR-draft-application-bundle-architecture). Jeder Import nimmt
+es mit: über den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das
+Installationsskript der Testumgebung. Die Realisierungen gehören der Applikation und gehen
+mit ihr. Die Capability-Landkarte gehört dem Server:
+
+- Einen Schlüssel, den sie schon hat, verknüpft der Import nur und überschreibt ihn nie.
+- Einer, der ihr fehlt, ist eine Lücke. Jemand entscheidet sie: übernehmen, einem
+  vorhandenen Schlüssel zuordnen oder weglassen.
+  - In der Console geschieht das im Import-Dialog.
+  - In den Skripten über `LANDKARTE` bzw. `-Landkarte` (siehe `architektur/README.md`).
 
 ## Voraussetzungen auf der Zielinstanz
 

@@ -110,12 +110,12 @@ Worker: ucc_exchange.</documentation>
       <bpmndi:BPMNEdge id="f_gw_kontakt2__st_ab_di" bpmnElement="f_gw_kontakt2__st_ab"><omgdi:waypoint x="805" y="270"/><omgdi:waypoint x="880" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="811" y="248" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_kontakt2__e_nie_di" bpmnElement="f_gw_kontakt2__e_nie"><omgdi:waypoint x="780" y="245"/><omgdi:waypoint x="780" y="130"/><omgdi:waypoint x="912" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="786" y="180" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_ab__e_ab_di" bpmnElement="f_st_ab__e_ab"><omgdi:waypoint x="980" y="270"/><omgdi:waypoint x="1062" y="270"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_neu_di" bpmnElement="dor_st_neu"><omgdc:Bounds x="1562" y="618" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1530" y="670" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_neu_di" bpmnElement="doa_st_neu"><omgdi:waypoint x="1572" y="590"/><omgdi:waypoint x="1580" y="618"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_auf_di" bpmnElement="dor_st_auf"><omgdc:Bounds x="1862" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1830" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_auf_di" bpmnElement="doa_st_auf"><omgdi:waypoint x="1872" y="450"/><omgdi:waypoint x="1880" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ab_di" bpmnElement="dor_st_ab"><omgdc:Bounds x="962" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ab_di" bpmnElement="doa_st_ab"><omgdi:waypoint x="972" y="310"/><omgdi:waypoint x="980" y="338"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_neu_di" bpmnElement="dor_st_neu"><omgdc:Bounds x="1512" y="614" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1480" y="668" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_neu_di" bpmnElement="doa_st_neu"><omgdi:waypoint x="1530" y="590"/><omgdi:waypoint x="1530" y="614"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_auf_di" bpmnElement="dor_st_auf"><omgdc:Bounds x="1812" y="296" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1780" y="265" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_auf_di" bpmnElement="doa_st_auf"><omgdi:waypoint x="1830" y="370"/><omgdi:waypoint x="1830" y="346"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ab_di" bpmnElement="dor_st_ab"><omgdc:Bounds x="1025" y="156" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="993" y="125" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ab_di" bpmnElement="doa_st_ab"><omgdi:waypoint x="955" y="230"/><omgdi:waypoint x="955" y="181"/><omgdi:waypoint x="1025" y="181"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="778" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="833" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

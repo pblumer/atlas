@@ -544,12 +544,12 @@ Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen aus
       <bpmndi:BPMNEdge id="E_Eskalieren_Ende" bpmnElement="F_Eskalieren_Ende">
         <omgdi:waypoint x="1840" y="620"/><omgdi:waypoint x="1890" y="620"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_Provisionieren_di" bpmnElement="dor_Provisionieren"><omgdc:Bounds x="1710" y="268" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1678" y="320" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_Provisionieren_di" bpmnElement="doa_Provisionieren"><omgdi:waypoint x="1682" y="240"/><omgdi:waypoint x="1728" y="268"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_Ablehnen_di" bpmnElement="dor_Ablehnen"><omgdc:Bounds x="1710" y="408" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1678" y="460" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_Ablehnen_di" bpmnElement="doa_Ablehnen"><omgdi:waypoint x="1682" y="380"/><omgdi:waypoint x="1728" y="408"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_Eskalieren_di" bpmnElement="dor_Eskalieren"><omgdc:Bounds x="1822" y="688" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1790" y="740" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_Eskalieren_di" bpmnElement="doa_Eskalieren"><omgdi:waypoint x="1832" y="660"/><omgdi:waypoint x="1840" y="688"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Provisionieren_di" bpmnElement="dor_Provisionieren"><omgdc:Bounds x="1927" y="78" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1895" y="47" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Provisionieren_di" bpmnElement="doa_Provisionieren"><omgdi:waypoint x="1665" y="160"/><omgdi:waypoint x="1665" y="103"/><omgdi:waypoint x="1927" y="103"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Ablehnen_di" bpmnElement="dor_Ablehnen"><omgdc:Bounds x="1735" y="404" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1703" y="458" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Ablehnen_di" bpmnElement="doa_Ablehnen"><omgdi:waypoint x="1665" y="380"/><omgdi:waypoint x="1665" y="429"/><omgdi:waypoint x="1735" y="429"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Eskalieren_di" bpmnElement="dor_Eskalieren"><omgdc:Bounds x="1797" y="684" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1765" y="738" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Eskalieren_di" bpmnElement="doa_Eskalieren"><omgdi:waypoint x="1815" y="660"/><omgdi:waypoint x="1815" y="684"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="152" y="830" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="102" y="885" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

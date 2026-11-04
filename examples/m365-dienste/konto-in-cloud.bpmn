@@ -182,18 +182,18 @@ Personendaten (ADR-0314): upn und konto (Anmeldename und DN im AD) sind versiege
       <bpmndi:BPMNEdge id="f_s_zurueck__ut_zurueck_di" bpmnElement="f_s_zurueck__ut_zurueck"><omgdi:waypoint x="178" y="620"/><omgdi:waypoint x="290" y="620"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ut_zurueck__st_returned_di" bpmnElement="f_ut_zurueck__st_returned"><omgdi:waypoint x="390" y="620"/><omgdi:waypoint x="470" y="620"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_returned__e_zurueck_di" bpmnElement="f_st_returned__e_zurueck"><omgdi:waypoint x="570" y="620"/><omgdi:waypoint x="682" y="620"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="4692" y="208" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="4660" y="260" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="4702" y="180"/><omgdi:waypoint x="4710" y="208"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="552" y="688" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="520" y="740" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="562" y="660"/><omgdi:waypoint x="570" y="688"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="1092" y="368" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1060" y="420" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="1102" y="340"/><omgdi:waypoint x="1110" y="368"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_set_di" bpmnElement="dor_st_set"><omgdc:Bounds x="3252" y="208" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="3220" y="260" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_set_di" bpmnElement="doa_st_set"><omgdi:waypoint x="3262" y="180"/><omgdi:waypoint x="3270" y="208"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ad_sperren_di" bpmnElement="dor_st_ad_sperren"><omgdc:Bounds x="4332" y="368" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="4300" y="420" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ad_sperren_di" bpmnElement="doa_st_ad_sperren"><omgdi:waypoint x="4342" y="340"/><omgdi:waypoint x="4350" y="368"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_ut_zurueck_di" bpmnElement="dor_ut_zurueck"><omgdc:Bounds x="372" y="688" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="340" y="740" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_ut_zurueck_di" bpmnElement="doa_ut_zurueck"><omgdi:waypoint x="382" y="660"/><omgdi:waypoint x="390" y="688"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="4642" y="26" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="4610" y="-5" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="4660" y="100"/><omgdi:waypoint x="4660" y="76"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="502" y="506" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="470" y="475" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="520" y="580"/><omgdi:waypoint x="520" y="556"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="1042" y="364" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1010" y="418" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="1060" y="340"/><omgdi:waypoint x="1060" y="364"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_set_di" bpmnElement="dor_st_set"><omgdc:Bounds x="3202" y="26" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="3170" y="-5" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_set_di" bpmnElement="doa_st_set"><omgdi:waypoint x="3220" y="100"/><omgdi:waypoint x="3220" y="76"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ad_sperren_di" bpmnElement="dor_st_ad_sperren"><omgdc:Bounds x="4282" y="186" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="4250" y="155" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ad_sperren_di" bpmnElement="doa_st_ad_sperren"><omgdi:waypoint x="4300" y="260"/><omgdi:waypoint x="4300" y="236"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_ut_zurueck_di" bpmnElement="dor_ut_zurueck"><omgdc:Bounds x="322" y="506" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="290" y="475" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_ut_zurueck_di" bpmnElement="doa_ut_zurueck"><omgdi:waypoint x="340" y="580"/><omgdi:waypoint x="340" y="556"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="142" y="830" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="92" y="885" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="dsr_active_directory_konten_di" bpmnElement="dsr_active_directory_konten"><omgdc:Bounds x="342" y="830" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="292" y="885" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>

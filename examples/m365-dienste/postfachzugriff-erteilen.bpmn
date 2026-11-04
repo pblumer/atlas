@@ -75,15 +75,15 @@ Personendaten: postfach, person und anlass sind als Personendaten der empfangend
       <bpmndi:BPMNShape id="br_frei_di" bpmnElement="br_frei"><omgdc:Bounds x="280" y="230" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sc_hinweis_di" bpmnElement="sc_hinweis"><omgdc:Bounds x="430" y="230" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_zusatz_di" bpmnElement="gw_zusatz" isMarkerVisible="true"><omgdc:Bounds x="605" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="533" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="730" y="370" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="gw_frei_di" bpmnElement="gw_frei" isMarkerVisible="true"><omgdc:Bounds x="905" y="385" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="354" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_ablehnen_di" bpmnElement="st_ablehnen"><omgdc:Bounds x="1030" y="510" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="1212" y="532" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="572" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_pruefen_di" bpmnElement="ut_pruefen"><omgdc:Bounds x="730" y="460" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_frei_di" bpmnElement="gw_frei" isMarkerVisible="true"><omgdc:Bounds x="905" y="475" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="833" y="444" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ablehnen_di" bpmnElement="st_ablehnen"><omgdc:Bounds x="1030" y="600" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="1212" y="622" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="662" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_ok_di" bpmnElement="gw_ok" isMarkerVisible="true"><omgdc:Bounds x="1055" y="245" width="50" height="50"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_art_di" bpmnElement="gw_art" isMarkerVisible="true"><omgdc:Bounds x="1205" y="245" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1133" y="214" width="70" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="st_voll_di" bpmnElement="st_voll"><omgdc:Bounds x="1330" y="230" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="st_sendas_di" bpmnElement="st_sendas"><omgdc:Bounds x="1330" y="90" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="st_auftrag_di" bpmnElement="st_auftrag"><omgdc:Bounds x="1330" y="370" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_auftrag_di" bpmnElement="st_auftrag"><omgdc:Bounds x="1330" y="460" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="gw_artjoin_di" bpmnElement="gw_artjoin" isMarkerVisible="true"><omgdc:Bounds x="1505" y="245" width="50" height="50"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="st_done_di" bpmnElement="st_done"><omgdc:Bounds x="1630" y="230" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok"><omgdc:Bounds x="1812" y="252" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1780" y="292" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
@@ -91,31 +91,31 @@ Personendaten: postfach, person und anlass sind als Personendaten der empfangend
       <bpmndi:BPMNEdge id="f_br_frei__sc_hinweis_di" bpmnElement="f_br_frei__sc_hinweis"><omgdi:waypoint x="380" y="270"/><omgdi:waypoint x="430" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_sc_hinweis__gw_zusatz_di" bpmnElement="f_sc_hinweis__gw_zusatz"><omgdi:waypoint x="530" y="270"/><omgdi:waypoint x="605" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_zusatz__gw_ok_di" bpmnElement="f_gw_zusatz__gw_ok"><omgdi:waypoint x="655" y="270"/><omgdi:waypoint x="1055" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="248" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_zusatz__ut_pruefen_di" bpmnElement="f_gw_zusatz__ut_pruefen"><omgdi:waypoint x="630" y="295"/><omgdi:waypoint x="630" y="410"/><omgdi:waypoint x="730" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="345" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_frei_di" bpmnElement="f_ut_pruefen__gw_frei"><omgdi:waypoint x="830" y="410"/><omgdi:waypoint x="905" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_frei__gw_ok_di" bpmnElement="f_gw_frei__gw_ok"><omgdi:waypoint x="955" y="410"/><omgdi:waypoint x="1080" y="410"/><omgdi:waypoint x="1080" y="295"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="388" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_frei__st_ablehnen_di" bpmnElement="f_gw_frei__st_ablehnen"><omgdi:waypoint x="930" y="435"/><omgdi:waypoint x="930" y="550"/><omgdi:waypoint x="1030" y="550"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="485" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="1130" y="550"/><omgdi:waypoint x="1212" y="550"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_zusatz__ut_pruefen_di" bpmnElement="f_gw_zusatz__ut_pruefen"><omgdi:waypoint x="630" y="295"/><omgdi:waypoint x="630" y="500"/><omgdi:waypoint x="730" y="500"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="435" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_pruefen__gw_frei_di" bpmnElement="f_ut_pruefen__gw_frei"><omgdi:waypoint x="830" y="500"/><omgdi:waypoint x="905" y="500"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_frei__gw_ok_di" bpmnElement="f_gw_frei__gw_ok"><omgdi:waypoint x="955" y="500"/><omgdi:waypoint x="1080" y="500"/><omgdi:waypoint x="1080" y="295"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="478" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_frei__st_ablehnen_di" bpmnElement="f_gw_frei__st_ablehnen"><omgdi:waypoint x="930" y="525"/><omgdi:waypoint x="930" y="640"/><omgdi:waypoint x="1030" y="640"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="575" width="64" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ablehnen__e_abgelehnt_di" bpmnElement="f_st_ablehnen__e_abgelehnt"><omgdi:waypoint x="1130" y="640"/><omgdi:waypoint x="1212" y="640"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_ok__gw_art_di" bpmnElement="f_gw_ok__gw_art"><omgdi:waypoint x="1105" y="270"/><omgdi:waypoint x="1205" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_art__st_voll_di" bpmnElement="f_gw_art__st_voll"><omgdi:waypoint x="1255" y="270"/><omgdi:waypoint x="1330" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="1261" y="248" width="66" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_art__st_sendas_di" bpmnElement="f_gw_art__st_sendas"><omgdi:waypoint x="1230" y="245"/><omgdi:waypoint x="1230" y="130"/><omgdi:waypoint x="1330" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="1236" y="180" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_gw_art__st_auftrag_di" bpmnElement="f_gw_art__st_auftrag"><omgdi:waypoint x="1230" y="295"/><omgdi:waypoint x="1230" y="410"/><omgdi:waypoint x="1330" y="410"/><bpmndi:BPMNLabel><omgdc:Bounds x="1236" y="345" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_art__st_auftrag_di" bpmnElement="f_gw_art__st_auftrag"><omgdi:waypoint x="1230" y="295"/><omgdi:waypoint x="1230" y="500"/><omgdi:waypoint x="1330" y="500"/><bpmndi:BPMNLabel><omgdc:Bounds x="1236" y="435" width="78" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_voll__gw_artjoin_di" bpmnElement="f_st_voll__gw_artjoin"><omgdi:waypoint x="1430" y="270"/><omgdi:waypoint x="1505" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_sendas__gw_artjoin_di" bpmnElement="f_st_sendas__gw_artjoin"><omgdi:waypoint x="1430" y="130"/><omgdi:waypoint x="1530" y="130"/><omgdi:waypoint x="1530" y="245"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="f_st_auftrag__gw_artjoin_di" bpmnElement="f_st_auftrag__gw_artjoin"><omgdi:waypoint x="1430" y="410"/><omgdi:waypoint x="1530" y="410"/><omgdi:waypoint x="1530" y="295"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_auftrag__gw_artjoin_di" bpmnElement="f_st_auftrag__gw_artjoin"><omgdi:waypoint x="1430" y="500"/><omgdi:waypoint x="1530" y="500"/><omgdi:waypoint x="1530" y="295"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_artjoin__st_done_di" bpmnElement="f_gw_artjoin__st_done"><omgdi:waypoint x="1555" y="270"/><omgdi:waypoint x="1630" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_done__e_ok_di" bpmnElement="f_st_done__e_ok"><omgdi:waypoint x="1730" y="270"/><omgdi:waypoint x="1812" y="270"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1712" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1680" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1722" y="310"/><omgdi:waypoint x="1730" y="338"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="1112" y="618" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1080" y="670" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="1122" y="590"/><omgdi:waypoint x="1130" y="618"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_voll_di" bpmnElement="dor_st_voll"><omgdc:Bounds x="1450" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1418" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_voll_di" bpmnElement="doa_st_voll"><omgdi:waypoint x="1422" y="310"/><omgdi:waypoint x="1468" y="338"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_sendas_di" bpmnElement="dor_st_sendas"><omgdc:Bounds x="1450" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1418" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_sendas_di" bpmnElement="doa_st_sendas"><omgdi:waypoint x="1422" y="170"/><omgdi:waypoint x="1468" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_auftrag_di" bpmnElement="dor_st_auftrag"><omgdc:Bounds x="1412" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1380" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_auftrag_di" bpmnElement="doa_st_auftrag"><omgdi:waypoint x="1422" y="450"/><omgdi:waypoint x="1430" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="760" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="815" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1662" y="156" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1630" y="125" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1680" y="230"/><omgdi:waypoint x="1680" y="206"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ablehnen_di" bpmnElement="dor_st_ablehnen"><omgdc:Bounds x="1062" y="704" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="758" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ablehnen_di" bpmnElement="doa_st_ablehnen"><omgdi:waypoint x="1080" y="680"/><omgdi:waypoint x="1080" y="704"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_voll_di" bpmnElement="dor_st_voll"><omgdc:Bounds x="1442" y="340" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1410" y="394" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_voll_di" bpmnElement="doa_st_voll"><omgdi:waypoint x="1430" y="295"/><omgdi:waypoint x="1460" y="295"/><omgdi:waypoint x="1460" y="340"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sendas_di" bpmnElement="dor_st_sendas"><omgdc:Bounds x="1362" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sendas_di" bpmnElement="doa_st_sendas"><omgdi:waypoint x="1380" y="90"/><omgdi:waypoint x="1380" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_auftrag_di" bpmnElement="dor_st_auftrag"><omgdc:Bounds x="1362" y="386" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="355" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_auftrag_di" bpmnElement="doa_st_auftrag"><omgdi:waypoint x="1380" y="460"/><omgdi:waypoint x="1380" y="436"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="850" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="905" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

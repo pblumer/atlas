@@ -193,12 +193,12 @@ Voraussetzungen: Worker ucc_entra, Secret atlas (API-Token mit der Rolle operato
       <bpmndi:BPMNEdge id="f_ut_adkonto__gw_ajoin_di" bpmnElement="f_ut_adkonto__gw_ajoin"><omgdi:waypoint x="3680" y="130"/><omgdi:waypoint x="3780" y="130"/><omgdi:waypoint x="3780" y="245"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_ajoin__gw_rende_di" bpmnElement="f_gw_ajoin__gw_rende"><omgdi:waypoint x="3805" y="270"/><omgdi:waypoint x="3930" y="270"/><omgdi:waypoint x="3930" y="385"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_rende__e_ausgetreten_di" bpmnElement="f_gw_rende__e_ausgetreten"><omgdi:waypoint x="3955" y="410"/><omgdi:waypoint x="4062" y="410"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_konto_di" bpmnElement="dor_st_konto"><omgdc:Bounds x="1262" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1230" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_konto_di" bpmnElement="doa_st_konto"><omgdi:waypoint x="1272" y="450"/><omgdi:waypoint x="1280" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_ut_uebergabe_di" bpmnElement="dor_ut_uebergabe"><omgdc:Bounds x="1600" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1568" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_ut_uebergabe_di" bpmnElement="doa_ut_uebergabe"><omgdi:waypoint x="1572" y="310"/><omgdi:waypoint x="1618" y="338"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_sperren_di" bpmnElement="dor_st_sperren"><omgdc:Bounds x="3250" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="3218" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_sperren_di" bpmnElement="doa_st_sperren"><omgdi:waypoint x="3222" y="450"/><omgdi:waypoint x="3268" y="478"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_konto_di" bpmnElement="dor_st_konto"><omgdc:Bounds x="1212" y="296" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="265" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_konto_di" bpmnElement="doa_st_konto"><omgdi:waypoint x="1230" y="370"/><omgdi:waypoint x="1230" y="346"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_ut_uebergabe_di" bpmnElement="dor_ut_uebergabe"><omgdc:Bounds x="1512" y="156" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1480" y="125" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_ut_uebergabe_di" bpmnElement="doa_ut_uebergabe"><omgdi:waypoint x="1530" y="230"/><omgdi:waypoint x="1530" y="206"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sperren_di" bpmnElement="dor_st_sperren"><omgdc:Bounds x="3162" y="296" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="3130" y="265" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sperren_di" bpmnElement="doa_st_sperren"><omgdi:waypoint x="3180" y="370"/><omgdi:waypoint x="3180" y="346"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="660" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="715" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

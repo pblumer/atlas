@@ -194,6 +194,28 @@ func TestEverySampleInstallsFromItsHubPackage(t *testing.T) {
 			}
 			dir := unpackHubPackage(t, archive)
 			args := []string{"--server", ts.URL, "--note", "atlas hub"}
+			// A package that brings its architecture names capabilities this empty map
+			// lacks: the person installing it decides each, here by adopting what the
+			// package proposes (ADR-draft-application-bundle-architecture).
+			var plan struct {
+				Artifacts []struct {
+					Ref      string `json:"ref"`
+					Status   string `json:"status"`
+					Proposed bool   `json:"proposed"`
+				} `json:"artifacts"`
+			}
+			if err := json.Unmarshal(body, &plan); err != nil {
+				t.Fatal(err)
+			}
+			var adopt []string
+			for _, a := range plan.Artifacts {
+				if a.Status == "gap" && a.Proposed {
+					adopt = append(adopt, a.Ref)
+				}
+			}
+			if len(adopt) > 0 {
+				args = append(args, "--adopt", strings.Join(adopt, ","))
+			}
 			if questions, err := readOptional(filepath.Join(dir, packageQuestions)); err != nil {
 				t.Fatal(err)
 			} else if questions != nil {

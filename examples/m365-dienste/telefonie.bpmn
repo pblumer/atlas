@@ -109,18 +109,18 @@ Personendaten: upn (aus dem Bestellformular), rufnummer (aus der Aufgabe) und zu
       <bpmndi:BPMNEdge id="f_st_nummer__st_done_di" bpmnElement="f_st_nummer__st_done"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1030" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_b_nummer__sc_vergeben_di" bpmnElement="f_b_nummer__sc_vergeben"><omgdi:waypoint x="930" y="188"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="1030" y="270"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_sc_vergeben__ut_nummer_di" bpmnElement="f_sc_vergeben__ut_nummer"><omgdi:waypoint x="1080" y="310"/><omgdi:waypoint x="1080" y="330"/><omgdi:waypoint x="780" y="330"/><omgdi:waypoint x="780" y="170"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1150" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1118" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1122" y="170"/><omgdi:waypoint x="1168" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="962" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="972" y="450"/><omgdi:waypoint x="980" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_lizenz_di" bpmnElement="dor_st_lizenz"><omgdc:Bounds x="662" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_lizenz_di" bpmnElement="doa_st_lizenz"><omgdi:waypoint x="672" y="170"/><omgdi:waypoint x="680" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_nummer_di" bpmnElement="dor_st_nummer"><omgdc:Bounds x="962" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_nummer_di" bpmnElement="doa_st_nummer"><omgdi:waypoint x="972" y="170"/><omgdi:waypoint x="980" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_frei_di" bpmnElement="dor_st_frei"><omgdc:Bounds x="362" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="330" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_frei_di" bpmnElement="doa_st_frei"><omgdi:waypoint x="372" y="450"/><omgdi:waypoint x="380" y="478"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_entzug_di" bpmnElement="dor_st_entzug"><omgdc:Bounds x="812" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="780" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_entzug_di" bpmnElement="doa_st_entzug"><omgdi:waypoint x="822" y="450"/><omgdi:waypoint x="830" y="478"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_done_di" bpmnElement="dor_st_done"><omgdc:Bounds x="1062" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_done_di" bpmnElement="doa_st_done"><omgdi:waypoint x="1080" y="90"/><omgdi:waypoint x="1080" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="912" y="474" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="528" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="930" y="450"/><omgdi:waypoint x="930" y="474"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_lizenz_di" bpmnElement="dor_st_lizenz"><omgdc:Bounds x="612" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_lizenz_di" bpmnElement="doa_st_lizenz"><omgdi:waypoint x="630" y="90"/><omgdi:waypoint x="630" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_nummer_di" bpmnElement="dor_st_nummer"><omgdc:Bounds x="912" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_nummer_di" bpmnElement="doa_st_nummer"><omgdi:waypoint x="930" y="90"/><omgdi:waypoint x="930" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_frei_di" bpmnElement="dor_st_frei"><omgdc:Bounds x="312" y="296" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="265" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_frei_di" bpmnElement="doa_st_frei"><omgdi:waypoint x="330" y="370"/><omgdi:waypoint x="330" y="346"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_entzug_di" bpmnElement="dor_st_entzug"><omgdc:Bounds x="762" y="474" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="730" y="528" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_entzug_di" bpmnElement="doa_st_entzug"><omgdi:waypoint x="780" y="450"/><omgdi:waypoint x="780" y="474"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="620" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="675" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="dsr_teams_phone_rufnummern_di" bpmnElement="dsr_teams_phone_rufnummern"><omgdc:Bounds x="362" y="620" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="675" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>

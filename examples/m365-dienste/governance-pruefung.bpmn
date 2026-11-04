@@ -73,10 +73,10 @@ Worker: ucc_exchange, ucc_entra.</documentation>
       <bpmndi:BPMNEdge id="f_gw__e_sauber_di" bpmnElement="f_gw__e_sauber"><omgdi:waypoint x="930" y="155"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="1062" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="205" width="43" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_sc_text__ut_di" bpmnElement="f_sc_text__ut"><omgdi:waypoint x="1130" y="130"/><omgdi:waypoint x="1180" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_ut__e_di" bpmnElement="f_ut__e"><omgdi:waypoint x="1280" y="130"/><omgdi:waypoint x="1362" y="130"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_sc_text_di" bpmnElement="dor_sc_text"><omgdc:Bounds x="1112" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1080" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_sc_text_di" bpmnElement="doa_sc_text"><omgdi:waypoint x="1122" y="170"/><omgdi:waypoint x="1130" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_ut_di" bpmnElement="dor_ut"><omgdc:Bounds x="1262" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1230" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_ut_di" bpmnElement="doa_ut"><omgdi:waypoint x="1272" y="170"/><omgdi:waypoint x="1280" y="198"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_sc_text_di" bpmnElement="dor_sc_text"><omgdc:Bounds x="1062" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_sc_text_di" bpmnElement="doa_sc_text"><omgdi:waypoint x="1080" y="90"/><omgdi:waypoint x="1080" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_ut_di" bpmnElement="dor_ut"><omgdc:Bounds x="1212" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_ut_di" bpmnElement="doa_ut"><omgdi:waypoint x="1230" y="90"/><omgdi:waypoint x="1230" y="66"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_gruppen_di" bpmnElement="dsr_entra_id_gruppen"><omgdc:Bounds x="162" y="358" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="413" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="362" y="358" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="312" y="413" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>

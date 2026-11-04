@@ -1,6 +1,7 @@
 package examples
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"os"
@@ -13,10 +14,10 @@ import (
 )
 
 // The architecture of m365-dienste (examples/m365-dienste/architektur): an information
-// model, capabilities and value streams that install-m365-dienste.py files on the server,
-// and the data objects and stores the processes declare. Nothing at deploy refuses a
-// data object whose class or state the model does not know (ADR-0259 §5 warns only), so
-// these tests are what keeps the three in step.
+// model, its realizations and proposed capabilities and value streams, which travel in the
+// application bundle (format 4), and the data objects and stores the processes declare.
+// Nothing at deploy refuses a data object whose class or state the model does not know
+// (ADR-0259 §5 warns only), so these tests are what keeps the three in step.
 
 const m365Dir = "m365-dienste"
 
@@ -153,22 +154,30 @@ func TestM365ProcessDataMatchesTheModel(t *testing.T) {
 	}
 }
 
+// m365Architecture is architektur/capabilities.json, the architecture file of the
+// source tree (format 4, ADR-draft-application-bundle-architecture).
 type m365Architecture struct {
-	Capabilities []capability.Capability  `json:"capabilities"`
-	ValueStreams []capability.ValueStream `json:"valueStreams"`
+	Comment      string                          `json:"_comment"`
+	Realizations []capability.BundledRealization `json:"realizations"`
+	Capabilities []capability.Capability         `json:"capabilities"`
+	ValueStreams []capability.ValueStream        `json:"valueStreams"`
 }
 
-// TestM365CapabilitiesAreValid: each capability and value stream passes the server's
-// validation, every process realization of the online application names one of its
-// processes, every process is realized by a capability, and every dependency and stage
-// names a capability of the file.
+// TestM365CapabilitiesAreValid: the manifest carries the model and the architecture
+// file in format 4; every realization is one the import accepts and names a process of
+// the application; every process is realized; each proposed capability and value stream
+// passes the server's validation and carries no realizations of its own; every
+// realization, dependency and stage names a capability the file proposes, so a server
+// whose map is empty can adopt the whole map from it.
 func TestM365CapabilitiesAreValid(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(m365Dir, "architektur", "capabilities.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var a m365Architecture
-	if err := json.Unmarshal(raw, &a); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&a); err != nil {
 		t.Fatal(err)
 	}
 	manRaw, err := os.ReadFile(filepath.Join(m365Dir, "atlas.json"))
@@ -176,32 +185,48 @@ func TestM365CapabilitiesAreValid(t *testing.T) {
 		t.Fatal(err)
 	}
 	var man struct {
-		Key       string
-		Processes []struct{ ID string }
+		FormatVersion     int
+		Key               string
+		Processes         []struct{ ID string }
+		InformationModels []struct{ Name, Path string }
+		Architecture      string
 	}
 	if err := json.Unmarshal(manRaw, &man); err != nil {
 		t.Fatal(err)
 	}
+	if man.FormatVersion != 4 || man.Architecture != "architektur/capabilities.json" ||
+		len(man.InformationModels) != 1 || man.InformationModels[0].Path != "architektur/informationsmodell.json" ||
+		man.InformationModels[0].Name != m365InfoModel(t).Name {
+		t.Fatalf("atlas.json does not carry the architecture in format 4: %+v", man)
+	}
 	procs := map[string]bool{}
+	known := map[string]bool{}
 	for _, p := range man.Processes {
 		procs[p.ID] = false
+		known[p.ID] = true
+	}
+	if !slices.Equal(a.Realizations, capability.NormalizeBundledRealizations(a.Realizations)) {
+		t.Error("the realizations are not in the order the server writes them; keep the file sorted")
+	}
+	for _, msg := range capability.ValidateBundledRealizations(a.Realizations, known) {
+		t.Errorf("realizations: %s", msg)
 	}
 	keys := map[string]bool{}
 	for _, c := range a.Capabilities {
 		keys[c.Key] = true
 	}
+	for _, r := range a.Realizations {
+		if !keys[r.Capability] {
+			t.Errorf("realization of %s names capability %s, which the file does not propose", r.ProcessID, r.Capability)
+		}
+		procs[r.ProcessID] = true
+	}
 	for _, c := range a.Capabilities {
 		for _, msg := range capability.ValidateCapability(c) {
 			t.Errorf("capability %s: %s", c.Key, msg)
 		}
-		for _, r := range c.Realizations {
-			if r.Kind != capability.RealizationProcess || r.ApplicationKey != man.Key {
-				continue
-			}
-			if _, ok := procs[r.ProcessID]; !ok {
-				t.Errorf("capability %s: realized by %s, which is not a process of %s", c.Key, r.ProcessID, man.Key)
-			}
-			procs[r.ProcessID] = true
+		if len(c.Realizations) > 0 {
+			t.Errorf("capability %s carries realizations; they belong under realizations", c.Key)
 		}
 		for _, k := range c.Requires {
 			if !keys[k] {

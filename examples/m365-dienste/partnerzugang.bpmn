@@ -65,10 +65,10 @@ Konstanten PARTNER_UPN_DOMAIN und USAGE_LOCATION (Applikation). Worker: ucc_entr
       <bpmndi:BPMNEdge id="f_st_konto__t_ablauf_di" bpmnElement="f_st_konto__t_ablauf"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="762" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_t_ablauf__st_sperren_di" bpmnElement="f_t_ablauf__st_sperren"><omgdi:waypoint x="798" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_sperren__e_gesperrt_di" bpmnElement="f_st_sperren__e_gesperrt"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1062" y="130"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_konto_di" bpmnElement="dor_st_konto"><omgdc:Bounds x="662" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_konto_di" bpmnElement="doa_st_konto"><omgdi:waypoint x="672" y="170"/><omgdi:waypoint x="680" y="198"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="dor_st_sperren_di" bpmnElement="dor_st_sperren"><omgdc:Bounds x="962" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="doa_st_sperren_di" bpmnElement="doa_st_sperren"><omgdi:waypoint x="972" y="170"/><omgdi:waypoint x="980" y="198"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_konto_di" bpmnElement="dor_st_konto"><omgdc:Bounds x="612" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_konto_di" bpmnElement="doa_st_konto"><omgdi:waypoint x="630" y="90"/><omgdi:waypoint x="630" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_sperren_di" bpmnElement="dor_st_sperren"><omgdc:Bounds x="912" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_sperren_di" bpmnElement="doa_st_sperren"><omgdi:waypoint x="930" y="90"/><omgdi:waypoint x="930" y="66"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="162" y="358" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="413" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
