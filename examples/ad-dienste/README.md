@@ -74,8 +74,8 @@ fremden Kontos und wird deshalb von der AD-Administration geprüft.
 ### Sicherheitsgruppe
 
 **Bestellformular** (`ad-sicherheitsgruppe-bestellung`): Bereichskürzel, Bezeichnung,
-Gruppenbereich (global, domänenlokal, universell), Zweck und die verantwortliche Person (ihr
-Anmeldename).
+Gruppenbereich (global, domänenlokal, universell), Zweck und die verantwortliche Person. Die Person
+wird im Active Directory gesucht (siehe «Personen suchen»); übermittelt wird ihr Anmeldename.
 
 **Bereitstellen:** Namensregel `AdNamensregel` (SG-<BEREICH>-<bezeichnung>), Prüfung der
 Angaben, Konto der verantwortlichen Person suchen (es muss bestehen und aktiv sein), verbindliche
@@ -117,8 +117,8 @@ bestehenden AD-Gruppe. Alle Produkte `ad-recht-*` sind an **einen** Lebenszyklus
 Entscheidung `AdBerechtigungen` (Produkt-ID → Gruppe). Ein neues Recht ist eine Zeile in dieser
 Tabelle und ein Produkt im Katalog, kein neuer Prozess.
 
-**Bestellformular** (`ad-berechtigung-bestellung`): `konto`, der Anmeldename der empfangenden
-Person.
+**Bestellformular** (`ad-berechtigung-bestellung`): `konto`, das Konto der empfangenden Person,
+im Active Directory gesucht; übermittelt wird der Anmeldename.
 
 **Bereitstellen:** Tabelle lesen, Angaben prüfen, Konto suchen (aktiv), Gruppe lesen (`scope`
 base: gibt es sie?), mit einer zweiten Suche auf die Gruppe prüfen, ob das Konto schon in `member`
@@ -152,8 +152,9 @@ unter den festgefahrenen Genehmigungen.
 
 ### Admin-Konto
 
-**Bestellformular** (`ad-admin-konto-bestellung`): Hauptkonto (Anmeldename, höchstens 16
-Zeichen), Begründung (`anlass`), gültig bis (höchstens 365 Tage).
+**Bestellformular** (`ad-admin-konto-bestellung`): Hauptkonto (im Active Directory gesucht,
+übermittelt wird der Anmeldename; höchstens 16 Zeichen, sonst lehnt die Bereitstellung ab),
+Begründung (`anlass`), gültig bis (höchstens 365 Tage).
 
 **Bereitstellen:** Ablaufdatum prüfen, Hauptkonto suchen (muss bestehen und aktiv sein, der
 Anmeldename höchstens 16 Zeichen haben und kein eingebautes Konto wie `administrator` oder
@@ -424,6 +425,9 @@ Jede Tabelle hat eine Auffangregel, die ablehnt (fail-closed). Die DNs in `AdBer
   Ausdrücken, die nur `a-z`, `0-9`, Punkte und Bindestriche erzeugen. Zweck und Begründung gehen
   nie in einen Filter. Wer ein Formular erweitert, hält sich an dieselbe Regel: Muster im Formular
   **und** Prüfung im Filterausdruck, weil eine Antwort auch an der Oberfläche vorbei kommen kann.
+  Die Personenfelder der Bestellformulare sind Suchfelder (siehe «Personen suchen»); die Suche
+  baut ihren Filter im AD-Worker selbst und maskiert jeden Suchbegriff, und der Prozess prüft den
+  übermittelten Anmeldenamen danach trotzdem mit `matches()`.
 - **Befristung und Rezertifizierung.** Berechtigungen, Admin-, Service-, Test- und externe Konten
   tragen `maxDays`: Ihr Recht erhält ein Enddatum (ADR-0344). Wer zusätzlich die beiden
   Beispiele `examples/befristung.bpmn` (gibt täglich überfällige Rechte über die Bestellung zurück)
@@ -514,6 +518,29 @@ Gruppe aufnimmt; nach einer Löschung dieses Schlüssels ist auch er nicht mehr 
 - **Die Antworten im Auftrag:** Was ein Bestellformular beantwortet, speichert auch die Bestellung
   (der Shop zeigt es den Genehmigenden); das versiegelt nicht der Prozess.
 
+## Personen suchen
+
+Die Personenfelder der Bestellformulare (`verantwortlich` der Sicherheitsgruppe, `konto` der
+Berechtigung und der Versetzung, `hauptkonto` des Admin-Kontos, `sponsor` des externen Kontos)
+sind Auswahlfelder mit der Datenquelle **Active Directory — users** (ADR-0473, Nachtrag
+2026-11-04). Wer bestellt, tippt zwei Buchstaben von Name, Vorname, Nachname, Mail oder
+Anmeldename und wählt aus den ersten 25 Treffern. Gesucht wird über den Worker `ad_verzeichnis`
+mit dessen Dienstkonto, nur aktive Konten, unter dem `defaultNamingContext` der Domäne.
+Übermittelt wird der Anmeldename (`sAMAccountName`), also dasselbe wie vorher im Textfeld: Die
+Prozesse sind unverändert und suchen das Konto weiterhin selbst unter `AD_PERSONEN_OU`. Ein Konto
+ausserhalb dieser OU findet die Suche, die Bereitstellung lehnt es ab.
+
+Der Shop prüft die Antwort beim Bestellen noch einmal gegen das Verzeichnis: Ein Anmeldename, den
+die Suche nicht angeboten hätte, wird abgelehnt.
+
+**Bleiben Textfelder:** `mitglied` (Mitglied aufnehmen, entfernen) und `neuerVerantwortlicher`
+(Verantwortung übergeben). Das sind Formulare von Aktionen am Bestand, und eine Aktion hat laut
+ADR-0473 keine Suche, weil ihr Wert nirgends geprüft würde.
+
+Wer die Suche auf einen Teil der Domäne beschränken will, setzt im Formular einen festen Filter auf
+`department` oder `company` (wie die Microsoft-365-Testumgebung es mit `department` tut). Eine
+Beschränkung auf eine OU bietet die Datenquelle nicht.
+
 ## Voraussetzungen auf der Zielinstanz
 
 1. **Worker `ad_verzeichnis`** (Worker-Typ AD, Console → Workers) mit einer Verbindung
@@ -530,6 +557,10 @@ Gruppe aufnimmt; nach einer Löschung dieses Schlüssels ist auch er nicht mehr 
    | `AD_KONTAKT_OU` | Kontaktobjekte erstellen und löschen; an Kontakten `displayName`, `givenName`, `sn`, `mail`, `description`, `info` schreiben | Kontakt anlegen, Rückgabe |
    | `AD_ADMIN_OU`, `AD_SERVICE_OU`, `AD_TEST_OU`, `AD_EXTERN_OU`, `AD_FUNKTION_OU`, `AD_ROLLEN_OU`, `AD_SCHULUNG_OU` | Benutzerobjekte erstellen und löschen; «Kennwort zurücksetzen»; an Benutzerobjekten `userAccountControl`, `accountExpires`, `lockoutTime`, `description`, `info`, `seeAlso`, `manager`, `displayName`, `userPrincipalName`, `givenName`, `sn`, `company`, `mail` schreiben | Konten anlegen, aktivieren, sperren, entsperren, Passwort, Rückgabe |
    | OUs der Organisationseinheiten unter `AD_PERSONEN_OU` | Benutzerobjekte löschen (Quelle) und erstellen (Ziel), `name`/`cn` schreiben | `move` bei der Versetzung (laut Microsoft braucht ein Verschieben das Löschen am alten und das Erstellen am neuen Ort) |
+
+   Damit die Personenfelder suchen können, schaltet die Console am Worker **«Forms may
+   search»** (`formLookups`) ein. Ohne den Schalter lehnt der Server jede Suche ab, und die
+   Bestellformulare mit einer Person lassen sich nicht ausfüllen.
 
    Für den Versuch ohne Verzeichnis: `ATLAS_AD_MOCK` (ADR-0181) mit einem Seed (LDIF), der die
    Konten, die Gruppen aus `AdBerechtigungen` und `AdOe` und die OUs der Einheiten enthält. Der Mock

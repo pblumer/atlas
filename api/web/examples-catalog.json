@@ -9311,12 +9311,33 @@
               },
               {
                 "key": "hauptkonto",
-                "type": "textfield",
-                "label": "Hauptkonto (Anmeldename) · Main account (logon name)",
-                "description": "Höchstens 16 Zeichen, damit adm- davor Platz hat. · At most 16 characters, so that adm- fits in front.",
+                "type": "select",
+                "label": "Hauptkonto · Main account",
+                "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted. Höchstens 16 Zeichen, damit adm- davor Platz hat; ein längerer Anmeldename wird bei der Bereitstellung abgelehnt. · At most 16 characters, so that adm- fits in front; a longer logon name is refused when the account is provided.",
                 "validate": {
-                  "required": true,
-                  "pattern": "^[A-Za-z0-9._-]{1,16}$"
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "ad",
+                  "worker": "ad_verzeichnis",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "givenName",
+                    "sn",
+                    "mail",
+                    "sAMAccountName"
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "sAMAccountName",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2
                 }
               },
               {
@@ -9443,12 +9464,33 @@
               },
               {
                 "key": "konto",
-                "type": "textfield",
-                "label": "Konto der empfangenden Person (Anmeldename) · Account of the recipient (logon name)",
-                "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores.",
+                "type": "select",
+                "label": "Konto der empfangenden Person · Account of the recipient",
+                "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted.",
                 "validate": {
-                  "required": true,
-                  "pattern": "^[A-Za-z0-9._-]{1,20}$"
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "ad",
+                  "worker": "ad_verzeichnis",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "givenName",
+                    "sn",
+                    "mail",
+                    "sAMAccountName"
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "sAMAccountName",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2
                 }
               }
             ]
@@ -9507,12 +9549,33 @@
               },
               {
                 "key": "sponsor",
-                "type": "textfield",
-                "label": "Dein Konto (Anmeldename) · Your account (logon name)",
-                "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores. Es wird manager des externen Kontos. · It becomes the external account's manager.",
+                "type": "select",
+                "label": "Dein Konto · Your account",
+                "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted. Es wird manager des externen Kontos. · It becomes the external account's manager.",
                 "validate": {
-                  "required": true,
-                  "pattern": "^[A-Za-z0-9._-]{1,20}$"
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "ad",
+                  "worker": "ad_verzeichnis",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "givenName",
+                    "sn",
+                    "mail",
+                    "sAMAccountName"
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "sAMAccountName",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2
                 }
               },
               {
@@ -9985,12 +10048,33 @@
               },
               {
                 "key": "verantwortlich",
-                "type": "textfield",
-                "label": "Verantwortliche Person (Anmeldename) · Responsible person (logon name)",
-                "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores. Sie wird managedBy der Gruppe und entscheidet über Zugänge. · They become the group's managedBy and decide on access.",
+                "type": "select",
+                "label": "Verantwortliche Person · Responsible person",
+                "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted. Sie wird managedBy der Gruppe und entscheidet über Zugänge. · They become the group's managedBy and decide on access.",
                 "validate": {
-                  "required": true,
-                  "pattern": "^[A-Za-z0-9._-]{1,20}$"
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "ad",
+                  "worker": "ad_verzeichnis",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "givenName",
+                    "sn",
+                    "mail",
+                    "sAMAccountName"
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "sAMAccountName",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2
                 }
               }
             ]
@@ -10151,12 +10235,33 @@
               },
               {
                 "key": "konto",
-                "type": "textfield",
-                "label": "Konto (Anmeldename) · Account (logon name)",
-                "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores.",
+                "type": "select",
+                "label": "Konto · Account",
+                "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted.",
                 "validate": {
-                  "required": true,
-                  "pattern": "^[A-Za-z0-9._-]{1,20}$"
+                  "required": true
+                },
+                "atlasDataSource": {
+                  "version": 1,
+                  "workerType": "ad",
+                  "worker": "ad_verzeichnis",
+                  "resource": "users",
+                  "searchFields": [
+                    "displayName",
+                    "givenName",
+                    "sn",
+                    "mail",
+                    "sAMAccountName"
+                  ],
+                  "option": {
+                    "label": "displayName",
+                    "description": "sAMAccountName",
+                    "details": [
+                      "department"
+                    ]
+                  },
+                  "pageSize": 25,
+                  "minSearchLength": 2
                 }
               },
               {

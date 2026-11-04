@@ -1,6 +1,6 @@
 # ADR-0473: A form looks remote data up through an ephemeral worker query
 
-- **Status:** Accepted (amended 2026-11-02: a directory field may stand in a shop product's order form, searched and checked against the release's catalogue instead of a task, and may submit a user's principal name instead of the object id; see «Amendment (2026-11-02)». Amended 2026-10-23: a directory field is a form-js select whose
+- **Status:** Accepted (amended 2026-11-04: Active Directory is a second source, its users and groups searched through an AD Worker's bind account and identified by logon name; see «Amendment (2026-11-04)». Amended 2026-11-02: a directory field may stand in a shop product's order form, searched and checked against the release's catalogue instead of a task, and may submit a user's principal name instead of the object id; see «Amendment (2026-11-02)». Amended 2026-10-23: a directory field is a form-js select whose
   options source is the remote data source, a fourth beside Static, Input data and
   Expression, edited under the select's own Options source; the vendored form-js bundles
   are rebuilt from a lockfile with Atlas's modules for it; a directory field saved as a
@@ -498,6 +498,57 @@ search" was "may this caller work on this task".
   the four test users and nobody else, refused a moved fixed filter with 400, and an
   order whose owner was chosen this way provisioned a distribution list managed by that
   person.
+
+### Amendment (2026-11-04): Active Directory as a second source
+
+**Context.** The AD example's forms asked for a person's logon name in a text field, and
+the person had to know it. An Active Directory without Entra Connect — or one whose
+accounts are not the ones Entra holds — cannot be searched through the Entra source,
+and AD's processes address accounts by `sAMAccountName`, not by an Entra object id.
+
+**Decision.** The AD Worker Type offers two resources, `users` and `groups`, through a
+table of its own (`connector/ad/lookup.go`, `ad.LookupResources`) that the server views
+exactly as it views Entra's (`api/formlookup/provider.go`). The field model, the
+routes, the rate limit, the submission check and the Worker's `formLookups` switch are
+unchanged; `workerType: "ad"` names the source.
+
+- **What is searched, read and submitted.** Users: prefix search over `displayName`,
+  `givenName`, `sn`, `mail`, `sAMAccountName`, `userPrincipalName`; equality filters on
+  `department` and `company`; the value is `sAMAccountName`, or `userPrincipalName` when
+  `option.value` says so. Groups: prefix over `cn`, `displayName`, `sAMAccountName`,
+  `mail`; the value is `sAMAccountName`. Users are `objectClass=user` without
+  `objectClass=computer`. `objectGUID` is never a value: it is binary.
+- **The filter is the Worker's.** It is written from the table, and every term and value
+  is escaped as RFC 4515 requires (`goldap.EscapeFilter`), so a term carrying `*`, `(`
+  or `)` is searched as text. "Enabled only" is AD's bitwise matching rule on
+  `userAccountControl`, asked of the directory.
+- **Where it searches.** Under the directory's `defaultNamingContext`, read from the
+  rootDSE on each lookup, so a Worker needs no further setting. A field narrows by its
+  fixed or bound filters, as an Entra field narrows by department. Narrowing to an OU is
+  not offered: an LDAP equality filter cannot say "below this DN", and a per-field base
+  would let a form choose where a privileged bind account reads.
+- **One page.** An LDAP paged-results cookie belongs to the connection that asked, and a
+  lookup's connection ends with its answer, so an AD lookup has no continuation: it asks
+  for the first page of a paged search (at most the field's page size) and the person
+  narrows by typing. A continuation arriving at the Worker is refused.
+- **A source says whether it has a disabled state.** The provider listing carries
+  `activeFlag`. A field's `activeOnly` default (true) applies only where it is set; a
+  group field asks for nothing, and a field that sets `activeOnly: true` on groups is
+  refused at save.
+- **Only named directories.** A lookup names a Worker; an AD task that carries its own
+  URL names none, so only directories configured in the Console are searchable, and a
+  worker holding none offers no lookup.
+- **The mock answers too.** The mock forest answers the rootDSE with the naming context
+  most of its entries share, so a mockup run searches the same way a domain controller
+  is searched.
+
+**Consequences.** The Console's Worker dialog offers the `formLookups` switch on an AD
+Worker. The AD example's order forms choose their people by search (a group's
+responsible person, the recipient of a permission or a move, the main account of an
+admin account, the sponsor of an external account); its action forms keep text fields,
+as the 2026-11-02 amendment requires. Not
+verified against a domain controller at the time of writing; the mock and the unit tests
+hold the filter, the escaping and the shapes.
 
 ## Pros and cons of the options
 

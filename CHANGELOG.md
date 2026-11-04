@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A form can search Active Directory.** A directory field may name an AD Worker
+  (`workerType: "ad"`) and search its `users` or `groups`, as it searches Entra's users:
+  prefix search over name, mail and logon name, equality filters on `department` and
+  `company`, only enabled accounts unless the field says otherwise, and the logon name
+  (`sAMAccountName`, or `userPrincipalName`) as the value. The AD Worker builds the LDAP
+  filter from its own table and escapes every term (RFC 4515), searches under the
+  domain's `defaultNamingContext`, and answers one page. The Console offers the
+  «Forms may search» switch on an AD Worker, and the mock forest answers the rootDSE. The
+  provider listing says whether a source has a disabled state (`activeFlag`); a group
+  field no longer asks for enabled records, and one that does is refused. The AD example's
+  order forms choose their people by search (ADR-0473, amended 2026-11-04).
 - **The AD example offers a customer's «Account verwalten» bundle.** `examples/ad-dienste`
   gains the Marktleistung `ad-account-verwalten`, whose options (aggregation) are the account
   products: admin, test and service account as before, and new a non-personal account with
