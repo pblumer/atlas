@@ -90,7 +90,7 @@ service task  capture                (only on status authorized)
 
 The webhook triggers the next step, but it is not the evidence for it. Before `capture`, the process reads the transaction through the authenticated API. A forged or replayed webhook can therefore at most cause an unnecessary read; it cannot cause a capture.
 
-**Gap:** Atlas has per-kind inbound watches (Jira, Google, Discord), but this record did not find a generic ingress that verifies a webhook signature and publishes a message. Until one exists, the process polls with `get-transaction` on a timer. Webhook ingress is a separate decision; it should not be built into this Worker Type.
+**Gap:** Atlas has per-kind inbound watches (Jira, Google, Discord), but this record did not find a generic ingress that verifies a webhook signature and publishes a message. Until one exists, the process polls with `get-transaction` on a timer. Webhook ingress is a separate decision; it should not be built into this Worker Type. [ADR-draft-signed-webhook-ingress](draft-signed-webhook-ingress.md) proposes it.
 
 ### 5. Credential
 
