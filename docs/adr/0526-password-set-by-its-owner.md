@@ -220,6 +220,26 @@ before. The Organization page offers it as "Revoke password…" in an account's 
 Revoking is audited (`auth.password_revoked`); the password itself never was anywhere
 it could be audited.
 
+## Amendment (2026-11-04): a revoke ends the links before it; the preview keeps no piece
+
+Two gaps in the design as built:
+
+- **A revoke brought old links back.** A link's signature covers the account's id, the
+  expiry, its address and its password hash, and a link dies because using it changes
+  the hash. A revoke returns the hash to the empty value an activation link was signed
+  over, so the account's activation link of the past seven days opened it again, whether
+  it had been used or not — and it may be held by the very person the revoke shuts out.
+  The account now counts its revokes (`credentialEpoch`), and a link is signed over that
+  number as well. Zero is left out of the signature, so every link of an account that was
+  never revoked, those mailed before this amendment among them, keeps holding.
+- **The preview outbox searched for the link.** It replaced the link as minted, and a model
+  can write the link in pieces, reversed or encoded where no search for it finds it, for an
+  operator reading the outbox to put together. A mail that carried a password link now
+  keeps its envelope in the outbox and loses its subject and both bodies.
+
+The pages a link opens also refuse every frame (`frame-ancestors 'none'`,
+`X-Frame-Options: DENY`).
+
 ## Links
 
 - supersedes, in part, ADR-0044 (no self-service recovery) and ADR-0126 (the intake's

@@ -95,7 +95,11 @@ func (s *Server) passwordMAC(u User, expiry int64) ([]byte, error) {
 		return nil, errors.New("password links are signed with a key the vault derives, and this server runs without a vault (--vault=false)")
 	}
 	m := hmac.New(sha256.New, s.vault.DerivedKey(passwordLinkPurpose))
-	for _, part := range []string{u.ID, strconv.FormatInt(expiry, 10), strings.ToLower(strings.TrimSpace(u.Email)), u.PasswordHash} {
+	parts := []string{u.ID, strconv.FormatInt(expiry, 10), strings.ToLower(strings.TrimSpace(u.Email)), u.PasswordHash}
+	if u.CredentialEpoch > 0 {
+		parts = append(parts, strconv.FormatUint(u.CredentialEpoch, 10))
+	}
+	for _, part := range parts {
 		m.Write([]byte(part))
 		m.Write([]byte{0})
 	}
@@ -146,8 +150,10 @@ func (s *Server) passwordLinkFor(u User, now time.Time) (string, int64, error) {
 // and unless the mail goes to the account's own address and to nobody beside it: a model
 // — even a modified system process — can send somebody's link only to the mailbox that
 // already is their recovery anchor. Runs on the loop.
-func (d mailDirectory) PasswordLink(processID, username string, to, cc, bcc []string) (string, error) {
-	if !d.s.systemPIDs[processID] {
+func (d mailDirectory) PasswordLink(processDefKey uint64, processID, username string, to, cc, bcc []string) (string, error) {
+	// The deployment, not the process id, must be the system project's: any model may
+	// call its process proc_passwort_link (systemprocessguard.go).
+	if !d.s.isSystemDefKey(processDefKey) {
 		return "", fmt.Errorf("process %q is not a system process; only the system project mails password links", processID)
 	}
 	if username == "" {
@@ -246,6 +252,7 @@ func (s *Server) handlePasswordPage(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cache-Control", "no-store")
+	setNoFraming(h)
 	_, _ = w.Write(page)
 }
 
@@ -635,6 +642,10 @@ func (s *Server) revokePassword(r *http.Request, u User) (User, int, error) {
 			}
 		}
 		cur.PasswordHash = ""
+		// The empty hash is the state an activation link was signed over; the new
+		// epoch is what keeps such a link — used or not — from opening the account
+		// again (ADR-0526, amendment of 2026-11-04).
+		cur.CredentialEpoch++
 		cur.UpdatedAt = time.Now().Unix()
 		if opErr = s.users.Save(cur); opErr == nil {
 			out = cur

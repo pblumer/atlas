@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // userConnBPMN wraps a <atlas:userConnector> extension in a minimal Start → task →
@@ -42,6 +43,22 @@ func deployBPMN(t *testing.T, h http.Handler, xml string) uint64 {
 	return resp.Key
 }
 
+// deploySystemBPMN deploys xml as atlas deploys its own processes: into the protected
+// system project, the only place a system process id may be deployed and the only
+// deployment the provisioning gate accepts (systemprocessguard.go).
+func deploySystemBPMN(t *testing.T, srv *Server, xml string) uint64 {
+	t.Helper()
+	var (
+		dps           []deployedProcess
+		compErr, pErr error
+	)
+	srv.do(func() { dps, compErr, pErr = srv.deployModel([]byte(xml), nil, time.Now().Unix(), systemProjectID, "") })
+	if compErr != nil || pErr != nil || len(dps) != 1 {
+		t.Fatalf("deploy into the system project: %v / %v (%d definitions)", compErr, pErr, len(dps))
+	}
+	return dps[0].Key
+}
+
 func startInstance(t *testing.T, h http.Handler, key uint64, varsJSON string) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/processes/"+strconv.FormatUint(key, 10)+"/instances",
@@ -64,7 +81,7 @@ func TestUserConnectorCreatesUser(t *testing.T) {
 	srv.systemPIDs = map[string]bool{"sysproc": true} // gate: treat this as a system process
 	h := srv.Handler()
 
-	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
+	key := deploySystemBPMN(t, srv, userConnBPMN("sysproc", createInner))
 	startInstance(t, h, key, `{"username":"erika.muster","email":"erika@example.org","displayName":"Erika Muster"}`)
 
 	u, ok, err := srv.users.byUsername("erika.muster")
@@ -88,7 +105,7 @@ func TestUserConnectorIdempotent(t *testing.T) {
 	srv, _ := newSystemServer(t, WithUserProvisioning())
 	srv.systemPIDs = map[string]bool{"sysproc": true}
 	h := srv.Handler()
-	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
+	key := deploySystemBPMN(t, srv, userConnBPMN("sysproc", createInner))
 
 	vars := `{"username":"dupe","email":"dupe@example.org","displayName":"Dupe"}`
 	startInstance(t, h, key, vars)
@@ -131,7 +148,7 @@ func TestUserConnectorRequiresOptIn(t *testing.T) {
 	srv.systemPIDs = map[string]bool{"sysproc": true}
 	h := srv.Handler()
 
-	key := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
+	key := deploySystemBPMN(t, srv, userConnBPMN("sysproc", createInner))
 	startInstance(t, h, key, `{"username":"noworker","email":"x@example.org","displayName":"X"}`)
 
 	if _, ok, _ := srv.users.byUsername("noworker"); ok {
@@ -185,7 +202,7 @@ func TestUserConnectorEmptyUsername(t *testing.T) {
 	srv.systemPIDs = map[string]bool{"sysproc": true}
 	h := srv.Handler()
 
-	key := deployBPMN(t, h, userConnBPMN("sysproc",
+	key := deploySystemBPMN(t, srv, userConnBPMN("sysproc",
 		`<atlas:userConnector operation="create" username="=fehlt" email="x@example.org" displayName="X" roles="user"/>`))
 	startInstance(t, h, key, `{}`)
 
@@ -209,11 +226,11 @@ func TestUserConnectorHandlerOpErrors(t *testing.T) {
 	if _, _, err := srv.provisionCreateUser("owner", "x@example.org", "", nil, 1); err != nil {
 		t.Fatalf("seed owner: %v", err)
 	}
-	badCreate := deployBPMN(t, h, userConnBPMN("sysproc",
+	badCreate := deploySystemBPMN(t, srv, userConnBPMN("sysproc",
 		`<atlas:userConnector operation="create" username="x" email="x@example.org"/>`))
 	startInstance(t, h, badCreate, `{}`)
 
-	missingDisable := deployBPMN(t, h, userConnBPMN("sysproc",
+	missingDisable := deploySystemBPMN(t, srv, userConnBPMN("sysproc",
 		`<atlas:userConnector operation="disable" username="ghost"/>`))
 	startInstance(t, h, missingDisable, `{}`)
 
@@ -237,7 +254,9 @@ func TestUserConnectorRefusesPasswords(t *testing.T) {
 		"create with a password": `<atlas:userConnector operation="create" username="bob" email="bob@example.org" password="=pw"/>`,
 		"set-password":           `<atlas:userConnector operation="set-password" username="bob" password="=newpw"/>`,
 	} {
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(userConnBPMN("sysproc", inner)))
+		// Under an id of its own: the rule holds for every model, and the id of a
+		// system process would be refused before it, for being reserved.
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/deployments", strings.NewReader(userConnBPMN("pwproc", inner)))
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
 		if rec.Code == http.StatusOK || !strings.Contains(rec.Body.String(), "user.password") {
@@ -245,9 +264,9 @@ func TestUserConnectorRefusesPasswords(t *testing.T) {
 		}
 	}
 
-	createKey := deployBPMN(t, h, userConnBPMN("sysproc", createInner))
+	createKey := deploySystemBPMN(t, srv, userConnBPMN("sysproc", createInner))
 	startInstance(t, h, createKey, `{"username":"bob","email":"bob@example.org","displayName":"Bob"}`)
-	disableKey := deployBPMN(t, h, userConnBPMN("sysproc", `<atlas:userConnector operation="disable" username="bob"/>`))
+	disableKey := deploySystemBPMN(t, srv, userConnBPMN("sysproc", `<atlas:userConnector operation="disable" username="bob"/>`))
 	startInstance(t, h, disableKey, `{}`)
 	if u, ok, _ := srv.users.byUsername("bob"); !ok || !u.Disabled {
 		t.Fatalf("bob not disabled: ok=%v", ok)

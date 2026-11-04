@@ -152,12 +152,15 @@ func (s *Server) mimImpactOf(processID, name string, want modelIdentity) (mimImp
 
 // latestDeploymentOf returns the highest-version deployment of a process id, or
 // nil when nothing by that id is deployed. Registration order is version order,
-// so the last match wins.
+// so the last match wins. For the id of a system process only a deployment in the
+// system project counts: a copy filed anywhere else is never "the" system process
+// (systemprocessguard.go).
 func (s *Server) latestDeploymentOf(processID string) *deployment {
 	var found *deployment
+	system := s.systemPIDs[processID]
 	for _, key := range s.order {
 		d := s.deployments[key]
-		if d == nil || d.ProcessID != processID {
+		if d == nil || d.ProcessID != processID || (system && d.ProjectID != systemProjectID) {
 			continue
 		}
 		if found == nil || d.Version >= found.Version {
