@@ -226,3 +226,35 @@ func TestListInstancesEmptyPageIsAnEmptyList(t *testing.T) {
 		t.Errorf("empty page = %s, want an empty items array on a page that says it is complete", text)
 	}
 }
+
+// TestInstanceToolsForwardValuesMode covers the 'values' argument of the listing and
+// the search: an agent scanning many instances asks for previews, so a page of
+// instances holding uploaded files does not fill its context, and the server's own
+// mode is what decides how the values are cut.
+func TestInstanceToolsForwardValuesMode(t *testing.T) {
+	var gotPath string
+	var gotQuery url.Values
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[],"total":0,"totalExact":true,"truncated":false}`))
+	}))
+	defer backend.Close()
+
+	for _, tc := range []struct {
+		tool string
+		args map[string]any
+		path string
+	}{
+		{"atlas_list_instances", map[string]any{"process": 7, "values": "preview"}, "/api/v1/instances"},
+		{"atlas_search_instances", map[string]any{"q": "kdnr=MT-1", "process": "7", "values": "preview"}, "/api/v1/instances/search"},
+	} {
+		text, isErr := toolText(t, result(t, callToolAgainstBackend(t, backend, tc.tool, tc.args)))
+		if isErr {
+			t.Fatalf("%s returned tool error: %s", tc.tool, text)
+		}
+		if gotPath != tc.path || gotQuery.Get("values") != "preview" {
+			t.Fatalf("%s called %s?%s, want %s with values=preview", tc.tool, gotPath, gotQuery.Encode(), tc.path)
+		}
+	}
+}

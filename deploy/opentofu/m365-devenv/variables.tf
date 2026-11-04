@@ -146,6 +146,17 @@ variable "sharepoint_read_all_sites" {
   default     = false
 }
 
+variable "sharepoint_admin_quota" {
+  description = "Grant the SharePoint worker app SharePoint Online's application permission Sites.FullControl.All, so set-site-quota can set a site's storage quota through the SharePoint admin endpoint (ADR-0141). Tenant-wide full control of every site, including real ones in a shared tenant, and only usable with sharepoint_credential = certificate: false by default. Without it the catalogue falls back to the manual quota task."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.sharepoint_admin_quota || var.sharepoint_credential == "certificate"
+    error_message = "sharepoint_admin_quota needs sharepoint_credential = certificate: the SharePoint admin endpoint refuses app-only tokens obtained with a client secret."
+  }
+}
+
 variable "sharepoint_credential" {
   description = "How the SharePoint worker app proves itself: certificate or secret."
   type        = string
@@ -271,6 +282,12 @@ variable "atlas_allowed_cidrs" {
 
 variable "atlas_sso" {
   description = "Register Atlas as an OpenID Connect app in the test tenant, so the test users sign in to Atlas with their Entra accounts (the local admin stays)."
+  type        = bool
+  default     = true
+}
+
+variable "atlas_hub" {
+  description = "Connect the Atlas server to the atlas hub of this repository (examples/hub), so the Console offers its bundles. The registry key comes from examples/hub/releases.json in this checkout, never from the Pages site."
   type        = bool
   default     = true
 }

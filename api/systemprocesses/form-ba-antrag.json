@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; ein Administrator prüft den Antrag, legt das Konto an und vergibt die Rolle."
+      "text": "# 👤 Benutzer aufnehmen\n\nBeantrage die Aufnahme eines neuen atlas-Benutzers. Aus deinen Angaben wird ein Benutzername vorgeschlagen; du bestätigst deine E-Mail-Adresse, ein Administrator prüft den Antrag, legt das Konto an und vergibt die Rolle, und du legst dein Passwort danach über einen Link selbst fest."
     },
     {
       "key": "vorname",
@@ -22,7 +22,7 @@
       "key": "email",
       "type": "textfield",
       "label": "E-Mail-Adresse",
-      "description": "An diese Adresse werden die Zugangsdaten versendet.",
+      "description": "An diese Adresse geht zuerst ein Bestätigungslink und nach der Freigabe der Link, über den Sie Ihr Passwort selbst festlegen.",
       "validate": { "required": true, "validationType": "email" }
     },
     {

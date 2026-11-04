@@ -134,6 +134,38 @@ type Runner struct {
 	// [Runner.Drive], which a fork or a migration runs on the loop — leaves them for
 	// the next such round instead of deadlocking on the loop it holds.
 	offLoop map[int32]bool
+	// retryBackoff, when set, is how long a failed job waits before its next attempt,
+	// given the retries it has left after this failure; see SetRetryBackoff. nil retries
+	// at once, which is what a runner built without one does.
+	retryBackoff func(retriesLeft int32) int64
+}
+
+// SetRetryBackoff installs the delay a failed job waits before its next attempt, or
+// removes it with nil. The function is handed the retries the job has left after the
+// failure it is reporting and returns unix-nanoseconds; 0 retries at once. The engine
+// holds the job off the activatable index until the delay has passed and arms a retry
+// timer for it (ADR-0111), so a fault that clears by itself — a directory that has not
+// yet replicated the object it was just asked to create — gets time to clear instead
+// of three attempts within one second.
+func (r *Runner) SetRetryBackoff(f func(retriesLeft int32) int64) { r.retryBackoff = f }
+
+// DefaultRetryBackoff is the delay the server's in-process runner waits before it
+// retries a failed job (ADR-0111, amendment 2026-11-04). The last retry waits longest:
+// a job with one retry left waits a minute, one with more left waits fifteen seconds.
+// With the default of three retries a fault therefore has 75 seconds to clear before
+// it becomes an incident — long enough for the replication delays Microsoft Graph
+// documents for a group or team created a moment earlier, short enough that a real
+// fault reaches an operator within a minute and a half. A job with no retries left
+// raises its incident at once; the delay does not apply to it.
+func DefaultRetryBackoff(retriesLeft int32) int64 {
+	switch {
+	case retriesLeft <= 0:
+		return 0
+	case retriesLeft == 1:
+		return int64(time.Minute)
+	default:
+		return int64(15 * time.Second)
+	}
 }
 
 // Gate decides whether a candidate job may be handed out, and hears how the ones that
@@ -517,9 +549,9 @@ func (r *Runner) Work(jobs []Job, reader state.Reader) []Outcome {
 // job that cannot complete — a business rule task whose decision model is not
 // deployed, say — must not poison the run, or every later deploy and completion
 // that drives jobs would fail with it. FailJob retries while retries remain, then
-// parks the token on an incident. The in-process runner retries immediately
-// (backoff 0); a worker-supplied backoff arrives through the HTTP fail endpoint
-// instead (ADR-0111).
+// parks the token on an incident. The in-process runner waits the backoff installed
+// with SetRetryBackoff before the next attempt, or retries at once without one; an
+// external worker's backoff arrives through the HTTP fail endpoint instead (ADR-0111).
 func (r *Runner) Submit(outcomes []Outcome) {
 	for _, o := range outcomes {
 		// Only the round that still holds the lease may report on it. A handler that
@@ -548,7 +580,12 @@ func (r *Runner) Submit(outcomes []Outcome) {
 			if r.gate != nil {
 				r.gate.Failed(o.Job.Type, o.Job.Key, o.Err.Error())
 			}
-			r.engine.FailJob(o.Job.Key, o.Job.Retries-1, o.Err.Error(), 0)
+			left := o.Job.Retries - 1
+			var backoff int64
+			if r.retryBackoff != nil && left > 0 {
+				backoff = r.retryBackoff(left)
+			}
+			r.engine.FailJob(o.Job.Key, left, o.Err.Error(), backoff)
 			continue
 		}
 		if r.gate != nil {

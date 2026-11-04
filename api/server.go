@@ -326,6 +326,8 @@ type Server struct {
 	registerRate        *rateLimiter      // throttles OAuth self-registration, on its own budget
 	tokenRate           *rateLimiter      // throttles the OAuth token and revocation endpoints, on their own budget
 	logins              *loginGuard       // throttles authentication attempts (see loginguard.go)
+	recoveryRate        *rateLimiter      // throttles "forgot password" per address (ADR-0526)
+	passwordMails       *rateLimiter      // at most one password link mailed per account per five minutes
 	projects            *projectStore     // durable sidecar for projects grouping artifacts (ADR-0034)
 	releases            *releaseStore     // durable sidecar for application releases (ADR-0128)
 	grantAudit          *grantAuditStore  // durable sidecar for access-control history (ADR-0186)
@@ -592,6 +594,9 @@ type Server struct {
 	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
+	// jobRetryBackoff is the delay a failed in-process job waits before its next
+	// attempt (ADR-0111, amendment 2026-11-04); see WithJobRetryBackoff.
+	jobRetryBackoff func(retriesLeft int32) int64
 	// ldapPool reuses bound LDAP connections across jobs (ADR-0154, amended). It is
 	// held here so Close can release what it is holding at shutdown.
 	ldapPool *ldap.Pool
@@ -1055,6 +1060,14 @@ func (s *Server) budgets() limits.Limits {
 		return limits.Default()
 	}
 	return s.limits
+}
+
+// WithJobRetryBackoff sets how long a failed in-process job waits before it is tried
+// again, given the retries it has left (ADR-0111, amendment 2026-11-04). The default is
+// job.DefaultRetryBackoff; nil retries at once, which tests that drive a failing task
+// to its incident within one call use.
+func WithJobRetryBackoff(f func(retriesLeft int32) int64) Option {
+	return func(s *Server) { s.jobRetryBackoff = f }
 }
 
 // WithLimits sets the installation's resource budgets. Without it a server runs on
@@ -1812,8 +1825,14 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		// everybody else. Burst enough for an operator wiring up several workers at
 		// once, then one every five seconds — slow enough that churning the bounded
 		// registry from outside is not worth anyone's time (ADR-0197, ADR-0200).
-		registerRate:      newRateLimiter(30, 0.2),
-		logins:            newLoginGuard(),
+		registerRate: newRateLimiter(30, 0.2),
+		logins:       newLoginGuard(),
+		// "Forgot password" mails somebody: a burst of five, then one every twenty
+		// seconds per address, and one mail per account per five minutes, so neither a
+		// script nor a prankster can turn the form into a mail cannon aimed at a person
+		// (ADR-0526).
+		recoveryRate:      newRateLimiter(5, 0.05),
+		passwordMails:     newRateLimiter(1, 1.0/300),
 		projects:          projects,
 		releases:          releases,
 		grantAudit:        grantAudit,
@@ -2151,6 +2170,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// design-time size and runs on it.
 	s.capabilities.SetMeasurementResolver(s.measureCapability)
 	s.blueprints = blueprints
+	s.jobRetryBackoff = job.DefaultRetryBackoff
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -2324,6 +2344,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The dispatch gate: the in-process runner asks it before handing a job out and
 	// tells it how each one ended, without learning what a Worker is (ADR-0340).
 	s.jobRunner.SetGate(jobGate{s})
+	// A failed in-process job waits before it is tried again (ADR-0111, amendment
+	// 2026-11-04): connector faults are mostly transient — a directory that has not yet
+	// replicated what it was just asked to create — and three attempts within one second
+	// turned each of them into an incident.
+	s.jobRunner.SetRetryBackoff(s.jobRetryBackoff)
 	s.breakers.onChange = s.logBreakerChange
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
 		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)
@@ -3900,6 +3925,15 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
 	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)
 	mountFunc(accessPublic, roleAny, "POST "+answerPagePath+"/task/{taskKey}/complete", s.handlePublicAnswerComplete)
+	// A password set by its owner through a one-time link, and the request for one
+	// (ADR-0526). The page is
+	// static; the signed token in an Authorization header is the whole authorization,
+	// and it opens one account until its password changes. "Forgot" answers alike for
+	// every input.
+	mountFunc(accessPublic, roleAny, "GET "+passwordPagePath, s.handlePasswordPage)
+	mountFunc(accessPublic, roleAny, "GET "+passwordPagePath+"/link", s.handlePasswordLinkState)
+	mountFunc(accessPublic, roleAny, "POST "+passwordPagePath+"/link", s.handlePasswordLinkSet)
+	mountFunc(accessPublic, roleAny, "POST "+passwordPagePath+"/forgot", s.handlePasswordForgot)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a

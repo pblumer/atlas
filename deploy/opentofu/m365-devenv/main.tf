@@ -41,8 +41,9 @@ locals {
   note        = "Atlas M365 development environment ${local.env_id}, created ${time_static.created.rfc3339} by OpenTofu (deploy/opentofu/m365-devenv). Remove with tofu destroy."
 
   # Well-known first-party application ids.
-  msgraph_app_id  = "00000003-0000-0000-c000-000000000000"
-  exchange_app_id = "00000002-0000-0ff1-ce00-000000000000"
+  msgraph_app_id    = "00000003-0000-0000-c000-000000000000"
+  exchange_app_id   = "00000002-0000-0ff1-ce00-000000000000"
+  sharepoint_app_id = "00000003-0000-0ff1-ce00-000000000000"
 
   # Built-in directory role template ids.
   role_teams_administrator = "69091246-20e8-4a56-aa4d-066075b2a7a8"
@@ -55,6 +56,14 @@ locals {
 # permission is hard-coded here.
 data "azuread_service_principal" "msgraph" {
   client_id = local.msgraph_app_id
+}
+
+# Office 365 SharePoint Online, only for sharepoint_admin_quota: its application
+# permission Sites.FullControl.All is what the SharePoint admin endpoint
+# (<tenant>-admin.sharepoint.com, set-site-quota) demands. Looked up by name like Graph's.
+data "azuread_service_principal" "sharepoint_online" {
+  count     = var.workers.sharepoint && var.sharepoint_admin_quota ? 1 : 0
+  client_id = local.sharepoint_app_id
 }
 
 # Office 365 Exchange Online. Present in every tenant with an Exchange Online plan; a

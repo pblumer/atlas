@@ -177,6 +177,11 @@ var (
 	identity = []string{"Identity"}
 
 	newRecipient = []string{"DisplayName", "Alias", "PrimarySmtpAddress", "OrganizationalUnit", "UserPrincipalName"}
+
+	// remoteOnly is what the remote-mailbox operations say on Exchange Online: there the
+	// mailbox of a synchronised account is the ordinary mailbox Exchange Online creates
+	// once the account is licensed, read with get-mailbox.
+	remoteOnly = "a remote mailbox is an Exchange Server object; in Exchange Online the mailbox of a synchronised account is created when the account is licensed and read with get-mailbox"
 )
 
 // Ops is the operation table. It covers the four areas an Exchange administration
@@ -207,6 +212,25 @@ var Ops = map[string]Op{
 		Variant{Cmdlet: "Remove-Mailbox"}),
 	"get-mailbox-statistics": same(Op{Area: "mailbox", Label: "read a mailbox's statistics", Required: identity, Result: ResultObject, NeedsResult: true},
 		Variant{Cmdlet: "Get-MailboxStatistics"}),
+
+	// Remote mailboxes: the Exchange Server half of a mailbox in Exchange Online for an
+	// account Active Directory holds and Entra Connect synchronises (Exchange hybrid). In
+	// a hybrid organization the mail attributes of such an account are written on
+	// premises — Enable-RemoteMailbox, not New-Mailbox in Exchange Online — and reach the
+	// cloud with the account (ADR-0462, amended 2026-11-04). They exist on Exchange
+	// Server only.
+	"enable-remote-mailbox": {Area: "mailbox", Label: "enable a remote mailbox", Required: []string{"Identity", "RemoteRoutingAddress"}, Optional: []string{"Alias", "PrimarySmtpAddress", "DisplayName"}, Result: ResultObject,
+		OnPrem:      &Variant{Cmdlet: "Enable-RemoteMailbox"},
+		Unavailable: remoteOnly},
+	"get-remote-mailbox": {Area: "mailbox", Label: "read a remote mailbox", Required: identity, Result: ResultObject, NeedsResult: true,
+		OnPrem:      &Variant{Cmdlet: "Get-RemoteMailbox"},
+		Unavailable: remoteOnly},
+	"list-remote-mailboxes": {Area: "mailbox", Label: "list remote mailboxes", Optional: []string{"Filter", "Anr", "OrganizationalUnit"}, Result: ResultList, NeedsResult: true, Sized: true,
+		OnPrem:      &Variant{Cmdlet: "Get-RemoteMailbox"},
+		Unavailable: remoteOnly},
+	"disable-remote-mailbox": {Area: "mailbox", Label: "disable a remote mailbox", Required: identity,
+		OnPrem:      &Variant{Cmdlet: "Disable-RemoteMailbox"},
+		Unavailable: remoteOnly},
 
 	// Permissions.
 	"add-full-access": same(Op{Area: "permission", Label: "grant full access", Required: []string{"Identity", "User"}, Optional: []string{"AutoMapping"}, Result: ResultObject},

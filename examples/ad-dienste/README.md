@@ -31,11 +31,12 @@ Der Worker heisst `ad_verzeichnis`. Wer einen anderen Namen verwendet, ersetzt i
 |---|---|---|---|
 | Active Directory (`cat-ad-dienste`) | 600 | `{{zielgruppe-ad}}` | alle 14 |
 
-Eine Person sieht im Shop genau einen Katalog: den mit dem höchsten Rang unter denen, die ihre
-Gruppen erreichen. Wer neben diesem Paket die Microsoft-365-Dienste (Ränge 500 bis 520)
-installiert, sieht deshalb mit einer Gruppe, die beide Zielgruppen erreicht, nur den Katalog
-«Active Directory». Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in
-`katalog.json` anzupassen.
+Eine Person sieht im Shop jeden Katalog, den ihre Gruppen erreichen (ADR-0522). Wer neben
+diesem Paket die Microsoft-365-Dienste (Ränge 500 bis 520) installiert, sieht mit einer Gruppe,
+die beide Zielgruppen erreicht, die Produkte beider Kataloge in einem Shop; Kategorien gleichen
+Namens werden zusammengelegt. Der Rang entscheidet nur noch, welcher Katalog ein Produkt stellt,
+das mehrere führen, und wessen Name und Gestaltung der Shop trägt. Die Ränge müssen auf der
+Zielinstanz frei sein; sonst sind sie in `katalog.json` anzupassen.
 
 ## Die Produkte
 

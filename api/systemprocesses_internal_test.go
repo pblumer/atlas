@@ -104,67 +104,27 @@ func TestBootstrapDeploysSystemProcesses(t *testing.T) {
 }
 
 // TestSystemIntakeProvisionsUser drives the rewired intake process (ADR-0123) end
-// to end: start the bootstrap-deployed proc_benutzer_aufnahme, approve the "Antrag
-// freigeben" task, and confirm the userConnector created exactly that Atlas login.
-// (The downstream mail task parks — no provider is configured — but the account is
-// created before it, which is what this asserts.)
+// to end: start the bootstrap-deployed proc_benutzer_aufnahme, confirm the address
+// through its link, approve the "Antrag freigeben" task, and confirm the userConnector
+// created exactly that Atlas login — awaiting activation, with no password
+// (ADR-0526).
 func TestSystemIntakeProvisionsUser(t *testing.T) {
-	srv, _ := newSystemServer(t, WithSystemProcesses(), WithUserProvisioning())
-	h := srv.Handler()
-
-	var key uint64
-	for _, r := range listProcesses(t, h) {
-		if r.ProcessID == "proc_benutzer_aufnahme" {
-			key = r.Key
-		}
-	}
-	if key == 0 {
-		t.Fatal("intake process not deployed")
-	}
+	srv := passwordServer(t)
 	// The start form carries no role field (ADR-0126) — the requester never picks a
 	// role; the admin assigns it at approval below.
-	startInstance(t, h, key, `{"vorname":"Neuer","nachname":"Kollege","email":"neuer@example.org"}`)
-
-	// Find the waiting "Antrag freigeben" user task.
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/tasks", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	var tasks []struct {
-		Key       uint64 `json:"key"`
-		ProcessID string `json:"processId"`
-	}
-	if err := json.Unmarshal(listRows(t, rec.Body.Bytes()), &tasks); err != nil {
-		t.Fatalf("decode tasks: %v (%s)", err, rec.Body.String())
-	}
-	var taskKey uint64
-	for _, it := range tasks {
-		if it.ProcessID == "proc_benutzer_aufnahme" {
-			taskKey = it.Key
-		}
-	}
-	if taskKey == 0 {
-		t.Fatal("freigabe task not found")
-	}
-
-	// Approve: the admin assigns the role, sets the username and initial password,
-	// and decides "anlegen".
-	creq := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/"+strconv.FormatUint(taskKey, 10)+"/complete",
-		strings.NewReader(`{"variables":{"rolle":"user","benutzername":"neuer.kollege","entscheidung":"anlegen","initialpasswort":"willkommen1"}}`))
-	crec := httptest.NewRecorder()
-	h.ServeHTTP(crec, creq)
-	if crec.Code != http.StatusOK {
-		t.Fatalf("complete freigabe task: %d %s", crec.Code, crec.Body.String())
-	}
+	startIntake(t, srv)
+	confirmIntake(t, srv)
+	approveIntake(t, srv)
 
 	u, ok, err := srv.users.byUsername("neuer.kollege")
 	if err != nil || !ok {
 		t.Fatalf("intake did not provision the user (ok=%v err=%v)", ok, err)
 	}
-	if !u.hasRole(RoleUser) || u.Disabled {
+	if !u.hasRole(RoleUser) || u.Disabled || u.Email != "neuer@example.org" {
 		t.Fatalf("provisioned user = %+v", u.toPublic())
 	}
-	if !checkPassword(u.PasswordHash, "willkommen1") {
-		t.Fatal("provisioned password does not verify")
+	if !u.toPublic().AwaitingActivation {
+		t.Fatal("the provisioned account does not await activation")
 	}
 }
 

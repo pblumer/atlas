@@ -234,8 +234,13 @@ type publicUser struct {
 	// needs to show the field read-only (ADR-0470).
 	ManagerID          string `json:"managerId,omitempty"`
 	ManagerDirectoryID string `json:"managerDirectoryId,omitempty"`
-	CreatedAt          int64  `json:"createdAt"`
-	UpdatedAt          int64  `json:"updatedAt"`
+	// AwaitingActivation is a local account whose owner has not set a password yet
+	// (ADR-0526): nobody can sign in as it until they use
+	// the link they were sent. Whether a password is set says nothing secret; the hash
+	// itself never leaves the server.
+	AwaitingActivation bool  `json:"awaitingActivation,omitempty"`
+	CreatedAt          int64 `json:"createdAt"`
+	UpdatedAt          int64 `json:"updatedAt"`
 }
 
 // toPublic strips the secret and normalizes Roles to a non-nil slice so the JSON
@@ -256,6 +261,7 @@ func (u User) toPublic() publicUser {
 		AvatarSource:       u.AvatarSource,
 		ManagerID:          u.ManagerID,
 		ManagerDirectoryID: u.ManagerDirectoryID,
+		AwaitingActivation: (u.Source == "" || u.Source == SourceLocal) && u.PasswordHash == "",
 		CreatedAt:          u.CreatedAt,
 		UpdatedAt:          u.UpdatedAt,
 	}

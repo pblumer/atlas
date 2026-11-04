@@ -25,6 +25,31 @@ _Changed_ / _Removed_ for each version.
   what is not covered (other domains, the 2FA exception, unenforcing the client). Admin,
   test and service account are now options of the bundle in the shop. Hub release
   `ad-dienste` 1.0.3.
+- **A SharePoint task can set a site's storage quota.** The new operation `set-site-quota`
+  (`quotaGB`, optional `warningPercent`, default 90) goes where Microsoft Graph cannot: to
+  SharePoint's tenant administration on the admin host, through the client object model's
+  `ProcessQuery` — the request `Set-SPOSite -StorageQuota` sends. It needs a certificate
+  credential and the SharePoint application permission `Sites.FullControl.All`; the admin
+  host is derived from the site, or named by `adminUrl` in the credential bundle. A tenant
+  that does not allow it ends the task with `SHAREPOINT_ADMIN_NOT_PERMITTED` or
+  `SHAREPOINT_QUOTA_REFUSED`, BPMN errors a process catches to hand the quota to a person.
+  The Modeler offers the operation, the mockup records the quota and `get-site` reports it.
+  `examples/m365-dienste` (1.0.9) sets an ordered quota this way, and a quota raise up to
+  25 GB, with the previous tasks as the fallback (ADR-0141, amended 2026-11-04). Not yet
+  run against a tenant.
+- **The Entra Worker reads and transfers a synchronised user's source of authority.** `get-sync-behavior` reads `onPremisesSyncBehavior` and `set-sync-behavior` sets its `isCloudManaged`, so a process can take an account that Entra Connect synchronises from Active Directory into the cloud. The body is held to that one boolean before anything is sent. Graph v1.0, permission `User-OnPremisesSyncBehavior.ReadWrite.All` (ADR-0172, amended).
+- **The Exchange Worker enables remote mailboxes on Exchange Server.** `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes` and `disable-remote-mailbox` run `Enable-`, `Get-` and `Disable-RemoteMailbox` for an Exchange hybrid organization, where the mail attributes of an account synchronised to the cloud are written on premises. On Exchange Online they are refused with what to do instead (ADR-0462, amended).
+- **The M365 example covers hybrid identity.** A catalogue `cat-m365-identitaet` for the administration with two products: «Konto (hybrid) anlegen» creates the account in AD, enables its remote mailbox, waits for Entra Connect with a bounded loop and orders the licence through the existing licence position; «Konto in die Cloud übernehmen» moves a still local mailbox first (a task) and then transfers the source of authority. The README explains the rules both follow and why the test environment, which synchronises nothing, leaves them out (`m365-dienste` 1.0.7).
+- **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
+  `cascade`, the default, or `tiles`, which draws a category menu and a search field above
+  one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and
+  a product page with a banner, the included services, the options and the approval rule.
+  The basket, the configuration form and the order are unchanged. A product may name an
+  `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
+  other name. The product editor offers the icon, the appearance card the layout, and the
+  OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
+  a later requirement (ADR-0525).
+
 - **A catalogue can declare Marktleistungen and services.** A catalogue switched to
   `structured` states for every product whether it is a Marktleistung (`kind: offering`),
   the whole somebody orders, or a service (`kind: service`), one building block with its
@@ -54,10 +79,56 @@ _Changed_ / _Removed_ for each version.
   vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
   multi-instance task, a mail that never shows the link and a link to a task that did not
   opt in. The Modeler offers both settings (ADR-0523).
+- **Forgotten passwords are recovered by their owner.** The login screen and the shop's
+  sign-in offer "Forgot password?" where the instance can mail a link (vault, external
+  URL, the system process `proc_passwort_link`): `POST /public/password/forgot` answers
+  202 alike for every input and mails an enabled local account with an address a
+  one-time link, at most once per account per five minutes. The link opens
+  `/public/password`, which sets the password and ends every session of the account. A
+  signed-in person changes their own password under the account menu ("Change
+  password…", `POST /api/v1/auth/password`), and an administrator sends an account its
+  link or takes it to hand over in person (`POST /api/v1/users/{id}/password-link`)
+  (ADR-0526).
+
+### Changed
+- **A password is set by its owner, never mailed.** Registration no longer asks the
+  approving administrator for an initial password, which was a process variable — an
+  event kept in the log — and was mailed in clear text. The requester first confirms
+  their address through a link (72 hours); only then is the request announced and
+  approved. The account is created without a password and its owner is mailed a
+  one-time activation link (7 days), signed with a vault-derived key over the account's
+  address and password hash, so it dies on use and when the address changes. The
+  preview outbox withholds the link, and only a worker the server runs itself is leased
+  a mail that carries one. `userConnector` refuses `password` and `set-password` at
+  deploy (`user.password`); the Organization page creates accounts without a password
+  ("awaiting activation"). `POST /api/v1/users/{id}/password` is deprecated and now ends
+  the account's sessions. The log of instances that ran the old intake still holds the
+  passwords typed there: send those accounts a password link, and migrate intake
+  instances still waiting at "Antrag freigeben" to the new version
+  (ADR-0526).
 
 ### Fixed
+- **The AD and M365 examples no longer say a person sees one catalogue.** Their READMEs and install questions still described the rule before ADR-0522 (only the highest-ranked catalogue a person reaches); they now say every reached catalogue is shown and what rank still decides (`ad-dienste` 1.0.2, `m365-dienste` 1.0.8).
+- **The M365 test environment connects its Atlas server to the atlas hub.** `atlas_hub` (on by default) sets `ATLAS_BLUEPRINT_REGISTRY_URL` and the key from `examples/hub/releases.json`, so the Console offers the bundles of this repository, among them `ad-dienste` with its AD catalogue.
+- **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
+
+- **A failed connector job waits before it is tried again.** The in-process runner, on which
+  every built-in connector runs, retried a failed job at once, so a task's three retries were
+  spent within one second and a fault that clears by itself — Microsoft Graph not yet knowing a
+  group created a moment earlier — became an incident. It now waits fifteen seconds before each
+  retry and a minute before the last one; a failure that leaves no retries is still an incident at
+  once (ADR-0111, amendment 2026-11-04).
+- **An order window names its days in UTC.** A refusal outside a product's order window
+  named the day in the server's local zone, so a server east of Greenwich said a window
+  ending on 31 October had closed on 1 November. The day is now read in UTC, the zone the
+  window's edges are stored in (ADR-0397).
+- **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
+  after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
+  minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up
+  to ten minutes, and every other call keeps the thirty seconds.
 - **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
 - **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
+- **The M365 example asks for every person in an order form by search.** The owner and the secondary owner of a SharePoint team site, the owner of a Viva Engage community and the mailbox of a litigation hold were plain text fields for a UPN, so a typo surfaced only as a failed provisioning job. They are now selects that search Entra ID through `ucc_entra` and submit the user principal name, like the team, distribution list and licence fields already did; the processes read the same value. The litigation hold also finds disabled accounts. Action forms, the public partner request and the joiner package keep text fields, because a search is not offered or not useful there (`m365-dienste` 1.0.9).
 - **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
 - **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
@@ -414,6 +485,17 @@ What changes on disk, and going back:
   (ADR-0510).
 
 ### Changed
+- **Operations shortens long variable values and opens them in a window.** An instance card in
+  the overview lists at most five values, the variables the process declares searchable first,
+  and opens the rest with "+ N more". A long text, such as a CSV upload held in one variable, is
+  shown as one line with its size in bytes and lines, and a list or object as its shape. A click
+  opens the whole value in a window that copies it and saves it as a file. The single-instance view
+  and the replay's Variables tab show the first lines of a long text and open the same window.
+  The overview's 1.5-second poll no longer carries every value whole: `GET /api/v1/instances` and
+  `GET /api/v1/instances/search` take `?values=preview`, which cuts each value longer than 512 bytes
+  to its beginning and marks it with `truncated`, `size`, and `lines` or `shape` and `count`. The
+  default stays `values=full`. The MCP tools `atlas_list_instances` and `atlas_search_instances` take
+  the same `values` argument. The whole value is read with the instance's point read when it is opened.
 - **The migration dialogs speak the Console's language.** Migrating one instance — its plan, element mapping and the alternative of continuing in a new instance — and migrating every running instance of a version, with its outcome list and its progress and error messages, now read from the locale catalogue, so they appear in German by default and in English when chosen.
 - **A person sees every catalogue they are the audience for.** The shop used to show one catalogue, the highest-ranked a person's groups reach (ADR-0312 decision 11), so a catalogue for a narrower audience with a lower rank was seen by nobody who also reached a higher one. `GET /api/v1/shop/catalogs` now answers every reached catalogue, highest rank first; the shop lays their releases over one another — a product several carry from the highest-ranked, equal category names as one heading — and places a basket from several catalogues as one order per release, so every order stays a snapshot of one release. `GET /api/v1/shop/catalog` still answers the top-ranked one (ADR-0522).
 - **The Microsoft 365 example carries its decision models.** `examples/m365-dienste/atlas.json` is now format 2 and names its five DMN models, so `atlas import` and atlas hub install it in one step; before, publishing refused it unless the models had been uploaded first. Its install scripts send the models with the source.

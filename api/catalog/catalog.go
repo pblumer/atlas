@@ -149,6 +149,12 @@ type Item struct {
 	// it. A declared kind is a statement a publish can check the graph against, and
 	// a refusal names the product whose declaration and structure disagree.
 	Kind ItemKind `json:"kind,omitempty"`
+	// Icon names the symbol the shop's tile layout draws for this item, one of
+	// [Icons] (ADR-0525). Empty draws the shop's default. A name,
+	// not a picture: a tile view shows dozens of items at once, and a named symbol
+	// costs no request and takes the catalogue's colour, where an uploaded picture
+	// per row would cost one request each (ADR-0391's open question).
+	Icon string `json:"icon,omitempty"`
 	// HomeCatalog is the catalogue whose scope governs editing this item. An item
 	// is referenced by catalogues rather than owned by one — it legitimately appears
 	// in several — so scope cannot be inherited from "the catalogue it is in", and a

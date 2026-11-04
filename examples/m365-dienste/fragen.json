@@ -17,8 +17,8 @@
       "en": "Audience of \"Communication and telephony\""
     },
     "hint": {
-      "de": "Wer zusätzlich Räume, Warteschlangen und Telefonzentralen bestellt, z.B. Teamleitungen und UCC-Verantwortliche. Sie sehen diesen Katalog, weil sein Rang höher ist.",
-      "en": "Who also orders rooms, call queues and auto attendants, e.g. team leads. They see this catalogue because its rank is higher."
+      "de": "Wer zusätzlich Räume, Warteschlangen und Telefonzentralen bestellt, z.B. Teamleitungen und UCC-Verantwortliche. Sie sehen diesen Katalog neben dem für alle Mitarbeitenden.",
+      "en": "Who also orders rooms, call queues and auto attendants, e.g. team leads. They see this catalogue beside the one for all staff."
     }
   },
   "telefonie-team": {
@@ -52,6 +52,17 @@
     "hint": {
       "de": "Eine Gruppe, meist der Rechtsdienst oder die Compliance. Sie entscheidet, ob das Postfach einer Person aufbewahrt wird; die betroffene Person erfährt davon nichts.",
       "en": "A group, usually legal or compliance. It decides whether a person's mailbox is placed on hold; the person concerned is not told."
+    }
+  },
+  "zielgruppe-identitaet": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Microsoft 365: Identität (hybrid)»: wer bestellt",
+      "en": "Audience of \"Microsoft 365: identity (hybrid)\": who orders"
+    },
+    "hint": {
+      "de": "Meist M365-Administration. Die Produkte legen Konten im Active Directory an und übertragen die Verwaltung eines Kontos in die Cloud; sie brauchen Entra Connect.",
+      "en": "Usually M365 administration. The products create accounts in Active Directory and transfer an account's management to the cloud; they need Entra Connect."
     }
   }
 }

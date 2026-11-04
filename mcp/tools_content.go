@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"net/url"
+	"time"
 )
 
 // The content binding of a product
@@ -155,15 +156,25 @@ func contentTools() []Tool {
 			Name: "atlas_refresh_catalog_content",
 			Description: "Refresh every bound product a catalogue offers, each all or nothing on its own; one " +
 				"homed in a catalogue you do not maintain is skipped. Answers refreshed, refused (with the " +
-				"problems) or skipped per product.",
+				"problems) or skipped per product. It waits up to ten minutes; the server finishes the batch " +
+				"even when the call gives up first, so calling it again finds the products refreshed.",
 			InputSchema: catalogIDArg("The catalogue whose bound products to refresh."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
 				if err != nil {
 					return "", err
 				}
-				return asText(c.post(withID(id, "/content/refresh"), "", nil))
+				return asText(c.withTimeout(catalogueRefreshTimeout).post(withID(id, "/content/refresh"), "", nil))
 			},
 		},
 	})
 }
+
+// catalogueRefreshTimeout bounds atlas_refresh_catalog_content. The server
+// refreshes the bound products one after the other, each a recheck and a fetch
+// of every page, which took about 1.5 seconds a product against a real wiki: a
+// catalogue of 35 products needed close to a minute, twice the client's thirty
+// seconds, and the agent saw a timeout for a refresh that went on and succeeded.
+// Ten minutes covers a few hundred products. The server finishes the batch even
+// when this runs out, so asking again finds the products refreshed.
+const catalogueRefreshTimeout = 10 * time.Minute
