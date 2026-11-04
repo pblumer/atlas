@@ -1,5 +1,5 @@
 {
-  "formatVersion": 2,
+  "formatVersion": 4,
   "key": "beispiel-m365-dienste",
   "name": "Beispiel: Microsoft-365-Dienste",
   "processes": [
@@ -465,5 +465,12 @@
       "modelRef": "m365-verteiler-zuordnung",
       "path": "m365-verteiler-zuordnung.dmn"
     }
-  ]
+  ],
+  "informationModels": [
+    {
+      "name": "Microsoft-365-Dienste",
+      "path": "architektur/informationsmodell.json"
+    }
+  ],
+  "architecture": "architektur/capabilities.json"
 }

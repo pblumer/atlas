@@ -1,0 +1,2155 @@
+{
+  "name": "Microsoft-365-Dienste",
+  "documentation": "Informationsmodell des Beispiels m365-dienste: die Geschaeftsobjekte, die die Prozesse anlegen, aendern und zurueckgeben, ihre Lebenszyklen und die Systeme, in denen sie liegen. Personenbezogen sind Konto, Partnerkonto, AdKonto, Postfach und Mailkontakt; das Modell haelt nur ihre Struktur, keine Werte. Die OnPrem-Variante (beispiel-m365-dienste-onprem) bekommt dasselbe Modell mit dem Speicher «Exchange Server: Empfaenger».",
+  "classes": [
+    {
+      "id": "cls-kontoherkunft",
+      "name": "KontoHerkunft",
+      "documentation": "Woher ein Konto in Entra ID stammt: in der Cloud angelegt oder aus dem lokalen AD synchronisiert (Entra Connect).",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "Cloud",
+        "Synchronisiert"
+      ],
+      "x": 340,
+      "y": 920
+    },
+    {
+      "id": "cls-zugriffsart",
+      "name": "Zugriffsart",
+      "documentation": "Die Rechte, die Atlas an einem Postfach erteilt.",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "Vollzugriff",
+        "SendenAls",
+        "SendenImAuftrag",
+        "Kalenderstellvertretung"
+      ],
+      "x": 640,
+      "y": 1140
+    },
+    {
+      "id": "cls-sichtbarkeit",
+      "name": "Sichtbarkeit",
+      "documentation": "Sichtbarkeit einer Microsoft-365-Gruppe.",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "Public",
+        "Private"
+      ],
+      "x": 1240,
+      "y": 1140
+    },
+    {
+      "id": "cls-inventarstatus",
+      "name": "InventarStatus",
+      "documentation": "Die Werte der Spalte Status in der SharePoint-Liste «Site-Inventar».",
+      "stereotype": "enumeration",
+      "attributes": [],
+      "literals": [
+        "Active",
+        "Returned",
+        "Removed"
+      ],
+      "x": 1240,
+      "y": 1360
+    },
+    {
+      "id": "cls-katalogposition",
+      "name": "Katalogposition",
+      "documentation": "Eine bestellte Position im Atlas-Shop: was eine Person fuer wen bestellt hat. Jeder Prozess des Beispiels meldet ihr Ergebnis an diese Position (erledigt, abgelehnt, fehlgeschlagen, zurueckgegeben); erst «erledigt» gibt das Recht im Bestand.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "orderId",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die Bestellung."
+        },
+        {
+          "name": "positionId",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die Position innerhalb der Bestellung."
+        },
+        {
+          "name": "produkt",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die Katalog-Id des Produkts, z.B. m365-team."
+        },
+        {
+          "name": "empfaenger",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Die empfangende Person (Atlas-Benutzername). Personenbezogen."
+        }
+      ],
+      "x": 40,
+      "y": 40,
+      "identity": [
+        "orderId",
+        "positionId"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bestellt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Erledigt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Abgelehnt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Fehlgeschlagen",
+            "x": 520,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Zurueckgegeben",
+            "x": 680,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-katalogposition-1",
+            "from": "Bestellt",
+            "to": "Erledigt"
+          },
+          {
+            "id": "t-katalogposition-2",
+            "from": "Bestellt",
+            "to": "Abgelehnt"
+          },
+          {
+            "id": "t-katalogposition-3",
+            "from": "Bestellt",
+            "to": "Fehlgeschlagen"
+          },
+          {
+            "id": "t-katalogposition-4",
+            "from": "Erledigt",
+            "to": "Zurueckgegeben"
+          },
+          {
+            "id": "t-katalogposition-5",
+            "from": "Bestellt",
+            "to": "Zurueckgegeben"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-genehmigung",
+      "name": "Genehmigung",
+      "documentation": "Der Entscheid ueber eine Bestellung, die eine Freigabe braucht: durch die vorgesetzte Person aus Entra ID oder eine Ersatzgruppe, mit Erinnerung und Eskalation.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "entscheid",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "genehmigt oder abgelehnt."
+        },
+        {
+          "name": "begruendung",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Pflicht bei einer Ablehnung."
+        },
+        {
+          "name": "entschiedenAm",
+          "type": "dateTime",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "eskalationsstufe",
+          "type": "number",
+          "multiplicity": "1",
+          "documentation": "0 bei der ersten Person, +1 je Weiterreichung."
+        }
+      ],
+      "x": 40,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Offen",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Eskaliert",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Erteilt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Abgelehnt",
+            "x": 520,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-genehmigung-1",
+            "from": "Offen",
+            "to": "Erteilt"
+          },
+          {
+            "id": "t-genehmigung-2",
+            "from": "Offen",
+            "to": "Abgelehnt"
+          },
+          {
+            "id": "t-genehmigung-3",
+            "from": "Offen",
+            "to": "Eskaliert"
+          },
+          {
+            "id": "t-genehmigung-4",
+            "from": "Eskaliert",
+            "to": "Eskaliert"
+          },
+          {
+            "id": "t-genehmigung-5",
+            "from": "Eskaliert",
+            "to": "Erteilt"
+          },
+          {
+            "id": "t-genehmigung-6",
+            "from": "Eskaliert",
+            "to": "Abgelehnt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-konto",
+      "name": "Konto",
+      "documentation": "Ein Benutzerkonto in Entra ID. Personenbezogen: Name, Abteilung und Anmeldename gehoeren einer Person.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "userPrincipalName",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Anmeldename, zugleich Mailadresse."
+        },
+        {
+          "name": "objectId",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Die unveraenderliche Id in Entra ID."
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "abteilung",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Grenzt in der Testumgebung die Personensuche ein."
+        },
+        {
+          "name": "nutzungsort",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "usageLocation, Voraussetzung fuer eine Lizenz."
+        },
+        {
+          "name": "herkunft",
+          "type": "KontoHerkunft",
+          "multiplicity": "1"
+        },
+        {
+          "name": "aktiv",
+          "type": "boolean",
+          "multiplicity": "1",
+          "documentation": "accountEnabled."
+        }
+      ],
+      "x": 340,
+      "y": 40,
+      "identity": [
+        "userPrincipalName"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Aktiv",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Synchronisiert",
+            "x": 360,
+            "y": 40
+          },
+          {
+            "name": "CloudVerwaltet",
+            "x": 520,
+            "y": 40
+          },
+          {
+            "name": "Gesperrt",
+            "x": 680,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-konto-1",
+            "from": "Angelegt",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-konto-2",
+            "from": "Angelegt",
+            "to": "Synchronisiert"
+          },
+          {
+            "id": "t-konto-3",
+            "from": "Synchronisiert",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-konto-4",
+            "from": "Aktiv",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-konto-5",
+            "from": "Aktiv",
+            "to": "CloudVerwaltet"
+          },
+          {
+            "id": "t-konto-6",
+            "from": "Synchronisiert",
+            "to": "CloudVerwaltet"
+          },
+          {
+            "id": "t-konto-7",
+            "from": "CloudVerwaltet",
+            "to": "Synchronisiert"
+          },
+          {
+            "id": "t-konto-8",
+            "from": "Aktiv",
+            "to": "Gesperrt"
+          },
+          {
+            "id": "t-konto-9",
+            "from": "Synchronisiert",
+            "to": "Gesperrt"
+          },
+          {
+            "id": "t-konto-10",
+            "from": "CloudVerwaltet",
+            "to": "Gesperrt"
+          },
+          {
+            "id": "t-konto-11",
+            "from": "Gesperrt",
+            "to": "Aktiv"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-partnerkonto",
+      "name": "Partnerkonto",
+      "documentation": "Ein Konto fuer eine externe Person (Partnerzugang), mit Ablaufdatum. Personenbezogen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "firma",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "ablaufdatum",
+          "type": "date",
+          "multiplicity": "1",
+          "documentation": "Nach 90 Tagen sperrt der Prozess das Konto."
+        }
+      ],
+      "x": 340,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Beantragt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Aktiv",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Gesperrt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-partnerkonto-1",
+            "from": "Beantragt",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-partnerkonto-2",
+            "from": "Aktiv",
+            "to": "Gesperrt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-adkonto",
+      "name": "AdKonto",
+      "documentation": "Ein Benutzerkonto im lokalen Active Directory, das Entra Connect nach Entra ID synchronisiert (hybride Identitaet). Personenbezogen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "samAccountName",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "userPrincipalName",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "distinguishedName",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Ort im Verzeichnis; die OU entscheidet, ob synchronisiert wird."
+        }
+      ],
+      "x": 340,
+      "y": 480,
+      "identity": [
+        "samAccountName"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Aktiv",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Gesperrt",
+            "x": 360,
+            "y": 40
+          },
+          {
+            "name": "AusserhalbSync",
+            "x": 520,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-adkonto-1",
+            "from": "Angelegt",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-adkonto-2",
+            "from": "Aktiv",
+            "to": "Gesperrt"
+          },
+          {
+            "id": "t-adkonto-3",
+            "from": "Gesperrt",
+            "to": "AusserhalbSync"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-lizenzzuweisung",
+      "name": "Lizenzzuweisung",
+      "documentation": "Eine Microsoft-365-Lizenz an einem Konto, direkt oder ueber eine Lizenzgruppe zugewiesen (Lizenzprofil M365Lizenzprofil).",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "skuId",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "profil",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "standard, erweitert, frontline, telefonie."
+        },
+        {
+          "name": "weg",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "direkt, Entra-Gruppe oder AD-Gruppe."
+        }
+      ],
+      "x": 340,
+      "y": 700,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Beantragt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Zugewiesen",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entzogen",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-lizenzzuweisung-1",
+            "from": "Beantragt",
+            "to": "Zugewiesen"
+          },
+          {
+            "id": "t-lizenzzuweisung-2",
+            "from": "Zugewiesen",
+            "to": "Entzogen"
+          },
+          {
+            "id": "t-lizenzzuweisung-3",
+            "from": "Beantragt",
+            "to": "Entzogen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-empfaenger",
+      "name": "Empfaenger",
+      "documentation": "Ein Empfaenger in Exchange: alles, was eine Mailadresse hat. Oberbegriff fuer Postfaecher, Verteiler und Kontakte.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "primarySmtpAddress",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "alias",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Beginnt in der geteilten Testumgebung mit dem Praefix (NAME_PREFIX)."
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "herkunft",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "CustomAttribute, mit dem Atlas markiert, was es angelegt hat (Governance-Pruefung)."
+        }
+      ],
+      "x": 640,
+      "y": 40,
+      "identity": [
+        "primarySmtpAddress"
+      ]
+    },
+    {
+      "id": "cls-postfach",
+      "name": "Postfach",
+      "documentation": "Das persoenliche Postfach einer Person, mit Abwesenheit, Kontingent, Weiterleitung und weiteren Adressen. Personenbezogen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "kontingentGB",
+          "type": "number",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "weiterleitungAn",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "abwesend",
+          "type": "boolean",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 640,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bereit",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Abwesend",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Weitergeleitet",
+            "x": 360,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-postfach-1",
+            "from": "Bereit",
+            "to": "Bereit"
+          },
+          {
+            "id": "t-postfach-2",
+            "from": "Bereit",
+            "to": "Abwesend"
+          },
+          {
+            "id": "t-postfach-3",
+            "from": "Abwesend",
+            "to": "Bereit"
+          },
+          {
+            "id": "t-postfach-4",
+            "from": "Bereit",
+            "to": "Weitergeleitet"
+          },
+          {
+            "id": "t-postfach-5",
+            "from": "Weitergeleitet",
+            "to": "Bereit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-funktionspostfach",
+      "name": "Funktionspostfach",
+      "documentation": "Ein gemeinsames Postfach (Shared Mailbox) fuer eine Funktion oder ein Team, ohne eigene Lizenz.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "zweck",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 640,
+      "y": 700,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-funktionspostfach-1",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-ressourcenpostfach",
+      "name": "Ressourcenpostfach",
+      "documentation": "Ein buchbares Postfach mit Buchungsregeln (Kalenderverarbeitung). Den Lebenszyklus tragen Raum- und Geraetepostfach selbst, weil ein Datenzustand gegen die Klasse aufgeloest wird, die das Datenobjekt nennt.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "kapazitaet",
+          "type": "number",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "standort",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "x": 940,
+      "y": 40
+    },
+    {
+      "id": "cls-raumpostfach",
+      "name": "Raumpostfach",
+      "documentation": "Ein Besprechungsraum.",
+      "stereotype": "businessObject",
+      "attributes": [],
+      "x": 940,
+      "y": 260,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Buchbar",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entfernt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-raumpostfach-1",
+            "from": "Angelegt",
+            "to": "Buchbar"
+          },
+          {
+            "id": "t-raumpostfach-2",
+            "from": "Buchbar",
+            "to": "Entfernt"
+          },
+          {
+            "id": "t-raumpostfach-3",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-geraetepostfach",
+      "name": "Geraetepostfach",
+      "documentation": "Ein buchbares Geraet, etwa ein Beamer oder ein Fahrzeug.",
+      "stereotype": "businessObject",
+      "attributes": [],
+      "x": 940,
+      "y": 480,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Buchbar",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entfernt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-geraetepostfach-1",
+            "from": "Angelegt",
+            "to": "Buchbar"
+          },
+          {
+            "id": "t-geraetepostfach-2",
+            "from": "Buchbar",
+            "to": "Entfernt"
+          },
+          {
+            "id": "t-geraetepostfach-3",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-verteiler",
+      "name": "Verteiler",
+      "documentation": "Eine Verteilerliste in Exchange.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "zweck",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "extern",
+          "type": "boolean",
+          "multiplicity": "1",
+          "documentation": "Ob Mail von aussen ankommen darf."
+        }
+      ],
+      "x": 940,
+      "y": 700,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-verteiler-1",
+            "from": "Angelegt",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-mailkontakt",
+      "name": "Mailkontakt",
+      "documentation": "Eine externe Adresse als Kontakt in Exchange, damit sie Mitglied eines Verteilers sein kann. Personenbezogen.",
+      "stereotype": "businessObject",
+      "attributes": [],
+      "x": 940,
+      "y": 1140,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          }
+        ],
+        "transitions": []
+      }
+    },
+    {
+      "id": "cls-verteilermitgliedschaft",
+      "name": "Verteilermitgliedschaft",
+      "documentation": "Die Mitgliedschaft eines Empfaengers in einem Verteiler (Selbstanmeldung oder Bestellung).",
+      "stereotype": "businessObject",
+      "attributes": [],
+      "x": 940,
+      "y": 920,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Beantragt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Aufgenommen",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entfernt",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-verteilermitgliedschaft-1",
+            "from": "Beantragt",
+            "to": "Aufgenommen"
+          },
+          {
+            "id": "t-verteilermitgliedschaft-2",
+            "from": "Aufgenommen",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-postfachberechtigung",
+      "name": "Postfachberechtigung",
+      "documentation": "Ein Recht einer Person an einem Postfach: Vollzugriff, Senden als, Senden im Auftrag oder Kalenderstellvertretung.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "zugriffsart",
+          "type": "Zugriffsart",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 640,
+      "y": 920,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Beantragt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Erteilt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entzogen",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-postfachberechtigung-1",
+            "from": "Beantragt",
+            "to": "Erteilt"
+          },
+          {
+            "id": "t-postfachberechtigung-2",
+            "from": "Erteilt",
+            "to": "Entzogen"
+          },
+          {
+            "id": "t-postfachberechtigung-3",
+            "from": "Beantragt",
+            "to": "Entzogen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-aufbewahrung",
+      "name": "Aufbewahrung",
+      "documentation": "Litigation Hold auf einem Postfach: nichts darin wird endgueltig geloescht, solange er gilt.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "dauerTage",
+          "type": "number",
+          "multiplicity": "0..1",
+          "documentation": "Leer heisst unbefristet."
+        },
+        {
+          "name": "begruendung",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 640,
+      "y": 480,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Beantragt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Aktiv",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Aufgehoben",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-aufbewahrung-1",
+            "from": "Beantragt",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-aufbewahrung-2",
+            "from": "Aktiv",
+            "to": "Aufgehoben"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-m365gruppe",
+      "name": "M365Gruppe",
+      "documentation": "Eine Microsoft-365-Gruppe (Unified Group) in Entra ID: die Mitgliedschaft hinter Team, SharePoint-Site und Viva-Engage-Community.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "mailNickname",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "Alias; bestimmt die Adresse und die Site-URL."
+        },
+        {
+          "name": "objectId",
+          "type": "string",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "sichtbarkeit",
+          "type": "Sichtbarkeit",
+          "multiplicity": "1"
+        },
+        {
+          "name": "beschreibung",
+          "type": "string",
+          "multiplicity": "0..1",
+          "documentation": "Nennt Zweck und Katalog-Position."
+        }
+      ],
+      "x": 1240,
+      "y": 40,
+      "identity": [
+        "mailNickname"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Geloescht",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-m365gruppe-1",
+            "from": "Aktiv",
+            "to": "Geloescht"
+          },
+          {
+            "id": "t-m365gruppe-2",
+            "from": "Geloescht",
+            "to": "Aktiv"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-team",
+      "name": "Team",
+      "documentation": "Ein Microsoft Team auf einer Microsoft-365-Gruppe.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "groupId",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "archiviert",
+          "type": "boolean",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 1240,
+      "y": 260,
+      "identity": [
+        "groupId"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Archiviert",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-team-1",
+            "from": "Aktiv",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-team-2",
+            "from": "Aktiv",
+            "to": "Archiviert"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-sharepointsite",
+      "name": "SharePointSite",
+      "documentation": "Die Teamwebsite einer Microsoft-365-Gruppe. Microsoft legt sie zur Gruppe an; Atlas wartet, bis sie erreichbar ist.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "url",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "alias",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "kontingentGB",
+          "type": "number",
+          "multiplicity": "0..1"
+        },
+        {
+          "name": "sprache",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 1240,
+      "y": 480,
+      "identity": [
+        "url"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angefordert",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Bereit",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-sharepointsite-1",
+            "from": "Angefordert",
+            "to": "Bereit"
+          },
+          {
+            "id": "t-sharepointsite-2",
+            "from": "Bereit",
+            "to": "Bereit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-siteinventareintrag",
+      "name": "SiteInventarEintrag",
+      "documentation": "Ein Eintrag in der SharePoint-Liste «Site-Inventar»: welche Site zu welcher Katalog-Position gehoert. Bewusst ohne Personendaten.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "alias",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "titel",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "siteUrl",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "groupId",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "sprache",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "kontingentGB",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "status",
+          "type": "InventarStatus",
+          "multiplicity": "1"
+        },
+        {
+          "name": "position",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "orderId/positionId."
+        }
+      ],
+      "x": 1240,
+      "y": 700,
+      "identity": [
+        "alias"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Active",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Returned",
+            "x": 200,
+            "y": 40,
+            "final": true
+          },
+          {
+            "name": "Removed",
+            "x": 360,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-siteinventareintrag-1",
+            "from": "Active",
+            "to": "Active"
+          },
+          {
+            "id": "t-siteinventareintrag-2",
+            "from": "Active",
+            "to": "Returned"
+          },
+          {
+            "id": "t-siteinventareintrag-3",
+            "from": "Active",
+            "to": "Removed"
+          },
+          {
+            "id": "t-siteinventareintrag-4",
+            "from": "Removed",
+            "to": "Active"
+          }
+        ],
+        "statesFrom": "InventarStatus"
+      }
+    },
+    {
+      "id": "cls-engagecommunity",
+      "name": "EngageCommunity",
+      "documentation": "Eine Community in Viva Engage auf einer Microsoft-365-Gruppe.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "groupId",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 1240,
+      "y": 920,
+      "identity": [
+        "groupId"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Angelegt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Geloescht",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-engagecommunity-1",
+            "from": "Angelegt",
+            "to": "Geloescht"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-rufnummer",
+      "name": "Rufnummer",
+      "documentation": "Eine Telefonnummer aus Teams Phone, einer Person oder einem Ressourcenkonto zugewiesen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "nummer",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "E.164."
+        },
+        {
+          "name": "typ",
+          "type": "string",
+          "multiplicity": "1",
+          "documentation": "CallingPlan, OperatorConnect oder DirectRouting."
+        }
+      ],
+      "x": 1540,
+      "y": 40,
+      "identity": [
+        "nummer"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Frei",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Zugewiesen",
+            "x": 200,
+            "y": 40
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-rufnummer-1",
+            "from": "Frei",
+            "to": "Zugewiesen"
+          },
+          {
+            "id": "t-rufnummer-2",
+            "from": "Zugewiesen",
+            "to": "Frei"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-ressourcenkonto",
+      "name": "Ressourcenkonto",
+      "documentation": "Das Konto, ueber das eine Telefonzentrale oder Warteschlange eine Rufnummer traegt.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "userPrincipalName",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "anzeigename",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "sprache",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 1540,
+      "y": 260,
+      "identity": [
+        "userPrincipalName"
+      ],
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bereit",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-ressourcenkonto-1",
+            "from": "Bereit",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-telefonzentrale",
+      "name": "Telefonzentrale",
+      "documentation": "Eine automatische Telefonzentrale (Auto Attendant) mit Begruessung und Weiterleitung.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "name",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "weiterleitungAn",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "x": 1540,
+      "y": 480,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-telefonzentrale-1",
+            "from": "Aktiv",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-anrufwarteschlange",
+      "name": "Anrufwarteschlange",
+      "documentation": "Eine Anrufwarteschlange (Call Queue) mit ihren Agentinnen und Agenten.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "name",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "verteilung",
+          "type": "string",
+          "multiplicity": "0..1"
+        }
+      ],
+      "x": 1540,
+      "y": 700,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Aktiv",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Entfernt",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-anrufwarteschlange-1",
+            "from": "Aktiv",
+            "to": "Aktiv"
+          },
+          {
+            "id": "t-anrufwarteschlange-2",
+            "from": "Aktiv",
+            "to": "Entfernt"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-oemitgliedschaften",
+      "name": "OeMitgliedschaften",
+      "documentation": "Die Mitgliedschaften, die eine Organisationseinheit vorgibt (Teams, Gruppen, Verteiler; M365OeMitgliedschaften).",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "organisationseinheit",
+          "type": "string",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 40,
+      "y": 700,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Bestimmt",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Zugeteilt",
+            "x": 200,
+            "y": 40
+          },
+          {
+            "name": "Entzogen",
+            "x": 360,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-oemitgliedschaften-1",
+            "from": "Bestimmt",
+            "to": "Zugeteilt"
+          },
+          {
+            "id": "t-oemitgliedschaften-2",
+            "from": "Zugeteilt",
+            "to": "Zugeteilt"
+          },
+          {
+            "id": "t-oemitgliedschaften-3",
+            "from": "Zugeteilt",
+            "to": "Entzogen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cls-governancebefund",
+      "name": "GovernanceBefund",
+      "documentation": "Das Ergebnis der Governance-Pruefung: Postfaecher, Verteiler und Gruppen, die keine Atlas-Kennzeichnung tragen.",
+      "stereotype": "businessObject",
+      "attributes": [
+        {
+          "name": "abweichungen",
+          "type": "number",
+          "multiplicity": "1"
+        },
+        {
+          "name": "text",
+          "type": "string",
+          "multiplicity": "1"
+        },
+        {
+          "name": "erstelltAm",
+          "type": "dateTime",
+          "multiplicity": "1"
+        }
+      ],
+      "x": 40,
+      "y": 480,
+      "lifecycle": {
+        "states": [
+          {
+            "name": "Erfasst",
+            "x": 40,
+            "y": 40,
+            "initial": true
+          },
+          {
+            "name": "Geprueft",
+            "x": 200,
+            "y": 40,
+            "final": true
+          }
+        ],
+        "transitions": [
+          {
+            "id": "t-governancebefund-1",
+            "from": "Erfasst",
+            "to": "Geprueft"
+          }
+        ]
+      }
+    }
+  ],
+  "associations": [
+    {
+      "id": "gen-1",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-partnerkonto"
+      },
+      "to": {
+        "classId": "cls-konto"
+      }
+    },
+    {
+      "id": "gen-2",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-postfach"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "gen-3",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-funktionspostfach"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "gen-4",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-ressourcenpostfach"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "gen-5",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-raumpostfach"
+      },
+      "to": {
+        "classId": "cls-ressourcenpostfach"
+      }
+    },
+    {
+      "id": "gen-6",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-geraetepostfach"
+      },
+      "to": {
+        "classId": "cls-ressourcenpostfach"
+      }
+    },
+    {
+      "id": "gen-7",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-verteiler"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "gen-8",
+      "kind": "generalization",
+      "from": {
+        "classId": "cls-mailkontakt"
+      },
+      "to": {
+        "classId": "cls-empfaenger"
+      }
+    },
+    {
+      "id": "assoc-1",
+      "name": "traegt",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-konto",
+        "role": "konto",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-lizenzzuweisung",
+        "role": "lizenzen",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-2",
+      "name": "wird synchronisiert als",
+      "kind": "association",
+      "from": {
+        "classId": "cls-adkonto",
+        "role": "quelle",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "synchronisiert",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-3",
+      "name": "besitzt",
+      "kind": "association",
+      "from": {
+        "classId": "cls-konto",
+        "role": "inhaber",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-postfach",
+        "role": "postfach",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-4",
+      "name": "gewaehrt",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-empfaenger",
+        "role": "postfach",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-postfachberechtigung",
+        "role": "berechtigungen",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-5",
+      "name": "fuer",
+      "kind": "association",
+      "from": {
+        "classId": "cls-postfachberechtigung",
+        "role": "berechtigung",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "berechtigte",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-6",
+      "name": "hat",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-verteiler",
+        "role": "verteiler",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-verteilermitgliedschaft",
+        "role": "mitglieder",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-7",
+      "name": "von",
+      "kind": "association",
+      "from": {
+        "classId": "cls-verteilermitgliedschaft",
+        "role": "mitgliedschaft",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-empfaenger",
+        "role": "mitglied",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-8",
+      "name": "steht unter",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-postfach",
+        "role": "postfach",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-aufbewahrung",
+        "role": "aufbewahrung",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-9",
+      "name": "gehoert",
+      "kind": "association",
+      "from": {
+        "classId": "cls-m365gruppe",
+        "role": "besitzergruppe",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "besitzer",
+        "multiplicity": "1..*"
+      }
+    },
+    {
+      "id": "assoc-10",
+      "name": "beruht auf",
+      "kind": "association",
+      "from": {
+        "classId": "cls-team",
+        "role": "team",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-m365gruppe",
+        "role": "gruppe",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-11",
+      "name": "gehoert zu",
+      "kind": "association",
+      "from": {
+        "classId": "cls-sharepointsite",
+        "role": "site",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-m365gruppe",
+        "role": "gruppe",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-12",
+      "name": "beschreibt",
+      "kind": "association",
+      "from": {
+        "classId": "cls-siteinventareintrag",
+        "role": "eintrag",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-sharepointsite",
+        "role": "site",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-13",
+      "name": "beruht auf",
+      "kind": "association",
+      "from": {
+        "classId": "cls-engagecommunity",
+        "role": "community",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-m365gruppe",
+        "role": "gruppe",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-14",
+      "name": "gehoert",
+      "kind": "association",
+      "from": {
+        "classId": "cls-rufnummer",
+        "role": "rufnummer",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "person",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-15",
+      "name": "traegt",
+      "kind": "association",
+      "from": {
+        "classId": "cls-ressourcenkonto",
+        "role": "konto",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-rufnummer",
+        "role": "rufnummer",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-16",
+      "name": "erreichbar ueber",
+      "kind": "association",
+      "from": {
+        "classId": "cls-telefonzentrale",
+        "role": "zentrale",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-ressourcenkonto",
+        "role": "konto",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-17",
+      "name": "erreichbar ueber",
+      "kind": "association",
+      "from": {
+        "classId": "cls-anrufwarteschlange",
+        "role": "warteschlange",
+        "multiplicity": "0..1"
+      },
+      "to": {
+        "classId": "cls-ressourcenkonto",
+        "role": "konto",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-18",
+      "name": "verteilt an",
+      "kind": "association",
+      "from": {
+        "classId": "cls-anrufwarteschlange",
+        "role": "warteschlange",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "agenten",
+        "multiplicity": "0..*"
+      }
+    },
+    {
+      "id": "assoc-19",
+      "name": "fuer",
+      "kind": "association",
+      "from": {
+        "classId": "cls-oemitgliedschaften",
+        "role": "mitgliedschaften",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "person",
+        "multiplicity": "1"
+      }
+    },
+    {
+      "id": "assoc-20",
+      "name": "braucht",
+      "kind": "composition",
+      "from": {
+        "classId": "cls-katalogposition",
+        "role": "position",
+        "multiplicity": "1"
+      },
+      "to": {
+        "classId": "cls-genehmigung",
+        "role": "genehmigung",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-21",
+      "name": "entschieden von",
+      "kind": "association",
+      "from": {
+        "classId": "cls-genehmigung",
+        "role": "genehmigung",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "genehmiger",
+        "multiplicity": "0..1"
+      }
+    },
+    {
+      "id": "assoc-22",
+      "name": "betreut von",
+      "kind": "association",
+      "from": {
+        "classId": "cls-partnerkonto",
+        "role": "partnerkonto",
+        "multiplicity": "0..*"
+      },
+      "to": {
+        "classId": "cls-konto",
+        "role": "ansprechperson",
+        "multiplicity": "1"
+      }
+    }
+  ],
+  "stores": [
+    {
+      "id": "store-1",
+      "name": "Entra ID: Konten",
+      "documentation": "Benutzerkonten im Verzeichnis des Tenants (Microsoft Graph).",
+      "class": "Konto",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 40,
+      "y": 1700
+    },
+    {
+      "id": "store-2",
+      "name": "Entra ID: Gruppen",
+      "documentation": "Microsoft-365-Gruppen hinter Teams, Sites und Communities.",
+      "class": "M365Gruppe",
+      "worker": "ucc_entra",
+      "mode": "read",
+      "x": 300,
+      "y": 1700
+    },
+    {
+      "id": "store-3",
+      "name": "Exchange Online: Empfaenger",
+      "documentation": "Postfaecher, Verteiler und Kontakte in Exchange Online.",
+      "class": "Empfaenger",
+      "worker": "ucc_exchange",
+      "mode": "read",
+      "x": 560,
+      "y": 1700
+    },
+    {
+      "id": "store-4",
+      "name": "SharePoint Online: Sites",
+      "documentation": "Die Teamwebsites der Gruppen.",
+      "class": "SharePointSite",
+      "worker": "ucc_sharepoint",
+      "mode": "read",
+      "x": 820,
+      "y": 1700
+    },
+    {
+      "id": "store-5",
+      "name": "SharePoint Online: Site-Inventar",
+      "documentation": "Die Liste «Site-Inventar» auf der Site SITE_INVENTAR.",
+      "class": "SiteInventarEintrag",
+      "worker": "ucc_sharepoint",
+      "mode": "read",
+      "x": 1080,
+      "y": 1700
+    },
+    {
+      "id": "store-6",
+      "name": "Teams Phone: Rufnummern",
+      "documentation": "Rufnummern, Ressourcenkonten, Telefonzentralen und Warteschlangen.",
+      "class": "Rufnummer",
+      "worker": "ucc_teams",
+      "mode": "read",
+      "x": 1340,
+      "y": 1700
+    },
+    {
+      "id": "store-7",
+      "name": "Active Directory: Konten",
+      "documentation": "Das lokale Verzeichnis (LDAPS), aus dem Entra Connect synchronisiert.",
+      "class": "AdKonto",
+      "worker": "ad_verzeichnis",
+      "mode": "read",
+      "x": 1600,
+      "y": 1700
+    }
+  ]
+}

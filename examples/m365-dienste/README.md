@@ -22,7 +22,8 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
 | `*.dmn` | Die acht Entscheidungsmodelle |
 | `*.form.json` | Bestell-, Aktions-, Aufgaben- und öffentliche Formulare |
-| `installieren.sh`, `installieren.ps1` | Installation in eine Atlas-Instanz: Entscheidungsmodelle, Applikation, Veröffentlichung, Katalog |
+| `installieren.sh`, `installieren.ps1` | Installation in eine Atlas-Instanz: Entscheidungsmodelle, Applikation, Architektur, Veröffentlichung, Katalog |
+| `architektur/` | Informationsmodell, Realisierungen und Vorschläge für Capabilities und Wertströme, mit einer Beschreibung (siehe «Architektur»); reisen im Applikationsbündel mit |
 | `antworten.beispiel.json` | Vorlage für die Antworten auf `fragen.json` |
 
 ## Die Kataloge
@@ -932,6 +933,44 @@ menschlichen Prüfung. Der öffentliche Link wird nach der Installation bewusst 
 - **Personendaten.** UPNs, Namen, Begründungen und Rufnummern sind in den Prozessen als
   Personendaten deklariert (`atlas:personal`) und werden verschlüsselt gespeichert. Sie
   stehen nur in Worker-Ausdrücken, nie in Bedingungen.
+
+## Architektur
+
+Damit die Dokumente, die Atlas aus einem Release erzeugt (Architektur-Skizze in SVG und
+ArchiMate, ADR-0471 und ADR-0495), mehr zeigen als Prozesse und Worker, beschreibt das
+Beispiel auch seine Daten und seinen Zweck. Alles Einzelne steht in
+[`architektur/README.md`](architektur/README.md); kurz:
+
+- **Informationsmodell** (`architektur/informationsmodell.json`, ADR-0230): 32 Klassen und
+  Aufzählungen, von `Katalogposition` und `Genehmigung` über `Konto`, `Lizenzzuweisung`,
+  `Empfaenger` (mit Postfach, Funktionspostfach, Raum-, Gerätepostfach, Verteiler, Kontakt)
+  bis `M365Gruppe`, `Team`, `SharePointSite`, `SiteInventarEintrag`, `Rufnummer` und
+  `Anrufwarteschlange`; jede mit Lebenszyklus (ADR-0259), dazu die Beziehungen und sieben
+  Datenspeicher (Entra ID, Exchange Online, SharePoint Online, Teams Phone, Active Directory)
+  mit dem Worker, der sie erreicht.
+- **Datenobjekte in den Prozessen** (ADR-0053): Jeder Schritt, der ein Geschäftsobjekt
+  anlegt, ändert oder zurückgibt, schreibt dessen Datenzustand, etwa `Team [Archiviert]` oder
+  `Katalogposition [Zurueckgegeben]`. Die Assoziationen tragen keine Zuweisung und ändern
+  deshalb nur den Datenzustand, nie eine Variable oder den Ablauf (ADR-0058). Jeder Prozess
+  nennt die Datenspeicher, die er über seine Worker erreicht.
+- **Capabilities und Wertströme** (`architektur/capabilities.json`, ADR-0305): elf
+  Capabilities (`m365-konten`, `m365-lizenzen`, `m365-zugriffe`, `m365-partner`,
+  `m365-zusammenarbeit`, `m365-messaging`, `m365-ressourcen`, `m365-telefonie`,
+  `m365-aufbewahrung`, `m365-genehmigung`, `m365-governance`), jede von den Prozessen
+  realisiert, die sie tun, auch denen der OnPrem-Variante; dazu die Wertströme
+  «Mitarbeitende arbeitsfähig machen» und «Zusammenarbeit ermöglichen».
+
+Beides reist im Applikationsbündel mit (Quellbaum-Format 4, `informationModels` und
+`architecture` in `atlas.json`, ADR-0528). Jeder Import nimmt
+es mit: über den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das
+Installationsskript der Testumgebung. Die Realisierungen gehören der Applikation und gehen
+mit ihr. Die Capability-Landkarte gehört dem Server:
+
+- Einen Schlüssel, den sie schon hat, verknüpft der Import nur und überschreibt ihn nie.
+- Einer, der ihr fehlt, ist eine Lücke. Jemand entscheidet sie: übernehmen, einem
+  vorhandenen Schlüssel zuordnen oder weglassen.
+  - In der Console geschieht das im Import-Dialog.
+  - In den Skripten über `LANDKARTE` bzw. `-Landkarte` (siehe `architektur/README.md`).
 
 ## Voraussetzungen auf der Zielinstanz
 

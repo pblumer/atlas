@@ -343,6 +343,13 @@ type packageManifest struct {
 		Path string `json:"path"`
 	} `json:"forms"`
 	Decisions []json.RawMessage `json:"decisions"`
+	// InformationModels and Architecture are what a format-4 tree carries of the
+	// architecture (ADR-0528).
+	InformationModels []struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	} `json:"informationModels"`
+	Architecture string `json:"architecture"`
 }
 
 func readPackageManifest(t *testing.T, dir string) packageManifest {
@@ -401,6 +408,20 @@ func TestEveryPackageManifestNamesWhatItShips(t *testing.T) {
 		wantFormat := 1
 		if len(carried) > 0 {
 			wantFormat = 2
+		}
+		// Format 4 once the tree carries its architecture; every file it names is there.
+		if len(man.InformationModels) > 0 || man.Architecture != "" {
+			wantFormat = 4
+			for _, m := range man.InformationModels {
+				if _, err := os.Stat(filepath.Join(dir, m.Path)); err != nil {
+					t.Errorf("%s: information model %s: %v", dir, m.Name, err)
+				}
+			}
+			if man.Architecture != "" {
+				if _, err := os.Stat(filepath.Join(dir, man.Architecture)); err != nil {
+					t.Errorf("%s: architecture: %v", dir, err)
+				}
+			}
 		}
 		if man.FormatVersion != wantFormat || man.Name == "" || !applicationKey.MatchString(man.Key) {
 			t.Errorf("%s: format %d, key %q, name %q — want format %d, a slug key and a name", dir, man.FormatVersion, man.Key, man.Name, wantFormat)
