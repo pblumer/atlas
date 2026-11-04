@@ -14,6 +14,16 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
+  `cascade`, the default, or `tiles`, which draws a category menu and a search field above
+  one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and
+  a product page with a banner, the included services, the options and the approval rule.
+  The basket, the configuration form and the order are unchanged. A product may name an
+  `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
+  other name. The product editor offers the icon, the appearance card the layout, and the
+  OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
+  a later requirement (ADR-draft-shop-tile-layout).
+
 - **A catalogue can declare Marktleistungen and services.** A catalogue switched to
   `structured` states for every product whether it is a Marktleistung (`kind: offering`),
   the whole somebody orders, or a service (`kind: service`), one building block with its
