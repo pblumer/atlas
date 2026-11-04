@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   (`POST /api/v1/instances/{key}/migrate/plan`, MCP `atlas_migration_plan`) answers `at`,
   the elements the instance stands on, and `changes` and `counts` as the version
   comparison lists them; each refusal of a batch carries `at` too
-  (ADR-draft-compare-process-versions).
+  (ADR-0530).
 
 - **Two versions of a process can be compared.** `GET /api/v1/processes/{key}/comparison`
   lists what changed from the version `?with=` names — by default the one before — to the
@@ -37,7 +37,7 @@ _Changed_ / _Removed_ for each version.
   comparison with any other version and, for a draft that differs, *Alle Unterschiede
   anzeigen*: `GET /api/v1/drafts/{id}/comparison` now carries the same `changes` and
   `counts` beside its first difference. MCP `atlas_compare_versions`
-  (ADR-draft-compare-process-versions).
+  (ADR-0530).
 
 - **An application bundle carries its information model and what it brings to the capability map.** Source-tree format 4 adds `informationModels` and an `architecture` file with the application's realizations (process or Worker → capability key) and proposals for capabilities and value streams. The capability map stays the server's: a key the map has is linked and never written over; a key it lacks is a gap that stops the import until the caller adopts the proposal, maps it onto an existing key or leaves it out (`?adopt=`, `?map=capability:K=EXISTING`, `?omit=`; the Console's import dialog, `atlas import --adopt/--map/--omit` and `atlas_hub_import_release` decide the same way). Realizations a bundle brings belong to the application: every read of the map and the release sketch sees them, marked `bundledBy`, writing a capability never stores them, and deleting the application removes them. An export carries the model, the realizations and the capabilities and value streams they name, so a hub import needs no extra script (ADR-0528).
 - **An administrator can revoke a password somebody else knows.** "Revoke password…" in an account's menu (`POST /api/v1/users/{id}/password-link` with `"revoke": true`) makes the current password stop working at once, ends the account's sessions and OAuth grants, and sends its owner an activation link — or hands it over where the account has no address. A password link alone leaves the old password valid until the link is used, which is too long for one that was typed by an administrator, mailed or written to a log. Refused for one's own account and for the last administrator who can sign in, and nothing is revoked when no link could follow (ADR-0526, amended).

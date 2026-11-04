@@ -1,4 +1,4 @@
-# ADR-DRAFT: Comparing two versions of a process, element by element
+# ADR-0530: Comparing two versions of a process, element by element
 
 - **Status:** Accepted
 - **Implementation:** Landed

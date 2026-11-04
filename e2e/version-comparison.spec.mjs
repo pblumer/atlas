@@ -1,5 +1,5 @@
 // End-to-end coverage for the comparison of two process versions
-// (api/web/version-comparison.js, ADR-draft-compare-process-versions).
+// (api/web/version-comparison.js, ADR-0530).
 //
 // The server lines the two models up by element id and lists what changed; what these
 // tests are about is whether a person can read that: which two versions are compared

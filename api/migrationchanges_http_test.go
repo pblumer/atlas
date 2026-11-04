@@ -13,7 +13,7 @@ import (
 // needs to know what the target version changes, and above all where the instance
 // stands — a changed task it waits on is the change it meets first. The plan names the
 // instance's positions and carries the comparison of the two versions
-// (ADR-draft-compare-process-versions).
+// (ADR-0530).
 func TestMigrationPlanSaysWhatTheInstanceMeets(t *testing.T) {
 	ts := newTestServer(t)
 	v1 := deployXML(t, ts, migrateV1BPMN)

@@ -539,7 +539,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
-			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused, where the instance stands (at: the element ids it has live element instances on), and what the target version changes against the instance's (changes and counts, as GET /api/v1/processes/{key}/comparison lists them) — writing nothing (admin-only when auth is on, ADR-0162, ADR-draft-compare-process-versions)", tag: "Instances", role: RoleAdmin,
+			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused, where the instance stands (at: the element ids it has live element instances on), and what the target version changes against the instance's (changes and counts, as GET /api/v1/processes/{key}/comparison lists them) — writing nothing (admin-only when auth is on, ADR-0162, ADR-0530)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, optional element-id overrides, and optional fork resume points", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "mapping": tArray(), "resume": tArray(),
 			}, "targetProcessDefKey")),
@@ -873,7 +873,7 @@ func (s *Server) apiRoutes() []apiRoute {
 				"kind": tString(), "id": tString(), "deploymentKey": tInteger(),
 			}, "kind")), status: http.StatusNoContent}},
 		{"GET", "/api/v1/processes/{key}/comparison", s.handleProcessComparison, apiOp{
-			summary: "Compare two deployed versions of a process: what changed from the version ?with= names — by default the one before — to the one in the path. Every element added, removed or changed, matched by element id, and for a changed one each field it states differently (name, condition, task definition, input and output mappings, script, form, event definition…) with its value before and after; plus whether the two are the same model and where they first differ. The diagram, formatting, attribute order, attributes at their default and the incoming/outgoing hints are not compared. Both must be versions of the same process (ADR-draft-compare-process-versions)", tag: "Processes", role: roleAny,
+			summary: "Compare two deployed versions of a process: what changed from the version ?with= names — by default the one before — to the one in the path. Every element added, removed or changed, matched by element id, and for a changed one each field it states differently (name, condition, task definition, input and output mappings, script, form, event definition…) with its value before and after; plus whether the two are the same model and where they first differ. The diagram, formatting, attribute order, attributes at their default and the incoming/outgoing hints are not compared. Both must be versions of the same process (ADR-0530)", tag: "Processes", role: roleAny,
 			resp: jsonBody("The comparison", schemaObj(map[string]any{
 				"processId": tString(), "from": tObject(), "to": tObject(),
 				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
@@ -885,7 +885,7 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"GET", "/api/v1/drafts/{id}/comparison", s.handleDraftComparison, apiOp{
-			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, every element the draft adds, removes or changes against the version (as GET /api/v1/processes/{key}/comparison lists them), who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452, ADR-draft-compare-process-versions)", tag: "Drafts", role: RoleModeler,
+			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, every element the draft adds, removes or changes against the version (as GET /api/v1/processes/{key}/comparison lists them), who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452, ADR-0530)", tag: "Drafts", role: RoleModeler,
 			resp: jsonBody("The comparison", schemaObj(map[string]any{
 				"processId": tString(), "ownerId": tString(), "ownerName": tString(),
 				"savedAt": tInteger(), "savedBy": tString(), "savedByName": tString(),

@@ -5,7 +5,7 @@
     <title>Atlas version comparison e2e harness</title>
     <!-- Drives the real api/web/version-comparison.js against a mock `api` that answers
          GET /api/v1/processes/{key}/comparison?with= the way the server does
-         (ADR-draft-compare-process-versions): every element added, removed or changed
+         (ADR-0530): every element added, removed or changed
          from ?with= to {key}, with the fields before and after. The page scaffolding is
          the test's own — app.js boots the whole console on import — so this proves the
          dialog and the list, not app.js's wiring of them. Every request is recorded in

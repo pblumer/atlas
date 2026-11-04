@@ -7049,7 +7049,7 @@ async function viewInstances() {
       const openHref = `#/operations/p/${g.latest.key}`;
       const menuItems = [{ label: "Open", icon: "→", href: openHref }];
       // Reading what changed between two versions needs no role beyond seeing them
-      // (ADR-draft-compare-process-versions).
+      // (ADR-0530).
       if (g.versions.length > 1) {
         menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
       }

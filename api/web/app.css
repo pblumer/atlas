@@ -1283,7 +1283,7 @@ textarea::placeholder {
 .mig-err { color: var(--warn); }
 
 /* What changed between two versions of a process, as a list
-   (ADR-draft-compare-process-versions). One entry per element, its kind as a coloured
+   (ADR-0530). One entry per element, its kind as a coloured
    tag and a rule on its left edge, and for a changed element a table of the fields
    before and after. Values that are long or span lines — a script, a condition — are
    blocks that scroll inside their cell rather than widen the dialog. */
@@ -1317,7 +1317,7 @@ textarea::placeholder {
 .vc-pre { margin: 0; padding: 4px 6px; max-height: 180px; overflow: auto; white-space: pre; font-size: 11.5px;
   background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: 4px; }
 
-/* What a migration meets (ADR-draft-compare-process-versions): the changed and
+/* What a migration meets (ADR-0530): the changed and
    removed elements instances stand on, then the whole comparison folded away. It
    scrolls inside the dialog, so a long comparison does not push the reason field and
    the buttons out of reach. */

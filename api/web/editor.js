@@ -14296,7 +14296,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
   // Comparing the version on screen with the one before it, or any other: what changed
   // is the question before migrating onto a version and when a run behaves differently
-  // from last week's (ADR-draft-compare-process-versions). Reading, so offered to
+  // from last week's (ADR-0530). Reading, so offered to
   // everyone who sees the view, whenever there is a second version.
   const compareBtn = root.querySelector("#compare-versions");
   if (thisVersion && versions.length > 1) {

@@ -1,5 +1,5 @@
 // End-to-end coverage for where Operations opens the comparison of two process
-// versions (ADR-draft-compare-process-versions): the ⋯ menu of a process row in the
+// versions (ADR-0530): the ⋯ menu of a process row in the
 // Instances list, and the live view of one deployed version.
 //
 // version-comparison.spec.mjs proves the dialog through a harness, which cannot load

@@ -306,7 +306,7 @@ test.describe("in German, the console's default", () => {
   });
 });
 
-// What the migration meets (ADR-draft-compare-process-versions): the dialogs set the
+// What the migration meets (ADR-0530): the dialogs set the
 // comparison of the two versions beside where the instances stand, so the change an
 // instance meets first — at the element it waits on — is read before it moves.
 test.describe("what the target version changes", () => {

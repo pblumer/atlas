@@ -64,7 +64,7 @@ type migrationPlanResp struct {
 	At []string `json:"at,omitempty"`
 	// Changes is every element the target version adds, removes or changes against
 	// the instance's version, and Counts their sums
-	// (ADR-draft-compare-process-versions): what the instance meets after the move,
+	// (ADR-0530): what the instance meets after the move,
 	// at the elements in At above all. Only the plan endpoint answers them; they are
 	// a reading of two documents, and a batch has no use for one per instance.
 	Changes []layout.Change `json:"changes,omitempty"`

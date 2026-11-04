@@ -9,7 +9,7 @@ import (
 	"github.com/pblumer/atlas/api/layout"
 )
 
-// Comparing two deployed versions of a process (ADR-draft-compare-process-versions).
+// Comparing two deployed versions of a process (ADR-0530).
 //
 // A version is immutable and every deploy mints one, so "what changed between v6
 // and v7" is a question every process with a history raises: before migrating

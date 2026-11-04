@@ -48,7 +48,7 @@ type draftComparisonResp struct {
 	// Difference names where they first part, when they do.
 	Difference string `json:"difference,omitempty"`
 	// Changes is every element the draft adds, removes or changes against the
-	// version, and Counts their sums (ADR-draft-compare-process-versions). Absent
+	// version, and Counts their sums (ADR-0530). Absent
 	// when no version is deployed.
 	Changes []layout.Change `json:"changes,omitempty"`
 	Counts  *changeCounts   `json:"counts,omitempty"`

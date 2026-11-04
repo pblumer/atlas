@@ -235,7 +235,7 @@ test("a new diagram is not saved yet, and its first deploy saves it", async ({ p
 });
 
 // The chip's panel opens the whole list of differences, not only the first one, and
-// on a version the comparison with any other version (ADR-draft-compare-process-versions).
+// on a version the comparison with any other version (ADR-0530).
 test("a draft that differs opens every difference against the version", async ({ page }) => {
   await setState(page, {
     comparison: {

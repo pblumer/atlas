@@ -1,5 +1,5 @@
 // What changed between two versions of a process, as a list
-// (ADR-draft-compare-process-versions).
+// (ADR-0530).
 //
 // A version is immutable and every deploy mints one, so "what is different in v7"
 // is a question every process with a history raises: before migrating instances
@@ -106,7 +106,7 @@ export function changesHTML(cmp) {
     <ul class="vc-list">${changes.map(changeHTML).join("")}</ul>`;
 }
 
-// What a migration meets (ADR-draft-compare-process-versions). An instance moved to
+// What a migration meets (ADR-0530). An instance moved to
 // another version continues under that version's model, and the change it meets first
 // is the one at the element it stands on: a waiting task whose form or job type
 // changed, an armed event listening for another message. A removed element with an

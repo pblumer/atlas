@@ -19,7 +19,7 @@
 // The panel also opens the full list of differences — every element the draft adds,
 // removes or changes against the version, which the comparison now carries — and, on
 // a version, the comparison with any other version of the process
-// (ADR-draft-compare-process-versions). A standing names those as actions; the chip
+// (ADR-0530). A standing names those as actions; the chip
 // opens them.
 //
 // draftStanding and versionStanding are pure functions of what the server answered, so

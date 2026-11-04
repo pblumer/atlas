@@ -279,7 +279,7 @@ function askMigration({ api, instanceKey, processId, fromVersion, targets }) {
       plan = got;
       planEl.innerHTML = planHTML(got);
       // What the target version changes, and at the instance's own positions first
-      // (ADR-draft-compare-process-versions). The plan carries no "same model" flag: an
+      // (ADR-0530). The plan carries no "same model" flag: an
       // empty list is read as one, which holds for everything the engine reads — the
       // list leaves out only what the compiler ignores.
       if (Array.isArray(got.changes)) {
@@ -479,7 +479,7 @@ function askBatchMigration({ api, processId, processName, versions, runningOf, f
     const byKey = new Map(versions.map((v) => [String(v.key), v]));
 
     // What the target version changes, and where the source version's instances stand
-    // on a changed or removed element (ADR-draft-compare-process-versions): the
+    // on a changed or removed element (ADR-0530): the
     // comparison of the two versions beside the source's live token counts. Read
     // afresh for every pair, and only the newest reading is shown.
     let impactSeq = 0;
