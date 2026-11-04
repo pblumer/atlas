@@ -39,7 +39,7 @@ Unterschied zwischen einem Signal und einer Nachricht.</documentation>
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="artikel" type="string" required="true" default="&quot;Zaunfeld verzinkt&quot;"/>
+        <atlas:startVariable name="artikel" type="string" required="true" default="Zaunfeld verzinkt"/>
         <atlas:startVariable name="neuerPreis" type="number" required="true" default="94.9"/>
       </atlas:startForm>
     </extensionElements>
