@@ -9,6 +9,18 @@ export default {
   "ops.mi.count": "{count} iterations",
   "ops.mi.incidents": "{count} incidents",
   "ops.mi.summary": "{completed} completed, {active} active, {terminated} terminated",
+  "ops.vars.lines.one": "{n} line",
+  "ops.vars.lines.other": "{n} lines",
+  "ops.vars.more.one": "+ 1 more variable",
+  "ops.vars.more.other": "+ {n} more variables",
+  "ops.vars.fewer": "Show fewer",
+  "ops.vars.open": "Show {name} in full",
+  "ops.vars.showAll": "Show all",
+  "ops.vars.window.copyText": "Copy",
+  "ops.vars.window.copyJSON": "Copy JSON",
+  "ops.vars.window.download": "Download",
+  "ops.vars.window.downloadTitle": "Save the value as a file",
+  "ops.vars.window.close": "Close",
 
   // The language's own name, in itself: how the language picker lists it.
   "locale.name": "English",

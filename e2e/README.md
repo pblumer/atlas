@@ -34,6 +34,13 @@ it down afterwards. Use `npx playwright test --headed` to watch it, or
   accidentally merged. This is a UI/DOM slice only: the timeline payload is not yet
   bounded (OHS2/OHS3).
 
+- **`long-values.spec.mjs`**: a variable value longer than its place in Operations — a
+  whole CSV upload in one string, a list of every record read — is shown as its beginning
+  and its size and opened whole in one value window that copies and saves it. Covered on
+  the overview card (one line, no value in the markup, at most five values with the
+  declared searchable ones first, the rest behind "+ N more" across the poll), in the
+  single-instance view and in the replay's Variables tab.
+
 - **`building-blocks.spec.mjs`**
   ([ADR-0515](../docs/adr/0515-service-reporting-and-customer-views.md)):
   the catalogue app's Building blocks page offers the sources the server names, shows each wiki

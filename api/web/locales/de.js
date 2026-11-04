@@ -15,6 +15,18 @@ export default {
   "ops.mi.count": "{count} Ausführungen",
   "ops.mi.incidents": "{count} Incidents",
   "ops.mi.summary": "{completed} abgeschlossen, {active} aktiv, {terminated} abgebrochen",
+  "ops.vars.lines.one": "{n} Zeile",
+  "ops.vars.lines.other": "{n} Zeilen",
+  "ops.vars.more.one": "+ 1 weitere Variable",
+  "ops.vars.more.other": "+ {n} weitere Variablen",
+  "ops.vars.fewer": "Weniger anzeigen",
+  "ops.vars.open": "{name} vollständig anzeigen",
+  "ops.vars.showAll": "Vollständig anzeigen",
+  "ops.vars.window.copyText": "Kopieren",
+  "ops.vars.window.copyJSON": "JSON kopieren",
+  "ops.vars.window.download": "Herunterladen",
+  "ops.vars.window.downloadTitle": "Den Wert als Datei speichern",
+  "ops.vars.window.close": "Schliessen",
 
   // The language's own name, in itself: how the language picker lists it.
   "locale.name": "Deutsch",

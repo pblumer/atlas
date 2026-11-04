@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas long variable values e2e harness</title>
+    <!-- Drives the *real* api/web/editor.js live view and instance replay against a mock
+         `api` whose instances carry values far longer than a panel row: an uploaded CSV
+         file held as a string, and lists of records. The Operations overview must show
+         each one as a one-line preview with its size and open the whole value in a
+         window, rather than printing every record into the card; the single-instance
+         view and the replay's Variables tab must do the same for a long text. -->
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      html, body { margin: 0; height: 100%; background: #fff; }
+      :root { --topbar-h: 0px; }
+      .djs-palette, .token-legend { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="view" style="height:100vh"></div>
+    <script type="module">
+      import { mountLive, mountInstanceReplay } from "/editor.js";
+
+      const view = document.getElementById("view");
+      const noop = () => {};
+      const T = 1_722_260_303_000;
+      const ns = (ms) => ms * 1e6;
+      const DEF = 7;
+
+      // The case behind the change: a CSV upload of fifteen people, held whole in one
+      // string variable. Its first line is the header, its last names Chiara Roth.
+      const people = [
+        "Anna;Meier", "Luca;Keller", "Sophie;Brunner", "Noah;Huber", "Mia;Schmid",
+        "Leon;Gerber", "Lena;Frei", "Elias;Moser", "Emma;Widmer", "Jonas;Zimmermann",
+        "Laura;Steiner", "David;Baumann", "Julia;Fischer", "Matteo;Graf", "Chiara;Roth",
+      ];
+      const CSV = ["personalnummer;vorname;nachname;email;abteilung;rolle"]
+        .concat(people.map((p, i) => {
+          const [vor, nach] = p.split(";");
+          return `P-${1001 + i};${vor};${nach};${vor.toLowerCase()}.${nach.toLowerCase()}@example.ch;Finanzen;Sachbearbeitung`;
+        }))
+        .join("\n");
+      window.__CSV = CSV;
+      const rows = JSON.stringify(people.map((p) => {
+        const [vorname, nachname] = p.split(";");
+        return { vorname, nachname, entscheid: "ok", bemerkung: null };
+      }));
+
+      const XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:atlas="http://atlas/schema/1.0" id="Definitions_lv" targetNamespace="http://atlas/bpmn">
+  <bpmn:process id="csvimport" name="CSV-Datensätze prüfen" isExecutable="true" atlas:searchable="importId">
+    <bpmn:startEvent id="Start_1" name="Import gestartet"><bpmn:outgoing>f_0</bpmn:outgoing></bpmn:startEvent>
+    <bpmn:userTask id="Task_1" name="Datensatz prüfen"><bpmn:incoming>f_0</bpmn:incoming><bpmn:outgoing>f_1</bpmn:outgoing></bpmn:userTask>
+    <bpmn:endEvent id="End_1" name="Import abgeschlossen"><bpmn:incoming>f_1</bpmn:incoming></bpmn:endEvent>
+    <bpmn:sequenceFlow id="f_0" sourceRef="Start_1" targetRef="Task_1"/>
+    <bpmn:sequenceFlow id="f_1" sourceRef="Task_1" targetRef="End_1"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="D"><bpmndi:BPMNPlane id="P" bpmnElement="csvimport">
+    <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1"><dc:Bounds x="160" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1"><dc:Bounds x="260" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1"><dc:Bounds x="440" y="142" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f_0_di" bpmnElement="f_0"><di:waypoint x="196" y="160"/><di:waypoint x="260" y="160"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_1_di" bpmnElement="f_1"><di:waypoint x="360" y="160"/><di:waypoint x="440" y="160"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+      // The server lists variables in its own order; the one the model declares
+      // searchable (importId) is deliberately last, so a test can see it promoted.
+      const bigVars = [
+        { name: "completedBy", value: "usr_251f4602587fc474f04e1866", kind: "string" },
+        { name: "csvText", value: CSV, kind: "string" },
+        { name: "pruefungen", value: rows, kind: "json" },
+        { name: "rowCount", value: "15", kind: "number" },
+        { name: "rows", value: rows, kind: "json" },
+        { name: "zusammenfassung", value: JSON.stringify({ abgelehnt: 1, korrektur: 2, ok: 12, total: 15 }), kind: "json" },
+        { name: "freigegeben", value: "true", kind: "boolean" },
+        { name: "kommentar", value: "kurz", kind: "string" },
+        { name: "importId", value: "IMP-2026-11", kind: "string" },
+      ];
+      window.__BIG_VARS = bigVars.map((v) => v.name);
+
+      const BIG = 281475062011074;
+      const SMALL = 281475062011090;
+      const instances = [
+        { key: SMALL, processDefKey: DEF, state: "active", createdAt: ns(T + 60000), completedAt: 0,
+          variables: [
+            { name: "importId", value: "IMP-2026-12", kind: "string" },
+            { name: "rowCount", value: "0", kind: "number" },
+          ] },
+        { key: BIG, processDefKey: DEF, state: "completed", createdAt: ns(T), completedAt: ns(T + 1838000),
+          variables: bigVars },
+      ];
+      window.__BIG = BIG;
+      window.__SMALL = SMALL;
+
+      const listing = (items, extra = {}) => ({ items, total: items.length, totalExact: true, truncated: false, ...extra });
+
+      const liveApi = async (method, url) => {
+        if (method !== "GET") return {};
+        if (url === "/api/v1/processes") return [{ key: DEF, processId: "csvimport", name: "CSV-Datensätze prüfen", version: 1 }];
+        if (/\/processes\/\d+\/xml$/.test(url)) return XML;
+        if (url.startsWith("/api/v1/instances?")) {
+          const state = new URL(url, location.origin).searchParams.get("state");
+          return listing(instances.filter((r) => (state === "finished") === (r.state !== "active")));
+        }
+        if (url.startsWith("/api/v1/tasks")) return listing([]);
+        if (url.includes("/runtime")) {
+          return { instances: 1, finished: 1, tokens: 1, incidents: [], incidentsTruncated: false,
+            elements: [{ elementId: "Task_1", type: "bpmn:UserTask", tokens: 1, visits: 2, incidents: 0 }] };
+        }
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        return {};
+      };
+      const liveApiRaw = async (method, url, body) => ({ data: await liveApi(method, url, body), headers: new Headers() });
+
+      // The replay of the finished instance: the task that read the CSV holds it.
+      const steps = [
+        { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1", variables: [] },
+        { elementId: "Task_1", elementInstanceKey: "1001", type: "bpmn:userTask", position: 2, tokenId: "1",
+          variables: [bigVars[1], bigVars[3]], variablesAfter: [bigVars[1], bigVars[3]] },
+        { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1",
+          variables: [bigVars[1], bigVars[3]] },
+      ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));
+      const frames = steps.map((s, i) => ({
+        position: s.position, at: s.at,
+        tokens: i < steps.length - 1 ? [{ elementId: s.elementId, tokenId: "1", elementInstanceKey: s.elementInstanceKey, state: "active" }] : [],
+      }));
+      const TIMELINE = { processDefKey: String(DEF), processId: "csvimport", version: 1, state: "completed", steps, frames };
+      const replayApi = async (method, url) => {
+        if (/\/instances\/\d+\/timeline$/.test(url)) return TIMELINE;
+        if (/\/processes\/[\w-]+\/xml$/.test(url)) return XML;
+        if (url.includes("/runtime")) return { elements: [] };
+        if (/\/instances\/\d+\/decisions$/.test(url)) return [];
+        if (/\/instances\/\d+\/data-objects$/.test(url)) return [];
+        if (/\/instances\/\d+\/object-graph$/.test(url)) return { nodes: [], links: [], unresolved: [] };
+        return {};
+      };
+
+      window.__mountLive = (instance) =>
+        mountLive(view, { api: liveApi, apiRaw: liveApiRaw, toast: noop, key: DEF, instance });
+      window.__mountReplay = () =>
+        mountInstanceReplay(view, { api: replayApi, toast: noop, key: String(BIG) });
+      window.__ready = true;
+    </script>
+  </body>
+</html>

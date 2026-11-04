@@ -2441,6 +2441,22 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
 .var-panel .vp-inst-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .var-panel .vp-inst-vars { margin-top: 6px; }
 .var-panel .vp-inst-vars:empty { display: none; }
+/* A long or structured value on a card: one line whatever its length — the beginning,
+   then its size — and a button that opens it whole in the value window. It does not wrap
+   like the short chips beside it: a wrapped file is the card the panel used to show. */
+.var-panel .vp-inst-vars .chip.vp-chip-open {
+  display: inline-flex; align-items: baseline; gap: 0; max-width: 100%; min-width: 0;
+  white-space: nowrap; word-break: normal; overflow: hidden; vertical-align: top;
+  cursor: pointer; color: var(--text); text-align: left;
+}
+.var-panel .vp-chip-open:hover { border-color: var(--accent); color: var(--accent-text); }
+.var-panel .vp-chip-open .vp-chip-k { flex: none; }
+.var-panel .vp-chip-open code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: inherit; }
+.var-panel .vp-chip-open .vp-chip-sum { flex: none; font-weight: 600; }
+.var-panel .vp-chip-open .vp-chip-size {
+  flex: none; margin-left: 8px; color: var(--muted); font: 11px/1.6 system-ui, sans-serif;
+}
+.var-panel .vp-more-vars { margin-top: 4px; padding: 0 6px; font-size: 11px; }
 
 /* Operator metadata for an instance — when it started, how long it ran (or has
    been running), and the message correlation key it began with — shown under the
@@ -2590,6 +2606,24 @@ label.field > span { display: block; font-size: 12px; color: var(--muted); margi
   background: var(--surface); border: 1px solid var(--border); white-space: nowrap;
 }
 .vars .vv { font: 13px/1.5 ui-monospace, monospace; margin-top: 3px; word-break: break-word; }
+/* A long text (varpreview.js): its first lines across the whole grid, line breaks kept,
+   and the way to the rest of it beneath. */
+.vars .vfield.long { grid-column: 1 / -1; }
+/* One stored line per screen line, cut at the edge rather than wrapped: wrapped, a CSV
+   record broke at its first hyphen and the preview no longer read as rows. */
+.vars .vfield.long .vv, .vt .c-val.long {
+  display: block; white-space: pre; overflow: hidden; text-overflow: ellipsis; word-break: normal;
+}
+/* In the replay's table an unwrapped line would set the column's minimum width and push
+   the table past its panel; width 0 takes it out of that sum, and min-width fills the cell. */
+.vt .c-val.long { width: 0; min-width: 100%; }
+.vt .v-show-all { white-space: nowrap; }
+.vars .v-show-all, .vt .v-show-all {
+  display: block; width: fit-content; margin-top: 6px; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font: 11px/1.6 system-ui, sans-serif;
+}
+.vars .v-show-all:hover, .vt .v-show-all:hover { border-color: var(--accent); color: var(--accent-text); }
 /* Scope chip on a subprocess-local variable in the replay variables table (ADR-0074). */
 .c-scope {
   font: 600 9px/1.6 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
@@ -2936,6 +2970,9 @@ table.vt { width: 100%; border-collapse: collapse; font-size: 13px; }
   margin: 0; padding: 0; border: 0; background: none; max-height: none;
   white-space: pre; font: 12.5px/1.6 ui-monospace, monospace; color: var(--text); tab-size: 2;
 }
+/* A text value is shown as stored, its long lines wrapped rather than scrolled sideways. */
+.var-modal-body .vj-body.text { white-space: pre-wrap; word-break: break-word; }
+.var-modal-size { font: 11px/1.6 system-ui, sans-serif; white-space: nowrap; }
 .var-modal .j-key  { color: #7a3e9d; }
 .var-modal .j-str  { color: #0a7c5a; }
 .var-modal .j-num  { color: #0b5cff; }

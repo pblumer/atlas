@@ -88,6 +88,12 @@ _Changed_ / _Removed_ for each version.
   (ADR-0510).
 
 ### Changed
+- **Operations shortens long variable values and opens them in a window.** An instance card in
+  the overview lists at most five values, the variables the process declares searchable first,
+  and opens the rest with "+ N more". A long text, such as a CSV upload held in one variable, is
+  shown as one line with its size in bytes and lines, and a list or object as its shape. A click
+  opens the whole value in a window that copies it and saves it as a file. The single-instance view
+  and the replay's Variables tab show the first lines of a long text and open the same window.
 - **The install guide says how to upgrade the Windows service.** Run again, `install-atlas-service.ps1`
   writes the service configuration from that run's parameters alone, so a parameter left out falls
   back to its default. A TLS installation then comes back as plain HTTP on `127.0.0.1:8080`. The

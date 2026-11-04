@@ -72,6 +72,12 @@ import { groupifyPanel, groupController } from "./pgroup.js";
 // Counts on the runtime views are five and six digits on a busy server, so every
 // number a badge or a count pill prints goes through the same grouping (numfmt.js).
 import { fmtCount } from "./numfmt.js";
+// A long value — a whole uploaded file in one variable — is shown as its beginning and
+// its size, and opened whole in a window (varpreview.js, openValueWindow below).
+import {
+  CARD_CHARS, CARD_VARS, FIELD_CHARS, FIELD_LINES,
+  isLongText, previewText, sizeText, searchableNames, cardOrder, downloadName,
+} from "./varpreview.js";
 // The heatmap over the live view (ADR-0496): the strip that
 // chooses what the diagram shows, the shading, and the figures behind it.
 import {
@@ -625,8 +631,22 @@ function renderVarsBody(list, collapsed) {
       // "textfield_nachnamestring" must not wrap mid-word against the type badge);
       // the badge rides the value row, and the copy button floats in the corner so
       // it never steals width from the name.
-      return `<div class="vfield"><div class="vf-head"><span class="vk" title="${esc(v.name)}">${esc(v.name)}</span></div>
-        <div class="vf-val"><span class="vv ${cls}">${esc(v.value)}</span><span class="vtag">${esc(v.kind)}</span></div>
+      //
+      // A long text — a whole uploaded file is the case that prompted it — shows its
+      // first lines and its size, and opens whole in the value window; printed in full
+      // it pushed every other variable of the instance off the panel. The field then
+      // takes the grid's full width, because a preview squeezed into one column of
+      // three is not readable either. The window resolves the value from the instance
+      // by name and scope (data-var, data-scope), so the markup carries no second copy.
+      const long = cls === "str" && isLongText(v.value, FIELD_CHARS, FIELD_LINES);
+      const shown = long ? previewText(v.value, FIELD_CHARS, FIELD_LINES) : String(v.value);
+      const more = long
+        ? `<button class="v-show-all" type="button" data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}"
+            title="${esc(tr("ops.vars.open", { name: v.name }))}">${esc(tr("ops.vars.showAll"))} · ${esc(sizeText(v.value))}</button>`
+        : "";
+      return `<div class="vfield${long ? " long" : ""}" data-var="${esc(v.name)}"><div class="vf-head"><span class="vk" title="${esc(v.name)}">${esc(v.name)}</span></div>
+        <div class="vf-val"><span class="vv ${cls}">${esc(shown)}</span><span class="vtag">${esc(v.kind)}</span></div>
+        ${more}
         ${copyBtn(v.value, "Copy value")}</div>`;
     }).join("")}</div>`;
   }
@@ -699,6 +719,84 @@ function bindVarCopy(panel, toast) {
     }
   });
 }
+
+// valueWindowHTML is the window a variable's whole value opens in: the overview's
+// cards, the single-instance view and the replay's Variables tab all open the same one
+// (openValueWindow), so "what is actually in there" has one answer however it was
+// reached. A structure is shown as formatted JSON, a text as it is stored — line breaks
+// kept, nothing cut — and either can be copied or saved as a file, which is what an
+// operator does with a value too long to read in place.
+function valueWindowHTML() {
+  return `<div class="var-modal-ov" id="var-modal-ov" hidden>
+    <div class="var-modal" role="dialog" aria-modal="true" aria-labelledby="var-modal-title">
+      <div class="var-modal-head">
+        <span class="var-modal-title mono" id="var-modal-title"></span>
+        <span class="vtag obj" id="var-modal-tag"></span>
+        <span class="muted var-modal-size" id="var-modal-size"></span>
+        <span style="flex:1"></span>
+        <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="">${esc(tr("ops.vars.window.copyJSON"))}</button>
+        <button class="btn ghost small" id="var-modal-dl" type="button" title="${esc(tr("ops.vars.window.downloadTitle"))}">${esc(tr("ops.vars.window.download"))}</button>
+        <button class="icon-btn" id="var-modal-x" type="button" title="${esc(tr("ops.vars.window.close"))}" aria-label="${esc(tr("ops.vars.window.close"))}">✕</button>
+      </div>
+      <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
+    </div>
+  </div>`;
+}
+
+// openValueWindow shows one value in the window valueWindowHTML put under root. kind is
+// the variable's kind: "json" is formatted and highlighted, anything else is text.
+// typeLabel overrides the badge (the replay names a structure "array" or "object").
+function openValueWindow(root, { name, value, kind, typeLabel }) {
+  const ov = root.querySelector("#var-modal-ov");
+  if (!ov) return;
+  const isJSON = kind === "json";
+  const text = String(value ?? "");
+  const saved = isJSON ? prettyJSON(text) : text;
+  root.querySelector("#var-modal-title").textContent = name;
+  root.querySelector("#var-modal-tag").textContent = typeLabel || (isJSON ? jsonTypeLabel(text) : kind || "string");
+  root.querySelector("#var-modal-size").textContent = sizeText(text);
+  const body = root.querySelector("#var-modal-body");
+  body.classList.toggle("text", !isJSON);
+  body.innerHTML = isJSON ? highlightJSON(text) : esc(text);
+  const copy = root.querySelector("#var-modal-copy");
+  copy.dataset.copy = saved;
+  copy.textContent = tr(isJSON ? "ops.vars.window.copyJSON" : "ops.vars.window.copyText");
+  // Held on the element rather than in an attribute: the copy button already carries
+  // the value once, and the download reads it only when somebody asks for it.
+  ov.__value = { name, text: saved, isJSON };
+  ov.hidden = false;
+  root.querySelector("#var-modal-x").focus(); // so Escape closes and focus is inside the dialog
+}
+
+// bindValueWindow wires the window's close, copy and download controls. Attach once per
+// view, after valueWindowHTML is in root.
+function bindValueWindow(root, toast) {
+  const ov = root.querySelector("#var-modal-ov");
+  const close = () => { ov.hidden = true; };
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  root.querySelector("#var-modal-x").addEventListener("click", close);
+  root.querySelector("#var-modal-dl").addEventListener("click", () => {
+    const v = ov.__value;
+    if (!v) return;
+    const blob = new Blob([v.text], { type: v.isJSON ? "application/json" : "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = downloadName(v.name, v.isJSON);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  });
+  bindVarCopy(ov, toast);
+  return close;
+}
+
+// findVar looks a variable up by name and scope in a list — how the value window finds
+// the value a button names without the markup carrying it a second time.
+const findVar = (list, name, scope) =>
+  (list || []).find((v) => v.name === name && String(v.scope || "") === String(scope || ""));
 
 // bindJsonCards wires the delegated expand/collapse click for JSON cards inside
 // panel, toggling names in collapsed and calling rerender. Attach once per view.
@@ -12583,6 +12681,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <span style="flex:1"></span>
         <span class="muted">Polling every 1.5s</span>
       </div>
+      ${valueWindowHTML()}
     </div>`;
 
   // Switching version loads a different deployed definition, so re-route to its
@@ -12662,6 +12761,19 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     return;
   }
 
+  // The variables this process declares searchable (ADR-0244) lead every instance card:
+  // they are the business values a case is found by, so they are the ones it is
+  // recognised by. Read off this definition's own process — in a collaboration, the
+  // pool whose id the listing named — and empty when it declares none.
+  const searchable = (() => {
+    try {
+      const procs = ((viewer.getDefinitions() || {}).rootElements || [])
+        .filter((e) => e.$type === "bpmn:Process");
+      const proc = procs.find((p) => p.id === processId) || (procs.length === 1 ? procs[0] : null);
+      return searchableNames(proc ? (proc.searchable || (proc.$attrs && proc.$attrs["atlas:searchable"])) : "");
+    } catch { return []; }
+  })();
+
   const canvas = viewer.get("canvas");
   const overlays = viewer.get("overlays");
   const registry = viewer.get("elementRegistry");
@@ -12676,6 +12788,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const varPanel = root.querySelector("#var-panel");
   let marked = [];
   const jsonCollapsed = new Set(); // JSON variable names collapsed by the operator
+  // Instance keys whose overview card the operator opened past its first CARD_VARS
+  // values. Kept here, not in the markup, because the poll rebuilds the panel every
+  // 1.5 seconds and an opened card must not close under the reader.
+  const openCards = new Set();
   let varsHTML = "";               // last rendered variables markup, to skip no-op rebuilds
   let decisions = [];              // the selected instance's DMN decision evaluations (ADR-0066)
   let incidents = [];              // unresolved incidents in view, from the runtime poll (ADR-0061/0150)
@@ -12977,17 +13093,44 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   const archivedPill = '<span class="pill off" title="This instance was removed from this server by history retention. ' +
     'What is shown comes from the exported event log — it cannot be opened, replayed or terminated.">archived</span>';
 
-  // JSON variable values are shown with a collapsible preview (first 60 chars)
-  // instead of blowing out the chip; hover to see the full value.
-  const varChips = (list) => !list || !list.length
-    ? '<span class="muted">No variables.</span>'
-    : list.map((v) => {
-        if (v.kind === "json") {
-          const preview = v.value.length > 60 ? v.value.slice(0, 57) + "..." : v.value;
-          return `<span class="chip" title="${esc(v.value)}">${esc(v.name)}=<code>${esc(preview)}</code></span>`;
-        }
-        return `<span class="chip">${esc(v.name)}=${esc(v.value)}</span>`;
-      }).join(" ");
+  // varChip is one value on an overview card, always one line. A card is for
+  // recognising an instance, not for reading its data: a whole CSV upload printed into
+  // it filled the panel and pushed the next instance a screen down. So a structure
+  // shows its shape ([15 items], {4 fields}) and a text longer than a line its
+  // beginning and its size, and either opens whole in the value window. Nothing past
+  // the preview is in the markup — no title attribute holding the value — because the
+  // panel is rebuilt every 1.5 seconds for every listed instance.
+  const varChip = (inst, v) => {
+    const at = `data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}" data-inst="${esc(String(inst.key))}"`;
+    const complex = isComplexVar(v);
+    const long = !complex && v.kind === "string" && isLongText(v.value, CARD_CHARS, 1);
+    if (!complex && !long) {
+      return `<span class="chip" ${at}>${esc(v.name)}=${esc(v.value)}</span>`;
+    }
+    const arr = complex && jsonTypeLabel(v.value) === "array";
+    const shown = complex
+      ? `<span class="vp-chip-sum">${arr ? "[" : "{"}${esc(jsonSummary(v.value))}${arr ? "]" : "}"}</span>`
+      : `<code>${esc(previewText(v.value, CARD_CHARS, 1))}</code>`;
+    return `<button type="button" class="chip vp-chip-open" ${at} title="${esc(tr("ops.vars.open", { name: v.name }))}">` +
+      `<span class="vp-chip-k">${esc(v.name)}</span>=${shown}` +
+      `<span class="vp-chip-size">${esc(sizeText(v.value))}</span></button>`;
+  };
+
+  // varChips lists an instance's values on its overview card: the declared searchable
+  // ones first, then at most CARD_VARS in all until the operator opens the card.
+  const varChips = (inst) => {
+    const list = inst.variables;
+    if (!list || !list.length) return '<span class="muted">No variables.</span>';
+    const ordered = cardOrder(list, searchable);
+    const open = openCards.has(String(inst.key));
+    const shown = open ? ordered : ordered.slice(0, CARD_VARS);
+    const hidden = ordered.length - CARD_VARS;
+    const toggle = hidden > 0
+      ? `<button type="button" class="btn ghost sm vp-more-vars" data-inst="${esc(String(inst.key))}" aria-expanded="${open}">${
+          esc(open ? tr("ops.vars.fewer") : trPlural("ops.vars.more", hidden))}</button>`
+      : "";
+    return shown.map((v) => varChip(inst, v)).join(" ") + toggle;
+  };
   // completedAt is unix nanoseconds; Date wants milliseconds.
   const fmtNano = (ns) => ns ? fmtDateTime(ns / 1e6) : "";
 
@@ -13239,7 +13382,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
                 : ""}<a class="replay-link" href="#/operations/i/${r.key}" title="Replay this instance step by step">&#9654; Replay</a>`}</span>
             </div>
             ${instanceMeta(r)}
-            <div class="vp-inst-vars">${varChips(r.variables)}</div>
+            <div class="vp-inst-vars">${varChips(r)}</div>
           </div>`;
         }).join("")}</div>${more}`;
     } else {
@@ -13716,6 +13859,24 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     if (t.closest("[data-load-more]")) { await loadMore(); return; }
     if (t.closest("[data-search-clear]")) { await runInstanceSearch(""); return; }
     if (t.closest("[data-filter-clear]")) { await applyFilterChange(""); return; }
+    // A card's "+ N more" opens it past its first values, and closes it again.
+    const moreVars = t.closest(".vp-more-vars");
+    if (moreVars) {
+      const k = moreVars.dataset.inst;
+      if (openCards.has(k)) openCards.delete(k); else openCards.add(k);
+      renderVariables();
+      return;
+    }
+    // A long value — on a card, or in the single-instance view — opens whole in the
+    // value window. It is looked up in the instance as the last poll listed it, so the
+    // window shows what is there now rather than what the markup was built from.
+    const open = t.closest(".vp-chip-open, .v-show-all");
+    if (open) {
+      const instKey = open.dataset.inst || selected;
+      const inst = instances.find((r) => String(r.key) === String(instKey));
+      const v = inst && findVar(inst.variables, open.dataset.var, open.dataset.scope);
+      if (v) openValueWindow(root, v);
+    }
   });
 
   // What is typed is mirrored into searchDraft, because the 1.5s poll rebuilds this
@@ -13854,6 +14015,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);
+  bindValueWindow(root, toast);
   varsPanelCtl = wireVarsPanel(root, viewer);
 
   // Decision panel: hovering (or focusing) a result row backed by a decision table
@@ -14630,18 +14792,7 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
           <div class="ops-tab-body" id="tab-data" hidden></div>
         </div>
       </div>
-      <div class="var-modal-ov" id="var-modal-ov" hidden>
-        <div class="var-modal" role="dialog" aria-modal="true" aria-labelledby="var-modal-title">
-          <div class="var-modal-head">
-            <span class="var-modal-title mono" id="var-modal-title"></span>
-            <span class="vtag obj" id="var-modal-tag"></span>
-            <span style="flex:1"></span>
-            <button class="btn ghost small vcopy vcopy-all" id="var-modal-copy" type="button" data-copy="" title="Copy all variables as JSON">Copy JSON</button>
-            <button class="icon-btn" id="var-modal-x" type="button" title="Close" aria-label="Close">✕</button>
-          </div>
-          <div class="var-modal-body"><pre class="vj-body" id="var-modal-body"></pre></div>
-        </div>
-      </div>
+      ${valueWindowHTML()}
       <div class="dec-pop" id="dec-pop" hidden></div>
       <div class="dec-pop ref-pop" id="ref-pop" role="tooltip" hidden></div>
     </div>`;
@@ -15300,7 +15451,14 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
       // A value that is somebody's or something's id keeps its place and is named beside
       // it: the stored value is still what the row shows first and what it copies.
       const ref = v.kind === "string" ? refChipHTML(refs.refOf(v.value)) : "";
-      valCell = `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
+      // A long text — a whole uploaded file — shows its first lines and its size and
+      // opens whole in the value window. Printed whole, one such row was the table.
+      const long = cls === "str" && isLongText(v.value, FIELD_CHARS, FIELD_LINES);
+      valCell = long
+        ? `<span class="c-val ${cls} long">${esc(previewText(v.value, FIELD_CHARS, FIELD_LINES))}</span>
+           <button class="v-big v-show-all" type="button" data-var="${esc(v.name)}" data-scope="${esc(v.scope || "")}"
+             title="${esc(tr("ops.vars.open", { name: v.name }))}">⤢ ${esc(tr("ops.vars.showAll"))} · ${esc(sizeText(v.value))}</button>`
+        : `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
     }
     const typeBadge = complex
       ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
@@ -15514,16 +15672,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
 
   // openVarModal shows an object/array variable's full value as pretty-printed,
   // syntax-highlighted JSON — the deep-inspect surface the table's "···" opens.
-  const modalOv = root.querySelector("#var-modal-ov");
+  // It is the same window the live view opens (openValueWindow), so a value reads the
+  // same wherever it was opened from.
   function openVarModal(name, jsonText, typeLabel) {
-    root.querySelector("#var-modal-title").textContent = name;
-    root.querySelector("#var-modal-tag").textContent = typeLabel || "json";
-    root.querySelector("#var-modal-body").innerHTML = highlightJSON(jsonText);
-    root.querySelector("#var-modal-copy").dataset.copy = prettyJSON(jsonText);
-    modalOv.hidden = false;
-    root.querySelector("#var-modal-x").focus(); // so Escape closes and focus is trapped in the dialog
+    openValueWindow(root, { name, value: jsonText, kind: "json", typeLabel });
   }
-  const closeVarModal = () => { modalOv.hidden = true; };
 
   // --- Decisions tab: the DMN evaluations this instance made (ADR-0066) ---
   // Rendered like the Operations decision-detail page (temis Operate style): inputs
@@ -16874,6 +17027,15 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   varsEl.addEventListener("click", (e) => {
     // The value cell expands the structure in place — the common case is a glance at the
     // shape, not a window. The window is one step further in, from inside the expansion.
+    // A long text opens whole in the same window, found in the set the tab is showing
+    // by name and scope rather than carried in the markup a second time. Checked before
+    // .v-big, whose look it shares.
+    const all = e.target.closest(".v-show-all");
+    if (all && varsEl.contains(all)) {
+      const v = findVar(curVarList, all.dataset.var, all.dataset.scope);
+      if (v) openValueWindow(root, v);
+      return;
+    }
     const big = e.target.closest(".v-big");
     if (big && varsEl.contains(big)) {
       openVarModal(big.dataset.name, big.dataset.json, big.dataset.type);
@@ -16894,11 +17056,8 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
     if (show) expandedVars.add(key); else expandedVars.delete(key);
     syncStructToggle(shownVars()); // the toolbar control flips to "Collapse all" and back
   });
-  modalOv.addEventListener("click", (e) => { if (e.target === modalOv) closeVarModal(); });
-  modalOv.addEventListener("keydown", (e) => { if (e.key === "Escape") closeVarModal(); });
-  root.querySelector("#var-modal-x").addEventListener("click", closeVarModal);
   bindVarCopy(varsEl, toast);
-  bindVarCopy(modalOv, toast);
+  bindValueWindow(root, toast);
   wireOpsResizer(root, viewer);
 
   // Decisions tab: hovering (or focusing) a result row backed by a decision table
