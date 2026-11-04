@@ -1,4 +1,4 @@
-# ADR-DRAFT: A capability vocabulary for CRM, ERP and finance, with idempotent writes as its admission rule
+# ADR-0527: A capability vocabulary for CRM, ERP and finance, with idempotent writes as its admission rule
 
 - **Status:** Proposed
 - **Implementation:** Not started

@@ -614,6 +614,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0524](0524-marktleistung-and-service.md) | A structured catalogue declares Marktleistung and service, and files them under capabilities | Accepted | Landed |
 | [0525](0525-shop-tile-layout.md) | A catalogue chooses the shop's layout, and a product names its icon | Proposed | Partial |
 | [0526](0526-password-set-by-its-owner.md) | A password is set by its owner, through a one-time link | Accepted | Landed |
+| [0527](0527-business-object-capability-vocabulary.md) | A capability vocabulary for CRM, ERP and finance, with idempotent writes as its admission rule | Proposed | Not started |
 
 ## The two states of a record
 
