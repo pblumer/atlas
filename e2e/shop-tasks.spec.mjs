@@ -127,13 +127,31 @@ test("the holder answers the task on its own form, in the row", async ({ page })
   // asks the approver to know a key.
   await expect(panel).toContainText("Bestellt für Carla");
   await expect(panel).not.toContainText("usr_2");
+  // Approving needs no reason: the field is the rejection's, and approving hides it.
   await panel.getByLabel("Genehmigen").check();
-  await panel.getByLabel("Begründung").fill("passt");
+  await expect(panel.getByLabel("Begründung der Ablehnung")).toHaveCount(0);
   await panel.getByRole("button", { name: "Complete" }).click();
 
   await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([
-    { key: 22, body: { variables: { genehmigt: true, begruendung: "passt" } } },
+    { key: 22, body: { variables: { genehmigt: true } } },
   ]);
   // And the page read the orders again: the answered task is gone from the row.
   await expect(taskRow(page, 22)).toHaveCount(0);
+});
+
+// A rejection needs a reason: left unticked, "Genehmigen" is a rejection, and the
+// order refuses one without a reason — the instance used to stop on an incident after
+// the task was gone (found against a real tenant). The form now refuses it first.
+test("the shipped approval form will not reject without a reason", async ({ page }) => {
+  await taskRow(page, 22).getByRole("button", { name: "Work on it" }).click();
+  const panel = taskRow(page, 22).locator(".cfg");
+  await expect(panel.getByLabel("Genehmigen")).toBeVisible({ timeout: 10000 });
+  await panel.getByRole("button", { name: "Complete" }).click();
+  await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([]);
+
+  await panel.getByLabel("Begründung der Ablehnung").fill("nicht nötig");
+  await panel.getByRole("button", { name: "Complete" }).click();
+  await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([
+    { key: 22, body: { variables: { genehmigt: false, begruendung: "nicht nötig" } } },
+  ]);
 });

@@ -602,6 +602,7 @@ var everyOperation = []Request{
 	{Operation: "create-folder", Site: siteID, Path: "a"},
 	{Operation: "delete-file", Site: siteID, Path: "a.txt"},
 	{Operation: "get-site", Site: siteID},
+	{Operation: "set-site-quota", Site: siteID, QuotaGB: "50"},
 }
 
 // TestEveryOperationIsCovered keeps the table above whole: an operation added to Ops

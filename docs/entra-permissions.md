@@ -45,6 +45,7 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `restore-group` | `POST /directory/deletedItems/{id}/restore` | `Group.ReadWrite.All` |
 | `list-deleted-groups` | `GET /directory/deletedItems/microsoft.graph.group` | `Group.Read.All` (or `Directory.Read.All`) |
 | `create-community` | `POST /employeeExperience/communities`, then `GET` on the `engagementAsyncOperation` its `202` names and `GET /employeeExperience/communities/{id}` | **`Community.ReadWrite.All`** — and, as Microsoft documents it, the tenant's Viva Engage network must be in **native mode**, the precondition for the communities API. Members and admins are then `add-group-member` / `add-group-owner` on the community's `groupId` |
+| `get-sync-behavior`, `set-sync-behavior` | `GET` / `PATCH /users/{id}/onPremisesSyncBehavior` | **`User-OnPremisesSyncBehavior.ReadWrite.All`** — Microsoft's configuration guide names it for the read and the write alike. Changing the user's properties afterwards in the cloud is `User.ReadWrite.All` as for any user |
 | A form's group-alias check (value lookup on `groups` / `deletedGroups`, not an operation) | `GET /groups?$filter=mailNickname eq '…'&$select=…&$top=1`, and the same on `/directory/deletedItems/microsoft.graph.group` | `Group.Read.All` |
 
 Read-only deployments (a re-certification report, a directory export, a delta sync that
@@ -99,6 +100,26 @@ when a process actually uses those operations, and drop them otherwise.
   the service account needs read permission on it (*Manage Private Keys*). Set exactly one
   of the three — the worker refuses a tenant that has more. With a certificate no shared
   secret travels to Entra: the worker signs a short-lived assertion and only that is sent.
+
+## The SharePoint worker's one step outside Graph: `set-site-quota`
+
+The `sharepoint` Worker Type ([ADR-0141](adr/0141-sharepoint-connector.md)) works through
+Microsoft Graph with `Sites.ReadWrite.All` or `Sites.Selected`, except for
+`set-site-quota`: Graph cannot set a site's storage quota, so that operation goes to
+SharePoint's tenant administration (`https://<tenant>-admin.sharepoint.com`, the client
+object model's `ProcessQuery`, the interface `Set-SPOSite -StorageQuota` uses). It needs:
+
+| What | Why |
+|---|---|
+| The **SharePoint** application permission **`Sites.FullControl.All`** (API *SharePoint*, not *Microsoft Graph*), with admin consent | Tenant administration answers an app only with full control over the tenant's sites. There is no narrower grant for it. |
+| A **certificate** credential (`certificate` or `certificateThumbprint` in the bundle) | SharePoint's own APIs refuse an app-only token obtained with a client secret. A bundle with a secret never reaches the admin host: the worker answers `SHAREPOINT_ADMIN_NOT_PERMITTED` at once. |
+| Optionally `adminUrl` in the bundle | The admin host is derived from the site (`contoso.sharepoint.com` → `contoso-admin.sharepoint.com`); a tenant under a custom domain names it. |
+
+`Sites.FullControl.All` reaches every site of the tenant, which is far more than the rest
+of the Worker needs. Grant it only where quotas are to be set automatically, on a
+dedicated app registration if the other SharePoint steps should keep the narrower grant
+(two Workers, one per app). Without it a process catches `SHAREPOINT_ADMIN_NOT_PERMITTED`
+and hands the quota to a person, as `examples/m365-dienste` does.
 
 ## See also
 

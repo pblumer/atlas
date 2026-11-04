@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-konto-sync",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Synchronisation klären · Check the synchronisation**\n\nDas Konto mit der Personalnummer {{personalnummer}} ist im Active Directory angelegt, aber Entra ID führt es nach der vorgesehenen Wartezeit nicht als synchronisiertes Konto. Zu prüfen:\n\n- Liegt die OU des Kontos (Konstante AD_SYNC_OU) im Bereich von Entra Connect?\n- Läuft die Synchronisation (Synchronization Service Manager, Entra Connect Health)?\n- Meldet sie einen Konflikt, etwa eine doppelte UPN oder Mailadresse (Entra Admin Center → Entra Connect → Fehler)?\n\nDiese Aufgabe abschliessen, wenn die Ursache behoben ist; der Prozess prüft danach erneut. · The account exists in Active Directory, but Entra ID does not list it as synchronised after the expected time. Check the scope of Entra Connect, whether it runs, and whether it reports a conflict; complete this task once fixed, and the process checks again."
+    }
+  ]
+}

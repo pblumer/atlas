@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**Speicherkontingent setzen · Set the storage quota**\n\nMicrosoft Graph hat keine Schnittstelle für das Speicherkontingent einer Site. Bitte das bestellte Kontingent im SharePoint Admin Center setzen (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota. · Microsoft Graph has no API for a site's storage quota. Please set the ordered quota in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota."
+      "text": "**Speicherkontingent setzen · Set the storage quota**\n\nAtlas konnte das Kontingent nicht selbst setzen: Dem SharePoint-Worker fehlt das Zertifikat oder die Berechtigung Sites.FullControl.All, oder der Tenant hat abgelehnt (etwa bei automatischer Speicherverwaltung). Bitte das bestellte Kontingent im SharePoint Admin Center setzen (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota. · Atlas could not set the quota itself: the SharePoint worker lacks the certificate or the Sites.FullControl.All permission, or the tenant refused (for instance under automatic storage management). Please set the ordered quota in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota."
     },
     {
       "key": "alias",

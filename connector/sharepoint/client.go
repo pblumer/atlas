@@ -126,6 +126,10 @@ type Op struct {
 	TakesFilter bool
 	TakesSelect bool
 	TakesPaging bool
+	// NeedsQuota marks set-site-quota, which is nothing without the storage it sets
+	// (quotaGB) and alone takes the share of it at which SharePoint warns
+	// (warningPercent).
+	NeedsQuota bool
 	// NeedsResult marks an operation whose whole point is what it returns; TakesResult
 	// one that answers with something a model may keep.
 	NeedsResult bool
@@ -136,8 +140,11 @@ type Op struct {
 
 // Ops is the operation table: the steps a business process takes in a SharePoint site.
 // It is deliberately not "every Graph call" — permissions, sharing links, content
-// types, versions and changing a site's settings are not here; reading a site and its
-// storage (get-site) is the one site-level step, and it changes nothing. A sharing link in particular
+// types, versions and a site's other settings are not here. Two steps act on the site
+// itself: reading it with its storage (get-site), and setting how much storage it may
+// use (set-site-quota) — the one setting a site offered as a product is ordered by,
+// and the one step that does not go through Graph, because Graph has no way to set it
+// (ADR-0141, amended 2026-11-04). A sharing link in particular
 // changes who may open a document, which is a decision about access rather than a step
 // in a case, and the webUrl every file answer carries already opens it for anybody who
 // may.
@@ -199,10 +206,27 @@ var Ops = map[string]Op{
 	OpGetSite: {
 		NeedsResult: true, TakesResult: true, Label: "read a site and its storage",
 	},
+	// set-site-quota sets the storage a site may use through SharePoint's tenant
+	// administration, not Graph (ADR-0141, amended 2026-11-04). It restates a value, so
+	// a retry after a success sets the same quota again.
+	OpSetSiteQuota: {
+		NeedsQuota: true, TakesResult: true, Label: "set a site's storage quota",
+	},
 }
 
 // OpGetSite is the site-level read (see [Ops]).
 const OpGetSite = "get-site"
+
+// OpSetSiteQuota sets a site's storage quota (see [Ops]).
+const OpSetSiteQuota = "set-site-quota"
+
+// MaxQuotaGB is the largest storage quota set-site-quota sets: SharePoint Online's own
+// ceiling for one site, 25 TB. DefaultWarningPercent is the share of the quota at which
+// SharePoint warns when the task authors none.
+const (
+	MaxQuotaGB            = 25 * 1024
+	DefaultWarningPercent = 90
+)
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
 // was expected.
@@ -253,6 +277,11 @@ type Request struct {
 	// MaxResults is a listing's page size; the compiler has already applied the default
 	// and refused a value past [MaxPageSize].
 	MaxResults int32 `json:"maxResults,omitempty"`
+	// QuotaGB is the storage set-site-quota sets, in gigabytes, and WarningPercent the
+	// share of it at which SharePoint warns; empty there is [DefaultWarningPercent].
+	// Both are the text their FEEL value resolved to, read as numbers by the client.
+	QuotaGB        string `json:"quotaGB,omitempty"`
+	WarningPercent string `json:"warningPercent,omitempty"`
 	// RequestID is the job key, carried for tracing.
 	RequestID string `json:"requestId,omitempty"`
 }

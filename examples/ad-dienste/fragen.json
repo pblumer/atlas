@@ -6,15 +6,15 @@
       "en": "Audience of \"Active Directory\": who orders"
     },
     "hint": {
-      "de": "Meist alle Mitarbeitenden. Der Katalog hat den Rang 600; wer ihn erreicht, sieht keinen Katalog mit tieferem Rang mehr.",
-      "en": "Usually all staff. The catalogue has rank 600; whoever it reaches no longer sees a catalogue of lower rank."
+      "de": "Meist alle Mitarbeitenden. Wer ihn erreicht, sieht ihn im Shop neben jedem anderen Katalog, den die eigenen Gruppen erreichen.",
+      "en": "Usually all staff. Whoever it reaches sees it in the shop beside every other catalogue their groups reach."
     }
   },
   "informationssicherheit": {
     "kind": "group",
     "label": {
-      "de": "Wer genehmigt Admin-Konten",
-      "en": "Who approves admin accounts"
+      "de": "Wer genehmigt Admin-Konten, unpersönliche Konten und RACF-Konten (ISBO)",
+      "en": "Who approves admin, non-personal and RACF accounts (ISBO)"
     },
     "hint": {
       "de": "Eine Gruppe, meist die Informationssicherheit; wer zuerst entscheidet, entscheidet.",

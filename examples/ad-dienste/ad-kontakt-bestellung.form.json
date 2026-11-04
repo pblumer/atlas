@@ -1,0 +1,47 @@
+{
+  "type": "default",
+  "id": "ad-kontakt-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Kontakt · Contact**\n\nEin Eintrag im Adressbuch für eine Person ausserhalb der Organisation: kein Konto, keine Anmeldung. Du bist der Sponsor; in Atlas bleiben die Angaben verschlüsselt. · An address book entry for a person outside the organisation: no account, no sign-in. You are the sponsor; in Atlas the details stay encrypted."
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname · First name",
+      "validate": {
+        "required": true,
+        "pattern": "^.*[A-Za-zÀ-ÿ].*$",
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname · Last name",
+      "validate": {
+        "required": true,
+        "pattern": "^.*[A-Za-zÀ-ÿ].*$",
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "firma",
+      "type": "textfield",
+      "label": "Firma · Company",
+      "validate": {
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "email",
+      "type": "textfield",
+      "label": "E-Mail-Adresse · E-mail address",
+      "validate": {
+        "required": true,
+        "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+      }
+    }
+  ]
+}
