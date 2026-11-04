@@ -111,6 +111,18 @@
       "version": "1.0.6",
       "digest": "sha256:9b4d898056ef8069c5b30ae7227e637f5b0bd3cb1fe61ed8e6c7355088e557f1",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.2",
+      "digest": "sha256:4bde186786b1128c8485d53441cdc2e5a6c8647e84965453ba9c12f635709fca",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.7",
+      "digest": "sha256:78ad0da9604fa5d5025d3658e1cd972e7b6485e8493c84f002de741880559ad8",
+      "minAtlas": "0.22.0-0"
     }
   ]
 }

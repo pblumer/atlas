@@ -8710,8 +8710,8 @@
               "en": "Audience of \"Communication and telephony\""
             },
             "hint": {
-              "de": "Wer zusätzlich Räume, Warteschlangen und Telefonzentralen bestellt, z.B. Teamleitungen und UCC-Verantwortliche. Sie sehen diesen Katalog, weil sein Rang höher ist.",
-              "en": "Who also orders rooms, call queues and auto attendants, e.g. team leads. They see this catalogue because its rank is higher."
+              "de": "Wer zusätzlich Räume, Warteschlangen und Telefonzentralen bestellt, z.B. Teamleitungen und UCC-Verantwortliche. Sie sehen diesen Katalog neben dem für alle Mitarbeitenden.",
+              "en": "Who also orders rooms, call queues and auto attendants, e.g. team leads. They see this catalogue beside the one for all staff."
             }
           },
           "telefonie-team": {
@@ -10015,8 +10015,8 @@
               "en": "Audience of \"Active Directory\": who orders"
             },
             "hint": {
-              "de": "Meist alle Mitarbeitenden. Der Katalog hat den Rang 600; wer ihn erreicht, sieht keinen Katalog mit tieferem Rang mehr.",
-              "en": "Usually all staff. The catalogue has rank 600; whoever it reaches no longer sees a catalogue of lower rank."
+              "de": "Meist alle Mitarbeitenden. Wer ihn erreicht, sieht ihn im Shop neben jedem anderen Katalog, den die eigenen Gruppen erreichen.",
+              "en": "Usually all staff. Whoever it reaches sees it in the shop beside every other catalogue their groups reach."
             }
           },
           "informationssicherheit": {
