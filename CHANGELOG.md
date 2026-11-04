@@ -86,6 +86,12 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 
+- **A failed connector job waits before it is tried again.** The in-process runner, on which
+  every built-in connector runs, retried a failed job at once, so a task's three retries were
+  spent within one second and a fault that clears by itself — Microsoft Graph not yet knowing a
+  group created a moment earlier — became an incident. It now waits fifteen seconds before each
+  retry and a minute before the last one; a failure that leaves no retries is still an incident at
+  once (ADR-0111, amendment 2026-11-04).
 - **An order window names its days in UTC.** A refusal outside a product's order window
   named the day in the server's local zone, so a server east of Greenwich said a window
   ending on 31 October had closed on 1 November. The day is now read in UTC, the zone the

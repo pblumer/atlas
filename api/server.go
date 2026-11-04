@@ -594,6 +594,9 @@ type Server struct {
 	// rule tasks (ADR-0014). Both are touched only on the run-loop goroutine.
 	dmnRegistry *dmn.Registry
 	jobRunner   *job.Runner
+	// jobRetryBackoff is the delay a failed in-process job waits before its next
+	// attempt (ADR-0111, amendment 2026-11-04); see WithJobRetryBackoff.
+	jobRetryBackoff func(retriesLeft int32) int64
 	// ldapPool reuses bound LDAP connections across jobs (ADR-0154, amended). It is
 	// held here so Close can release what it is holding at shutdown.
 	ldapPool *ldap.Pool
@@ -1057,6 +1060,14 @@ func (s *Server) budgets() limits.Limits {
 		return limits.Default()
 	}
 	return s.limits
+}
+
+// WithJobRetryBackoff sets how long a failed in-process job waits before it is tried
+// again, given the retries it has left (ADR-0111, amendment 2026-11-04). The default is
+// job.DefaultRetryBackoff; nil retries at once, which tests that drive a failing task
+// to its incident within one call use.
+func WithJobRetryBackoff(f func(retriesLeft int32) int64) Option {
+	return func(s *Server) { s.jobRetryBackoff = f }
 }
 
 // WithLimits sets the installation's resource budgets. Without it a server runs on
@@ -2159,6 +2170,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// design-time size and runs on it.
 	s.capabilities.SetMeasurementResolver(s.measureCapability)
 	s.blueprints = blueprints
+	s.jobRetryBackoff = job.DefaultRetryBackoff
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -2332,6 +2344,11 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	// The dispatch gate: the in-process runner asks it before handing a job out and
 	// tells it how each one ended, without learning what a Worker is (ADR-0340).
 	s.jobRunner.SetGate(jobGate{s})
+	// A failed in-process job waits before it is tried again (ADR-0111, amendment
+	// 2026-11-04): connector faults are mostly transient — a directory that has not yet
+	// replicated what it was just asked to create — and three attempts within one second
+	// turned each of them into an incident.
+	s.jobRunner.SetRetryBackoff(s.jobRetryBackoff)
 	s.breakers.onChange = s.logBreakerChange
 	s.jobRunner.HandleCompleting(compiler.DMNJobTypeIndex, func(rd state.Reader) job.CompletingHandler {
 		return dmn.Handler(rd, s.processLookup, s.dmnRegistry, nil)

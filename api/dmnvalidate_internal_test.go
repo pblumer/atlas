@@ -51,7 +51,7 @@ func newValidateServer(t *testing.T, opts ...Option) (*Server, string) {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := New(proc, store, dir, opts...)
+	srv, err := New(proc, store, dir, append([]Option{WithJobRetryBackoff(nil)}, opts...)...)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
