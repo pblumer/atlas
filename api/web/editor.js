@@ -4085,7 +4085,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, and licences and directory-role assignments", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -4131,13 +4131,15 @@ const SERVICE_TASK_KINDS = [
           { v: "assign-license", l: "Assign licence" },
           { v: "assign-role", l: "Assign directory role" },
           { v: "invite-guest", l: "Invite guest user" },
+          { v: "get-sync-behavior", l: "Read source of authority (AD or cloud)" },
+          { v: "set-sync-behavior", l: "Transfer source of authority (AD ↔ cloud)" },
         ],
       },
       {
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "create-community"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "create-community", "get-sync-behavior", "set-sync-behavior"].includes(v.operation),
         hint: (v) => v.operation === "create-community"
           ? "The community's first owner — a user principal name or object id. Microsoft documents that a community created with application permissions must name an owner, so the worker binds this user as owners@odata.bind. Further members and admins are added afterwards with Add group member / Add group owner on the community's groupId. May be a FEEL expression (fx)."
           : "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
@@ -4158,7 +4160,7 @@ const SERVICE_TASK_KINDS = [
         key: "attributes", label: "Attribute", type: "json", rows: 8,
         // The two ways to supply the body are mutually exclusive (the compiler refuses
         // both): the inline editor shows until a variable is named, and vice versa.
-        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community"].includes(v.operation) && !v.attributesVariable,
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community", "set-sync-behavior"].includes(v.operation) && !v.attributesVariable,
         placeholder: '{\n  "accountEnabled": true,\n  "displayName": "=vorname + \\" \\" + nachname",\n  "userPrincipalName": "=upn",\n  "passwordProfile": { "password": "=tempPasswort", "forceChangePasswordNextSignIn": true }\n}',
         // The operations that carry a capture mask (create/update user & group, channel,
         // role) get a short note — the mask renders the fields; the rest keep the full
@@ -4169,7 +4171,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "attributesVariable", label: "Attributes variable", placeholder: "neuerBenutzer",
-        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community"].includes(v.operation) && !v.attributes,
+        showIf: (v) => ["create-user", "update-user", "create-group", "update-group", "create-channel", "assign-license", "assign-role", "invite-guest", "create-community", "set-sync-behavior"].includes(v.operation) && !v.attributes,
         hint: "Alternative to the inline JSON above: a process variable holding the JSON object to send as the request body. Use one or the other, not both.",
       },
       {

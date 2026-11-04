@@ -1,6 +1,6 @@
 # ADR-0462: A Microsoft Exchange Worker Type — mailbox administration as named operations, online and on-premises
 
-- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519)
+- **Status:** Accepted (amended 2026-11-03: a value lookup on `recipients` answers a name field's question whether an alias is still free, ADR-0519; amended 2026-11-04: remote mailboxes for Exchange hybrid, on Exchange Server only)
 - **Implementation:** Landed
 - **Date:** 2026-10-17
 - **Deciders:** Atlas maintainers
@@ -210,3 +210,40 @@ the roles this record names for the operations already include. Whether Exchange
 evaluates the `-like` clause on `EmailAddresses` in every tenant is Microsoft's
 documentation of filterable properties and has not been checked against one.
 
+## Amendment 2026-11-04: remote mailboxes (Exchange hybrid)
+
+In an Exchange hybrid organization an account lives in Active Directory and reaches
+Entra ID through Entra Connect, and its mailbox lives in Exchange Online. The mail
+attributes of such an account are written **on premises**: the Exchange Server enables a
+*remote mailbox* for it (`Enable-RemoteMailbox`, with the account and its
+`RemoteRoutingAddress` in the tenant's `mail.onmicrosoft.com` domain), Entra Connect
+carries them to the cloud, and Exchange Online creates the mailbox once the account is
+licensed. `New-Mailbox` in Exchange Online for a synchronised account is the mistake
+this avoids. A process that creates a hybrid account had no named operation for it.
+
+Four operations, each a row in `connector/exchange/catalog`, all on the `mailbox` area
+and **Exchange Server only** — there is no Online variant, and a task on an Online
+Worker is refused with what to do instead (read the mailbox with `get-mailbox`):
+
+- `enable-remote-mailbox` — `Enable-RemoteMailbox`: `Identity` (the AD account) and
+  `RemoteRoutingAddress` required; `Alias`, `PrimarySmtpAddress`, `DisplayName` optional.
+- `get-remote-mailbox` — `Get-RemoteMailbox -Identity`, an object.
+- `list-remote-mailboxes` — `Get-RemoteMailbox` with `Filter`, `Anr` or
+  `OrganizationalUnit`, bounded by `maxResults` like the other listings. It is the read
+  that may answer *none*: a process asking whether an account has a remote mailbox
+  filters instead of reading by identity, which fails the job when there is none.
+- `disable-remote-mailbox` — `Disable-RemoteMailbox`: removes the Exchange attributes
+  from the account. It does not touch the mailbox in Exchange Online, which goes with the
+  licence or the account.
+
+Moving a mailbox from Exchange Server to Exchange Online is deliberately **not** an
+operation: `New-MoveRequest -Remote` needs a credential of the on-premises organization
+handed to the cloud cmdlet (`-RemoteCredential`), and `New-MigrationBatch` a CSV of the
+users. Neither fits a named operation whose parameters a model authors; a process hands
+the move to the Exchange administration as a task and then reads where the mailbox is
+(`get-mailbox` on the Online Worker).
+
+- Written from Microsoft's documentation of the cmdlets; tested against the catalogue
+  only. None of the four has run against an Exchange Server in a hybrid configuration.
+  The roles: Organization Management or Recipient Management on premises include the
+  remote-mailbox cmdlets.

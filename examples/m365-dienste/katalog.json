@@ -103,6 +103,25 @@
           "kind": "requires"
         }
       ]
+    },
+    {
+      "id": "cat-m365-identitaet",
+      "texts": {
+        "de": "Microsoft 365: Identität (hybrid)",
+        "en": "Microsoft 365: identity (hybrid)"
+      },
+      "rank": 530,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "m365-konto-hybrid",
+        "m365-konto-cloud"
+      ],
+      "groups": [
+        "{{zielgruppe-identitaet}}"
+      ]
     }
   ],
   "products": [
@@ -1278,6 +1297,9 @@
       "commandedBy": [
         "beispiel-m365-dienste"
       ],
+      "orderableBy": [
+        "beispiel-m365-dienste"
+      ],
       "keywords": [
         "M365",
         "Lizenz",
@@ -1346,6 +1368,110 @@
       "categoryTexts": {
         "de": "Zusammenarbeit",
         "en": "Collaboration"
+      }
+    },
+    {
+      "id": "m365-konto-hybrid",
+      "homeCatalog": "cat-m365-identitaet",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Konto (hybrid) anlegen",
+        "en": "Create a hybrid account"
+      },
+      "descriptions": {
+        "de": "Ein Konto, das im Active Directory entsteht und über Entra Connect nach Entra ID kommt, mit Postfach in Exchange Online (Remote-Postfach) und Lizenz. Für Organisationen, die ihre Konten im AD führen. Für die Administration.",
+        "en": "An account created in Active Directory that reaches Entra ID through Entra Connect, with a mailbox in Exchange Online (remote mailbox) and a licence. For organisations that keep their accounts in AD. For administrators."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_konto_hybrid",
+      "configForm": "m365-konto-hybrid-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.konto.hybrid.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.konto.hybrid.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto zurückgeben (sperren und aus der Synchronisation nehmen)",
+            "en": "Return the account (disable and take out of synchronisation)"
+          }
+        }
+      ],
+      "keywords": [
+        "Hybrid",
+        "Entra Connect",
+        "Active Directory",
+        "Konto",
+        "Account",
+        "Remote-Postfach",
+        "Remote mailbox"
+      ],
+      "category": "identitaet",
+      "categoryTexts": {
+        "de": "Identität und Lizenzen",
+        "en": "Identity and licences"
+      }
+    },
+    {
+      "id": "m365-konto-cloud",
+      "homeCatalog": "cat-m365-identitaet",
+      "state": "active",
+      "multipleAllowed": false,
+      "texts": {
+        "de": "Konto in die Cloud übernehmen",
+        "en": "Take an account into the cloud"
+      },
+      "descriptions": {
+        "de": "Ein aus dem Active Directory synchronisiertes Konto wird danach in Entra ID verwaltet (Source of Authority). Liegt sein Postfach noch auf dem Exchange Server, wird es zuerst nach Exchange Online verschoben. Die empfangende Person ist die Person, deren Konto übernommen wird.",
+        "en": "An account synchronised from Active Directory is managed in Entra ID from then on (source of authority). If its mailbox is still on Exchange Server, it is moved to Exchange Online first. The recipient is the person whose account is taken over."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_m365_konto_in_cloud",
+      "configForm": "m365-person",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "m365.konto.cloud.uebernehmen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "m365.konto.cloud.zurueck",
+          "effect": "deprovision",
+          "triggers": [
+            "operator"
+          ],
+          "labels": {
+            "de": "Verwaltung an das AD zurückgeben",
+            "en": "Hand management back to AD"
+          }
+        }
+      ],
+      "keywords": [
+        "Source of Authority",
+        "SOA",
+        "Cloud",
+        "Entra Connect",
+        "Konto",
+        "Account"
+      ],
+      "category": "identitaet",
+      "categoryTexts": {
+        "de": "Identität und Lizenzen",
+        "en": "Identity and licences"
       }
     }
   ]

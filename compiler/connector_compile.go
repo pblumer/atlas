@@ -286,6 +286,11 @@ var entraOps = map[string]entraOp{
 	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
 	// owner (ADR-0172, amended 2026-11-03).
 	"create-community": {needsUser: true, needsAttributes: true, async: true},
+	// A synchronised user's source of authority: read it, and transfer it from Active
+	// Directory to the cloud (or back) by setting isCloudManaged (ADR-0172, amended
+	// 2026-11-04). The attributes are {"isCloudManaged": true|false}.
+	"get-sync-behavior": {needsUser: true},
+	"set-sync-behavior": {needsUser: true, needsAttributes: true},
 }
 
 // The listing bounds a model inherits when it authors none.
@@ -356,7 +361,7 @@ func compileEntraConnectorTask(b *Builder, st xmlServiceTask, retries int32) (in
 		return 0, fmt.Errorf("compiler: entra task %q sets both inline attributes and an attributesVariable; use one, not both", st.Id)
 	}
 	if !spec.needsAttributes && (hasInlineAttrs || hasAttrsVar) {
-		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update, create-channel, create-community, invite-guest, assign-license and assign-role)", st.Id, op)
+		return 0, fmt.Errorf("compiler: entra task %q sets attributes on operation %q, which sends no body (attributes apply to create/update, create-channel, create-community, invite-guest, assign-license, assign-role and set-sync-behavior)", st.Id, op)
 	}
 	attrs, err := entraAttributesExpr(b.gate(), st.Id, cn.Attributes)
 	if err != nil {

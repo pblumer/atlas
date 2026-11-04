@@ -45,6 +45,7 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `restore-group` | `POST /directory/deletedItems/{id}/restore` | `Group.ReadWrite.All` |
 | `list-deleted-groups` | `GET /directory/deletedItems/microsoft.graph.group` | `Group.Read.All` (or `Directory.Read.All`) |
 | `create-community` | `POST /employeeExperience/communities`, then `GET` on the `engagementAsyncOperation` its `202` names and `GET /employeeExperience/communities/{id}` | **`Community.ReadWrite.All`** — and, as Microsoft documents it, the tenant's Viva Engage network must be in **native mode**, the precondition for the communities API. Members and admins are then `add-group-member` / `add-group-owner` on the community's `groupId` |
+| `get-sync-behavior`, `set-sync-behavior` | `GET` / `PATCH /users/{id}/onPremisesSyncBehavior` | **`User-OnPremisesSyncBehavior.ReadWrite.All`** — Microsoft's configuration guide names it for the read and the write alike. Changing the user's properties afterwards in the cloud is `User.ReadWrite.All` as for any user |
 | A form's group-alias check (value lookup on `groups` / `deletedGroups`, not an operation) | `GET /groups?$filter=mailNickname eq '…'&$select=…&$top=1`, and the same on `/directory/deletedItems/microsoft.graph.group` | `Group.Read.All` |
 
 Read-only deployments (a re-certification report, a directory export, a delta sync that

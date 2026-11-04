@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-konto-soa-pruefen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Übertragung prüfen · Check the transfer**\n\nGraph hat die Übertragung der Verwaltung für {{upn}} angenommen, liest isCloudManaged aber nicht als true zurück. Im Entra Admin Center das Konto öffnen und im Überwachungsprotokoll nach «Change Source of Authority from AD to cloud» suchen. Diese Aufgabe abschliessen, wenn das Konto in der Cloud verwaltet wird. · Graph accepted the transfer but does not read it back. Check the account and the audit log entry, then complete this task."
+    }
+  ]
+}
