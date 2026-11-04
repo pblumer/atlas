@@ -40,6 +40,9 @@ import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
 import { t } from "./i18n.js";
 import { deliveryCard, wireDelivery } from "./deliveryreport.js";
 import { foldCards, pageOf } from "./fold.js";
+// The symbols the shop's tile layout draws (ADR-draft-shop-tile-layout); the keys are
+// the only names a product may carry as its icon.
+import { PRODUCT_ICONS, drawIcon } from "./shop-icons.js";
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1120,6 +1123,7 @@ export function productBody(f, { productID, homeCatalog, langs, stored }) {
     ...was,
     id: productID, homeCatalog, state: f.get("state"), texts,
     kind: f.get("kind") || "",
+    icon: f.get("icon") || "",
     descriptions: bound ? was.descriptions : descriptions,
     approval: approvalFrom(f),
     category: cg.key, categoryTexts: cg.texts,
@@ -1973,12 +1977,21 @@ function mayTheme(me, enforced) {
   return !!me && (me.roles || []).includes("admin");
 }
 
+// iconMarkup writes a product icon into the form's template from the shop's own
+// outline data, each outline escaped as an attribute value.
+function iconMarkup(name) {
+  const paths = PRODUCT_ICONS[name] || PRODUCT_ICONS.package;
+  return `<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${
+  paths.map((d) => `<path d="${esc(d)}"></path>`).join("")}</svg>`;
+}
+
 function appearanceCard(cat, me, enforced) {
   const theme = cat.theme || {};
   const accent = theme.accent || "";
   const logoURL = `/api/v1/catalogs/${encodeURIComponent(cat.id)}/logo`;
-  const summary = accent || theme.typeface
-    ? [accent, theme.typeface].filter(Boolean).join(", ")
+  const summary = accent || theme.typeface || theme.layout
+    ? [accent, theme.typeface, theme.layout].filter(Boolean).join(", ")
     : "the instance's";
 
   if (!mayTheme(me, enforced)) {
@@ -2015,9 +2028,13 @@ function appearanceCard(cat, me, enforced) {
           ${TYPEFACES.map((f) => `<option value="${esc(f.id)}"${
     theme.typeface === f.id ? " selected" : ""}>${esc(f.name)} — ${esc(f.what)}</option>`).join("")}
         </select></label>
+        <label class="field">Shop layout<select name="layout">
+          <option value=""${theme.layout ? "" : " selected"}>Cascade &mdash; headings, then groups, then products</option>
+          <option value="tiles"${theme.layout === "tiles" ? " selected" : ""}>Tiles &mdash; one row of tiles per catalogue, with icons and search</option>
+        </select></label>
         <div class="row">
           <button class="btn" type="submit">Save appearance</button>
-          ${accent || theme.typeface
+          ${accent || theme.typeface || theme.layout
     ? `<button class="btn neutral" type="button" data-act="theme-clear">Wear the instance's</button>` : ""}
         </div>
       </form>
@@ -2366,6 +2383,20 @@ function productForm(it, cat, langs, procIDs, formList, items, dir, people, apps
           <option value="offering" ${v.kind === "offering" ? "selected" : ""}>Marktleistung</option>
           <option value="service" ${v.kind === "service" ? "selected" : ""}>Service</option>
         </select></label>
+      <label class="field wide">Icon
+        <span class="muted" style="display:block; margin:2px 0 6px">The symbol the shop's
+          tile layout draws on this product's tile and page. A name, not a picture: the
+          shop carries the symbols itself. Leave it empty and the tile shows a parcel.
+          The cascade layout does not draw it.</span>
+        <span class="row" style="gap:10px; align-items:center">
+          <select name="icon">
+            <option value="" ${!v.icon ? "selected" : ""}>&mdash; none (parcel)</option>
+            ${Object.keys(PRODUCT_ICONS).map((k) => `<option value="${esc(k)}"${
+  v.icon === k ? " selected" : ""}>${esc(k)}</option>`).join("")}
+          </select>
+          <span class="icon-preview" style="display:inline-flex; width:28px; height:28px">${
+  iconMarkup(v.icon)}</span>
+        </span></label>
       <label class="field wide">Category
         <span class="muted" style="display:block; margin:2px 0 6px">The heading the
           shop groups this product under &mdash; <code>Arbeitsplatz</code>,
@@ -2716,6 +2747,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
     putTheme({
       accent: String(f.get("accent") || "").trim().toLowerCase(),
       typeface: String(f.get("typeface") || ""),
+      layout: String(f.get("layout") || ""),
     });
   });
 
@@ -2738,6 +2770,17 @@ function wireAppearance({ api, toast, view }, id, reload) {
   // re-rendered from scratch each time a product is opened — so the listener sits on
   // the view rather than on the select, and survives every re-render.
   view.addEventListener("change", (e) => {
+    const pick = e.target.closest('select[name="icon"]');
+    if (!pick) return;
+    const preview = pick.parentElement.querySelector(".icon-preview");
+    if (!preview) return;
+    const svg = drawIcon(pick.value);
+    svg.setAttribute("width", "28");
+    svg.setAttribute("height", "28");
+    preview.replaceChildren(svg);
+  }, { signal: viewListeners.signal });
+
+  view.addEventListener("change", (e) => {
     const sel = e.target.closest('select[name="akind"]');
     if (!sel) return;
     const form = sel.closest("form");
@@ -2754,7 +2797,7 @@ function wireAppearance({ api, toast, view }, id, reload) {
     if (b.dataset.act === "theme-clear") {
       // Both fields, not a missing body: the server stores what it is given, so
       // two empty strings are how an appearance is taken away.
-      putTheme({ accent: "", typeface: "" });
+      putTheme({ accent: "", typeface: "", layout: "" });
       return;
     }
 

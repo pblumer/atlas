@@ -2559,6 +2559,13 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   Marktleistung is built from services only and a service is part of one, holds category
   and product group to the capability register, and an order cannot ask for a service on
   its own ([ADR-0524](docs/adr/0524-marktleistung-and-service.md)).
+- 🚧 **A tile layout for the shop.** A catalogue chooses `tiles` in its appearance; the
+  shop then draws a category menu, search and one tile row per catalogue, and a product
+  page, with an icon per product from a shipped symbol set. Still open: an
+  **accessibility audit against eCH-0059 / WCAG 2.1 AA** (keyboard order in the tile track,
+  names for the scroll button and icons, banner contrast, reflow at 200 %), resource tiles
+  (FAQ, guides), a shareable product link, and a favourite that persists
+  ([ADR-draft-shop-tile-layout](docs/adr/draft-shop-tile-layout.md)).
 - ✅ **The answers reach the approver and the processes.** The approver reads a position's
   configuration answers on the approval, labelled as the form labels them; the processes the
   product binds receive each answer as a variable of its own, sealed where the model declares
