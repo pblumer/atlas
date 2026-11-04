@@ -4,6 +4,11 @@
   "name": "Beispiel: Active-Directory-Dienste",
   "processes": [
     {
+      "id": "proc_ad_account_verwalten",
+      "name": "Active Directory: Account verwalten",
+      "path": "ad-account-verwalten.bpmn"
+    },
+    {
       "id": "proc_ad_admin_konto",
       "name": "Active Directory: Admin-Konto",
       "path": "ad-admin-konto.bpmn"
@@ -24,6 +29,21 @@
       "path": "ad-genehmigung-gruppenverantwortung.bpmn"
     },
     {
+      "id": "proc_ad_kontakt",
+      "name": "Active Directory: Kontakt",
+      "path": "ad-kontakt.bpmn"
+    },
+    {
+      "id": "proc_ad_konto_anfrage",
+      "name": "Active Directory: Allgemeine Anfrage – Account",
+      "path": "ad-konto-anfrage.bpmn"
+    },
+    {
+      "id": "proc_ad_racf_konto",
+      "name": "Mainframe: RACF-Konto",
+      "path": "ad-racf-konto.bpmn"
+    },
+    {
       "id": "proc_ad_servicekonto",
       "name": "Active Directory: Servicekonto",
       "path": "ad-servicekonto.bpmn"
@@ -39,6 +59,11 @@
       "path": "ad-testkonto.bpmn"
     },
     {
+      "id": "proc_ad_unpersoenliches_konto",
+      "name": "Active Directory: Unpersönliches Konto",
+      "path": "ad-unpersoenliches-konto.bpmn"
+    },
+    {
       "id": "proc_ad_versetzung",
       "name": "Active Directory: Versetzung",
       "path": "ad-versetzung.bpmn"
@@ -49,6 +74,16 @@
       "id": "ad-admin-konto-bestellung",
       "name": "ad-admin-konto-bestellung",
       "path": "ad-admin-konto-bestellung.form.json"
+    },
+    {
+      "id": "ad-auftrag-ausfuehren",
+      "name": "ad-auftrag-ausfuehren",
+      "path": "ad-auftrag-ausfuehren.form.json"
+    },
+    {
+      "id": "ad-auftrag-rueckmeldung",
+      "name": "ad-auftrag-rueckmeldung",
+      "path": "ad-auftrag-rueckmeldung.form.json"
     },
     {
       "id": "ad-berechtigung-bestellung",
@@ -76,9 +111,34 @@
       "path": "ad-gruppe-verantwortung.form.json"
     },
     {
+      "id": "ad-kontakt-bestellung",
+      "name": "ad-kontakt-bestellung",
+      "path": "ad-kontakt-bestellung.form.json"
+    },
+    {
+      "id": "ad-konto-anfrage-bestellung",
+      "name": "ad-konto-anfrage-bestellung",
+      "path": "ad-konto-anfrage-bestellung.form.json"
+    },
+    {
+      "id": "ad-konto-im",
+      "name": "ad-konto-im",
+      "path": "ad-konto-im.form.json"
+    },
+    {
+      "id": "ad-konto-mutieren",
+      "name": "ad-konto-mutieren",
+      "path": "ad-konto-mutieren.form.json"
+    },
+    {
       "id": "ad-konto-passwort",
       "name": "ad-konto-passwort",
       "path": "ad-konto-passwort.form.json"
+    },
+    {
+      "id": "ad-racf-bestellung",
+      "name": "ad-racf-bestellung",
+      "path": "ad-racf-bestellung.form.json"
     },
     {
       "id": "ad-servicekonto-bestellung",
@@ -94,6 +154,11 @@
       "id": "ad-testkonto-bestellung",
       "name": "ad-testkonto-bestellung",
       "path": "ad-testkonto-bestellung.form.json"
+    },
+    {
+      "id": "ad-unpersoenliches-konto-bestellung",
+      "name": "ad-unpersoenliches-konto-bestellung",
+      "path": "ad-unpersoenliches-konto-bestellung.form.json"
     },
     {
       "id": "ad-versetzung-bestellung",

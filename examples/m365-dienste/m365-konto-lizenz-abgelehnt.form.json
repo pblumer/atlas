@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-konto-lizenz-abgelehnt",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenz von Hand vergeben · Assign the licence by hand**\n\nDie Bestellung der Lizenz für das hybride Konto (Personalnummer {{personalnummer}}) wurde abgelehnt. Den Grund nennt die Meldung des Fehlers SHOP_ORDER_REFUSED im Verlauf dieser Instanz (Operations). Häufige Gründe: Das Produkt m365-eintritt-lizenz nennt die Applikation nicht in orderableBy, oder der Katalog cat-m365-hr ist nicht veröffentlicht. Die Lizenz von Hand vergeben oder im Shop bestellen, dann diese Aufgabe abschliessen. · The licence order for the hybrid account was refused; the SHOP_ORDER_REFUSED message in this instance's history says why. Assign the licence by hand or order it in the shop, then complete this task."
+    }
+  ]
+}

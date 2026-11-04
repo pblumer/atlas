@@ -53,7 +53,7 @@ func newTestServerWith(t *testing.T, opts ...api.Option) *httptest.Server {
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir, opts...)
+	srv, err := api.New(proc, store, dir, append([]api.Option{api.WithJobRetryBackoff(nil)}, opts...)...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}

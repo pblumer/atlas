@@ -159,6 +159,15 @@ var Ops = map[string]Op{
 	// the community's first owner; the attributes are the community (displayName,
 	// description, privacy). See createCommunity for the 202 it is answered with.
 	"create-community": {Method: "POST", NeedsUser: true, NeedsAttributes: true, Async: true, Label: "create a Viva Engage community"},
+	// A synchronised user's source of authority (SOA): whether Active Directory or the
+	// cloud manages the account. get-sync-behavior reads onPremisesSyncBehavior;
+	// set-sync-behavior sets its isCloudManaged — true transfers the user to the cloud,
+	// after which Entra Connect no longer writes to it; false hands it back to AD. The
+	// attributes are that one property, {"isCloudManaged": true|false} (ADR-0172,
+	// amended 2026-11-04). Microsoft documents both on Graph v1.0, with the permission
+	// User-OnPremisesSyncBehavior.ReadWrite.All.
+	"get-sync-behavior": {Method: "GET", NeedsUser: true, Label: "read a user's source of authority"},
+	"set-sync-behavior": {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "transfer a user's source of authority"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -714,11 +723,31 @@ func checkRequired(j Job, spec Op) error {
 	if spec.NeedsPassword && strings.TrimSpace(j.NewPassword) == "" {
 		return fmt.Errorf("entra: operation %q resolved no newPassword", j.Operation)
 	}
+	if j.Operation == "set-sync-behavior" {
+		if err := checkSyncBehavior(j.Attributes); err != nil {
+			return err
+		}
+	}
 	if spec.needsResult() && strings.TrimSpace(j.ResultVariable) == "" {
 		if spec.Async {
 			return fmt.Errorf("entra: operation %q resolved no resultVariable; what it creates is known only by the id it answers, and an id nobody keeps cannot be followed up", j.Operation)
 		}
 		return fmt.Errorf("entra: operation %q resolved no resultVariable; a directory read that discards its result is one nothing asked for", j.Operation)
+	}
+	return nil
+}
+
+// checkSyncBehavior holds set-sync-behavior's body to the one property Graph's
+// onPremisesSyncBehavior has. A transfer of authority is not a call to send with a typo
+// in it: isCloudManaged spelled otherwise, or written as the string "true", would be a
+// 400 at best, and the model should say plainly which way the user goes.
+func checkSyncBehavior(attrs map[string]any) error {
+	v, ok := attrs["isCloudManaged"]
+	if !ok || len(attrs) != 1 {
+		return fmt.Errorf("entra: operation \"set-sync-behavior\" takes exactly one attribute, isCloudManaged (true transfers the user to the cloud, false back to Active Directory)")
+	}
+	if _, isBool := v.(bool); !isBool {
+		return fmt.Errorf("entra: operation \"set-sync-behavior\": isCloudManaged must be true or false, not %T", v)
 	}
 	return nil
 }
@@ -857,6 +886,12 @@ func request(j Job, spec Op, baseURL string) Request {
 		// That is Microsoft's stated behaviour, not something verified against a tenant
 		// here. An id past the 30 days, or one that is no deleted group, is Graph's 404.
 		r.Path = "/directory/deletedItems/" + group + "/restore"
+	case "get-sync-behavior":
+		r.Path = "/users/" + user + "/onPremisesSyncBehavior?$select=isCloudManaged"
+	case "set-sync-behavior":
+		// Graph answers 204: the client's no-content path returns nil, so the job
+		// completes; a process reads the new state back with get-sync-behavior.
+		r.Path, r.Body = "/users/"+user+"/onPremisesSyncBehavior", j.Attributes
 	case "create-community":
 		// Graph answers 202 with a Location and no body; WantLocation is what keeps that
 		// Location rather than reading the empty answer as nil (createCommunity).

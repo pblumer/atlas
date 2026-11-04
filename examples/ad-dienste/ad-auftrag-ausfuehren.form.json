@@ -1,0 +1,53 @@
+{
+  "type": "default",
+  "id": "ad-auftrag-ausfuehren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Auftrag ausführen · Carry out the order**\n\nAuftrag · Order: {{auftragstitel}}\n\n{{#if racfGruppe}}RACF-Gruppe oder Zugriff · RACF group or access: {{racfGruppe}}\n\n{{/if}}{{#if zweck}}Begründung · Justification: {{zweck}}\n\n{{/if}}{{#if anfrage}}Anfrage · Request: {{anfrage}}\n\n{{/if}}"
+    },
+    {
+      "key": "ergebnis",
+      "type": "radio",
+      "label": "Ergebnis · Result",
+      "values": [
+        {
+          "label": "Ausgeführt · Done",
+          "value": "ausgefuehrt"
+        },
+        {
+          "label": "Abgelehnt · Rejected",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "kontoname",
+      "type": "textfield",
+      "label": "Kontoname oder User-ID (falls vorhanden) · Account name or user ID (if any)",
+      "validate": {
+        "pattern": "^[A-Za-z0-9@#$._-]{1,64}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "bemerkung",
+      "type": "textarea",
+      "label": "Bemerkung (bei einer Ablehnung im Shop sichtbar) · Remark (shown in the shop on a rejection)",
+      "validate": {
+        "maxLength": 500
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

@@ -14,7 +14,8 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
          SKU of license_sku_ids (a test tenant rarely holds E3, E5 and F3);
        - without the Teams Phone worker (workers.teamsphone = false) the products
          m365-telefonie, m365-warteschlange and m365-telefonzentrale leave both catalogues;
-       - m365-engage and m365-aufbewahrung always leave them (see UNSERVED), and
+       - m365-engage, m365-aufbewahrung and the two hybrid-identity products always leave
+         them (see UNSERVED), and a catalogue left without products is left out too, and
          m365-sharepoint-site unless --site-inventory names the inventory site;
        - the site order form's SharePoint host becomes the tenant's;
   4. does what the package's installieren.sh does (decision models, application, release,
@@ -52,7 +53,15 @@ TELEPHONY = {"m365-telefonie", "m365-warteschlange", "m365-telefonzentrale"}
 # needs Community.ReadWrite.All on the whole tenant and a network in native mode, which a
 # shared tenant should not grant to a test app; Litigation Hold needs Exchange Online
 # Plan 2, which Business Basic does not include.
-UNSERVED = {"m365-engage", "m365-aufbewahrung"}
+#
+# The hybrid-identity products (m365-konto-hybrid, m365-konto-cloud) need Entra Connect
+# between the domain controller and the tenant, and this environment synchronises
+# nothing: its AD and its Entra ID are two separate directories whose test users merely
+# share a UPN. Entra Connect must not be added to the shared tenant either, because it
+# would soft-match the AD test users onto the existing cloud users by that UPN and turn
+# them into synchronised users for good (examples/m365-dienste/README.md, «Hybride
+# Identität (Entra Connect)»).
+UNSERVED = {"m365-engage", "m365-aufbewahrung", "m365-konto-hybrid", "m365-konto-cloud"}
 SITE = "m365-sharepoint-site"
 GROUPS = {
     # answer in fragen.json -> Atlas group
@@ -61,6 +70,7 @@ GROUPS = {
     "telefonie-team": "M365-Telefonie",
     "facility-management": "M365-Facility",
     "compliance": "Informationssicherheit",
+    "zielgruppe-identitaet": "M365-Administration",
 }
 NAMED_GROUPS = ["M365-Administration", "M365-Telefonie", "Informationssicherheit"]
 
@@ -162,6 +172,9 @@ def adapt(src, dst, sku, with_telephony, department, sharepoint_host, with_site)
     for c in doc["catalogs"]:
         c["items"] = [i for i in c["items"] if i not in drop]
         c["edges"] = [e for e in c.get("edges", []) if e["from"] not in drop and e["to"] not in drop]
+    # A catalogue whose every product is left out here (cat-m365-identitaet) would publish
+    # empty; it goes too, with the audience it asks for.
+    doc["catalogs"] = [c for c in doc["catalogs"] if c["items"]]
     json.dump(doc, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     log("products left out here: " + ", ".join(sorted(drop)))
 

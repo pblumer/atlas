@@ -4,7 +4,7 @@
   "components": [
     {
       "type": "text",
-      "text": "**Kontingent prüfen und setzen · Review and set the quota**\n\nGesetzt wird das Kontingent im SharePoint Admin Center (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota; Microsoft Graph hat dafür keine Schnittstelle. «Gesetzt» erst wählen, wenn es gesetzt ist. · The quota is set in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota; Microsoft Graph has no API for it. Choose “set” only once it is set."
+      "text": "**Kontingent prüfen und setzen · Review and set the quota**\n\nGesetzt wird das Kontingent im SharePoint Admin Center (Sites → Active sites → Storage) oder mit Set-SPOSite -StorageQuota. Bis 25 GB setzt Atlas es selbst; hier landet ein solcher Antrag nur, wenn das nicht ging. «Gesetzt» erst wählen, wenn es gesetzt ist. · The quota is set in the SharePoint admin centre (Sites → Active sites → Storage) or with Set-SPOSite -StorageQuota. Up to 25 GB Atlas sets it itself; such a request only lands here when that failed. Choose “set” only once it is set."
     },
     {
       "key": "pruefhinweis",
