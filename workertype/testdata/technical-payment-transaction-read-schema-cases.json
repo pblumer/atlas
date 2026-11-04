@@ -1,0 +1,57 @@
+[
+  {
+    "name": "read by transaction id",
+    "direction": "input",
+    "document": {
+      "transactionId": "251104123456789012"
+    },
+    "valid": true
+  },
+  {
+    "name": "missing transaction id",
+    "direction": "input",
+    "document": {},
+    "valid": false
+  },
+  {
+    "name": "authorized transaction",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042",
+      "status": "authorized",
+      "amount": 4990,
+      "currency": "CHF",
+      "capturedAmount": 0,
+      "paymentMethod": "VIS"
+    },
+    "valid": true
+  },
+  {
+    "name": "provider status is mapped, not passed through",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042",
+      "status": "challenge_required",
+      "amount": 4990,
+      "currency": "CHF",
+      "capturedAmount": 0,
+      "paymentMethod": "VIS"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing status",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "capturedAmount": 0,
+      "paymentMethod": "VIS"
+    },
+    "valid": false
+  }
+]
