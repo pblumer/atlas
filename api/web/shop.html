@@ -424,6 +424,60 @@
   .rp-table th { font-size:12px; color:var(--muted); border-top:0; }
   .rp-table .num { text-align:right; white-space:nowrap; }
   .rp-met { color:var(--ok); } .rp-missed, .rp-overdue, .rp-failed { color:var(--danger); }
+
+  /* The tile layout (ADR-0525). A tile is an icon square in the
+     catalogue's colour beside the product's name; rows scroll sideways two tiles
+     high until "show all" opens the whole catalogue as a grid. */
+  .tile-bar { display:flex; gap:12px; margin:8px 0 20px; flex-wrap:wrap; }
+  .tile-menu { padding:12px 14px; border:1px solid var(--border-strong); border-radius:4px;
+               background:var(--surface); font:inherit; min-width:220px; }
+  .tile-find { flex:1 1 320px; padding:14px 18px; font-size:18px; border:1px solid var(--border-strong);
+               border-radius:4px; text-align:center; color:var(--accent-hover); }
+  .tile-section { border-top:1px solid var(--border); padding:16px 0 8px; }
+  .tile-head { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .tile-head h3 { font-size:22px; font-weight:400; margin:0 0 14px; }
+  .linkish { background:none; border:0; color:var(--accent-hover); font:inherit; cursor:pointer; padding:0; }
+  .tile-row { position:relative; }
+  .tile-track { display:grid; grid-auto-flow:column; grid-template-rows:repeat(2, auto);
+                grid-auto-columns:calc((100% - 36px) / 4); gap:12px; overflow-x:auto;
+                scroll-snap-type:x mandatory; padding-bottom:6px; }
+  .tile-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; }
+  .tile { display:flex; align-items:center; gap:14px; text-align:left; background:var(--surface);
+          border:1px solid var(--border); border-radius:2px; padding:14px; min-height:96px;
+          font:inherit; cursor:pointer; scroll-snap-align:start; }
+  .tile:hover { border-color:var(--accent); box-shadow:0 1px 4px rgba(0,0,0,.08); }
+  .tile-icon { flex:0 0 64px; width:64px; height:64px; background:var(--accent); color:var(--accent-ink);
+               display:flex; align-items:center; justify-content:center; }
+  .tile-icon svg { width:44px; height:44px; }
+  .tile-text { display:flex; flex-direction:column; gap:2px; }
+  .tile-kind { font-weight:600; font-size:13px; color:var(--text); }
+  .tile-name { color:var(--accent-hover); font-size:16px; }
+  .tile-parts { color:var(--muted); font-size:14px; }
+  .tile-next { position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:44px; height:88px;
+               border:1px solid var(--border); background:var(--surface); font-size:28px; cursor:pointer;
+               box-shadow:-4px 0 8px rgba(0,0,0,.06); }
+  .product-page .page-top { display:flex; justify-content:space-between; align-items:center; padding:6px 0 12px; }
+  .product-page .page-top strong { font-size:22px; font-weight:400; }
+  .page-fav { display:flex; align-items:center; gap:6px; color:var(--muted); }
+  .page-banner { display:flex; align-items:flex-end; gap:16px; min-height:84px; padding:0 18px;
+                 background:linear-gradient(90deg, var(--accent-hover), var(--accent)); color:var(--accent-ink); }
+  .page-banner .tile-icon { width:88px; height:88px; flex-basis:88px; margin-bottom:-24px;
+                            box-shadow:0 2px 6px rgba(0,0,0,.25); }
+  .page-banner .tile-icon svg { width:60px; height:60px; }
+  .page-banner h2 { color:inherit; text-transform:none; letter-spacing:0; font-size:24px; font-weight:400;
+                    align-self:flex-start; margin:14px 0; }
+  .page-columns { display:grid; grid-template-columns:minmax(0, 2fr) minmax(220px, 1fr); gap:28px; margin-top:36px; }
+  .page-section { border-bottom:1px solid var(--border); padding:12px 0; }
+  .page-section summary { font-weight:600; font-size:17px; cursor:pointer; }
+  .page-body { padding-top:8px; }
+  .page-option { display:flex; align-items:center; gap:8px; margin:6px 0; }
+  .page-side { border-left:1px solid var(--border); padding-left:24px; display:flex; flex-direction:column; gap:10px; }
+  .page-cta { width:100%; padding:12px; font-size:16px; }
+  @media (max-width:760px) {
+    .tile-track { grid-auto-columns:85%; }
+    .page-columns { grid-template-columns:1fr; }
+    .page-side { border-left:0; padding-left:0; }
+  }
 </style>
 </head>
 <body>

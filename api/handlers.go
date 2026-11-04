@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -6733,6 +6734,13 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			if scanErr != nil {
 				return
 			}
+			// A mail that carries a password link goes out only through a worker the
+			// server itself runs (ADR-0526): the resolved
+			// message is the link, and a lease by any other credential — an operator's
+			// session, an API token they minted — would hand it to whoever holds that.
+			if jobType == compiler.MailJobTypeIndex && !s.ownWorker(r) {
+				keys = slices.DeleteFunc(keys, s.carriesPasswordLink)
+			}
 			for _, k := range keys {
 				s.proc.ActivateJob(k, body.Worker, int64(lease))
 			}
@@ -6968,6 +6976,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			// Why the task could not be resolved — the answer link a mail is for
 			// (ADR-0523); the worker fails the job with it.
 			"resolveError": j.ResolveError,
+			// What a preview must not keep: a password link
+			// (ADR-0526).
+			"withhold": j.Withhold,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service

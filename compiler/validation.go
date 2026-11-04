@@ -202,6 +202,23 @@ const (
 	// RuleAnswerUnsent marks a task answered by link that no mail task names. A warning:
 	// it runs, and can be answered in the Tasks app, but nobody is sent its link.
 	RuleAnswerUnsent = "answer.unsent"
+
+	// The password rules (ADR-0526). A
+	// password is set by its owner through a one-time link; a process never carries one.
+	//
+	// RulePasswordOperation marks passwordFor on a mailbox operation other than send. An
+	// error: only a message this task sends can carry a link.
+	RulePasswordOperation = "password.operation"
+	// RulePasswordUnshown marks a mail task that names an account with passwordFor and
+	// whose subject, body and HTML body never read passwordLink. An error: the mail would
+	// go out without the one thing it is for.
+	RulePasswordUnshown = "password.unshown"
+	// RuleUserPassword marks a user-provisioning task that carries a password, or that
+	// sets one (operation="set-password"). An error: the password would be a process
+	// variable — an event in the log for as long as the log is kept, readable by everybody
+	// who reads the instance. create makes an account awaiting activation instead, and the
+	// owner sets the password through the link a mail task with passwordFor carries.
+	RuleUserPassword = "user.password"
 )
 
 // eventGatewayKind is one event-based gateway marked as a kind atlas does not run,
@@ -291,6 +308,7 @@ func Validate(cp *CompiledProcess) []Problem {
 	ps = append(ps, checkDecisionBindings(cp)...)
 	ps = append(ps, checkWizards(cp)...)
 	ps = append(ps, checkAnswerLinks(cp)...)
+	ps = append(ps, checkPasswords(cp)...)
 	return ps
 }
 
@@ -364,6 +382,60 @@ func checkAnswerLinks(cp *CompiledProcess) []Problem {
 		if !sent[id] {
 			ps = append(ps, problem(cp, id, SeverityWarning, RuleAnswerUnsent,
 				fmt.Sprintf("%s is answered by link, but no mail task of this process names it with answerTask, so nobody is sent its link", describeNode(cp, id))))
+		}
+	}
+	return ps
+}
+
+// passwordLinkVariable is the variable a mail task's subject and bodies read the password
+// link of the account its passwordFor names under
+// (ADR-0526).
+const passwordLinkVariable = "passwordLink"
+
+// PasswordLinkVariable is [passwordLinkVariable] for the packages that resolve a mail task.
+const PasswordLinkVariable = passwordLinkVariable
+
+// checkPasswords holds the two places a password could enter a process to the rule that
+// it never does: a user-provisioning task carries none, and a mail task that names an
+// account shows its link and sends nothing else
+// (ADR-0526).
+func checkPasswords(cp *CompiledProcess) []Problem {
+	var ps []Problem
+	mails := make([]int32, 0, len(cp.passwordFor))
+	for id := range cp.passwordFor {
+		mails = append(mails, id)
+	}
+	slices.Sort(mails)
+	for _, id := range mails {
+		d := cp.ConnectorTask(cp.nodes[id].Detail)
+		if d.MailOp != "" {
+			ps = append(ps, problem(cp, id, SeverityError, RulePasswordOperation,
+				fmt.Sprintf("%s performs the mailbox operation %q and names an account with passwordFor; only a message the task sends can carry a password link", describeNode(cp, id), d.MailOp)))
+			continue
+		}
+		if !mailReads(d, passwordLinkVariable) {
+			ps = append(ps, problem(cp, id, SeverityError, RulePasswordUnshown,
+				fmt.Sprintf("%s names an account with passwordFor, but neither its subject nor its bodies show %s; put it in the body, as an expression (= ... + %s) or a template ({{%s}})",
+					describeNode(cp, id), passwordLinkVariable, passwordLinkVariable, passwordLinkVariable)))
+		}
+	}
+	for i := range cp.nodes {
+		id := int32(i)
+		n := &cp.nodes[i]
+		if n.Type != TypeConnectorTask {
+			continue
+		}
+		d := cp.ConnectorTask(n.Detail)
+		if d.JobType != UserConnectorJobTypeIndex {
+			continue
+		}
+		switch {
+		case cp.Intern(d.UserOp) == "set-password":
+			ps = append(ps, problem(cp, id, SeverityError, RuleUserPassword,
+				fmt.Sprintf("%s sets a password; a process never carries one. Send the account its link instead: a mail task with passwordFor, whose body shows %s", describeNode(cp, id), passwordLinkVariable)))
+		case d.UserPassword.Literal != "" || d.UserPassword.Expr != nil:
+			ps = append(ps, problem(cp, id, SeverityError, RuleUserPassword,
+				fmt.Sprintf("%s carries a password; a process never carries one. Drop the password attribute: the account is created awaiting activation, and a mail task with passwordFor sends its owner the link to set one", describeNode(cp, id))))
 		}
 	}
 	return ps

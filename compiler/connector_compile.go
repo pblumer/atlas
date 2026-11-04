@@ -1499,6 +1499,11 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	// opted in, and whether the mail shows its link — so a model deployed before the rules
 	// comes back on restart (ADR-0523, ADR-0177).
 	cfg.AnswerTask = strings.TrimSpace(cn.AnswerTask)
+	if strings.TrimSpace(cn.PasswordFor) != "" {
+		if cfg.PasswordFor, err = restValue(b.gate(), st.Id, "passwordFor", cn.PasswordFor); err != nil {
+			return 0, err
+		}
+	}
 	return b.AddMailConnectorTask(cfg), nil
 }
 
@@ -1614,8 +1619,13 @@ func mailFlag(taskID, attr, raw string) (bool, error) {
 
 // compileUserConnectorTask compiles an <atlas:userConnector> task: it delegates to
 // the in-process user-provisioning worker via the job path (ADR-0123), which mutates
-// the internal user store. operation selects the action; username is always required,
-// and create/set-password additionally require a password. The field values are
+// the internal user store. operation selects the action; username is always required.
+// A password is no longer something a process may carry
+// (ADR-0526): create makes an account awaiting activation,
+// and a password attribute or set-password is a stage-5 error (RuleUserPassword) rather
+// than a parse error here, so a definition deployed before comes back on restart and is
+// reported instead of failing the boot. set-password without a password still fails
+// here, as it always did. The field values are
 // literal-or-FEEL (like the mail worker); no worker name or credential is
 // authored — the worker uses the local store, gated to the system project.
 func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
@@ -1629,7 +1639,7 @@ func compileUserConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 	if strings.TrimSpace(cn.Username) == "" {
 		return 0, fmt.Errorf("compiler: user task %q needs a username", st.Id)
 	}
-	if (op == "create" || op == "set-password") && strings.TrimSpace(cn.Password) == "" {
+	if op == "set-password" && strings.TrimSpace(cn.Password) == "" {
 		return 0, fmt.Errorf("compiler: user task %q (%s) needs a password", st.Id, op)
 	}
 	username, err := restValue(b.gate(), st.Id, "username", cn.Username)
