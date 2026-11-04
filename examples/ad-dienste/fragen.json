@@ -13,8 +13,8 @@
   "informationssicherheit": {
     "kind": "group",
     "label": {
-      "de": "Wer genehmigt Admin-Konten",
-      "en": "Who approves admin accounts"
+      "de": "Wer genehmigt Admin-Konten, unpersönliche Konten und RACF-Konten (ISBO)",
+      "en": "Who approves admin, non-personal and RACF accounts (ISBO)"
     },
     "hint": {
       "de": "Eine Gruppe, meist die Informationssicherheit; wer zuerst entscheidet, entscheidet.",

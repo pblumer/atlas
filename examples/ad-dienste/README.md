@@ -3,8 +3,9 @@
 Ein Katalog aus der Sicht einer Informatik, die ihr Active Directory über Atlas anbietet:
 Sicherheitsgruppen mit einer verantwortlichen Person, Berechtigungen auf Fileshares und
 Applikationen als Gruppenmitgliedschaft, persönliche Admin-Konten, Servicekonten, Testkonten,
-Konten für externe Personen und die Versetzung eines Kontos in eine andere
-Organisationseinheit. Alles läuft über den Worker-Typ **AD** (ADR-0166); das Paket enthält den
+Konten für externe Personen, die Versetzung eines Kontos in eine andere
+Organisationseinheit und das Kundenbündel «Account verwalten» mit unpersönlichen Konten (Funktions-,
+Rollen-, Schulungskonto), Kontakten, RACF-Konten und einer allgemeinen Anfrage. Alles läuft über den Worker-Typ **AD** (ADR-0166); das Paket enthält den
 Katalog, die Produkte, die Prozesse, drei Entscheidungstabellen und die Formulare, zweisprachig
 (Deutsch und Englisch).
 
@@ -15,8 +16,8 @@ Der Worker heisst `ad_verzeichnis`. Wer einen anderen Namen verwendet, ersetzt i
 
 | Datei | Inhalt |
 |---|---|
-| `atlas.json` | Manifest der Applikation «Beispiel: Active-Directory-Dienste» (Schlüssel `beispiel-ad-dienste`): 8 Prozesse, 11 Formulare, 3 Entscheidungen samt ihren Modellen (Format 2) |
-| `katalog.json` | Das Katalogdokument: ein Katalog, neun Produkte, eine Beziehung (`excludes`) |
+| `atlas.json` | Manifest der Applikation «Beispiel: Active-Directory-Dienste» (Schlüssel `beispiel-ad-dienste`): 13 Prozesse, 19 Formulare, 3 Entscheidungen samt ihren Modellen (Format 2) |
+| `katalog.json` | Das Katalogdokument: ein Katalog, 14 Produkte, eine Beziehung `excludes` und sieben `aggregation` (die Optionen von «Account verwalten») |
 | `fragen.json` | Was jeder Platzhalter im Katalogdokument fragt (Zielgruppe, Genehmigende) |
 | `antworten.beispiel.json` | Vorlage für die Antworten auf `fragen.json` |
 | `*.bpmn` | Die Prozesse, je mit Dokumentation an Prozess und Elementen |
@@ -28,7 +29,7 @@ Der Worker heisst `ad_verzeichnis`. Wer einen anderen Namen verwendet, ersetzt i
 
 | Katalog | Rang | Zielgruppe | Produkte |
 |---|---|---|---|
-| Active Directory (`cat-ad-dienste`) | 600 | `{{zielgruppe-ad}}` | alle neun |
+| Active Directory (`cat-ad-dienste`) | 600 | `{{zielgruppe-ad}}` | alle 14 |
 
 Eine Person sieht im Shop jeden Katalog, den ihre Gruppen erreichen (ADR-0522). Wer neben
 diesem Paket die Microsoft-365-Dienste (Ränge 500 bis 520) installiert, sieht mit einer Gruppe,
@@ -49,6 +50,11 @@ Zielinstanz frei sein; sonst sind sie in `katalog.json` anzupassen.
 | Servicekonto (`ad-servicekonto`) | vorgesetzte Person der bestellenden Person | `ad-servicekonto.bpmn` | 365 Tage | Servicekonto zurückgeben, Konto entsperren, Passwort zurücksetzen |
 | Testkonto (`ad-testkonto`) | keine | `ad-testkonto.bpmn` | 90 Tage, gibt sich am Ablaufdatum selbst zurück | Testkonto zurückgeben, Konto entsperren, Passwort zurücksetzen |
 | Konto für eine externe Person (`ad-externes-konto`) | vorgesetzte Person der bestellenden Person (des Sponsors) | `ad-externes-konto.bpmn` | 180 Tage | Konto zurückgeben, Konto entsperren, Passwort zurücksetzen |
+| Account verwalten (`ad-account-verwalten`), Marktleistung mit sieben Optionen | keine | `ad-account-verwalten.bpmn` | – | Account verwalten zurückgeben |
+| Unpersönliches Konto (`ad-unpersoenliches-konto`), Varianten F, R, E | `{{informationssicherheit}}` (ISBO) | `ad-unpersoenliches-konto.bpmn` | 365 Tage | Konto mutieren, Konto löschen, Konto entsperren, Passwort zurücksetzen |
+| Kontakt (`ad-kontakt`) | keine | `ad-kontakt.bpmn` | 365 Tage | Kontakt entfernen |
+| RACF-Konto (`ad-racf-konto`) | `{{informationssicherheit}}` | `ad-racf-konto.bpmn` (Aufgabe) | 365 Tage | RACF-Konto zurückgeben |
+| Allgemeine Anfrage – Account (`ad-konto-anfrage`) | keine (Identity Management entscheidet) | `ad-konto-anfrage.bpmn` (Aufgabe) | – | Anfrage abschliessen |
 | Versetzung (`ad-versetzung`) | `{{ad-administration}}` | `ad-versetzung.bpmn` | – (gibt sich nach der Ausführung selbst zurück) | Versetzung abschliessen (der Prozess selbst und der Betrieb) |
 
 Jedes Produkt hat **einen Lebenszyklus-Prozess** (ADR-0425): eine Nachricht je Aktion startet
@@ -253,9 +259,128 @@ neuen Einheit, `done`, Selbstrückgabe. Die Gruppen kommen vor dem Verschieben, 
 DN des Kontos ändert. Die Idee entspricht den «Mitgliedschaften der Organisationseinheit» der
 Microsoft-365-Dienste; dort ist die Versetzung als Grenze vermerkt.
 
+### Account verwalten: das Kundenbündel
+
+Ein Kundenportal bietet die Konten als **ein Bündel «Account verwalten»** an: Man öffnet es, schaltet
+die gewünschten Kontoarten zu und wählt je eine Mutationsart (erstellen, mutieren, löschen). Dieses
+Paket bildet das als **Marktleistung `ad-account-verwalten` mit Optionen** nach (Kanten `aggregation`,
+ADR-0312): Wer sie bestellt, kreuzt die Konten an, die er braucht, und bestellt weitere später als
+Option dazu. Die Marktleistung selbst hat kein Zielsystem und meldet sich sofort `done`; jede Option
+ist ein eigenes Recht mit eigener Genehmigung, Befristung und Rezertifizierung. Die Rückgabe der
+Marktleistung gibt die Konten nicht mit zurück, weil sie andere Verantwortliche haben können.
+
+**Folge für den Shop:** Admin-, Test- und Servicekonto sind jetzt Optionen von «Account verwalten»
+und nicht mehr eigene Einstiege im Katalog. Über die API bleiben sie einzeln bestellbar (der
+Katalog ist nicht `structured`), deshalb gibt der Austrittsprozess der Microsoft-365-Dienste das
+Admin-Konto weiterhin zurück.
+
+**Warum `aggregation` und nicht `composition`:** `composition` bestellt den Teil immer mit; im
+Kundenportal ist jede Kontoart ein Schalter. **Warum kein strukturierter Katalog (ADR-0524):** Er
+verlangt Kategorie und Produktgruppe als Keys des Capability-Registers der Zielinstanz, und ein
+Beispiel aus dem atlas hub kann nicht voraussetzen, dass es diese Capabilities gibt.
+
+#### Die Kontotypen des Kunden
+
+Die Taxonomie des Kunden unterscheidet sekundäre Benutzerkonten einer Person (A, T, C) und
+unpersönliche Benutzerkonten (F, S, R, M, I, E, G):
+
+| Typ | Kunde | Atlas-Produkt | Abdeckung |
+|---|---|---|---|
+| A | Administratorkonto (Privileged User persönlich) | `ad-admin-konto` | ja: `adm-<Anmeldename>`, Genehmigung `{{informationssicherheit}}` |
+| T | Testerkonto (Test-ID, Testaccounts unpersönlich) | `ad-testkonto` | ja: `tst-<bezeichnung>`, 90 Tage, ohne Genehmigung |
+| C | Kontakt | `ad-kontakt` (neu) | ja: Kontaktobjekt im AD, ohne Konto |
+| F | Funktionskonto (Funktions-ID) | `ad-unpersoenliches-konto`, Variante `funktion` (neu) | ja: `f-<bezeichnung>` |
+| S | Servicekonto | `ad-servicekonto` | ja: `svc-<bezeichnung>`; Genehmigung siehe unten |
+| R | Rollenkonto (Rollen-ID) | `ad-unpersoenliches-konto`, Variante `rolle` (neu) | ja: `r-<bezeichnung>` |
+| E | Schulungskonto (Schulungs-ID) | `ad-unpersoenliches-konto`, Variante `schulung` (neu) | ja: `e-<bezeichnung>` |
+| M | Mailboxkonto (Mailbox-ID) | Funktionspostfach der Microsoft-365-Dienste | nicht in diesem Paket; Exchange, nicht AD |
+| I | Microsoft-Teams-Gerätekonto | Teams-Gerät der Microsoft-365-Dienste | nicht in diesem Paket |
+| G | Gruppe, Verteilerliste | `ad-sicherheitsgruppe`; Verteiler der Microsoft-365-Dienste | Sicherheitsgruppe ja, Verteilerliste nicht in diesem Paket |
+| – | RACF-Account (Mainframe) | `ad-racf-konto` (neu) | als Aufgabe an das Mainframe-Team |
+| – | Allgemeine Anfrage – Account | `ad-konto-anfrage` (neu) | als Aufgabe an Identity Management |
+
+M, I und die Verteilerliste liegen in Exchange beziehungsweise Teams. Sie bleiben bei den
+Microsoft-365-Diensten; dieses Paket hängt nicht von einem anderen Beispiel ab. Wer beide Pakete
+installiert, kann sie in einem eigenen Katalog nebeneinander anbieten.
+
+#### Unpersönliches Konto (F, R, E)
+
+**Bestellformular** (`ad-unpersoenliches-konto-bestellung`): Auftragstitel, Bezeichnung,
+Verwendungszweck (Pflicht; er ist die Begründung für die Genehmigung), «2FA dauerhaft deaktivieren»
+und «Client deforcieren» (je ja/nein). Den Kontotyp wählt die **Variante** (Funktions-, Rollen- oder
+Schulungskonto). Verantwortlich ist die **empfangende Person**, im Kundenportal der «Manager»; der
+Shop sucht sie wie bei jeder Bestellung für eine andere Person.
+
+**Genehmigung:** `{{informationssicherheit}}` (`role`), die Rolle ISBO. Sie sieht den
+Verwendungszweck in der Bestellung.
+
+**Bereitstellen:** Kontotyp aus der Variante, Namensregel (`f-`, `r-`, `e-<bezeichnung>`, höchstens
+20 Zeichen), Prüfung auf den Namen in der ganzen Domäne, Konto gesperrt in der OU des Typs anlegen
+(`AD_FUNKTION_OU`, `AD_ROLLEN_OU`, `AD_SCHULUNG_OU`), **Initialpasswort durch die verantwortliche
+Person** (wie beim Servicekonto), aktivieren, dann die Aufgabe **«Konto zur Kenntnis nehmen»** an
+Identity Management (Gruppe aus `AD_IM_GRUPPE`, Formular `ad-konto-im`). Hat die Bestellung 2FA-Ausnahme
+oder Client deforcieren verlangt, nennt die Aufgabe diese Schritte; Atlas führt sie nicht aus.
+Danach `done`.
+
+**Mutationsarten:** erstellen ist die Bestellung, **mutieren** die Aktion `mutieren` (Effekt
+`change`, Formular `ad-konto-mutieren`: neuer Verwendungszweck ersetzt `description`), **löschen**
+die Rückgabe (sperren, löschen, `returned`). Dazu entsperren und Passwort zurücksetzen. Alle Aktionen
+finden das Konto über die Herkunftskennzeichnung in `info`, in der ganzen Domäne.
+
+#### Servicekonto mit Genehmigung durch die Informationssicherheit
+
+Das Servicekonto bleibt bei der Genehmigung durch die vorgesetzte Person (`superior`), damit sich
+bestehende Installationen nicht ändern. Wer es wie der Kunde durch die ISBO genehmigen lassen will,
+setzt in `katalog.json` beim Produkt `ad-servicekonto`:
+
+```json
+"approval": { "kind": "role", "ref": "{{informationssicherheit}}" }
+```
+
+#### Kontakt (C)
+
+**Bestellformular** (`ad-kontakt-bestellung`): Vorname, Nachname, Firma, E-Mail-Adresse. Alle vier
+sind Personendaten (`atlas:personal`); die Engine liest sie nicht, erst der AD-Worker setzt sie in
+`displayName`, `givenName`, `sn` und `mail` ein. Der `cn` heisst `kontakt-<Auftrag>-<Position>` und
+benennt niemanden. `create-contact` in `AD_KONTAKT_OU`, `done`; die Rückgabe löscht den Kontakt.
+Ohne Genehmigung, 365 Tage. `targetAddress` setzt der Prozess nicht: Das Attribut gehört zum
+Schema von Exchange.
+
+#### RACF-Konto und Allgemeine Anfrage
+
+Atlas hat **keine Anbindung an RACF**. Beide Produkte sind Aufgaben an ein Team, mit demselben
+Ablauf:
+
+1. Aufgabe «RACF-Konto anlegen» an die Gruppe aus `AD_MAINFRAME_GRUPPE` beziehungsweise «Anfrage
+   bearbeiten» an `AD_IM_GRUPPE` (Formular `ad-auftrag-ausfuehren`: Ergebnis, Kontoname oder
+   User-ID, Bemerkung).
+2. Abgelehnt: `…/decision` mit der Bemerkung als Grund, die bestellende Person liest sie im Shop.
+3. Ausgeführt: **Rückmeldung an die bestellende Person** (`assignee = orderer`, Formular
+   `ad-auftrag-rueckmeldung`, mit der User-ID), dann `done`.
+4. Die Rückgabe ist wieder eine Aufgabe an dieselbe Gruppe.
+
+Das RACF-Konto genehmigt `{{informationssicherheit}}`; die Anfrage hat keine Genehmigung,
+Identity Management entscheidet in der Aufgabe. Eine automatische RACF-Anbindung wäre ein
+REST-Connector zu einer Schnittstelle des Kunden vor RACF (etwa z/OSMF); dann wird nur die Aufgabe
+zum Service-Task.
+
+#### Was nicht abgedeckt ist
+
+- **Persönliche Accounts anderer Domänen:** Der Worker `ad_verzeichnis` spricht mit einer Domäne.
+  Eine zweite Domäne braucht einen zweiten Worker und eine Auswahl der Domäne im Formular; das
+  Paket hat beides nicht.
+- **Unix-Konten** sind bewusst nicht Teil des Pakets.
+- **2FA-Ausnahme und Client deforcieren** sind Handschritte in der Aufgabe an Identity Management;
+  Atlas setzt weder eine Ausnahme im bedingten Zugriff noch etwas am Client.
+- **Verantwortung übergeben** an eine andere Person gibt es für unpersönliche Konten nicht; die
+  empfangende Person einer Position lässt sich nicht ändern. Heute: neues Konto bestellen, altes
+  löschen.
+- **Mutieren** ändert nur den Verwendungszweck. Name und Typ eines Kontos bleiben; ein anderer Typ
+  ist ein neues Konto.
+
 ### Entsperren und Passwort zurücksetzen
 
-An Admin-, Service-, Test- und externen Konten, je als Aktion mit dem Effekt `service`:
+An Admin-, Service-, Test-, unpersönlichen und externen Konten, je als Aktion mit dem Effekt `service`:
 
 | Aktion | Ablauf | Ergebnis |
 |---|---|---|
@@ -402,7 +527,8 @@ Gruppe aufnimmt; nach einer Löschung dieses Schlüssels ist auch er nicht mehr 
    | ganze Domäne | lesen (haben authentifizierte Benutzer meist schon) | Suchen nach Konten und Gruppen, Prüfung freier Namen |
    | `AD_GRUPPEN_OU` | Gruppenobjekte erstellen und löschen; an Gruppenobjekten `member`, `managedBy`, `description`, `info` schreiben | Sicherheitsgruppe anlegen, Mitglieder, Verantwortung, Rückgabe |
    | OU der Berechtigungsgruppen und der Gruppen der Organisationseinheiten | an Gruppenobjekten `member` schreiben («Mitglieder schreiben») | Berechtigungen, Versetzung |
-   | `AD_ADMIN_OU`, `AD_SERVICE_OU`, `AD_TEST_OU`, `AD_EXTERN_OU` | Benutzerobjekte erstellen und löschen; «Kennwort zurücksetzen»; an Benutzerobjekten `userAccountControl`, `accountExpires`, `lockoutTime`, `description`, `info`, `seeAlso`, `manager`, `displayName`, `userPrincipalName`, `givenName`, `sn`, `company`, `mail` schreiben | Konten anlegen, aktivieren, sperren, entsperren, Passwort, Rückgabe |
+   | `AD_KONTAKT_OU` | Kontaktobjekte erstellen und löschen; an Kontakten `displayName`, `givenName`, `sn`, `mail`, `description`, `info` schreiben | Kontakt anlegen, Rückgabe |
+   | `AD_ADMIN_OU`, `AD_SERVICE_OU`, `AD_TEST_OU`, `AD_EXTERN_OU`, `AD_FUNKTION_OU`, `AD_ROLLEN_OU`, `AD_SCHULUNG_OU` | Benutzerobjekte erstellen und löschen; «Kennwort zurücksetzen»; an Benutzerobjekten `userAccountControl`, `accountExpires`, `lockoutTime`, `description`, `info`, `seeAlso`, `manager`, `displayName`, `userPrincipalName`, `givenName`, `sn`, `company`, `mail` schreiben | Konten anlegen, aktivieren, sperren, entsperren, Passwort, Rückgabe |
    | OUs der Organisationseinheiten unter `AD_PERSONEN_OU` | Benutzerobjekte löschen (Quelle) und erstellen (Ziel), `name`/`cn` schreiben | `move` bei der Versetzung (laut Microsoft braucht ein Verschieben das Löschen am alten und das Erstellen am neuen Ort) |
 
    Für den Versuch ohne Verzeichnis: `ATLAS_AD_MOCK` (ADR-0181) mit einem Seed (LDIF), der die
@@ -411,7 +537,10 @@ Gruppe aufnimmt; nach einer Löschung dieses Schlüssels ist auch er nicht mehr 
 2. **Secret `atlas`** im Vault: ein API-Token mit der Rolle `operator` (Console → Administration →
    API tokens, Scope `full`, «Direkt im Vault ablegen», Name `atlas`). Damit melden die Prozesse
    ihre Positionen und geben Testkonten und Versetzungen zurück.
-3. **Gruppen** in Atlas: die Zielgruppe, die Informationssicherheit und die AD-Administration.
+3. **Gruppen** in Atlas: die Zielgruppe, die Informationssicherheit (ISBO) und die AD-Administration,
+   dazu für «Account verwalten» die Gruppen aus `AD_IM_GRUPPE` (Identity Management) und
+   `AD_MAINFRAME_GRUPPE` (Mainframe-Team). Diese beiden sind Konstanten und keine Katalogfragen,
+   weil die Prozesse ihre Aufgaben an sie richten.
    Die Genehmigung der Berechtigungen fällt ohne `approval.ref` auf die Gruppe `AD-Administration`
    über ihren Namen zurück.
 4. **Atlas-Konten der Gruppenverantwortlichen**, am einfachsten aus der Kontenspiegelung
@@ -432,6 +561,12 @@ Gruppe aufnimmt; nach einer Löschung dieses Schlüssels ist auch er nicht mehr 
    | `AD_SERVICE_OU` | `OU=Servicekonten,OU=Atlas,DC=contoso,DC=local` | wo Servicekonten entstehen |
    | `AD_TEST_OU` | `OU=Testkonten,OU=Atlas,DC=contoso,DC=local` | wo Testkonten entstehen |
    | `AD_EXTERN_OU` | `OU=Extern,OU=Atlas,DC=contoso,DC=local` | wo externe Konten entstehen |
+   | `AD_FUNKTION_OU` | `OU=Funktionskonten,OU=Atlas,DC=contoso,DC=local` | wo Funktionskonten (F) entstehen |
+   | `AD_ROLLEN_OU` | `OU=Rollenkonten,OU=Atlas,DC=contoso,DC=local` | wo Rollenkonten (R) entstehen |
+   | `AD_SCHULUNG_OU` | `OU=Schulungskonten,OU=Atlas,DC=contoso,DC=local` | wo Schulungskonten (E) entstehen |
+   | `AD_KONTAKT_OU` | `OU=Kontakte,OU=Atlas,DC=contoso,DC=local` | wo Kontakte (C) entstehen |
+   | `AD_IM_GRUPPE` | `Identity Management` | Atlas-Gruppe, die unpersönliche Konten zur Kenntnis nimmt und allgemeine Anfragen bearbeitet |
+   | `AD_MAINFRAME_GRUPPE` | `Mainframe` | Atlas-Gruppe, die RACF-Konten anlegt und zurücknimmt |
    | `ATLAS_API_BASE` | `http://127.0.0.1:8080` | Adresse, unter der die Prozesse Atlas selbst erreichen, wenn eine Rückgabe oder Aktion sie nicht mitbringt |
 7. **Die Tabellen `AdBerechtigungen` und `AdOe`** mit den Gruppen und OUs des eigenen
    Verzeichnisses, und die Auswahl der Organisationseinheiten im Formular
@@ -564,6 +699,11 @@ API).
     liefert nur den DN.
 12. Vor- und Nachname einer externen Person enthalten mindestens einen Buchstaben (das Formular
     verlangt es); sonst entstünde ein Name wie `ext-.muster`.
+13. Die Kontotypen F, R und E und ihre Präfixe `f-`, `r-`, `e-` folgen der Taxonomie eines Kunden;
+    ISBO ist dort die Informationssicherheit, IM Identity Management. Andere Präfixe stehen in
+    `AdNamensregel`.
+14. Die verantwortliche Person eines unpersönlichen Kontos ist die empfangende Person der
+    Bestellung; ein eigenes Feld «Manager» gibt es nicht.
 
 ## Bekannte Grenzen
 
@@ -592,4 +732,7 @@ API).
 - **Höchstens 100 Gruppen** liest die Suche nach den Mitgliedschaften einer Versetzung; mehr
   lässt sie scheitern, statt abzuschneiden.
 - **Der SPN eines Servicekontos** wird nicht gesetzt (siehe dort).
+- **«Account verwalten»:** andere Domänen, 2FA-Ausnahme, Client deforcieren und Übergabe der
+  Verantwortung sind nicht automatisiert (siehe «Was nicht abgedeckt ist»). An einem echten
+  Verzeichnis und Mainframe ist der Ablauf **nicht geprüft**.
 - **Das Ablaufdatum gilt in UTC**, nicht in der Ortszeit.

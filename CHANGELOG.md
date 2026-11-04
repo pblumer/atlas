@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The AD example offers a customer's «Account verwalten» bundle.** `examples/ad-dienste`
+  gains the Marktleistung `ad-account-verwalten`, whose options (aggregation) are the account
+  products: admin, test and service account as before, and new a non-personal account with
+  the variants function (F), role (R) and training (E) approved by information security and
+  acknowledged by identity management, with change, delete, unlock and password actions; an
+  AD contact (C) through `create-contact`; a RACF account and a general account request, both
+  as tasks to a team with feedback to the orderer. `AdNamensregel` knows the prefixes `f-`,
+  `r-` and `e-`. The README maps the customer's account types to the products and names
+  what is not covered (other domains, the 2FA exception, unenforcing the client). Admin,
+  test and service account are now options of the bundle in the shop. Hub release
+  `ad-dienste` 1.0.3.
 - **A SharePoint task can set a site's storage quota.** The new operation `set-site-quota`
   (`quotaGB`, optional `warningPercent`, default 90) goes where Microsoft Graph cannot: to
   SharePoint's tenant administration on the admin host, through the client object model's

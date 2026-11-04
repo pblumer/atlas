@@ -1,0 +1,32 @@
+{
+  "type": "default",
+  "id": "ad-konto-im",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Neues unpersönliches Konto · New non-personal account**\n\nKonto · Account: {{regel.sAMAccountName}}\n\nAuftrag · Order: {{auftragstitel}}\n\nVerwendungszweck · Purpose: {{zweck}}\n\n{{#if mfaAusnahme = \"ja\"}}**Zu tun · To do:** Konto in die Ausnahme der Mehrfaktor-Anmeldung aufnehmen (z.B. Ausschlussgruppe im bedingten Zugriff). · Add the account to the multi-factor exception (e.g. exclusion group in conditional access).\n\n{{/if}}{{#if clientDeforcieren = \"ja\"}}**Zu tun · To do:** Client deforcieren. · Unenforce the client.\n\n{{/if}}"
+    },
+    {
+      "key": "erledigt",
+      "type": "checkbox",
+      "label": "Zur Kenntnis genommen und erledigt · Noted and done",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "imBemerkung",
+      "type": "textarea",
+      "label": "Bemerkung · Remark",
+      "validate": {
+        "maxLength": 300
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}
