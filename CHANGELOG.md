@@ -45,6 +45,13 @@ _Changed_ / _Removed_ for each version.
   opt in. The Modeler offers both settings (ADR-0523).
 
 ### Fixed
+
+- **A failed connector job waits before it is tried again.** The in-process runner, on which
+  every built-in connector runs, retried a failed job at once, so a task's three retries were
+  spent within one second and a fault that clears by itself — Microsoft Graph not yet knowing a
+  group created a moment earlier — became an incident. It now waits fifteen seconds before each
+  retry and a minute before the last one; a failure that leaves no retries is still an incident at
+  once (ADR-0111, amendment 2026-11-04).
 - **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
   after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
   minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up

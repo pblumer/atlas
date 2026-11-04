@@ -198,7 +198,7 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0108](0108-bpmn-transactions.md) | BPMN transactions (cancel end event, cancel boundary, transactional compensation) | Accepted | Landed |
 | [0109](0109-full-instance-snapshot.md) | Whole-instance snapshot — a full backup that includes running instances | Accepted (amended) | Landed |
 | [0110](0110-event-based-gateways.md) | Event-based gateways (deferred choice) | Accepted | Landed |
-| [0111](0111-incident-model-completion.md) | Completing the incident model — retry backoff and timer-FEEL failure incidents | Accepted | Landed |
+| [0111](0111-incident-model-completion.md) | Completing the incident model — retry backoff and timer-FEEL failure incidents | Accepted (amended) | Landed |
 | [0112](0112-send-tasks.md) | Send tasks | Accepted | Landed |
 | [0113](0113-org-wide-ui-theme.md) | Org-wide UI brand theme | Accepted | Landed |
 | [0114](0114-opensearch-event-exporter.md) | OpenSearch event exporter — a WAL-tailing sink, off the hot path | Accepted | Landed |

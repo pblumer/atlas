@@ -43,7 +43,7 @@ func newAuthServerWith(t *testing.T, adminUser, adminPass string, opts ...api.Op
 	if err := proc.Recover(); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
-	srv, err := api.New(proc, store, dir, append([]api.Option{api.WithAuth()}, opts...)...)
+	srv, err := api.New(proc, store, dir, append([]api.Option{api.WithAuth(), api.WithJobRetryBackoff(nil)}, opts...)...)
 	if err != nil {
 		t.Fatalf("api.New: %v", err)
 	}
