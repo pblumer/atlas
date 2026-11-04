@@ -181,6 +181,12 @@
     {
       "bundle": "m365-dienste",
       "version": "1.0.11",
+      "digest": "sha256:2370e73f0db0b74d76dfa518f3fb1241f9871a95d3af241427f8596627a08c3a",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.12",
       "digest": "sha256:fcba88ab30f9238da1e320cc36d0c80207df997424e88682bb85d150787e0f14",
       "minAtlas": "0.22.0-0"
     }
