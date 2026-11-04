@@ -11,6 +11,8 @@ Microsoft 365: Genehmigung durch Vorgesetzte. Eigene Genehmigungsart der Produkt
              id="defs_proc_m365_genehmigung_vorgesetzter" targetNamespace="http://atlas/beispiel/m365-dienste">
   <error id="Err_PersonUnbekannt" name="Person in Entra ID unbekannt" errorCode="ENTRA_USER_NOT_FOUND"/>
 
+  <itemDefinition id="item_Genehmigung" structureRef="Genehmigung"/>
+  <dataStore id="ds_entra_id_konten" name="Entra ID: Konten"/>
   <process id="proc_m365_genehmigung_vorgesetzter" name="Microsoft 365: Genehmigung durch Vorgesetzte" isExecutable="true" atlas:personal="upn,besitzer,stellvertretung,person,postfach,anlass" atlas:dataSubject="recipient">
     <documentation>Holt die Genehmigung für eine Microsoft-365-Position bei der vorgesetzten Person der betroffenen Person ein und meldet das Ergebnis an den Auftrag.
 
@@ -211,7 +213,7 @@ Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste a
       </extensionElements>
       <incoming>F_Gw_Provisionieren</incoming>
       <outgoing>F_Prov_Join</outgoing>
-    </serviceTask>
+    <dataOutputAssociation id="doa_Provisionieren"><targetRef>dor_Provisionieren</targetRef></dataOutputAssociation></serviceTask>
 
     <serviceTask id="Ablehnen" name="Ablehnung melden">
       <documentation>POST /api/v1/orders/{orderId}/lines/{positionId}/decision mit der Person, die entschieden hat, und ihrer Begründung. Die bestellende Person bekommt die Begründung zu lesen. begruendung ist die Variable, die der Posteingang beim Ablehnen schreibt; der Anlass aus dem Bestellformular des Postfachzugriffs heisst deshalb anlass.</documentation>
@@ -224,7 +226,7 @@ Nur der Treffer wird in den Prozess übernommen (vorgesetzterKonto); die Liste a
       </extensionElements>
       <incoming>F_Gw_Ablehnen</incoming>
       <outgoing>F_Abl_Join</outgoing>
-    </serviceTask>
+    <dataOutputAssociation id="doa_Ablehnen"><targetRef>dor_Ablehnen</targetRef></dataOutputAssociation></serviceTask>
 
     <exclusiveGateway id="Join">
       <incoming>F_Prov_Join</incoming>
@@ -290,7 +292,7 @@ Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen aus
       <incoming>F_KontoNaechster_Eskalieren</incoming>
       <incoming>F_UnbekanntNaechster_Eskalieren</incoming>
       <outgoing>F_Eskalieren_Ende</outgoing>
-    </serviceTask>
+    <dataOutputAssociation id="doa_Eskalieren"><targetRef>dor_Eskalieren</targetRef></dataOutputAssociation></serviceTask>
 
     <endEvent id="EndeFrist" name="Weitergereicht">
       <incoming>F_Eskalieren_Ende</incoming>
@@ -332,6 +334,12 @@ Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen aus
     <sequenceFlow id="F_KontoNaechster_Eskalieren" sourceRef="KontoNaechster" targetRef="Eskalieren"/>
     <sequenceFlow id="F_Eskalieren_Ende" sourceRef="Eskalieren" targetRef="EndeFrist"/>
     <sequenceFlow id="F_UnbekanntNaechster_Eskalieren" sourceRef="UnbekanntNaechster" targetRef="Eskalieren"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_genehmigung" name="Genehmigung" itemSubjectRef="item_Genehmigung"/>
+    <dataObjectReference id="dor_Provisionieren" name="Genehmigung" dataObjectRef="do_genehmigung"><dataState name="Erteilt"/></dataObjectReference>
+    <dataObjectReference id="dor_Ablehnen" name="Genehmigung" dataObjectRef="do_genehmigung"><dataState name="Abgelehnt"/></dataObjectReference>
+    <dataObjectReference id="dor_Eskalieren" name="Genehmigung" dataObjectRef="do_genehmigung"><dataState name="Eskaliert"/></dataObjectReference>
+    <dataStoreReference id="dsr_entra_id_konten" name="Entra ID: Konten" dataStoreRef="ds_entra_id_konten"/>
   </process>
 
   <bpmndi:BPMNDiagram id="Diagram">
@@ -536,6 +544,13 @@ Kennt Entra ID den Vorgesetzten nicht mehr, etwa weil er in den sieben Tagen aus
       <bpmndi:BPMNEdge id="E_Eskalieren_Ende" bpmnElement="F_Eskalieren_Ende">
         <omgdi:waypoint x="1840" y="620"/><omgdi:waypoint x="1890" y="620"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Provisionieren_di" bpmnElement="dor_Provisionieren"><omgdc:Bounds x="1710" y="268" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1678" y="320" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Provisionieren_di" bpmnElement="doa_Provisionieren"><omgdi:waypoint x="1682" y="240"/><omgdi:waypoint x="1728" y="268"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Ablehnen_di" bpmnElement="dor_Ablehnen"><omgdc:Bounds x="1710" y="408" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1678" y="460" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Ablehnen_di" bpmnElement="doa_Ablehnen"><omgdi:waypoint x="1682" y="380"/><omgdi:waypoint x="1728" y="408"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_Eskalieren_di" bpmnElement="dor_Eskalieren"><omgdc:Bounds x="1822" y="688" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1790" y="740" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_Eskalieren_di" bpmnElement="doa_Eskalieren"><omgdi:waypoint x="1832" y="660"/><omgdi:waypoint x="1840" y="688"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_entra_id_konten_di" bpmnElement="dsr_entra_id_konten"><omgdc:Bounds x="152" y="830" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="102" y="885" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

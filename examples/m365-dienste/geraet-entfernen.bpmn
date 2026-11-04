@@ -9,6 +9,9 @@ Exchange: Gerätepostfach entfernen.
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_m365_geraet_entfernen" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <itemDefinition id="item_Geraetepostfach" structureRef="Geraetepostfach"/>
+  <itemDefinition id="item_Katalogposition" structureRef="Katalogposition"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
   <process id="proc_m365_geraet_entfernen" name="Exchange: Gerätepostfach entfernen" isExecutable="true">
     <documentation>Entfernt das Gerätepostfach der Position wieder. Rückgabeprozess des Produkts m365-geraet; das Postfach wird über seine Herkunftskennzeichnung gefunden, nicht über seinen Namen.</documentation>
     <extensionElements>
@@ -19,9 +22,9 @@ Exchange: Gerätepostfach entfernen.
     <startEvent id="s" name="Rückgabe gestartet"><documentation>Die Rückgabe startet den Prozess für die Position.</documentation><outgoing>f_s__st_finden</outgoing></startEvent>
     <serviceTask id="st_finden" name="Gerätepostfach finden"><documentation>Findet das Gerätepostfach über die Herkunftskennzeichnung: CustomAttribute3 trägt seit der Bereitstellung «&lt;orderId&gt;/&lt;positionId&gt;». Die Suche hängt damit nicht am Namen, der sich nach einer Änderung der Namensregel anders bilden würde, sondern an der Position, die das Recht im Bestand begründet. maxResults 5: Mehr Treffer wären ein Fehler der Kennzeichnung, und Exchange-Listen scheitern über der Grenze, statt abgeschnitten zu werden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-mailboxes" parameters="{&quot;Filter&quot;: &quot;=\&quot;CustomAttribute3 -eq '\&quot; + orderId + \&quot;/\&quot; + (if positionId = null then itemId else positionId) + \&quot;'\&quot;&quot;, &quot;RecipientTypeDetails&quot;: &quot;EquipmentMailbox&quot;}" maxResults="5" resultVariable="treffer"/></extensionElements><incoming>f_s__st_finden</incoming><outgoing>f_st_finden__gw_gef</outgoing></serviceTask>
     <exclusiveGateway id="gw_gef" name="Gerät vorhanden?" default="f_gw_gef__st_entfernen"><documentation>Ist das Postfach schon weg (von Hand gelöscht), gibt es nichts zu entfernen; die Rückgabe wird trotzdem gemeldet, damit das Recht endet.</documentation><incoming>f_st_finden__gw_gef</incoming><outgoing>f_gw_gef__st_entfernen</outgoing><outgoing>f_gw_gef__gw_join</outgoing></exclusiveGateway>
-    <serviceTask id="st_entfernen" name="Gerätepostfach entfernen"><documentation>remove-mailbox. Exchange Online hält ein entferntes Postfach danach noch 30 Tage als vorläufig gelöscht.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-mailbox" parameters='{"Identity": "=treffer[1].PrimarySmtpAddress"}'/></extensionElements><incoming>f_gw_gef__st_entfernen</incoming><outgoing>f_st_entfernen__gw_join</outgoing></serviceTask>
+    <serviceTask id="st_entfernen" name="Gerätepostfach entfernen"><documentation>remove-mailbox. Exchange Online hält ein entferntes Postfach danach noch 30 Tage als vorläufig gelöscht.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-mailbox" parameters='{"Identity": "=treffer[1].PrimarySmtpAddress"}'/></extensionElements><incoming>f_gw_gef__st_entfernen</incoming><outgoing>f_st_entfernen__gw_join</outgoing><dataOutputAssociation id="doa_st_entfernen"><targetRef>dor_st_entfernen</targetRef></dataOutputAssociation></serviceTask>
     <exclusiveGateway id="gw_join"><incoming>f_gw_gef__gw_join</incoming><incoming>f_st_entfernen__gw_join</incoming><outgoing>f_gw_join__st_returned</outgoing></exclusiveGateway>
-    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_join__st_returned</incoming><outgoing>f_st_returned__e</outgoing></serviceTask>
+    <serviceTask id="st_returned" name="Rückgabe melden"><documentation>Meldet die Rückgabe (status "returned") über die Positionsroute; damit endet das Recht im Bestand. Braucht das Secret "atlas" mit einem API-Token der Rolle operator. Eine Rückgabe erhält die Variable atlasApiBase nicht; die Adresse kommt dann aus der Applikationskonstante ATLAS_API_BASE (Fallback http://127.0.0.1:8080), die auf jeder Installation einmal zu setzen ist, deren Server nicht dort lauscht.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/orders/" + orderId + "/lines/" + (if positionId = null then itemId else positionId)' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="returned"' target="status"/></zeebe:ioMapping></extensionElements><incoming>f_gw_join__st_returned</incoming><outgoing>f_st_returned__e</outgoing><dataOutputAssociation id="doa_st_returned"><targetRef>dor_st_returned</targetRef></dataOutputAssociation></serviceTask>
     <endEvent id="e" name="Gerät entfernt"><incoming>f_st_returned__e</incoming></endEvent>
     <sequenceFlow id="f_s__st_finden" sourceRef="s" targetRef="st_finden"/>
     <sequenceFlow id="f_st_finden__gw_gef" sourceRef="st_finden" targetRef="gw_gef"/>
@@ -30,6 +33,12 @@ Exchange: Gerätepostfach entfernen.
     <sequenceFlow id="f_st_entfernen__gw_join" sourceRef="st_entfernen" targetRef="gw_join"/>
     <sequenceFlow id="f_gw_join__st_returned" sourceRef="gw_join" targetRef="st_returned"/>
     <sequenceFlow id="f_st_returned__e" sourceRef="st_returned" targetRef="e"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_katalogposition" name="Katalogposition" itemSubjectRef="item_Katalogposition"/>
+    <dataObject id="do_geraetepostfach" name="Geraetepostfach" itemSubjectRef="item_Geraetepostfach"/>
+    <dataObjectReference id="dor_st_returned" name="Katalogposition" dataObjectRef="do_katalogposition"><dataState name="Zurueckgegeben"/></dataObjectReference>
+    <dataObjectReference id="dor_st_entfernen" name="Geraetepostfach" dataObjectRef="do_geraetepostfach"><dataState name="Entfernt"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
   </process>
   <bpmndi:BPMNDiagram id="proc_m365_geraet_entfernen_diagram">
     <bpmndi:BPMNPlane id="proc_m365_geraet_entfernen_plane" bpmnElement="proc_m365_geraet_entfernen">
@@ -47,6 +56,11 @@ Exchange: Gerätepostfach entfernen.
       <bpmndi:BPMNEdge id="f_st_entfernen__gw_join_di" bpmnElement="f_st_entfernen__gw_join"><omgdi:waypoint x="680" y="130"/><omgdi:waypoint x="755" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_join__st_returned_di" bpmnElement="f_gw_join__st_returned"><omgdi:waypoint x="805" y="130"/><omgdi:waypoint x="880" y="130"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_returned__e_di" bpmnElement="f_st_returned__e"><omgdi:waypoint x="980" y="130"/><omgdi:waypoint x="1062" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_returned_di" bpmnElement="dor_st_returned"><omgdc:Bounds x="962" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_returned_di" bpmnElement="doa_st_returned"><omgdi:waypoint x="972" y="170"/><omgdi:waypoint x="980" y="198"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_entfernen_di" bpmnElement="dor_st_entfernen"><omgdc:Bounds x="662" y="198" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="630" y="250" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_entfernen_di" bpmnElement="doa_st_entfernen"><omgdi:waypoint x="672" y="170"/><omgdi:waypoint x="680" y="198"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="340" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="395" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

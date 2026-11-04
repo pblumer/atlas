@@ -20,7 +20,13 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
        - the site order form's SharePoint host becomes the tenant's;
   4. does what the package's installieren.sh does (decision models, application, release,
      catalogue), in the administrator's session rather than with a token (see install());
-  5. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
+  5. files the architecture of examples/m365-dienste/architektur (ADR-0230, ADR-0305): the
+     capabilities and value streams before the release is published, and the information
+     model of each application between its import and its publication, so the release's
+     architecture sketch (ADR-0471, ADR-0495) records classes, stores, capabilities and
+     value streams. A hub import through the Console does none of this: an application
+     bundle carries processes, forms and decisions only;
+  6. sets the application constants: NAME_PREFIX (the environment's prefix, so everything
      the catalogue creates lies in the shared tenant's Exchange scope and is removed by
      the cleanup scripts), MAIL_DOMAIN, USAGE_LOCATION, PARTNER_UPN_DOMAIN, ATLAS_API_BASE.
 
@@ -183,6 +189,8 @@ def adapt(src, dst, sku, with_telephony, department, sharepoint_host, with_site)
 # of their own, served by the Exchange worker on the Exchange server.
 ONPREM_PRODUCTS = ["m365-funktionspostfach", "m365-verteiler", "m365-postfachzugriff", "m365-raum", "m365-geraet"]
 ONPREM_WORKER = "ucc_exchange_onprem"
+ONLINE_STORE = "Exchange Online: Empfaenger"
+ONPREM_STORE = "Exchange Server: Empfaenger"
 
 
 def build_onprem(pkg, dst):
@@ -227,6 +235,8 @@ def build_onprem(pkg, dst):
     for pid in sorted(procs):
         src = open(os.path.join(pkg, path_of[pid]), encoding="utf-8").read()
         src = src.replace('connector="ucc_exchange"', f'connector="{ONPREM_WORKER}"')
+        # The data store the processes name follows the worker (architektur/informationsmodell.json).
+        src = src.replace(f'name="{ONLINE_STORE}"', f'name="{ONPREM_STORE}"')
         # The process id is an attribute value wherever it occurs (the process, its
         # diagram plane): replaced as a whole quoted value.
         src = src.replace(f'"{pid}"', f'"{proc(pid)}"')
@@ -289,7 +299,56 @@ MODELS = ["m365-lizenzprofil", "m365-namensregel", "m365-postfachkontingent", "m
           "m365-site-kontingent", "m365-telefonie", "m365-verteiler-zuordnung"]
 
 
-def install(atlas, pkg):
+def put_record(atlas, kind, rec):
+    """Files one capability or value stream (kind: capabilities or value-streams): created
+    when the key is new, replaced at its current revision otherwise."""
+    status, cur = atlas.call("GET", f"/api/v1/{kind}/{rec['key']}", ok=(200, 404))
+    if status == 404:
+        atlas.call("POST", f"/api/v1/{kind}", rec)
+        return "created"
+    atlas.call("PUT", f"/api/v1/{kind}/{rec['key']}", dict(rec, revision=cur.get("revision", 0)))
+    return "updated"
+
+
+def file_capabilities(atlas, example, with_onprem):
+    """The capabilities and value streams of architektur/capabilities.json. They are
+    server-wide records; a realization by the on-premises variant is left out when that
+    variant is not installed, so the gap report does not count it as missing."""
+    doc = json.load(open(os.path.join(example, "architektur", "capabilities.json"), encoding="utf-8"))
+    for cap in doc["capabilities"]:
+        if not with_onprem:
+            cap["realizations"] = [r for r in cap.get("realizations", [])
+                                   if r.get("applicationKey") != APP_KEY + "-onprem"]
+        put_record(atlas, "capabilities", cap)
+    for vs in doc["valueStreams"]:
+        put_record(atlas, "value-streams", vs)
+    log(f"{len(doc['capabilities'])} capabilities and {len(doc['valueStreams'])} value streams filed")
+
+
+def file_information_model(atlas, example, app_id, onprem=False):
+    """The information model of architektur/informationsmodell.json for one application:
+    imported the first time, replaced at its current revision after that. The on-premises
+    variant's processes name Exchange Server as their store, and so does its model."""
+    doc = json.load(open(os.path.join(example, "architektur", "informationsmodell.json"), encoding="utf-8"))
+    if onprem:
+        for st in doc["stores"]:
+            if st["name"] == ONLINE_STORE:
+                st["name"], st["worker"] = ONPREM_STORE, ONPREM_WORKER
+        doc["name"] += " (Exchange Server)"
+    _, listing = atlas.call("GET", f"/api/v1/infomodel/models?applicationId={app_id}")
+    have = next((m for m in items(listing, "models") if m.get("name") == doc["name"]), None)
+    if have is None:
+        atlas.call("POST", "/api/v1/infomodel/import", {"applicationId": app_id, "name": doc["name"],
+                   "documentation": doc["documentation"], "format": "json",
+                   "document": json.dumps(doc, ensure_ascii=False)})
+        log(f"information model {doc['name']!r} imported")
+        return
+    _, cur = atlas.call("GET", f"/api/v1/infomodel/models/{have['id']}")
+    atlas.call("PUT", f"/api/v1/infomodel/models/{have['id']}", dict(doc, revision=cur.get("revision", 0)))
+    log(f"information model {doc['name']!r} updated")
+
+
+def install(atlas, pkg, before_publish=None):
     """The steps of the package's installieren.sh, in the administrator's session.
 
     installieren.sh authenticates with an API token, and the application then belongs to
@@ -311,6 +370,8 @@ def install(atlas, pkg):
             tar.add(os.path.join(pkg, f), arcname=f)
     _, res = atlas.call("POST", "/api/v1/applications/source", raw=buf.getvalue(), ctype="application/gzip")
     app_id = res["applicationId"]
+    if before_publish:
+        before_publish(app_id)
     _, pub = atlas.call("POST", f"/api/v1/applications/{app_id}/publish", {"note": "install-m365-dienste.py"})
     log(f"application {app_id} imported and published, release {(pub.get('release') or {}).get('version')}")
 
@@ -386,12 +447,17 @@ def main():
                 atlas.call("PUT", f"/api/v1/groups/{have[name]}/members/{u['id']}")
             log(f"{u['username']} joins the approver and audience groups")
 
+    example = os.path.abspath(args.example)
+    onprem = tofu_output(tofu_dir, "exchange_onprem")
+    with_onprem = bool(onprem) and not args.no_onprem
+    file_capabilities(atlas, example, with_onprem)
+
     work = tempfile.mkdtemp(prefix="m365-dienste-")
     try:
         pkg = os.path.join(work, "m365-dienste")
-        adapt(os.path.abspath(args.example), pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "",
+        adapt(example, pkg, sku, with_telephony, prefix.rstrip("-") if prefix else "",
               sharepoint_host, bool(args.site_inventory))
-        install(atlas, pkg)
+        install(atlas, pkg, lambda app_id: file_information_model(atlas, example, app_id))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
@@ -415,8 +481,7 @@ def main():
     atlas.call("PUT", f"/api/v1/applications/{app['id']}/constants", {"constants": constants})
     log(f"constants set: NAME_PREFIX={prefix!r}, MAIL_DOMAIN={domain}")
 
-    onprem = tofu_output(tofu_dir, "exchange_onprem")
-    if onprem and not args.no_onprem:
+    if with_onprem:
         work = tempfile.mkdtemp(prefix="m365-dienste-onprem-")
         try:
             pkg = os.path.join(work, "m365-dienste")
@@ -424,7 +489,7 @@ def main():
                   sharepoint_host, bool(args.site_inventory))
             var = os.path.join(work, "onprem")
             build_onprem(pkg, var)
-            install(atlas, var)
+            install(atlas, var, lambda app_id: file_information_model(atlas, example, app_id, onprem=True))
         finally:
             shutil.rmtree(work, ignore_errors=True)
         _, apps = atlas.call("GET", "/api/v1/applications")

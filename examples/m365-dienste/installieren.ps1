@@ -6,6 +6,8 @@
   Dieselben Schritte wie installieren.sh, für Windows PowerShell 5.1 und PowerShell 7:
     1. die acht Entscheidungsmodelle unter ihren Handles hochladen;
     2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
+    2b. die Architektur anlegen (architektur/einspielen.py, braucht Python 3; ohne Python
+       wird der Schritt mit einem Hinweis übersprungen);
     3. die Applikation veröffentlichen;
     4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
        Dokument importieren und veröffentlichen.
@@ -52,6 +54,17 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "tar ist mit $LASTEXITCODE gescheitert" }
   $source = Invoke-RestMethod -Method Post -Uri "$Server/api/v1/applications/source" -Headers $auth -ContentType 'application/gzip' -InFile $archive
   Write-Host "   Applikation $($source.applicationId)"
+
+  Write-Host '2b. Architektur (Capabilities, Wertströme, Informationsmodell)'
+  $py = Get-Command python3 -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
+  if ($py) {
+    $env:ATLAS_TOKEN = $Token
+    & $py.Source -I (Join-Path $here 'architektur\einspielen.py') $Server $source.applicationId
+    if ($LASTEXITCODE -ne 0) { throw "architektur/einspielen.py ist mit $LASTEXITCODE gescheitert" }
+  } else {
+    Write-Host '   Übersprungen: kein Python 3 gefunden (architektur/README.md).'
+  }
 
   Write-Host '3. Applikation veröffentlichen'
   $publish = Invoke-RestMethod -Method Post -Uri "$Server/api/v1/applications/$($source.applicationId)/publish" -Headers $auth -ContentType 'application/json' -Body '{"note":"installieren.ps1"}'

@@ -9,6 +9,9 @@ Verteiler-Anmeldung (öffentliches Formular): An- und Abmeldung externer Adresse
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
              id="defs_proc_m365_verteiler_anmeldung" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <itemDefinition id="item_Mailkontakt" structureRef="Mailkontakt"/>
+  <itemDefinition id="item_Verteilermitgliedschaft" structureRef="Verteilermitgliedschaft"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
   <process id="proc_m365_verteiler_anmeldung" name="Verteiler-Anmeldung (öffentliches Formular)" isExecutable="true" atlas:searchable="email">
     <documentation>Öffentliche An- und Abmeldung externer Adressen für ausgewählte Verteilerlisten. Das Startformular m365-verteiler-anmeldung wird über einen öffentlichen Link veröffentlicht (ADR-0029).
 
@@ -29,13 +32,13 @@ Worker: ucc_exchange.</documentation>
     <exclusiveGateway id="gw_pjoin"><incoming>f_gw_pruef__gw_pjoin</incoming><incoming>f_gw_best__gw_pjoin</incoming><outgoing>f_gw_pjoin__st_kontakt</outgoing></exclusiveGateway>
     <serviceTask id="st_kontakt" name="Kontakt suchen"><documentation>get-mail-contact: der bestehende Kontakt zur Adresse, oder null.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mail-contact" parameters='{"Identity": "=email"}' resultVariable="kontakt"/></extensionElements><incoming>f_gw_pjoin__st_kontakt</incoming><outgoing>f_st_kontakt__gw_kontakt</outgoing></serviceTask>
     <exclusiveGateway id="gw_kontakt" name="Kontakt vorhanden?" default="f_gw_kontakt__st_neu"><incoming>f_st_kontakt__gw_kontakt</incoming><outgoing>f_gw_kontakt__gw_kjoin</outgoing><outgoing>f_gw_kontakt__st_neu</outgoing></exclusiveGateway>
-    <serviceTask id="st_neu" name="Kontakt anlegen"><documentation>create-mail-contact. Name und Anzeigename sind die Adresse selbst: Das Formular fragt bewusst keinen Namen ab.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="create-mail-contact" parameters='{"Name": "=email", "DisplayName": "=email", "ExternalEmailAddress": "=email"}'/></extensionElements><incoming>f_gw_kontakt__st_neu</incoming><outgoing>f_st_neu__gw_kjoin</outgoing></serviceTask>
+    <serviceTask id="st_neu" name="Kontakt anlegen"><documentation>create-mail-contact. Name und Anzeigename sind die Adresse selbst: Das Formular fragt bewusst keinen Namen ab.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="create-mail-contact" parameters='{"Name": "=email", "DisplayName": "=email", "ExternalEmailAddress": "=email"}'/></extensionElements><incoming>f_gw_kontakt__st_neu</incoming><outgoing>f_st_neu__gw_kjoin</outgoing><dataOutputAssociation id="doa_st_neu"><targetRef>dor_st_neu</targetRef></dataOutputAssociation></serviceTask>
     <exclusiveGateway id="gw_kjoin"><incoming>f_gw_kontakt__gw_kjoin</incoming><incoming>f_st_neu__gw_kjoin</incoming><outgoing>f_gw_kjoin__st_auf</outgoing></exclusiveGateway>
-    <serviceTask id="st_auf" name="In Verteiler aufnehmen"><documentation>add-distribution-group-member.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kjoin__st_auf</incoming><outgoing>f_st_auf__e_an</outgoing></serviceTask>
+    <serviceTask id="st_auf" name="In Verteiler aufnehmen"><documentation>add-distribution-group-member.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="add-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kjoin__st_auf</incoming><outgoing>f_st_auf__e_an</outgoing><dataOutputAssociation id="doa_st_auf"><targetRef>dor_st_auf</targetRef></dataOutputAssociation></serviceTask>
     <endEvent id="e_an" name="Angemeldet"><incoming>f_st_auf__e_an</incoming></endEvent>
     <serviceTask id="st_kontakt2" name="Kontakt suchen"><documentation>get-mail-contact.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mail-contact" parameters='{"Identity": "=email"}' resultVariable="kontakt"/></extensionElements><incoming>f_gw_aktion__st_kontakt2</incoming><outgoing>f_st_kontakt2__gw_kontakt2</outgoing></serviceTask>
     <exclusiveGateway id="gw_kontakt2" name="Kontakt vorhanden?" default="f_gw_kontakt2__e_nie"><incoming>f_st_kontakt2__gw_kontakt2</incoming><outgoing>f_gw_kontakt2__st_ab</outgoing><outgoing>f_gw_kontakt2__e_nie</outgoing></exclusiveGateway>
-    <serviceTask id="st_ab" name="Aus Verteiler entfernen"><documentation>remove-distribution-group-member; der Kontakt selbst bleibt bestehen.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kontakt2__st_ab</incoming><outgoing>f_st_ab__e_ab</outgoing></serviceTask>
+    <serviceTask id="st_ab" name="Aus Verteiler entfernen"><documentation>remove-distribution-group-member; der Kontakt selbst bleibt bestehen.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="remove-distribution-group-member" parameters='{"Identity": "=zuordnung.verteiler", "Member": "=email", "BypassSecurityGroupManagerCheck": true}'/></extensionElements><incoming>f_gw_kontakt2__st_ab</incoming><outgoing>f_st_ab__e_ab</outgoing><dataOutputAssociation id="doa_st_ab"><targetRef>dor_st_ab</targetRef></dataOutputAssociation></serviceTask>
     <endEvent id="e_ab" name="Abgemeldet"><incoming>f_st_ab__e_ab</incoming></endEvent>
     <endEvent id="e_nie" name="War nicht angemeldet"><incoming>f_gw_kontakt2__e_nie</incoming></endEvent>
     <sequenceFlow id="f_s__br_liste" sourceRef="s" targetRef="br_liste"/>
@@ -58,6 +61,13 @@ Worker: ucc_exchange.</documentation>
     <sequenceFlow id="f_gw_kontakt2__st_ab" sourceRef="gw_kontakt2" targetRef="st_ab" name="ja"><conditionExpression>=kontakt != null</conditionExpression></sequenceFlow>
     <sequenceFlow id="f_gw_kontakt2__e_nie" sourceRef="gw_kontakt2" targetRef="e_nie" name="nein"/>
     <sequenceFlow id="f_st_ab__e_ab" sourceRef="st_ab" targetRef="e_ab"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_mailkontakt" name="Mailkontakt" itemSubjectRef="item_Mailkontakt"/>
+    <dataObject id="do_verteilermitgliedschaft" name="Verteilermitgliedschaft" itemSubjectRef="item_Verteilermitgliedschaft"/>
+    <dataObjectReference id="dor_st_neu" name="Mailkontakt" dataObjectRef="do_mailkontakt"><dataState name="Angelegt"/></dataObjectReference>
+    <dataObjectReference id="dor_st_auf" name="Verteilermitgliedschaft" dataObjectRef="do_verteilermitgliedschaft"><dataState name="Aufgenommen"/></dataObjectReference>
+    <dataObjectReference id="dor_st_ab" name="Verteilermitgliedschaft" dataObjectRef="do_verteilermitgliedschaft"><dataState name="Entfernt"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
   </process>
   <bpmndi:BPMNDiagram id="proc_m365_verteiler_anmeldung_diagram">
     <bpmndi:BPMNPlane id="proc_m365_verteiler_anmeldung_plane" bpmnElement="proc_m365_verteiler_anmeldung">
@@ -100,6 +110,13 @@ Worker: ucc_exchange.</documentation>
       <bpmndi:BPMNEdge id="f_gw_kontakt2__st_ab_di" bpmnElement="f_gw_kontakt2__st_ab"><omgdi:waypoint x="805" y="270"/><omgdi:waypoint x="880" y="270"/><bpmndi:BPMNLabel><omgdc:Bounds x="811" y="248" width="22" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_gw_kontakt2__e_nie_di" bpmnElement="f_gw_kontakt2__e_nie"><omgdi:waypoint x="780" y="245"/><omgdi:waypoint x="780" y="130"/><omgdi:waypoint x="912" y="130"/><bpmndi:BPMNLabel><omgdc:Bounds x="786" y="180" width="36" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="f_st_ab__e_ab_di" bpmnElement="f_st_ab__e_ab"><omgdi:waypoint x="980" y="270"/><omgdi:waypoint x="1062" y="270"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_neu_di" bpmnElement="dor_st_neu"><omgdc:Bounds x="1562" y="618" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1530" y="670" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_neu_di" bpmnElement="doa_st_neu"><omgdi:waypoint x="1572" y="590"/><omgdi:waypoint x="1580" y="618"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_auf_di" bpmnElement="dor_st_auf"><omgdc:Bounds x="1862" y="478" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1830" y="530" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_auf_di" bpmnElement="doa_st_auf"><omgdi:waypoint x="1872" y="450"/><omgdi:waypoint x="1880" y="478"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_st_ab_di" bpmnElement="dor_st_ab"><omgdc:Bounds x="962" y="338" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="930" y="390" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_st_ab_di" bpmnElement="doa_st_ab"><omgdi:waypoint x="972" y="310"/><omgdi:waypoint x="980" y="338"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="778" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="833" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

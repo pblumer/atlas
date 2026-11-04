@@ -7,6 +7,9 @@
 #   1. die acht Entscheidungsmodelle unter ihren Handles hochladen (der Quellbaum trägt sie
 #      ebenfalls; der Import findet sie dann unverändert vor);
 #   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
+#   2b. die Architektur anlegen: Capabilities und Wertströme (serverweit) und das
+#      Informationsmodell der Applikation (architektur/einspielen.py), vor dem Veröffentlichen,
+#      damit die Architektur-Skizze des Release sie enthält;
 #   3. die Applikation veröffentlichen;
 #   4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
 #      Dokument importieren und veröffentlichen.
@@ -43,6 +46,9 @@ curl -fsS -X POST "$SERVER/api/v1/applications/source" -H "$AUTH" \
   -H 'Content-Type: application/gzip' --data-binary "@$WORK/source.tar.gz" > "$WORK/source.json"
 APP=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["applicationId"])' "$WORK/source.json")
 echo "   Applikation $APP"
+
+echo "2b. Architektur (Capabilities, Wertströme, Informationsmodell)"
+ATLAS_TOKEN=$TOKEN python3 -I "$HERE/architektur/einspielen.py" "$SERVER" "$APP"
 
 echo "3. Applikation veröffentlichen"
 curl -fsS -X POST "$SERVER/api/v1/applications/$APP/publish" -H "$AUTH" \
