@@ -2425,8 +2425,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
 			resp: jsonBody("User id", tObject())}},
 		{"POST", "/api/v1/users/{id}/password-link", s.handleUserPasswordLink, apiOp{
-			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
-			req:  jsonBody("Send or hand over", schemaObj(map[string]any{"send": tBool()})),
+			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. revoke=true first makes the current password stop working — for a password somebody else knows — ending the account's sessions and grants; refused for the caller's own account and the last administrator who can sign in. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
+			req:  jsonBody("Send or hand over, and whether to revoke the current password", schemaObj(map[string]any{"send": tBool(), "revoke": tBool()})),
 			resp: jsonBody("Sent, or the link and when it expires", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},

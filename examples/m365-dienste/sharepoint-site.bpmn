@@ -281,7 +281,7 @@ Personendaten: besitzer, stellvertretung, die Adressen der Aktionen (email, anze
       <bpmndi:BPMNShape id="b_kont_admin_di" bpmnElement="b_kont_admin"><omgdc:Bounds x="3887" y="152" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="3800" y="192" width="84" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="b_kont_quota_di" bpmnElement="b_kont_quota"><omgdc:Bounds x="3937" y="152" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="3976" y="192" width="84" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="ut_kontingent_di" bpmnElement="ut_kontingent"><omgdc:Bounds x="3880" y="250" width="100" height="80"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="4062" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="4030" y="81" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_bereit_di" bpmnElement="e_bereit"><omgdc:Bounds x="4062" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="4030" y="80" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="s_rueck_di" bpmnElement="s_rueck"><omgdc:Bounds x="162" y="672" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="712" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="sc_alias2_di" bpmnElement="sc_alias2"><omgdc:Bounds x="280" y="650" width="100" height="80"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="st_suchen2_di" bpmnElement="st_suchen2"><omgdc:Bounds x="430" y="650" width="100" height="80"/></bpmndi:BPMNShape>

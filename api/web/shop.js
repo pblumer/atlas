@@ -38,7 +38,6 @@ const STRINGS = {
     'page.options': "Optional verfügbar",
     'page.approval': "Genehmigung",
     'page.more': "Zusatzinformationen",
-    'page.basket': "Zum Warenkorb",
     'page.form': "Optionen wählen Sie im Warenkorb dazu; dort erfassen Sie auch die Angaben zur Bestellung.",
     'page.favourite': "Favorit",
     'portal.title': 'Shop',
@@ -293,7 +292,6 @@ const STRINGS = {
     'page.options': "Optionally available",
     'page.approval': "Approval",
     'page.more': "Additional information",
-    'page.basket': "Go to the basket",
     'page.form': "You add options in the basket, where you also fill in the order details.",
     'page.favourite': "Favourite",
     'portal.title': 'Shop',
@@ -546,7 +544,6 @@ const STRINGS = {
     'page.options': "Disponible en option",
     'page.approval': "Approbation",
     'page.more': "Informations complémentaires",
-    'page.basket': "Aller au panier",
     'page.form': "Vous ajoutez les options dans le panier, où vous saisissez aussi les détails de la commande.",
     'page.favourite': "Favori",
     'portal.title': 'Shop',
@@ -798,7 +795,6 @@ const STRINGS = {
     'page.options': "Disponibile come opzione",
     'page.approval': "Approvazione",
     'page.more': "Informazioni aggiuntive",
-    'page.basket': "Vai al carrello",
     'page.form': "Le opzioni si aggiungono nel carrello, dove si inseriscono anche i dettagli dell’ordine.",
     'page.favourite': "Preferito",
     'portal.title': 'Shop',
@@ -3318,11 +3314,13 @@ function renderTiles() {
 }
 
 // renderProductPage is one Marktleistung on a page of its own: what it is, what
-// comes with it and what can be added, who approves it, and the button that puts
-// it in the basket. The order details are asked in the basket, as in the cascade.
+// comes with it and what can be added, and who approves it: the description open
+// in the wide column, the rest folded beside it. Putting it in the
+// basket is the row along the bottom (renderActions), the same row every screen of
+// the shop ends in, so the page carries no second button for it. The order
+// details are asked in the basket, as in the cascade.
 function renderProductPage(rel, item) {
   const back = () => { state.productPage = ''; render(); };
-  const inIt = inBasketNow(rel, item.id);
   const included = offeringParts(rel, item, 'includes');
   const optional = offeringParts(rel, item, 'options');
   const approval = item.approval && item.approval.kind && item.approval.kind !== 'none'
@@ -3340,10 +3338,14 @@ function renderProductPage(rel, item) {
       productIcon(item),
       el('h2', {}, textOf(item.texts, item.id))),
     el('div', { class: 'page-columns' },
+      // The product's own description is what the page is for, so it takes the
+      // wide column and is open. The facts around it — who it is for, what comes
+      // with it, who approves, price — fold in the narrow column beside it, where
+      // they take the room of their headings until a reader opens one.
       el('div', { class: 'page-main' },
-        // Who it is for, then what comes with it (open, because that is what a
-        // reader compares), then the product's own specification (closed: it is
-        // long and only some readers need it).
+        descriptionView(item) ? el('h3', { class: 'page-heading' }, t('page.details')) : null,
+        descriptionView(item)),
+      el('div', { class: 'page-side' },
         section(t('page.summary'), false, el('p', {}, whoLabel())),
         included.length || optional.length
           ? section(t('page.scope'), true,
@@ -3356,29 +3358,12 @@ function renderProductPage(rel, item) {
             optional.length ? el('ul', {}, optional.map((o) => el('li', {}, textOf(o.texts, o.id)))) : null,
             el('p', { class: 'muted' }, t('page.form')))
           : null,
-        section(t('page.details'), false, descriptionView(item)),
         section(t('page.approval'), false, el('p', {}, approval)),
         section(t('page.more'), false,
           el('p', { class: 'muted' }, `${t('info.price')}: ${item.price ? item.price : t('price.none')}`),
           el('p', { class: 'muted' },
             `${t('info.repeatable')}: ${item.multipleAllowed ? t('info.yes') : t('info.no')}`),
-          windowNote(item) ? el('p', { class: 'muted' }, windowNote(item)) : null)),
-      el('div', { class: 'page-side' },
-        state.canOrder && orderableNow(item)
-          ? el('button', {
-            class: inIt ? 'secondary page-cta' : 'page-cta',
-            onclick: () => {
-              if (state.basket.has(item.id)) state.basket.delete(item.id); else state.basket.add(item.id);
-              render();
-            },
-          }, inIt ? t('act.remove') : t('act.add'))
-          : null,
-        state.basket.size
-          ? el('button', {
-            class: 'secondary page-cta',
-            onclick: () => { state.productPage = ''; state.inBasket = true; render(); },
-          }, `${t('page.basket')} (${state.basket.size})`)
-          : null)));
+          windowNote(item) ? el('p', { class: 'muted' }, windowNote(item)) : null))));
 }
 
 // stepper is the cascade's way back on a narrow screen (ADR-0417), where one
@@ -5200,11 +5185,18 @@ function renderActions() {
     return el('div', { class: 'actions' },
       el('a', { class: 'backlink', href: '/index.html' }, t('act.back')));
   }
+  // On a product page of the tile layout the row is the page's own buttons: the
+  // way back leads to the tiles, and the way to the basket puts the product in
+  // first, so one button says "this one, and on to the order".
+  const pageItem = !state.inBasket && state.productPage && state.release && tileLayout()
+    ? itemsById(state.release)[state.productPage] : null;
+  const adds = !!(pageItem && orderableNow(pageItem) && !state.basket.has(pageItem.id));
   return el('div', { class: 'actions' },
     el('button', {
       class: 'secondary',
       onclick: () => {
         if (state.inBasket) { state.inBasket = false; render(); return; }
+        if (pageItem) { state.productPage = ''; render(); return; }
         window.location.href = '/index.html';
       },
     }, t('act.back')),
@@ -5232,8 +5224,12 @@ function renderActions() {
           }, state.busy ? t('portal.ordering') : t('act.place')))
         : el('button', {
           class: 'primary',
-          disabled: !count,
-          onclick: () => { state.inBasket = true; state.info = ''; render(); },
+          disabled: !count && !adds,
+          onclick: () => {
+            if (adds) state.basket.add(pageItem.id);
+            state.productPage = '';
+            state.inBasket = true; state.info = ''; render();
+          },
         }, `${t('act.toBasket')}${count ? ` (${count})` : ''}`))
       : el('span', { class: 'muted', title: t('noid.hint') }, t('noid.title')));
 }
