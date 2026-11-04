@@ -298,7 +298,7 @@ können im selben Augenblick «frei» lesen. Verbindlich prüft die Bereitstellu
    'smtp:<alias>@*')"` beim Worker `ucc_exchange`. Ein Treffer irgendwo lehnt die Position mit
    «Die URL ist bereits vergeben» ab.
 4. `create-group` (Unified, `mailEnabled` true, `securityEnabled` false, Sichtbarkeit aus dem
-   Formular, Beschreibung mit Zweck und Katalog-Position, `preferredLanguage` aus der Sprache),
+   Formular, Beschreibung mit Zweck und Katalog-Position; ohne `preferredLanguage`, siehe unten),
    dann `add-group-owner` für beide Personen.
 5. Warten auf die Site: höchstens zehnmal im Abstand von zwei Minuten `get-site`. Erscheint sie
    nicht, erhält `M365-SharePoint` die Aufgabe «Site-Erstellung prüfen».
@@ -1122,10 +1122,12 @@ Governance-Prüfung, die Gruppen mit einem Anzeigenamen «EC-…» nicht mehr me
   und lehnt ab, wenn die URL inzwischen vergeben ist.
 - **Der Filter auf gelöschte Gruppen** (`mailNickname eq '…'` auf
   `/directory/deletedItems/microsoft.graph.group`) ist an keinem Tenant geprüft.
-- **Sprache der Site.** `preferredLanguage` der Gruppe kommt aus dem Formular (`de-CH`,
-  `en-US`, `fr-CH`, `it-CH`); ob SharePoint daraus die Sprache der Site ableitet, ist nicht
-  geprüft. Die Sprache einer Site lässt sich nach ihrer Erstellung nicht mehr ändern; wer sie
-  verbindlich braucht, prüft das vor dem Einsatz an einem Test-Tenant.
+- **Sprache der Site.** Microsoft Graph nimmt `preferredLanguage` beim Anlegen einer Gruppe
+  nicht an (HTTP 400 «Property preferredLanguage should not be set», am Tenant gesehen). Die
+  Gruppe entsteht deshalb ohne Sprache, und die Site erhält die Standardsprache des Tenants.
+  Die bestellte Sprache (`de-CH`, `en-US`, `fr-CH`, `it-CH`) steht nur im Inventar. Die
+  Sprache einer Site lässt sich nach ihrer Erstellung nicht mehr ändern; wer sie verbindlich
+  braucht, legt die Site anders an (etwa über die SharePoint-Schnittstelle mit `lcid`).
 - **Sites in der Governance-Prüfung.** Der Alias einer Site ist ihre frei gewählte URL und
   folgt keinem Präfix. Die Gruppe einer Site, die dieser Katalog angelegt hat, trägt deshalb in
   ihrer Beschreibung «| SharePoint-Site | Katalog-Position …», und die Governance-Prüfung zählt
