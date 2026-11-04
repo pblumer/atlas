@@ -101,6 +101,26 @@ when a process actually uses those operations, and drop them otherwise.
   of the three — the worker refuses a tenant that has more. With a certificate no shared
   secret travels to Entra: the worker signs a short-lived assertion and only that is sent.
 
+## The SharePoint worker's one step outside Graph: `set-site-quota`
+
+The `sharepoint` Worker Type ([ADR-0141](adr/0141-sharepoint-connector.md)) works through
+Microsoft Graph with `Sites.ReadWrite.All` or `Sites.Selected`, except for
+`set-site-quota`: Graph cannot set a site's storage quota, so that operation goes to
+SharePoint's tenant administration (`https://<tenant>-admin.sharepoint.com`, the client
+object model's `ProcessQuery`, the interface `Set-SPOSite -StorageQuota` uses). It needs:
+
+| What | Why |
+|---|---|
+| The **SharePoint** application permission **`Sites.FullControl.All`** (API *SharePoint*, not *Microsoft Graph*), with admin consent | Tenant administration answers an app only with full control over the tenant's sites. There is no narrower grant for it. |
+| A **certificate** credential (`certificate` or `certificateThumbprint` in the bundle) | SharePoint's own APIs refuse an app-only token obtained with a client secret. A bundle with a secret never reaches the admin host: the worker answers `SHAREPOINT_ADMIN_NOT_PERMITTED` at once. |
+| Optionally `adminUrl` in the bundle | The admin host is derived from the site (`contoso.sharepoint.com` → `contoso-admin.sharepoint.com`); a tenant under a custom domain names it. |
+
+`Sites.FullControl.All` reaches every site of the tenant, which is far more than the rest
+of the Worker needs. Grant it only where quotas are to be set automatically, on a
+dedicated app registration if the other SharePoint steps should keep the narrower grant
+(two Workers, one per app). Without it a process catches `SHAREPOINT_ADMIN_NOT_PERMITTED`
+and hands the quota to a person, as `examples/m365-dienste` does.
+
 ## See also
 
 - [ADR-0172 — Entra ID connector](adr/0172-entra-id-connector.md) — why the Worker Type

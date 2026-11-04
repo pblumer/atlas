@@ -1,0 +1,22 @@
+{
+  "type": "default",
+  "id": "ad-konto-mutieren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Konto mutieren · Change the account**\n\nDer neue Verwendungszweck ersetzt die Beschreibung des Kontos im Verzeichnis. · The new purpose replaces the account's description in the directory."
+    },
+    {
+      "key": "neuerZweck",
+      "type": "textarea",
+      "label": "Neuer Verwendungszweck · New purpose",
+      "validate": {
+        "required": true,
+        "maxLength": 300
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

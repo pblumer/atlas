@@ -181,8 +181,9 @@ export function workerShape(kind, provider) {
     // is its editors' decision, not the form author's.
     // A SharePoint or Exchange Worker can let an order form ask whether a site name or an
     // alias is still free (ADR-0519), under the same switch for
-    // the same reason.
-    formLookups: entra || sharepoint || kind === "exchange",
+    // the same reason. An Active Directory Worker can let a directory field search its
+    // accounts and groups the same way (ADR-0473, amended 2026-11-04).
+    formLookups: entra || sharepoint || kind === "exchange" || ad,
     // An SMTP mail Worker can name an IMAP endpoint, which is what lets it read the
     // mailbox it sends from (ADR-0438). Gmail and Graph read through the
     // API they send with; preview has no mailbox at all.

@@ -1,6 +1,6 @@
 # ADR-0141: A SharePoint connector (create list item, via Microsoft Graph)
 
-- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget. Amended 2026-10-23: a certificate may also be named by its thumbprint in the Windows certificate store, `certificateThumbprint`, the Entra worker's third credential read the same way; the store is asked on the first token request rather than while the engine builds the client on its run loop, and tried at startup by the worker. Amended 2026-11-03: `get-site`, the one site-level operation and a read — the site and its default library's storage quota, `exists=false` for an address where there is no site — and a value lookup on `sites` that answers an order form's question whether a site name is free, ADR-0519.)
+- **Status:** Accepted (amended 2026-10-22: ten operations beside create-item — `get-item`, `update-item`, `delete-item` and `list-items` on a list, and `upload-file`, `download-file`, `get-file`, `list-folder`, `create-folder` and `delete-file` in a document library — carried by a second reserved job type, `io.atlas.sharepoint`, so a worker built before them is never handed one; a site addressed by its URL or by host and path as well as by its Graph id; column values that keep the JSON shape of their FEEL value; a certificate in place of the client secret; and every answer read under the process variable's budget. Amended 2026-10-23: a certificate may also be named by its thumbprint in the Windows certificate store, `certificateThumbprint`, the Entra worker's third credential read the same way; the store is asked on the first token request rather than while the engine builds the client on its run loop, and tried at startup by the worker. Amended 2026-11-03: `get-site`, the one site-level operation and a read — the site and its default library's storage quota, `exists=false` for an address where there is no site — and a value lookup on `sites` that answers an order form's question whether a site name is free, ADR-0519. Amended 2026-11-04: `set-site-quota`, the one operation outside Graph — a site's storage quota through SharePoint's tenant administration (client object model `ProcessQuery` on the admin host, a certificate credential and `Sites.FullControl.All`), with the refusal codes `SHAREPOINT_ADMIN_NOT_PERMITTED` and `SHAREPOINT_QUOTA_REFUSED`.)
 - **Implementation:** Landed
 - **Date:** 2026-08-10
 - **Deciders:** Atlas engine team
@@ -323,3 +323,60 @@ Graph API at all (a site's storage quota, which only the SharePoint admin centre
 PowerShell set). Whether the drive's quota is the site's quota as the admin centre shows
 it is Microsoft's documentation of the drive resource and has not been checked against a
 tenant.
+
+## Amendment 2026-11-04: setting a site's storage quota
+
+A site offered as a product is ordered by its storage quota (1 to 25 GB in
+`examples/m365-dienste`), and the 2026-11-03 amendment left setting it to a person,
+because Microsoft Graph has no API for it. That made every order end in a task whose
+whole content is "type this number into the admin centre". This amendment adds the one
+operation that leaves Graph.
+
+- **`set-site-quota`** takes `site`, `quotaGB` (required; more than 0, at most 25600, the
+  most SharePoint Online gives one site) and `warningPercent` (optional; 1 to 100, default
+  90), all literal or FEEL. It answers the site's URL, the quota as authored, and
+  SharePoint's own values in megabytes (`storageMaximumLevelMB`,
+  `storageWarningLevelMB`), with `complete` from the update operation SharePoint reports.
+  Setting a value twice sets the same value, so the at-least-once delivery above holds.
+- **The interface is the client object model's `ProcessQuery`** on the tenant's admin
+  host: construct `Tenant`, `GetSitePropertiesByUrl(url, false)`, set
+  `StorageMaximumLevel` and `StorageWarningLevel`, call `Update`. This is the request
+  `Set-SPOSite -StorageQuota` and `Set-PnPTenantSite -StorageQuota` send. A REST route
+  under `/_api/SPO.Tenant` exists for parts of tenant administration, but Microsoft
+  documents none that sets a site's properties; the object model is the documented and
+  long-stable contract, so the Worker writes that request out rather than depend on an
+  undocumented route. A Graph site id is resolved to its `webUrl` through Graph first,
+  because tenant administration addresses a site by its URL.
+- **Credential.** The same app and credential as for Graph, with a token for
+  `https://<tenant>-admin.sharepoint.com/.default` instead. SharePoint's own APIs refuse
+  an app-only token obtained with a client secret, so only a certificate bundle
+  (`certificate` or `certificateThumbprint`) reaches the admin host; any other bundle is
+  refused before a request is sent, with what to change. The admin host is derived from
+  the site (`contoso.sharepoint.com` → `contoso-admin.sharepoint.com`, also in the
+  national clouds); a tenant under a custom domain names it with `adminUrl` in the
+  bundle. The bundle is the place because the Worker record's endpoint is Graph's, and
+  the admin host is not a secret but is tenant configuration like `tenantId`. The app
+  needs the **SharePoint** application permission `Sites.FullControl.All` with admin
+  consent; there is no narrower grant for tenant administration
+  (`docs/entra-permissions.md`).
+- **Two refusal codes**, thrown as BPMN errors when the task's process catches them and
+  ordinary failures otherwise (ADR-0461's rule, as Teams Phone and Entra do):
+  `SHAREPOINT_ADMIN_NOT_PERMITTED` for a credential without a certificate, a 401 or 403
+  from the admin host, or the object model's `UnauthorizedAccessException`; and
+  `SHAREPOINT_QUOTA_REFUSED` for any other error the object model reports — typically a
+  tenant that manages site storage automatically, where a site has no quota of its own.
+  Neither changes on a retry; both mean "a person sets it", and a process draws that path
+  as an error boundary to the task it had before. A site tenant administration does not
+  know yet (`…NotFound…`, `…NoSite…`), a 429, a 5xx and a transport fault stay failures
+  with their retries, because each can change.
+- **Mockup.** The mockup records the quota for the site's address and `get-site` reports
+  it as the site's total once the site exists there. It refuses a Graph site id, which it
+  cannot resolve to a URL.
+
+Nothing of this has run against a tenant. The request shape is the one the cmdlets send
+as documented and observed by others; whether a tenant's object model answers a refused
+quota with exactly the error types named above is not checked, which is why every error
+that is not about access and not about an unknown site is read as a refusal of the quota
+— the safe reading, because it leads to a person rather than to three retries and an
+incident. Other site settings (sharing, lock state, owners) stay out: owners are Entra's,
+and the rest is a decision about access, as above.
