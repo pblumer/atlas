@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/archsketch"
+	"github.com/pblumer/atlas/api/capability"
 	"github.com/pblumer/atlas/api/catalog"
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/order"
@@ -152,6 +153,14 @@ func (s *Server) strategyPart(appID string, shipped map[string]bool, deps []arch
 	if err != nil {
 		return nil
 	}
+	// The realizations the application's bundle brought count as the records' own
+	// (ADR-draft-application-bundle-architecture): they are how an installed bundle's
+	// processes reach the strategy layer.
+	overlay, err := s.bundledRealizations.Overlay()
+	if err != nil {
+		return nil
+	}
+	caps = capability.WithBundled(caps, overlay)
 	streams, err := s.valueStreamRecords.LoadAll()
 	if err != nil {
 		return nil

@@ -1,7 +1,7 @@
 # ADR-DRAFT: What an application bundle carries of the architecture, and where the capability map lives
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Landed
 - **Date:** 2026-11-04
 - **Deciders:** Atlas maintainers
 - **Open question:** Whether several Atlas servers of one organisation must share one
@@ -94,7 +94,8 @@ a form), because it already belongs to the application.
 
 ## Decision outcome
 
-Proposed: **B**, built so that **C** can follow without changing the bundle format.
+Chosen option: **B**, built so that **C** can follow without changing the bundle format.
+C stays an outlook: it is decided once the open question above has an answer.
 
 - B keeps the register what ADR-0305 made it — one flat, portable map of the organisation —
   so catalogue headings (ADR-0524), Panorama (ADR-0308), coverage and gaps keep one meaning.
@@ -109,33 +110,58 @@ Proposed: **B**, built so that **C** can follow without changing the bundle form
   C adds a package kind for the map and a reference ("written against map X version Y"),
   and can be decided when the open question above has an answer.
 
-### What B means concretely
+### What B means concretely (as built)
 
-- **Bundle format 4** adds to `atlas.json`:
-  - `informationModel`: path of the application's information model (the import format of
-    `POST /api/v1/infomodel/import`).
-  - `architecture`: path of a file with `realizations` (process id or product id →
-    capability key, optionally value-stream stage) and `proposals` (capabilities and value
-    streams in the shape of ADR-0305, used only for keys the server does not know).
-- **Import plan** gains refs `infomodel:<application key>`, `realization:<process>→<key>`
-  and `capability:<key>` / `valuestream:<key>` for proposals. A proposal for an unknown key
-  is `Undecided` until the caller adopts it (filed in the map with the bundle's content) or
-  maps it onto an existing key; a proposal for a known key is shown as a difference and
-  never overwrites the map's record. Non-architects (no right to write capabilities) get
-  the realizations and the information model; proposals stay open as gaps in
-  `atlas_business_architecture_gaps`.
-- **Realizations move to where they belong.** Today they live inside the capability record
-  (`realizations[]`). A realization brought by a bundle is owned by the application: it is
-  written, replaced and removed with the application. The capability record keeps the
-  realizations written by hand; the read side unions both. (The storage form — a field
-  with an owner on the capability record, or a separate sidecar keyed by application — is
-  an implementation choice; the separate sidecar is preferred because deleting an
-  application then touches no capability record.)
-- **Export** writes the application's information model, its realizations and, as
-  proposals, the capabilities and value streams its realizations name, so a tree installs
-  on an empty server with a complete sketch after an architect adopts the proposals.
+- **Source-tree format 4** (`api/appsourcearch.go`). `atlas.json` gains
+  `informationModels: [{name, path}]` and `architecture: path`. A model file is the JSON
+  `POST /api/v1/infomodel/import` reads; the architecture file is
+  `{realizations, capabilities, valueStreams}` (plus a `_comment` for readers). A format-3
+  manifest that names either is refused, so an older reader never ignores them silently.
+  The hub's package builder and `atlas import` carry the files the manifest names.
+- **Realizations** are `{capability, kind, processId | workerRef}`, kind `process` (a
+  process of the tree — a bundle speaks for its own processes only) or `worker`. A
+  *product* is not realized here: ADR-0524 already files every Marktleistung under capability
+  keys (category, product group), so a bundle need not say it twice. System and manual
+  realizations describe work outside Atlas and stay on the capability record.
+- **Realizations are the application's.** They live in their own sidecar, one record per
+  application, keyed by the application's id (`capability.RealizationStore`, directory
+  `capability-realizations`). An import writes and replaces the record as the tree states
+  it; deleting an application — plain delete or purge — removes it; nobody edits it
+  through the capability routes. Every read of the map (list, read, coverage, gaps,
+  measurement, the release sketch) unions the record's own realizations with the bundled
+  ones (`capability.WithBundled`), each bundled one marked `bundledBy: <application key>`.
+  Writing a capability drops every realization marked `bundledBy`, so reading a record and
+  sending it back cannot copy an application's realizations into the map. Existing
+  records are read unchanged: no migration.
+- **Capabilities and value streams in the tree are proposals.** A key the map has is
+  **linked**: the import files the tree's realizations under it and never writes over the
+  map's record (status `linked`, `compared` says whether the proposal reads like the
+  record). A key the map lacks is a **gap** (status `gap`, `proposed` says whether the tree
+  offers a record). A gap stops the import, like a change nobody decided, until the caller
+  settles it:
+  - `?adopt=capability:K` files the tree's proposal in the map (only when there is one);
+  - `?map=capability:K=EXISTING` files what the tree names under `K` under a key the map has
+    (or one this import adopts);
+  - `?omit=capability:K` (or `?omit=*`) leaves it out, and the realizations naming it with it.
+
+  A value stream is adopted or omitted, never mapped. An adopted value stream whose stage
+  names a capability the import leaves out is refused; an adopted capability's `requires`
+  follow the mappings. The application's realizations are planned as `owned`: replaced as
+  the tree states them, nothing to decide. Information models are planned and decided like
+  any artifact (`infomodel:<name>`, three-way with the base of the last import; a document
+  that says exactly what the stored model says is unchanged).
+- **Every import path decides the same way**: the HTTP source import and the hub import
+  (`?adopt=`, `?map=`, `?omit=`), the Console's import dialog (a section "Not in the
+  capability map" with adopt / map onto a key / leave out per gap), `atlas import`
+  (`--adopt`, `--map`, `--omit`, and a question per gap at a terminal) and the MCP tool
+  `atlas_hub_import_release` (`adopt`, `map`, `omit`). The import needs the modeler role,
+  the role that writes capabilities, so adopting needs no further check.
+- **Export** writes the application's information models, its realizations and, as
+  proposals, the capabilities they name and the value streams with a stage one of those
+  serves. The tree installs on an empty server once its gaps are decided, and against its
+  own server it is unchanged.
 - **The sketch** (ADR-0471/0495) is unchanged in what it draws; it now finds the data layer
-  and the strategy layer for any installed bundle.
+  and the strategy layer of any installed bundle.
 - **Reads in the sketch** (gap 3) are not this record's: drawing reads needs a data input
   association that does not write a variable (ADR-0059). It is named here so it is not
   lost.
@@ -149,10 +175,10 @@ Proposed: **B**, built so that **C** can follow without changing the bundle form
   capabilities lands with open gaps instead of a complete strategy layer until an architect
   decides the proposals; the import plan grows a new kind of decision (adopt or map a
   proposal).
-- **Follow-ups / risks to watch:** the storage move of realizations needs a migration that
-  reads existing `realizations[]` unchanged (design-time sidecar, no WAL impact); the
-  Console needs an import dialog section for proposals; the MCP tools need the proposal
-  decisions; C stays open until the open question is answered.
+- **Follow-ups / risks to watch:** C stays open until the open question is answered; when it
+  is, a shared map is one more source of linked keys and the bundle format stays as it is.
+  The read of the map now reads the realization sidecar on every request — design-time size,
+  one file per application, like the capability store itself.
 
 ## Pros and cons of the options
 

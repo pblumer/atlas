@@ -665,6 +665,21 @@ th{color:var(--muted);font-weight:600}
         <td data-l="en">take artifacts another application on the server holds into this one: refs such as
           <code>process:ID</code>, <code>form:ID</code> or <code>decision:ID</code>, comma-separated, no
           <code>all</code>; repeatable. Needs the editor role on the application they leave</td></tr>
+      <tr><td><code>--omit</code></td>
+        <td data-l="de">Eine Capability oder einen Wertstrom, den die Capability-Landkarte des Servers nicht hat,
+          weglassen, samt dem, was das Paket darunter ablegen würde: <code>capability:KEY</code> oder
+          <code>valuestream:KEY</code>, durch Komma getrennt, oder <code>all</code>; mehrfach möglich. Den
+          Vorschlag des Pakets in die Landkarte übernehmen: <code>--adopt capability:KEY</code></td>
+        <td data-l="en">leave out a capability or value stream the server's capability map lacks, with what the
+          package would file under it: <code>capability:KEY</code> or <code>valuestream:KEY</code>,
+          comma-separated, or <code>all</code>; repeatable. To file the package's proposal in the map:
+          <code>--adopt capability:KEY</code></td></tr>
+      <tr><td><code>--map</code></td>
+        <td data-l="de">Was das Paket unter einer Capability ablegt, die der Landkarte fehlt, stattdessen unter
+          einem Key ablegen, den sie hat: <code>capability:KEY=VORHANDEN</code>, durch Komma getrennt; mehrfach
+          möglich</td>
+        <td data-l="en">file what the package files under a capability the map lacks under a key the map has
+          instead: <code>capability:KEY=EXISTING</code>, comma-separated; repeatable</td></tr>
       <tr><td><code>--dry-run</code></td>
         <td data-l="de">nur den Plan zeigen – was neu ist, was gleich bleibt, was sich unterscheidet – und nichts
           schreiben</td>
