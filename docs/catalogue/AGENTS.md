@@ -48,6 +48,7 @@ Die Regeln gelten für Kataloge mit `structured: true`. Ein Verstoss verhindert 
 
 ## 4. Empfehlungen (nicht von Atlas geprüft)
 
+- **Einzeln erhältlich und zugleich Option.** Soll ein Baustein einzeln bestellbar und zugleich Option einer anderen Marktleistung sein, legt man eine eigene Marktleistung an, die den Service enthält, und hängt denselben Service als `aggregation` an die andere Marktleistung. Beispiel: Die Marktleistung `tastatur-extern-ch-de` (Peripherie) enthält den Service `tastatur-extern-ch-de-hw`, der zugleich Option beider Laptops ist.
 - **Ein Einzelprodukt ist eine Marktleistung mit einem Service.** Ein Funktionskonto wird zum Beispiel als Marktleistung `funktionsaccount` mit dem Service `funktionsaccount-konto` angelegt. Das erzeugt zwei Datensätze, hält aber die Trennung durch.
 - **IDs:** Die Marktleistung trägt den fachlichen Namen (`laptop-dell`). Ein Service trägt den Namen der Marktleistung plus seine Rolle (`laptop-dell-hw`, `laptop-dell-os`) oder einen neutralen Namen, wenn er in mehreren Marktleistungen vorkommt (`huelle-laptop-14`). IDs lassen sich nicht umbenennen.
 - **`requires` wirkt nur innerhalb einer Bestellung.** Eine Kante zu einem Produkt, das nicht mitbestellt wird, entfällt für diese Bestellung (`requiresFor`). Ein Zubehör darf deshalb jede Hardware erfordern, zu der es passt: Eine Hülle mit `requires` auf iPhone- *und* Android-Hardware wartet nur auf die Hardware, die in derselben Bestellung steht. Wird das Zubehör später zu einem bereits gehaltenen Gerät bestellt, wartet es auf nichts.
@@ -63,8 +64,8 @@ Stand 2026-11-04, alle Capabilities im Zustand `proposed`:
 |---|---|---|---|
 | Kategorie | `arbeitsalltag-bewaeltigen` | Arbeitsalltag bewältigen | – |
 | Produktgruppe | `digitale-identitaet-bereitstellen` | Identität und Zugang | Benutzerkonto intern, Benutzerkonto extern, Admin-, Funktions-, Service-, Test-, Schulungs- und Rollen-/Ressourcenkonto |
-| Produktgruppe | `endgeraet-bereitstellen` | Endgeräte | Laptop Dell, Laptop Apple (Optionen: Laptophülle 14", Tastatur CH-DE), Notebook Convertible |
-| Produktgruppe | `arbeitsplatz-ausruesten` | Peripherie | Monitor 24", Monitor 32" |
+| Produktgruppe | `endgeraet-bereitstellen` | Endgeräte | Laptop Dell, Laptop Apple (Optionen: Laptophülle 14", Service Tastatur CH-DE), Notebook Convertible |
+| Produktgruppe | `arbeitsplatz-ausruesten` | Peripherie | Monitor 24", Monitor 32", Tastatur CH-DE |
 | Produktgruppe | `mobile-kommunikation-ermoeglichen` | Mobile Kommunikation | iPhone, Android-Smartphone |
 | Produktgruppe | `elektronische-kommunikation-ermoeglichen` | Mail und Telefonie | Mailbox, IP-Telefon |
 | Produktgruppe | `software-bereitstellen` | Software | noch keine (Lücke) |
