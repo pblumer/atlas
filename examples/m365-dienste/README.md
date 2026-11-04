@@ -278,7 +278,8 @@ der Site ist: `https://<SHAREPOINT_HOST>/sites/<alias>`. Microsoft legt die Site
 selbst an; der Prozess legt deshalb die Gruppe an und wartet auf die Site.
 
 **Bestellformular** (`m365-sharepoint-site-bestellung`): Titel, URL, Sprache, anfängliches
-Kontingent (1, 5, 10 oder 25 GB), Zweck, Sichtbarkeit, Besitzer und Stellvertretung (UPN). Das
+Kontingent (1, 5, 10 oder 25 GB), Zweck, Sichtbarkeit, Besitzer und Stellvertretung (beide aus
+Entra ID gesucht, siehe [Personenfelder](#personenfelder)). Das
 Feld URL prüft beim Tippen, ob die URL noch frei ist (ADR-0519): bei
 den Gruppen in Entra ID, bei den gelöschten Gruppen, die ihren Alias 30 Tage lang behalten,
 bei SharePoint selbst unter `https://contoso.sharepoint.com/sites/<url>` und bei den
@@ -339,7 +340,7 @@ Microsoft-365-Gruppe, die Viva Engage zu ihr anlegt; Mitglieder und Admins führ
 dieser Gruppe.
 
 **Bestellformular** (`m365-engage-bestellung`): Bereich, Bezeichnung, Beschreibung, Sichtbarkeit
-(privat oder öffentlich) und Besitzerin oder Besitzer (UPN). Genehmigt wird von deren
+(privat oder öffentlich) und Besitzerin oder Besitzer (aus Entra ID gesucht). Genehmigt wird von deren
 vorgesetzter Person (`proc_m365_genehmigung_vorgesetzter`).
 
 **Bereitstellung** (`m365.community.erstellen`, `engage-community.bpmn`):
@@ -408,6 +409,21 @@ Ablauf:
 Daneben benachrichtigt der Prozess die entscheidende Person oder Gruppe per Mail, erinnert
 die vorgesetzte Person nach drei Tagen und reicht die Genehmigung nach sieben Tagen an den
 nächsthöheren Vorgesetzten weiter (`…/escalate`). Die Aufgabe bleibt dabei offen.
+
+**Personenfelder.** Wo ein Bestellformular eine Person im Tenant nennt, ist das Feld eine
+Auswahl mit Suche in Entra ID (`atlasDataSource`, Worker `ucc_entra`, Ressource `users`,
+ADR-0473): Besitzer und Stellvertretung der SharePoint-Teamwebsite, Besitzer von Team,
+Community, Verteiler und Funktionspostfach, die Person des Postfachzugriffs und der Lizenz
+sowie das Postfach der Aufbewahrung. Das Feld übermittelt die UPN (`option.value`
+`userPrincipalName`); die Prozesse lesen also denselben Wert wie früher aus dem Textfeld, und
+Atlas prüft die Wahl beim Bestellen noch einmal gegen das Verzeichnis. Die Aufbewahrung sucht
+auch gesperrte Konten (`activeOnly: false`), weil sie oft für Personen nach dem Austritt bestellt
+wird. Textfelder bleiben, wo keine Suche möglich oder sinnvoll ist: in den Formularen der
+Aktionen am Bestand (Besitzer ändern, Mitglied oder Person aufnehmen, Stellvertretung,
+Postfachberechtigung), weil eine Aktion weder Aufgabe noch Bestellung ist und ihr Wert nirgends
+geprüft würde (ADR-0473, Amendment 2026-11-02); im öffentlichen Antrag für einen Partnerzugang,
+der ohne Anmeldung läuft; in den Teilen des Eintrittspakets, weil das Konto beim Bestellen erst
+Sekunden alt ist; bei Gästen, externen Adressen und Ressourcenkonten.
 
 **Personendaten.** `upn`, `besitzer`, `stellvertretung`, `person`, `postfach` und `anlass` sind im
 Genehmigungsprozess als Personendaten der empfangenden Person deklariert. Kein Ausdruck, den
