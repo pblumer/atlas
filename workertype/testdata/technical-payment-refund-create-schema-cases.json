@@ -1,0 +1,44 @@
+[
+  {
+    "name": "partial refund",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0002",
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042-R1",
+      "amount": 1000,
+      "currency": "CHF"
+    },
+    "valid": true
+  },
+  {
+    "name": "refund without amount",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0002",
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042-R1",
+      "currency": "CHF"
+    },
+    "valid": false
+  },
+  {
+    "name": "refunded",
+    "direction": "output",
+    "document": {
+      "refundTransactionId": "251104999999999999",
+      "transactionId": "251104123456789012",
+      "refundedAmount": 1000
+    },
+    "valid": true
+  },
+  {
+    "name": "refund without its own transaction",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "refundedAmount": 1000
+    },
+    "valid": false
+  }
+]

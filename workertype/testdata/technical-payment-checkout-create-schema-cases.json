@@ -1,0 +1,166 @@
+[
+  {
+    "name": "checkout with manual capture",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "paymentMethods": [
+        "VIS",
+        "ECA",
+        "TWI"
+      ],
+      "language": "de",
+      "returnUrls": {
+        "success": "https://shop.example.ch/ok",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "checkout with only the required fields",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "returnUrls": {
+        "success": "https://shop.example.ch/ok",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "missing return urls",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "paymentMethods": [
+        "VIS",
+        "ECA",
+        "TWI"
+      ],
+      "language": "de"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown capture mode",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "later",
+      "paymentMethods": [
+        "VIS",
+        "ECA",
+        "TWI"
+      ],
+      "language": "de",
+      "returnUrls": {
+        "success": "https://shop.example.ch/ok",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "return url that is not a uri",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "paymentMethods": [
+        "VIS",
+        "ECA",
+        "TWI"
+      ],
+      "language": "de",
+      "returnUrls": {
+        "success": "not a url",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "empty payment method list",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "paymentMethods": [],
+      "language": "de",
+      "returnUrls": {
+        "success": "https://shop.example.ch/ok",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "customer data is not part of the contract",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF",
+      "captureMode": "manual",
+      "paymentMethods": [
+        "VIS",
+        "ECA",
+        "TWI"
+      ],
+      "language": "de",
+      "returnUrls": {
+        "success": "https://shop.example.ch/ok",
+        "cancel": "https://shop.example.ch/cancel",
+        "error": "https://shop.example.ch/error"
+      },
+      "email": "kunde@example.ch"
+    },
+    "valid": false
+  },
+  {
+    "name": "checkout created",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "paymentPageUrl": "https://pay.example.ch/v1/start/251104123456789012"
+    },
+    "valid": true
+  },
+  {
+    "name": "checkout without page url",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012"
+    },
+    "valid": false
+  }
+]

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "cancel an authorization",
+    "direction": "input",
+    "document": {
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042"
+    },
+    "valid": true
+  },
+  {
+    "name": "cancel without reference",
+    "direction": "input",
+    "document": {
+      "transactionId": "251104123456789012"
+    },
+    "valid": false
+  },
+  {
+    "name": "canceled",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "status": "canceled"
+    },
+    "valid": true
+  },
+  {
+    "name": "cancel reports only the canceled state",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "status": "authorized"
+    },
+    "valid": false
+  }
+]

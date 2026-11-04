@@ -1,0 +1,88 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.payment.transaction.cancel",
+    "version": "1.0.0",
+    "profile": "datatrans",
+    "name": "Release an uncaptured authorization"
+  },
+  "spec": {
+    "resourceKind": "payment-transaction",
+    "identityScope": "merchant-account",
+    "verb": "cancel",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "$ref": "#/$defs/transactionId"
+        },
+        "merchantReference": {
+          "$ref": "#/$defs/merchantReference"
+        }
+      },
+      "required": [
+        "transactionId",
+        "merchantReference"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "merchantReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "$ref": "#/$defs/transactionId"
+        },
+        "status": {
+          "const": "canceled"
+        }
+      },
+      "required": [
+        "transactionId",
+        "status"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "errors": [
+      {
+        "code": "TRANSACTION_ALREADY_CAPTURED",
+        "description": "The authorization has been captured; only a refund can return the money",
+        "retryable": false
+      },
+      {
+        "code": "TRANSACTION_NOT_FOUND",
+        "description": "No transaction with this identifier exists for the merchant account",
+        "retryable": false
+      },
+      {
+        "code": "PROVIDER_UNAVAILABLE",
+        "description": "The provider did not answer or answered with a server error; the same key may be retried",
+        "retryable": true
+      }
+    ],
+    "idempotency": "idempotent",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}
