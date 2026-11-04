@@ -219,3 +219,47 @@ func TestM365GovernanceCountsTeamsOutsideTheNamingRule(t *testing.T) {
 		}
 	}
 }
+
+// TestM365SiteActionsFindTheSiteUnderItsPrefixedAlias evaluates the alias every change
+// action of the SharePoint team site builds from the ordered URL. Provisioning takes the
+// alias from the naming rule, which puts NAME_PREFIX in front; an action that searched
+// for the bare URL found neither the group nor the inventory entry on a shared tenant, so
+// a deletion deleted nothing and stopped on an incident.
+func TestM365SiteActionsFindTheSiteUnderItsPrefixedAlias(t *testing.T) {
+	src, err := os.ReadFile("m365-dienste/sharepoint-site.bpmn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`<scriptTask id="(sc_alias[2-7])"[^>]*>.*?<zeebe:script expression='=([^']*)' resultVariable="alias"/>`).FindAllSubmatch(src, -1)
+	if len(m) != 6 {
+		t.Fatalf("found %d alias scripts of change actions, want 6", len(m))
+	}
+	cases := []struct {
+		prefix expr.Value
+		want   string
+	}{
+		{expr.String("atlas-test-ab12-"), "atlas-test-ab12-tratsch-share"},
+		{expr.String(""), "tratsch-share"},
+		{expr.Null, "tratsch-share"},
+	}
+	for _, tc := range cases {
+		prefix, want := tc.prefix, tc.want
+		vars := map[string]expr.Value{
+			"url":         expr.String("Tratsch-Share"),
+			"application": expr.ContextOf(map[string]expr.Value{"NAME_PREFIX": prefix}),
+		}
+		for _, x := range m {
+			c, err := expr.CompileAuto(html.UnescapeString(string(x[2])))
+			if err != nil {
+				t.Fatalf("%s: %v", x[1], err)
+			}
+			v, err := c.Eval(vars)
+			if err != nil {
+				t.Fatalf("%s: %v", x[1], err)
+			}
+			if got, _ := expr.ToJSON(v); got != strconv.Quote(want) {
+				t.Errorf("%s with NAME_PREFIX %v: alias = %s, want %q", x[1], prefix, got, want)
+			}
+		}
+	}
+}
