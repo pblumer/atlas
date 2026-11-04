@@ -34,8 +34,10 @@ Bestellformular der SharePoint-Teamwebsite (Block `atlasAvailability`).
 | Microsoft 365: HR-Eintritte (`cat-m365-hr`) | 520 | keine | Eintrittspaket, Lizenz mit Postfach (Eintritt), Mitgliedschaften der Organisationseinheit |
 | Microsoft 365: Identität (hybrid) (`cat-m365-identitaet`) | 530 | `{{zielgruppe-identitaet}}` | Konto (hybrid) anlegen, Konto in die Cloud übernehmen (siehe «Hybride Identität (Entra Connect)») |
 
-Eine Person sieht im Shop genau einen Katalog: den mit dem höchsten Rang unter denen, die
-ihre Gruppen erreichen. Der UCC-Katalog bietet deshalb auch die allgemeinen Produkte an.
+Eine Person sieht im Shop jeden Katalog, den ihre Gruppen erreichen (ADR-0522); Kategorien
+gleichen Namens werden zusammengelegt. Führen zwei Kataloge dasselbe Produkt, stellt es der
+mit dem höheren Rang. Der UCC-Katalog führt die allgemeinen Produkte trotzdem auch selbst,
+damit er für sich allein vollständig bleibt.
 Die Ränge müssen auf der Zielinstanz frei sein; sonst sind sie in `katalog.json` anzupassen.
 
 Der Katalog `cat-m365-hr` hat keine Zielgruppe und erreicht deshalb niemanden: Im Shop sieht ihn keine
