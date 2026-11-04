@@ -45,8 +45,14 @@
   <rect width="1800" height="1410" fill="#f6f8fb"/>
 
   <g transform="translate(70 52)">
-    <rect width="54" height="54" rx="13" fill="#050505"/>
-    <path fill="#fff" fill-rule="evenodd" d="M27 8 49 44H5ZM27 35l9 9H18Zm-3-20h6v5h5v6h-5v5h-6v-5h-5v-6h5Z"/>
+    <!-- The atlas mark, as drawn in docs/brand/atlas-mark.svg. -->
+    <svg width="54" height="54" viewBox="0 0 256 256" aria-hidden="true">
+      <rect width="256" height="256" rx="56" fill="#000"/>
+      <path fill="#fff" d="M146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9Z"/>
+      <path fill="#fff" d="M40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4Z"/>
+      <path fill="#fff" d="M133 93H162V211H133Z"/>
+      <path fill="#fff" d="M184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>
+    </svg>
     <text x="72" y="29" class="title">Atlas Architektur</text>
     <text x="72" y="53" class="subtitle">Von Benutzer und Agent bis zur dauerhaften Ausführung und externen Arbeit</text>
   </g>
