@@ -436,11 +436,11 @@ func (s *Server) apiRoutes() []apiRoute {
 			}, "file", "config")},
 			resp: jsonBody("Created instance with parsed row count", tObject())}},
 		{"GET", "/api/v1/instances", s.handleListInstances, apiOp{
-			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token). Answers {items, total, totalExact, truncated, nextCursor}: total is exact wherever a maintained counter knows it (one definition's halves, the engine's live total) and a floor otherwise", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tPage())}},
+			summary: "List active and finished instances — capped per call (?limit=, default 1000, max 10000); ?process=<key> narrows to one definition and reads its index (cost is the page, not the store); ?state=active|finished returns one half (all = both, the default); ?before=<cursor> pages it (requires ?process=); ?element=<bpmn element id> narrows to the instances whose token is sitting on that element right now, read from its own index (requires ?process=, and lists live instances only — a finished one holds no token); ?values=preview cuts every variable value longer than 512 bytes to its beginning and marks it {truncated, size, lines | shape, count} (values=full, the default, returns them whole). Answers {items, total, totalExact, truncated, nextCursor}: total is exact wherever a maintained counter knows it (one definition's halves, the engine's live total) and a floor otherwise", tag: "Instances", role: RoleOperator, resp: jsonBody("Instances", tPage())}},
 		{"GET", "/api/v1/instances/summary", s.handleInstancesSummary, apiOp{
 			summary: "Per-definition instance counts (active/completed) — lean count-only scan for the operations overview", tag: "Instances", role: RoleOperator, resp: jsonBody("Instance summary", tArray())}},
 		{"GET", "/api/v1/instances/search", s.handleSearchInstances, apiOp{
-			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact), or a term matched over variable names and values; a term is matched whole, with * for any run of characters and ? for exactly one, and \\* or \\? for those characters literally; ?process=<key> narrows the search to one definition and reads its index instead of every instance — and for a variable that definition declares atlas:searchable, the value index answers it", tag: "Instances", role: RoleOperator,
+			summary: "Find instances by key or variable content — ?q= a bare instance key (point read, live or finished), or name=value (name exact), or a term matched over variable names and values; a term is matched whole, with * for any run of characters and ? for exactly one, and \\* or \\? for those characters literally; ?process=<key> narrows the search to one definition and reads its index instead of every instance — and for a variable that definition declares atlas:searchable, the value index answers it; ?values=preview cuts long variable values as the instance list does (an archived row stays whole)", tag: "Instances", role: RoleOperator,
 			resp: jsonBody("Matching instances", tPage())}},
 		// Every signed-in identity, not the operator role the rest of this group carries:
 		// a task form is prefilled from the variables of the instance the task belongs to,
@@ -1522,7 +1522,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Ask the source for its technical account's standing: whether it is reachable with its credential, the token's scope, the spaces it holds viewer in, and every problem — a scope other than read, any system role, any space role other than viewer. Answers 200 either way. Admin-only", tag: "Catalogue", role: RoleAdmin,
 			resp: jsonBody("Reachability and standing", tObject())}},
 		{"POST", "/api/v1/catalog-products", s.catalogs.HandleSaveItem, apiOp{
-			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. `orderableBy` lists the applications whose processes may order the product for somebody with a shop order task (ADR-0520), read the same way. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `kind` says what it is in a structured catalogue: `offering` for a Marktleistung, the whole a person orders, or `service` for one building block with its own lifecycle, ordered only as part of a Marktleistung; empty outside one (ADR-0524). `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
+			summary: "Create or replace a product: its texts, lifecycle window, variants, approval rule, the processes that provision and deprovision it — or `lifecycleProcess` with its `actions` (ADR-0429), each {key, message, effect, triggers, labels, form, outcomes}, in place of the two and of the legacy `operations` map — the groups eligible to receive it, and the `keywords` somebody might search for that are not its name — synonyms, the vendor's term, the abbreviation everybody uses. `commandedBy` lists the keys of the applications whose processes may issue the product's operator and system actions with a shop command task (ADR-0429 §10); it is read from the newest release when a task commands, so taking an application off it stops it for every right already held. `orderableBy` lists the applications whose processes may order the product for somebody with a shop order task (ADR-0520), read the same way. Keywords are one flat list rather than one per language, because a synonym list is for finding and a searcher's language is not the catalogue's. `configForm` names an atlas form the orderer fills in for this product — a cost centre, a site — whose answers travel with the order line. `price` is what it costs, written as the catalogue wants it read and never computed: it is displayed, frozen into the release and copied onto the order line, so an approver's figure stays the figure they decided on. `kind` says what it is in a structured catalogue: `offering` for a Marktleistung, the whole a person orders, or `service` for one building block with its own lifecycle, ordered only as part of a Marktleistung; empty outside one (ADR-0524). `icon` names one of the symbols the shop's tile layout draws (publishing refuses any other name); empty draws a parcel. `category` is the heading the shop groups it under and `productGroup` the group one level below it — headings and nothing else, with no ordering and no entity behind them. Both are **keys**: the shop groups by them and renders `categoryTexts` and `productGroupTexts`, each a heading per language tag, where the catalogue has them. Leave the texts out and the key renders in every language. They are optional as a whole and all-or-nothing once present: publishing refuses a heading translated into one declared language and not another. The write is a full **replace**, so a field left out is a field cleared: read the product first, change what you mean to change, and send the whole record back. Optionally state the `revision` you read — the write is then refused with 409 unless the stored product is still on it, which is what makes a read-modify-write safe against a second maintainer. Omitting it replaces unconditionally", tag: "Catalogue", role: RoleProductManager,
 			req: jsonBody("Product", schemaObj(map[string]any{
 				"id": tString(), "homeCatalog": tString(), "state": tString(),
 				"texts": tObject(), "lifecycle": tObject(), "variants": tArray(),
@@ -1535,14 +1535,14 @@ func (s *Server) apiRoutes() []apiRoute {
 				"maxDays": tInteger(), "revision": tInteger(),
 				"lifecycleProcess": tString(), "lifecycleForm": tString(),
 				"operations": tObject(), "actions": tArray(), "commandedBy": tArray(),
-				"kind": tString(),
+				"kind": tString(), "icon": tString(),
 			}, "id")),
 			resp: jsonBody("The saved product", tObject())}},
 
 		{"PUT", "/api/v1/catalogs/{id}/theme", s.catalogs.HandleSetTheme, apiOp{
-			summary: "Set or clear a catalogue's appearance: the source accent colour and one of the shipped typefaces. Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
+			summary: "Set or clear a catalogue's appearance: the source accent colour, one of the shipped typefaces and the shop layout (`cascade`, the default, or `tiles`: one row of tiles per catalogue with icons, a category menu and search). Administration rather than catalogue maintenance; an empty body restores the instance brand", tag: "Catalogue", role: RoleAdmin,
 			req: jsonBody("Theme", schemaObj(map[string]any{
-				"accent": tString(), "typeface": tString(),
+				"accent": tString(), "typeface": tString(), "layout": tString(),
 			})),
 			resp: jsonBody("The updated catalogue", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/logo", s.catalogs.HandleGetLogo, apiOp{
@@ -2373,6 +2373,15 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/auth/providers", s.handleAuthProviders, apiOp{
 			summary: "List the identity providers this server offers besides the password form — empty unless an operator configured one (ADR-0210)", tag: "Auth", role: roleAny,
 			resp: jsonBody("Configured identity providers", tArray())}},
+		{"GET", "/api/v1/auth/password-recovery", s.handlePasswordRecovery, apiOp{
+			summary: "Whether the login screen offers \"forgot password\": the server can sign a password link (vault), build it (external URL) and mail it (the proc_passwort_link system process) (public; read before login)", tag: "Auth", role: roleAny,
+			resp: jsonBody("Password recovery", schemaObj(map[string]any{"enabled": tBool()}))}},
+		{"POST", "/api/v1/auth/password", s.handleChangeOwnPassword, apiOp{
+			summary: "Change the signed-in person's own password. Asks for the current one, is throttled like a login, and ends every other session of the account", tag: "Auth", role: roleAny,
+			req: jsonBody("Current and new password", schemaObj(map[string]any{
+				"currentPassword": tString(), "newPassword": tString(),
+			}, "currentPassword", "newPassword")),
+			resp: jsonBody("User id", tObject())}},
 		{"GET", "/api/v1/auth/me", s.handleMe, apiOp{
 			summary: "Report auth status and the current user, with the groups the user is a member of", tag: "Auth", role: roleAny,
 			resp: jsonBody("Auth status", schemaObj(map[string]any{
@@ -2389,11 +2398,11 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/principals", s.handleListPrincipals, apiOp{
 			summary: "List principals (users; groups later) for member and assignee pickers — id-referenced, any authenticated caller (ADR-0073)", tag: "Users", role: roleAny, resp: jsonBody("Principals", tArray())}},
 		{"POST", "/api/v1/users", s.handleCreateUser, apiOp{
-			summary: "Create a user account", tag: "Users", role: RoleAdmin, status: http.StatusCreated,
+			summary: "Create a user account. Without a password the account awaits activation: send its owner a password link (POST /api/v1/users/{id}/password-link). The password field is deprecated", tag: "Users", role: RoleAdmin, status: http.StatusCreated,
 			req: jsonBody("New user", schemaObj(map[string]any{
 				"username": tString(), "email": tString(), "displayName": tString(),
 				"password": tString(), "roles": map[string]any{"type": "array", "items": tString()},
-			}, "username", "password")),
+			}, "username")),
 			resp: jsonBody("Created user", tObject())}},
 		{"GET", "/api/v1/users/{id}", s.handleGetUser, apiOp{
 			summary: "Fetch a user account", tag: "Users", role: RoleAdmin, resp: jsonBody("User", tObject())}},
@@ -2406,9 +2415,13 @@ func (s *Server) apiRoutes() []apiRoute {
 			})),
 			resp: jsonBody("Updated user", tObject())}},
 		{"POST", "/api/v1/users/{id}/password", s.handleSetUserPassword, apiOp{
-			summary: "Set a user's password", tag: "Users", role: RoleAdmin,
+			summary: "Set a user's password, ending the account's sessions. Deprecated: a password is set by its owner — send them a link instead (POST /api/v1/users/{id}/password-link)", tag: "Users", role: RoleAdmin, deprecated: true,
 			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
 			resp: jsonBody("User id", tObject())}},
+		{"POST", "/api/v1/users/{id}/password-link", s.handleUserPasswordLink, apiOp{
+			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
+			req:  jsonBody("Send or hand over", schemaObj(map[string]any{"send": tBool()})),
+			resp: jsonBody("Sent, or the link and when it expires", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},
 		{"GET", "/api/v1/users/{id}/avatar", s.handleGetAvatar, apiOp{

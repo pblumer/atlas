@@ -43,8 +43,8 @@ preisliste.geaendert wirft proc_preisliste — eine Instanz davon erreicht jede 
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="kunde" type="string" required="true" default="&quot;Muster GmbH&quot;"/>
-        <atlas:startVariable name="artikel" type="string" required="true" default="&quot;Zaunfeld verzinkt&quot;"/>
+        <atlas:startVariable name="kunde" type="string" required="true" default="Muster GmbH"/>
+        <atlas:startVariable name="artikel" type="string" required="true" default="Zaunfeld verzinkt"/>
         <atlas:startVariable name="menge" type="number" required="true" default="40"/>
         <atlas:startVariable name="einzelpreis" type="number" required="true" default="89.5"/>
       </atlas:startForm>

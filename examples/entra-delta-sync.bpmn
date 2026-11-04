@@ -32,7 +32,7 @@
     <bpmn:documentation>Liest Verzeichnisänderungen aus Entra ID über eine Graph-Delta-Abfrage. Der erste Lauf (letzterDeltaLink leer) zählt einmal vollständig auf und liefert einen Cursor; jeder weitere Lauf reicht diesen Cursor als letzterDeltaLink herein und bekommt nur die Änderungen seither. Der neue Cursor steht danach unter =aenderungen.deltaLink und wird für den nächsten Lauf persistiert. Worker-only (ADR-0172): das Tenant-Credential liegt nie in der Engine.</bpmn:documentation>
     <bpmn:extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="letzterDeltaLink" type="string" default="&#34;&#34;" required="false" />
+        <atlas:startVariable name="letzterDeltaLink" type="string" required="false" />
       </atlas:startForm>
     </bpmn:extensionElements>
 

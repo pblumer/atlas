@@ -319,6 +319,11 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		}
 		defKey = n
 	}
+	preview, err := parseValuesMode(query.Get("values"))
+	if err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	raw := query.Get("q")
 	pred, ok := parseVarQuery(raw)
 	if !ok {
@@ -354,6 +359,9 @@ func (s *Server) handleSearchInstances(w http.ResponseWriter, r *http.Request) {
 		archive := s.searchArchive(r.Context(), defKey, pred)
 		w.Header().Set("X-Archive-State", archive.State)
 		out = append(out, archiveRows(archive.Instances, defs)...)
+	}
+	if preview {
+		previewInstanceRows(out)
 	}
 	// This listing said nothing about its own cap until now, and the console filled the
 	// gap by guessing: it printed "showing first 200" whenever it received exactly 200

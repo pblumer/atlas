@@ -101,7 +101,9 @@ test("Edit stays one click on the row; the rest are in its menu", async ({ page 
   await expect(row.locator("td.row-actions > button[data-act='edit']")).toBeVisible();
   const menu = await openMenu(page, OTHER.id);
   // Each entry opens with its icon, so the label is matched at the end.
-  await expect(menu.locator("button[data-act]")).toHaveText([/Set password…$/, /Disable account$/, /Delete…$/]);
+  // A password is set by its owner: the menu sends them a link or hands it over, and
+  // never asks the administrator for one (ADR-0526).
+  await expect(menu.locator("button[data-act]")).toHaveText([/Send password link…$/, /Copy password link…$/, /Disable account$/, /Delete…$/]);
   await expect(menu.locator("button[data-act='delete']")).toHaveClass(/danger/);
 });
 
@@ -116,11 +118,11 @@ test("the menu's entries do what the row's buttons did", async ({ page }) => {
   expect(writes[0]).toEqual({ method: "PATCH", path: user, body: { disabled: true } });
   await expect(page.locator(".dropdown-menu:not([hidden])")).toHaveCount(0);
 
-  // Password asks for the new one first.
-  page.once("dialog", (d) => d.accept("correct-horse-battery"));
-  await (await openMenu(page, OTHER.id)).locator("button[data-act='password']").click();
+  // Sending the password link asks first, and sends the link — never a password.
+  page.once("dialog", (d) => d.accept());
+  await (await openMenu(page, OTHER.id)).locator("button[data-act='pwsend']").click();
   await expect.poll(() => writes.length).toBe(2);
-  expect(writes[1]).toEqual({ method: "POST", path: `${user}/password`, body: { password: "correct-horse-battery" } });
+  expect(writes[1]).toEqual({ method: "POST", path: `${user}/password-link`, body: { send: true } });
 
   // Delete asks before it deletes, and a refusal deletes nothing.
   page.once("dialog", (d) => d.dismiss());

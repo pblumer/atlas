@@ -2927,6 +2927,9 @@ type xmlMailConnector struct {
 	// AnswerTask names a user task answered by link (ADR-0523):
 	// the mail's subject and bodies are handed that task's link as answerLink.
 	AnswerTask string `xml:"answerTask,attr"`
+	// PasswordFor names the account whose password link the message carries as
+	// passwordLink (ADR-0526): a username, literal or FEEL.
+	PasswordFor string `xml:"passwordFor,attr"`
 }
 
 // xmlUserConnector is the <atlas:userConnector> extension of a user-provisioning

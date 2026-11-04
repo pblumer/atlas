@@ -237,6 +237,7 @@ var wantAdminRoutes = []string{
 	"GET /api/v1/users/{id}",
 	"PATCH /api/v1/users/{id}",
 	"POST /api/v1/users/{id}/password",
+	"POST /api/v1/users/{id}/password-link",
 	"DELETE /api/v1/users/{id}",
 	"GET /api/v1/groups",
 	"POST /api/v1/groups",

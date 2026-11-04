@@ -87,7 +87,7 @@ func (c closed) reason() string {
 // A date and not a timestamp: the window is authored as days — a product opens on
 // the first of the month, not at 09:17:43 — and a nanosecond precision nobody
 // entered would read as precision somebody did.
-func day(ns int64) string { return time.Unix(0, ns).Format("2006-01-02") }
+func day(ns int64) string { return time.Unix(0, ns).UTC().Format("2006-01-02") }
 
 // closedIn reports the first item in this order that is outside its window at the
 // given moment, or nil.

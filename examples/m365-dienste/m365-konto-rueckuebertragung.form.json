@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "m365-konto-rueckuebertragung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Verwaltung an das Active Directory zurückgeben · Hand the account back to Active Directory**\n\nKonto {{upn}}. Microsofts Ablauf, von Hand:\n\n1. Das Konto aus Gruppen entfernen, deren Verwaltung in die Cloud übertragen wurde, und aus Zugriffspaketen.\n2. Die Tenant-Einstellung blockCloudObjectTakeoverThroughHardMatchEnabled ausschalten (PATCH /beta/directory/onPremisesSynchronization/{id}).\n3. PATCH /v1.0/users/{id}/onPremisesSyncBehavior mit isCloudManaged false.\n4. Einen Lauf von Entra Connect abwarten (Start-ADSyncSyncCycle); das AD-Konto muss aktiv im Sync-Bereich liegen.\n5. Die Tenant-Einstellung wieder einschalten.\n\nDie Einstellung gilt für den ganzen Tenant, deshalb schaltet sie kein Shop-Prozess. Diese Aufgabe abschliessen, wenn das Konto wieder vom AD verwaltet wird. · Microsoft's roll-back, by hand: remove cloud references, switch off the tenant flag, set isCloudManaged false, let Entra Connect run, switch the flag on again. Complete this task when AD manages the account again."
+    }
+  ]
+}

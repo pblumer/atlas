@@ -53,10 +53,10 @@ gleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="umzugstermin" type="string" required="true" default="&quot;2026-10-01&quot;"/>
-        <atlas:startVariable name="kuendigungsfrist" type="string" required="false" default="&quot;P3M&quot;"/>
-        <atlas:startVariable name="alteAdresse" type="string" required="true" default="&quot;Bahnhofstrasse 12, 8001 Zürich&quot;"/>
-        <atlas:startVariable name="neueAdresse" type="string" required="true" default="&quot;Seestrasse 4, 8802 Kilchberg&quot;"/>
+        <atlas:startVariable name="umzugstermin" type="string" required="true" default="2026-10-01"/>
+        <atlas:startVariable name="kuendigungsfrist" type="string" required="false" default="P3M"/>
+        <atlas:startVariable name="alteAdresse" type="string" required="true" default="Bahnhofstrasse 12, 8001 Zürich"/>
+        <atlas:startVariable name="neueAdresse" type="string" required="true" default="Seestrasse 4, 8802 Kilchberg"/>
       </atlas:startForm>
     </extensionElements>
 

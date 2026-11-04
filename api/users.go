@@ -301,8 +301,14 @@ func (s *Server) handleListAssignableUsers(w http.ResponseWriter, _ *http.Reques
 
 // handleCreateUser creates a local user. Body:
 // {"username","email","displayName","password","roles":[...]}. Username is
-// required and unique (case-insensitive); email, if given, is unique too; the
-// password must meet the minimum length. Roles default to ["user"].
+// required and unique (case-insensitive); email, if given, is unique too. Roles
+// default to ["user"].
+//
+// The password is optional and deprecated (ADR-0526):
+// without one the account awaits activation, and its owner sets a password through
+// the link POST /api/v1/users/{id}/password-link sends them. It stays accepted for
+// scripts that provision accounts with a password of their own; given, it must meet
+// the same rule as every other.
 func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		Username    string   `json:"username"`
@@ -320,14 +326,18 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, "username is required")
 		return
 	}
-	if len(payload.Password) < minPasswordLen {
-		httpapi.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
-		return
-	}
-	hash, err := hashPassword(payload.Password)
-	if err != nil {
-		httpapi.Error(w, http.StatusInternalServerError, "create user: "+err.Error())
-		return
+	var hash string
+	if payload.Password != "" {
+		if err := validateNewPassword(payload.Password, username); err != nil {
+			httpapi.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h, err := hashPassword(payload.Password)
+		if err != nil {
+			httpapi.Error(w, http.StatusInternalServerError, "create user: "+err.Error())
+			return
+		}
+		hash = h
 	}
 	id, err := newUserID()
 	if err != nil {
@@ -534,6 +544,11 @@ func (s *Server) handlePatchUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetUserPassword replaces a user's password. Body: {"password":"..."}.
+//
+// Deprecated (ADR-0526): it makes the administrator
+// somebody who knows the password. The Console no longer offers it — it sends the
+// owner a link — and it stays for scripts. Like every password change it now ends the
+// account's sessions.
 func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var payload struct {
@@ -542,8 +557,8 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeJSONBody(w, r, &payload) {
 		return
 	}
-	if len(payload.Password) < minPasswordLen {
-		httpapi.Error(w, http.StatusBadRequest, "password must be at least 8 characters")
+	if err := validateNewPassword(payload.Password, ""); err != nil {
+		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	hash, err := hashPassword(payload.Password)
@@ -575,6 +590,8 @@ func (s *Server) handleSetUserPassword(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no user with that id")
 	default:
+		// Whoever was signed in as the account before is not any more.
+		s.sessions.destroyUser(id)
 		// That it happened and to whom. Never the password, and never a hash — a
 		// hash in a log is a credential in a log with an extra step.
 		audit(r, logging.AuthPasswordSet, "password set for user", slog.String("user_id", id))
