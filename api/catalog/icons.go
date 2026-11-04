@@ -4,7 +4,7 @@ import "slices"
 
 // Icons are the names a product's Icon may carry: the set the shop's tile layout
 // draws (api/web/shop-icons.js, from Tabler Icons, MIT). A name outside it would
-// draw nothing, so publishing refuses it (ADR-draft-shop-tile-layout).
+// draw nothing, so publishing refuses it (ADR-0525).
 var Icons = []string{
 	"user-cog",
 	"users-group",

@@ -2565,7 +2565,7 @@ shipped approval and fulfilment models are in `api/systemprocesses/`.
   **accessibility audit against eCH-0059 / WCAG 2.1 AA** (keyboard order in the tile track,
   names for the scroll button and icons, banner contrast, reflow at 200 %), resource tiles
   (FAQ, guides), a shareable product link, and a favourite that persists
-  ([ADR-draft-shop-tile-layout](docs/adr/draft-shop-tile-layout.md)).
+  ([ADR-0525](docs/adr/0525-shop-tile-layout.md)).
 - ✅ **The answers reach the approver and the processes.** The approver reads a position's
   configuration answers on the approval, labelled as the form labels them; the processes the
   product binds receive each answer as a variable of its own, sealed where the model declares

@@ -22,7 +22,7 @@ _Changed_ / _Removed_ for each version.
   `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
   other name. The product editor offers the icon, the appearance card the layout, and the
   OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
-  a later requirement (ADR-draft-shop-tile-layout).
+  a later requirement (ADR-0525).
 
 - **A catalogue can declare Marktleistungen and services.** A catalogue switched to
   `structured` states for every product whether it is a Marktleistung (`kind: offering`),

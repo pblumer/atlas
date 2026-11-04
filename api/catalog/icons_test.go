@@ -2,7 +2,7 @@ package catalog
 
 import "testing"
 
-// The tile layout draws a product's icon by name (ADR-draft-shop-tile-layout).
+// The tile layout draws a product's icon by name (ADR-0525).
 // A name the shop does not draw would show nothing while the catalogue claims a
 // choice was made, so publishing refuses it; an empty name is the default.
 

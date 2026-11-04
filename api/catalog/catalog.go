@@ -150,7 +150,7 @@ type Item struct {
 	// a refusal names the product whose declaration and structure disagree.
 	Kind ItemKind `json:"kind,omitempty"`
 	// Icon names the symbol the shop's tile layout draws for this item, one of
-	// [Icons] (ADR-draft-shop-tile-layout). Empty draws the shop's default. A name,
+	// [Icons] (ADR-0525). Empty draws the shop's default. A name,
 	// not a picture: a tile view shows dozens of items at once, and a named symbol
 	// costs no request and takes the catalogue's colour, where an uploaded picture
 	// per row would cost one request each (ADR-0391's open question).

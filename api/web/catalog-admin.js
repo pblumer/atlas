@@ -40,7 +40,7 @@ import { mountContentPanel, mountCatalogRefresh } from "./catalog-content.js";
 import { t } from "./i18n.js";
 import { deliveryCard, wireDelivery } from "./deliveryreport.js";
 import { foldCards, pageOf } from "./fold.js";
-// The symbols the shop's tile layout draws (ADR-draft-shop-tile-layout); the keys are
+// The symbols the shop's tile layout draws (ADR-0525); the keys are
 // the only names a product may carry as its icon.
 import { PRODUCT_ICONS, drawIcon } from "./shop-icons.js";
 

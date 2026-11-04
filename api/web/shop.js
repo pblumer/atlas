@@ -1378,7 +1378,7 @@ function paintFromCache() {
 }
 
 const state = {
-  // The tile layout (ADR-draft-shop-tile-layout): the catalogue whose row is open
+  // The tile layout (ADR-0525): the catalogue whose row is open
   // in full, and the product whose page is open. Empty is the start page.
   tileSection: '',
   productPage: '',
@@ -3192,7 +3192,7 @@ function renderCatalogue() {
     catalogueBodyNode);
 }
 
-// --- The tile layout (ADR-draft-shop-tile-layout) ---------------------------
+// --- The tile layout (ADR-0525) ---------------------------
 //
 // A second way to lay the same release out, chosen per catalogue by its theme:
 // a start page with a search, the categories as a menu and one row of tiles per

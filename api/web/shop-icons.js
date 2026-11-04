@@ -1,4 +1,4 @@
-// Product icons for the shop's tile layout (ADR-draft-shop-tile-layout).
+// Product icons for the shop's tile layout (ADR-0525).
 //
 // Drawn from Tabler Icons 3.19.0 (outline), MIT licence, Copyright (c) 2020-2024
 // Pawel Kuna; see THIRD_PARTY_NOTICES.md. Each entry is the list of path outlines of

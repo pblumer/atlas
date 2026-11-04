@@ -1,4 +1,4 @@
-# ADR-DRAFT: A catalogue chooses the shop's layout, and a product names its icon
+# ADR-0525: A catalogue chooses the shop's layout, and a product names its icon
 
 - **Status:** Proposed
 - **Implementation:** Partial

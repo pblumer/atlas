@@ -9,7 +9,7 @@ import (
 )
 
 // The server refuses an icon the shop does not draw, and the shop draws only what
-// the server allows (ADR-draft-shop-tile-layout). The two lists are written twice,
+// the server allows (ADR-0525). The two lists are written twice,
 // once in Go and once in the shop's module, so this keeps them the same list.
 func TestTheShopDrawsExactlyTheIconsTheCatalogueAllows(t *testing.T) {
 	src := readWeb(t, "shop-icons.js")

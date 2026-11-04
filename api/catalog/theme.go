@@ -36,7 +36,7 @@ type Theme struct {
 	// operator in public administration cannot accept on a customer-facing
 	// surface.
 	Typeface string `json:"typeface,omitempty"`
-	// Layout is how the shop lays this catalogue out (ADR-draft-shop-tile-layout):
+	// Layout is how the shop lays this catalogue out (ADR-0525):
 	// "cascade" (the columns Kategorie, Produktgruppe, Produkt, Services) or
 	// "tiles" (a start page of tiles, one row of them per catalogue, and a page per
 	// product). Empty is the cascade, as every catalogue was before the field.
