@@ -59,6 +59,12 @@ type credentialBundle struct {
 	Certificate           string `json:"certificate,omitempty"`
 	CertificateThumbprint string `json:"certificateThumbprint,omitempty"`
 	RefreshToken          string `json:"refreshToken,omitempty"`
+	// AdminURL names the tenant's SharePoint administration host
+	// (https://contoso-admin.sharepoint.com) for set-site-quota, when it cannot be
+	// derived from the site — a tenant under a custom domain. It is optional and is not
+	// a credential; it lives in the bundle because the Worker record's endpoint is
+	// Graph's (ADR-0141, amended 2026-11-04).
+	AdminURL string `json:"adminUrl,omitempty"`
 }
 
 // openStoreCertificate finds a certificate in the Windows certificate store by

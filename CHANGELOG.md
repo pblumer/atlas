@@ -14,6 +14,18 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A SharePoint task can set a site's storage quota.** The new operation `set-site-quota`
+  (`quotaGB`, optional `warningPercent`, default 90) goes where Microsoft Graph cannot: to
+  SharePoint's tenant administration on the admin host, through the client object model's
+  `ProcessQuery` — the request `Set-SPOSite -StorageQuota` sends. It needs a certificate
+  credential and the SharePoint application permission `Sites.FullControl.All`; the admin
+  host is derived from the site, or named by `adminUrl` in the credential bundle. A tenant
+  that does not allow it ends the task with `SHAREPOINT_ADMIN_NOT_PERMITTED` or
+  `SHAREPOINT_QUOTA_REFUSED`, BPMN errors a process catches to hand the quota to a person.
+  The Modeler offers the operation, the mockup records the quota and `get-site` reports it.
+  `examples/m365-dienste` (1.0.9) sets an ordered quota this way, and a quota raise up to
+  25 GB, with the previous tasks as the fallback (ADR-0141, amended 2026-11-04). Not yet
+  run against a tenant.
 - **The Entra Worker reads and transfers a synchronised user's source of authority.** `get-sync-behavior` reads `onPremisesSyncBehavior` and `set-sync-behavior` sets its `isCloudManaged`, so a process can take an account that Entra Connect synchronises from Active Directory into the cloud. The body is held to that one boolean before anything is sent. Graph v1.0, permission `User-OnPremisesSyncBehavior.ReadWrite.All` (ADR-0172, amended).
 - **The Exchange Worker enables remote mailboxes on Exchange Server.** `enable-remote-mailbox`, `get-remote-mailbox`, `list-remote-mailboxes` and `disable-remote-mailbox` run `Enable-`, `Get-` and `Disable-RemoteMailbox` for an Exchange hybrid organization, where the mail attributes of an account synchronised to the cloud are written on premises. On Exchange Online they are refused with what to do instead (ADR-0462, amended).
 - **The M365 example covers hybrid identity.** A catalogue `cat-m365-identitaet` for the administration with two products: «Konto (hybrid) anlegen» creates the account in AD, enables its remote mailbox, waits for Entra Connect with a bounded loop and orders the licence through the existing licence position; «Konto in die Cloud übernehmen» moves a still local mailbox first (a task) and then transfers the source of authority. The README explains the rules both follow and why the test environment, which synchronises nothing, leaves them out (`m365-dienste` 1.0.7).
