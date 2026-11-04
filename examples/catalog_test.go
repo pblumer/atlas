@@ -336,6 +336,7 @@ var formDisplayNames = map[string]string{
 	"za-freigabe":           "Zugangsantrag – Freigabe",
 	"ba-antrag":             "Benutzer aufnehmen – Antrag",
 	"ba-konto":              "Benutzer aufnehmen – Konto",
+	"ba-bestaetigen":        "Benutzer aufnehmen – E-Mail bestätigen",
 	"off-antrag":            "Offboarding – Antrag",
 	"off-sperren":           "Offboarding – Sperren",
 	"rev-start":             "Zugriffs-Review – Start",

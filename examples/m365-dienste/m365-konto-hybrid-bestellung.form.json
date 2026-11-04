@@ -1,0 +1,87 @@
+{
+  "type": "default",
+  "id": "m365-konto-hybrid-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Konto (hybrid) anlegen · Create a hybrid account**\n\nDas Konto entsteht im Active Directory und kommt über Entra Connect nach Entra ID; das Postfach liegt in Exchange Online. Die Kennung ist der Anmeldename im AD und der erste Teil der UPN und der Mailadresse. Sie wird im AD und in Entra ID geprüft; ist sie vergeben, wird die Bestellung abgelehnt. · The account is created in Active Directory and reaches Entra ID through Entra Connect; the mailbox lives in Exchange Online. The identifier is the logon name in AD and the first part of the UPN and the mail address. It is checked in AD and Entra ID; if it is taken, the order is refused."
+    },
+    {
+      "key": "personalnummer",
+      "type": "textfield",
+      "label": "Personalnummer · Employee number",
+      "validate": {
+        "required": true,
+        "pattern": "^[A-Za-z0-9-]{1,20}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "vorname",
+      "type": "textfield",
+      "label": "Vorname · First name",
+      "validate": {
+        "required": true,
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "nachname",
+      "type": "textfield",
+      "label": "Nachname · Last name",
+      "validate": {
+        "required": true,
+        "maxLength": 64
+      }
+    },
+    {
+      "key": "kennung",
+      "type": "textfield",
+      "label": "Kennung (Anmeldename) · Identifier (logon name)",
+      "description": "Kleinbuchstaben, Ziffern, Punkt und Bindestrich, höchstens 20 Zeichen, z.B. anna.muster · Lower-case letters, digits, dot and hyphen, at most 20 characters, e.g. anna.muster",
+      "validate": {
+        "required": true,
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,19}$"
+      }
+    },
+    {
+      "key": "oe",
+      "type": "textfield",
+      "label": "Organisationseinheit (optional) · Organisational unit (optional)",
+      "validate": {
+        "maxLength": 64
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "lizenzvariante",
+      "type": "radio",
+      "label": "Lizenzvariante · Licence variant",
+      "values": [
+        {
+          "label": "Standard (E3)",
+          "value": "standard"
+        },
+        {
+          "label": "Erweitert (E5) · Extended (E5)",
+          "value": "erweitert"
+        },
+        {
+          "label": "Frontline (F3)",
+          "value": "frontline"
+        }
+      ],
+      "defaultValue": "standard",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

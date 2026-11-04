@@ -1,0 +1,10 @@
+{
+  "type": "default",
+  "id": "ba-bestaetigen",
+  "components": [
+    {
+      "type": "text",
+      "text": "# ✉️ E-Mail-Adresse bestätigen\n\nMit «Antwort senden» bestätigen Sie, dass diese Adresse Ihnen gehört und dass Sie den Zugang zu atlas beantragt haben. Ihr Antrag geht danach an die Benutzerverwaltung.\n\nHaben Sie nichts beantragt, schliessen Sie diese Seite einfach; der Antrag verfällt nach 72 Stunden."
+    }
+  ]
+}

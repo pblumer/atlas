@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -133,23 +132,6 @@ func TestEnsureSystemProcessesBundleError(t *testing.T) {
 	}
 }
 
-// TestProvisionHashPasswordError covers the bcrypt-error branch: a password longer
-// than 72 bytes makes hashPassword fail, for both create and set-password.
-func TestProvisionHashPasswordError(t *testing.T) {
-	srv := newServerForErrors(t)
-	long := strings.Repeat("x", 80)
-	if _, _, err := srv.provisionCreateUser("u", "", "", nil, long, 1); err == nil {
-		t.Error("create with an 80-char password: want hash error")
-	}
-	// Seed a user, then a too-long set-password must fail at hashing.
-	if _, _, err := srv.provisionCreateUser("bob", "", "", nil, "longenough1", 1); err != nil {
-		t.Fatalf("seed bob: %v", err)
-	}
-	if err := srv.provisionSetPassword("bob", long, 1); err == nil {
-		t.Error("set-password with an 80-char password: want hash error")
-	}
-}
-
 // TestUserConnectorPureHelpers exercises the small FEEL-binding helpers across
 // every branch: the kind mapping, the variable binding (builtin key, present and
 // absent names, the empty-names short-circuit), a literal resolve, and role
@@ -203,11 +185,8 @@ func TestProvisionOpsStoreErrors(t *testing.T) {
 	srv := newServerForErrors(t)
 	srv.users = brokenStore(newUserStore(filepath.Join(t.TempDir(), "nope", "deeper")))
 
-	if _, _, err := srv.provisionCreateUser("u", "", "", nil, "longenough1", 1); err == nil {
+	if _, _, err := srv.provisionCreateUser("u", "", "", nil, 1); err == nil {
 		t.Error("provisionCreateUser with broken store: want error")
-	}
-	if err := srv.provisionSetPassword("u", "longenough1", 1); err == nil {
-		t.Error("provisionSetPassword with broken store: want error")
 	}
 	if err := srv.provisionDisableUser("u", 1); err == nil {
 		t.Error("provisionDisableUser with broken store: want error")
