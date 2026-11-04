@@ -14,6 +14,21 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue can declare Marktleistungen and services.** A catalogue switched to
+  `structured` states for every product whether it is a Marktleistung (`kind: offering`),
+  the whole somebody orders, or a service (`kind: service`), one building block with its
+  own lifecycle process. Publishing then proves the graph agrees: a Marktleistung is
+  contained by nothing, includes at least one service and contains services only; a
+  service has no parts, carries no heading and is part of at least one Marktleistung. A
+  Marktleistung's category and product group are keys of the capability register — the
+  product group one the category capability requires — and are worded from the
+  capability's name where the product leaves a language unworded. An order can no longer
+  ask for a service on its own in such a release, except as an option of a Marktleistung
+  the recipient holds. Catalogues that are not switched on publish as before. The product
+  editor offers the kind, the catalogue settings the switch, and the MCP tools both
+  fields; `docs/catalogue/AGENTS.md` describes how products are created
+  (ADR-draft-marktleistung-and-service).
+
 - **A person without an account answers a task from a mail.** A user task marked
   `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
   that names it with `answerTask` is handed that link as `answerLink` for its subject and

@@ -76,6 +76,14 @@ type Service struct {
 	// (AnswerWarnings). Nil skips the warning.
 	Personal PersonalLookup
 
+	// Capabilities reads the capability register, so publishing a structured
+	// catalogue can hold its category and product group to it and word them from
+	// it (ADR-draft-marktleistung-and-service). Nil refuses the publish of a
+	// structured catalogue rather than skipping the check: a heading that was never
+	// checked must not read as one that was. A catalogue that has not opted in
+	// never asks.
+	Capabilities CapabilityLookup
+
 	// Models answers the BPMN a process id was deployed from, for an export that
 	// carries the processes its products are bound to (export.go). Nil refuses
 	// such an export rather than leaving the processes out unannounced.
@@ -335,6 +343,10 @@ type catalogUpdate struct {
 	// needs one at all — the three list fields above are replaced whole, and the
 	// callers that send them compute the new list from a snapshot.
 	Revision int64 `json:"revision,omitempty"`
+	// Structured turns declared structure on or off
+	// (ADR-draft-marktleistung-and-service). A pointer, like Rank, so a patch that
+	// does not mention it leaves it where it is.
+	Structured *bool `json:"structured,omitempty"`
 }
 
 // HandleUpdateCatalog changes what a catalogue offers.
@@ -463,6 +475,9 @@ func (s *Service) HandleUpdateCatalog(w http.ResponseWriter, r *http.Request) {
 		}
 		if in.Edges != nil {
 			got.Edges = in.Edges
+		}
+		if in.Structured != nil {
+			got.Structured = *in.Structured
 		}
 		got.Revision++
 		got.UpdatedAt = s.now()
@@ -699,11 +714,12 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 
 	p := httpapi.PrincipalFrom(r.Context())
 	var (
-		rel      Release
-		problems []Problem
-		found    bool
-		allowed  bool
-		opErr    error
+		rel       Release
+		problems  []Problem
+		found     bool
+		allowed   bool
+		opErr     error
+		languages []string
 	)
 	s.loop.Do(func() {
 		var cat Catalog
@@ -718,6 +734,7 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 		if allowed = s.mayEdit(cat, p); !allowed {
 			return
 		}
+		languages = cat.Languages
 		var in Input
 		if in, found, opErr = s.store.InputFor(id, cat.Edges); opErr != nil || !found {
 			return
@@ -738,8 +755,15 @@ func (s *Service) HandlePublish(w http.ResponseWriter, r *http.Request) {
 	// its next publish, not folded into this one.
 	if opErr == nil && found && allowed && len(problems) == 0 {
 		problems = append(LifecycleProblems(rel.Items, s.EntryPoints), OrderFormProblems(rel.Items, s.Forms)...)
+		// The register is the server's too, read the same way: after the release is
+		// computed and before it is saved. Its words are frozen in only once every
+		// heading resolved.
+		problems = append(problems, HeadingProblems(rel, s.Capabilities)...)
 	}
 	if opErr == nil && found && allowed && len(problems) == 0 {
+		if rel.Structured {
+			WordHeadings(rel.Items, languages, s.Capabilities)
+		}
 		rel.ID, rel.CatalogID, rel.CreatedAt = relID, id, s.now()
 		s.loop.Do(func() { opErr = s.store.SaveRelease(rel) })
 	}
