@@ -272,6 +272,7 @@ const STRINGS = {
     'signin.or': 'oder mit Benutzername und Passwort',
     'signin.register': 'Noch kein Konto?',
     'signin.registerLink': 'Registrieren',
+    'signin.forgot': 'Passwort vergessen?',
   },
   en: {
     'tile.find': "How can we help you?",
@@ -521,6 +522,7 @@ const STRINGS = {
     'signin.or': 'or sign in with a username and password',
     'signin.register': 'No account yet?',
     'signin.registerLink': 'Register',
+    'signin.forgot': 'Forgot password?',
   },
   // Français, pour les catalogues tenus en français. Vouvoiement partout, comme
   // dans l’allemand : le shop s’adresse à une personne qui commande pour son
@@ -773,6 +775,7 @@ const STRINGS = {
     'signin.or': 'ou avec un nom d’utilisateur et un mot de passe',
     'signin.register': 'Pas encore de compte ?',
     'signin.registerLink': 'S’inscrire',
+    'signin.forgot': 'Mot de passe oublié ?',
   },
   // Italiano, per i cataloghi tenuti in italiano. Forma di cortesia ovunque, come
   // nelle altre lingue.
@@ -1024,6 +1027,7 @@ const STRINGS = {
     'signin.or': 'oppure con nome utente e password',
     'signin.register': 'Non ha ancora un conto?',
     'signin.registerLink': 'Registrarsi',
+    'signin.forgot': 'Password dimenticata?',
   },
 };
 
@@ -1450,6 +1454,10 @@ const state = {
   // registerURL is where somebody with no account starts, empty where the
   // instance does not offer that (ADR-0126).
   registerURL: '',
+  // recovery is whether the instance mails a link to set a new password
+  // (ADR-draft-password-set-by-its-owner); the sign-in offers "forgot password" only
+  // where it does.
+  recovery: false,
   // signinError is what the last attempt is waiting to say, as a catalogue key.
   // A key and not a sentence: the page is redrawn on every keystroke of state and
   // a sentence captured in one locale would survive the language switch.
@@ -1942,6 +1950,7 @@ function forgetTheReader() {
 async function loadSignInOptions() {
   state.providers = [];
   state.registerURL = '';
+  state.recovery = false;
   try {
     const list = await api('/api/v1/auth/providers');
     state.providers = Array.isArray(list) ? list : [];
@@ -1950,6 +1959,10 @@ async function loadSignInOptions() {
     const cfg = await api('/api/v1/settings/registration');
     if (cfg && cfg.enabled && cfg.url) state.registerURL = cfg.url;
   } catch { /* registration off or unreachable — the line stays hidden */ }
+  try {
+    const rec = await api('/api/v1/auth/password-recovery');
+    state.recovery = !!(rec && rec.enabled);
+  } catch { /* recovery off or unreachable — the line stays hidden */ }
 }
 
 // loadCatalogue reads every catalogue this person is the audience for and their
@@ -2285,6 +2298,9 @@ function renderSignIn() {
       : null,
     el('button', { class: 'primary', type: 'submit', disabled: state.signinBusy },
       state.signinBusy ? t('signin.busy') : t('signin.submit')),
+    state.recovery
+      ? el('p', { class: 'muted' }, el('a', { href: '/public/password' }, t('signin.forgot')))
+      : null,
     state.registerURL
       ? el('p', { class: 'muted' }, `${t('signin.register')} `,
         el('a', { href: state.registerURL }, t('signin.registerLink')))

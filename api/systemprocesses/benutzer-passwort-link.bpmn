@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Benutzerverwaltung: Passwort-Link senden
+
+  Sendet der Inhaberin oder dem Inhaber eines atlas-Kontos den einmaligen Link, ueber
+  den das Passwort gesetzt wird (ADR-draft-password-set-by-its-owner). Der Server
+  startet diesen Prozess selbst:
+
+    - anlass="vergessen"  : jemand hat auf der Anmeldeseite "Passwort vergessen"
+                            angefordert (POST /public/password/forgot);
+    - anlass="einladung"  : ein Administrator hat dem Konto seinen Link geschickt
+                            (POST /api/v1/users/{id}/password-link, send=true).
+
+  Die Instanz traegt nur benutzername und anlass. Der Link entsteht erst, wenn die
+  Mail versendet wird (passwordFor), und steht in keiner Variable, keinem Event und
+  keinem Log. Der Server versendet ihn nur an die Adresse des Kontos und an niemanden
+  sonst (to="=benutzername" loest genau diese auf); die Vorschau-Outbox zeigt ihn nicht.
+
+  Start
+   -> (X) Gateway "Anlass?"   (default -> vergessen; anlass="einladung" -> Einladung)
+        [vergessen] -> Service-Task "Neues Passwort festlegen"  (Mail mit passwordLink)
+        [einladung] -> Service-Task "Einladung senden"          (Mail mit passwordLink)
+   -> (X) Join
+   -> Ende "Link gesendet"
+
+  BPMN-DI von Hand gesetzt: Hauptachse bei y=120, Einladungs-Zweig bei y=260.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_passwort_link" targetNamespace="http://atlas/examples">
+
+  <process id="proc_passwort_link" name="Benutzerverwaltung: Passwort-Link senden" isExecutable="true">
+
+    <startEvent id="start" name="Link angefordert">
+      <outgoing>f_start_anlass</outgoing>
+    </startEvent>
+
+    <exclusiveGateway id="anlass_gw" name="Anlass?" default="f_vergessen">
+      <incoming>f_start_anlass</incoming>
+      <outgoing>f_vergessen</outgoing>
+      <outgoing>f_einladung</outgoing>
+    </exclusiveGateway>
+
+    <serviceTask id="vergessen_mail" name="Neues Passwort festlegen">
+      <documentation>Antwort auf «Passwort vergessen». Der Link gilt eine Stunde und nur einmal; das bisherige Passwort bleibt gültig, bis ein neues gesetzt ist.</documentation>
+      <extensionElements>
+        <atlas:mailConnector connector="mail"
+          to="=benutzername"
+          passwordFor="=benutzername"
+          subject="Neues Passwort für Ihr atlas-Konto"
+          body="=&quot;Guten Tag,\n\nfür Ihr atlas-Konto «&quot; + benutzername + &quot;» wurde ein neues Passwort angefordert. Über diesen Link legen Sie es fest:\n\n&quot; + passwordLink + &quot;\n\nDer Link ist begrenzt gültig und kann nur einmal verwendet werden.\n\nHaben Sie das nicht angefordert, ignorieren Sie diese Nachricht; Ihr bisheriges Passwort bleibt gültig.\n\nFreundliche Grüsse\nIhre Benutzerverwaltung&quot;"/>
+      </extensionElements>
+      <incoming>f_vergessen</incoming>
+      <outgoing>f_vergessen_join</outgoing>
+    </serviceTask>
+
+    <serviceTask id="einladung_mail" name="Einladung senden">
+      <documentation>Ein Administrator hat dem Konto seinen Link geschickt — für ein neues Konto oder eines, dessen Passwort neu gesetzt werden soll.</documentation>
+      <extensionElements>
+        <atlas:mailConnector connector="mail"
+          to="=benutzername"
+          passwordFor="=benutzername"
+          subject="Ihr atlas-Zugang"
+          body="=&quot;Guten Tag,\n\nfür Sie besteht ein atlas-Konto. Ihr Benutzername: &quot; + benutzername + &quot;\n\nBitte legen Sie über diesen Link Ihr Passwort fest:\n\n&quot; + passwordLink + &quot;\n\nDer Link ist begrenzt gültig und kann nur einmal verwendet werden. Ist er abgelaufen, fordern Sie auf der Anmeldeseite über «Passwort vergessen» einen neuen an.\n\nFreundliche Grüsse\nIhre Benutzerverwaltung&quot;"/>
+      </extensionElements>
+      <incoming>f_einladung</incoming>
+      <outgoing>f_einladung_join</outgoing>
+    </serviceTask>
+
+    <exclusiveGateway id="join">
+      <incoming>f_vergessen_join</incoming>
+      <incoming>f_einladung_join</incoming>
+      <outgoing>f_join_ende</outgoing>
+    </exclusiveGateway>
+
+    <endEvent id="ende" name="Link gesendet">
+      <incoming>f_join_ende</incoming>
+    </endEvent>
+
+    <sequenceFlow id="f_start_anlass" sourceRef="start" targetRef="anlass_gw"/>
+    <sequenceFlow id="f_vergessen" name="vergessen" sourceRef="anlass_gw" targetRef="vergessen_mail"/>
+    <sequenceFlow id="f_einladung" name="einladung" sourceRef="anlass_gw" targetRef="einladung_mail">
+      <conditionExpression>= anlass = "einladung"</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="f_vergessen_join" sourceRef="vergessen_mail" targetRef="join"/>
+    <sequenceFlow id="f_einladung_join" sourceRef="einladung_mail" targetRef="join"/>
+    <sequenceFlow id="f_join_ende" sourceRef="join" targetRef="ende"/>
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_passwort_link">
+    <bpmndi:BPMNPlane id="BPMNPlane_passwort_link" bpmnElement="proc_passwort_link">
+      <bpmndi:BPMNShape id="start_di" bpmnElement="start">
+        <omgdc:Bounds x="152" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="128" y="145" width="84" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="anlass_gw_di" bpmnElement="anlass_gw" isMarkerVisible="true">
+        <omgdc:Bounds x="240" y="95" width="50" height="50"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="240" y="62" width="50" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="vergessen_mail_di" bpmnElement="vergessen_mail">
+        <omgdc:Bounds x="360" y="80" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="einladung_mail_di" bpmnElement="einladung_mail">
+        <omgdc:Bounds x="360" y="220" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="join_di" bpmnElement="join" isMarkerVisible="true">
+        <omgdc:Bounds x="530" y="95" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ende_di" bpmnElement="ende">
+        <omgdc:Bounds x="630" y="102" width="36" height="36"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="612" y="145" width="72" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="f_start_anlass_di" bpmnElement="f_start_anlass">
+        <omgdi:waypoint x="188" y="120"/><omgdi:waypoint x="240" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vergessen_di" bpmnElement="f_vergessen">
+        <omgdi:waypoint x="290" y="120"/><omgdi:waypoint x="360" y="120"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="296" y="96" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_einladung_di" bpmnElement="f_einladung">
+        <omgdi:waypoint x="265" y="145"/>
+        <omgdi:waypoint x="265" y="260"/>
+        <omgdi:waypoint x="360" y="260"/>
+        <bpmndi:BPMNLabel><omgdc:Bounds x="272" y="200" width="56" height="14"/></bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_vergessen_join_di" bpmnElement="f_vergessen_join">
+        <omgdi:waypoint x="460" y="120"/><omgdi:waypoint x="530" y="120"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_einladung_join_di" bpmnElement="f_einladung_join">
+        <omgdi:waypoint x="460" y="260"/>
+        <omgdi:waypoint x="555" y="260"/>
+        <omgdi:waypoint x="555" y="145"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_join_ende_di" bpmnElement="f_join_ende">
+        <omgdi:waypoint x="580" y="120"/><omgdi:waypoint x="630" y="120"/>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

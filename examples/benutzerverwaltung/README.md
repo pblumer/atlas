@@ -36,9 +36,19 @@ Ein Buttton wie „Disable" wird also **nicht** zum Prozess; der *Ablauf* rundhe
 Die atlas-Benutzerverwaltung (`api/users.go`) ist **admin-gated**. Bis ADR-0123
 blieb auch die Konto-Anlage eine reine Admin-Handhabung. Mit ADR-0123 gibt es
 einen **sanktionierten, engen** Schreibpfad: den `userConnector` (create /
-set-password / disable), der **nur** für Prozesse des geschützten System-Projekts
+disable), der **nur** für Prozesse des geschützten System-Projekts
 (ADR-0122) läuft, kein Credential im Modell trägt und dieselben Rails wie die
-Admin-API nutzt (Passwortlänge, Uniqueness, Last-Admin-Lockout). Seit dem
+Admin-API nutzt (Uniqueness, Last-Admin-Lockout).
+
+**Ein Passwort kommt in keinem Prozess vor**
+([ADR-draft-password-set-by-its-owner](../../docs/adr/draft-password-set-by-its-owner.md)).
+Niemand ausser der Person, der das Konto gehört, legt es fest oder kennt es — auch
+kein Administrator. `create` legt das Konto ohne Passwort an; ein Mail-Task mit
+`passwordFor` schickt der Inhaberin oder dem Inhaber einen einmaligen Link, über den
+das Passwort gesetzt wird. Der Link entsteht erst beim Versand, steht in keiner
+Variable, geht nur an die Adresse des Kontos und wird von der Vorschau-Outbox nicht
+angezeigt. `set-password` und ein `password`-Attribut werden beim Deploy abgelehnt
+(`user.password`). Seit dem
 Amendment vom 2026-08-14 ist die Provisionierung **standardmäßig aktiv (opt-out)** —
 abschaltbar mit `--user-provisioning=false`.
 
@@ -55,13 +65,24 @@ aktiviert.
 ```
 Start (ba-antrag: Vorname, Nachname, E-Mail, Abteilung, Begründung)
   → [Script] Zugangsdaten vorschlagen   – FEEL: benutzername = vorname.nachname
+  → ✉️ Mail "E-Mail bestätigen lassen"   – trägt answerLink (ADR-0523)
+  → ✅ User-Task "E-Mail bestätigen" (ba-bestaetigen, per Link beantwortet)
+        ⏱ nach 72 Stunden ohne Bestätigung → Ende "Antrag verfallen"
   → 📣 Signal "Aufnahme beantragt"      – atlas.user.requested (siehe unten)
-  → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin vergibt Rolle, setzt Initialpasswort
+  → 🔑 User-Task "Antrag freigeben" (ba-konto) – Admin entscheidet und vergibt die Rolle
   → (X) Angelegt?
-        anlegen (Default) → [userConnector create] "Konto anlegen" → Zugangs-Mail
+        anlegen (Default) → [userConnector create] "Konto anlegen" (ohne Passwort)
+                          → Mail "Zugang aktivieren" mit passwordLink
         ablehnen          → Ablehnungs-Mail
   → Ende
 ```
+Ein Antrag erreicht die Benutzerverwaltung erst, wenn die angegebene Adresse
+bestätigt ist: wer eine fremde Adresse einträgt, erreicht nichts, und Tippfehler
+fallen auf, bevor jemand den Antrag prüft. Der Aktivierungslink ist 7 Tage gültig;
+danach fordert die Person auf der Anmeldeseite über «Passwort vergessen» einen neuen
+an (Prozess `proc_passwort_link`, ebenfalls im System-Projekt). Beide Mails brauchen
+neben dem Mail-Worker `mail` die externe URL des Servers (`--external-url`) und den
+Vault.
 Der Antragsteller wählt seine **Rolle bewusst nicht selbst** — das Start-Formular
 kennt kein Rollen-Feld. So ist derselbe Prozess auch als **öffentliches
 Registrierungs-Formular** tragfähig: die Login-Seite zeigt einen
@@ -77,7 +98,8 @@ deshalb ein einziger Wert und keine Ausnahme.
 Ein eingegangener Antrag wartet bei „Antrag freigeben", und niemand wird darauf
 hingewiesen. Den geschützten Prozess kann eine Installation nicht um eine
 Benachrichtigung ergänzen. Deshalb wirft er selbst ein Signal,
-**`atlas.user.requested`**, unmittelbar bevor die Freigabe wartet
+**`atlas.user.requested`**, sobald die Adresse bestätigt ist und unmittelbar bevor
+die Freigabe wartet
 ([ADR-0431](../../docs/adr/0431-system-processes-announce-their-facts-as-signals.md)).
 Der Prozess kennt seine Empfänger nicht. Wer informiert werden will, deployt einen
 **eigenen** Prozess mit einem Signal-Start auf diesen Namen. Ohne einen solchen Prozess
@@ -92,8 +114,9 @@ dieser Stelle hat. Sie stehen im Empfänger als gewöhnliche FEEL-Variablen bere
 | `abteilung`, `begruendung` | Formular `ba-antrag` | nein |
 | `benutzername` | Script „Zugangsdaten vorschlagen" | ja |
 
-`initialpasswort`, `rolle` und `entscheidung` entstehen erst bei der Freigabe und sind
-deshalb **nie** dabei. Ein Test hält diese Stelle fest.
+`rolle` und `entscheidung` entstehen erst bei der Freigabe und sind deshalb **nie**
+dabei; ein Passwort gibt es in diesem Prozess überhaupt nicht. Ein Test hält diese
+Stelle fest.
 
 **Rezept: ein Antrag, eine Discord-Nachricht.** Das Rezept setzt einen eingerichteten
 Discord-Worker voraus
@@ -178,7 +201,7 @@ den Mail-Worker `mail` — das Attribut heisst weiterhin `connector="…"`
 | Datei | Zweck |
 |---|---|
 | `benutzer-aufnahme.bpmn` | Aufnahme-Prozess (`proc_benutzer_aufnahme`) |
-| `form-ba-antrag.json` / `form-ba-konto.json` | Formulare: Antrag / Konto anlegen |
+| `form-ba-antrag.json` / `form-ba-bestaetigen.json` / `form-ba-konto.json` | Formulare: Antrag / E-Mail bestätigen / Konto anlegen |
 | `benutzer-review.bpmn` | Review-Prozess (`proc_benutzer_review`) |
 | `form-rev-start.json` / `form-rev-pruefen.json` | Formulare: Start / Konten prüfen |
 | `benutzer-offboarding.bpmn` | Offboarding-Prozess (`proc_benutzer_offboarding`) |
@@ -203,7 +226,8 @@ Serverstart (idempotent, ins geschützte System-Projekt).
 ## Erfasste Prozessvariablen (Auswahl)
 
 - **Aufnahme:** `vorname`, `nachname`, `email`, `rolle`, `abteilung`, `begruendung`,
-  `benutzername` (FEEL), `entscheidung`, `initialpasswort`, `ablehnungsgrund`
+  `benutzername` (FEEL), `atlasInstance`, `entscheidung`, `ablehnungsgrund` — kein
+  Passwort
 - **Review:** `quartal`, `umfang`, `hinweis`, `ergebnis`, `betroffene_konten`,
   `bemerkung`, `review_status` (FEEL)
 - **Offboarding:** `benutzername`, `letzter_tag`, `grund`, `email`, `gesperrt`,

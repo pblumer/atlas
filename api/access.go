@@ -71,12 +71,13 @@ func (c accessClass) String() string {
 // covered the write as well, leaving requireAdmin inside the handler as the only
 // refusal; now the read is public and the write is gated at the boundary too.
 var publicAPIRoutes = []string{
-	"POST /api/v1/auth/login",           // the call that creates a session
-	"GET /api/v1/info",                  // product name and version, shown on the login screen
-	"GET /api/v1/settings/theme",        // brand accent, applied before login (ADR-0113)
-	"GET /api/v1/settings/logo",         // brand logo, shown before login (ADR-0148)
-	"GET /api/v1/settings/registration", // whether the login screen offers self-registration (ADR-0126)
-	"GET /api/v1/auth/providers",        // whether the login screen offers a way in besides the password form
+	"POST /api/v1/auth/login",            // the call that creates a session
+	"GET /api/v1/info",                   // product name and version, shown on the login screen
+	"GET /api/v1/settings/theme",         // brand accent, applied before login (ADR-0113)
+	"GET /api/v1/settings/logo",          // brand logo, shown before login (ADR-0148)
+	"GET /api/v1/settings/registration",  // whether the login screen offers self-registration (ADR-0126)
+	"GET /api/v1/auth/providers",         // whether the login screen offers a way in besides the password form
+	"GET /api/v1/auth/password-recovery", // whether the login screen offers "forgot password"
 
 	// What the consent screen is being asked to approve (ADR-0200). Public because
 	// that screen has to render for somebody not yet signed in — its whole job in

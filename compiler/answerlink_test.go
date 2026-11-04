@@ -176,3 +176,29 @@ func TestATaskBelowTheMailsScopeIsReachable(t *testing.T) {
 		t.Errorf("problems: %+v", ps)
 	}
 }
+
+// A mail task that names an account with passwordFor carries its owner's one-time
+// password link as passwordLink (ADR-draft-password-set-by-its-owner).
+func TestTheMailThatCarriesAPasswordLink(t *testing.T) {
+	ok := answerModel(`passwordFor="=benutzername" subject="Ihr Zugang" body="=&quot;Hier: &quot; + passwordLink"`, ``, ``)
+	cp := mustParse(t, ok)
+	acct, carries := cp.PasswordFor(node(t, cp, "send"))
+	if !carries || acct.Expr == nil {
+		t.Fatalf("passwordFor = %+v (%v), want the FEEL expression", acct, carries)
+	}
+	if p := findProblem(problemsOf(t, ok), RulePasswordUnshown, "send"); p != nil {
+		t.Errorf("a mail that shows the link is reported: %s", p.Message)
+	}
+	templ := answerModel(`passwordFor="anna" templating="true" subject="Ihr Zugang" body="Hier: {{passwordLink}}"`, ``, ``)
+	if p := findProblem(problemsOf(t, templ), RulePasswordUnshown, "send"); p != nil {
+		t.Errorf("a template that shows the link is reported: %s", p.Message)
+	}
+	if _, carries := mustParse(t, answerModel(`subject="Hi" body="Hi"`, ``, ``)).PasswordFor(0); carries {
+		t.Error("a mail without passwordFor carries a password link")
+	}
+
+	unshown := answerModel(`passwordFor="=benutzername" subject="Ihr Zugang" body="Kein Link"`, ``, ``)
+	if p := findProblem(problemsOf(t, unshown), RulePasswordUnshown, "send"); p == nil || p.Severity != SeverityError {
+		t.Errorf("a mail that names an account and shows no link: %+v, want a %s error", p, RulePasswordUnshown)
+	}
+}

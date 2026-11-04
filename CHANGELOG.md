@@ -53,6 +53,33 @@ _Changed_ / _Removed_ for each version.
   vault derives. Seven deploy rules (`answer.*`) refuse a task without a form, a
   multi-instance task, a mail that never shows the link and a link to a task that did not
   opt in. The Modeler offers both settings (ADR-0523).
+- **Forgotten passwords are recovered by their owner.** The login screen and the shop's
+  sign-in offer "Forgot password?" where the instance can mail a link (vault, external
+  URL, the system process `proc_passwort_link`): `POST /public/password/forgot` answers
+  202 alike for every input and mails an enabled local account with an address a
+  one-time link, at most once per account per five minutes. The link opens
+  `/public/password`, which sets the password and ends every session of the account. A
+  signed-in person changes their own password under the account menu ("Change
+  password…", `POST /api/v1/auth/password`), and an administrator sends an account its
+  link or takes it to hand over in person (`POST /api/v1/users/{id}/password-link`)
+  (ADR-draft-password-set-by-its-owner).
+
+### Changed
+- **A password is set by its owner, never mailed.** Registration no longer asks the
+  approving administrator for an initial password, which was a process variable — an
+  event kept in the log — and was mailed in clear text. The requester first confirms
+  their address through a link (72 hours); only then is the request announced and
+  approved. The account is created without a password and its owner is mailed a
+  one-time activation link (7 days), signed with a vault-derived key over the account's
+  address and password hash, so it dies on use and when the address changes. The
+  preview outbox withholds the link, and only a worker the server runs itself is leased
+  a mail that carries one. `userConnector` refuses `password` and `set-password` at
+  deploy (`user.password`); the Organization page creates accounts without a password
+  ("awaiting activation"). `POST /api/v1/users/{id}/password` is deprecated and now ends
+  the account's sessions. The log of instances that ran the old intake still holds the
+  passwords typed there: send those accounts a password link, and migrate intake
+  instances still waiting at "Antrag freigeben" to the new version
+  (ADR-draft-password-set-by-its-owner).
 
 ### Fixed
 

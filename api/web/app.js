@@ -317,6 +317,10 @@ function updateAccount() {
       `<a href="#/console/settings" title="Number format, time zone and language — yours, not this server's">Display settings</a>` +
       (LINKING.offered ? `<a href="#/console/connections" title="The external accounts you linked, and which Workers may act as you">Connected accounts</a>` : "") +
       `<a href="#/console/approvals" title="The actions waiting for your approval, and the ones asked on your behalf">Approvals</a>` +
+      // Only an account that signs in with a password here can change one here; one that
+      // signs in through its identity provider changes it there.
+      (!AUTH.user.source || AUTH.user.source === "local"
+        ? `<button type="button" data-act="password" title="Change the password you sign in with">Change password…</button>` : "") +
       `<button type="button" data-act="logout" title="Sign out of atlas">Log out</button>`;
   } else {
     // Nobody is signed in — which is two different things. With enforcement off the
@@ -334,6 +338,70 @@ function updateAccount() {
     if (menu) menu.innerHTML = `<div class="mlabel">${label}</div>` +
       (AUTH.enabled ? "" : `<a href="#/console/settings" title="Number format, time zone and language">Display settings</a>`);
   }
+}
+
+// openChangePassword lets the signed-in person change their own password
+// (ADR-draft-password-set-by-its-owner). It asks for the current one — an open session
+// on a shared screen must not be enough to take the account — and the server ends every
+// other session of the account once it is changed.
+function openChangePassword(returnTo = document.activeElement) {
+  const ov = document.createElement("div");
+  ov.className = "modal-ov";
+  ov.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Change password" style="max-width:420px">
+      <div class="modal-head">
+        <h2>Change password</h2>
+        <button type="button" class="icon-btn" data-x aria-label="Close" title="Close">✕</button>
+      </div>
+      <form class="modal-body" id="pw-change" autocomplete="on">
+        <input type="text" name="username" autocomplete="username" value="${esc((AUTH.user && AUTH.user.username) || "")}" hidden style="display:none">
+        <label class="field">Current password
+          <input name="current" type="password" autocomplete="current-password" required></label>
+        <label class="field">New password
+          <input name="next" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>
+        <label class="field">Repeat the new password
+          <input name="again" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>
+        <p class="muted" style="font-size:12px; margin:4px 0 0">At least 8 characters. Every other session of your account is signed out.</p>
+        <p id="pw-change-err" style="color:var(--danger)" hidden></p>
+        <div class="modal-actions" style="margin-top:12px">
+          <button type="button" class="btn ghost" data-x title="Close without changing anything">Cancel</button>
+          <button type="submit" class="btn" title="Change your password">Change password</button>
+        </div>
+      </form>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => {
+    ov.remove();
+    document.removeEventListener("keydown", onKey);
+    if (returnTo && returnTo.isConnected && typeof returnTo.focus === "function") returnTo.focus();
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  document.addEventListener("keydown", onKey);
+  ov.addEventListener("mousedown", (e) => { if (e.target === ov) close(); });
+  ov.querySelectorAll("[data-x]").forEach((b) => b.addEventListener("click", close));
+  const form = ov.querySelector("#pw-change");
+  const err = ov.querySelector("#pw-change-err");
+  form.querySelector("[name=current]").focus();
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    err.hidden = true;
+    if (fd.get("next") !== fd.get("again")) {
+      err.textContent = "The two new passwords differ.";
+      err.hidden = false;
+      return;
+    }
+    try {
+      await api("POST", "/api/v1/auth/password", { currentPassword: fd.get("current"), newPassword: fd.get("next") });
+      close();
+      toast("Password changed", "ok");
+    } catch (ex) {
+      err.textContent = ex.status === 429
+        ? "Too many attempts — wait a few minutes and try again."
+        : (ex.message || "The password could not be changed.");
+      err.hidden = false;
+    }
+  });
 }
 
 async function logout() {
@@ -411,11 +479,11 @@ function viewLogin() {
         <p id="login-error" class="muted" hidden></p>
       </form>
       <div style="margin-top:10px">
-        <button type="button" id="forgot-password" class="linklike" title="Show how to recover your password">Forgot password?</button>
+        <button type="button" id="forgot-password" class="linklike" title="Get a link to set a new password">Forgot password?</button>
         <p id="forgot-help" class="muted" style="margin-top:6px" hidden>
-          Atlas doesn't send password-reset emails. An administrator resets
-          passwords for this instance &mdash; ask yours to set a new one for your
-          account, then sign in with it.
+          This instance cannot send you a link itself. Ask an administrator to send
+          you one: they never choose or see your password &mdash; you set it through
+          the link.
         </p>
       </div>
       <p id="register-line" class="muted" style="margin-top:10px" hidden>
@@ -461,13 +529,25 @@ function viewLogin() {
     } catch { /* registration off or unreachable — leave the link hidden */ }
   })();
   const f = document.getElementById("login-form");
-  // Password recovery on a self-hosted, admin-managed instance is an admin
-  // action (POST /users/{id}/password), not a self-service email flow — there is
-  // no transactional mail sender and email is optional per user (ADR-0044). So
-  // this affordance points the user at the recovery path that actually exists
-  // rather than a dead-end "invalid password" error.
+  // A forgotten password is recovered by its owner through a one-time link mailed to
+  // the account's address (ADR-draft-password-set-by-its-owner) — where the instance
+  // can mail one: it needs the vault, an external URL and the system process. Where it
+  // cannot, the affordance says the path that exists instead: an administrator sends
+  // the link, and still never learns the password.
   const forgot = document.getElementById("forgot-password");
+  let recovery = false;
+  (async () => {
+    try { recovery = !!(await api("GET", "/api/v1/auth/password-recovery"))?.enabled; } catch { /* stays off */ }
+  })();
   forgot.addEventListener("click", () => {
+    if (recovery) {
+      // What was typed travels in this tab's storage, not in the address, so it is in
+      // no access log.
+      const who = (new FormData(f).get("username") || "").trim();
+      try { if (who) sessionStorage.setItem("atlas.forgot.login", who); } catch { /* no storage */ }
+      location.href = "/public/password";
+      return;
+    }
     const help = document.getElementById("forgot-help");
     help.hidden = !help.hidden;
     forgot.setAttribute("aria-expanded", String(!help.hidden));
@@ -1274,6 +1354,7 @@ function initShell() {
     window.__acctMenu = menu;
     menu.addEventListener("click", (e) => {
       if (e.target.closest("[data-act=logout]")) { closeAllMenus(); logout(); }
+      if (e.target.closest("[data-act=password]")) { closeAllMenus(); openChangePassword(); }
     });
   }
 
@@ -2502,7 +2583,7 @@ function userForm(u, people) {
       ${isEdit ? "" : `<label class="field">Username<input name="username" autocomplete="off" required></label>`}
       <label class="field">Display name<input name="displayName" value="${isEdit ? esc(u.displayName || "") : ""}"></label>
       <label class="field">Email<input name="email" type="email" value="${isEdit ? esc(u.email || "") : ""}"></label>
-      ${isEdit ? "" : `<label class="field">Password<input name="password" type="password" autocomplete="new-password" required></label>`}
+      ${isEdit ? "" : `<p class="muted" style="margin:0 0 10px">The account is created without a password. Its owner sets one through a one-time link — sent to the address above, or handed over by you. Nobody else ever knows it.</p>`}
       <div class="field"><b>Roles</b><div class="muted" style="margin:2px 0 6px">What this account may do. Untick everything and it can only sign in.</div>${boxes}</div>
       ${isEdit ? lineManagerField(u, people) : ""}
       ${isEdit ? `<label class="field inline"><input type="checkbox" name="disabled"${u.disabled ? " checked" : ""}> Disabled</label>` : ""}
@@ -2621,18 +2702,24 @@ const rolesFrom = (fd, u) => {
   return picked.concat(kept);
 };
 
+// createUser creates the account without a password and then has its owner set one
+// (ADR-draft-password-set-by-its-owner): with an address, by mailing them the
+// activation link; without one, by handing the administrator the link to pass on in
+// person. The administrator never chooses or sees a password.
 async function createUser(fd, reload) {
+  let created;
   try {
-    await api("POST", "/api/v1/users", {
+    created = await api("POST", "/api/v1/users", {
       username: (fd.get("username") || "").trim(),
       displayName: (fd.get("displayName") || "").trim(),
       email: (fd.get("email") || "").trim(),
-      password: fd.get("password"),
       roles: rolesFrom(fd),
     });
     toast("User created", "ok");
-    reload();
-  } catch (e) { toast("could not create user: " + e.message, "err"); }
+  } catch (e) { toast("could not create user: " + e.message, "err"); return; }
+  if (created && created.email) await sendPasswordLink(created, false);
+  else if (created) await copyPasswordLink(created);
+  reload();
 }
 
 async function saveUser(id, fd, reload, u) {
@@ -2654,14 +2741,27 @@ async function saveUser(id, fd, reload, u) {
   } catch (e) { toast("could not update user: " + e.message, "err"); }
 }
 
-async function resetUserPassword(u, reload) {
-  const pw = window.prompt(`New password for "${u.username}" (at least 8 characters)`);
-  if (pw == null) return;
+// sendPasswordLink mails the account's owner the one-time link through which they set
+// their password — an activation for a new account, a reset for one that has a
+// password, which stays valid until the new one is set.
+async function sendPasswordLink(u, ask = true) {
+  if (ask && !window.confirm(`Send "${u.username}" a link to set a new password, to ${u.email}? Their current password stays valid until they use it.`)) return;
+  if (!ask && !window.confirm(`Send "${u.username}" the link to set their password, to ${u.email}?`)) return;
   try {
-    await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password`, { password: pw });
-    toast("Password updated", "ok");
-  } catch (e) { toast("could not set password: " + e.message, "err"); }
-  reload();
+    await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password-link`, { send: true });
+    toast(`Password link sent to ${u.email}`, "ok");
+  } catch (e) { toast("could not send the password link: " + e.message, "err"); }
+}
+
+// copyPasswordLink hands the administrator the link to pass on in person — for an
+// account without an address, or an instance without mail. It opens once and expires.
+async function copyPasswordLink(u) {
+  try {
+    const r = await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password-link`, {});
+    const link = r.url || (location.origin + r.path);
+    const until = r.expiresAt ? fmtDateTime(r.expiresAt * 1000) : "";
+    window.prompt(`Hand this link to "${u.username}" in person — not by an unencrypted channel. It sets their password once${until ? " and expires " + until : ""}.`, link);
+  } catch (e) { toast("could not create the password link: " + e.message, "err"); }
 }
 
 async function toggleUserDisabled(u, reload) {
@@ -3191,7 +3291,9 @@ async function viewConsoleOrg() {
   const roleChips = (roles) => (roles || []).map((r) => `<span class="chip">${esc(r)}</span>`).join(" ");
   const statusPill = (u) => u.disabled
     ? `<span class="pill warn"><span class="dot"></span>disabled</span>`
-    : `<span class="pill ok"><span class="dot"></span>active</span>`;
+    : u.awaitingActivation
+      ? `<span class="pill" title="Nobody can sign in as this account until its owner sets a password through the link they were sent"><span class="dot"></span>awaiting activation</span>`
+      : `<span class="pill ok"><span class="dot"></span>active</span>`;
   // A face in the roster, and only for the accounts that have one. The record says
   // so (avatarSource), which is why it is on the projection at all: a row per
   // account that mostly 404s would be a request per row for nothing.
@@ -3204,8 +3306,13 @@ async function viewConsoleOrg() {
   // 342px of the table's minimum width, which then no longer fitted the content column:
   // the card scrolled it, Delete was cut off at the card's edge, and the roles beside
   // them were squeezed to one per line.
+  // A password is set by its owner (ADR-draft-password-set-by-its-owner): the menu
+  // sends them a link, or hands it to the administrator to pass on — and offers
+  // neither for an account that signs in through an identity provider.
+  const localAccount = (u) => !u.source || u.source === "local";
   const userMenu = (u) => [
-    { label: "Set password…", icon: "🔑", act: "password" },
+    ...(localAccount(u) && !u.disabled && u.email ? [{ label: "Send password link…", icon: "✉", act: "pwsend" }] : []),
+    ...(localAccount(u) && !u.disabled ? [{ label: "Copy password link…", icon: "🔑", act: "pwlink" }] : []),
     { label: u.disabled ? "Enable account" : "Disable account", icon: u.disabled ? "▶" : "⊘", act: "toggle" },
     { sep: true },
     { label: "Delete…", icon: "🗑", act: "delete", danger: true },
@@ -3360,7 +3467,8 @@ async function viewConsoleOrg() {
         wireAvatarField(slot, reload);
         slot.scrollIntoView({ block: "nearest" });
         break;
-      case "password": resetUserPassword(u, reload); break;
+      case "pwsend": sendPasswordLink(u); break;
+      case "pwlink": copyPasswordLink(u); break;
       case "toggle": toggleUserDisabled(u, reload); break;
       case "delete": deleteUser(u, reload); break;
     }
