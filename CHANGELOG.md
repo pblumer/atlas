@@ -14,6 +14,31 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **The shop can lay a catalogue out as tiles.** A catalogue's appearance gains a layout:
+  `cascade`, the default, or `tiles`, which draws a category menu and a search field above
+  one row of tiles per catalogue, "Alle N Elemente anzeigen" to open a row into a grid, and
+  a product page with a banner, the included services, the options and the approval rule.
+  The basket, the configuration form and the order are unchanged. A product may name an
+  `icon` from the shop's own set of 36 symbols (Tabler Icons, MIT); publishing refuses any
+  other name. The product editor offers the icon, the appearance card the layout, and the
+  OpenAPI table and MCP tools both fields. Accessibility of the tile layout is recorded as
+  a later requirement (ADR-0525).
+
+- **A catalogue can declare Marktleistungen and services.** A catalogue switched to
+  `structured` states for every product whether it is a Marktleistung (`kind: offering`),
+  the whole somebody orders, or a service (`kind: service`), one building block with its
+  own lifecycle process. Publishing then proves the graph agrees: a Marktleistung is
+  contained by nothing, includes at least one service and contains services only; a
+  service has no parts, carries no heading and is part of at least one Marktleistung. A
+  Marktleistung's category and product group are keys of the capability register — the
+  product group one the category capability requires — and are worded from the
+  capability's name where the product leaves a language unworded. An order can no longer
+  ask for a service on its own in such a release, except as an option of a Marktleistung
+  the recipient holds. Catalogues that are not switched on publish as before. The product
+  editor offers the kind, the catalogue settings the switch, and the MCP tools both
+  fields; `docs/catalogue/AGENTS.md` describes how products are created
+  (ADR-0524).
+
 - **A person without an account answers a task from a mail.** A user task marked
   `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task
   that names it with `answerTask` is handed that link as `answerLink` for its subject and
@@ -31,6 +56,19 @@ _Changed_ / _Removed_ for each version.
 
 ### Fixed
 - **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
+
+- **An order window names its days in UTC.** A refusal outside a product's order window
+  named the day in the server's local zone, so a server east of Greenwich said a window
+  ending on 31 October had closed on 1 November. The day is now read in UTC, the zone the
+  window's edges are stored in (ADR-0397).
+- **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
+  after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
+  minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up
+  to ten minutes, and every other call keeps the thirty seconds.
+- **Every handbook recipe runs from its own card, and says what to do next.** "▶ Ausprobieren" started each recipe with no variables, so the net-amount recipe computed `net = null` from a `gross` nobody supplied, the shopping-cart sum `total = null`, and most others stopped at a service task, message or timer with no word on how to go on. A recipe that reads input now declares it as start variables with a default (`atlas:startForm`, ADR-0455), which the empty start then receives, and each card has a "So probierst du es aus" list whose buttons play the worker, the person, the message sender or the operator the recipe waits for (complete a job or task, report a BPMN error or a failure, resolve an incident, publish a message) and then report where the run stands. The signal recipe threw its signal before its own catch was armed and never finished; it now lists the catching branch first. The DMN recipe ships its `discountTier` table, the call-activity recipe its called process (`recipe-kyc-check`), and the timer recipes use durations a reader can wait for. `api/handbookrecipes_internal_test.go` replays every card as a reader's clicks would and requires it to end at the end event the card names, with no incident and no variable left null. The tutorial gained the same button for its service tasks, the dunning example a button for its payment message and the time window it must arrive in, the identity-lifecycle example a start and its four messages, and the workplace, trip-booking and record-check examples step-by-step start instructions.
+- **String start-variable defaults in the examples no longer carry their quotes.** A string default is taken as written, so `default="&quot;P10D&quot;"` seeded the text `"P10D"` with its quotes: the dunning example started without variables raised `timer schedule: result is not a valid duration`, and the start forms showed the quotes. The defaults in mahnwesen, preisaenderung, reisestorno and umzug are unquoted; blick-schlagzeilen and entra-delta-sync, whose `""` default seeded two quote characters, declare no default, and the headline filter treats a missing search word as "every entry matches".
+- **The M365 example's SharePoint team site is created again.** Its `create-group` step set `preferredLanguage`, which Microsoft Graph refuses when a group is created (HTTP 400 "Property preferredLanguage should not be set"), so every order stopped in an incident before anything was created. The group is now created without it; the site gets the tenant's default language, and the ordered language is kept in the site inventory only (`m365-dienste` 1.0.6).
+- **The M365 example's team waits for its owner before it becomes a team.** `create-team` ran one second after `add-group-owner` and Graph answered HTTP 400 "Group … must have one or more owners in order to create a Team"; the job's three retries follow each other without a pause, so the order stood in an incident within a second. The process now waits two minutes between the two steps (`m365-dienste` 1.0.6).
 - **A worker is leased only the jobs of the worker names it holds.** `POST /api/v1/jobs/activate` leased by job type alone, so with two workers of one type — Exchange Online and an Exchange Server, two mail providers — a job for one went to the other and failed with "no worker registered as …". A poll that reports `connectors` is now leased only jobs whose task names one of them, names none, or names one by a FEEL expression; a poll that reports none is leased as before (ADR-0168, amended).
 - **A process variable read only inside a FEEL filter is no longer null.** `expr.CompileAuto` never declared a name that appears only in a filter predicate, because there an unknown name may be a key of the element, so `groups[starts with(alias, application.PREFIX)]` read the prefix as null and matched nothing; where the name was declared, it shadowed the element's key of the same name instead. The element's keys now take precedence and outer variables stay visible (DMN 10.3.2.5), through `github.com/pblumer/feel` with `CompileStringOpen` (ADR-0015, amended). A name declared personal (`atlas:personal`) that a filter alone reads stays the element's key and is not bound, so the filter never sees its ciphertext and a model that filters on such a key deploys as before (ADR-0314).
 
@@ -431,6 +469,18 @@ What changes on disk, and going back:
   `ATLAS_LIMIT_TOKEN_ENDPOINT_RATE` move it (ADR-0510).
 
 ### Fixed
+- **The current atlas mark everywhere, in place of the former logos.** The system
+  overview that the Console's welcome card, its help menu, the handbook and the
+  architecture document show still opened with the former logo, a triangle with a
+  cross; it now carries the mark from `docs/brand/atlas-mark.svg`, the lowercase a with
+  the Swiss cross. The handbook's training nuggets showed the former peak mark in every
+  top bar and are re-taken from the running product (`make nuggets`), which also brings
+  them up to the screens that had moved since. The README screenshots show the mark in
+  place of the former letter tile, the feature icons for *One binary* and *Made for AI
+  agents* are redrawn on the mark instead of the peak, the five Console pages that had
+  no favicon (the conformance gallery, the order-to-cash and travel-booking demos) now
+  carry it, and so does the Modeler top-bar design sketch. Tests hold the system
+  overview to the mark's shapes and every Console page to the favicon's.
 - **A caller who stops waiting no longer quarantines catalogue products.** A content refresh
   rechecked the product with the request's context, so a client that gave up — the MCP adapter waits
   thirty seconds, a catalogue of a few dozen bound products takes longer — cancelled the recheck, and

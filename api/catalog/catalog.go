@@ -126,12 +126,35 @@ type TargetRef struct {
 	Ref string `json:"ref"`
 }
 
-// Item is a product or a service. Which of the two it is follows from its position
-// in the graph, not from a field: an item nothing composes is a product, an item
-// with no parts is a service, and an item with both is a bundle inside a bundle.
-// Levels nest arbitrarily.
+// Item is a product or a service. In a catalogue that has not opted in to
+// [Catalog.Structured], which of the two it is follows from its position in the
+// graph, not from a field: an item nothing composes is a product, an item with no
+// parts is a service, and an item with both is a bundle inside a bundle. Levels nest
+// arbitrarily there.
+//
+// A structured catalogue declares it instead, in [Item.Kind], and publishing proves
+// the graph agrees (ADR-0524).
 type Item struct {
 	ID string `json:"id"`
+	// Kind says what this item is: a Marktleistung, the whole a person orders and
+	// the only thing the shop offers, built from services; or a service, one
+	// building block with a lifecycle process of its own that provisions it
+	// autonomously. Empty is the ordinary value outside a structured catalogue and
+	// means "read it off the graph", as every catalogue did before the field
+	// existed.
+	//
+	// Declared rather than derived because the derivation was the weakness: a
+	// product became a service the moment somebody drew an edge into it, and a
+	// single account was announced as a Marktleistung because nothing contained
+	// it. A declared kind is a statement a publish can check the graph against, and
+	// a refusal names the product whose declaration and structure disagree.
+	Kind ItemKind `json:"kind,omitempty"`
+	// Icon names the symbol the shop's tile layout draws for this item, one of
+	// [Icons] (ADR-0525). Empty draws the shop's default. A name,
+	// not a picture: a tile view shows dozens of items at once, and a named symbol
+	// costs no request and takes the catalogue's colour, where an uploaded picture
+	// per row would cost one request each (ADR-0391's open question).
+	Icon string `json:"icon,omitempty"`
 	// HomeCatalog is the catalogue whose scope governs editing this item. An item
 	// is referenced by catalogues rather than owned by one — it legitimately appears
 	// in several — so scope cannot be inherited from "the catalogue it is in", and a
@@ -504,6 +527,21 @@ type Item struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
+// ItemKind is what an item is in a structured catalogue.
+type ItemKind string
+
+const (
+	// ItemOffering is a Marktleistung: the whole a person orders, assembled from
+	// services the way a house is assembled from bricks. It is contained by
+	// nothing, includes at least one service, contains services only, and carries
+	// the category and product group the shop files it under.
+	ItemOffering ItemKind = "offering"
+	// ItemService is one building block: it has a lifecycle process of its own,
+	// provisions autonomously, has no parts, carries no heading, and is ordered
+	// only as part of a Marktleistung — included, or ticked as an option.
+	ItemService ItemKind = "service"
+)
+
 // EdgeKind distinguishes the two questions an edge can answer. They are different
 // questions and were conflated in the record this implements: structure says what
 // belongs to what, precedence says what must exist first.
@@ -614,6 +652,18 @@ type Catalog struct {
 	// are what its release is computed from, and because the same two products can
 	// relate differently in two catalogues.
 	Edges []Edge `json:"edges,omitempty"`
+	// Structured opts this catalogue in to declared structure
+	// (ADR-0524): every product it offers says whether
+	// it is a Marktleistung or a service, a Marktleistung is built from services
+	// only, and its category and product group are keys of the capability register
+	// — the category a capability, the product group one the category requires.
+	// Publishing refuses a catalogue whose graph or headings disagree.
+	//
+	// A switch rather than the new default, because the rules refuse catalogues
+	// that were valid the day before: a single account with no parts, a heading
+	// written on a part, a free-text category. Turning it on is a decision somebody
+	// takes once the catalogue has been converted, not a side effect of upgrading.
+	Structured bool `json:"structured,omitempty"`
 	// OwnerID is whoever created it, because creation is the one moment where
 	// there is nobody to ask. The owner may always read, write and share.
 	OwnerID string `json:"ownerId,omitempty"`

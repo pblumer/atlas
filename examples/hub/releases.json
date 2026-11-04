@@ -105,6 +105,36 @@
       "version": "1.0.5",
       "digest": "sha256:d21432982832dc3573ec7b080c2de065580de2989809e7df6958b4c43507f60a",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "m365-dienste",
+      "version": "1.0.6",
+      "digest": "sha256:9b4d898056ef8069c5b30ae7227e637f5b0bd3cb1fe61ed8e6c7355088e557f1",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "auftrag-finanzen",
+      "version": "1.0.1",
+      "digest": "sha256:35da1da5a1b8eb142c49c9a089e060eacff7339e27485a5aefe00cc917defd7f",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "einstieg",
+      "version": "1.0.1",
+      "digest": "sha256:b26955e7efa94169f89e04f0253df709f6fefb6ad7be15949e10dc1a0b8565eb",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "identitaet",
+      "version": "1.0.1",
+      "digest": "sha256:74bcaaff0106c4bfb6db91a10e1559d10ab8d1df35d10760aa3f1e82d974fea3",
+      "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "personal",
+      "version": "1.0.1",
+      "digest": "sha256:58215fde20d77198b4e988cca6b2c6e7eb0f8ce2a151564eec594060422ac2e1",
+      "minAtlas": "0.22.0-0"
     }
   ]
 }

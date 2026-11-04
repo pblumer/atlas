@@ -104,15 +104,18 @@ Eight icons, one per Highlights bullet. They exist because the alternative was
 emoji, and a row of emoji down the left of a feature list reads as generated
 filler no matter what the words say.
 
-They are **drawn from the vocabulary of the former peak mark** so the set looks
-like one family: solid shapes with their detail cut out of them, the peak as the
-enclosing form, and nodes as filled dots. Same constants throughout —
+They are **drawn from the vocabulary of the mark** so the set looks like one
+family: solid shapes with their detail cut out of them, the mark's rounded tile as
+the enclosing form, and nodes as filled dots. The two icons that stand for atlas
+itself (`one-binary.svg`, `agents.svg`) carry the mark's own shapes — the tile with
+the a and the cross cut out — in the icon grey; they were drawn on the former peak
+mark and were redrawn with it. Same constants throughout —
 
 | | |
 |---|---|
 | Colour | `#6E7781` only. No second colour, no gradient. |
 | Canvas | `viewBox="0 0 256 256"`, matching the mark, so weights carry over unscaled. |
-| Form | Filled shapes, never strokes. Interior detail is a hole in the fill (`fill-rule="evenodd"`), exactly as the mark cuts its notch and cross. |
+| Form | Filled shapes, never strokes. Interior detail is a hole in the fill (`fill-rule="evenodd"`), as the mark's a and cross are holes in its tile in the icon cut. |
 | Weight | No feature under ~22 units — that is 1.5px at the size these ship. |
 | Nodes | Filled circles, r 19–28 by prominence. |
 
@@ -126,14 +129,14 @@ switch them to `currentColor` and drop the constant.
 
 | File | What it draws |
 |------|---------------|
-| `one-binary.svg` | Everything Atlas is, inside the mark's own peak |
+| `one-binary.svg` | Everything atlas is, in one piece: the mark itself, its tile with the a and the cross cut out |
 | `durable.svg` | A record landing on the append-only log |
 | `compiled.svg` | Many strands resolving into one path |
 | `modeler.svg` | A canvas holding a modelled flow |
 | `tokens.svg` | One live token on the flow, singled out |
 | `human.svg` | A person — work handed to someone, not to a worker |
 | `decisions.svg` | A rule table with the row that hit marked |
-| `agents.svg` | The peak driven from outside, through two connectors |
+| `agents.svg` | The mark driven from outside, through two connectors |
 
 **Drawing another one.** Keep to the constants above and to the vocabulary —
 if a motif needs a shape the mark does not use, it probably belongs to a

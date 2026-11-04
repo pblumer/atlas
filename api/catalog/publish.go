@@ -134,6 +134,12 @@ type Release struct {
 	// It is a standing list rather than a report somebody has to think to run,
 	// because the role that defines approval rules is the role that publishes them.
 	WithoutApproval []string `json:"withoutApproval"`
+	// Structured says the catalogue was published under declared structure, so
+	// every item carries its kind and the order may hold the shop's rule: a service
+	// is ordered only as part of a Marktleistung. Carried on the release rather than
+	// read from the catalogue, because an order is placed against the release and
+	// the switch may have moved since.
+	Structured bool `json:"structured,omitempty"`
 }
 
 // Publish validates a catalogue set and computes its release. A non-empty problem
@@ -151,6 +157,7 @@ func Publish(in Input) (Release, []Problem) {
 	checkCatalogs(in, byID, add)
 	checkItems(in, add)
 	checkEdges(in, byID, add)
+	structuredRelease := checkStructure(in, byID, add)
 
 	// Both graphs must be acyclic. Structure is checked over containment alone;
 	// precedence over requires alone.
@@ -175,6 +182,7 @@ func Publish(in Input) (Release, []Problem) {
 		Requires:        preconditions(in),
 		Excludes:        incompatibilities(in),
 		WithoutApproval: itemsWithoutApproval(in.Items),
+		Structured:      structuredRelease,
 	}, nil
 }
 
@@ -351,6 +359,7 @@ func checkItems(in Input, add func(Problem)) {
 				"the shop would show its id, and there is nothing to fall back to"})
 		}
 		checkBindings(it, add)
+		checkIcon(it, add)
 		switch it.Approval.Kind {
 		case KindFixed, KindRole:
 			if it.Approval.Ref == "" {

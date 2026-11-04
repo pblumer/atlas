@@ -289,11 +289,7 @@ func findingMessages(findings []json.RawMessage) []string {
 // that first answer: a server behind a firewall that drops packets would otherwise
 // hold the whole adapter for half a minute to decide which tools to list.
 func (c *Client) CatalogueOffered() (bool, error) {
-	probe := *c
-	hc := *c.http
-	hc.Timeout = catalogueProbeTimeout
-	probe.http = &hc
-	body, err := probe.get("/api/v1/info")
+	body, err := c.withTimeout(catalogueProbeTimeout).get("/api/v1/info")
 	if err != nil {
 		return false, err
 	}
@@ -308,3 +304,15 @@ func (c *Client) CatalogueOffered() (bool, error) {
 
 // catalogueProbeTimeout bounds CatalogueOffered.
 const catalogueProbeTimeout = 5 * time.Second
+
+// withTimeout answers a copy of the client whose requests wait d instead of the
+// client's own thirty seconds, for the few calls whose answer is known to come
+// sooner or later than that. The copy shares the transport and its connection
+// pool; only the http.Client value, which carries the timeout, is new.
+func (c *Client) withTimeout(d time.Duration) *Client {
+	dup := *c
+	hc := *c.http
+	hc.Timeout = d
+	dup.http = &hc
+	return &dup
+}

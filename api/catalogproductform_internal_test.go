@@ -247,6 +247,8 @@ var productFieldControls = map[string]string{
 	"lifecycle":          `name="orderableFrom"`,
 	"keywords":           `name="keywords"`,
 	"configForm":         `name="configForm"`,
+	"kind":               `name="kind"`,
+	"icon":               `name="icon"`,
 	"price":              `name="price"`,
 	// The delivery promise (ADR-0515): a name,
 	// the working days and a name per declared language, drawn by one helper.

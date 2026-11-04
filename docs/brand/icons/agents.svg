@@ -1,6 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" aria-hidden="true">
-  <!-- The peak driven from outside, through two connectors — the MCP surface. -->
-  <path fill="#6E7781" fill-rule="evenodd" d="M166 54 240 208 92 208ZM166 176 194 208 138 208Z"/>
-  <rect fill="#6E7781" x="8" y="92" width="127" height="26" rx="13"/>
-  <rect fill="#6E7781" x="8" y="150" width="99" height="26" rx="13"/>
+  <!-- The mark driven from outside, through two connectors — the MCP surface. The
+       mark is its tile with the a and the cross cut out of it, drawn smaller. -->
+  <g transform="translate(96 56) scale(0.5625)">
+    <path fill="#6E7781" fill-rule="evenodd" d="M56 0H200A56 56 0 0 1 256 56V200A56 56 0 0 1 200 256H56A56 56 0 0 1 0 200V56A56 56 0 0 1 56 0ZM146 189.6A60 60 0 0 1 42.3 167.5L69.5 145.6A31 31 0 0 0 123.7 170.9ZM40.6 159.4A60 60 0 0 1 114.5 92.8L125.4 113.3L107.5 120.9A31 31 0 0 0 70.5 141.4ZM133 93H162V211H133ZM184.5 53H199.5V70.5H217V85.5H199.5V103H184.5V85.5H167V70.5H184.5Z"/>
+  </g>
+  <rect fill="#6E7781" x="8" y="104" width="100" height="26" rx="13"/>
+  <rect fill="#6E7781" x="8" y="156" width="100" height="26" rx="13"/>
 </svg>
