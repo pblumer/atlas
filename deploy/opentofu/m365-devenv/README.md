@@ -218,6 +218,15 @@ SharePoint:
 | `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
 | Zugangsdaten | `credential_validity_days` frei | höchstens 7 Tage |
 
+**Speicherkontingent automatisch setzen (`sharepoint_admin_quota`, Vorgabe `false`).** Der
+Katalogschritt `set-site-quota` setzt das Kontingent einer Site über den Admin-Endpunkt von
+SharePoint (`<tenant>-admin.sharepoint.com`, ADR-0141). Dieser verlangt die SharePoint-Online-
+Anwendungsberechtigung `Sites.FullControl.All` (nicht die von Graph) und eine Anmeldung mit
+Zertifikat (`sharepoint_credential = "certificate"`). Die Berechtigung gilt für **jede** Site des
+Tenants, auch für echte; ein engeres Recht gibt es für diesen Endpunkt nicht. Ohne den Schalter
+fällt der Katalog auf die Aufgabe «Speicherkontingent von Hand setzen» zurück. Nachträglich
+anwenden, ohne die Atlas-VM anzufassen: `tofu apply -target=module.sharepoint`.
+
 Der **Management Scope** umfasst alle Empfänger, deren Alias mit dem Präfix der Umgebung
 beginnt (`Alias -like 'atlas-test-<zufall>*'`): die Testpersonen und alles, was die Worker
 unter diesem Namen anlegen. Ein Testprozess, der ein Funktionspostfach oder eine Verteilerliste

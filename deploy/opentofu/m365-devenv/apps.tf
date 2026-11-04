@@ -23,6 +23,14 @@ locals {
   }
 
   app_owners = [data.azuread_client_config.current.object_id]
+
+  # SharePoint Online's own Sites.FullControl.All (not Graph's): the admin endpoint that
+  # set-site-quota calls accepts nothing narrower, and only with a certificate.
+  sharepoint_admin_roles = [for sp in data.azuread_service_principal.sharepoint_online : {
+    resource_app_id    = local.sharepoint_app_id
+    resource_object_id = sp.object_id
+    role_id            = sp.app_role_ids["Sites.FullControl.All"]
+  }]
 }
 
 # --- Entra ID worker (ADR-0172) ---------------------------------------------
@@ -73,7 +81,7 @@ module "sharepoint" {
   display_name       = "${local.env_id}-worker-sharepoint"
   notes              = local.note
   owners             = local.app_owners
-  app_roles          = [for p in local.sharepoint_graph_permissions_effective : local.graph_role[p]]
+  app_roles          = concat([for p in local.sharepoint_graph_permissions_effective : local.graph_role[p]], local.sharepoint_admin_roles)
   create_certificate = var.sharepoint_credential == "certificate"
   create_secret      = var.sharepoint_credential == "secret"
   validity_days      = var.credential_validity_days

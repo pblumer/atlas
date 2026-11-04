@@ -87,6 +87,7 @@ _Changed_ / _Removed_ for each version.
 ### Fixed
 - **The AD and M365 examples no longer say a person sees one catalogue.** Their READMEs and install questions still described the rule before ADR-0522 (only the highest-ranked catalogue a person reaches); they now say every reached catalogue is shown and what rank still decides (`ad-dienste` 1.0.2, `m365-dienste` 1.0.8).
 - **The M365 test environment connects its Atlas server to the atlas hub.** `atlas_hub` (on by default) sets `ATLAS_BLUEPRINT_REGISTRY_URL` and the key from `examples/hub/releases.json`, so the Console offers the bundles of this repository, among them `ad-dienste` with its AD catalogue.
+- **The shipped approval form will not reject without a reason.** Its "Begründung" was optional, so a task completed through the form with "Genehmigen" left unticked — an administrator answering a manager's approval in Operations, say — was a rejection with no reason, which the order refuses ("the orderer is told it"): the instance stopped on an incident after the task was gone. The reason is now required, and shown, while "Genehmigen" is not ticked; approving hides it. The form is reseeded on start, so existing installations get it with the binary.
 
 - **A failed connector job waits before it is tried again.** The in-process runner, on which
   every built-in connector runs, retried a failed job at once, so a task's three retries were
