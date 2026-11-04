@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Atlas version comparison e2e harness</title>
+    <!-- Drives the real api/web/version-comparison.js against a mock `api` that answers
+         GET /api/v1/processes/{key}/comparison?with= the way the server does
+         (ADR-draft-compare-process-versions): every element added, removed or changed
+         from ?with= to {key}, with the fields before and after. The page scaffolding is
+         the test's own — app.js boots the whole console on import — so this proves the
+         dialog and the list, not app.js's wiring of them. Every request is recorded in
+         window.__calls. -->
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="card" style="padding: 18px; max-width: 720px">
+      <button class="btn" id="cmp-default">Compare (default pair)</button>
+      <button class="btn" id="cmp-oldest">Compare (oldest version)</button>
+      <button class="btn" id="cmp-draft">Show a draft's changes</button>
+    </div>
+    <script type="module">
+      import { compareVersionsFlow, showChangesDialog, changesHTML, defaultPair, countsText } from "/version-comparison.js";
+
+      const VERSIONS = [
+        { key: 101, processId: "order", name: "Bestellung", version: 1 },
+        { key: 103, processId: "order", name: "Bestellung", version: 3, versionTag: "hotfix" },
+        { key: 102, processId: "order", name: "Bestellung", version: 2 },
+      ];
+      const SCRIPT = "if amount > 100:\n    result = \"gross\"\nelse:\n    result = \"klein\"";
+      const CHANGES = {
+        "102<101": {
+          sameModel: false, difference: "x",
+          counts: { added: 1, removed: 1, changed: 1 },
+          changes: [
+            { kind: "added", id: "sign", type: "userTask", name: "Unterschreiben", parent: "order" },
+            { kind: "changed", id: "calc", type: "scriptTask", name: "Betrag prüfen", parent: "order", details: [
+              { field: "name", kind: "changed", before: "Prüfen", after: "Betrag prüfen" },
+              { field: "script", kind: "changed", before: "result = 1", after: SCRIPT },
+              { field: "extensionElements/zeebe:userTask", kind: "added", after: "" },
+              { field: "extensionElements/zeebe:ioMapping/zeebe:input[who]@source", kind: "removed", before: "=customer" },
+            ] },
+            { kind: "removed", id: "old", type: "task", name: "Ablegen", parent: "order" },
+          ],
+        },
+        "103<102": { sameModel: true, difference: "", counts: { added: 0, removed: 0, changed: 0 }, changes: [] },
+        "101<102": { sameModel: false, difference: "at <outgoing>", counts: { added: 0, removed: 0, changed: 0 }, changes: [] },
+      };
+      window.__calls = [];
+      const api = async (method, url) => {
+        window.__calls.push(`${method} ${url}`);
+        const m = url.match(/^\/api\/v1\/processes\/(\d+)\/comparison\?with=(\d+)$/);
+        const ans = m && CHANGES[`${m[1]}<${m[2]}`];
+        if (!ans) {
+          const err = new Error("no deployment with the key ?with= names");
+          err.status = 404;
+          throw err;
+        }
+        return JSON.parse(JSON.stringify(ans));
+      };
+
+      window.__pure = { changesHTML, defaultPair, countsText, VERSIONS };
+      document.getElementById("cmp-default").addEventListener("click", () =>
+        compareVersionsFlow({ api, processId: "order", processName: "Bestellung", versions: VERSIONS, toKey: 102 }));
+      document.getElementById("cmp-oldest").addEventListener("click", () =>
+        compareVersionsFlow({ api, processId: "order", processName: "Bestellung", versions: VERSIONS, toKey: 101 }));
+      document.getElementById("cmp-draft").addEventListener("click", () =>
+        showChangesDialog({ title: "Entwurf gegenüber v2", intro: "Vorher ist v2.", cmp: CHANGES["102<101"] }));
+      window.__ready = true;
+    </script>
+  </body>
+</html>

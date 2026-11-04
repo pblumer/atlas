@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pblumer/atlas/api/httpapi"
+	"github.com/pblumer/atlas/api/layout"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/model"
@@ -56,6 +57,22 @@ type migrationPlanResp struct {
 	// refusal with no next step is what sent them back to cancel-and-restart. Absent
 	// only when the plan could not be built far enough to ask.
 	Fork *forkPlanResp `json:"fork,omitempty"`
+	// At is where the instance stands now: the elements it has a live element
+	// instance on — a waiting task, an armed event, the sub-process around them — by
+	// element id, the process itself left out. A refusal of a batch carries it too, so
+	// the outcome can say where each instance that stayed behind is.
+	At []string `json:"at,omitempty"`
+	// Changes is every element the target version adds, removes or changes against
+	// the instance's version, and Counts their sums
+	// (ADR-draft-compare-process-versions): what the instance meets after the move,
+	// at the elements in At above all. Only the plan endpoint answers them; they are
+	// a reading of two documents, and a batch has no use for one per instance.
+	Changes []layout.Change `json:"changes,omitempty"`
+	Counts  *changeCounts   `json:"counts,omitempty"`
+
+	// The two versions' documents, copied out of the registry so the plan endpoint
+	// can compare them after the run loop's turn.
+	fromXML, toXML []byte
 }
 
 // migrationRequest is the body both endpoints take. Mapping overrides are optional and
@@ -206,8 +223,44 @@ func (s *Server) planMigration(piKey, targetDefKey uint64, overrides []migration
 	}
 	plan.Problems = append(plan.Problems, engine.ValidateMigration(src.cp, dst.cp, live, mapping)...)
 	plan.Mapping = migrationPairsOf(src.cp, dst.cp, mapping)
+	plan.At = migrationPositions(src.cp, src.ProcessID, live)
+	plan.fromXML, plan.toXML = src.xml, dst.xml
 	plan.Migratable = len(plan.Problems) == 0
 	return plan, true, nil
+}
+
+// migrationPositions names the elements an instance has live element instances on,
+// once each, in the order of the source model: a multi-instance body and its
+// iterations are one position, and the process itself is not one.
+func migrationPositions(cp *compiler.CompiledProcess, processID string, live []engine.MigrationElement) []string {
+	at := map[int32]bool{}
+	for _, el := range live {
+		at[el.ElementId] = true
+	}
+	var out []string
+	for i := int32(0); int(i) < cp.NodeCount(); i++ {
+		if !at[i] {
+			continue
+		}
+		if id := cp.ElementBpmnId(i); id != "" && id != processID {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// withChanges adds to a plan what the target version changes against the instance's,
+// read from the two documents the plan carries. It parses both, so it runs after the
+// run loop's turn and only where an operator is reading the answer. A comparison that
+// fails leaves the plan as it was: the plan's own verdict does not depend on it.
+func (plan *migrationPlanResp) withChanges() {
+	if plan.fromXML == nil || plan.toXML == nil {
+		return
+	}
+	if changes, err := layout.Changes(plan.fromXML, plan.toXML); err == nil {
+		counts := countChanges(changes)
+		plan.Changes, plan.Counts = changes, &counts
+	}
 }
 
 // readMigrationRequest decodes and sanity-checks the shared body.
@@ -271,6 +324,7 @@ func (s *Server) handleMigrationPlan(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no running instance with that key")
 	default:
+		plan.withChanges()
 		httpapi.JSON(w, http.StatusOK, plan)
 	}
 }

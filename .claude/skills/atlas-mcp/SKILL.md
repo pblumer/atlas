@@ -35,6 +35,7 @@ Bearer` header.
 | `atlas_create_instance` | `key`, `variables?` | starts an instance (optionally seeded with start variables) and returns stats |
 | `atlas_process_runtime` | `key` | per-element token and visit counts |
 | `atlas_process_versions` | `key` | every deployed version of that process, newest first: running, finished and incident counts and the active flag — which versions still hold work |
+| `atlas_compare_versions` | `key`, `with?` | what changed from the version `with` names (default: the one before) to `key`: every element added, removed or changed, and for a changed one each field before and after — the diagram and formatting are not compared |
 | `atlas_process_statistics` | `key`, `from?`, `to?` | over a period: runs per element and per sequence flow (zeroes included), and per element duration, waiting and working time as count, mean, median, p90, max and total (ADR-0496) |
 | `atlas_call_activities` | none | every call activity across deployed processes, with its called process id, binding, propagation, any per-server target override (redirect/pin/disable, ADR-0105), and how it currently resolves here |
 | `atlas_collaboration_runtime` | `key` | a collaboration's live pools, tokens, and message flows |

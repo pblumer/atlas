@@ -16,12 +16,19 @@
 // /api/v1/drafts/{id}/comparison), because only it can say "same model" without a
 // formatting difference reading as a change.
 //
+// The panel also opens the full list of differences — every element the draft adds,
+// removes or changes against the version, which the comparison now carries — and, on
+// a version, the comparison with any other version of the process
+// (ADR-draft-compare-process-versions). A standing names those as actions; the chip
+// opens them.
+//
 // draftStanding and versionStanding are pure functions of what the server answered, so
 // a browser test drives them without an editor around them — the split
 // frozen-decisions.js already makes.
 
 import { fmtDateTime } from "./datefmt.js";
 import { t } from "./i18n.js";
+import { compareVersionsFlow, showChangesDialog } from "./version-comparison.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -44,7 +51,7 @@ export function draftStanding(cmp) {
     return {
       label: t("shown.draft"), tone: "", title: t("shown.draftTitle"),
       rows: [[t("shown.row.showing"), t("shown.showingDraft")]],
-      note: t("shown.noCompare"), links: [],
+      note: t("shown.noCompare"), links: [], actions: [],
     };
   }
   const rows = [
@@ -57,7 +64,7 @@ export function draftStanding(cmp) {
     return {
       label: t("shown.notDeployed"), tone: "off",
       title: t("shown.notDeployedTitle"),
-      rows, note: "", links: [],
+      rows, note: "", links: [], actions: [],
     };
   }
   const v = `v${cmp.version}`;
@@ -67,11 +74,12 @@ export function draftStanding(cmp) {
     return {
       label: t("shown.same", { v }), tone: "ok",
       title: t("shown.sameTitle", { v }),
-      rows, links,
+      rows, links, actions: [],
       note: t("shown.sameNote", { v }),
     };
   }
   const diff = cmp.difference ? t("shown.firstDiff", { difference: cmp.difference }) : "";
+  const actions = changesAction(cmp, v);
   // Deployed after the draft's last save and not the same model: the version holds
   // something this draft does not. That is the case that loses work — editing this
   // draft and publishing its application deploys without it — so it is the warning.
@@ -80,16 +88,26 @@ export function draftStanding(cmp) {
     return {
       label: t("shown.behind", { v }), tone: "warn",
       title: t("shown.behindTitle", { v }),
-      rows, links,
+      rows, links, actions,
       note: t("shown.behindNote", { v, diff }),
     };
   }
   return {
     label: t("shown.ahead", { v }), tone: "",
     title: t("shown.aheadTitle", { v }),
-    rows, links,
+    rows, links, actions,
     note: t("shown.aheadNote", { diff }),
   };
+}
+
+// changesAction offers the full list of what the draft changes against version v,
+// when the comparison carries one — a server from before the list does not.
+function changesAction(cmp, v) {
+  if (!cmp || cmp.sameModel || !Array.isArray(cmp.changes)) return [];
+  return [{
+    act: "changes", text: t("shown.showChanges"),
+    title: t("shown.changesDraftTitle", { v }), intro: t("shown.changesDraftIntro", { v }), cmp,
+  }];
 }
 
 // versionStanding is the chip for a session opened on a deployed version. here is its
@@ -114,7 +132,12 @@ export function versionStanding(here, versions, cmp, draftUnread) {
     links.push({ href: `#/modeler/d/${encodeURIComponent(newest.key)}`, text: t("shown.open", { v: `v${newest.version}` }) });
   }
   let note = "";
+  const actions = [];
+  if ((versions || []).length > 1) {
+    actions.push({ act: "compare", text: t("shown.compareVersions"), here, versions });
+  }
   if (cmp) {
+    actions.push(...changesAction(cmp, v));
     const same = t(cmp.sameModel ? "shown.sameModel" : "shown.otherModel", { v });
     rows.push([t("shown.row.draft"), t("shown.draftSaved", { stamp: stamp(cmp.savedAt, cmp.savedByName), same })]);
     links.push({ href: `#/modeler/draft/${encodeURIComponent(here.processId)}`, text: t("shown.openDraft") });
@@ -132,7 +155,7 @@ export function versionStanding(here, versions, cmp, draftUnread) {
     label: latest ? t("shown.newestLabel", { v }) : t("shown.ofLabel", { v, newest: newest.version }),
     tone: latest ? "ok" : "warn",
     title: t("shown.versionTitle", { version: here.version, newest: newest.version, stamp: stamp(here.deployedAt, here.deployedByName) }),
-    rows, note, links,
+    rows, note, links, actions,
   };
 }
 
@@ -140,7 +163,7 @@ export function versionStanding(here, versions, cmp, draftUnread) {
 export function unsavedStanding() {
   return {
     label: t("shown.unsaved"), tone: "off", title: t("shown.unsavedTitle"),
-    rows: [[t("shown.row.showing"), t("shown.unsavedRow")]], note: "", links: [],
+    rows: [[t("shown.row.showing"), t("shown.unsavedRow")]], note: "", links: [], actions: [],
   };
 }
 
@@ -148,8 +171,10 @@ export function unsavedStanding() {
 export function standingHTML(s) {
   const rows = s.rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
   const note = s.note ? `<p class="sv-note${s.tone === "warn" ? " warn" : ""}">${esc(s.note)}</p>` : "";
-  const links = s.links.length
-    ? `<div class="sv-links">${s.links.map((l) => `<a class="btn neutral small" href="${esc(l.href)}">${esc(l.text)}</a>`).join("")}</div>`
+  const actions = s.actions || [];
+  const links = s.links.length || actions.length
+    ? `<div class="sv-links">${s.links.map((l) => `<a class="btn neutral small" href="${esc(l.href)}">${esc(l.text)}</a>`).join("")}${
+      actions.map((a, i) => `<button type="button" class="btn neutral small" data-sv-act="${i}">${esc(a.text)}</button>`).join("")}</div>`
     : "";
   return `<button type="button" class="pill sv-chip${s.tone ? " " + s.tone : ""}" id="sv-chip"
       aria-haspopup="true" aria-expanded="false" aria-controls="sv-pop" title="${esc(s.title)}">${esc(s.label)}</button>
@@ -167,6 +192,7 @@ export function standingHTML(s) {
 export function attachShownVersion(host, { api, which }) {
   let seq = 0;
   let closed = false;
+  let shown = null; // the standing on screen, whose actions the panel's buttons name
   const setOpen = (open) => {
     const chip = host.querySelector("#sv-chip");
     const pop = host.querySelector("#sv-pop");
@@ -180,6 +206,15 @@ export function attachShownVersion(host, { api, which }) {
   // a time. This one closes on a click anywhere outside it, read in the capture phase
   // because the bar menu's trigger stops its click before it would bubble up to here.
   const onHostClick = (e) => {
+    const act = e.target.closest && e.target.closest("[data-sv-act]");
+    if (act && shown) {
+      const a = (shown.actions || [])[Number(act.dataset.svAct)];
+      if (a) {
+        setOpen(false);
+        runAction(a);
+      }
+      return;
+    }
     if (!(e.target.closest && e.target.closest("#sv-chip"))) return;
     const pop = host.querySelector("#sv-pop");
     setOpen(pop ? pop.hidden : false);
@@ -196,6 +231,17 @@ export function attachShownVersion(host, { api, which }) {
   host.addEventListener("click", onHostClick);
   host.addEventListener("keydown", onKey);
   document.addEventListener("click", onDocClick, true);
+
+  const runAction = (a) => {
+    if (a.act === "changes") {
+      showChangesDialog({ title: a.title, intro: a.intro, cmp: a.cmp });
+    } else if (a.act === "compare") {
+      compareVersionsFlow({
+        api, processId: a.here.processId, processName: a.here.name || a.here.processId,
+        versions: a.versions, toKey: a.here.key,
+      });
+    }
+  };
 
   const read = async (method, url) => {
     try { return await api(method, url); } catch { return null; }
@@ -230,6 +276,7 @@ export function attachShownVersion(host, { api, which }) {
     const s = await standingNow();
     if (closed || mine !== seq) return; // superseded, or the editor is gone
     const wasOpen = !!host.querySelector("#sv-pop:not([hidden])");
+    shown = s;
     host.innerHTML = s ? standingHTML(s) : "";
     host.hidden = !s;
     if (wasOpen) setOpen(true);
