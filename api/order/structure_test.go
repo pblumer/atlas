@@ -8,7 +8,7 @@ import (
 )
 
 // In a structured release a service is ordered only as part of a Marktleistung
-// (ADR-draft-marktleistung-and-service). The shop never offers one on its own, and
+// (ADR-0524). The shop never offers one on its own, and
 // the order holds the same rule, so a caller of the API cannot place what the shop
 // would not show.
 

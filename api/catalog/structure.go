@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Declared structure (ADR-draft-marktleistung-and-service).
+// Declared structure (ADR-0524).
 //
 // A catalogue drew its levels from the graph: an item nothing contained was a
 // product, anything below one a service. That made the distinction a picture rather

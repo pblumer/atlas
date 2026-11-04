@@ -2,7 +2,7 @@
 
 Dieser Leitfaden richtet sich an KI-Agenten und Personen, die Produktkataloge in Atlas pflegen, typischerweise über die MCP-Werkzeuge `atlas_*_catalog*`. Er beschreibt, wie man Katalogprodukte anlegt, welcher Kategorie und Produktgruppe man sie zuordnet, was eine Marktleistung ausmacht und was ein Service ist.
 
-Die Entscheidung dahinter steht in [ADR-draft-marktleistung-and-service](../adr/draft-marktleistung-and-service.md). Für Agenten, die am Atlas-Code arbeiten, gilt das [AGENTS.md im Wurzelverzeichnis](../../AGENTS.md).
+Die Entscheidung dahinter steht in [ADR-0524](../adr/0524-marktleistung-and-service.md). Für Agenten, die am Atlas-Code arbeiten, gilt das [AGENTS.md im Wurzelverzeichnis](../../AGENTS.md).
 
 ## 1. Begriffe
 

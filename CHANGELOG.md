@@ -27,7 +27,7 @@ _Changed_ / _Removed_ for each version.
   the recipient holds. Catalogues that are not switched on publish as before. The product
   editor offers the kind, the catalogue settings the switch, and the MCP tools both
   fields; `docs/catalogue/AGENTS.md` describes how products are created
-  (ADR-draft-marktleistung-and-service).
+  (ADR-0524).
 
 - **A person without an account answers a task from a mail.** A user task marked
   `atlas:answeredBy="link"` may be answered by whoever holds its link, and a mail task

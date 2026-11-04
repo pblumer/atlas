@@ -9,7 +9,7 @@ import (
 )
 
 // In a structured catalogue the two headings are references, not words
-// (ADR-draft-marktleistung-and-service): the category is the key of a capability,
+// (ADR-0524): the category is the key of a capability,
 // the product group the key of a capability that category requires. These tests
 // hold the publish to that, and say where the words then come from.
 

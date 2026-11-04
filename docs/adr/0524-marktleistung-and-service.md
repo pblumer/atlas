@@ -1,4 +1,4 @@
-# ADR-DRAFT: A structured catalogue declares Marktleistung and service, and files them under capabilities
+# ADR-0524: A structured catalogue declares Marktleistung and service, and files them under capabilities
 
 - **Status:** Accepted
 - **Implementation:** Landed

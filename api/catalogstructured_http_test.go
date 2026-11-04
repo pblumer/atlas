@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// A structured catalogue over the real routes (ADR-draft-marktleistung-and-service):
+// A structured catalogue over the real routes (ADR-0524):
 // the switch is a catalogue patch, its headings are held to the capability register
 // at publish and worded from it, and an order cannot ask for a service on its own.
 

@@ -8,7 +8,7 @@ import (
 	"github.com/pblumer/atlas/api/runloop"
 )
 
-// Headings that are references (ADR-draft-marktleistung-and-service).
+// Headings that are references (ADR-0524).
 //
 // ADR-0360 made the category a string a product writes on itself and named the day
 // it would have to become a reference: when something must talk *about* a category

@@ -367,7 +367,7 @@ func (s *Service) place(orderer, recipient, id string, rel catalog.Release, req 
 		// that had already opened at the moment the order says it was placed.
 		at := s.now()
 		// A service is ordered only as part of a Marktleistung in a structured
-		// release (ADR-draft-marktleistung-and-service). Checked on what was asked
+		// release (ADR-0524). Checked on what was asked
 		// for, before it is expanded: an included part arriving with its whole is
 		// the ordinary case, and asking for it alone is the one refused.
 		if stray = directServiceIn(rel, req.Items, has); stray != "" {

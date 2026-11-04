@@ -133,7 +133,7 @@ type TargetRef struct {
 // arbitrarily there.
 //
 // A structured catalogue declares it instead, in [Item.Kind], and publishing proves
-// the graph agrees (ADR-draft-marktleistung-and-service).
+// the graph agrees (ADR-0524).
 type Item struct {
 	ID string `json:"id"`
 	// Kind says what this item is: a Marktleistung, the whole a person orders and
@@ -647,7 +647,7 @@ type Catalog struct {
 	// relate differently in two catalogues.
 	Edges []Edge `json:"edges,omitempty"`
 	// Structured opts this catalogue in to declared structure
-	// (ADR-draft-marktleistung-and-service): every product it offers says whether
+	// (ADR-0524): every product it offers says whether
 	// it is a Marktleistung or a service, a Marktleistung is built from services
 	// only, and its category and product group are keys of the capability register
 	// — the category a capability, the product group one the category requires.

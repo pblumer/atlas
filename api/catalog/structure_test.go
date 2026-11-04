@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// A structured catalogue (ADR-draft-marktleistung-and-service) declares what every
+// A structured catalogue (ADR-0524) declares what every
 // product is: a Marktleistung, the whole a person orders, built from services; or a
 // service, one building block with a lifecycle of its own. These tests state the
 // rules a publish holds such a catalogue to, and that a catalogue which has not

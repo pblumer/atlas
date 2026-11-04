@@ -78,7 +78,7 @@ type Service struct {
 
 	// Capabilities reads the capability register, so publishing a structured
 	// catalogue can hold its category and product group to it and word them from
-	// it (ADR-draft-marktleistung-and-service). Nil refuses the publish of a
+	// it (ADR-0524). Nil refuses the publish of a
 	// structured catalogue rather than skipping the check: a heading that was never
 	// checked must not read as one that was. A catalogue that has not opted in
 	// never asks.
@@ -344,7 +344,7 @@ type catalogUpdate struct {
 	// callers that send them compute the new list from a snapshot.
 	Revision int64 `json:"revision,omitempty"`
 	// Structured turns declared structure on or off
-	// (ADR-draft-marktleistung-and-service). A pointer, like Rank, so a patch that
+	// (ADR-0524). A pointer, like Rank, so a patch that
 	// does not mention it leaves it where it is.
 	Structured *bool `json:"structured,omitempty"`
 }

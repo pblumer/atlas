@@ -90,7 +90,7 @@ func catalogRecordProps() map[string]any {
 			"role: \"viewer\"|\"editor\"}]. Only the OWNER may change this; an editor changing the " +
 			"catalogue and its member list would be a grant that amplifies itself. THE COMPLETE LIST."),
 		"structured": map[string]any{"type": "boolean",
-			"description": "Opt the catalogue in to DECLARED STRUCTURE (ADR-draft-marktleistung-and-service). " +
+			"description": "Opt the catalogue in to DECLARED STRUCTURE (ADR-0524). " +
 				"Every product it offers must then carry `kind`: a Marktleistung (\"offering\") is the " +
 				"whole a person orders — contained by nothing, including at least one service, containing " +
 				"services only, filed under a `category` and a `productGroup` that are CAPABILITY KEYS, the " +
@@ -238,7 +238,7 @@ func catalogItemProps() map[string]any {
 				"deliveryDays": map[string]any{"type": "integer", "minimum": 1, "maximum": 365},
 			}},
 		"kind": map[string]any{"type": "string", "enum": []any{"", "offering", "service"},
-			"description": "What it is in a STRUCTURED catalogue (ADR-draft-marktleistung-and-service): " +
+			"description": "What it is in a STRUCTURED catalogue (ADR-0524): " +
 				"\"offering\" for a Marktleistung, the whole a person orders, assembled from services like " +
 				"a house from bricks; \"service\" for one brick, with its own lifecycle process, provisioned " +
 				"autonomously and ordered only as part of a Marktleistung. Leave it empty outside a " +

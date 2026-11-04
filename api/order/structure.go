@@ -8,7 +8,7 @@ import (
 
 // directServiceIn reports a service the selection asks for on its own, or "" when
 // there is none. In a structured release the shop offers services only inside a
-// Marktleistung (ADR-draft-marktleistung-and-service), so a selection may name one
+// Marktleistung (ADR-0524), so a selection may name one
 // only beside a Marktleistung it is part of — included or optional — or as an option
 // of a Marktleistung the recipient already holds, which is how a sleeve not ticked
 // with the laptop is ordered later (ADR-0312, amendment of 2026-10-28). A release
