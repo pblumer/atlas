@@ -1,5 +1,5 @@
 {
-  "_comment": "Was die Applikation beispiel-m365-dienste zur Capability-Landkarte des Servers beitraegt (ADR-draft-application-bundle-architecture): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen). Die OnPrem-Variante baut install-m365-dienste.py daraus mit den Prozessen *_onprem.",
+  "_comment": "Was die Applikation beispiel-m365-dienste zur Capability-Landkarte des Servers beitraegt (ADR-0528): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen). Die OnPrem-Variante baut install-m365-dienste.py daraus mit den Prozessen *_onprem.",
   "realizations": [
     {
       "capability": "m365-aufbewahrung",

@@ -344,7 +344,7 @@ type packageManifest struct {
 	} `json:"forms"`
 	Decisions []json.RawMessage `json:"decisions"`
 	// InformationModels and Architecture are what a format-4 tree carries of the
-	// architecture (ADR-draft-application-bundle-architecture).
+	// architecture (ADR-0528).
 	InformationModels []struct {
 		Name string `json:"name"`
 		Path string `json:"path"`

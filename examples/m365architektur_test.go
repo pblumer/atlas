@@ -155,7 +155,7 @@ func TestM365ProcessDataMatchesTheModel(t *testing.T) {
 }
 
 // m365Architecture is architektur/capabilities.json, the architecture file of the
-// source tree (format 4, ADR-draft-application-bundle-architecture).
+// source tree (format 4, ADR-0528).
 type m365Architecture struct {
 	Comment      string                          `json:"_comment"`
 	Realizations []capability.BundledRealization `json:"realizations"`

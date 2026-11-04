@@ -7,7 +7,7 @@ Dieses Verzeichnis beschreibt, *was* die Prozesse des Beispiels bewegen und *wof
 | `informationsmodell.json` | Klassen, Lebenszyklen, Beziehungen, Datenspeicher (ADR-0230, ADR-0259) | Informationsmodell der Applikation |
 | `capabilities.json` | `realizations`: welche Prozesse dieser Applikation welche Capability realisieren; `capabilities` und `valueStreams`: Vorschlaege fuer die Capability-Landkarte (ADR-0305) | Realisierungen gehoeren der Applikation; die Landkarte gehoert dem Server |
 
-Beide Dateien reisen im Applikationsbuendel mit: `atlas.json` nennt sie im Quellbaum-Format 4 unter `informationModels` und `architecture` (ADR-draft-application-bundle-architecture). Jeder Import nimmt sie mit, ob ueber den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das Installationsskript der Testumgebung.
+Beide Dateien reisen im Applikationsbuendel mit: `atlas.json` nennt sie im Quellbaum-Format 4 unter `informationModels` und `architecture` (ADR-0528). Jeder Import nimmt sie mit, ob ueber den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das Installationsskript der Testumgebung.
 
 In den Prozessen (`*.bpmn`) stehen dazu typisierte Datenobjekte und Datenspeicher (ADR-0053): Jeder Schritt, der ein Geschaeftsobjekt anlegt, aendert oder zurueckgibt, schreibt dessen Datenzustand ueber eine Datenausgabe-Assoziation **ohne Zuweisung**. Das ist nach ADR-0058 eine reine Zustandsaenderung: Sie setzt keine Prozessvariable und aendert den Ablauf nicht. Lesende Zugriffe sind bewusst nicht gezeichnet, weil eine Dateneingabe-Assoziation in Atlas eine Variable schreibt (ADR-0059).
 

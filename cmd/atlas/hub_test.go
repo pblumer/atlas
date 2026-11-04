@@ -196,7 +196,7 @@ func TestEverySampleInstallsFromItsHubPackage(t *testing.T) {
 			args := []string{"--server", ts.URL, "--note", "atlas hub"}
 			// A package that brings its architecture names capabilities this empty map
 			// lacks: the person installing it decides each, here by adopting what the
-			// package proposes (ADR-draft-application-bundle-architecture).
+			// package proposes (ADR-0528).
 			var plan struct {
 				Artifacts []struct {
 					Ref      string `json:"ref"`

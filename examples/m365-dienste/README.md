@@ -961,7 +961,7 @@ Beispiel auch seine Daten und seinen Zweck. Alles Einzelne steht in
   «Mitarbeitende arbeitsfähig machen» und «Zusammenarbeit ermöglichen».
 
 Beides reist im Applikationsbündel mit (Quellbaum-Format 4, `informationModels` und
-`architecture` in `atlas.json`, ADR-draft-application-bundle-architecture). Jeder Import nimmt
+`architecture` in `atlas.json`, ADR-0528). Jeder Import nimmt
 es mit: über den Hub in der Console, `atlas import`, `installieren.sh`/`.ps1` oder das
 Installationsskript der Testumgebung. Die Realisierungen gehören der Applikation und gehen
 mit ihr. Die Capability-Landkarte gehört dem Server:

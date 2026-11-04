@@ -21,7 +21,7 @@ Run from deploy/opentofu/m365-devenv after `tofu apply` and scripts/wait-atlas.s
   4. does what the package's installieren.sh does (decision models, application, release,
      catalogue), in the administrator's session rather than with a token (see install());
   5. brings the architecture of examples/m365-dienste/architektur with the application:
-     the source tree (format 4, ADR-draft-application-bundle-architecture) carries the
+     the source tree (format 4, ADR-0528) carries the
      information model and the realizations, and the import files them before the release
      is published, so its architecture sketch (ADR-0471, ADR-0495) records classes,
      stores, capabilities and value streams. The capability map is the server's: what it
@@ -261,7 +261,7 @@ def build_onprem(pkg, dst):
     for m in MODELS:
         shutil.copy(os.path.join(pkg, m + ".dmn"), os.path.join(dst, m + ".dmn"))
     shutil.copy(os.path.join(pkg, "fragen.json"), os.path.join(dst, "fragen.json"))
-    # The variant's architecture (ADR-draft-application-bundle-architecture): its own copy
+    # The variant's architecture (ADR-0528): its own copy
     # of the information model, whose Exchange store is Exchange Server and its worker, and
     # the online realizations of the processes it copies, under their copies' ids. The
     # proposals are the online package's: installed after it, the variant finds every key
