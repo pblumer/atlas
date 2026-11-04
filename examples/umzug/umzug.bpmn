@@ -48,12 +48,12 @@
 
   <process id="proc_umzug" name="Umzug organisieren" isExecutable="true">
     <documentation>Führt einen privaten Umzug: kündigen, Umzugsfirma buchen und Adressen ändern laufen
-gleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (Datum, ISO), kuendigungsfrist
-(ISO-Dauer, Vorgabe P3M), alteAdresse und neueAdresse.</documentation>
+gleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (Datum, ISO; leer heisst
+"in zwei Wochen"), kuendigungsfrist (ISO-Dauer, Vorgabe P3M), alteAdresse und neueAdresse.</documentation>
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="umzugstermin" type="string" required="true" default="2026-10-01"/>
+        <atlas:startVariable name="umzugstermin" type="string" required="false"/>
         <atlas:startVariable name="kuendigungsfrist" type="string" required="false" default="P3M"/>
         <atlas:startVariable name="alteAdresse" type="string" required="true" default="Bahnhofstrasse 12, 8001 Zürich"/>
         <atlas:startVariable name="neueAdresse" type="string" required="true" default="Seestrasse 4, 8802 Kilchberg"/>
@@ -65,12 +65,14 @@ gleichzeitig, die Übergabe wartet auf alle drei. Startvariablen: umzugstermin (
     </startEvent>
 
     <scriptTask id="fristen" name="Fristen rechnen">
-      <documentation>Echte Datumsarithmetik in FEEL: date(umzugstermin) - duration(kuendigungsfrist).
+      <documentation>Echte Datumsarithmetik in FEEL: date(umzugstermin) - duration(kuendigungsfrist). Ohne
+umzugstermin rechnet der Task mit einem Umzug in zwei Wochen ab heute – ein fest eingetragenes Datum läge
+irgendwann in der Vergangenheit, und das Beispiel zeigte dann nicht mehr den Fall, für den es gebaut ist.
 Innerhalb des Ausdrucks ist das Ergebnis ein Datum; als Prozessvariable wird es JSON und kommt als String
 zurück. Der Timer wandelt es deshalb mit date(...) wieder um — siehe die Dokumentation an der Boundary.</documentation>
       <extensionElements>
         <zeebe:script resultVariable="fristen"
-          expression="= { kuendigenBis: date(umzugstermin) - duration(kuendigungsfrist), umzug: date(umzugstermin) }"/>
+          expression="= { umzug: if umzugstermin = null then today() + duration(&quot;P14D&quot;) else date(umzugstermin), kuendigenBis: umzug - duration(kuendigungsfrist) }"/>
       </extensionElements>
       <incoming>f_start_fristen</incoming>
       <outgoing>f_fristen_fork</outgoing>

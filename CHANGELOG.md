@@ -45,6 +45,8 @@ _Changed_ / _Removed_ for each version.
   opt in. The Modeler offers both settings (ADR-0523).
 
 ### Fixed
+- **The moving example no longer drifts into the past.** `umzug` started with the fixed moving date 2026-10-01, which has since passed, so the card's case — a move in two weeks against three months' notice — no longer held. Without a moving date the model now computes one two weeks from today, and "Install and start" passes none; a date given in the start form is used as before.
+- **Installing the workshop twice leaves one decision reference.** The handbook's workshop install added a `bw-vorpruefung` reference to the Bewerbermanagement application on every click, although the upload overwrites the model in place; it now checks for the reference first, as the examples chapter does, and names the model by the reference the upload reports.
 - **The MCP catalogue refresh waits for its answer.** `atlas_refresh_catalog_content` gave up
   after the MCP client's thirty seconds, while a catalogue of 35 wiki-bound products took close to a
   minute; the agent saw a timeout for a refresh that went on and succeeded. That one tool now waits up

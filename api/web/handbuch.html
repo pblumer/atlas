@@ -3467,7 +3467,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               warten „in zehn Tagen" ab oder laufen auf einen Zeitplan. <code>&lt;timeDate&gt;</code> nimmt einen
               FEEL-Ausdruck, und der rechnet mit echter Datumsarithmetik – Umzugstermin minus Kündigungsfrist. Liegt
               das Datum schon in der Vergangenheit, feuert der Timer <b>sofort</b>, was bei zwei Wochen Vorlauf und
-              drei Monaten Frist genau die richtige Antwort ist. Die Boundary ist <b>nicht unterbrechend</b>: sie
+              drei Monaten Frist genau die richtige Antwort ist. Ohne angegebenen Umzugstermin rechnet das Modell
+              genau mit diesem Fall – Umzug in zwei Wochen ab heute –, so dass «Installieren und starten» ihn
+              immer zeigt; mit einem eigenen Termin im Startformular rechnet es mit diesem. Die Boundary ist <b>nicht unterbrechend</b>: sie
               erinnert, statt die Aufgabe zu schliessen, deren Erledigung sie anmahnt. Und das Join ist ein
               <b>paralleles</b> Gateway – ein exklusives wäre der häufigste Modellierfehler überhaupt, die Übergabe
               fände statt, sobald irgendein Strang fertig ist.</p>
@@ -3475,7 +3477,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               timer waits "in ten days" or runs on a schedule. <code>&lt;timeDate&gt;</code> takes a FEEL expression,
               and that one does real date arithmetic – moving date minus notice period. If the date is already in the
               past the timer fires <b>at once</b>, which with two weeks' lead time and three months' notice is exactly
-              the right answer. The boundary is <b>non-interrupting</b>: it reminds rather than closing the task whose
+              the right answer. Without a moving date the model computes exactly that case – a move two weeks from
+              today – so "Install and start" always shows it; with a date of your own in the start form it uses that. The boundary is <b>non-interrupting</b>: it reminds rather than closing the task whose
               completion it is chasing. And the join is a <b>parallel</b> gateway – an exclusive one would be the most
               common modelling mistake there is, with the handover happening as soon as any one strand finishes.</p>
           </div>
@@ -14362,10 +14365,21 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       const appId = await applicationId(data.application.name, data.application.key);
       setStatus(T("Entscheidung hochladen\u2026", "Uploading the decision\u2026"));
       try {
-        await apiCall("POST", "/api/v1/dmn-models?handle=" + encodeURIComponent(data.decision.handle),
-                      data.decision.xml, true);
-        await apiCall("POST", "/api/v1/dmnrefs",
-                      { name: data.decision.name, modelRef: data.decision.handle, projectId: appId });
+        // The upload overwrites the model in place under its handle, so a reference made by
+        // an earlier install still points at it. Adding another each time left one copy of
+        // "bw-vorpruefung" per click in the application; the examples chapter checks first,
+        // and so does this. The modelRef is the one the upload reports, which is the folded
+        // handle the reference has to name.
+        const up = await apiCall("POST", "/api/v1/dmn-models?handle=" + encodeURIComponent(data.decision.handle),
+                                 data.decision.xml, true);
+        const modelRef = (up && up.modelRef) || data.decision.handle;
+        const refs = await apiCall("GET", "/api/v1/dmnrefs");
+        const already = (Array.isArray(refs) ? refs : [])
+          .find((r) => r.name === data.decision.name && (r.projectId || "") === appId);
+        if (!already){
+          await apiCall("POST", "/api/v1/dmnrefs",
+                        { name: data.decision.name, modelRef: modelRef, projectId: appId });
+        }
       } catch (e) {
         if (e.status === 409) {
           throw new Error(T("Diese Instanz bezieht DMN-Modelle von einem entfernten temis-Dienst. Lege "

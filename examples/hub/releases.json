@@ -135,6 +135,12 @@
       "version": "1.0.1",
       "digest": "sha256:58215fde20d77198b4e988cca6b2c6e7eb0f8ce2a151564eec594060422ac2e1",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "personal",
+      "version": "1.0.2",
+      "digest": "sha256:797740164c57b0f76e934c0b76ba0aadd02fca677a12a90c15ad7a95f56d0dc0",
+      "minAtlas": "0.22.0-0"
     }
   ]
 }
