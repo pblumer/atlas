@@ -15,7 +15,7 @@ import (
 )
 
 // What a source tree carries of the architecture (format 4,
-// ADR-draft-application-bundle-architecture).
+// ADR-0528).
 //
 //	atlas.json                          "informationModels": [{"name", "path"}], "architecture": path
 //	architecture/<name>.model.json      an information model, in the shape POST /infomodel/import reads

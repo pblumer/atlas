@@ -167,7 +167,7 @@ func decisions(overwrite, keep, adopt *refFlag) (importplan.Decisions, error) {
 }
 
 // decisionsWithGaps is decisions with what --omit and --map say of the capability
-// map's gaps (ADR-draft-application-bundle-architecture). mapped holds ref=key pairs.
+// map's gaps (ADR-0528). mapped holds ref=key pairs.
 func decisionsWithGaps(overwrite, keep, adopt, omit *refFlag, mapped []string) (importplan.Decisions, error) {
 	d := importplan.Decisions{Overwrite: overwrite.refs, Keep: keep.refs, OverwriteAll: overwrite.all, KeepAll: keep.all,
 		Adopt: adopt.refs, Omit: omit.refs, OmitAll: omit.all, Map: map[string]string{}}

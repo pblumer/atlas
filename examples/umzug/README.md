@@ -62,9 +62,14 @@ atlas_create_project  name="Umzug"                             → projectId
 atlas_save_form       id="umzug-adressen" schema=<form>  projectId=…
 atlas_save_draft      xml=<umzug.bpmn>                   projectId=…
 atlas_deploy_project  id=<projectId>
-atlas_create_instance key=<definitionKey>  {umzugstermin:"2026-10-01", kuendigungsfrist:"P3M",
+atlas_create_instance key=<definitionKey>  {umzugstermin:"2027-06-30", kuendigungsfrist:"P3M",
                                             alteAdresse:"…", neueAdresse:"…"}
 ```
+
+Ohne `umzugstermin` rechnet der Script-Task mit einem Umzug in zwei Wochen ab heute.
+Bei drei Monaten Frist liegt `kuendigenBis` dann in der Vergangenheit, und die
+Erinnerung kommt sofort — der Fall, den das Handbuch beschreibt. Ein fest
+eingetragenes Datum würde mit der Zeit in die Vergangenheit rutschen.
 
 Gegen einen laufenden Server verifiziert: Nach dem Start stehen **drei** Aufgaben
 gleichzeitig im Posteingang (`kuendigen`, `firma`, `adressen`), und der Timer ist

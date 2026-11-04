@@ -433,7 +433,7 @@ func (s *Server) deleteApplicationRecordOnLoop(id string) error {
 		return err
 	}
 	// The realizations its bundle brought are the application's, not the map's
-	// (ADR-draft-application-bundle-architecture): gone with it, so the map stops
+	// (ADR-0528): gone with it, so the map stops
 	// claiming that an application nobody has realizes a capability. The capabilities
 	// themselves stay — they are the organisation's.
 	if s.bundledRealizations != nil {

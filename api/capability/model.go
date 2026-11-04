@@ -137,7 +137,7 @@ type Realization struct {
 	// portable key). Such a realization is the application's, read into the record
 	// and never stored on it: a write of the record drops it (NormalizeCapability),
 	// so reading a capability and sending it back cannot copy an application's
-	// realizations into the map (ADR-draft-application-bundle-architecture).
+	// realizations into the map (ADR-0528).
 	BundledBy string `json:"bundledBy,omitempty"`
 }
 
