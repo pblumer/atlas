@@ -1305,6 +1305,10 @@ const state = {
   taskOpen: '',
   taskError: '',
   catalog: null,
+  // every catalogue this person reaches, highest rank first, and which release each
+  // product in the merged release came from (ADR-0522)
+  catalogs: [],
+  releaseOf: {},
   release: null,
   orders: [],
   // held is what the inventory says this person already has, as itemId -> since.
@@ -1829,7 +1833,9 @@ async function readMe() {
 function forgetTheReader() {
   state.loaded = false;
   state.catalog = null;
+  state.catalogs = [];
   state.release = null;
+  state.releaseOf = {};
   state.orders = [];
   state.held = new Map();
   state.favourites = new Set();
@@ -1857,18 +1863,32 @@ async function loadSignInOptions() {
   } catch { /* registration off or unreachable — the line stays hidden */ }
 }
 
-// loadCatalogue reads the catalogue assigned to this person and its newest release.
+// loadCatalogue reads every catalogue this person is the audience for and their
+// newest releases, and lays the releases over one another
+// (ADR-0522): the shop offers what all of them offer.
+// The highest-ranked catalogue is the one whose name, theme and languages the page
+// wears.
 async function loadCatalogue() {
-  let catalog = null;
+  let catalogs = [];
   try {
-    catalog = await api('/api/v1/shop/catalog');
+    catalogs = await api('/api/v1/shop/catalogs');
   } catch (e) {
-    // 404 here is the ordinary "you are the audience for nothing" answer, not a
-    // failure: the page says so rather than showing an error. Anything else is a
-    // failure, and is said as one — read as "none assigned", a server that could
-    // not answer told people they had no catalogue.
+    // A server without the route answers 404: it still knows one catalogue per
+    // person, and that one is asked for as before.
     if (!e || e.status !== 404) throw e;
+    try {
+      const one = await api('/api/v1/shop/catalog');
+      catalogs = one ? [one] : [];
+    } catch (e2) {
+      // 404 here is the ordinary "you are the audience for nothing" answer, not a
+      // failure: the page says so rather than showing an error. Anything else is a
+      // failure, and is said as one — read as "none assigned", a server that could
+      // not answer told people they had no catalogue.
+      if (!e2 || e2.status !== 404) throw e2;
+    }
   }
+  state.catalogs = Array.isArray(catalogs) ? catalogs : [];
+  const catalog = state.catalogs[0] || null;
   state.catalog = catalog;
   applyTheme(state.catalog);
   // The catalogue decides which languages there are to choose between, so the
@@ -1877,10 +1897,51 @@ async function loadCatalogue() {
   // chosen.
   settleLocale();
   state.release = null;
-  if (state.catalog) {
-    const releases = await api(`/api/v1/catalogs/${state.catalog.id}/releases`);
-    state.release = releases && releases.length ? releases[0] : null;
+  state.releaseOf = {};
+  const newest = [];
+  for (const c of state.catalogs) {
+    const releases = await api(`/api/v1/catalogs/${encodeURIComponent(c.id)}/releases`);
+    if (releases && releases.length) newest.push(releases[0]);
   }
+  state.release = newest.length ? mergeReleases(newest) : null;
+}
+
+// mergeReleases lays releases over one another, highest-ranked first, into the one
+// release the rest of the page reads. A product several of them carry is taken from
+// the first; what makes it up (includes, options and every other map keyed by product)
+// comes with it from that same release. Categories are headings over this list, so two
+// catalogues' "Mail" become one heading. state.releaseOf remembers which release each
+// product came from: an order names one release, so a basket is placed per release.
+function mergeReleases(releases) {
+  const owner = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (!(it.id in owner)) owner[it.id] = r.id;
+    }
+  }
+  state.releaseOf = owner;
+  if (releases.length === 1) return releases[0];
+  const isMap = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  const out = { ...releases[0], items: [], withoutApproval: [] };
+  const mapKeys = new Set();
+  for (const r of releases) {
+    for (const [key, value] of Object.entries(r)) if (isMap(value)) mapKeys.add(key);
+  }
+  for (const key of mapKeys) out[key] = {};
+  for (const r of releases) {
+    for (const it of r.items || []) {
+      if (owner[it.id] === r.id && !out.items.some((x) => x.id === it.id)) out.items.push(it);
+    }
+    for (const id of r.withoutApproval || []) {
+      if (owner[id] === r.id && !out.withoutApproval.includes(id)) out.withoutApproval.push(id);
+    }
+    for (const key of mapKeys) {
+      for (const [id, v] of Object.entries(r[key] || {})) {
+        if (owner[id] === r.id && !(id in out[key])) out[key][id] = v;
+      }
+    }
+  }
+  return out;
 }
 
 // loadOrdersAndTasks reads this person's orders and the open tasks on orders at once,
@@ -2220,17 +2281,40 @@ async function order() {
       if (taken.length) variants[c.id] = [...taken];
     }
 
-    await api('/api/v1/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        releaseId: state.release.id,
-        items: [...state.basket],
-        ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
-        ...(Object.keys(config).length ? { config } : {}),
-        ...(Object.keys(variants).length ? { variants } : {}),
-      }),
-    });
+    // An order names one release (ADR-0312): a basket from several catalogues is
+    // placed as one order per release, each with its own products and what they are
+    // made of, their answers and their shapes.
+    const byRelease = new Map();
+    for (const id of state.basket) {
+      const rid = (state.releaseOf || {})[id] || state.release.id;
+      if (!byRelease.has(rid)) byRelease.set(rid, []);
+      byRelease.get(rid).push(id);
+    }
+    for (const [rid, ids] of byRelease) {
+      const part = new Set();
+      const walk = (id) => {
+        if (part.has(id)) return;
+        part.add(id);
+        for (const p of (rel.includes || {})[id] || []) walk(p);
+      };
+      ids.forEach(walk);
+      const partConfig = Object.fromEntries(Object.entries(config).filter(([id]) => part.has(id)));
+      const partVariants = Object.fromEntries(Object.entries(variants).filter(([id]) => part.has(id)));
+      await api('/api/v1/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          releaseId: rid,
+          items: ids,
+          ...(state.forWhom.trim() ? { recipient: state.forWhom.trim() } : {}),
+          ...(Object.keys(partConfig).length ? { config: partConfig } : {}),
+          ...(Object.keys(partVariants).length ? { variants: partVariants } : {}),
+        }),
+      });
+      // Placed: out of the basket, so a failure on the next release does not offer
+      // to order these a second time.
+      ids.forEach((id) => state.basket.delete(id));
+    }
     state.basket.clear();
     state.chosen.clear();
     state.config = {};
@@ -3277,6 +3361,11 @@ function renderBasket() {
         el('div', {
           'data-configkey': x.id,
           'data-formid': configFormOf(rel, x.id),
+          // What a directory field in the form searches through: this item in the
+          // release it is offered from — with several catalogues laid over one another
+          // (ADR-0522) that is not always the first.
+          'data-release': (state.releaseOf || {})[x.id] || (rel && rel.id),
+          'data-item': x.id,
         }, el('p', { class: 'note' }, t('cfg.loading'))))))
       : null,
     // What the "i" on a basket row opens. The button was drawn here from the
@@ -3437,12 +3526,13 @@ async function mountConfigForms() {
   availability.clear();
   if (!hosts.length) return;
 
-  let Form, decisionOptions, attachAvailabilityChecks;
+  let Form, decisionOptions, attachAvailabilityChecks, remote;
   try {
     const mod = await import('./formviewer.js');
     mod.ensureFormStyles();
     ({ Form } = await mod.loadFormViewer());
     ({ decisionOptions, attachAvailabilityChecks } = mod);
+    remote = await import('./remote-select.js');
   } catch {
     for (const host of hosts) paint(host, el('p', { class: 'note' }, t('cfg.failed')));
     return;
@@ -3458,7 +3548,17 @@ async function mountConfigForms() {
       }
       const schema = schemas.get(formID);
       if (!schema) throw new Error('no schema');
-      const form = new Form({ container: host, atlasDecisions: decisionOptions({ formId: formID }) });
+      // A directory field searches through the context the server authorizes: the
+      // release's item for an order form, the task for a task's (ADR-0473). A form
+      // with no such context — an action's — gets no search, as before.
+      let transport = null;
+      if (host.dataset.task) transport = remote.taskTransport(host.dataset.task);
+      else if (host.dataset.release && host.dataset.item) {
+        transport = remote.orderFormTransport(host.dataset.release, host.dataset.item);
+      }
+      const opts = { container: host, atlasDecisions: decisionOptions({ formId: formID }) };
+      if (transport) opts.atlasRemote = remote.remoteAdapter({ transport, data: state.config[itemID] || {} });
+      const form = new Form(opts);
       // Handed back what was typed before the last redraw, which is what makes the
       // basket survivable: adding a second product must not empty the first's form.
       const parsed = typeof schema === 'string' ? JSON.parse(schema) : schema;
@@ -4125,7 +4225,7 @@ function taskPanel(task) {
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.taskError ? el('p', { class: 'error' }, state.taskError) : null,
     task.formId
-      ? el('div', { 'data-configkey': key, 'data-formid': task.formId },
+      ? el('div', { 'data-configkey': key, 'data-formid': task.formId, 'data-task': task.key },
         el('p', { class: 'note' }, t('cfg.loading')))
       : el('p', { class: 'note' }, t('task.noForm')),
     el('div', { class: 'row', style: 'margin-top:10px' },
@@ -4261,8 +4361,10 @@ function detailsPanel(order, line) {
   if (!state.config[key]) state.config[key] = { ...(line.config || {}) };
   return el('div', { class: 'card cfg', style: 'margin-top:8px' },
     state.configError === key ? el('p', { class: 'error' }, t('cfg.invalid')) : null,
-    el('div', { 'data-configkey': key, 'data-formid': line.configForm },
-      el('p', { class: 'note' }, t('cfg.loading'))),
+    el('div', {
+      'data-configkey': key, 'data-formid': line.configForm,
+      'data-release': order.releaseId, 'data-item': line.itemId,
+    }, el('p', { class: 'note' }, t('cfg.loading'))),
     el('div', { class: 'row', style: 'margin-top:10px' },
       el('button', {
         class: 'primary', disabled: state.busy,

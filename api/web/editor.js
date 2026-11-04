@@ -1822,6 +1822,23 @@ function wizardHTML(bo) {
     <p class="muted" style="font-size:12px">A wizard's user tasks are the screens of one multi-step form, and the gateways between them decide which screen follows which answer. Attach an interrupting <b>timer boundary event</b> to say when an unfinished sitting is abandoned; a public wizard cannot be published without one. Leave the steps of a public wizard unassigned: they belong to whoever started it. In the Tasks app, a signed-in person who submits one screen lands on the next; the visitor of a public start link is carried the same way on the public page.</p>`;
 }
 
+// answeredByHTML is a user task's choice of who may answer it
+// (ADR-0523): the people it is assigned to, or also whoever
+// holds the link a mail task carries for it. A value the panel does not know is shown as
+// it stands; the Problems panel says why it is refused.
+function answeredByHTML(bo) {
+  const v = bo.answeredBy || "";
+  const opt = (value, label) => `<option value="${value}" ${v === value ? "selected" : ""}>${label}</option>`;
+  const unknown = v && v !== "link" ? `<option value="${esc(v)}" selected>${esc(v)}</option>` : "";
+  return `<label class="field"><span>${esc(tr("pnl.main.ut.answeredBy"))}</span>
+      <select id="f-answeredby">
+        ${opt("", esc(tr("pnl.main.ut.answeredBy.people")))}
+        ${opt("link", esc(tr("pnl.main.ut.answeredBy.link")))}
+        ${unknown}
+      </select></label>
+    <p class="muted" style="font-size:12px">${tr("pnl.main.ut.answeredByHint")}</p>`;
+}
+
 // shopOwners holds, per diagram instance, which message names product actions own: a Map
 // from name to [{ product, action }], set when the listing arrives. Present but null means
 // it was asked for and has not answered — or failed, which leaves it so: no receive task is
@@ -3966,6 +3983,11 @@ const SERVICE_TASK_KINDS = [
           : "Narrows what the pass reports. An RFC 4515 filter; empty reports every changed object.",
       },
       {
+        key: "select", label: "Attributes returned", placeholder: "cn,mail,sAMAccountName",
+        showIf: (v) => v.operation === "search",
+        hint: "The attributes the search returns, comma-separated — an LDAP attribute selection such as cn,mail. Empty returns the directory's default set: every attribute the account may read. Ask only for what the process needs, because whatever the search returns lands in the result variable.",
+      },
+      {
         key: "cookieVariable", label: "Cookie variable", placeholder: "dirsyncCookie",
         showIf: (v) => v.operation === "sync",
         hint: "One variable, read and written: the pass presents the cookie it finds here and writes the server's new one back, so a loop — sync, handle the changes, wait, sync again — carries its own position forward. Unset on the first pass means read everything.",
@@ -3989,8 +4011,18 @@ const SERVICE_TASK_KINDS = [
         hint: "The entry the operation acts on: the user for create/update/password/enable/disable/delete, the group for a membership change, or the entry being moved. May be a FEEL expression (fx).",
       },
       {
+        key: "attributes", label: "Attributes", type: "json", rows: 8,
+        // The inline entry and the entry variable are the two ways to supply an entry,
+        // and the compiler refuses both at once: the editor shows until a variable is
+        // named, and vice versa — the Entra panel's arrangement (ADR-0166, amended
+        // 2026-11-03).
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.entryVariable,
+        placeholder: '{\n  "sAMAccountName": "=konto",\n  "givenName": "=vorname",\n  "sn": "=nachname",\n  "displayName": "=vorname + \\" \\" + nachname",\n  "mail": "=email",\n  "telephoneNumber": null\n}',
+        hint: "The entry, authored here as JSON: attribute names to values. A string value beginning with = is a FEEL expression the Worker evaluates when it is handed the job, so it may read a variable the process declares personal — an attributes variable cannot, because the engine has to build it. A string is one value, a list several, a number or boolean its LDAP text; null leaves the attribute out of a create and clears it on an update. On a create, the object classes are supplied unless you set them.",
+      },
+      {
         key: "entryVariable", label: "Attributes variable", placeholder: "adUser",
-        showIf: (v) => v.operation === "create-user" || v.operation === "create-group" || v.operation === "create-contact" || v.operation === "update-attributes",
+        showIf: (v) => ["create-user", "create-group", "create-contact", "update-attributes"].includes(v.operation) && !v.attributes,
         hint: "A process variable holding a JSON object of AD attribute names to values (e.g. sAMAccountName, userPrincipalName). On a create, the object classes for a user, group or contact are supplied for you unless you set them yourself. On an update, exactly the attributes named here are replaced and the rest of the entry is left alone.",
       },
       {
@@ -4016,6 +4048,11 @@ const SERVICE_TASK_KINDS = [
         hint: (v) => v.operation === "search"
           ? "Receives {found, count, dn, entries}. 'found' is what a gateway branches on — =gruppe.found — and 'dn' is the distinguished name of the first entry found, ready to hand straight to a following task's Target DN as =gruppe.dn. The entries are DN-sorted, so 'dn' is the same one every time. Nothing found is an answer, not a failure: the task completes with found=false."
           : "Receives {entries, more}. A deleted object arrives as an entry carrying isDeleted=TRUE — AD reports a deletion as a change, not as an absence. 'more' says further changes are already waiting, so a loop can go straight round again instead of waiting for its timer.",
+      },
+      {
+        key: "foundVariable", label: "Found variable", placeholder: "gefunden",
+        showIf: (v) => v.operation === "search",
+        hint: "Receives found on its own, as a boolean, so a gateway branches on =gefunden while the result variable — names and DNs of people — is declared personal and stays sealed. With only this set, the search writes nothing else.",
       },
     ],
   },
@@ -4561,6 +4598,7 @@ const SERVICE_TASK_KINDS = [
           ? "Subject and bodies are templates: {{kunde.name}} inserts a value, {{#if bedingung}}…{{/if}} and {{#loop liste}}…{{/loop}} write a section conditionally or once per element, with FEEL between the braces. What the HTML body inserts is escaped. Press F2 in a field for the editor with a live preview."
           : "On makes the subject and bodies templates with {{ }} placeholders — easier to read than a FEEL expression that joins strings, and previewed as you write."),
       },
+      { key: "answerTask", label: "Link to answer", placeholder: "the id of a user task answered by link", showIf: (v) => !v.operation || v.operation === "send", hint: "Optional. A user task of this process whose \"Answered by\" is \"also whoever holds the link\": the message is handed that task's link as answerLink — put it in the body, as =\"…\" + answerLink or {{answerLink}}. Whoever opens it sees the task's form and answers it without an account; opening the link alone answers nothing. The server's external URL must be configured." },
       { key: "subject", label: "Subject", placeholder: "Order shipped", fx: true, template: "template", showIf: (v) => !v.operation || v.operation === "send" },
       { key: "body", label: "Body", placeholder: "Your order is on its way.", fx: true, template: "template", rows: 8, showIf: (v) => !v.operation || v.operation === "send" || v.operation === "reply" || v.operation === "forward", hint: (v) => (v.operation === "reply"
         ? "The reply's text. It goes to the original's Reply-To, or its From, under \"Re: \" and its subject, threaded beneath it."
@@ -6212,10 +6250,15 @@ const SHOP_TASK_MODES = [
         hint: "The position on that order, likewise a literal or a FEEL expression (fx).",
       },
       {
+        key: "recipient", label: "Or: recipient", fx: true, placeholder: "= account.id",
+        hint: "Instead of order and position: the account id of the person whose position of the product is asked. The server finds it in the inventory, so the process never reads what the person holds. When they hold none, the task completes and the result variable is empty. Fill either this or order and position.",
+      },
+      {
         key: "resultVariable", label: "Result variable", placeholder: "commandId",
-        hint: "Receives the id of the command the action runs under. Leave empty to discard it.",
+        hint: "Receives the id of the command the action runs under, or an empty text when a recipient holds nothing to command. Leave empty to discard it.",
       },
     ],
+    after: "A refusal a retry will not change — the product does not list this application, the action is not an operator's or a system's, the position is not held — is thrown as the BPMN error SHOP_COMMAND_REFUSED when the process catches that code: put an error boundary event catching SHOP_COMMAND_REFUSED on this task to route it. Uncaught, it fails the job and becomes an incident after the retries.",
   },
   {
     v: "order", l: "Order — place an order for somebody in the application's name",
@@ -9466,6 +9509,7 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
               <textarea id="f-assignee" rows="1" spellcheck="false" placeholder="editor">${esc(a.assignee || "")}</textarea></label>
             <label class="field"><span>${esc(tr("pnl.main.ut.candidateGroups"))}</span>
               <textarea id="f-groups" rows="1" spellcheck="false" placeholder="reviewers">${esc(a.candidateGroups || "")}</textarea></label>
+            ${answeredByHTML(bo)}
             <h3 data-group="Schedule">${esc(tr("bpmn.group.schedule"))}</h3>
             <label class="field"><span>${esc(tr("pnl.main.ut.priority"))}</span>
               <input type="number" id="f-priority" min="0" max="100" value="${esc(pr.priority || "50")}" placeholder="50"/></label>
@@ -11539,6 +11583,13 @@ function wireProperties(root, modeler, api, projectId, toast, identity) {
         try { modeling.updateProperties(element, { completionCondition: cexpr }); } catch { /* stale */ }
       }));
     }
+    const fansweredby = body.querySelector("#f-answeredby");
+    if (fansweredby) {
+      fansweredby.addEventListener("change", () => savePreservingPanel(() => {
+        // Only "link" is written, so a task answered in the Tasks app alone stays attribute-free.
+        try { modeling.updateProperties(element, { answeredBy: fansweredby.value || undefined }); } catch { /* stale */ }
+      }));
+    }
     const fwizard = body.querySelector("#f-wizard");
     if (fwizard) {
       fwizard.addEventListener("change", () => savePreservingPanel(() => {
@@ -12586,7 +12637,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <a class="btn neutral" href="#/operations">&larr; Instances</a>
         <span class="crumbs" style="margin-left:8px">Live</span>
         <label class="bar-select"><span>Version</span>
-          <select id="version-sel">${versionOptions}</select></label>
+          <select id="version-sel" title="${esc(tr("ops.versions.pickerTitle"))}">${versionOptions}</select></label>
         <label class="bar-select"><span>Instance</span>
           <select id="instance-sel"><option value="all">All instances</option></select></label>
         <div style="flex:1"></div>
@@ -12609,6 +12660,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
           <span class="live-process-version">${esc(versionLabel)}</span>
         </div>
         ${layoutNote}${frozenNote}
+        <span class="muted live-other-versions" id="other-versions" hidden></span>
       </div>
       <div class="start-panel" id="start-panel" hidden>
         <div id="start-body"></div>
@@ -12647,6 +12699,96 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     const next = Number(e.target.value);
     if (next && next !== key) location.hash = `#/operations/p/${next}`;
   });
+
+  // The version picker says what each version still holds — running, stuck behind an
+  // incident, finished — and the heading names the other versions that still run
+  // instances. Without it, "which versions of this process still have work in them"
+  // was answered by opening every version in turn. One request answers for every
+  // version (GET /api/v1/processes/{key}/versions: counters and the shared incident
+  // reading, never an instance scan), and it is refreshed on a slower beat than the
+  // diagram: a count in a closed dropdown does not need 1.5 seconds. Best-effort, like
+  // the picker it labels — a failed read leaves the plain "v8" it was built with.
+  const versionSel = root.querySelector("#version-sel");
+  const otherVersions = root.querySelector("#other-versions");
+  const versionCountsEvery = 10000;
+  let versionCountsAt = 0;
+  // The last counts read, by definition key — what the migration dialog's picker says
+  // each version holds. Null until a reading arrived; the dialog then asks the summary.
+  let versionCounts = null;
+  // Migrating needs somewhere to move to; the deployed versions are fixed for the life
+  // of this view.
+  const canMigrate = !!(processId && versions.length > 1);
+
+  // openMigration drains one version — the one on screen from the toolbar, another one
+  // from the heading's list — onto another, by default the newest (ADR-0162). The
+  // picker's counts come from the reading this view already holds; only without one is
+  // the summary read, and a failed read leaves the picker without counts rather than
+  // with wrong ones.
+  async function openMigration(fromKey) {
+    let runningOf;
+    if (versionCounts) {
+      runningOf = (v) => (versionCounts.get(String(v.key)) || {}).running || 0;
+    } else {
+      try {
+        const running = runningByDefinition(await api("GET", "/api/v1/instances/summary"));
+        runningOf = (v) => running.get(String(v.key)) || 0;
+      } catch { /* best-effort: no counts rather than wrong ones */ }
+    }
+    await migrateProcessFlow({
+      api, toast, processId, processName: procName, versions, fromKey, runningOf,
+      // The moved instances leave one version's counts and arrive in another's, so both
+      // the diagram and the per-version counts are re-read now rather than on the next tick.
+      onDone: async () => { await poll(); await refreshVersionCounts(); },
+    });
+  }
+  const versionCountParts = (v) => {
+    const parts = [];
+    if (v.running) parts.push(trPlural("ops.versions.running", v.running));
+    if (v.incidents) parts.push(trPlural("ops.versions.incidents", v.incidents));
+    if (v.finished) parts.push(trPlural("ops.versions.finished", v.finished));
+    if (!parts.length) parts.push(tr("ops.versions.empty"));
+    if (!v.active) parts.push(tr("ops.versions.inactive"));
+    return parts;
+  };
+  async function refreshVersionCounts() {
+    versionCountsAt = Date.now();
+    let res;
+    try { res = await api("GET", `/api/v1/processes/${key}/versions`); }
+    catch { return; }
+    if (!versionSel.isConnected) return; // navigated away mid-flight
+    const listed = Array.isArray(res && res.versions) ? res.versions : [];
+    const byKey = new Map(listed.map((v) => [String(v.key), v]));
+    if (listed.length) versionCounts = byKey;
+    // Only the text of an option that changed is touched, so a refresh while the
+    // operator has the dropdown open does not rebuild it under the pointer.
+    for (const opt of versionSel.options) {
+      const v = byKey.get(opt.value);
+      if (!v) continue;
+      const label = [`v${v.version}`, ...versionCountParts(v)].join(" · ");
+      if (opt.textContent !== label) opt.textContent = label;
+    }
+    const others = listed.filter((v) => v.key !== key && v.running > 0);
+    otherVersions.hidden = others.length === 0;
+    otherVersions.innerHTML = others.length
+      ? `${esc(tr("ops.versions.othersRunning"))} ` + others.map((v) => {
+        const counts = [trPlural("ops.versions.running", v.running)];
+        if (v.incidents) counts.push(trPlural("ops.versions.incidents", v.incidents));
+        const migrate = canMigrate
+          ? ` <button type="button" class="btn ghost live-migrate-other" data-mig-from="${v.key}" title="${
+            esc(trPlural("ops.versions.migrateTitle", v.running, { version: v.version }))}">${esc(tr("ops.versions.migrate"))}</button>`
+          : "";
+        return `<a href="#/operations/p/${v.key}" title="${esc(tr("ops.versions.otherTitle", { version: v.version }))}">v${v.version}</a>` +
+          ` <span class="${v.incidents ? "err" : ""}">(${esc(counts.join(", "))})</span>${migrate}`;
+      }).join(", ")
+      : "";
+  }
+  // Delegated once: the list is rewritten on every reading, and a handler bound to the
+  // buttons it held would die with them.
+  otherVersions.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-mig-from]");
+    if (btn && otherVersions.contains(btn)) openMigration(Number(btn.dataset.migFrom));
+  });
+  refreshVersionCounts();
 
   // The legend's three count badges are switches as well as a key: each one takes its
   // own number off every shape and puts it back. Which counts an operator wants on the
@@ -13447,6 +13589,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     await refreshDecisions();
     await refreshHeatStats();
     updateCancelBtn();
+    if (Date.now() - versionCountsAt >= versionCountsEvery) refreshVersionCounts();
     const q = selected === "all" ? "" : `?instance=${encodeURIComponent(selected)}`;
     let rt;
     try { rt = await api("GET", `/api/v1/processes/${key}/runtime${q}`); }
@@ -13890,23 +14033,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
   // running count is not, and the dialog says per version what it holds (ADR-0162).
   const migrateBtn = root.querySelector("#migrate-version");
   const thisVersion = versions.find((v) => v.key === key);
-  if (processId && thisVersion && versions.length > 1) {
+  if (canMigrate && thisVersion) {
     migrateBtn.hidden = false;
     migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
-    migrateBtn.addEventListener("click", async () => {
-      // This view counts its own version only, and the picker has to say which of the
-      // others hold instances too. The summary is one row per definition, not a scan.
-      let running = null;
-      try { running = runningByDefinition(await api("GET", "/api/v1/instances/summary")); }
-      catch { /* best-effort: the picker then states no counts rather than wrong ones */ }
-      await migrateProcessFlow({
-        api, toast, processId, processName: procName, versions, fromKey: key,
-        runningOf: running ? (v) => running.get(String(v.key)) || 0 : undefined,
-        // The moved instances leave this version's counts and diagram, so re-read now
-        // rather than on the next tick.
-        onDone: poll,
-      });
-    });
+    migrateBtn.addEventListener("click", () => openMigration(key));
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);

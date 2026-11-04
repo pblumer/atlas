@@ -158,11 +158,11 @@ var webFS embed.FS
 //
 // It is a var, not a const, so a release build can stamp the tag into it with
 //
-//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.21.0"
+//	go build -ldflags "-X github.com/pblumer/atlas/api.Version=0.22.0"
 //
 // A plain checkout build keeps the "-dev" suffix; the exact commit is always
 // available from the embedded VCS metadata (see buildInfo).
-var Version = "0.21.0-dev"
+var Version = "0.22.0-dev"
 
 // deployment is the server-side record of a deployed definition. The compiled
 // process itself lives in the processor; here we keep the metadata the UI needs
@@ -286,6 +286,9 @@ type Server struct {
 	// stopped, the HTTP half of the rotation the in-process runner keeps for itself.
 	// See [Server.scanHeldCandidates].
 	gateResume map[int32]uint64
+	// serveResume is where a worker's scan for the jobs it serves last stopped, per job
+	// type and worker. See [Server.scanServedCandidates].
+	serveResume map[serveResumeKey]uint64
 	// jobWaiters parks long-polling workers until a job of their type is durable
 	// (ADR-0157). Guarded by its own mutex, deliberately NOT run-loop owned: the
 	// waiting happens off the loop — see api/jobwait.go.
@@ -1789,6 +1792,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 		workers:             newWorkerRegistry(nil),
 		breakers:            newWorkerBreakers(nil),
 		gateResume:          map[int32]uint64{},
+		serveResume:         map[serveResumeKey]uint64{},
 		// Created unconditionally, not with a worker registry: AD is worker-only
 		// (ADR-0206), so this server never holds a mock
 		// directory of its own and is only ever the place the workers' reports land.
@@ -2209,6 +2213,7 @@ func New(proc *engine.Processor, store *state.Store, dataDir string, opts ...Opt
 	contentReg.OnChange(s.contentRunner.Reload)
 	s.catalogs.BindingChanged = s.contentRunner.Kick
 	s.orders.Limits = s.budgets()
+	s.orders.CheckAnswers = s.checkOrderAnswers
 	// An outcome that comes without a right changing hands — a provision that
 	// failed or was refused, a return that failed — is written on its own
 	// (ADR-0429 §3).
@@ -3887,6 +3892,12 @@ func (s *Server) mountRoutes() (*http.ServeMux, *accessPolicy) {
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/complete", s.handlePublicFormPreflight)
 	mountFunc(accessPublic, roleAny, "POST /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicWizardFieldOptions)
 	mountFunc(accessPublic, roleAny, "OPTIONS /public/wizard/steps/{taskKey}/fields/{field}/options", s.handlePublicFormPreflight)
+	// A user task answered through the link a mail carries
+	// (ADR-0523). The page is static; the signed token in an
+	// Authorization header is the whole authorization, and it opens one open task.
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath, s.handlePublicAnswerPage)
+	mountFunc(accessPublic, roleAny, "GET "+answerPagePath+"/task", s.handlePublicAnswerTask)
+	mountFunc(accessPublic, roleAny, "POST "+answerPagePath+"/task/{taskKey}/complete", s.handlePublicAnswerComplete)
 
 	// The shop was called the portal and lived at /portal.html. The address was
 	// bookmarked, pasted into mails and printed on intranet pages, none of which a

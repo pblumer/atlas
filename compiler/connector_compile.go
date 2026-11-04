@@ -650,7 +650,7 @@ func sqlMaxRows(kind, taskID, op, raw string) (int32, error) {
 // the same directory, which is a worse answer than a little overlap (ADR-0166,
 // amended).
 type adOp struct {
-	needsEntry    bool // an entryVariable naming the attribute object
+	needsEntry    bool // an entry: inline attributes or an entryVariable naming the object
 	needsPassword bool
 	needsMember   bool
 	needsNewDN    bool
@@ -715,7 +715,8 @@ func adOpNames() []string {
 // Directory operation against a model-authored server via the job path (ADR-0166), not
 // an external service-task worker. AD speaks LDAP, so the server URL and DNs live in
 // the model and the bind password never does (a secret reference, ADR-0041). Most
-// operations target a dn: create-user takes an attribute variable, set-password a new
+// operations target a dn: the creates and update-attributes take an entry (inline
+// attributes or an entry variable), set-password a new
 // password, the group operations a member dn. The two reading operations — sync and
 // search — take a baseDN and a result variable instead.
 func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32, error) {
@@ -763,8 +764,11 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		if strings.TrimSpace(cn.BaseDN) == "" {
 			return 0, fmt.Errorf("compiler: ad task %q operation search needs a baseDN (where in the tree to look)", st.Id)
 		}
-		if strings.TrimSpace(cn.ResultVariable) == "" {
-			return 0, fmt.Errorf("compiler: ad task %q operation search needs a resultVariable to receive what it found; a directory read that discards its result is one nothing asked for", st.Id)
+		// A foundVariable alone is enough: "is this name taken?" is a whole question,
+		// and its answer is the boolean — writing the entries somewhere too would only
+		// put a person's data in a variable nothing reads.
+		if strings.TrimSpace(cn.ResultVariable) == "" && strings.TrimSpace(cn.FoundVariable) == "" {
+			return 0, fmt.Errorf("compiler: ad task %q operation search needs a resultVariable to receive what it found, or a foundVariable for whether it found anything; a directory read that discards its result is one nothing asked for", st.Id)
 		}
 	default:
 		if strings.TrimSpace(cn.DN) == "" {
@@ -779,8 +783,44 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 	if err != nil {
 		return 0, err
 	}
-	if spec.needsEntry && strings.TrimSpace(cn.EntryVariable) == "" {
-		return 0, fmt.Errorf("compiler: ad task %q operation %q needs an entryVariable naming the attribute object", st.Id, op)
+	// An entry comes inline (attributes, evaluated by the worker, so it may read a
+	// personal variable) or from a variable the engine built (entryVariable). Both at
+	// once is refused for the reason a worker and a url are: whichever won, half the
+	// readers of the model would assume the other.
+	hasInlineEntry := strings.TrimSpace(cn.Attributes) != ""
+	hasEntryVar := strings.TrimSpace(cn.EntryVariable) != ""
+	switch {
+	case hasInlineEntry && hasEntryVar:
+		return 0, fmt.Errorf("compiler: ad task %q sets both inline attributes and an entryVariable; use one, not both", st.Id)
+	case spec.needsEntry && !hasInlineEntry && !hasEntryVar:
+		return 0, fmt.Errorf("compiler: ad task %q operation %q needs its entry — inline attributes, or an entryVariable naming the attribute object", st.Id, op)
+	case !spec.needsEntry && hasInlineEntry:
+		return 0, fmt.Errorf("compiler: ad task %q sets attributes on operation %q, which writes no entry (attributes apply to create-user, create-group, create-contact and update-attributes)", st.Id, op)
+	}
+	entry, err := attributesTemplateExpr(b.gate(), "ad", st.Id, cn.Attributes, adEntryShape)
+	if err != nil {
+		return 0, err
+	}
+	// select and foundVariable shape what a search returns, so they mean nothing on
+	// any other operation — refused rather than ignored, like scope.
+	if !spec.isSearch && strings.TrimSpace(cn.Select) != "" {
+		return 0, fmt.Errorf("compiler: ad task %q sets select on operation %q; select narrows what a search returns and applies to search only", st.Id, op)
+	}
+	if !spec.isSearch && strings.TrimSpace(cn.FoundVariable) != "" {
+		return 0, fmt.Errorf("compiler: ad task %q sets foundVariable on operation %q; it receives whether a search found anything and applies to search only", st.Id, op)
+	}
+	selectList, err := adSelectList(st.Id, cn.Select)
+	if err != nil {
+		return 0, err
+	}
+	foundVar := strings.TrimSpace(cn.FoundVariable)
+	if foundVar != "" {
+		if !validVariableName(foundVar) {
+			return 0, fmt.Errorf("compiler: ad task %q foundVariable %q is not a variable name (a letter or underscore, then letters, digits and underscores)", st.Id, foundVar)
+		}
+		if foundVar == strings.TrimSpace(cn.ResultVariable) {
+			return 0, fmt.Errorf("compiler: ad task %q writes found and the result into the same variable %q; foundVariable exists to be a separate one, so the result can be declared personal while a gateway reads the boolean", st.Id, foundVar)
+		}
 	}
 	if spec.needsPassword && strings.TrimSpace(cn.NewPassword) == "" {
 		return 0, fmt.Errorf("compiler: ad task %q operation %q needs a newPassword", st.Id, op)
@@ -843,6 +883,9 @@ func compileAdConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int32
 		MaxEntries:     maxEntries,
 		ObjectSecurity: strings.EqualFold(strings.TrimSpace(cn.ObjectSecurity), "true"),
 		Retries:        retries,
+		Attributes:     entry,
+		Select:         selectList,
+		FoundVar:       foundVar,
 	}), nil
 }
 
@@ -1452,6 +1495,10 @@ func compileMailConnectorTask(b *Builder, st xmlServiceTask, retries int32) (int
 			return 0, err
 		}
 	}
+	// The task to answer is kept by its BPMN id and judged in stage 5 — whether it exists,
+	// opted in, and whether the mail shows its link — so a model deployed before the rules
+	// comes back on restart (ADR-0523, ADR-0177).
+	cfg.AnswerTask = strings.TrimSpace(cn.AnswerTask)
 	return b.AddMailConnectorTask(cfg), nil
 }
 

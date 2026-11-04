@@ -1,9 +1,9 @@
 # ADR-0166: Active Directory connector
 
-- **Status:** Accepted (amended 2026-08-21 four times and 2026-08-31 once — the
-  operation set covers the whole lifecycle, the connector runs on a worker, it can read
-  a DirSync delta, it can create a contact, and it can search; see the amendment notes
-  below)
+- **Status:** Accepted (amended 2026-08-21 four times, 2026-08-31 once and 2026-11-03
+  once — the operation set covers the whole lifecycle, the connector runs on a worker,
+  it can read a DirSync delta, it can create a contact, it can search, and it writes and
+  finds attributes a process keeps sealed; see the amendment notes below)
 - **Implementation:** Landed
 - **Date:** 2026-08-20
 - **Deciders:** Atlas maintainers
@@ -217,6 +217,81 @@
 > does not require the base itself to exist, because it already accepts an add whose
 > parent was never created, and demanding a seeded OU chain here would refuse the
 > mockup runs it exists to allow.
+>
+> **Amendment (2026-11-03, sixth): attributes a process keeps sealed.** Three
+> attributes join the element: `attributes` on the four operations that write an entry,
+> and `select` and `foundVariable` on `search`.
+>
+> The reason is [ADR-0314](0314-portal-personal-data.md). A variable a process
+> declares personal is ciphertext wherever the engine evaluates an expression, and the
+> compiler refuses any engine-evaluated expression that reads one. Until now the AD
+> worker took the entry of `create-user`, `create-group`, `create-contact` and
+> `update-attributes` *only* from `entryVariable` — a variable the engine has to build,
+> in a script or an output mapping — so **nothing written into an AD attribute could come
+> from a sealed variable**. And a search wrote `{found, count, dn, entries}` into one
+> variable that a gateway had to read, so the result, whose DNs carry people's names,
+> could not be sealed either. `examples/ad-dienste` had to keep logon names and DNs in
+> plaintext and name external accounts by order id for exactly these two reasons.
+>
+> - **`attributes`** is the entry inline: a JSON template whose `=…` string values are
+>   FEEL, compiled at deploy into one FEEL context — Entra's inline attributes
+>   ([ADR-0172](0172-entra-id-connector.md), amended), through the same compiler code,
+>   so a template means the same thing on both workers. The worker evaluates it when it
+>   is handed the job, over the opened variables, which is the edge where ADR-0314
+>   permits plaintext; `compiler/personal.go` lists it there beside the task's other
+>   worker-evaluated fields. It and `entryVariable` are mutually exclusive, and an entry
+>   operation needs one of them; `attributes` on any other operation is refused.
+>   Values map onto LDAP as a person reading the template expects: a string is one
+>   value, a list one per element, a number its text and a boolean RFC 4517's `TRUE` or
+>   `FALSE` (the only spelling AD's Boolean syntax accepts — an `entryVariable` keeps
+>   rendering `true` as before). **`null` means "no value"**, and what that does depends
+>   on the operation: a create **leaves the attribute out**, because an LDAP add cannot
+>   carry an attribute without a value; `update-attributes` **clears it**, because a
+>   replace with no values is how LDAP removes an attribute, and "this person has no
+>   phone number any more" is a change an update has to be able to say. An empty list
+>   means what `null` does, and a list's `null` elements are dropped — so an expression
+>   over a variable that is not set leaves the attribute alone on a create rather than
+>   writing an empty string. A nested object is refused: at deploy when it is written
+>   in the template, and at the handoff when an `=…` expression produces one, because no
+>   attribute syntax takes a structure and flattening it would write something nobody
+>   authored.
+> - **`select`** is LDAP's attribute selection: comma-separated attribute descriptions
+>   (RFC 4512 — a descriptor or numeric OID, with options such as `;binary`), plus RFC
+>   4511's `*` and `+`. Names are checked at deploy, and one named twice is refused
+>   because LDAP names are case-insensitive. Empty keeps the behaviour before this
+>   amendment: the server's default set. It exists so a search returns what the process
+>   needs and not a person's whole entry, which used to land in the instance and its
+>   history in full. AD's ranged retrieval (`member;range=…`) is not admitted, for the
+>   reason the third amendment gives.
+> - **`foundVariable`** receives `found` on its own, as a boolean. The result variable
+>   can then be declared personal — sealed on its way back in like any worker result —
+>   while a gateway branches on a value that names nobody. It must be a variable name
+>   (a letter or underscore, then letters, digits and underscores) and differ from
+>   `resultVariable`. **Only `found` gets this**, not `count`: a gateway asks "is it
+>   there?", and a count that a model needs to branch on ("exactly one?") is rare enough
+>   to be read off the sealed result in a worker. A search may name a `foundVariable`
+>   and no `resultVariable` — "is this name taken?" is a whole question whose answer is
+>   the boolean, and writing the entries as well would put a person's data in a variable
+>   nothing reads.
+>
+> The mock directory (ADR-0181) applies a selection as a directory does — only the named
+> attributes, matched without regard to case, `*` for all of them and `1.1` for none —
+> with one infidelity: it does not tell operational attributes from the rest, so `+` on
+> its own adds nothing. It returns less than a server would, never more. Its filter
+> learns two things a model needs once the values it filters on are sealed and can only
+> be read in the filter expression: it decodes RFC 4515 escapes in an assertion value,
+> so a DN escaped into a filter finds the entry it came from, and it applies AD's two
+> bitwise matching rules (`1.2.840.113556.1.4.803` and `…804`), so
+> `(!(userAccountControl:1.2.840.113556.1.4.803:=2))` asks for an enabled account the
+> way AD answers it — a gateway that may not read the account's flags branches on
+> whether the search found one. Every other extensible match is still refused.
+>
+> A search found nothing and a search that was never meant to run look the same to a
+> gateway, which matters once the engine cannot check a value's form before it reaches
+> a filter: `examples/ad-dienste` checks a sealed logon name *inside* the filter
+> expression (FEEL's `matches`, evaluated by the worker) and asks for an always-empty
+> filter when the form is wrong, so a malformed value is "no such account" rather than
+> an injection or an unbounded search.
 
 ## Context and problem statement
 
@@ -277,7 +352,9 @@ Concretely:
   amendment, which also adds the `newDN` attribute a move targets), plus the two
   reading operations the later amendments add: sync (`baseDN filter cookieVariable
   maxEntries objectSecurity resultVariable`) and search (`baseDN scope filter
-  maxEntries resultVariable`).
+  maxEntries resultVariable`, and `select foundVariable` since the sixth amendment).
+  The four operations that write an entry take it from `entryVariable` or, since the
+  sixth amendment, inline as `attributes`.
 - The worker dials/binds like the LDAP connector (go-ldap, bounded by
   `nettimeout.Default`) and maps each operation: **set-password** replaces `unicodePwd`
   with the UTF-16LE quote-wrapped encoding (LDAPS/STARTTLS); **enable/disable** read

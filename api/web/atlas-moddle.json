@@ -180,6 +180,7 @@
         { "name": "dn", "type": "String", "isAttr": true },
         { "name": "memberDN", "type": "String", "isAttr": true },
         { "name": "entryVariable", "type": "String", "isAttr": true },
+        { "name": "attributes", "type": "String", "isAttr": true },
         { "name": "newPassword", "type": "String", "isAttr": true },
         { "name": "newDN", "type": "String", "isAttr": true },
         { "name": "baseDN", "type": "String", "isAttr": true },
@@ -187,6 +188,8 @@
         { "name": "scope", "type": "String", "isAttr": true },
         { "name": "cookieVariable", "type": "String", "isAttr": true },
         { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "select", "type": "String", "isAttr": true },
+        { "name": "foundVariable", "type": "String", "isAttr": true },
         { "name": "maxEntries", "type": "String", "isAttr": true },
         { "name": "objectSecurity", "type": "String", "isAttr": true },
         { "name": "retries", "type": "String", "isAttr": true }
@@ -324,7 +327,8 @@
         { "name": "allowedTypes", "type": "String", "isAttr": true },
         { "name": "store", "type": "String", "isAttr": true },
         { "name": "bucket", "type": "String", "isAttr": true },
-        { "name": "key", "type": "String", "isAttr": true }
+        { "name": "key", "type": "String", "isAttr": true },
+        { "name": "answerTask", "type": "String", "isAttr": true }
       ]
     },
     {
@@ -744,6 +748,13 @@
       "extends": ["bpmn:SubProcess"],
       "properties": [
         { "name": "wizard", "type": "String", "isAttr": true }
+      ]
+    },
+    {
+      "name": "UserTaskMeta",
+      "extends": ["bpmn:UserTask"],
+      "properties": [
+        { "name": "answeredBy", "type": "String", "isAttr": true }
       ]
     }
   ]

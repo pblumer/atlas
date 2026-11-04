@@ -27,6 +27,22 @@ const SUMMARY = [
   { processDefKey: 21, processId: "sauber", version: 1, active: 2, completed: 0, latestCompletedAt: 0 },
 ];
 
+// What GET /api/v1/processes/{key}/versions answers for each process: every deployed
+// version, newest first, with what it still holds.
+const VERSIONS = {
+  kredit: {
+    processId: "kredit", incidentCountsExact: true, versions: [
+      { key: 12, version: 2, active: true, running: 1, finished: 0, incidents: 0 },
+      { key: 11, version: 1, active: true, running: 3, finished: 4, incidents: 1 },
+    ],
+  },
+  sauber: {
+    processId: "sauber", incidentCountsExact: true, versions: [
+      { key: 21, version: 1, active: true, running: 2, finished: 0, incidents: 0 },
+    ],
+  },
+};
+
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_mig" targetNamespace="http://atlas/bpmn">
   <bpmn:process id="kredit" name="Kreditantrag" isExecutable="true">
@@ -47,12 +63,14 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?>
 
 // boot starts the real console against the mock. Every write the page makes is kept
 // here in the test process, so an assertion never has to reach back into the page.
-const boot = async (page, hash, { summaryFails = false } = {}) => {
+const boot = async (page, hash, { countsFail = false } = {}) => {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.__errors = errors;
   const writes = [];
   page.__writes = writes;
+  const reads = [];
+  page.__reads = reads;
   await page.route("**/api/v1/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
@@ -64,10 +82,17 @@ const boot = async (page, hash, { summaryFails = false } = {}) => {
       }
       return route.fulfill({ json: {} });
     }
+    reads.push(path);
     if (path.endsWith("/auth/me")) return route.fulfill({ json: { authEnabled: false, user: null } });
+    const versionsOf = path.match(/\/processes\/(\d+)\/versions$/);
+    if (versionsOf) {
+      if (countsFail) return route.fulfill({ status: 500, json: { error: "counts unavailable" } });
+      const pid = PROCESSES.find((p) => String(p.key) === versionsOf[1]).processId;
+      return route.fulfill({ json: VERSIONS[pid] });
+    }
     if (path === "/api/v1/processes") return route.fulfill({ json: PROCESSES });
     if (path === "/api/v1/instances/summary") {
-      return summaryFails
+      return countsFail
         ? route.fulfill({ status: 500, json: { error: "summary unavailable" } })
         : route.fulfill({ json: SUMMARY });
     }
@@ -81,7 +106,8 @@ const boot = async (page, hash, { summaryFails = false } = {}) => {
     if (path === "/api/v1/instances" || path === "/api/v1/tasks") return route.fulfill({ json: listing([]) });
     return route.fulfill({ json: [] });
   });
-  await page.goto("/index.html");
+  // The dialogs' English wording is what these tests read; German has its own spec.
+  await page.goto("/index.html?lang=en");
   await page.waitForFunction(
     () => document.querySelector("#view") && document.querySelector("#view").children.length > 0,
     null, { timeout: 15000 });
@@ -176,12 +202,57 @@ test.describe("live view of one version", () => {
   });
 
   test("counts that could not be read are not reported as none", async ({ page }) => {
-    await boot(page, "#/operations/p/11", { summaryFails: true });
+    await boot(page, "#/operations/p/11", { countsFail: true });
     await page.locator("#migrate-version").click();
     const modal = page.locator(".mig-modal");
     await expect(modal.locator("#migb-from")).toHaveValue("11");
     // "none running" on every version would be a claim, and a false one.
     expect(await modal.locator("#migb-from option").allTextContents()).toEqual(["v2", "v1"]);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("an older version still holding instances is migrated from the heading", async ({ page }) => {
+    // Looking at the newest version, the heading names the older one that still runs
+    // instances — and that is where the operator wants to drain it from, without first
+    // switching to it or picking it as the source by hand.
+    await boot(page, "#/operations/p/12");
+    const other = page.locator("#other-versions");
+    await expect(other).toBeVisible();
+    await expect(other).toContainText("v1");
+    const btn = other.locator('[data-mig-from="11"]');
+    await expect(btn).toBeVisible();
+    const versionReads = () => page.__reads.filter((p) => p.endsWith("/versions")).length;
+    const before = versionReads();
+
+    await btn.click();
+    const modal = page.locator(".mig-modal");
+    await expect(modal).toBeVisible();
+    await expect(modal.locator("#migb-from")).toHaveValue("11");
+    await expect(modal.locator("#migb-to")).toHaveValue("12");
+    // The counts the heading already holds say which version is worth draining.
+    await expect(modal.locator("#migb-from")).toContainText("3 running");
+
+    await modal.locator("#migb-reason").fill("v1 auslaufen lassen");
+    await modal.locator("[data-migb-go]").click();
+    await expect(modal).toHaveCount(0);
+    expect(page.__writes.filter((w) => w.path.endsWith("/migrate-instances"))).toEqual([{
+      path: "/api/v1/processes/11/migrate-instances",
+      body: { targetProcessDefKey: 12, reason: "v1 auslaufen lassen" },
+    }]);
+    // The moved instances leave v1, so the counts are read again now rather than on the
+    // next slow tick.
+    await expect.poll(versionReads).toBeGreaterThan(before);
+    expect(page.__errors).toEqual([]);
+  });
+
+  test("the button still works after the counts are redrawn", async ({ page }) => {
+    await boot(page, "#/operations/p/12");
+    await expect(page.locator('#other-versions [data-mig-from="11"]')).toBeVisible();
+    // Refresh rewrites the heading's list, and with it every button a handler could
+    // have been bound to.
+    await page.locator("#refresh").click();
+    await page.locator('#other-versions [data-mig-from="11"]').click();
+    await expect(page.locator(".mig-modal #migb-from")).toHaveValue("11");
     expect(page.__errors).toEqual([]);
   });
 
@@ -192,6 +263,7 @@ test.describe("live view of one version", () => {
     await expect(page.locator('#canvas g[data-element-id="Task_check"]')).toBeVisible();
     await expect(page.locator("#migrate-version")).toHaveCount(1);
     await expect(page.locator("#migrate-version")).toBeHidden();
+    await expect(page.locator("#other-versions [data-mig-from]")).toHaveCount(0);
     expect(page.__errors).toEqual([]);
   });
 });

@@ -686,6 +686,9 @@ type sourceCaller struct {
 	// authorize answers whether the caller may write an application this server
 	// already has: 0 when it may, else the status and message to refuse with.
 	authorize func(project) (int, string)
+	// sees answers whether the caller may see an application: only then does a plan
+	// name the application an artifact belongs to. nil sees none.
+	sees func(project) bool
 	// admin says the caller may set the application's constants.
 	admin bool
 	// audit records a change to the application's constants, as a PUT records it;
@@ -701,6 +704,16 @@ type sourceUndecided struct {
 }
 
 func (e sourceUndecided) Error() string {
+	elsewhere := 0
+	for _, a := range e.plan.Artifacts {
+		if a.Status == importplan.Elsewhere && a.Outcome == importplan.Undecided {
+			elsewhere++
+		}
+	}
+	if elsewhere > 0 {
+		return fmt.Sprintf("%d artifacts were not decided (%s); name each that another application holds under adopt to take it, and each that differs from this server's under overwrite or keep",
+			len(e.refs), strings.Join(e.refs, ", "))
+	}
 	return fmt.Sprintf("%d artifacts differ from this server's and were not decided (%s); name each under overwrite or keep",
 		len(e.refs), strings.Join(e.refs, ", "))
 }
@@ -801,19 +814,74 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		refOwner[rec.ID] = rec
 	}
 
+	// An artifact belongs to another application only while that application exists:
+	// one whose application was deleted without purge keeps the id it was tagged with
+	// but reads as Ungrouped (ADR-0034), and an import takes it as it takes any other
+	// Ungrouped artifact. Without this, deleting an imported application left its
+	// processes, forms and decisions blocking every later import of the same package.
+	existing := make(map[string]bool, len(all))
+	for _, p := range all {
+		existing[p.ID] = true
+	}
+	ownedElsewhere := func(projectID string) bool {
+		return projectID != "" && projectID != app.ID && existing[projectID]
+	}
+	// ungrouped is an artifact filed nowhere: never in an application, or in one
+	// that no longer exists. The import files it into this application.
+	ungrouped := func(projectID string) bool {
+		return projectID == "" || (projectID != app.ID && !existing[projectID])
+	}
+	// An artifact another existing application holds is taken only when the caller
+	// adopts it (ADR-0467 amendment 2026-11-03): editor on the application it leaves,
+	// never from a protected one. Unadopted it is planned as Elsewhere and stops the
+	// import like a change nobody decided; adopted it is compared like any other and
+	// filed into this application whatever its outcome.
+	byID := make(map[string]project, len(all))
+	for _, p := range all {
+		byID[p.ID] = p
+	}
+	adopted := map[string]bool{}
+	held := map[string]project{}
+	claim := func(ref, projectID string) error {
+		if !ownedElsewhere(projectID) {
+			return nil
+		}
+		holder := byID[projectID]
+		if !decide.Adopt[ref] {
+			held[ref] = holder
+			return nil
+		}
+		if holder.Protected {
+			return sourceRefusal{http.StatusForbidden, fmt.Sprintf("%s belongs to a protected system application and cannot be adopted", ref)}
+		}
+		if code, msg := caller.authorize(holder); code != 0 {
+			if code == http.StatusNotFound {
+				msg = fmt.Sprintf("%s belongs to an application you cannot edit, so it cannot be adopted", ref)
+			}
+			return sourceRefusal{code, msg}
+		}
+		adopted[ref] = true
+		return nil
+	}
 	for _, p := range man.Processes {
-		if d, ok := draftOwner[p.ID]; ok && d.ProjectID != "" && d.ProjectID != app.ID {
-			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("process %q already belongs to another application", p.ID)}
+		if d, ok := draftOwner[p.ID]; ok {
+			if err := claim("process:"+p.ID, d.ProjectID); err != nil {
+				return sourceImportResult{}, err
+			}
 		}
 	}
 	for _, f := range man.Forms {
-		if rec, ok := formOwner[f.ID]; ok && rec.ProjectID != "" && rec.ProjectID != app.ID {
-			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("form %q already belongs to another application", f.ID)}
+		if rec, ok := formOwner[f.ID]; ok {
+			if err := claim("form:"+f.ID, rec.ProjectID); err != nil {
+				return sourceImportResult{}, err
+			}
 		}
 	}
 	for _, d := range man.Decisions {
-		if rec, ok := refOwner[d.ID]; ok && rec.ProjectID != "" && rec.ProjectID != app.ID {
-			return sourceImportResult{}, sourceRefusal{http.StatusConflict, fmt.Sprintf("decision %q already belongs to another application", d.ID)}
+		if rec, ok := refOwner[d.ID]; ok {
+			if err := claim("decision:"+d.ID, rec.ProjectID); err != nil {
+				return sourceImportResult{}, err
+			}
 		}
 	}
 
@@ -826,20 +894,40 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		return sourceImportResult{}, err
 	}
 	writes, incoming := map[string]bool{}, map[string]string{}
+	// moves holds adopted artifacts the caller kept: their content stays as this
+	// server has it, and only their application changes.
+	moves := map[string]bool{}
 	var undecided []string
 	note := func(ref, name string, exists bool, local, in string, regroup bool) {
 		incoming[ref] = in
 		status := importplan.Classify(exists, local, in, bases[ref])
+		if holder, ok := held[ref]; ok {
+			// Another application holds it and the caller did not adopt it: nothing
+			// is written, and the plan says whose it is when the caller may know.
+			a := importplan.Artifact{Ref: ref, Name: name, Status: importplan.Elsewhere,
+				Outcome: importplan.Undecided, Compared: status}
+			if caller.sees != nil && caller.sees(holder) {
+				a.HeldBy = &importplan.Holder{ID: holder.ID, Name: holder.Name}
+			}
+			undecided = append(undecided, ref)
+			res.Artifacts = append(res.Artifacts, a)
+			return
+		}
 		outcome := decide.Outcome(ref, status)
 		// An ungrouped artifact the tree names joins the application even when its
-		// content is already the tree's: that moves nobody's work, it files it.
-		if importplan.Writes(outcome) || outcome == importplan.Unchanged && regroup {
+		// content is already the tree's: that moves nobody's work, it files it. An
+		// adopted one moves whatever its outcome — kept means its content stays.
+		if importplan.Writes(outcome) || outcome == importplan.Unchanged && (regroup || adopted[ref]) {
 			writes[ref] = true
+		}
+		if outcome == importplan.Kept && adopted[ref] {
+			moves[ref] = true
 		}
 		if outcome == importplan.Undecided {
 			undecided = append(undecided, ref)
 		}
-		res.Artifacts = append(res.Artifacts, importplan.Artifact{Ref: ref, Name: name, Status: status, Outcome: outcome})
+		res.Artifacts = append(res.Artifacts, importplan.Artifact{Ref: ref, Name: name, Status: status,
+			Outcome: outcome, Adopted: adopted[ref]})
 	}
 	note("application:"+man.Key, man.Name, found, importplan.Hash([]byte(app.Name)), importplan.Hash([]byte(man.Name)), false)
 	// Text files compare newline-terminated on both sides, the way an export writes
@@ -849,19 +937,19 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		d, ok := draftOwner[p.ID]
 		note("process:"+p.ID, p.Name, ok,
 			importplan.Hash([]byte(d.Name), newlineTerminated([]byte(d.XML))),
-			importplan.Hash([]byte(p.Name), newlineTerminated(byPath[p.Path])), ok && d.ProjectID == "")
+			importplan.Hash([]byte(p.Name), newlineTerminated(byPath[p.Path])), ok && ungrouped(d.ProjectID))
 	}
 	for _, f := range man.Forms {
 		rec, ok := formOwner[f.ID]
 		note("form:"+f.ID, f.Name, ok,
 			importplan.Hash([]byte(rec.Name), newlineTerminated([]byte(rec.Schema))),
-			importplan.Hash([]byte(f.Name), newlineTerminated(byPath[f.Path])), ok && rec.ProjectID == "")
+			importplan.Hash([]byte(f.Name), newlineTerminated(byPath[f.Path])), ok && ungrouped(rec.ProjectID))
 	}
 	for _, d := range man.Decisions {
 		rec, ok := refOwner[d.ID]
 		note("decision:"+d.ID, d.Name, ok,
 			importplan.Hash([]byte(rec.Name), []byte(rec.ModelRef)),
-			importplan.Hash([]byte(d.Name), []byte(d.ModelRef)), ok && rec.ProjectID == "")
+			importplan.Hash([]byte(d.Name), []byte(d.ModelRef)), ok && ungrouped(rec.ProjectID))
 	}
 	models, err := s.planSourceModels(man, byPath)
 	if err != nil {
@@ -993,6 +1081,30 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 		}
 		if err := s.dmnrefs.Save(rec); err != nil {
 			return sourceImportResult{}, err
+		}
+	}
+	// An adopted artifact the caller kept moves with its content as it is here.
+	for ref := range moves {
+		kind, id, _ := strings.Cut(ref, ":")
+		switch kind {
+		case "process":
+			d := draftOwner[id]
+			d.ProjectID = app.ID
+			if err := s.drafts.Save(d); err != nil {
+				return sourceImportResult{}, err
+			}
+		case "form":
+			f := formOwner[id]
+			f.ProjectID = app.ID
+			if err := s.forms.Save(f); err != nil {
+				return sourceImportResult{}, err
+			}
+		case "decision":
+			r := refOwner[id]
+			r.ProjectID = app.ID
+			if err := s.dmnrefs.Save(r); err != nil {
+				return sourceImportResult{}, err
+			}
 		}
 	}
 	if res.ConstantsSet, err = s.setImportedConstants(app.ID, heldConstants, consts.toSet, ownerID, caller.audit); err != nil {

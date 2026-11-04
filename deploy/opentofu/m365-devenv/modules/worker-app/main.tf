@@ -96,6 +96,13 @@ resource "azuread_application_certificate" "this" {
   encoding       = "pem"
   value          = tls_self_signed_cert.this[0].cert_pem
   end_date       = tls_self_signed_cert.this[0].validity_end_time
+
+  # The tls provider writes the end in local time (+01:00), Graph returns it in UTC (Z):
+  # the same instant, but a different string that would replace the certificate on every
+  # apply. A new certificate changes value, which still replaces it.
+  lifecycle {
+    ignore_changes = [end_date]
+  }
 }
 
 # --- Credential: client secret ----------------------------------------------

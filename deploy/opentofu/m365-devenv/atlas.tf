@@ -232,15 +232,18 @@ locals {
     apiToken = { name = "${local.env_id} processes", scope = "full", vaultSecret = "atlas", expiresInDays = var.credential_validity_days }
   }) : ""
 
-  atlas_setup_env = join("\n", [
-    "ATLAS_INSTALL=${var.atlas_install}",
-    "ATLAS_VERSION=${var.atlas_version}",
-    "ATLAS_SOURCE_REPO=${var.atlas_source_repo}",
-    "ATLAS_SOURCE_REF=${var.atlas_source_ref}",
-    "WITH_TEAMS=${var.workers.teamsphone ? 1 : 0}",
-    "AD_HOSTS_LINE=${var.enable_ad_dc ? "${local.ad_private_ip} ${local.ad_internal_host}" : ""}",
-    "",
-  ])
+  # atlas-setup.sh sources this file: every value is single-quoted, or a value with a
+  # space (AD_HOSTS_LINE) runs its second word as a command and aborts the setup.
+  atlas_setup_env = join("\n", concat([
+    for k, v in {
+      ATLAS_INSTALL     = var.atlas_install
+      ATLAS_VERSION     = var.atlas_version
+      ATLAS_SOURCE_REPO = var.atlas_source_repo
+      ATLAS_SOURCE_REF  = var.atlas_source_ref
+      WITH_TEAMS        = var.workers.teamsphone ? "1" : "0"
+      AD_HOSTS_LINE     = var.enable_ad_dc ? "${local.ad_private_ip} ${local.ad_internal_host}" : ""
+    } : "${k}='${replace(v, "'", "'\\''")}'"
+  ], [""]))
 
   caddyfile = var.enable_atlas_server ? join("\n", [
     "${local.atlas_fqdn} {",

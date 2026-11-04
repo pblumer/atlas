@@ -60,6 +60,7 @@ func defaultTools() []Tool {
 	tools = append(tools, infomodelTools()...)
 	tools = append(tools, capabilityTools()...)
 	tools = append(tools, catalogTools()...)
+	tools = append(tools, hubTools()...)
 	return append(tools, contentTools()...)
 }
 
@@ -194,6 +195,24 @@ func runtimeTools() []Tool {
 					return "", err
 				}
 				return asText(c.get("/api/v1/processes/" + strconv.FormatUint(key, 10) + "/runtime"))
+			},
+		},
+		{
+			Name: "atlas_process_versions",
+			Description: "List every deployed version of a process with what it still holds — the answer to " +
+				"'which versions still have work in them'. Give any version's definition key; the answer covers " +
+				"all versions of that process id, newest first, each with its key, version number, version tag, " +
+				"deploy time, active flag (whether it may start instances by itself) and how many of its " +
+				"instances are running, how many have finished and how many tokens are parked behind an " +
+				"incident. A version with nothing in it is listed with zeroes. Use it before migrating or " +
+				"deleting old versions, then atlas_list_instances with process=<key> for the instances of one.",
+			InputSchema: keyArg("Any deployed version's process definition key (from atlas_list_processes)."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				key, err := argUint(args, "key")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get("/api/v1/processes/" + strconv.FormatUint(key, 10) + "/versions"))
 			},
 		},
 		{

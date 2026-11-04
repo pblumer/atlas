@@ -99,6 +99,29 @@ afterthought.
 - Good: reuse with a clean module boundary; ADR-0008 satisfied; swappable backend.
 - Bad: external dependency to track; value-conversion work at the boundary.
 
+## Amendment (2026-11-03): a name inside a filter
+
+`CompileAuto` learns an expression's variables from the compiler's "unknown variable"
+errors. Inside a filter over context elements an unknown name is no error — it may be a
+key of the element (`people[age > 18]`) — so a process variable read only there was never
+declared and read null. And where a name was declared, the declared variable shadowed the
+element's key of the same name, the opposite of DMN 10.3.2.5, which makes the element's
+entries the innermost scope. Found against a real tenant: a governance check compared each
+group's alias with `application.NAME_PREFIX` inside a filter and reported nothing.
+
+`feel` now resolves a name inside a filter as the element's key when the element has it,
+and otherwise as the variable bound outside the filter; a binding made inside the filter
+(a `for` or quantifier variable, a nested filter's `item`) is inner to the element. And
+`feel.CompileStringOpen` returns, besides the references, the names read only inside a
+filter that are neither declared nor a function. `CompileAuto` declares those too and
+compiles again, so they are inputs and are bound like any other variable; where the
+elements carry the key, the key still wins. Consequence: `Inputs()` of such an expression
+now also names element keys used bare in a filter. They are bound when a variable of that
+name exists and are null otherwise, which changes nothing at runtime. `FilterOnly()` names
+them apart, so what judges a variable as missing (the FEEL assistant's check, the
+behaviour-impact reader's agreement test) does not count `age` in `people[age > 18]`. The official DMN TCK
+through temis is unchanged (3430/3495).
+
 ## Links
 
 - implements the reuse path left open by ADR-0008 (FEEL expression strategy)

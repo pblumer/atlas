@@ -12,3 +12,6 @@ out/
 # The real variable values name the tenant; keep only the example in git.
 terraform.tfvars
 *.auto.tfvars
+
+# Python bytecode of the helper scripts (onprem/run-smoke.py).
+__pycache__/

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/connector/exchange/catalog"
 	"github.com/pblumer/atlas/connector/nettimeout"
@@ -71,6 +73,46 @@ type OnlineClient struct {
 	httpc        *http.Client
 	// maxPage bounds one response body; a field so a test can lower it.
 	maxPage int64
+	// notFoundWaits are the pauses before a Set- or Add- cmdlet answered 404 is sent
+	// again; a field so a test can shorten them.
+	notFoundWaits []time.Duration
+}
+
+// notFoundWaits is how long a change waits for an object Exchange Online has only just
+// created. Observed against a real tenant: Set-DistributionGroup four seconds after
+// New-DistributionGroup answered 404 NotFound, and found the list a moment later. About
+// a minute in all; what is still missing after that is missing.
+var notFoundWaits = []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 15 * time.Second, 30 * time.Second}
+
+// defaultOnlineTimeout bounds one cmdlet sent to Exchange Online. The shared bound of a
+// REST call (nettimeout.Default, ten seconds) is too short for it: observed against a
+// real tenant, Add-MailboxPermission on a shared mailbox created a minute before took
+// longer than ten seconds, the client gave up, and the permission was set all the same —
+// the job failed for a change that had been made. Exchange's own module waits minutes;
+// this waits two, as the on-premises backend does, and is still a bound.
+const defaultOnlineTimeout = 2 * time.Minute
+
+// onlineCmdletClient is the client a cmdlet is sent with when the caller gives none.
+func onlineCmdletClient() *http.Client {
+	c := nettimeout.HTTPClient()
+	c.Timeout = defaultOnlineTimeout
+	return c
+}
+
+// cmdletError is a cmdlet's refusal with its HTTP status, so a caller can tell an object
+// not found from every other failure.
+type cmdletError struct {
+	status int
+	msg    string
+}
+
+func (e *cmdletError) Error() string { return e.msg }
+
+// retriesNotFound reports whether a cmdlet answered 404 may be sent again unchanged: a
+// change to one object — Set- or Add- — that did nothing because it found nothing. A
+// New- or Remove- is not repeated, and a Get- answers 404 as what it is.
+func retriesNotFound(cmdlet string) bool {
+	return strings.HasPrefix(cmdlet, "Set-") || strings.HasPrefix(cmdlet, "Add-")
 }
 
 // NewOnlineClient builds a client for one organization.
@@ -81,11 +123,12 @@ func NewOnlineClient(c OnlineConfig) *OnlineClient {
 	}
 	httpc := c.HTTPClient
 	if httpc == nil {
-		httpc = nettimeout.HTTPClient()
+		httpc = onlineCmdletClient()
 	}
 	return &OnlineClient{
 		tokens: c.Tokens, baseURL: base, organization: strings.TrimSpace(c.Organization),
 		anchor: strings.TrimSpace(c.AnchorMailbox), httpc: httpc, maxPage: limits.Default().Payload,
+		notFoundWaits: notFoundWaits,
 	}
 }
 
@@ -114,6 +157,20 @@ func (c *OnlineClient) Invoke(ctx context.Context, inv catalog.Invocation, limit
 	items := []any{}
 	for pages := 0; pages < maxPages; pages++ {
 		page, next, err := c.post(ctx, inv.Cmdlet, target, anchor, body)
+		// An object created a moment ago is not yet found everywhere: a change to it
+		// waits and is sent again (notFoundWaits).
+		for wait := 0; pages == 0 && err != nil && wait < len(c.notFoundWaits) && retriesNotFound(inv.Cmdlet); wait++ {
+			var ce *cmdletError
+			if !errors.As(err, &ce) || ce.status != http.StatusNotFound {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return nil, err
+			case <-time.After(c.notFoundWaits[wait]):
+			}
+			page, next, err = c.post(ctx, inv.Cmdlet, target, anchor, body)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +202,11 @@ func (c *OnlineClient) post(ctx context.Context, cmdlet, target, anchor string, 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("X-AnchorMailbox", anchor)
+	// Uncompressed, said out loud. Without it Go's transport asks for gzip itself and
+	// decompresses what comes back; Exchange Online's admin API was observed answering
+	// a request with a body labelled gzip that was not, which surfaced as "gzip: invalid
+	// header" in place of the cmdlet's own answer.
+	req.Header.Set("Accept-Encoding", "identity")
 	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("exchange: %s: %w", cmdlet, err)
@@ -280,11 +342,12 @@ func failure(cmdlet string, status int, raw []byte) error {
 				msg = strings.TrimSpace(msg[end+2:]) + " (" + typ + ")"
 			}
 		}
-		return fmt.Errorf("exchange: %s returned HTTP %d: %s: %s", cmdlet, status, env.Error.Code, msg)
+		return &cmdletError{status: status, msg: fmt.Sprintf("exchange: %s returned HTTP %d: %s: %s", cmdlet, status, env.Error.Code, msg)}
 	}
-	quote := strings.TrimSpace(string(raw))
+	// Exchange Online was observed answering a 403 with a body of NUL bytes.
+	quote := strings.TrimSpace(strings.Trim(string(raw), "\x00"))
 	if max := int(limits.Default().ErrorBody); len(quote) > max {
 		quote = quote[:max] + "…"
 	}
-	return fmt.Errorf("exchange: %s returned HTTP %d: %s", cmdlet, status, quote)
+	return &cmdletError{status: status, msg: fmt.Sprintf("exchange: %s returned HTTP %d: %s", cmdlet, status, quote)}
 }

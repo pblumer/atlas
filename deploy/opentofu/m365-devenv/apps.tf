@@ -10,7 +10,7 @@ locals {
   # no Mail.Send and no Exchange directory role in Entra, Sites.Selected for SharePoint.
   mail_graph_permissions_effective       = var.shared_tenant ? [] : var.mail_graph_permissions
   exchange_directory_roles_effective     = var.shared_tenant ? [] : var.exchange_directory_roles
-  sharepoint_graph_permissions_effective = var.shared_tenant ? ["Sites.Selected"] : var.sharepoint_graph_permissions
+  sharepoint_graph_permissions_effective = var.shared_tenant ? concat(["Sites.Selected"], var.sharepoint_read_all_sites ? ["Sites.Read.All"] : []) : var.sharepoint_graph_permissions
 
   # A misspelt permission name fails the plan here, naming the key Graph does not know.
   graph_role = {

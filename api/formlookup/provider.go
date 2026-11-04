@@ -26,10 +26,12 @@ type Provider struct {
 	// Label names the source to a model author.
 	Label string `json:"label"`
 	// ValueProperty identifies a record; it is what a form submits.
-	ValueProperty string   `json:"valueProperty"`
-	Searchable    []string `json:"searchable"`
-	Filterable    []string `json:"filterable"`
-	Readable      []string `json:"readable"`
+	ValueProperty string `json:"valueProperty"`
+	// ValueProperties are the properties a field may submit instead (option.value).
+	ValueProperties []string `json:"valueProperties"`
+	Searchable      []string `json:"searchable"`
+	Filterable      []string `json:"filterable"`
+	Readable        []string `json:"readable"`
 	// DefaultLabel and DefaultDescription are what an option shows when the form
 	// names nothing; Fallback stands in for either when a record leaves it empty — a
 	// user without a mailbox still has a user principal name.
@@ -38,13 +40,24 @@ type Provider struct {
 	Fallback           string `json:"fallback,omitempty"`
 	// ValueFormat says in words what a value looks like, for an error message.
 	ValueFormat string `json:"valueFormat"`
+	// ValueFormats says it for each of ValueProperties.
+	ValueFormats map[string]string `json:"valueFormats,omitempty"`
 
-	validValue func(string) bool
-	check      func(lookup.Query) error
+	validValue   func(string) bool
+	validValueAs func(property, v string) bool
+	check        func(lookup.Query) error
 }
 
 // ValidValue reports whether v has the shape of a value of this source.
 func (p Provider) ValidValue(v string) bool { return p.validValue != nil && p.validValue(v) }
+
+// ValidValueAs reports whether v has the shape of a value read by property.
+func (p Provider) ValidValueAs(property, v string) bool {
+	if property == "" || property == p.ValueProperty {
+		return p.ValidValue(v)
+	}
+	return p.validValueAs != nil && p.validValueAs(property, v)
+}
 
 // Check holds a query to the Worker Type's own rules, before it is sent.
 func (p Provider) Check(q lookup.Query) error {
@@ -66,6 +79,7 @@ func entraUsers() Provider {
 		JobType:            compiler.EntraJobType,
 		Label:              "Microsoft Entra ID — users",
 		ValueProperty:      res.ValueProperty,
+		ValueProperties:    slices.Clone(res.ValueProperties),
 		Searchable:         slices.Clone(res.Searchable),
 		Filterable:         slices.Clone(res.Filterable),
 		Readable:           slices.Clone(res.Readable),
@@ -73,7 +87,12 @@ func entraUsers() Provider {
 		DefaultDescription: "mail",
 		Fallback:           "userPrincipalName",
 		ValueFormat:        "an Entra object id (a GUID)",
-		validValue:         func(v string) bool { return entra.ValidLookupValue("users", v) },
+		ValueFormats: map[string]string{
+			"id":                "an Entra object id (a GUID)",
+			"userPrincipalName": "a user principal name (name@domain)",
+		},
+		validValue:   func(v string) bool { return entra.ValidLookupValue("users", v) },
+		validValueAs: func(prop, v string) bool { return entra.ValidLookupValueAs("users", prop, v) },
 		check: func(q lookup.Query) error {
 			_, err := entra.CheckLookup(q)
 			return err

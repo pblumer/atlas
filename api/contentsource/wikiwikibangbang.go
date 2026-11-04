@@ -162,6 +162,12 @@ func (w *WikiWikiBangBang) Standing(ctx context.Context) (Standing, error) {
 		Erasure *bool  `json:"erasure"`
 	}
 	if err := w.get(ctx, "/api/me", nil, &me); err != nil {
+		// do answers a 404 as ErrUnreadable, whose sentence is about a page.
+		// The account's own route answering 404 is about the source — a wrong
+		// base URL, a proxy in front of it, a wiki starting up — and says so.
+		if errors.Is(err, ErrUnreadable) {
+			return Standing{}, &statusError{path: "/api/me", status: http.StatusNotFound}
+		}
 		return Standing{}, err
 	}
 	var roles struct {

@@ -30,6 +30,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `onboarding-tutorial` | Onboarding | the handbook's end-to-end tutorial |
 | `verwaltung-dienstleistungen` | Beispiel: Dienstleistungen der Verwaltung | shop package with two catalogues |
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
+| `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |
 
 Rules, checked by `go test ./cmd/atlas`:
 
@@ -305,6 +306,31 @@ index.
 The server then verifies the index signature and every package digest. A person with the
 `modeler` role opens **atlas hub** in the Console, filters by tag, previews a bundle and
 imports it. A shop bundle's catalogue import needs `productmanager`.
+
+An agent does the same over MCP:
+1. `atlas_hub_list_releases` lists the releases.
+2. `atlas_hub_preview_release` returns the release's digest.
+3. `atlas_hub_import_release` with that digest runs a dry run by default and shows the plan.
+4. Only with `dryRun: false`, and the person's `overwrite`/`keep` decisions for anything changed here and `adopt` decisions for anything held elsewhere, does it write.
+
+The MCP import does not publish and does not import a shop bundle's catalogues. Their
+questions about groups and people are answered by a person in the Console.
+
+**Artifacts another application holds.** A process, form or decision can belong to
+another existing application, for example where a sample was installed earlier into its own
+application or copied into another one. The plan then lists it as `elsewhere`, with the
+application that holds it, and the import stops until somebody decides (ADR-0467 amendment
+2026-11-03):
+
+- In the Console, tick it under "In another application" ("In einer anderen Applikation") to move it into the bundle's
+  application. If its content differs, a second box says whether the bundle's version
+  replaces this server's.
+- With `atlas import`, name it with `--adopt process:ID`. At a terminal the command asks.
+- Over MCP, pass it in `adopt`, only as the person decided.
+
+Adopting needs the editor role on the application the artifact leaves. There is no "adopt
+all". Artifacts of a *deleted* application do not block the import: they read as Ungrouped
+and are filed into the imported application.
 
 A bundle's preview and its import plan name what it does not bring:
 

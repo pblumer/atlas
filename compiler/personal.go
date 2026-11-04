@@ -83,7 +83,8 @@ var engineEvaluatedExpressions = map[string]bool{
 //
 // Every one of these is a ConnectorTaskDetail field, and none of them is evaluated in
 // engine/: the evaluation sites are connector/rest/worker.go:95, connector/mail/worker.go:89,
-// connector/ldap/worker.go:190, connector/ad/worker.go:296, connector/jira/worker.go:82,
+// connector/ldap/worker.go:190, connector/ad/worker.go (resolveValue, and evalEntry for the
+// inline attributes), connector/jira/worker.go:82,
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
 // connector/googlecontacts/offload.go, connector/carddav/offload.go and
@@ -95,6 +96,7 @@ var engineEvaluatedExpressions = map[string]bool{
 // enciphering step lands without deciphering at that point, every entry here becomes a
 // worker evaluating FEEL over ciphertext — and this comment is where to come back to.
 var workerEvaluatedExpressions = map[string]string{
+	"connectorTasks.AdAttributes.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBaseDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdBindDN.Expr":            "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.AdDN.Expr":                "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
@@ -182,7 +184,7 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.SheetsValues.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ShopOrder.Expr":           "evaluated in the server's shop command task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ShopPosition.Expr":        "evaluated in the server's shop command task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
-	"connectorTasks.ShopRecipient.Expr":       "evaluated in the server's shop order task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.ShopRecipient.Expr":       "evaluated in the server's shop order and command tasks (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.ShopAnswers.Expr":         "evaluated in the server's shop order task (api/shopcommand.go), a connector edge like the user task's, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.Site.Expr":                "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.SoapAction.Expr":          "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
@@ -291,6 +293,32 @@ var expressionKindByPath = map[string]string{
 type expressionSite struct {
 	path string // the field path, so the coverage test can check this reads every one
 	e    *expr.Compiled
+}
+
+// unbindPersonalFilterNames keeps a declared personal variable out of a filter that
+// only names it there. Inside a filter a name may as well be a key of the elements
+// (people[vorname != null]), and before CompileAuto bound such names that is all it
+// ever read; binding the variable now would hand the filter ciphertext wherever an
+// element lacks the key — the comparison against bytes the rule below exists to
+// prevent. So such a name stays unbound: the element's key, or null, as before, and
+// the expression deploys as it did. A personal name read outside a filter is
+// untouched and still refused below.
+//
+// Only the engine-evaluated sites are touched: a worker evaluates its expressions
+// where the plaintext exists, so there the variable stays bound.
+func (p *CompiledProcess) unbindPersonalFilterNames() {
+	if len(p.personalSet) == 0 {
+		return
+	}
+	personal := func(name string) bool {
+		_, ok := p.personalSet[name]
+		return ok
+	}
+	for _, site := range p.expressionSites() {
+		if site.e != nil {
+			site.e.UnbindFilterOnly(personal)
+		}
+	}
 }
 
 // refuseExpressionsReadingPersonalData is called by Build on the assembled process. It

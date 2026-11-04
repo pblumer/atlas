@@ -415,7 +415,14 @@ func TestTheCheckReadsFEELNamesAsTheCompilerDoes(t *testing.T) {
 			return // not FEEL the engine compiles: nothing to agree with
 		}
 		checked++
-		want := slices.Clone(c.Inputs())
+		// The reader skips what a filter reads (the elements' keys, by its heuristic);
+		// the compiler names it too, as an input that may as well be such a key.
+		var want []string
+		for _, in := range c.Inputs() {
+			if !slices.Contains(c.FilterOnly(), in) {
+				want = append(want, in)
+			}
+		}
 		slices.Sort(want)
 		got := slices.Clone(names)
 		slices.Sort(got)

@@ -485,6 +485,10 @@ type UserTaskDetail struct {
 	AssigneeExpr        *expr.Compiled
 	CandidateGroupsExpr *expr.Compiled
 	FormId              int32 // interned form id bound via zeebe:formDefinition → index, -1 if unset (ADR-0028)
+	// AnsweredByLink is atlas:answeredBy="link": whoever holds the link a mail task
+	// carries for this task may complete it through its form, beside anybody it is
+	// assigned to (ADR-0523).
+	AnsweredByLink bool
 	// Priority is the task's static importance from zeebe:priorityDefinition
 	// (default 50, Camunda's convention); higher sorts first in the inbox.
 	Priority int32
@@ -864,6 +868,20 @@ type ConnectorTaskDetail struct {
 	AdCookieVar      int32
 	AdMaxEntries     int32
 	AdObjectSecurity bool
+	// AdAttributes is the entry of create-user/-group/-contact and update-attributes
+	// authored inline: a JSON template compiled to one FEEL context, evaluated by the
+	// worker at handoff, and the zero RestExpr when the task names AdEntryVar instead
+	// (the compiler requires exactly one). Because the worker evaluates it, it may read
+	// a variable the process declares personal (ADR-0314) — which an entry the engine
+	// had to build in a variable never could (ADR-0166, amended 2026-11-03).
+	//
+	// AdSelect is a search's interned attribute selection ("cn,mail", -1 for none: the
+	// server's default set). AdFoundVar is the interned name of the variable that
+	// receives a search's found on its own (-1 for none), so a gateway can branch on a
+	// boolean while the result variable — names, DNs — is declared personal.
+	AdAttributes RestExpr
+	AdSelect     int32
+	AdFoundVar   int32
 	// Generic SQL worker fields (JobType == SqlJobType, ADR-0173). Worker
 	// (above) names the database the *worker* is configured for — a SQL task carries
 	// no address and no credential, because the DSN never enters the engine. SqlOp is
@@ -1663,6 +1681,8 @@ type CompiledProcess struct {
 	conditionalStarts  []int32             // process-level start nodes that carried a conditional event definition; read by stage 5 only
 	eventGatewayKinds  []eventGatewayKind  // event-based gateways of a kind atlas does not run; read by stage 5 only
 	invalidWizards     []int32             // subprocess nodes whose atlas:wizard named no kind; read by stage 5 only (ADR-0449)
+	invalidAnsweredBy  []int32             // user task nodes whose atlas:answeredBy named no way; read by stage 5 only
+	answerTasks        map[int32]int32     // mail task node → interned BPMN id of the task answered by its link
 	versionTag         int32               // interned atlas:versionTag revision label, -1 if none
 	instanceTtlNanos   int64               // per-definition instance TTL in nanoseconds, 0 = off (ADR-0085)
 	historyTtlNanos    int64               // per-definition history TTL in nanoseconds, 0 = off (ADR-0144)
@@ -1774,6 +1794,18 @@ func (p *CompiledProcess) BoundaryEvent(detail int32) *BoundaryEventDetail {
 // `<subProcess triggeredByEvent="true">` armed by its start event's event definition
 // rather than entered by a flow (ADR-0082).
 func (p *CompiledProcess) IsEventSubProcess(id int32) bool { return p.nodes[id].EventSub >= 0 }
+
+// AnswerTask returns the BPMN id of the user task whose link the mail task node id
+// carries, and false when it carries none (ADR-0523). The id
+// is what the model wrote; whether it names a task answered by link is stage 5's
+// question (RuleAnswerTask).
+func (p *CompiledProcess) AnswerTask(id int32) (string, bool) {
+	ref, ok := p.answerTasks[id]
+	if !ok {
+		return "", false
+	}
+	return p.Intern(ref), true
+}
 
 // Wizard reports the wizard kind of node id (ADR-0449): WizardNone for every node but
 // an embedded subprocess marked atlas:wizard.

@@ -2,6 +2,7 @@ package ad
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -13,10 +14,16 @@ import (
 // is exactly the difference a mockup run exists to catch.
 //
 // What is supported is what an identity model authors: equality, presence, a
-// substring with wildcards, and the &/|/! that compose them. Everything else —
-// ordering (>=, <=), approximate (~=), extensible matches — is **refused rather than
-// ignored**, so a model that needs one learns it here instead of quietly getting more
-// entries than it asked for.
+// substring with wildcards, the &/|/! that compose them, and Active Directory's two
+// bitwise matching rules — LDAP_MATCHING_RULE_BIT_AND (1.2.840.113556.1.4.803) and
+// LDAP_MATCHING_RULE_BIT_OR (…804) — because
+// (!(userAccountControl:1.2.840.113556.1.4.803:=2)), *only enabled accounts*, is how a
+// model asks AD whether an account is usable without reading its flags (ADR-0166,
+// amended 2026-11-03). An assertion value is decoded as RFC 4515 writes it, so a DN
+// escaped into a filter (\5c, \2a, \28, \29) matches the DN it came from. Everything
+// else — ordering (>=, <=), approximate (~=), any other extensible match — is
+// **refused rather than ignored**, so a model that needs one learns it here instead
+// of quietly getting more entries than it asked for.
 
 // mockFilter matches an entry's attributes.
 type mockFilter interface {
@@ -57,10 +64,13 @@ func (f filterNot) match(attrs map[string][]string) bool { return !f.sub.match(a
 
 // filterItem is one assertion: an attribute is present, equals a value, or matches a
 // pattern with wildcards. Matching is case-insensitive, which is how a directory
-// compares the string syntaxes an identity model filters on.
+// compares the string syntaxes an identity model filters on. parts is the assertion
+// value split at its unescaped wildcards and then decoded, so one part is an equality
+// and more are a substring match — an escaped \2a is a literal asterisk, not a
+// wildcard.
 type filterItem struct {
 	attr     string
-	value    string
+	parts    []string
 	presence bool
 }
 
@@ -73,7 +83,39 @@ func (f filterItem) match(attrs map[string][]string) bool {
 		return true
 	}
 	for _, v := range vals {
-		if matchPattern(f.value, v) {
+		if matchParts(f.parts, v) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterBits is AD's bitwise matching rule: the attribute holds an integer, and all
+// (BIT_AND) or any (BIT_OR) of the asserted bits are set in it.
+type filterBits struct {
+	attr string
+	bits uint64
+	all  bool
+}
+
+// The two rule OIDs, as AD names them.
+const (
+	matchingRuleBitAnd = "1.2.840.113556.1.4.803"
+	matchingRuleBitOr  = "1.2.840.113556.1.4.804"
+)
+
+func (f filterBits) match(attrs map[string][]string) bool {
+	_, vals, ok := findAttr(attrs, f.attr)
+	if !ok {
+		return false
+	}
+	for _, v := range vals {
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			continue
+		}
+		set := uint64(n) & f.bits
+		if (f.all && set == f.bits) || (!f.all && set != 0) {
 			return true
 		}
 	}
@@ -159,8 +201,11 @@ func parseFilterItem(inner string) (mockFilter, error) {
 	if i <= 0 {
 		return nil, filterErr(inner, "want attribute=value")
 	}
-	if strings.ContainsAny(inner[i-1:i], "><~:") {
-		return nil, filterErr(inner, "only equality, presence and wildcards are applied by the mock directory")
+	if inner[i-1] == ':' {
+		return parseBitFilter(inner, inner[:i-1], strings.TrimSpace(inner[i+1:]))
+	}
+	if strings.ContainsAny(inner[i-1:i], "><~") {
+		return nil, filterErr(inner, "only equality, presence, wildcards and AD's bitwise matching rules are applied by the mock directory")
 	}
 	attr := strings.TrimSpace(inner[:i])
 	value := strings.TrimSpace(inner[i+1:])
@@ -175,7 +220,56 @@ func parseFilterItem(inner string) (mockFilter, error) {
 		}
 		return filterItem{attr: attr, presence: true}, nil
 	}
-	return filterItem{attr: attr, value: value}, nil
+	parts, err := assertionParts(value)
+	if err != nil {
+		return nil, filterErr(inner, err.Error())
+	}
+	return filterItem{attr: attr, parts: parts}, nil
+}
+
+// parseBitFilter parses an extensible match attr:rule:=value and admits exactly AD's
+// two bitwise rules; any other rule, and the dn-attributes form, is refused.
+func parseBitFilter(inner, left, value string) (mockFilter, error) {
+	attr, rule, ok := strings.Cut(strings.TrimSpace(left), ":")
+	attr, rule = strings.TrimSpace(attr), strings.TrimSpace(rule)
+	if !ok || attr == "" || (rule != matchingRuleBitAnd && rule != matchingRuleBitOr) {
+		return nil, filterErr(inner, "the only extensible matches the mock directory applies are AD's bitwise rules, attribute:"+
+			matchingRuleBitAnd+":=n (all bits set) and attribute:"+matchingRuleBitOr+":=n (any bit set)")
+	}
+	n, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return nil, filterErr(inner, "a bitwise matching rule takes a non-negative integer")
+	}
+	return filterBits{attr: attr, bits: n, all: rule == matchingRuleBitAnd}, nil
+}
+
+// assertionParts splits an assertion value at its unescaped wildcards and decodes RFC
+// 4515's escapes — a backslash and two hex digits — in each part.
+func assertionParts(value string) ([]string, error) {
+	var (
+		parts []string
+		cur   []byte
+	)
+	for i := 0; i < len(value); i++ {
+		switch c := value[i]; c {
+		case '*':
+			parts = append(parts, string(cur))
+			cur = cur[:0]
+		case '\\':
+			if i+2 >= len(value) {
+				return nil, fmt.Errorf("an escape needs two hex digits after the backslash")
+			}
+			b, err := strconv.ParseUint(value[i+1:i+3], 16, 8)
+			if err != nil {
+				return nil, fmt.Errorf("%q is not an escape (a backslash and two hex digits)", value[i:i+3])
+			}
+			cur = append(cur, byte(b))
+			i += 2
+		default:
+			cur = append(cur, c)
+		}
+	}
+	return append(parts, string(cur)), nil
 }
 
 // matchingParen returns the index of the parenthesis closing the one at s[0], or -1.
@@ -195,13 +289,18 @@ func matchingParen(s string) int {
 	return -1
 }
 
-// matchPattern matches an LDAP assertion value against a stored one,
-// case-insensitively, honouring * as the wildcard it is in a substring filter.
-func matchPattern(pattern, value string) bool {
-	if !strings.Contains(pattern, "*") {
-		return strings.EqualFold(pattern, value)
+// matchParts matches a decoded assertion against a stored value, case-insensitively:
+// one part is an equality, more are a substring match with a wildcard between each
+// two.
+func matchParts(parts []string, value string) bool {
+	if len(parts) == 1 {
+		return strings.EqualFold(parts[0], value)
 	}
-	parts := strings.Split(strings.ToLower(pattern), "*")
+	lower := make([]string, len(parts))
+	for i, p := range parts {
+		lower[i] = strings.ToLower(p)
+	}
+	parts = lower
 	v := strings.ToLower(value)
 	if head := parts[0]; head != "" {
 		if !strings.HasPrefix(v, head) {

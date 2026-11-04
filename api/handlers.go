@@ -6706,7 +6706,12 @@ func (s *Server) handleActivateJobsByType(w http.ResponseWriter, r *http.Request
 			// (ADR-0270).
 			var keys []uint64
 			held = s.breakers.holdingFor(jobType)
-			if held {
+			if serves := servedConnectors(body.Connectors); serves != nil {
+				// The worker named the workers it holds: it is leased only their jobs,
+				// so a second worker of the same type serving another name never
+				// takes, and fails, a job meant for the first.
+				scanErr = s.scanServedCandidates(jobType, body.Worker, serves, held, want, &keys)
+			} else if held {
 				// A target under this type is down, so the candidates have to be
 				// filtered as they are scanned rather than after: collecting first
 				// would fill the page with jobs that may not go out and hand back
@@ -6960,6 +6965,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"attachment": j.Attachment, "allowedTypes": j.AllowedTypes,
 			"store": j.Store, "bucket": j.Bucket, "key": j.Key,
 			"errorCodes": j.ErrorCodes,
+			// Why the task could not be resolved — the answer link a mail is for
+			// (ADR-0523); the worker fails the job with it.
+			"resolveError": j.ResolveError,
 		}}
 	case compiler.RemedyJobTypeIndex:
 		// The form and its field values travel; the AR System base URL and the service
@@ -7099,6 +7107,9 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"scope": j.Scope, "cookie": j.Cookie, "cookieVariable": j.CookieVariable,
 			"maxEntries": j.MaxEntries, "objectSecurity": j.ObjectSecurity,
 			"resultVariable": j.ResultVariable,
+			// A search's attribute selection and the variable its found goes to on its
+			// own (ADR-0166, amended 2026-11-03).
+			"select": j.Select, "foundVariable": j.FoundVariable,
 		}}
 	case compiler.LdapJobTypeIndex:
 		// LDAP authors its own server (ADR-0154), so like AD the endpoint travels and

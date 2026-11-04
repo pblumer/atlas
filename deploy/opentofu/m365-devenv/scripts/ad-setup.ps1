@@ -53,6 +53,15 @@ try {
         if (-not $cert) { throw "No certificate with subject '$($cfg.ldapsSubject)' and private key in LocalMachine\My." }
         Write-Output "LDAPS certificate present: $($cert.Thumbprint)"
 
+        # The certificate is self-signed. Schannel only offers it as the directory's
+        # default server credential when its chain ends in a trusted root; otherwise
+        # LDAPS stays down (event 1220, Schannel 36886) and 636 resets every handshake.
+        $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'LocalMachine')
+        $rootStore.Open('ReadWrite')
+        $rootStore.Add([System.Security.Cryptography.X509Certificates.X509Certificate2]::new(($cert | Select-Object -First 1).RawData))
+        $rootStore.Close()
+        Write-Output 'LDAPS certificate trusted in LocalMachine\Root.'
+
         Set-Content -Path $configFile -Value $json -Encoding UTF8
         Protect-File $configFile
 
