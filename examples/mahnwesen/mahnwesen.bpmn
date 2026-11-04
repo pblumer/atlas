@@ -63,11 +63,11 @@ kunde, betrag, zahlungsfrist und nachfrist (ISO-8601-Dauern, Vorgabe P10D/P20D).
 
     <extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="rechnungsnummer" type="string" required="true" default="&quot;RE-2026-0042&quot;"/>
-        <atlas:startVariable name="kunde" type="string" required="true" default="&quot;Muster GmbH&quot;"/>
+        <atlas:startVariable name="rechnungsnummer" type="string" required="true" default="RE-2026-0042"/>
+        <atlas:startVariable name="kunde" type="string" required="true" default="Muster GmbH"/>
         <atlas:startVariable name="betrag" type="number" required="true" default="1250"/>
-        <atlas:startVariable name="zahlungsfrist" type="string" required="false" default="&quot;P10D&quot;"/>
-        <atlas:startVariable name="nachfrist" type="string" required="false" default="&quot;P20D&quot;"/>
+        <atlas:startVariable name="zahlungsfrist" type="string" required="false" default="P10D"/>
+        <atlas:startVariable name="nachfrist" type="string" required="false" default="P20D"/>
       </atlas:startForm>
     </extensionElements>
 

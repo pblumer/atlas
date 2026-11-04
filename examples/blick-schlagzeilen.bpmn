@@ -33,12 +33,12 @@
   Credential, kein konfigurierter Worker nötig — die URL steht im Modell,
   ein Scrape ist ein GET und ein Retry holt ihn schlicht neu.
 
-  Zum FEEL im Skript-Task, weil die naheliegende Schreibweise hier eine Falle ist:
-  ein Filter `schlagzeilen[contains(title, suchwort)]` wertet **jeden freien Namen
-  im Filter gegen den Eintrag aus**. `suchwort` ist kein Feld eines Eintrags, wird
-  also zu null — der Filter liefert stillschweigend []. Deshalb bindet das Skript
-  die Prüfung mit `for e in …` an eine Schleifenvariable, hängt das Ergebnis als
-  `treffer`-Feld an und filtert erst danach auf dieses Feld.
+  Zum FEEL im Skript-Task: Es baut mit `for e in …` neue Einträge mit deutschen
+  Feldnamen, hängt das Ergebnis der Suche als `treffer`-Feld an und filtert erst
+  danach auf dieses Feld. Ein Listenfilter `schlagzeilen[contains(title, suchwort)]`
+  sähe `suchwort` ebenfalls (Namen, die der Eintrag nicht hat, löst FEEL im äusseren
+  Kontext auf), behielte aber die englischen Feldnamen. Ohne Suchwort (null) zählt
+  jeder Eintrag als Treffer.
 -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
@@ -52,7 +52,7 @@
     <bpmn:documentation>Liest den RSS-Feed von Blick.ch über den Web-Scraping-Worker im Format rss (ADR-0190) und schreibt die ersten 15 Einträge als strukturierte Objekte (title, link, description, published) nach schlagzeilen. Ein Inline-FEEL-Skript hält die Einträge fest, deren Titel das Suchwort enthält; gibt es welche, parkt der Prozess auf einem User-Task zur Sichtung, sonst endet er. Braucht kein Credential und keinen konfigurierten Worker: die URL steht im Modell, den Abruf erledigt die standardmässig mitlaufende webscrape-Worker-Instanz.</bpmn:documentation>
     <bpmn:extensionElements>
       <atlas:startForm>
-        <atlas:startVariable name="suchwort" type="string" default="&#34;&#34;" required="false" />
+        <atlas:startVariable name="suchwort" type="string" required="false" />
       </atlas:startForm>
     </bpmn:extensionElements>
 
@@ -77,7 +77,7 @@
       <bpmn:documentation>Behält die Einträge, deren Titel das Suchwort enthält (Gross-/Kleinschreibung egal). Leeres Suchwort heisst: jeder Eintrag ist ein Treffer, denn contains(text, "") ist wahr. Die Prüfung hängt als Feld treffer am Zwischenobjekt und wird erst danach gefiltert — ein Filter darf das äussere suchwort nicht sehen.</bpmn:documentation>
       <bpmn:extensionElements>
         <zeebe:script resultVariable="treffer"
-                      expression="= (for e in schlagzeilen return {titel: e.title, link: e.link, veroeffentlicht: e.published, treffer: contains(lower case(e.title), lower case(suchwort))})[treffer]" />
+                      expression="= (for e in schlagzeilen return {titel: e.title, link: e.link, veroeffentlicht: e.published, treffer: contains(lower case(e.title), lower case(if suchwort = null then &quot;&quot; else suchwort))})[treffer]" />
       </bpmn:extensionElements>
       <bpmn:incoming>f_feed_filtern</bpmn:incoming>
       <bpmn:outgoing>f_filtern_gw</bpmn:outgoing>
