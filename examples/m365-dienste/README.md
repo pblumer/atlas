@@ -979,7 +979,9 @@ Exchange-Worker in einer Rollengruppe mit Schreibbereich (`deploy/opentofu/m365-
   auf die Abteilung der Testpersonen: echte Konten des Tenants erscheinen nicht.
 
 Dabei korrigiert: das Team wartet die Replikation **vor** dem Besitzer ab (`add-group-owner`
-23 s nach `create-group` antwortete 404); der Entra-Worker legt Teams mit `POST /teams` an
+23 s nach `create-group` antwortete 404) und noch einmal zwei Minuten **nach** dem Besitzer
+(`create-team` eine Sekunde nach `add-group-owner` antwortete 400 «must have one or more owners»,
+2026-11-04); der Entra-Worker legt Teams mit `POST /teams` an
 (`PUT /groups/{id}/team` antwortete einer App 403 «StampTenantRegionRequest»); die
 Verteilerliste entsteht ohne `-Type`; der Exchange-Worker liest Antworten unkomprimiert und
 wiederholt ein `Set-`/`Add-`, das ein eben angelegtes Objekt noch nicht findet, und wartet
