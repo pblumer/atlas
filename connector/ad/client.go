@@ -105,6 +105,13 @@ type SearchRequest struct {
 	// one, and a process branching on "did I find the group?" would branch on it
 	// confidently. 0 is unbounded.
 	MaxEntries int32
+	// Limit is the opposite contract, for a reader who is a person rather than a
+	// process: at most Limit entries, and the rest is not read rather than refused. A
+	// form lookup (lookup.go) shows one page and the person types another letter; it
+	// never branches on "found nothing". It is asked of the server as the first page of
+	// a paged search (RFC 2696), whose cookie is dropped with the connection. 0 means no
+	// limit; it is not combined with PageSize or MaxEntries.
+	Limit int32
 }
 
 // Conn is a bound AD connection the worker operates over and then closes. It is an
@@ -315,9 +322,19 @@ func (c *goConn) Search(req SearchRequest) ([]Entry, error) {
 		res *goldap.SearchResult
 		err error
 	)
-	if req.PageSize > 0 {
+	switch {
+	case req.Limit > 0:
+		// One page of a paged search: the server stops at Limit without the
+		// size-limit error a SizeLimit would raise, and the cookie for the next page
+		// is never used.
+		sr.Controls = append(sr.Controls, goldap.NewControlPaging(uint32(req.Limit)))
+		res, err = c.conn.Search(sr)
+		if err == nil && len(res.Entries) > int(req.Limit) {
+			res.Entries = res.Entries[:req.Limit]
+		}
+	case req.PageSize > 0:
 		res, err = c.conn.SearchWithPaging(sr, uint32(req.PageSize))
-	} else {
+	default:
 		res, err = c.conn.Search(sr)
 	}
 	if err != nil {

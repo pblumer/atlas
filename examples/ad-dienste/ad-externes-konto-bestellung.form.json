@@ -47,12 +47,33 @@
     },
     {
       "key": "sponsor",
-      "type": "textfield",
-      "label": "Dein Konto (Anmeldename) · Your account (logon name)",
-      "description": "Der Anmeldename im Active Directory (sAMAccountName), z.B. amaier: 1 bis 20 Zeichen aus Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich. · The Active Directory logon name (sAMAccountName), e.g. amaier: 1 to 20 letters, digits, dots, hyphens and underscores. Es wird manager des externen Kontos. · It becomes the external account's manager.",
+      "type": "select",
+      "label": "Dein Konto · Your account",
+      "description": "Suche nach Name, Anmeldename oder Mail im Active Directory; übermittelt wird der Anmeldename (sAMAccountName). · Search the Active Directory by name, logon name or mail; the logon name (sAMAccountName) is submitted. Es wird manager des externen Kontos. · It becomes the external account's manager.",
       "validate": {
-        "required": true,
-        "pattern": "^[A-Za-z0-9._-]{1,20}$"
+        "required": true
+      },
+      "atlasDataSource": {
+        "version": 1,
+        "workerType": "ad",
+        "worker": "ad_verzeichnis",
+        "resource": "users",
+        "searchFields": [
+          "displayName",
+          "givenName",
+          "sn",
+          "mail",
+          "sAMAccountName"
+        ],
+        "option": {
+          "label": "displayName",
+          "description": "sAMAccountName",
+          "details": [
+            "department"
+          ]
+        },
+        "pageSize": 25,
+        "minSearchLength": 2
       }
     },
     {

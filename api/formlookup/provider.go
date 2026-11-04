@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/pblumer/atlas/compiler"
+	"github.com/pblumer/atlas/connector/ad"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/lookup"
 )
@@ -42,6 +43,9 @@ type Provider struct {
 	ValueFormat string `json:"valueFormat"`
 	// ValueFormats says it for each of ValueProperties.
 	ValueFormats map[string]string `json:"valueFormats,omitempty"`
+	// ActiveFlag says the source marks records as disabled, so a field may leave them
+	// out (activeOnly). Users have one; groups do not.
+	ActiveFlag bool `json:"activeFlag"`
 
 	validValue   func(string) bool
 	validValueAs func(property, v string) bool
@@ -67,9 +71,9 @@ func (p Provider) Check(q lookup.Query) error {
 	return p.check(q)
 }
 
-// providers are the remote data sources this server offers. One today; another is a
-// row here and a query handler in its Worker Type.
-var providers = []Provider{entraUsers()}
+// providers are the remote data sources this server offers. Another is a row here and
+// a query handler in its Worker Type.
+var providers = []Provider{entraUsers(), adUsers(), adGroups()}
 
 func entraUsers() Provider {
 	res := entra.LookupResources["users"]
@@ -81,7 +85,7 @@ func entraUsers() Provider {
 		ValueProperty:      res.ValueProperty,
 		ValueProperties:    slices.Clone(res.ValueProperties),
 		Searchable:         slices.Clone(res.Searchable),
-		Filterable:         slices.Clone(res.Filterable),
+		Filterable:         append([]string{}, res.Filterable...),
 		Readable:           slices.Clone(res.Readable),
 		DefaultLabel:       "displayName",
 		DefaultDescription: "mail",
@@ -91,10 +95,74 @@ func entraUsers() Provider {
 			"id":                "an Entra object id (a GUID)",
 			"userPrincipalName": "a user principal name (name@domain)",
 		},
+		ActiveFlag:   res.ActiveProperty != "",
 		validValue:   func(v string) bool { return entra.ValidLookupValue("users", v) },
 		validValueAs: func(prop, v string) bool { return entra.ValidLookupValueAs("users", prop, v) },
 		check: func(q lookup.Query) error {
 			_, err := entra.CheckLookup(q)
+			return err
+		},
+	}
+}
+
+// adUsers is Active Directory's user accounts (ADR-0473, amended 2026-11-04): searched
+// under the directory's default naming context with the Worker's bind account, and
+// identified by logon name — the name an AD process addresses an account by.
+func adUsers() Provider {
+	res := ad.LookupResources["users"]
+	return Provider{
+		WorkerType:         "ad",
+		Resource:           "users",
+		JobType:            compiler.AdJobType,
+		Label:              "Active Directory — users",
+		ValueProperty:      res.ValueProperty,
+		ValueProperties:    slices.Clone(res.ValueProperties),
+		Searchable:         slices.Clone(res.Searchable),
+		Filterable:         append([]string{}, res.Filterable...),
+		Readable:           slices.Clone(res.Readable),
+		DefaultLabel:       "displayName",
+		DefaultDescription: "userPrincipalName",
+		Fallback:           "sAMAccountName",
+		ValueFormat:        "a logon name (sAMAccountName)",
+		ValueFormats: map[string]string{
+			"sAMAccountName":    "a logon name (sAMAccountName)",
+			"userPrincipalName": "a user principal name (name@domain)",
+		},
+		ActiveFlag:   res.ActiveOnly,
+		validValue:   func(v string) bool { return ad.ValidLookupValue("users", v) },
+		validValueAs: func(prop, v string) bool { return ad.ValidLookupValueAs("users", prop, v) },
+		check: func(q lookup.Query) error {
+			_, err := ad.CheckLookup(q)
+			return err
+		},
+	}
+}
+
+// adGroups is Active Directory's groups, identified by their sAMAccountName.
+func adGroups() Provider {
+	res := ad.LookupResources["groups"]
+	return Provider{
+		WorkerType:         "ad",
+		Resource:           "groups",
+		JobType:            compiler.AdJobType,
+		Label:              "Active Directory — groups",
+		ValueProperty:      res.ValueProperty,
+		ValueProperties:    slices.Clone(res.ValueProperties),
+		Searchable:         slices.Clone(res.Searchable),
+		Filterable:         append([]string{}, res.Filterable...),
+		Readable:           slices.Clone(res.Readable),
+		DefaultLabel:       "cn",
+		DefaultDescription: "description",
+		Fallback:           "sAMAccountName",
+		ValueFormat:        "a group's sAMAccountName",
+		ValueFormats: map[string]string{
+			"sAMAccountName": "a group's sAMAccountName",
+		},
+		ActiveFlag:   res.ActiveOnly,
+		validValue:   func(v string) bool { return ad.ValidLookupValue("groups", v) },
+		validValueAs: func(prop, v string) bool { return ad.ValidLookupValueAs("groups", prop, v) },
+		check: func(q lookup.Query) error {
+			_, err := ad.CheckLookup(q)
 			return err
 		},
 	}

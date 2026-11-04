@@ -135,6 +135,12 @@
       "version": "1.0.1",
       "digest": "sha256:58215fde20d77198b4e988cca6b2c6e7eb0f8ce2a151564eec594060422ac2e1",
       "minAtlas": "0.22.0-0"
+    },
+    {
+      "bundle": "ad-dienste",
+      "version": "1.0.4",
+      "digest": "sha256:b1f2a32a4ba0f31817d3633eade5b77636a65f1fe0c3364443377cd6f9485b43",
+      "minAtlas": "0.22.0-0"
     }
   ]
 }
