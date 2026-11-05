@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzPreise: der Preis pro Lizenz und Monat, den die Verrechnung (P6) einem Kunden belastet.
+  Eingaben: sku, monat (erster Tag des Monats, Text JJJJ-MM-TT)
+  Ausgaben: preis (CHF pro Lizenz und Monat), waehrung
+  BEISPIELWERTE, VOR DEM EINSATZ ERSETZEN: die Preise der eigenen Preisliste. Eine SKU ohne Preis ergibt kein Ergebnis;
+  die Verrechnung hält dann mit einem Incident an, statt zu 0 zu verrechnen.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzPreise" name="LzPreise" namespace="http://atlas/dmn">
+  <inputData id="id_monat" name="monat"/>
+  <inputData id="id_sku" name="sku"/>
+  <decision id="LzPreise" name="LzPreise">
+    <informationRequirement id="ir_monat"><requiredInput href="#id_monat"/></informationRequirement>
+    <informationRequirement id="ir_sku"><requiredInput href="#id_sku"/></informationRequirement>
+    <decisionTable id="dt_LzPreise" hitPolicy="FIRST">
+      <input id="in_0" label="sku"><inputExpression id="ie_0" typeRef="string"><text>sku</text></inputExpression></input>
+      <input id="in_1" label="monat"><inputExpression id="ie_1" typeRef="string"><text>monat</text></inputExpression></input>
+      <output id="out_0" label="preis" name="preis" typeRef="number"/>
+      <output id="out_1" label="waehrung" name="waehrung" typeRef="string"/>
+      <rule id="r1">
+        <description>E3</description>
+        <inputEntry id="r1_i0"><text>"E3"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>36.00</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"CHF"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>E5</description>
+        <inputEntry id="r2_i0"><text>"E5"</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>57.00</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"CHF"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>F3</description>
+        <inputEntry id="r3_i0"><text>"F3"</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>8.00</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"CHF"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

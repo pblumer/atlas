@@ -14,6 +14,29 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **Example: licence management for Microsoft 365.** A new example package,
+  `examples/lizenzmanagement` (application «Beispiel: Lizenzmanagement», hub bundle
+  `lizenzmanagement`), keeps licence contracts per customer and project with a WBS element
+  and a quantity per SKU, approved by the person responsible for the tenant, and checks every
+  licence order of `m365-dienste` against them (P1–P9 of the concept: contract and its
+  actions, quota check with a race-free reservation and approved overdrafts, the daily
+  comparison with the tenant through `list-subscribed-skus` and the purchase task in the EA,
+  monthly billing per WBS element, the EA anniversary and the 90-day grace period with a
+  withdrawal rule each customer sets as a decision table, and the one-off take-over of the
+  licences in use). The state lives in long-running instances, one contract book per contract
+  and one tenant book, that take bookings as messages one after another and apply each in a
+  single script task, so two simultaneous orders never both get the last seat; requests and
+  answers go through `POST /api/v1/messages` with a time to live. It brings its information
+  model and capability proposals (format 4), installers and a handbook card. The M365 devenv
+  installs it with `scripts/install-lizenzmanagement.py`.
+- **M365 example: licences against a contract, and changing a licence.** With the
+  application constant `LIZENZ_VERTRAG_PRUEFEN = ein`, `m365-dienste/lizenz.bpmn` asks the
+  order form for the licence contract, calls the quota check of the licence management
+  before assigning, books the use afterwards and releases it on return; without it the
+  package behaves as before and installs without the licence management. A new action
+  «Lizenz wechseln» changes the variant (E3 → E5 and back), with approval for a more
+  expensive one, in direct mode as one atomic `assign-license`. A return now withdraws the
+  variant the account holds rather than the one ordered.
 - **The Entra Worker reads the tenant's licence stock.** A new operation,
   `list-subscribed-skus`, reads Microsoft Graph's `GET /subscribedSkus`. Like the other
   Entra listings, the result variable receives a JSON array with one item per SKU:

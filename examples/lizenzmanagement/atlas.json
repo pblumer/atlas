@@ -1,0 +1,247 @@
+{
+  "formatVersion": 4,
+  "key": "beispiel-lizenzmanagement",
+  "name": "Beispiel: Lizenzmanagement",
+  "processes": [
+    {
+      "id": "proc_lz_bestand",
+      "name": "Lizenzmanagement: Bestand abgleichen",
+      "path": "bestand.bpmn"
+    },
+    {
+      "id": "proc_lz_bestand_aufgaben",
+      "name": "Lizenzmanagement: Nachkauf und Abweichung",
+      "path": "bestand-aufgaben.bpmn"
+    },
+    {
+      "id": "proc_lz_buchen",
+      "name": "Lizenzmanagement: Buch fragen",
+      "path": "buchen.bpmn"
+    },
+    {
+      "id": "proc_lz_jahrestag",
+      "name": "Lizenzmanagement: Jahrestag vorbereiten",
+      "path": "jahrestag.bpmn"
+    },
+    {
+      "id": "proc_lz_karenz",
+      "name": "Lizenzmanagement: Rückführung in der Abo-Karenz",
+      "path": "karenz.bpmn"
+    },
+    {
+      "id": "proc_lz_karenz_vertrag",
+      "name": "Lizenzmanagement: Entzug je Vertrag",
+      "path": "karenz-vertrag.bpmn"
+    },
+    {
+      "id": "proc_lz_kontingent",
+      "name": "Lizenzmanagement: Kontingent prüfen",
+      "path": "kontingent.bpmn"
+    },
+    {
+      "id": "proc_lz_tenantbuch",
+      "name": "Lizenzmanagement: Tenant-Kontingent",
+      "path": "tenantbuch.bpmn"
+    },
+    {
+      "id": "proc_lz_uebernahme",
+      "name": "Lizenzmanagement: Bestand übernehmen",
+      "path": "uebernahme.bpmn"
+    },
+    {
+      "id": "proc_lz_verrechnung",
+      "name": "Lizenzmanagement: Monatliche Verrechnung",
+      "path": "verrechnung.bpmn"
+    },
+    {
+      "id": "proc_lz_verrechnung_vertrag",
+      "name": "Lizenzmanagement: Vertrag verrechnen",
+      "path": "verrechnung-vertrag.bpmn"
+    },
+    {
+      "id": "proc_lz_vertrag",
+      "name": "Lizenzmanagement: Lizenzvertrag",
+      "path": "vertrag.bpmn"
+    },
+    {
+      "id": "proc_lz_vertragsbuch",
+      "name": "Lizenzmanagement: Vertragsbuch",
+      "path": "vertragsbuch.bpmn"
+    }
+  ],
+  "forms": [
+    {
+      "id": "lz-abweichung",
+      "name": "lz-abweichung",
+      "path": "lz-abweichung.form.json"
+    },
+    {
+      "id": "lz-nachkauf",
+      "name": "lz-nachkauf",
+      "path": "lz-nachkauf.form.json"
+    },
+    {
+      "id": "lz-neue-menge",
+      "name": "lz-neue-menge",
+      "path": "lz-neue-menge.form.json"
+    },
+    {
+      "id": "lz-rueckfuehrung",
+      "name": "lz-rueckfuehrung",
+      "path": "lz-rueckfuehrung.form.json"
+    },
+    {
+      "id": "lz-uebernahme-start",
+      "name": "lz-uebernahme-start",
+      "path": "lz-uebernahme-start.form.json"
+    },
+    {
+      "id": "lz-ueberzug-genehmigen",
+      "name": "lz-ueberzug-genehmigen",
+      "path": "lz-ueberzug-genehmigen.form.json"
+    },
+    {
+      "id": "lz-unbekannte",
+      "name": "lz-unbekannte",
+      "path": "lz-unbekannte.form.json"
+    },
+    {
+      "id": "lz-verlaengerung",
+      "name": "lz-verlaengerung",
+      "path": "lz-verlaengerung.form.json"
+    },
+    {
+      "id": "lz-verrechnung-uebersicht",
+      "name": "lz-verrechnung-uebersicht",
+      "path": "lz-verrechnung-uebersicht.form.json"
+    },
+    {
+      "id": "lz-vertrag-aufstocken",
+      "name": "lz-vertrag-aufstocken",
+      "path": "lz-vertrag-aufstocken.form.json"
+    },
+    {
+      "id": "lz-vertrag-aufstockung-genehmigen",
+      "name": "lz-vertrag-aufstockung-genehmigen",
+      "path": "lz-vertrag-aufstockung-genehmigen.form.json"
+    },
+    {
+      "id": "lz-vertrag-beenden",
+      "name": "lz-vertrag-beenden",
+      "path": "lz-vertrag-beenden.form.json"
+    },
+    {
+      "id": "lz-vertrag-bestellung",
+      "name": "lz-vertrag-bestellung",
+      "path": "lz-vertrag-bestellung.form.json"
+    },
+    {
+      "id": "lz-vertrag-entzugsregel",
+      "name": "lz-vertrag-entzugsregel",
+      "path": "lz-vertrag-entzugsregel.form.json"
+    },
+    {
+      "id": "lz-vertrag-genehmigung",
+      "name": "lz-vertrag-genehmigung",
+      "path": "lz-vertrag-genehmigung.form.json"
+    },
+    {
+      "id": "lz-vertrag-korrektur",
+      "name": "lz-vertrag-korrektur",
+      "path": "lz-vertrag-korrektur.form.json"
+    },
+    {
+      "id": "lz-vertrag-personen",
+      "name": "lz-vertrag-personen",
+      "path": "lz-vertrag-personen.form.json"
+    },
+    {
+      "id": "lz-vertrag-senken",
+      "name": "lz-vertrag-senken",
+      "path": "lz-vertrag-senken.form.json"
+    },
+    {
+      "id": "lz-vertrag-verlaengern",
+      "name": "lz-vertrag-verlaengern",
+      "path": "lz-vertrag-verlaengern.form.json"
+    },
+    {
+      "id": "lz-vertrag-verrechnung",
+      "name": "lz-vertrag-verrechnung",
+      "path": "lz-vertrag-verrechnung.form.json"
+    },
+    {
+      "id": "lz-weiterfuehren",
+      "name": "lz-weiterfuehren",
+      "path": "lz-weiterfuehren.form.json"
+    },
+    {
+      "id": "lz-zuordnung",
+      "name": "lz-zuordnung",
+      "path": "lz-zuordnung.form.json"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dmn-lz-abgleich",
+      "name": "LzAbgleich",
+      "modelRef": "lz-abgleich",
+      "path": "lz-abgleich.dmn"
+    },
+    {
+      "id": "dmn-lz-entzug-standard",
+      "name": "LzEntzugStandard",
+      "modelRef": "lz-entzug-standard",
+      "path": "lz-entzug-standard.dmn"
+    },
+    {
+      "id": "dmn-lz-export-form",
+      "name": "LzExportForm",
+      "modelRef": "lz-export-form",
+      "path": "lz-export-form.dmn"
+    },
+    {
+      "id": "dmn-lz-kontingent",
+      "name": "LzKontingent",
+      "modelRef": "lz-kontingent",
+      "path": "lz-kontingent.dmn"
+    },
+    {
+      "id": "dmn-lz-kunde-zuordnung",
+      "name": "LzKundeZuordnung",
+      "modelRef": "lz-kunde-zuordnung",
+      "path": "lz-kunde-zuordnung.dmn"
+    },
+    {
+      "id": "dmn-lz-nachkauf-schwelle",
+      "name": "LzNachkaufSchwelle",
+      "modelRef": "lz-nachkauf-schwelle",
+      "path": "lz-nachkauf-schwelle.dmn"
+    },
+    {
+      "id": "dmn-lz-preise",
+      "name": "LzPreise",
+      "modelRef": "lz-preise",
+      "path": "lz-preise.dmn"
+    },
+    {
+      "id": "dmn-lz-psp-pruefung",
+      "name": "LzPspPruefung",
+      "modelRef": "lz-psp-pruefung",
+      "path": "lz-psp-pruefung.dmn"
+    },
+    {
+      "id": "dmn-lz-sku",
+      "name": "LzSku",
+      "modelRef": "lz-sku",
+      "path": "lz-sku.dmn"
+    }
+  ],
+  "informationModels": [
+    {
+      "name": "Lizenzmanagement",
+      "path": "architektur/informationsmodell.json"
+    }
+  ],
+  "architecture": "architektur/capabilities.json"
+}

@@ -1,0 +1,27 @@
+{
+  "type": "default",
+  "id": "lz-unbekannte",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Unbekannte zuordnen · Assign the unknown**\n\nLizenzen ohne Kunden. Je Zeile Konto-ID=Vertragsnummer; was fehlt, wird von Hand entzogen. · One line per account: account id=contract number."
+    },
+    {
+      "key": "unbekanntText",
+      "type": "textarea",
+      "label": "Ohne Kunden · Without a customer",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zuordnungen",
+      "type": "textarea",
+      "label": "Zuordnungen · Assignments",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

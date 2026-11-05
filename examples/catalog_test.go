@@ -299,6 +299,12 @@ var catalogSources = []catalogSource{
 	{ID: "ad-dienste", Dir: "ad-dienste", NoInstall: true,
 		Main: "ad-dienste/ad-sicherheitsgruppe.bpmn",
 		Shop: true},
+	// Licence contracts per customer and project, kept in long-running books that take
+	// bookings as messages; the m365-dienste licence order checks its quota here. It
+	// installs with its installieren.sh, which also starts the tenant's book.
+	{ID: "lizenzmanagement", Dir: "lizenzmanagement", NoInstall: true,
+		Main: "lizenzmanagement/vertrag.bpmn",
+		Shop: true},
 }
 
 // formDisplayNames gives a form the name the Modeler and the Tasks inbox list it

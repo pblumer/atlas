@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_lz_buchen" targetNamespace="http://atlas/beispiel/lizenzmanagement">
+  <message id="m_lz_antwort" name="lz.buch.antwort"><extensionElements><zeebe:subscription correlationKey="=anfrageId"/></extensionElements></message>
+  <itemDefinition id="item_Lizenzvertrag" structureRef="Lizenzvertrag"/>
+  <itemDefinition id="item_TenantKontingent" structureRef="TenantKontingent"/>
+  <process id="proc_lz_buchen" name="Lizenzmanagement: Buch fragen" isExecutable="true">
+    <documentation>Fragt ein Buch des Lizenzmanagements und wartet auf seine Antwort: das Vertragsbuch eines Lizenzvertrags (buchId = Vertragsnummer) oder das Tenant-Kontingent (buchId = TENANT). Jeder Prozess, der eine Buchung braucht (reservieren, belegen, freigeben, Mengen setzen, lesen …), ruft diesen Prozess als Call Activity mit zwei Eingaben auf: buchId und auftrag (ein Kontext mit aktion und den Angaben der Buchung, dazu ref, eine Kennung des Aufrufers). Zurück kommt antwort.
+
+Warum eine Anfrage als Nachricht und kein Lesen und Schreiben über die API: Der Stand eines Vertrags gehört einer einzigen, lange laufenden Instanz (proc_lz_vertragsbuch bzw. proc_lz_tenantbuch). Sie nimmt Buchungen nacheinander an ihrem Nachrichtenereignis entgegen und wendet jede in einer einzigen Script-Task an. Zwei gleichzeitige Bestellungen können deshalb nicht beide den letzten Platz bekommen: Die zweite Nachricht wartet im Puffer (ADR-0370), bis das Buch wieder bereit ist.
+
+Die Anfrage geht über POST /api/v1/messages mit timeToLiveMs und messageId, die Antwort genauso zurück. Eine Nachricht, die aus dem Modell geworfen würde, hätte keine Lebensdauer, und eine Antwort, die eintrifft, bevor die Empfangsaufgabe wartet, ginge verloren. Braucht das Secret "atlas" (API-Token der Rolle operator) und die Applikationskonstante ATLAS_API_BASE.
+
+Antwortet das Buch nicht innerhalb von zehn Minuten, ist antwort.ergebnis "keine-antwort": Das Buch läuft nicht (Tenant-Kontingent nicht gestartet, Vertrag unbekannt) oder steht mit einem Incident.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/></atlas:constants></extensionElements>
+    <dataObject id="do_lizenzvertrag" name="Lizenzvertrag" itemSubjectRef="item_Lizenzvertrag"/>
+    <dataObject id="do_tenantkontingent" name="TenantKontingent" itemSubjectRef="item_TenantKontingent"/>
+    <startEvent id="s" name="Buchung gebraucht"><documentation>Gestartet von einer Call Activity mit buchId und auftrag.</documentation><outgoing>f_s__sc_id</outgoing></startEvent>
+    <scriptTask id="sc_id" name="Anfrage bilden"><documentation>Die Kennung der Anfrage: Buch, Aktion, die Kennung des Aufrufers (auftrag.ref) und die Zeit. Sie ist zugleich die messageId der Anfrage (ein wiederholter Aufruf derselben Anfrage wirkt nicht doppelt) und der Korrelationsschlüssel der Antwort.</documentation><extensionElements><zeebe:script expression='=buchId + "|" + string(auftrag.aktion) + "|" + (if auftrag.ref = null then "-" else string(auftrag.ref)) + "|" + string(now())' resultVariable="anfrageId"/></extensionElements><incoming>f_s__sc_id</incoming><outgoing>f_sc_id__st_senden</outgoing></scriptTask>
+    <serviceTask id="st_senden" name="Anfrage senden"><documentation>POST /api/v1/messages: Nachricht lz.buch.anfrage an das Buch buchId, mit dem Auftrag und seiner Kennung. Wartet das Buch gerade nicht, hält der Puffer die Nachricht einen Tag lang.</documentation><extensionElements><atlas:restConnector method="POST" url='=(if atlasApiBase = null then application.ATLAS_API_BASE else atlasApiBase) + "/api/v1/messages"' authType="bearer" authSecret="atlas"/><zeebe:ioMapping><zeebe:input source='="lz.buch.anfrage"' target="name"/><zeebe:input source="=buchId" target="correlationKey"/><zeebe:input source='={auftrag: context put(auftrag, "anfrageId", anfrageId)}' target="variables"/><zeebe:input source="=86400000" target="timeToLiveMs"/><zeebe:input source="=anfrageId" target="messageId"/></zeebe:ioMapping></extensionElements><incoming>f_sc_id__st_senden</incoming><outgoing>f_st_senden__rt_antwort</outgoing></serviceTask>
+    <receiveTask id="rt_antwort" name="Antwort abwarten" messageRef="m_lz_antwort"><documentation>Wartet auf lz.buch.antwort mit dem Schlüssel anfrageId. Die Ausgabe übernimmt nur antwort; der Rest der Nachricht bleibt in der Aufgabe.</documentation><extensionElements><zeebe:ioMapping><zeebe:output source="=antwort" target="antwort"/></zeebe:ioMapping></extensionElements><incoming>f_st_senden__rt_antwort</incoming><outgoing>f_rt_antwort__gw_join</outgoing></receiveTask>
+    <boundaryEvent id="tm_antwort" name="10 Minuten" attachedToRef="rt_antwort"><documentation>Ein Buch antwortet in Sekunden, weil es nur automatische Schritte kennt. Zehn Minuten ohne Antwort heisst: Es läuft nicht oder steht.</documentation><outgoing>f_tm_antwort__sc_keine</outgoing><timerEventDefinition><timeDuration>PT10M</timeDuration></timerEventDefinition></boundaryEvent>
+    <scriptTask id="sc_keine" name="Ohne Antwort"><documentation>antwort mit ergebnis keine-antwort und einem Grund, den die Aufrufer anzeigen.</documentation><extensionElements><zeebe:script expression='={anfrageId: anfrageId, ergebnis: "keine-antwort", grund: "Das Buch " + buchId + " hat nicht geantwortet: Es läuft nicht (Vertrag unbekannt, Tenant-Kontingent nicht gestartet) oder steht mit einem Incident."}' resultVariable="antwort"/></extensionElements><incoming>f_tm_antwort__sc_keine</incoming><outgoing>f_sc_keine__gw_join</outgoing></scriptTask>
+    <exclusiveGateway id="gw_join"><incoming>f_rt_antwort__gw_join</incoming><incoming>f_sc_keine__gw_join</incoming><outgoing>f_gw_join__e</outgoing></exclusiveGateway>
+    <endEvent id="e" name="Antwort da"><incoming>f_gw_join__e</incoming></endEvent>
+    <sequenceFlow id="f_s__sc_id" sourceRef="s" targetRef="sc_id"/>
+    <sequenceFlow id="f_sc_id__st_senden" sourceRef="sc_id" targetRef="st_senden"/>
+    <sequenceFlow id="f_st_senden__rt_antwort" sourceRef="st_senden" targetRef="rt_antwort"/>
+    <sequenceFlow id="f_rt_antwort__gw_join" sourceRef="rt_antwort" targetRef="gw_join"/>
+    <sequenceFlow id="f_tm_antwort__sc_keine" sourceRef="tm_antwort" targetRef="sc_keine"/>
+    <sequenceFlow id="f_sc_keine__gw_join" sourceRef="sc_keine" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__e" sourceRef="gw_join" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_lz_buchen_diagram">
+    <bpmndi:BPMNPlane id="proc_lz_buchen_plane" bpmnElement="proc_lz_buchen">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="102" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="89" y="142" width="62" height="28"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_id_di" bpmnElement="sc_id"><omgdc:Bounds x="240" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_senden_di" bpmnElement="st_senden"><omgdc:Bounds x="410" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="rt_antwort_di" bpmnElement="rt_antwort"><omgdc:Bounds x="580" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="tm_antwort_di" bpmnElement="tm_antwort"><omgdc:Bounds x="642" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="682" y="164" width="69" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_keine_di" bpmnElement="sc_keine"><omgdc:Bounds x="750" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join"><omgdc:Bounds x="775" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="952" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="142" width="69" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__sc_id_di" bpmnElement="f_s__sc_id"><omgdi:waypoint x="138" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_id__st_senden_di" bpmnElement="f_sc_id__st_senden"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_senden__rt_antwort_di" bpmnElement="f_st_senden__rt_antwort"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="580" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_rt_antwort__gw_join_di" bpmnElement="f_rt_antwort__gw_join"><omgdi:waypoint x="680" y="120"/><omgdi:waypoint x="775" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_tm_antwort__sc_keine_di" bpmnElement="f_tm_antwort__sc_keine"><omgdi:waypoint x="660" y="178"/><omgdi:waypoint x="660" y="260"/><omgdi:waypoint x="750" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_keine__gw_join_di" bpmnElement="f_sc_keine__gw_join"><omgdi:waypoint x="800" y="220"/><omgdi:waypoint x="800" y="145"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__e_di" bpmnElement="f_gw_join__e"><omgdi:waypoint x="825" y="120"/><omgdi:waypoint x="952" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

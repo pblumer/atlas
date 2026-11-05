@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_lz_kontingent" targetNamespace="http://atlas/beispiel/lizenzmanagement">
+  <itemDefinition id="item_Lizenzvertrag" structureRef="Lizenzvertrag"/>
+  <itemDefinition id="item_Lizenzbezug" structureRef="Lizenzbezug"/>
+  <process id="proc_lz_kontingent" name="Lizenzmanagement: Kontingent prüfen" isExecutable="true">
+    <documentation>P3: Bevor eine Person eine Lizenz erhält oder wechselt, prüft Atlas, ob ihr Vertrag noch Platz hat, und reserviert den Platz. Aufgerufen als Call Activity aus lizenz.bpmn (M365-Dienste, P4) mit den Eingaben vertrag (Vertragsnummer), variante (standard, erweitert, frontline) und bezugId (orderId/positionId der Lizenzposition). Ergebnis an P4: kontingent = {ergebnis: reserviert | ueberzug genehmigt | abgelehnt, grund, sku}.
+
+Prüfen und reservieren sind ein Schritt im Vertragsbuch (Buchung reservieren): Es rechnet frei = Menge − belegt − reserviert und reserviert in derselben Auswertung. Zwei gleichzeitige Bestellungen bekommen deshalb nie beide den letzten Platz. Die Tabelle LzKontingent entscheidet danach nur, wie es weitergeht: reserviert, einen Überzug bei der Tenant-verantwortlichen Person anfragen, oder ablehnen. Ein genehmigter Überzug reserviert über die Menge hinaus (ueberzug), wird als Überzug belegt und in der Verrechnung (P6) als eigene Zeile nachverrechnet; der Integrations Manager erhält eine Mail mit dem Hinweis auf das Aufstocken (P2).
+
+Eine Reservation verfällt im Vertragsbuch nach RESERVATION_TAGE (Vorschlag 7), wenn P4 sie weder belegt noch freigibt.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/><atlas:constant name="GRUPPE_TENANT" type="string" source="application" value="Lizenz-Tenantverantwortung"/><atlas:constant name="GRUPPE_CHEF" type="string" source="application" value="Lizenz-Chef"/><atlas:constant name="UEBERZUG_FRIST" type="string" source="application" value="P3D"/></atlas:constants></extensionElements>
+    <dataObject id="do_lizenzvertrag" name="Lizenzvertrag" itemSubjectRef="item_Lizenzvertrag"/>
+    <dataObject id="do_lizenzbezug" name="Lizenzbezug" itemSubjectRef="item_Lizenzbezug"/>
+    <startEvent id="s" name="Kontingent gefragt"><documentation>Gestartet von P4 mit vertrag, variante und bezugId.</documentation><outgoing>f_s__br_sku</outgoing></startEvent>
+    <businessRuleTask id="br_sku" name="SKU bestimmen"><documentation>LzSku: Die Variante des Microsoft-365-Katalogs wird zur SKU der Verträge (E3, E5, F3).</documentation><extensionElements><zeebe:calledDecision decisionId="LzSku" resultVariable="skuInfo"/><zeebe:ioMapping><zeebe:input source="=variante" target="variante"/><zeebe:input source="=null" target="skuId"/></zeebe:ioMapping></extensionElements><incoming>f_s__br_sku</incoming><outgoing>f_br_sku__ca_res</outgoing></businessRuleTask>
+    <callActivity id="ca_res" name="Platz reservieren"><documentation>Buchung reservieren im Vertragsbuch des Vertrags. Die Antwort trägt Menge, belegt, reserviert und frei.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source="=vertrag" target="buchId"/><zeebe:input source='={aktion: "reservieren", sku: skuInfo.kurz, bezugId: bezugId, ref: bezugId}' target="auftrag"/><zeebe:output source="=antwort" target="reservierung"/></zeebe:ioMapping></extensionElements><incoming>f_br_sku__ca_res</incoming><outgoing>f_ca_res__br_kont</outgoing></callActivity>
+    <businessRuleTask id="br_kont" name="Platz frei?"><documentation>LzKontingent: reserviert, Überzug fragen oder ablehnen.</documentation><extensionElements><zeebe:calledDecision decisionId="LzKontingent" resultVariable="kontingentWeg"/><zeebe:ioMapping><zeebe:input source="=reservierung.ergebnis" target="ergebnis"/><zeebe:input source="=reservierung.menge" target="menge"/><zeebe:input source="=reservierung.ueberzug" target="ueberzug"/></zeebe:ioMapping></extensionElements><incoming>f_ca_res__br_kont</incoming><outgoing>f_br_kont__gw_weg</outgoing></businessRuleTask>
+    <exclusiveGateway id="gw_weg" name="Wie weiter?" default="f_gw_weg__sc_abgelehnt"><incoming>f_br_kont__gw_weg</incoming><outgoing>f_gw_weg__sc_reserviert</outgoing><outgoing>f_gw_weg__sc_abgelehnt</outgoing><outgoing>f_gw_weg__ut_ueberzug</outgoing></exclusiveGateway>
+    <scriptTask id="sc_reserviert" name="Reserviert"><extensionElements><zeebe:script expression='={ergebnis: "reserviert", grund: null, sku: skuInfo.kurz}' resultVariable="kontingent"/></extensionElements><incoming>f_gw_weg__sc_reserviert</incoming><outgoing>f_sc_reserviert__gw_join</outgoing></scriptTask>
+    <scriptTask id="sc_abgelehnt" name="Abgelehnt"><extensionElements><zeebe:script expression='={ergebnis: "abgelehnt", grund: if kontingentWeg.grund = null then reservierung.grund else kontingentWeg.grund + (if reservierung.grund = null then "" else " " + reservierung.grund), sku: skuInfo.kurz}' resultVariable="kontingent"/></extensionElements><incoming>f_gw_weg__sc_abgelehnt</incoming><outgoing>f_sc_abgelehnt__e_abgelehnt</outgoing></scriptTask>
+    <endEvent id="e_abgelehnt" name="Abgelehnt"><incoming>f_sc_abgelehnt__e_abgelehnt</incoming></endEvent>
+    <userTask id="ut_ueberzug" name="Überzug genehmigen"><documentation>Die Tenant-verantwortliche Person sieht Vertrag, Position, SKU und den aktuellen Überzug und genehmigt oder lehnt mit Grund ab. Nach UEBERZUG_FRIST (Vorschlag 3 Tage, statt 3 Arbeitstagen) erhält der Chef einen Hinweis.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="=application.GRUPPE_TENANT"/><zeebe:formDefinition formId="lz-ueberzug-genehmigen"/></extensionElements><incoming>f_gw_weg__ut_ueberzug</incoming><outgoing>f_ut_ueberzug__gw_ue</outgoing></userTask>
+    <boundaryEvent id="tm_ue" name="Frist" attachedToRef="ut_ueberzug" cancelActivity="false"><outgoing>f_tm_ue__st_ue_chef</outgoing><timerEventDefinition><timeDuration>=application.UEBERZUG_FRIST</timeDuration></timerEventDefinition></boundaryEvent>
+    <serviceTask id="st_ue_chef" name="Chef informieren"><extensionElements><atlas:mailConnector connector="mail" to="=application.GRUPPE_CHEF" subject='="Überzug wartet auf Genehmigung: " + vertrag' body='="Im Lizenzvertrag " + vertrag + " wartet ein Überzug für eine Lizenz " + skuInfo.kurz + " seit " + application.UEBERZUG_FRIST + " auf die Tenant-verantwortliche Person."'/></extensionElements><incoming>f_tm_ue__st_ue_chef</incoming><outgoing>f_st_ue_chef__e_ue_chef</outgoing></serviceTask>
+    <endEvent id="e_ue_chef" name="Chef informiert"><incoming>f_st_ue_chef__e_ue_chef</incoming></endEvent>
+    <exclusiveGateway id="gw_ue" name="Genehmigt?" default="f_gw_ue__sc_ue_abl"><incoming>f_ut_ueberzug__gw_ue</incoming><outgoing>f_gw_ue__ca_ue</outgoing><outgoing>f_gw_ue__sc_ue_abl</outgoing></exclusiveGateway>
+    <callActivity id="ca_ue" name="Überzug buchen"><documentation>Buchung reservieren mit ueberzug: Das Vertragsbuch reserviert über die Menge hinaus und merkt sich den Überzug für P6.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source="=vertrag" target="buchId"/><zeebe:input source='={aktion: "reservieren", sku: skuInfo.kurz, bezugId: bezugId, ueberzug: true, ref: bezugId + "/ueberzug"}' target="auftrag"/><zeebe:output source="=antwort" target="reservierung"/></zeebe:ioMapping></extensionElements><incoming>f_gw_ue__ca_ue</incoming><outgoing>f_ca_ue__st_ue_mail</outgoing></callActivity>
+    <serviceTask id="st_ue_mail" name="Kunden informieren"><documentation>Mail an den Integrations Manager: Der Vertrag ist um n Lizenzen überzogen, der Überzug wird nachverrechnet; Hinweis auf das Aufstocken.</documentation><extensionElements><atlas:mailConnector connector="mail" to="=reservierung.integrationsManager" subject='="Lizenzvertrag " + vertrag + " ist überzogen"' body='="Guten Tag\n\nDer Lizenzvertrag " + vertrag + " ist bei " + skuInfo.kurz + " um " + string(reservierung.ueberzug + 1) + " Lizenz(en) überzogen. Die Tenant-verantwortliche Person hat den Überzug genehmigt; er wird nachverrechnet.\n\nWerden die Lizenzen dauerhaft gebraucht, stockt den Vertrag im Lizenzmanagement auf (Aktion «Aufstocken»).\n\nFreundliche Grüsse\nLizenzmanagement"'/></extensionElements><incoming>f_ca_ue__st_ue_mail</incoming><outgoing>f_st_ue_mail__sc_ue_ok</outgoing></serviceTask>
+    <scriptTask id="sc_ue_ok" name="Überzug genehmigt"><extensionElements><zeebe:script expression='={ergebnis: "ueberzug genehmigt", grund: null, sku: skuInfo.kurz}' resultVariable="kontingent"/></extensionElements><incoming>f_st_ue_mail__sc_ue_ok</incoming><outgoing>f_sc_ue_ok__gw_join</outgoing></scriptTask>
+    <scriptTask id="sc_ue_abl" name="Überzug abgelehnt"><extensionElements><zeebe:script expression='={ergebnis: "abgelehnt", grund: "Überzug abgelehnt: " + (if begruendung = null then "-" else begruendung), sku: skuInfo.kurz}' resultVariable="kontingent"/></extensionElements><incoming>f_gw_ue__sc_ue_abl</incoming><outgoing>f_sc_ue_abl__e_ue_abl</outgoing></scriptTask>
+    <endEvent id="e_ue_abl" name="Abgelehnt"><incoming>f_sc_ue_abl__e_ue_abl</incoming></endEvent>
+    <exclusiveGateway id="gw_join"><incoming>f_sc_reserviert__gw_join</incoming><incoming>f_sc_ue_ok__gw_join</incoming><outgoing>f_gw_join__e</outgoing></exclusiveGateway>
+    <endEvent id="e" name="Platz gesichert"><incoming>f_gw_join__e</incoming></endEvent>
+    <sequenceFlow id="f_s__br_sku" sourceRef="s" targetRef="br_sku"/>
+    <sequenceFlow id="f_br_sku__ca_res" sourceRef="br_sku" targetRef="ca_res"/>
+    <sequenceFlow id="f_ca_res__br_kont" sourceRef="ca_res" targetRef="br_kont"/>
+    <sequenceFlow id="f_br_kont__gw_weg" sourceRef="br_kont" targetRef="gw_weg"/>
+    <sequenceFlow id="f_gw_weg__sc_reserviert" sourceRef="gw_weg" targetRef="sc_reserviert" name="reserviert"><conditionExpression>=kontingentWeg.weg = "reserviert"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_weg__sc_abgelehnt" sourceRef="gw_weg" targetRef="sc_abgelehnt" name="abgelehnt"/>
+    <sequenceFlow id="f_gw_weg__ut_ueberzug" sourceRef="gw_weg" targetRef="ut_ueberzug" name="Überzug fragen"><conditionExpression>=kontingentWeg.weg = "ueberzug-fragen"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_sc_abgelehnt__e_abgelehnt" sourceRef="sc_abgelehnt" targetRef="e_abgelehnt"/>
+    <sequenceFlow id="f_sc_reserviert__gw_join" sourceRef="sc_reserviert" targetRef="gw_join"/>
+    <sequenceFlow id="f_tm_ue__st_ue_chef" sourceRef="tm_ue" targetRef="st_ue_chef"/>
+    <sequenceFlow id="f_st_ue_chef__e_ue_chef" sourceRef="st_ue_chef" targetRef="e_ue_chef"/>
+    <sequenceFlow id="f_ut_ueberzug__gw_ue" sourceRef="ut_ueberzug" targetRef="gw_ue"/>
+    <sequenceFlow id="f_gw_ue__ca_ue" sourceRef="gw_ue" targetRef="ca_ue" name="ja"><conditionExpression>=entscheid = "genehmigt"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_ue__sc_ue_abl" sourceRef="gw_ue" targetRef="sc_ue_abl" name="nein"/>
+    <sequenceFlow id="f_sc_ue_abl__e_ue_abl" sourceRef="sc_ue_abl" targetRef="e_ue_abl"/>
+    <sequenceFlow id="f_ca_ue__st_ue_mail" sourceRef="ca_ue" targetRef="st_ue_mail"/>
+    <sequenceFlow id="f_st_ue_mail__sc_ue_ok" sourceRef="st_ue_mail" targetRef="sc_ue_ok"/>
+    <sequenceFlow id="f_sc_ue_ok__gw_join" sourceRef="sc_ue_ok" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__e" sourceRef="gw_join" targetRef="e"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_lz_kontingent_diagram">
+    <bpmndi:BPMNPlane id="proc_lz_kontingent_plane" bpmnElement="proc_lz_kontingent">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="102" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="86" y="142" width="69" height="28"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_sku_di" bpmnElement="br_sku"><omgdc:Bounds x="240" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_res_di" bpmnElement="ca_res"><omgdc:Bounds x="410" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="br_kont_di" bpmnElement="br_kont"><omgdc:Bounds x="580" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_weg_di" bpmnElement="gw_weg"><omgdc:Bounds x="775" y="95" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="710" y="84" width="75" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_reserviert_di" bpmnElement="sc_reserviert"><omgdc:Bounds x="920" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_abgelehnt_di" bpmnElement="sc_abgelehnt"><omgdc:Bounds x="920" y="-60" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abgelehnt_di" bpmnElement="e_abgelehnt"><omgdc:Bounds x="1122" y="-38" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1109" y="2" width="62" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_ueberzug_di" bpmnElement="ut_ueberzug"><omgdc:Bounds x="920" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="tm_ue_di" bpmnElement="tm_ue"><omgdc:Bounds x="952" y="282" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="978" y="322" width="37" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ue_chef_di" bpmnElement="st_ue_chef"><omgdc:Bounds x="920" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ue_chef_di" bpmnElement="e_ue_chef"><omgdc:Bounds x="952" y="522" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="920" y="562" width="100" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_ue_di" bpmnElement="gw_ue"><omgdc:Bounds x="1115" y="235" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1148" y="217" width="69" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_ue_di" bpmnElement="ca_ue"><omgdc:Bounds x="1260" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ue_mail_di" bpmnElement="st_ue_mail"><omgdc:Bounds x="1430" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_ue_ok_di" bpmnElement="sc_ue_ok"><omgdc:Bounds x="1600" y="220" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_ue_abl_di" bpmnElement="sc_ue_abl"><omgdc:Bounds x="1260" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ue_abl_di" bpmnElement="e_ue_abl"><omgdc:Bounds x="1462" y="382" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1449" y="422" width="62" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join"><omgdc:Bounds x="1795" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="1972" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1940" y="142" width="100" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__br_sku_di" bpmnElement="f_s__br_sku"><omgdi:waypoint x="138" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_sku__ca_res_di" bpmnElement="f_br_sku__ca_res"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_res__br_kont_di" bpmnElement="f_ca_res__br_kont"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="580" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_br_kont__gw_weg_di" bpmnElement="f_br_kont__gw_weg"><omgdi:waypoint x="680" y="120"/><omgdi:waypoint x="775" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_weg__sc_reserviert_di" bpmnElement="f_gw_weg__sc_reserviert"><omgdi:waypoint x="825" y="120"/><omgdi:waypoint x="920" y="120"/><bpmndi:BPMNLabel><omgdc:Bounds x="831" y="102" width="69" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_weg__sc_abgelehnt_di" bpmnElement="f_gw_weg__sc_abgelehnt"><omgdi:waypoint x="800" y="95"/><omgdi:waypoint x="800" y="-20"/><omgdi:waypoint x="920" y="-20"/><bpmndi:BPMNLabel><omgdc:Bounds x="806" y="77" width="62" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_weg__ut_ueberzug_di" bpmnElement="f_gw_weg__ut_ueberzug"><omgdi:waypoint x="800" y="145"/><omgdi:waypoint x="800" y="260"/><omgdi:waypoint x="920" y="260"/><bpmndi:BPMNLabel><omgdc:Bounds x="806" y="149" width="94" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_abgelehnt__e_abgelehnt_di" bpmnElement="f_sc_abgelehnt__e_abgelehnt"><omgdi:waypoint x="1020" y="-20"/><omgdi:waypoint x="1122" y="-20"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_reserviert__gw_join_di" bpmnElement="f_sc_reserviert__gw_join"><omgdi:waypoint x="1020" y="120"/><omgdi:waypoint x="1795" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_tm_ue__st_ue_chef_di" bpmnElement="f_tm_ue__st_ue_chef"><omgdi:waypoint x="970" y="318"/><omgdi:waypoint x="970" y="360"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ue_chef__e_ue_chef_di" bpmnElement="f_st_ue_chef__e_ue_chef"><omgdi:waypoint x="970" y="440"/><omgdi:waypoint x="970" y="522"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_ueberzug__gw_ue_di" bpmnElement="f_ut_ueberzug__gw_ue"><omgdi:waypoint x="1020" y="260"/><omgdi:waypoint x="1115" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ue__ca_ue_di" bpmnElement="f_gw_ue__ca_ue"><omgdi:waypoint x="1165" y="260"/><omgdi:waypoint x="1260" y="260"/><bpmndi:BPMNLabel><omgdc:Bounds x="1171" y="242" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_ue__sc_ue_abl_di" bpmnElement="f_gw_ue__sc_ue_abl"><omgdi:waypoint x="1140" y="285"/><omgdi:waypoint x="1140" y="400"/><omgdi:waypoint x="1260" y="400"/><bpmndi:BPMNLabel><omgdc:Bounds x="1146" y="289" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_ue_abl__e_ue_abl_di" bpmnElement="f_sc_ue_abl__e_ue_abl"><omgdi:waypoint x="1360" y="400"/><omgdi:waypoint x="1462" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_ue__st_ue_mail_di" bpmnElement="f_ca_ue__st_ue_mail"><omgdi:waypoint x="1360" y="260"/><omgdi:waypoint x="1430" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ue_mail__sc_ue_ok_di" bpmnElement="f_st_ue_mail__sc_ue_ok"><omgdi:waypoint x="1530" y="260"/><omgdi:waypoint x="1600" y="260"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_ue_ok__gw_join_di" bpmnElement="f_sc_ue_ok__gw_join"><omgdi:waypoint x="1700" y="260"/><omgdi:waypoint x="1820" y="260"/><omgdi:waypoint x="1820" y="145"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__e_di" bpmnElement="f_gw_join__e"><omgdi:waypoint x="1845" y="120"/><omgdi:waypoint x="1972" y="120"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -162,6 +162,25 @@ mit `ATLAS_TOKEN` eines Tokens mit Rolle `modeler`):
 ATLAS_TOKEN=atlasat_... ../../../examples/m365-dienste/installieren.sh "$(tofu output -raw atlas_url)" antworten.json
 ```
 
+Das Lizenzmanagement (`examples/lizenzmanagement`: Lizenzverträge, Kontingentprüfung der
+Lizenzbestellung, täglicher Abgleich, Verrechnung) installiert nach `install-m365-dienste.py`:
+
+```bash
+python3 scripts/install-lizenzmanagement.py --cafile out/caddy-root.crt --vertrag-pruefen
+```
+
+Es legt die Gruppen Lizenz-Tenantverantwortung, Lizenz-Chef, Lizenzmanagement, Lizenz-Finanzen
+und Lizenz-Integrations-Manager an, setzt `LzSku` auf die erste SKU von `license_sku_ids`
+(dieselbe wie `M365Lizenzprofil`), importiert und veröffentlicht Applikation, Architektur und
+Katalog, übernimmt die Vorschläge der Capability-Landkarte, setzt die Konstanten
+(`EA_JAHRESTAG` der nächste 1. Juli) und startet das Tenant-Kontingent. `--vertrag-pruefen`
+schaltet in `beispiel-m365-dienste` `LIZENZ_VERTRAG_PRUEFEN = ein`; danach braucht jede
+Lizenzbestellung einen Lizenzvertrag (`--standardvertrag LV-…` für Bestellungen ohne). Die
+Berechtigungen `LicenseAssignment.Read.All` und `AuditLog.Read.All` des Entra-Workers stehen in
+`variables.tf`. Am Tenant ändert das Skript nichts. `install-m365-dienste.py` ersetzt bei jedem Lauf
+alle Konstanten von `beispiel-m365-dienste`; danach `install-lizenzmanagement.py --vertrag-pruefen`
+wiederholen.
+
 Mit `atlas_tls = "internal"` lehnt `curl` das Zertifikat ab, solange Caddys
 Stammzertifikat nicht vertraut ist; es liegt auf dem Server unter
 `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`.

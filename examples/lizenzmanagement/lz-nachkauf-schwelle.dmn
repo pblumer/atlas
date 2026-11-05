@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzNachkaufSchwelle: ab wann im EA nachzukaufen ist, pro SKU (P5 Task 6).
+  Eingaben: sku, gekauft, frei (gekauft − belegt im Tenant), freiVertraege (gekauft − Summe der Vertragsmengen)
+  Ausgaben: nachkaufen (Wahrheitswert), empfehlung (empfohlene Menge)
+  VORSCHLAG: E3 bei weniger als 5 % oder weniger als 10 freien Lizenzen, E5 und F3 bei weniger als 5 freien. Fehlen in
+  den Verträgen Lizenzen gegenüber dem Kauf (freiVertraege < 0), ist immer nachzukaufen. Die Empfehlung füllt auf 10 %
+  bzw. auf die Vertragsmenge auf.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzNachkaufSchwelle" name="LzNachkaufSchwelle" namespace="http://atlas/dmn">
+  <inputData id="id_sku" name="sku"/>
+  <inputData id="id_gekauft" name="gekauft"/>
+  <inputData id="id_frei" name="frei"/>
+  <inputData id="id_freiVertraege" name="freiVertraege"/>
+  <decision id="LzNachkaufSchwelle" name="LzNachkaufSchwelle">
+    <informationRequirement id="ir_sku"><requiredInput href="#id_sku"/></informationRequirement>
+    <informationRequirement id="ir_gekauft"><requiredInput href="#id_gekauft"/></informationRequirement>
+    <informationRequirement id="ir_frei"><requiredInput href="#id_frei"/></informationRequirement>
+    <informationRequirement id="ir_freiVertraege"><requiredInput href="#id_freiVertraege"/></informationRequirement>
+    <decisionTable id="dt_LzNachkaufSchwelle" hitPolicy="FIRST">
+      <input id="in_0" label="sku"><inputExpression id="ie_0" typeRef="string"><text>sku</text></inputExpression></input>
+      <input id="in_1" label="gekauft"><inputExpression id="ie_1" typeRef="number"><text>gekauft</text></inputExpression></input>
+      <input id="in_2" label="frei"><inputExpression id="ie_2" typeRef="number"><text>frei</text></inputExpression></input>
+      <input id="in_3" label="freiVertraege"><inputExpression id="ie_3" typeRef="number"><text>freiVertraege</text></inputExpression></input>
+      <input id="in_4" label="freiProzent"><inputExpression id="ie_4" typeRef="number"><text>if gekauft = null or gekauft = 0 then 0 else frei / gekauft * 100</text></inputExpression></input>
+      <output id="out_0" label="nachkaufen" name="nachkaufen" typeRef="boolean"/>
+      <output id="out_1" label="empfehlung" name="empfehlung" typeRef="number"/>
+      <rule id="r1">
+        <description>Kein Stand</description>
+        <inputEntry id="r1_i0"><text>-</text></inputEntry>
+        <inputEntry id="r1_i1"><text>null</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <inputEntry id="r1_i3"><text>-</text></inputEntry>
+        <inputEntry id="r1_i4"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>0</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Verträge über dem Kauf</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <inputEntry id="r2_i2"><text>-</text></inputEntry>
+        <inputEntry id="r2_i3"><text>&lt; 0</text></inputEntry>
+        <inputEntry id="r2_i4"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>true</text></outputEntry>
+        <outputEntry id="r2_o1"><text>-freiVertraege + ceiling(gekauft * 0.1)</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>E3: unter 5 %</description>
+        <inputEntry id="r3_i0"><text>"E3"</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <inputEntry id="r3_i2"><text>-</text></inputEntry>
+        <inputEntry id="r3_i3"><text>-</text></inputEntry>
+        <inputEntry id="r3_i4"><text>&lt; 5</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>ceiling(gekauft * 0.1) - frei</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>E3: weniger als 10 frei</description>
+        <inputEntry id="r4_i0"><text>"E3"</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>&lt; 10</text></inputEntry>
+        <inputEntry id="r4_i3"><text>-</text></inputEntry>
+        <inputEntry id="r4_i4"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>true</text></outputEntry>
+        <outputEntry id="r4_o1"><text>10 - frei</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>E5, F3: weniger als 5 frei</description>
+        <inputEntry id="r5_i0"><text>"E5", "F3"</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>&lt; 5</text></inputEntry>
+        <inputEntry id="r5_i3"><text>-</text></inputEntry>
+        <inputEntry id="r5_i4"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>true</text></outputEntry>
+        <outputEntry id="r5_o1"><text>5 - frei</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Genug frei</description>
+        <inputEntry id="r6_i0"><text>-</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <inputEntry id="r6_i3"><text>-</text></inputEntry>
+        <inputEntry id="r6_i4"><text>-</text></inputEntry>
+        <outputEntry id="r6_o0"><text>false</text></outputEntry>
+        <outputEntry id="r6_o1"><text>0</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

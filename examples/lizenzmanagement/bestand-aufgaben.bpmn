@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_lz_bestand_aufgaben" targetNamespace="http://atlas/beispiel/lizenzmanagement">
+  <message id="m_nk" name="lz.nachkauf.start"/>
+  <message id="m_abw" name="lz.abweichung.start"/>
+  <itemDefinition id="item_Nachkauf" structureRef="Nachkauf"/>
+  <itemDefinition id="item_Tagesstand" structureRef="Tagesstand"/>
+  <process id="proc_lz_bestand_aufgaben" name="Lizenzmanagement: Nachkauf und Abweichung" isExecutable="true">
+    <documentation>Die Aufgaben aus dem täglichen Abgleich (P5) und aus einem neuen oder aufgestockten Vertrag (P1, P2), mit zwei Nachrichtenstarts:
+
+- lz.nachkauf.start (kandidaten, anlass): Das Tenant-Kontingent öffnet einen Nachkauf nur für SKUs ohne offene Aufgabe (Buchung nachkauf-oeffnen). Für jede neue SKU erhält der Chef die Aufgabe «Im EA nachkaufen» mit dem freien Bestand, der empfohlenen Menge und dem Verlauf der letzten 90 Tage. Er trägt die gekaufte Menge und das Datum ein oder «nicht kaufen» mit Grund. «Kauf vermerken» schliesst die SKU im Tenant-Kontingent; der nächste Abgleich bestätigt die neue Menge aus dem Tenant.
+- lz.abweichung.start (abweichungen): die Aufgabe «Abweichung klären» an das Lizenzmanagement, mit belegt im Tenant und laut Atlas pro SKU. Meist ist die Antwort die Übernahme des Bestands (P9).
+
+Eine Schnittstelle, über die Atlas im EA selbst bestellen könnte, ist nicht bekannt; gekauft wird weiter von Hand.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="ATLAS_API_BASE" type="string" source="application" value="http://127.0.0.1:8080"/><atlas:constant name="GRUPPE_CHEF" type="string" source="application" value="Lizenz-Chef"/><atlas:constant name="GRUPPE_LIZENZMANAGEMENT" type="string" source="application" value="Lizenzmanagement"/></atlas:constants></extensionElements>
+    <dataObject id="do_nachkauf" name="Nachkauf" itemSubjectRef="item_Nachkauf"/>
+    <dataObject id="do_tagesstand" name="Tagesstand" itemSubjectRef="item_Tagesstand"/>
+    <startEvent id="s_nk" name="Nachkauf angestossen"><outgoing>f_s_nk__ca_oeffnen</outgoing><messageEventDefinition messageRef="m_nk"/></startEvent>
+    <callActivity id="ca_oeffnen" name="Offene Nachkauf-Aufgabe?"><documentation>Buchung nachkauf-oeffnen mit den SKUs der Kandidaten: zurück kommen nur die SKUs, für die jetzt eine Aufgabe geöffnet ist.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source='="TENANT"' target="buchId"/><zeebe:input source='={aktion: "nachkauf-oeffnen", skus: for k in kandidaten return k.sku, ref: anlass}' target="auftrag"/><zeebe:output source="=antwort" target="offen"/></zeebe:ioMapping></extensionElements><incoming>f_s_nk__ca_oeffnen</incoming><outgoing>f_ca_oeffnen__ca_verlauf</outgoing></callActivity>
+    <callActivity id="ca_verlauf" name="Verlauf lesen"><documentation>Buchung verlauf über 90 Tage: der Stand pro Tag für die Aufgabe.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source='="TENANT"' target="buchId"/><zeebe:input source='={aktion: "verlauf", tage: 90, ref: anlass + "/verlauf"}' target="auftrag"/><zeebe:output source="=antwort" target="verlauf"/></zeebe:ioMapping></extensionElements><incoming>f_ca_oeffnen__ca_verlauf</incoming><outgoing>f_ca_verlauf__sc_neu</outgoing></callActivity>
+    <scriptTask id="sc_neu" name="Aufgaben bilden"><documentation>Die Kandidaten, deren SKU das Tenant-Kontingent geöffnet hat, mit dem Verlauf als Text (Datum: gekauft/belegt).</documentation><extensionElements><zeebe:script expression='=for k in kandidaten[list contains(offen.neueNachkaeufe, sku)] return context put(k, "verlauf", string join(for d in verlauf.verlauf return d.datum + ": " + string(d.skus[sku = k.sku][1].gekauft) + "/" + string(d.skus[sku = k.sku][1].belegt), ", "))' resultVariable="neu"/></extensionElements><incoming>f_ca_verlauf__sc_neu</incoming><outgoing>f_sc_neu__gw_neu</outgoing></scriptTask>
+    <exclusiveGateway id="gw_neu" name="Neue Aufgabe?" default="f_gw_neu__gw_join"><incoming>f_sc_neu__gw_neu</incoming><outgoing>f_gw_neu__ut_nachkauf</outgoing><outgoing>f_gw_neu__gw_join</outgoing></exclusiveGateway>
+    <userTask id="ut_nachkauf" name="Im EA nachkaufen"><documentation>Für jede SKU eine Aufgabe an den Chef (GRUPPE_CHEF), Mehrfach-Instanz. Die Eingaben stellen die Angaben der SKU als eigene Variablen bereit, weil ein Formularfeld eine Variable liest, kein Feld eines Kontexts.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="=application.GRUPPE_CHEF"/><zeebe:formDefinition formId="lz-nachkauf"/><zeebe:ioMapping><zeebe:input source="=k.sku" target="nkSku"/><zeebe:input source="=k.frei" target="nkFrei"/><zeebe:input source="=k.empfehlung" target="nkEmpfehlung"/><zeebe:input source="=k.gekauft" target="nkGekauft"/><zeebe:input source="=k.vertragsmenge" target="nkVertragsmenge"/><zeebe:input source="=k.verlauf" target="nkVerlauf"/><zeebe:input source="=anlass" target="nkAnlass"/></zeebe:ioMapping></extensionElements><incoming>f_gw_neu__ut_nachkauf</incoming><outgoing>f_ut_nachkauf__ca_kauf</outgoing><multiInstanceLoopCharacteristics><extensionElements><zeebe:loopCharacteristics inputCollection="=neu" inputElement="k" outputCollection="entscheide" outputElement='={sku: k.sku, entscheid: kaufEntscheid, menge: if kaufMenge = null or kaufMenge = "" then 0 else number(kaufMenge), datum: kaufDatum, grund: kaufGrund}'/></extensionElements></multiInstanceLoopCharacteristics></userTask>
+    <callActivity id="ca_kauf" name="Kauf vermerken"><documentation>Buchung kauf je Entscheid: schliesst die SKU im Tenant-Kontingent und hält Menge, Datum oder den Grund fest.</documentation><extensionElements><zeebe:calledElement processId="proc_lz_buchen" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source='="TENANT"' target="buchId"/><zeebe:input source='={aktion: "kauf", sku: e.sku, entscheid: e.entscheid, menge: e.menge, datum: e.datum, grund: e.grund, ref: anlass + "/" + e.sku}' target="auftrag"/><zeebe:output source="=antwort" target="vermerkt"/></zeebe:ioMapping></extensionElements><incoming>f_ut_nachkauf__ca_kauf</incoming><outgoing>f_ca_kauf__gw_join</outgoing><multiInstanceLoopCharacteristics><extensionElements><zeebe:loopCharacteristics inputCollection="=entscheide" inputElement="e"/></extensionElements></multiInstanceLoopCharacteristics></callActivity>
+    <exclusiveGateway id="gw_join"><incoming>f_gw_neu__gw_join</incoming><incoming>f_ca_kauf__gw_join</incoming><outgoing>f_gw_join__e_nk</outgoing></exclusiveGateway>
+    <endEvent id="e_nk" name="Nachkauf erledigt"><incoming>f_gw_join__e_nk</incoming></endEvent>
+    <startEvent id="s_abw" name="Abweichung gemeldet"><outgoing>f_s_abw__sc_abw</outgoing><messageEventDefinition messageRef="m_abw"/></startEvent>
+    <scriptTask id="sc_abw" name="Abweichung beschreiben"><extensionElements><zeebe:script expression='=string join(for a in abweichungen return a.sku + ": im Tenant " + string(a.belegtTenant) + ", laut Atlas " + string(a.belegtAtlas) + ". " + a.hinweis, "\n")' resultVariable="abweichungText"/></extensionElements><incoming>f_s_abw__sc_abw</incoming><outgoing>f_sc_abw__ut_abw</outgoing></scriptTask>
+    <userTask id="ut_abw" name="Abweichung klären"><documentation>Aufgabe an das Lizenzmanagement (GRUPPE_LIZENZMANAGEMENT): Lizenzen, die ausserhalb von Atlas vergeben oder entzogen wurden. Meist hilft die Übernahme des Bestands (P9) oder eine Rückgabe im Shop.</documentation><extensionElements><zeebe:assignmentDefinition candidateGroups="=application.GRUPPE_LIZENZMANAGEMENT"/><zeebe:formDefinition formId="lz-abweichung"/></extensionElements><incoming>f_sc_abw__ut_abw</incoming><outgoing>f_ut_abw__e_abw</outgoing></userTask>
+    <endEvent id="e_abw" name="Geklärt"><incoming>f_ut_abw__e_abw</incoming></endEvent>
+    <sequenceFlow id="f_s_nk__ca_oeffnen" sourceRef="s_nk" targetRef="ca_oeffnen"/>
+    <sequenceFlow id="f_ca_oeffnen__ca_verlauf" sourceRef="ca_oeffnen" targetRef="ca_verlauf"/>
+    <sequenceFlow id="f_ca_verlauf__sc_neu" sourceRef="ca_verlauf" targetRef="sc_neu"/>
+    <sequenceFlow id="f_sc_neu__gw_neu" sourceRef="sc_neu" targetRef="gw_neu"/>
+    <sequenceFlow id="f_gw_neu__ut_nachkauf" sourceRef="gw_neu" targetRef="ut_nachkauf" name="ja"><conditionExpression>=count(neu) &gt; 0</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_neu__gw_join" sourceRef="gw_neu" targetRef="gw_join" name="nein"/>
+    <sequenceFlow id="f_ut_nachkauf__ca_kauf" sourceRef="ut_nachkauf" targetRef="ca_kauf"/>
+    <sequenceFlow id="f_ca_kauf__gw_join" sourceRef="ca_kauf" targetRef="gw_join"/>
+    <sequenceFlow id="f_gw_join__e_nk" sourceRef="gw_join" targetRef="e_nk"/>
+    <sequenceFlow id="f_s_abw__sc_abw" sourceRef="s_abw" targetRef="sc_abw"/>
+    <sequenceFlow id="f_sc_abw__ut_abw" sourceRef="sc_abw" targetRef="ut_abw"/>
+    <sequenceFlow id="f_ut_abw__e_abw" sourceRef="ut_abw" targetRef="e_abw"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_lz_bestand_aufgaben_diagram">
+    <bpmndi:BPMNPlane id="proc_lz_bestand_aufgaben_plane" bpmnElement="proc_lz_bestand_aufgaben">
+      <bpmndi:BPMNShape id="s_nk_di" bpmnElement="s_nk"><omgdc:Bounds x="102" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="83" y="142" width="75" height="28"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_oeffnen_di" bpmnElement="ca_oeffnen"><omgdc:Bounds x="240" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_verlauf_di" bpmnElement="ca_verlauf"><omgdc:Bounds x="410" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_neu_di" bpmnElement="sc_neu"><omgdc:Bounds x="580" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_neu_di" bpmnElement="gw_neu"><omgdc:Bounds x="775" y="95" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="757" y="77" width="87" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_nachkauf_di" bpmnElement="ut_nachkauf"><omgdc:Bounds x="920" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_kauf_di" bpmnElement="ca_kauf"><omgdc:Bounds x="1090" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_join_di" bpmnElement="gw_join"><omgdc:Bounds x="1285" y="95" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nk_di" bpmnElement="e_nk"><omgdc:Bounds x="1462" y="102" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1452" y="142" width="56" height="28"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="s_abw_di" bpmnElement="s_abw"><omgdc:Bounds x="102" y="382" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="86" y="422" width="69" height="28"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_abw_di" bpmnElement="sc_abw"><omgdc:Bounds x="240" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ut_abw_di" bpmnElement="ut_abw"><omgdc:Bounds x="410" y="360" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_abw_di" bpmnElement="e_abw"><omgdc:Bounds x="612" y="382" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="605" y="422" width="50" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s_nk__ca_oeffnen_di" bpmnElement="f_s_nk__ca_oeffnen"><omgdi:waypoint x="138" y="120"/><omgdi:waypoint x="240" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_oeffnen__ca_verlauf_di" bpmnElement="f_ca_oeffnen__ca_verlauf"><omgdi:waypoint x="340" y="120"/><omgdi:waypoint x="410" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_verlauf__sc_neu_di" bpmnElement="f_ca_verlauf__sc_neu"><omgdi:waypoint x="510" y="120"/><omgdi:waypoint x="580" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_neu__gw_neu_di" bpmnElement="f_sc_neu__gw_neu"><omgdi:waypoint x="680" y="120"/><omgdi:waypoint x="775" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_neu__ut_nachkauf_di" bpmnElement="f_gw_neu__ut_nachkauf"><omgdi:waypoint x="825" y="120"/><omgdi:waypoint x="920" y="120"/><bpmndi:BPMNLabel><omgdc:Bounds x="831" y="102" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_neu__gw_join_di" bpmnElement="f_gw_neu__gw_join"><omgdi:waypoint x="800" y="145"/><omgdi:waypoint x="800" y="260"/><omgdi:waypoint x="1310" y="260"/><omgdi:waypoint x="1310" y="145"/><bpmndi:BPMNLabel><omgdc:Bounds x="806" y="149" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_nachkauf__ca_kauf_di" bpmnElement="f_ut_nachkauf__ca_kauf"><omgdi:waypoint x="1020" y="120"/><omgdi:waypoint x="1090" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_kauf__gw_join_di" bpmnElement="f_ca_kauf__gw_join"><omgdi:waypoint x="1190" y="120"/><omgdi:waypoint x="1285" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_join__e_nk_di" bpmnElement="f_gw_join__e_nk"><omgdi:waypoint x="1335" y="120"/><omgdi:waypoint x="1462" y="120"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_s_abw__sc_abw_di" bpmnElement="f_s_abw__sc_abw"><omgdi:waypoint x="138" y="400"/><omgdi:waypoint x="240" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_abw__ut_abw_di" bpmnElement="f_sc_abw__ut_abw"><omgdi:waypoint x="340" y="400"/><omgdi:waypoint x="410" y="400"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ut_abw__e_abw_di" bpmnElement="f_ut_abw__e_abw"><omgdi:waypoint x="510" y="400"/><omgdi:waypoint x="612" y="400"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

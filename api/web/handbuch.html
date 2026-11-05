@@ -2638,12 +2638,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">46</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">47</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">46</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">47</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -6191,6 +6191,57 @@ carla@example.org,admins,GOLD</code></pre></li>
         <p data-l="en"><b>It installs with <code>atlas import</code></b> once the three decision models are uploaded; the
           steps, the answers to the catalogue's questions, the application's constants and the rights the Worker's
           service account needs in the directory are in <code>examples/ad-dienste/README.md</code>.</p>
+      </div>
+      <div class="bsp" id="bsp-lizenzmanagement">
+        <h4><span class="rz-emoji" aria-hidden="true">📜</span>
+          <span data-l="de">Lizenzmanagement: Microsoft-365-Lizenzverträge mit Kontingent, Verrechnung und Abo-Karenz</span><span data-l="en">Licence management: Microsoft 365 licence contracts with quota, billing and grace period</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag">Entra</span>
+          <span class="tag" data-l="de">Kontingent</span><span class="tag" data-l="en">quota</span>
+          <span class="tag" data-l="de">Verrechnung</span><span class="tag" data-l="en">billing</span>
+          <span class="tag">examples/lizenzmanagement/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Jeder Kunde und jedes Projekt hat einen Lizenzvertrag mit PSP-Element und einer Menge pro
+              SKU, den die Tenant-verantwortliche Person genehmigt. Jede Lizenzbestellung im Microsoft-365-Katalog
+              zieht davon ab; fehlt der Platz, wird nicht still überzogen. Täglich vergleicht Atlas die Verträge mit dem
+              Tenant und sagt dem Chef, wann im EA nachzukaufen ist; monatlich verrechnet es die bezogenen Lizenzen pro
+              PSP-Element. Vor dem Jahrestag im EA bereitet es die neue Menge vor und führt in der Abo-Karenz
+              überzählige Lizenzen geordnet zurück, nach einer Entzugsregel, die jeder Kunde selbst bestimmt.</p>
+            <p data-l="en">Every customer and project has a licence contract with a WBS element and a quantity per SKU,
+              approved by the person responsible for the tenant. Every licence order in the Microsoft 365 catalogue
+              draws on it; without room, nothing is silently overdrawn. Every day Atlas compares the contracts with the
+              tenant and tells the head when to buy more in the EA; every month it bills the licences used per WBS
+              element. Before the EA anniversary it prepares the new quantity and, in the grace period, returns surplus
+              licences in order, following a withdrawal rule each customer sets.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Dreizehn Prozesse, neun Entscheidungstabellen und zweiundzwanzig Formulare. Den Stand halten
+              lange laufende Instanzen: ein Vertragsbuch je Vertrag und das Tenant-Kontingent. Sie nehmen Buchungen als
+              Nachrichten nacheinander an und wenden jede in einer einzigen Script-Task an; deshalb bekommen zwei
+              gleichzeitige Bestellungen nie beide den letzten Platz. Angefragt wird über
+              <code>POST /api/v1/messages</code> mit Lebensdauer, damit nichts verloren geht, während ein Buch beschäftigt
+              ist. Die Lizenzbestellung von <code>m365-dienste</code> ruft die Kontingentprüfung als Call Activity auf.</p>
+            <p data-l="en">Thirteen processes, nine decision tables and twenty-two forms. Long-running instances hold the
+              state: one contract book per contract and the tenant quota. They take bookings as messages one after
+              another and apply each in a single script task, so two simultaneous orders never both get the last seat.
+              Requests go through <code>POST /api/v1/messages</code> with a time to live, so nothing is lost while a book
+              is busy. The licence order of <code>m365-dienste</code> calls the quota check as a call activity.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es mit <code>installieren.sh</code></b> (oder <code>atlas import</code>, nachdem die
+          Entscheidungsmodelle hochgeladen sind); danach ist das Tenant-Kontingent einmal zu starten. Die Schritte, die
+          Konstanten und die Rechte des Entra-Workers stehen in <code>examples/lizenzmanagement/README.md</code>.</p>
+        <p data-l="en"><b>It installs with <code>installieren.sh</code></b> (or <code>atlas import</code> once the decision
+          models are uploaded); afterwards the tenant quota is started once. The steps, the constants and the rights the
+          Entra Worker needs are in <code>examples/lizenzmanagement/README.md</code>.</p>
       </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
@@ -14155,7 +14206,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">46</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">46</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">47</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">47</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

@@ -251,9 +251,29 @@
       "path": "m365-konto-umzug.form.json"
     },
     {
+      "id": "m365-lizenz-bestellung",
+      "name": "m365-lizenz-bestellung",
+      "path": "m365-lizenz-bestellung.form.json"
+    },
+    {
       "id": "m365-lizenz-klaeren",
       "name": "m365-lizenz-klaeren",
       "path": "m365-lizenz-klaeren.form.json"
+    },
+    {
+      "id": "m365-lizenz-wechsel",
+      "name": "m365-lizenz-wechsel",
+      "path": "m365-lizenz-wechsel.form.json"
+    },
+    {
+      "id": "m365-lizenz-wechsel-genehmigen",
+      "name": "m365-lizenz-wechsel-genehmigen",
+      "path": "m365-lizenz-wechsel-genehmigen.form.json"
+    },
+    {
+      "id": "m365-lizenz-wechsel-gruppen",
+      "name": "m365-lizenz-wechsel-gruppen",
+      "path": "m365-lizenz-wechsel-gruppen.form.json"
     },
     {
       "id": "m365-oe-bestellung",
