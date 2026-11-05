@@ -20,7 +20,7 @@ _Changed_ / _Removed_ for each version.
   `City`, `Building`, `Floor`, `FloorLabel`, `Label`, `Tags`, the address and the room's equipment;
   at least one of them) and `get-place`. The two Places operations exist in Exchange Online only:
   against an Exchange Server the Worker refuses them before anything is sent and says that city and
-  address are properties of the account there (ADR-draft-exchange-room-lists-and-places).
+  address are properties of the account there (ADR-0532).
 - **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
   its symbol, the same one the drawer and the top bar show, and the overview says so. The
   handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.

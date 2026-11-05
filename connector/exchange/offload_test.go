@@ -434,7 +434,7 @@ func TestStripAnnotationsLeavesScalars(t *testing.T) {
 
 // TestRunRoomFinderOperations: a room list is created with -RoomList on either target,
 // and Set-Place reaches Exchange Online only — a task on an Exchange Server Worker is
-// refused before the server is asked (ADR-draft-exchange-room-lists-and-places).
+// refused before the server is asked (ADR-0532).
 func TestRunRoomFinderOperations(t *testing.T) {
 	online := &fakeBackend{target: catalog.Online}
 	if _, err := Run(context.Background(), Job{

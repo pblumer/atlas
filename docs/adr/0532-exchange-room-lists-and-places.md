@@ -1,4 +1,4 @@
-# ADR-DRAFT: Rooms Outlook can find — room lists and Places metadata in the Exchange Worker
+# ADR-0532: Rooms Outlook can find — room lists and Places metadata in the Exchange Worker
 
 - **Status:** Accepted
 - **Implementation:** Landed

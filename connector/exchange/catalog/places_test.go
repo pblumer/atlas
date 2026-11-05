@@ -10,7 +10,7 @@ import (
 // TestCreateRoomListIsADistributionGroupMarkedAsOne: Outlook's Room Finder lists rooms
 // through room lists, which are distribution groups created with -RoomList. The
 // operation sets the switch itself, on either target, and a model cannot turn it off
-// (ADR-draft-exchange-room-lists-and-places).
+// (ADR-0532).
 func TestCreateRoomListIsADistributionGroupMarkedAsOne(t *testing.T) {
 	for _, target := range []catalog.Target{catalog.Online, catalog.OnPrem} {
 		inv := build(t, "create-room-list", target, map[string]any{

@@ -282,7 +282,7 @@ var Ops = map[string]Op{
 	// A room list is a distribution group Exchange marks as one (New-DistributionGroup
 	// -RoomList): Outlook's Room Finder lists rooms through room lists only, so a room
 	// mailbox in none is bookable by its address and absent from "Browse all rooms"
-	// (ADR-draft-exchange-room-lists-and-places). Its members are room mailboxes; a
+	// (ADR-0532). Its members are room mailboxes; a
 	// room list carries no ordinary recipients, so the group options of
 	// create-distribution-group that are about people joining and sending are not
 	// offered. Find one with list-distribution-groups and RecipientTypeDetails
@@ -333,7 +333,7 @@ var Ops = map[string]Op{
 	"set-calendar-processing": same(Op{Area: "settings", Label: "set calendar processing", Required: identity, Open: true},
 		Variant{Cmdlet: "Set-CalendarProcessing"}),
 	// A room's Places metadata, what Room Finder filters by
-	// (ADR-draft-exchange-room-lists-and-places). Exchange Online only: Exchange Server
+	// (ADR-0532). Exchange Online only: Exchange Server
 	// has no Places.
 	"get-place": {Area: "settings", Label: "read a room's place metadata", Required: identity, Result: ResultObject, NeedsResult: true,
 		Online:      &Variant{Cmdlet: "Get-Place"},
