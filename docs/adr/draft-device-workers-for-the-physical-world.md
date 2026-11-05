@@ -285,6 +285,10 @@ under `display.show`:
   Rev2.1): `waveshare-2in13-v3` drew the test picture; `waveshare-2in13-v2` left the
   panel blank with its busy line never rising, which is what a wrong generation looks
   like. The panel's model must therefore be configured, not guessed from its board.
+  Measured with V3: initialisation 54 ms, a full refresh 2.73 s from the update command
+  until the busy line fell; with the wrong V2 sequence the "refresh" returned after
+  249 ms because the busy line never rose. A refresh that ends far sooner than a
+  second is therefore a sign the panel did not run it.
 - Not yet: partial refresh, the content hash and refresh interval, the stale marker,
   and the layout a model states — the driver draws what it is given.
 
