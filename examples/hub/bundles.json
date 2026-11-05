@@ -64,6 +64,11 @@
       "id": "lizenzmanagement",
       "tags": ["m365", "lizenzen"],
       "examples": ["lizenzmanagement"]
+    },
+    {
+      "id": "informationstransfer",
+      "tags": ["active-directory", "m365", "identitaet"],
+      "examples": ["informationstransfer"]
     }
   ]
 }

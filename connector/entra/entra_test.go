@@ -350,6 +350,17 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		{op: "set-sync-behavior", job: Job{UserID: "u1", Attributes: map[string]any{"isCloudManaged": true}},
 			method: "PATCH", path: "/users/u1/onPremisesSyncBehavior",
 			wantBodyIs: func(b any) bool { m, ok := b.(map[string]any); return ok && m["isCloudManaged"] == true }},
+		// A transfer between accounts (transfer_test.go covers paging, the query fields
+		// and the recycle bin's 404).
+		{op: "list-user-groups", job: Job{UserID: "u1", ResultVariable: "gruppen"},
+			method: "GET", path: "/users/u1/memberOf/microsoft.graph.group?$count=true",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "restore-user", job: Job{UserID: "u1"},
+			method: "POST", path: "/directory/deletedItems/u1/restore",
+			wantBodyIs: func(b any) bool { return b == nil }},
+		{op: "permanently-delete-user", job: Job{UserID: "u1"},
+			method: "DELETE", path: "/directory/deletedItems/u1",
+			wantBodyIs: func(b any) bool { return b == nil }},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			var res any = map[string]any{"id": "x"}
@@ -385,7 +396,7 @@ func TestRunMapsEveryOperation(t *testing.T) {
 		})
 	}
 	// Every operation in the table is covered above; a new one must be added here too.
-	if len(Ops) != 35 {
+	if len(Ops) != 38 {
 		t.Errorf("Ops has %d operations; add the new one to this test", len(Ops))
 	}
 }

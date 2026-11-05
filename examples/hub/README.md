@@ -32,6 +32,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
 | `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |
 | `lizenzmanagement` | Beispiel: Lizenzmanagement | shop package; works with `m365-dienste` |
+| `informationstransfer` | Beispiel: Informationstransfer | shop package |
 
 Rules, checked by `go test ./cmd/atlas`:
 

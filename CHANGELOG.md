@@ -13,6 +13,30 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Example: resource transfer between two accounts.** A new example package,
+  `examples/informationstransfer` (application «Beispiel: Informationstransfer», hub bundle
+  `informationstransfer`), moves the resources of a previous account to a new one on
+  internalisation, externalisation or a change of office or department, modelled on BIT's
+  «Transfer Resources»: primary address and UPN (with the `transfered.` prefix on the source, or
+  none when the content moves too), mailbox content, mailbox quota (only when the source has more,
+  compared in KB), Teams Phone number, direct manual group memberships in AD and Entra ID, the short
+  code, and on internalisation the Entra ID account by a hard match on `onPremisesImmutableId`. A
+  COLLECT decision table tells the orderer which combinations the scenario refuses and why, Identity
+  Management approves, every deletion is released by a person right before it, the Entra transfer
+  stays off until `ENTRA_TRANSFER = ein`, and the source is finally marked «Ressourcen transferiert».
+  Mailboxes live on Exchange Server or Exchange Online (`POSTFACH_SYSTEM`); what a platform cannot
+  do (moving content inside Exchange Online, Entra Connect, the telephony records) is a task. Accounts
+  and mailboxes stay sealed: the comparisons run in the AD Worker's search filters. The M365 devenv
+  installs it with `scripts/install-informationstransfer.py`.
+- **Worker operations for moving one account's resources to another.** Entra Worker:
+  `list-user-groups` lists the groups a user is a direct member of (always an advanced query),
+  `restore-user` takes a deleted user back out of the recycle bin and `permanently-delete-user`
+  removes one for good; an id not in the recycle bin fails the job (`Directory.Read.All`,
+  `User.DeleteRestore.All`). Exchange Worker, Exchange Server only: `disable-mailbox` disconnects a
+  mailbox and `restore-mailbox-content` copies a disconnected mailbox's content into another mailbox
+  (`New-MailboxRestoreRequest`, `AllowLegacyDNMismatch` set by the Worker). The AD Worker returns
+  `objectGUID`, `objectSid` and `mS-DS-ConsistencyGuid` as base64 of their bytes; for `objectGUID`
+  that is Entra's `onPremisesImmutableId` (ADR-draft-informationstransfer-operations).
 - **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
   one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
   `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is

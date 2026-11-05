@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_it_adresse" targetNamespace="http://atlas/beispiel/informationstransfer">
+  <itemDefinition id="item_Postfach" structureRef="Postfach"/>
+  <dataStore id="ds_exchange_server_empfaenger" name="Exchange Server: Empfaenger"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
+  <dataStore id="ds_active_directory_konten" name="Active Directory: Konten"/>
+  <dataStore id="ds_entra_id_konten" name="Entra ID: Konten"/>
+  <process id="proc_it_adresse" name="Informationstransfer: Primäradresse" isExecutable="true" atlas:personal="quelle,ziel,begruendung,quelleKonto,zielKonto,pfQuelle,pfZiel" atlas:dataSubject="recipient">
+    <documentation>Das Zielkonto übernimmt die Primäradresse und die UPN der Quelle; seine bisherige Primäradresse bleibt als weitere Adresse (Proxy) erhalten. Sauber nur bei gleicher Mail-Domain; sonst hat die bestellende Person den Transfer ausdrücklich bestätigt (Regel).
+
+Quelle: Ohne Inhaltsübertragung (3.1) erhält sie die Primäradresse transfered.&lt;adresse&gt;, und die bisherige verschwindet aus ihren Adressen, damit das Ziel sie übernehmen kann. Mit Inhaltsübertragung (3.3) hat sie kein Postfach mehr und damit keine Adresse; sie erhält kein Präfix. Die UPN der Quelle wird in beiden Fällen transfered.&lt;upn&gt;, weil das Ziel ihre UPN übernimmt.
+
+Exchange Server: update-mailbox mit der ganzen Adressliste (EmailAddresses) und EmailAddressPolicyEnabled = false, damit eine Adressrichtlinie die Primäradresse nicht zurücksetzt; die UPN im AD (update-attributes). Exchange Online (Konten, die die Cloud verwaltet): update-mailbox mit der Adressliste am Postfach (Guid), die UPN in Entra ID (update-user über die Objekt-ID) und im AD, damit beide Verzeichnisse übereinstimmen.
+
+Die Adresslisten entstehen in den Ausdrücken, die der Exchange-Worker auswertet, aus pfQuelle und pfZiel (gelesen, bevor sich etwas änderte). Der Anzeigename des Ziels bleibt; bei BIT übernimmt das Ziel Anzeigename und AD-Pfad der Quelle nur mit «Use Initials for Uniqueness», das dieses Paket nicht abbildet.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="POSTFACH_SYSTEM" type="string" source="application" value="exchange-server"/></atlas:constants></extensionElements>
+    <dataObject id="do_postfach" name="Zielpostfach" itemSubjectRef="item_Postfach"/>
+    <startEvent id="s" name="Aufgerufen"><outgoing>f_s__gw_an</outgoing></startEvent>
+    <exclusiveGateway id="gw_an" name="Primäradresse?" default="f_gw_an__e_nein"><incoming>f_s__gw_an</incoming><outgoing>f_gw_an__gw_sys</outgoing><outgoing>f_gw_an__e_nein</outgoing></exclusiveGateway>
+    <endEvent id="e_nein" name="Nicht gewählt"><incoming>f_gw_an__e_nein</incoming></endEvent>
+    <exclusiveGateway id="gw_sys" name="Exchange Server?" default="f_gw_sys__gw_pre_o"><incoming>f_gw_an__gw_sys</incoming><outgoing>f_gw_sys__gw_pre</outgoing><outgoing>f_gw_sys__gw_pre_o</outgoing></exclusiveGateway>
+    <exclusiveGateway id="gw_pre" name="Ohne Inhalt?" default="f_gw_pre__gw_pre_join"><documentation>Nur ohne Inhaltsübertragung hat die Quelle noch ein Postfach, das die Adresse hält.</documentation><incoming>f_gw_sys__gw_pre</incoming><outgoing>f_gw_pre__st_qa</outgoing><outgoing>f_gw_pre__gw_pre_join</outgoing></exclusiveGateway>
+    <serviceTask id="st_qa" name="Quelle umbenennen"><documentation>update-mailbox am Quellpostfach: Primäradresse transfered.&lt;adresse&gt;, die bisherige Primäradresse und alle SMTP:-Einträge entfernt, die übrigen Adressen bleiben.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="update-mailbox" parameters='{"Identity": "=quelle", "EmailAddresses": "=concatenate([\"SMTP:transfered.\" + pfQuelle.PrimarySmtpAddress], (for e in pfQuelle.EmailAddresses return if lower case(substring after(e, \":\")) = lower case(pfQuelle.PrimarySmtpAddress) or starts with(e, \"SMTP:\") then null else e)[item != null])", "EmailAddressPolicyEnabled": false}'/></extensionElements><incoming>f_gw_pre__st_qa</incoming><outgoing>f_st_qa__gw_pre_join</outgoing></serviceTask>
+    <exclusiveGateway id="gw_pre_join"><incoming>f_gw_pre__gw_pre_join</incoming><incoming>f_st_qa__gw_pre_join</incoming><outgoing>f_gw_pre_join__st_za</outgoing></exclusiveGateway>
+    <serviceTask id="st_za" name="Adresse dem Ziel geben"><documentation>update-mailbox am Zielpostfach: Primäradresse = die bisherige der Quelle, die eigene bisherige als smtp: (Proxy).</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="update-mailbox" parameters='{"Identity": "=ziel", "EmailAddresses": "=concatenate([\"SMTP:\" + pfQuelle.PrimarySmtpAddress], (for e in pfZiel.EmailAddresses return if lower case(substring after(e, \":\")) = lower case(pfQuelle.PrimarySmtpAddress) then null else if starts with(e, \"SMTP:\") then \"smtp:\" + substring after(e, \":\") else e)[item != null])", "EmailAddressPolicyEnabled": false}'/></extensionElements><incoming>f_gw_pre_join__st_za</incoming><outgoing>f_st_za__st_qu</outgoing><dataOutputAssociation id="doa_st_za"><targetRef>dor_st_za</targetRef></dataOutputAssociation></serviceTask>
+    <serviceTask id="st_qu" name="UPN der Quelle"><documentation>update-attributes: userPrincipalName = transfered.&lt;upn&gt;.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="update-attributes" dn="=quelleKonto.dn" attributes='{"userPrincipalName": "=\"transfered.\" + quelleKonto.entries[1].attributes.userPrincipalName[1]"}'/></extensionElements><incoming>f_st_za__st_qu</incoming><outgoing>f_st_qu__st_zu</outgoing></serviceTask>
+    <serviceTask id="st_zu" name="UPN des Ziels"><documentation>update-attributes: userPrincipalName = die bisherige UPN der Quelle.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="update-attributes" dn="=zielKonto.dn" attributes='{"userPrincipalName": "=quelleKonto.entries[1].attributes.userPrincipalName[1]"}'/></extensionElements><incoming>f_st_qu__st_zu</incoming><outgoing>f_st_zu__sc_ok</outgoing></serviceTask>
+    <scriptTask id="sc_ok" name="Ergebnis"><extensionElements><zeebe:script expression='={text: "Primäradresse und UPN übertragen (Exchange Server)" + (if optInhalt = "ja" then "; die Quelle hat kein Postfach mehr." else "; die Quelle trägt das Präfix transfered.")}' resultVariable="ergebnis"/></extensionElements><incoming>f_st_zu__sc_ok</incoming><outgoing>f_sc_ok__e_ok</outgoing></scriptTask>
+    <endEvent id="e_ok" name="Übertragen"><incoming>f_sc_ok__e_ok</incoming></endEvent>
+    <exclusiveGateway id="gw_pre_o" name="Ohne Inhalt? (Online)" default="f_gw_pre_o__gw_pre_join_o"><incoming>f_gw_sys__gw_pre_o</incoming><outgoing>f_gw_pre_o__st_qa_o</outgoing><outgoing>f_gw_pre_o__gw_pre_join_o</outgoing></exclusiveGateway>
+    <serviceTask id="st_qa_o" name="Quelle umbenennen (Online)"><documentation>update-mailbox in Exchange Online am Quellpostfach (Guid), wie auf dem Server, ohne Adressrichtlinie.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="update-mailbox" parameters='{"Identity": "=string(pfQuelle.Guid)", "EmailAddresses": "=concatenate([\"SMTP:transfered.\" + pfQuelle.PrimarySmtpAddress], (for e in pfQuelle.EmailAddresses return if lower case(substring after(e, \":\")) = lower case(pfQuelle.PrimarySmtpAddress) or starts with(e, \"SMTP:\") then null else e)[item != null])"}'/></extensionElements><incoming>f_gw_pre_o__st_qa_o</incoming><outgoing>f_st_qa_o__gw_pre_join_o</outgoing></serviceTask>
+    <exclusiveGateway id="gw_pre_join_o"><incoming>f_gw_pre_o__gw_pre_join_o</incoming><incoming>f_st_qa_o__gw_pre_join_o</incoming><outgoing>f_gw_pre_join_o__st_za_o</outgoing></exclusiveGateway>
+    <serviceTask id="st_za_o" name="Adresse dem Ziel geben (Online)"><documentation>update-mailbox am Zielpostfach (Guid).</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="update-mailbox" parameters='{"Identity": "=string(pfZiel.Guid)", "EmailAddresses": "=concatenate([\"SMTP:\" + pfQuelle.PrimarySmtpAddress], (for e in pfZiel.EmailAddresses return if lower case(substring after(e, \":\")) = lower case(pfQuelle.PrimarySmtpAddress) then null else if starts with(e, \"SMTP:\") then \"smtp:\" + substring after(e, \":\") else e)[item != null])"}'/></extensionElements><incoming>f_gw_pre_join_o__st_za_o</incoming><outgoing>f_st_za_o__st_qe</outgoing><dataOutputAssociation id="doa_st_za_o"><targetRef>dor_st_za_o</targetRef></dataOutputAssociation></serviceTask>
+    <serviceTask id="st_qe" name="UPN der Quelle (Entra)"><documentation>update-user über die Objekt-ID (ExternalDirectoryObjectId): userPrincipalName = transfered.&lt;upn des Cloud-Kontos&gt;.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-user" userId="=pfQuelle.ExternalDirectoryObjectId" attributes='{"userPrincipalName": "=\"transfered.\" + pfQuelle.UserPrincipalName"}'/></extensionElements><incoming>f_st_za_o__st_qe</incoming><outgoing>f_st_qe__st_ze</outgoing></serviceTask>
+    <serviceTask id="st_ze" name="UPN des Ziels (Entra)"><documentation>update-user: userPrincipalName = die bisherige UPN des Cloud-Kontos der Quelle.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="update-user" userId="=pfZiel.ExternalDirectoryObjectId" attributes='{"userPrincipalName": "=pfQuelle.UserPrincipalName"}'/></extensionElements><incoming>f_st_qe__st_ze</incoming><outgoing>f_st_ze__st_qu_o</outgoing></serviceTask>
+    <serviceTask id="st_qu_o" name="UPN der Quelle (AD)"><documentation>Wie auf dem Server: das AD-Konto folgt.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="update-attributes" dn="=quelleKonto.dn" attributes='{"userPrincipalName": "=\"transfered.\" + quelleKonto.entries[1].attributes.userPrincipalName[1]"}'/></extensionElements><incoming>f_st_ze__st_qu_o</incoming><outgoing>f_st_qu_o__st_zu_o</outgoing></serviceTask>
+    <serviceTask id="st_zu_o" name="UPN des Ziels (AD)"><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="update-attributes" dn="=zielKonto.dn" attributes='{"userPrincipalName": "=quelleKonto.entries[1].attributes.userPrincipalName[1]"}'/></extensionElements><incoming>f_st_qu_o__st_zu_o</incoming><outgoing>f_st_zu_o__sc_ok_o</outgoing></serviceTask>
+    <scriptTask id="sc_ok_o" name="Ergebnis (Online)"><extensionElements><zeebe:script expression='={text: "Primäradresse und UPN übertragen (Exchange Online und Entra ID)" + (if optInhalt = "ja" then "; die Quelle hat kein Postfach mehr." else "; die Quelle trägt das Präfix transfered.")}' resultVariable="ergebnis"/></extensionElements><incoming>f_st_zu_o__sc_ok_o</incoming><outgoing>f_sc_ok_o__e_ok_o</outgoing></scriptTask>
+    <endEvent id="e_ok_o" name="Übertragen (Online)"><incoming>f_sc_ok_o__e_ok_o</incoming></endEvent>
+    <dataObjectReference id="dor_st_za" name="Zielpostfach" dataObjectRef="do_postfach"><dataState name="Aktiv"/></dataObjectReference>
+    <dataObjectReference id="dor_st_za_o" name="Zielpostfach" dataObjectRef="do_postfach"><dataState name="Aktiv"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_server_empfaenger" name="Exchange Server: Empfaenger" dataStoreRef="ds_exchange_server_empfaenger"/>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
+    <dataStoreReference id="dsr_active_directory_konten" name="Active Directory: Konten" dataStoreRef="ds_active_directory_konten"/>
+    <dataStoreReference id="dsr_entra_id_konten" name="Entra ID: Konten" dataStoreRef="ds_entra_id_konten"/>
+    <sequenceFlow id="f_s__gw_an" sourceRef="s" targetRef="gw_an"/>
+    <sequenceFlow id="f_gw_an__gw_sys" sourceRef="gw_an" targetRef="gw_sys" name="ja"><conditionExpression>=optMail = "ja" and pfQuelleDa = true and pfZielDa = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_an__e_nein" sourceRef="gw_an" targetRef="e_nein" name="nein"/>
+    <sequenceFlow id="f_gw_sys__gw_pre" sourceRef="gw_sys" targetRef="gw_pre" name="Server"><conditionExpression>=application.POSTFACH_SYSTEM = "exchange-server"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_sys__gw_pre_o" sourceRef="gw_sys" targetRef="gw_pre_o" name="Online"/>
+    <sequenceFlow id="f_gw_pre__st_qa" sourceRef="gw_pre" targetRef="st_qa" name="ja"><conditionExpression>=optInhalt != "ja"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_pre__gw_pre_join" sourceRef="gw_pre" targetRef="gw_pre_join" name="nein"/>
+    <sequenceFlow id="f_st_qa__gw_pre_join" sourceRef="st_qa" targetRef="gw_pre_join"/>
+    <sequenceFlow id="f_gw_pre_o__st_qa_o" sourceRef="gw_pre_o" targetRef="st_qa_o" name="ja"><conditionExpression>=optInhalt != "ja"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_pre_o__gw_pre_join_o" sourceRef="gw_pre_o" targetRef="gw_pre_join_o" name="nein"/>
+    <sequenceFlow id="f_st_qa_o__gw_pre_join_o" sourceRef="st_qa_o" targetRef="gw_pre_join_o"/>
+    <sequenceFlow id="f_gw_pre_join__st_za" sourceRef="gw_pre_join" targetRef="st_za"/>
+    <sequenceFlow id="f_st_za__st_qu" sourceRef="st_za" targetRef="st_qu"/>
+    <sequenceFlow id="f_st_qu__st_zu" sourceRef="st_qu" targetRef="st_zu"/>
+    <sequenceFlow id="f_st_zu__sc_ok" sourceRef="st_zu" targetRef="sc_ok"/>
+    <sequenceFlow id="f_sc_ok__e_ok" sourceRef="sc_ok" targetRef="e_ok"/>
+    <sequenceFlow id="f_gw_pre_join_o__st_za_o" sourceRef="gw_pre_join_o" targetRef="st_za_o"/>
+    <sequenceFlow id="f_st_za_o__st_qe" sourceRef="st_za_o" targetRef="st_qe"/>
+    <sequenceFlow id="f_st_qe__st_ze" sourceRef="st_qe" targetRef="st_ze"/>
+    <sequenceFlow id="f_st_ze__st_qu_o" sourceRef="st_ze" targetRef="st_qu_o"/>
+    <sequenceFlow id="f_st_qu_o__st_zu_o" sourceRef="st_qu_o" targetRef="st_zu_o"/>
+    <sequenceFlow id="f_st_zu_o__sc_ok_o" sourceRef="st_zu_o" targetRef="sc_ok_o"/>
+    <sequenceFlow id="f_sc_ok_o__e_ok_o" sourceRef="sc_ok_o" targetRef="e_ok_o"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_it_adresse_diagram">
+    <bpmndi:BPMNPlane id="proc_it_adresse_plane" bpmnElement="proc_it_adresse">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_an_di" bpmnElement="gw_an" isMarkerVisible="true"><omgdc:Bounds x="305" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="238" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nein_di" bpmnElement="e_nein"><omgdc:Bounds x="312" y="292" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="332" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_sys_di" bpmnElement="gw_sys" isMarkerVisible="true"><omgdc:Bounds x="455" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="388" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pre_di" bpmnElement="gw_pre" isMarkerVisible="true"><omgdc:Bounds x="605" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="538" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_qa_di" bpmnElement="st_qa"><omgdc:Bounds x="730" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pre_join_di" bpmnElement="gw_pre_join" isMarkerVisible="true"><omgdc:Bounds x="905" y="135" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_za_di" bpmnElement="st_za"><omgdc:Bounds x="1030" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_za_di" bpmnElement="dor_st_za"><omgdc:Bounds x="1062" y="46" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="16" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_qu_di" bpmnElement="st_qu"><omgdc:Bounds x="1180" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_zu_di" bpmnElement="st_zu"><omgdc:Bounds x="1330" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_ok_di" bpmnElement="sc_ok"><omgdc:Bounds x="1480" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok"><omgdc:Bounds x="1662" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1630" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pre_o_di" bpmnElement="gw_pre_o" isMarkerVisible="true"><omgdc:Bounds x="605" y="435" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="538" y="391" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_qa_o_di" bpmnElement="st_qa_o"><omgdc:Bounds x="730" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_pre_join_o_di" bpmnElement="gw_pre_join_o" isMarkerVisible="true"><omgdc:Bounds x="905" y="435" width="50" height="50"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_za_o_di" bpmnElement="st_za_o"><omgdc:Bounds x="1030" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_za_o_di" bpmnElement="dor_st_za_o"><omgdc:Bounds x="1062" y="524" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1030" y="578" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_qe_di" bpmnElement="st_qe"><omgdc:Bounds x="1180" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_ze_di" bpmnElement="st_ze"><omgdc:Bounds x="1330" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_qu_o_di" bpmnElement="st_qu_o"><omgdc:Bounds x="1480" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_zu_o_di" bpmnElement="st_zu_o"><omgdc:Bounds x="1630" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="sc_ok_o_di" bpmnElement="sc_ok_o"><omgdc:Bounds x="1780" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_o_di" bpmnElement="e_ok_o"><omgdc:Bounds x="1962" y="442" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1930" y="482" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__gw_an_di" bpmnElement="f_s__gw_an"><omgdi:waypoint x="198" y="160"/><omgdi:waypoint x="305" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__gw_sys_di" bpmnElement="f_gw_an__gw_sys"><omgdi:waypoint x="355" y="160"/><omgdi:waypoint x="455" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="361" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__e_nein_di" bpmnElement="f_gw_an__e_nein"><omgdi:waypoint x="330" y="185"/><omgdi:waypoint x="330" y="292"/><bpmndi:BPMNLabel><omgdc:Bounds x="336" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sys__gw_pre_di" bpmnElement="f_gw_sys__gw_pre"><omgdi:waypoint x="505" y="160"/><omgdi:waypoint x="605" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="140" width="44" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sys__gw_pre_o_di" bpmnElement="f_gw_sys__gw_pre_o"><omgdi:waypoint x="480" y="185"/><omgdi:waypoint x="480" y="460"/><omgdi:waypoint x="605" y="460"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="191" width="44" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre__st_qa_di" bpmnElement="f_gw_pre__st_qa"><omgdi:waypoint x="655" y="160"/><omgdi:waypoint x="730" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre__gw_pre_join_di" bpmnElement="f_gw_pre__gw_pre_join"><omgdi:waypoint x="630" y="185"/><omgdi:waypoint x="630" y="270"/><omgdi:waypoint x="930" y="270"/><omgdi:waypoint x="930" y="185"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_qa__gw_pre_join_di" bpmnElement="f_st_qa__gw_pre_join"><omgdi:waypoint x="830" y="160"/><omgdi:waypoint x="905" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre_o__st_qa_o_di" bpmnElement="f_gw_pre_o__st_qa_o"><omgdi:waypoint x="655" y="460"/><omgdi:waypoint x="730" y="460"/><bpmndi:BPMNLabel><omgdc:Bounds x="661" y="440" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre_o__gw_pre_join_o_di" bpmnElement="f_gw_pre_o__gw_pre_join_o"><omgdi:waypoint x="630" y="485"/><omgdi:waypoint x="630" y="570"/><omgdi:waypoint x="930" y="570"/><omgdi:waypoint x="930" y="485"/><bpmndi:BPMNLabel><omgdc:Bounds x="636" y="491" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_qa_o__gw_pre_join_o_di" bpmnElement="f_st_qa_o__gw_pre_join_o"><omgdi:waypoint x="830" y="460"/><omgdi:waypoint x="905" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre_join__st_za_di" bpmnElement="f_gw_pre_join__st_za"><omgdi:waypoint x="955" y="160"/><omgdi:waypoint x="1030" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_za__st_qu_di" bpmnElement="f_st_za__st_qu"><omgdi:waypoint x="1130" y="160"/><omgdi:waypoint x="1180" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_qu__st_zu_di" bpmnElement="f_st_qu__st_zu"><omgdi:waypoint x="1280" y="160"/><omgdi:waypoint x="1330" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_zu__sc_ok_di" bpmnElement="f_st_zu__sc_ok"><omgdi:waypoint x="1430" y="160"/><omgdi:waypoint x="1480" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_ok__e_ok_di" bpmnElement="f_sc_ok__e_ok"><omgdi:waypoint x="1580" y="160"/><omgdi:waypoint x="1662" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_pre_join_o__st_za_o_di" bpmnElement="f_gw_pre_join_o__st_za_o"><omgdi:waypoint x="955" y="460"/><omgdi:waypoint x="1030" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_za_o__st_qe_di" bpmnElement="f_st_za_o__st_qe"><omgdi:waypoint x="1130" y="460"/><omgdi:waypoint x="1180" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_qe__st_ze_di" bpmnElement="f_st_qe__st_ze"><omgdi:waypoint x="1280" y="460"/><omgdi:waypoint x="1330" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_ze__st_qu_o_di" bpmnElement="f_st_ze__st_qu_o"><omgdi:waypoint x="1430" y="460"/><omgdi:waypoint x="1480" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_qu_o__st_zu_o_di" bpmnElement="f_st_qu_o__st_zu_o"><omgdi:waypoint x="1580" y="460"/><omgdi:waypoint x="1630" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_zu_o__sc_ok_o_di" bpmnElement="f_st_zu_o__sc_ok_o"><omgdi:waypoint x="1730" y="460"/><omgdi:waypoint x="1780" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_sc_ok_o__e_ok_o_di" bpmnElement="f_sc_ok_o__e_ok_o"><omgdi:waypoint x="1880" y="460"/><omgdi:waypoint x="1962" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_za_di" bpmnElement="doa_st_za"><omgdi:waypoint x="1080" y="120"/><omgdi:waypoint x="1080" y="96"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_za_o_di" bpmnElement="doa_st_za_o"><omgdi:waypoint x="1080" y="500"/><omgdi:waypoint x="1080" y="524"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

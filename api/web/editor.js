@@ -4209,7 +4209,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, licences and directory-role assignments, and the tenant's licence subscriptions (bought and assigned units per SKU)", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, restore from and permanently delete out of the recycle bin, list the groups a user is a direct member of, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, licences and directory-role assignments, and the tenant's licence subscriptions (bought and assigned units per SKU)", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -4234,11 +4234,14 @@ const SERVICE_TASK_KINDS = [
           { v: "enable", l: "Enable account" },
           { v: "disable", l: "Disable account" },
           { v: "delete-user", l: "Delete user" },
+          { v: "restore-user", l: "Restore deleted user (Papierkorb)" },
+          { v: "permanently-delete-user", l: "Permanently delete deleted user (Papierkorb)" },
           { v: "add-group-member", l: "Add group member" },
           { v: "remove-group-member", l: "Remove group member" },
           { v: "create-group", l: "Create group" },
           { v: "get-group", l: "Read group" },
           { v: "list-groups", l: "List groups" },
+          { v: "list-user-groups", l: "List a user's groups (direct)" },
           { v: "delta-groups", l: "Delta groups (Änderungen)" },
           { v: "update-group", l: "Update group" },
           { v: "delete-group", l: "Delete group" },
@@ -4264,8 +4267,14 @@ const SERVICE_TASK_KINDS = [
         key: "userId", label: "User", placeholder: "arno@contoso.com", fx: true,
         // The operations that address a user (compiler's needsUser). An explicit list so
         // an operation that takes only a group never prompts for a user it ignores.
-        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "create-community", "get-sync-behavior", "set-sync-behavior"].includes(v.operation),
-        hint: (v) => v.operation === "create-community"
+        showIf: (v) => ["get-user", "get-user-manager", "update-user", "delete-user", "reset-password", "enable", "disable", "add-group-member", "remove-group-member", "add-group-owner", "remove-group-owner", "add-team-member", "add-team-owner", "assign-license", "assign-role", "create-community", "get-sync-behavior", "set-sync-behavior", "list-user-groups", "restore-user", "permanently-delete-user"].includes(v.operation),
+        hint: (v) => v.operation === "restore-user"
+          ? "The deleted user's object id — not the user principal name, which Entra prefixes with the id while the user is in the recycle bin. A user deleted less than 30 days ago can be restored; Microsoft documents that a formerly synchronised user comes back cloud-managed, no longer written by Entra Connect. May be a FEEL expression (fx)."
+          : v.operation === "permanently-delete-user"
+          ? "The object id of a user already deleted (Delete user puts it in the recycle bin). Deletes it for good; it cannot be undone. Graph answers 404 for an id that is not in the recycle bin — an active user, one restored meanwhile, or one already gone — and the job fails rather than reporting a deletion that did not happen. May be a FEEL expression (fx)."
+          : v.operation === "list-user-groups"
+          ? "The user whose groups are listed — a user principal name or object id. Only the groups the user is a direct member of: a group that is a member of another does not make the user a member of that one here. May be a FEEL expression (fx)."
+          : v.operation === "create-community"
           ? "The community's first owner — a user principal name or object id. Microsoft documents that a community created with application permissions must name an owner, so the worker binds this user as owners@odata.bind. Further members and admins are added afterwards with Add group member / Add group owner on the community's groupId. May be a FEEL expression (fx)."
           : "A user principal name or object id. May be a FEEL expression (fx) over the instance's variables.",
       },
@@ -4301,16 +4310,18 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "filter", label: "Filter", placeholder: "accountEnabled eq true", fx: true,
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-user-groups"].includes(v.operation),
         hint: "An OData $filter over the directory, e.g. startsWith(displayName,'Arno') or department eq 'IT'. Empty lists every user. May be a FEEL expression (fx), so a process can list the department it is actually about. Forms Graph calls advanced — endsWith, ne, not — additionally need the Erweiterte Abfrage switch below.",
       },
       {
         key: "search", label: "Suche", placeholder: "\"displayName:Arno\"", fx: true,
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-user-groups"].includes(v.operation),
         hint: "Graphs $search über das Verzeichnis — geschrieben genau so, wie Graph es nimmt, Anführungszeichen inklusive: \"displayName:Arno\", oder zusammengesetzt \"mail:blumer\" AND \"displayName:Arno\". Der Worker kodiert den Begriff, erfindet aber keine Anführungszeichen darum, sonst wäre der zusammengesetzte Fall nicht schreibbar. Eine Suche schaltet die erweiterte Abfrage automatisch ein — Graph kennt keinen anderen Weg, sie auszuführen.",
       },
       {
         key: "advancedQuery", label: "Erweiterte Abfrage", type: "select",
+        // Not on list-user-groups: Graph answers its cast on memberOf only as an
+        // advanced query, so the worker always sends it as one.
         showIf: (v) => ["list-users", "list-groups", "list-deleted-groups"].includes(v.operation),
         options: [
           { v: "", l: "Aus (streng konsistent)" },
@@ -4320,7 +4331,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "list-user-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: (v) => v.operation === "get-user-manager"
           ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
           : v.operation === "list-subscribed-skus"
@@ -4331,12 +4342,12 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-user-groups", "delta-users", "delta-groups"].includes(v.operation),
         hint: "How many objects to ask for per request ($top, at most 999). Every page is followed either way — the result variable receives the whole read, never one page — so this only trades request count against response size. Empty leaves Graph its own page size.",
       },
       {
         key: "maxUsers", label: "Maximum objects", placeholder: "1000",
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-user-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
       },
       {
@@ -4360,7 +4371,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups, room lists and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas, a room's place metadata for Room Finder) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
+    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove; on Exchange Server also remote mailboxes, disabling a mailbox and restoring a disconnected mailbox's content into another), permissions (full access, send as, send on behalf, folder permissions), distribution groups, room lists and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas, a room's place metadata for Room Finder) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
     // An envelope on Exchange blue: the mailbox this Worker Type administers, beside
     // Entra's directory account in the same group.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0364b8"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="#fff"/><path d="M3.5 5.2 8 8.6l4.5-3.4" fill="none" stroke="#0364b8" stroke-width="1.2"/></svg>`,

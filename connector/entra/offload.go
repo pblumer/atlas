@@ -63,6 +63,11 @@ type Op struct {
 	// the select and nothing else, and the query fields a listing otherwise takes are
 	// refused rather than sent to a 400.
 	SelectOnly bool
+	// AlwaysAdvanced marks a listing Graph answers only as an advanced query:
+	// list-user-groups, whose OData cast on memberOf Microsoft documents as requiring
+	// ConsistencyLevel: eventual and $count. The request carries both whatever the
+	// model said, rather than a 400 when it said nothing.
+	AlwaysAdvanced bool
 	// IsBinary marks an operation whose answer is bytes rather than an object: a
 	// photo (ADR-0367). Like a listing it needs a result variable —
 	// a read that discards what it read is one nothing asked for — and unlike every
@@ -109,7 +114,9 @@ func (o Op) needsResult() bool {
 // (create, read, list, update, delete, restore and list the deleted, and members and
 // owners), and the Team a group backs (create, add members and owners, create a
 // channel, archive) — plus guest invitation, a Viva Engage community, licence and
-// directory-role assignment, and the tenant's licence subscriptions.
+// directory-role assignment, the tenant's licence subscriptions, and what a transfer
+// from one account to another reads and finishes with: a user's direct group
+// memberships and the users' recycle bin.
 var Ops = map[string]Op{
 	"create-user": {Method: "POST", NeedsAttributes: true, Label: "create a user"},
 	"get-user":    {Method: "GET", NeedsUser: true, Selects: true, Label: "read a user"},
@@ -179,6 +186,27 @@ var Ops = map[string]Op{
 	// User-OnPremisesSyncBehavior.ReadWrite.All.
 	"get-sync-behavior": {Method: "GET", NeedsUser: true, Label: "read a user's source of authority"},
 	"set-sync-behavior": {Method: "PATCH", NeedsUser: true, NeedsAttributes: true, Label: "transfer a user's source of authority"},
+	// What a transfer from one account to another needs
+	// (ADR-draft-informationstransfer-operations). list-user-groups is the groups the
+	// user is a *direct* member of — memberOf cast to groups, not transitiveMemberOf:
+	// a transfer copies the memberships somebody granted, and what a nested group
+	// grants follows from that group, so copying it as well would make the target a
+	// direct member of groups the source never was. Its ListPath is relative to the
+	// user (see request). Graph's memberOf takes the same $filter, $search, $select and
+	// $top a directory collection does, but the cast to microsoft.graph.group is
+	// answered only as an advanced query, so it always runs as one. Microsoft documents
+	// Directory.Read.All as the least privileged application permission.
+	"list-user-groups": {Method: "GET", NeedsUser: true, IsList: true, AlwaysAdvanced: true, ListPath: "/memberOf/microsoft.graph.group", Label: "list a user's groups"},
+	// The recycle bin for users: restore-user takes a soft-deleted user back (Microsoft:
+	// within 30 days; a formerly synchronised user comes back cloud-managed), and
+	// permanently-delete-user deletes one that is already there, for good. Both address
+	// /directory/deletedItems, never /users, so neither can touch an active account: its
+	// id is not in the recycle bin, and Graph answers 404 — which fails the job, because
+	// a final deletion recorded for an id nobody deleted is a wrong fact, not a
+	// no-op. Microsoft documents User.DeleteRestore.All as the least privileged
+	// permission for both.
+	"restore-user":            {Method: "POST", NeedsUser: true, Label: "restore a deleted user"},
+	"permanently-delete-user": {Method: "DELETE", NeedsUser: true, Label: "permanently delete a deleted user"},
 }
 
 // OpNames lists the operations, sorted, for the error messages that have to say what
@@ -806,6 +834,10 @@ func expandQuery(j Job, nav string) string {
 // Only a listing can ask for eventual consistency: every other operation addresses
 // one object by id, where an advanced query has nothing to mean.
 func request(j Job, spec Op, baseURL string) Request {
+	if spec.AlwaysAdvanced {
+		// j is a copy: the listing's header and its $count follow from one flag.
+		j.Advanced = true
+	}
 	user := url.PathEscape(strings.TrimSpace(j.UserID))
 	group := url.PathEscape(strings.TrimSpace(j.GroupID))
 	base := strings.TrimRight(baseURL, "/")
@@ -815,7 +847,13 @@ func request(j Job, spec Op, baseURL string) Request {
 		return r
 	}
 	if spec.IsList {
-		r.Path = listPath(j, spec.ListPath)
+		collection := spec.ListPath
+		if spec.NeedsUser {
+			// A listing of something the user has (list-user-groups) reads a collection
+			// under the user; every other listing reads a directory-wide one.
+			collection = "/users/" + user + collection
+		}
+		r.Path = listPath(j, collection)
 		return r
 	}
 	if spec.IsDelta {
@@ -904,6 +942,10 @@ func request(j Job, spec Op, baseURL string) Request {
 		// That is Microsoft's stated behaviour, not something verified against a tenant
 		// here. An id past the 30 days, or one that is no deleted group, is Graph's 404.
 		r.Path = "/directory/deletedItems/" + group + "/restore"
+	case "restore-user":
+		r.Path = "/directory/deletedItems/" + user + "/restore"
+	case "permanently-delete-user":
+		r.Path = "/directory/deletedItems/" + user
 	case "get-sync-behavior":
 		r.Path = "/users/" + user + "/onPremisesSyncBehavior?$select=isCloudManaged"
 	case "set-sync-behavior":

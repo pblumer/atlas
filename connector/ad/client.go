@@ -24,6 +24,7 @@ package ad
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
@@ -367,9 +368,61 @@ func entriesFrom(res *goldap.SearchResult) []Entry {
 	for _, e := range res.Entries {
 		attrs := make(map[string][]string, len(e.Attributes))
 		for _, a := range e.Attributes {
+			if isBinaryAttr(a.Name) {
+				attrs[a.Name] = base64Values(a.ByteValues)
+				continue
+			}
 			attrs[a.Name] = a.Values
 		}
 		out = append(out, Entry{DN: e.DN, Attributes: attrs})
+	}
+	return out
+}
+
+// binaryAttrs are the attributes whose values are bytes rather than text, by their
+// lower-cased name (LDAP names are case-insensitive). Read as a string, a GUID or a SID
+// is sixteen or so arbitrary bytes that no JSON variable carries intact and no process
+// can compare, so a search and a sync answer them as standard base64 of the raw bytes
+// instead (ADR-draft-informationstransfer-operations). For objectGUID that is exactly
+// Entra ID's onPremisesImmutableId — the source anchor Entra Connect writes and a hard
+// match compares — and mS-DS-ConsistencyGuid, the anchor newer Connect installations
+// use, carries the same bytes. The list is deliberately the identity anchors and no
+// more: other binary attributes (thumbnailPhoto, userCertificate) are larger, rarer in
+// a process, and would change shape under a model that reads them today.
+var binaryAttrs = map[string]bool{
+	"objectguid":            true,
+	"objectsid":             true,
+	"ms-ds-consistencyguid": true,
+}
+
+// isBinaryAttr reports whether a search answers the attribute as base64.
+func isBinaryAttr(name string) bool { return binaryAttrs[strings.ToLower(name)] }
+
+// base64Values encodes each raw value as standard base64.
+func base64Values(raw [][]byte) []string {
+	out := make([]string, len(raw))
+	for i, b := range raw {
+		out[i] = base64.StdEncoding.EncodeToString(b)
+	}
+	return out
+}
+
+// answeredAttrs is a copy of stored attributes as a search answers them: the binary
+// ones, held as their raw bytes, encoded as base64. The mock directory keeps bytes as
+// AD does — an LDIF seed's "objectGUID:: …" line decodes to them — and answers through
+// this so a mock run reads the same values a real one would.
+func answeredAttrs(attrs map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(attrs))
+	for name, vals := range attrs {
+		if !isBinaryAttr(name) {
+			out[name] = append([]string(nil), vals...)
+			continue
+		}
+		raw := make([][]byte, len(vals))
+		for i, v := range vals {
+			raw[i] = []byte(v)
+		}
+		out[name] = base64Values(raw)
 	}
 	return out
 }

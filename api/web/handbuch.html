@@ -2648,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">47</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">48</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">47</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">48</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -6253,6 +6253,60 @@ carla@example.org,admins,GOLD</code></pre></li>
           models are uploaded); afterwards the tenant quota is started once. The steps, the constants and the rights the
           Entra Worker needs are in <code>examples/lizenzmanagement/README.md</code>.</p>
       </div>
+      <div class="bsp" id="bsp-informationstransfer">
+        <h4><span class="rz-emoji" aria-hidden="true">🔀</span>
+          <span data-l="de">Informationstransfer: Ressourcen eines Kontos auf ein anderes übertragen</span><span data-l="en">Resource transfer: moving one account's resources to another</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag">AD</span>
+          <span class="tag">Exchange</span>
+          <span class="tag">Entra</span>
+          <span class="tag">Teams Phone</span>
+          <span class="tag">examples/informationstransfer/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Wer intern wird, extern wird oder das Amt oder die Abteilung wechselt, bekommt oft ein neues Konto.
+              Identity Management bestellt dann einen Informationstransfer vom bisherigen auf das neue Konto: Primäradresse
+              und UPN, Postfachinhalt, Kontingent, Telefonnummer, manuelle Gruppen, Kürzel und bei einer Internalisierung das
+              Cloud-Konto mit Teams und OneDrive. Eine Entscheidungstabelle sagt der bestellenden Person, welche Kombination im
+              Szenario nicht geht und warum; jede Löschung gibt jemand unmittelbar davor frei, und am Schluss trägt das
+              bisherige Konto den Vermerk «Ressourcen transferiert».</p>
+            <p data-l="en">Someone who becomes internal or external, or changes office or department, often gets a new account.
+              Identity Management then orders a resource transfer from the previous to the new account: primary address and
+              UPN, mailbox content, quota, phone number, manual groups, short code and, on internalisation, the cloud account
+              with Teams and OneDrive. A decision table tells the orderer which combination the scenario does not allow and
+              why; every deletion is released by a person right before it, and finally the previous account is marked
+              "resources transferred".</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Neun Prozesse, eine Entscheidungstabelle (COLLECT, mit Gründen und Hinweisen) und neun Formulare:
+              ein Lebenszyklus und je ein Teilprozess pro Ressource über die Worker-Typen AD, Exchange (Server oder Online),
+              Entra und Teams Phone. Konten und Postfächer sind versiegelt; was die Engine vergleichen müsste, vergleichen
+              die Suchfilter des AD-Workers und melden nur einen Wahrheitswert. Den Postfachinhalt überträgt auf dem Exchange
+              Server <code>restore-mailbox-content</code>, in Exchange Online eine Aufgabe; der Entra-Transfer setzt
+              <code>onPremisesImmutableId</code> für den Hard Match und ist ausgeschaltet, bis jemand
+              <code>ENTRA_TRANSFER</code> einschaltet.</p>
+            <p data-l="en">Nine processes, one decision table (COLLECT, with reasons and notes) and nine forms: a lifecycle and
+              one subprocess per resource across the AD, Exchange (Server or Online), Entra and Teams Phone Worker Types.
+              Accounts and mailboxes are sealed; whatever the engine would have to compare, the AD Worker's search filters
+              compare, answering only a boolean. On Exchange Server <code>restore-mailbox-content</code> moves the mailbox
+              content, in Exchange Online a task does; the Entra transfer sets <code>onPremisesImmutableId</code> for the
+              hard match and stays off until somebody switches <code>ENTRA_TRANSFER</code> on.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es mit <code>installieren.sh</code></b> (oder <code>atlas import</code>, nachdem das
+          Entscheidungsmodell hochgeladen ist). Was automatisch läuft und was eine Aufgabe ist, die Konstanten und die
+          Rechte der Worker stehen in <code>examples/informationstransfer/README.md</code>.</p>
+        <p data-l="en"><b>It installs with <code>installieren.sh</code></b> (or <code>atlas import</code> once the decision
+          model is uploaded). What runs automatically and what is a task, the constants and the rights the Workers need are
+          in <code>examples/informationstransfer/README.md</code>.</p>
+      </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
         läuft, ist Arbeit – aber sie hat eine Reihenfolge, und die ist immer dieselbe.</p>
@@ -7681,7 +7735,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
             <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
             sein). Den Lizenzbestand des Tenants lesen (<code>list-subscribed-skus</code>: gekaufte und zugewiesene
-            Einheiten pro SKU) braucht zusätzlich <code>LicenseAssignment.Read.All</code>. Die letzte Anmeldung
+            Einheiten pro SKU) braucht zusätzlich <code>LicenseAssignment.Read.All</code>. Gelöschte Benutzer aus dem
+            Papierkorb wiederherstellen oder endgültig löschen (<code>restore-user</code>,
+            <code>permanently-delete-user</code>) braucht zusätzlich <code>User.DeleteRestore.All</code>, die
+            direkten Gruppen eines Benutzers lesen (<code>list-user-groups</code>) laut Microsoft
+            <code>Directory.Read.All</code>. Die letzte Anmeldung
             eines Kontos (<code>signInActivity</code> im <code>select</code> von <code>list-users</code> oder
             <code>get-user</code>) braucht zusätzlich <code>AuditLog.Read.All</code> und im Tenant eine Lizenz
             Entra ID P1 oder P2.</li>
@@ -7696,7 +7754,10 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
             documents that the Engage network must be in native mode for it). Reading the tenant's licence stock
             (<code>list-subscribed-skus</code>: bought and assigned units per SKU) also needs
-            <code>LicenseAssignment.Read.All</code>. An account's last sign-in (<code>signInActivity</code> in the
+            <code>LicenseAssignment.Read.All</code>. Restoring deleted users from the recycle bin or deleting them for
+            good (<code>restore-user</code>, <code>permanently-delete-user</code>) also needs
+            <code>User.DeleteRestore.All</code>, and reading a user's direct groups (<code>list-user-groups</code>)
+            needs <code>Directory.Read.All</code>, as Microsoft documents it. An account's last sign-in (<code>signInActivity</code> in the
             <code>select</code> of <code>list-users</code> or <code>get-user</code>) also needs
             <code>AuditLog.Read.All</code> and an Entra ID P1 or P2 licence in the tenant.</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
@@ -7845,6 +7906,33 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           address are properties of the account. Microsoft names the Exchange role <i>Mail Recipients</i> for
           <code>Set-Place</code>, which the <i>Exchange Recipient Administrator</i> and <i>Exchange Administrator</i>
           roles include. Changes take 24 to 48 hours to appear in Room Finder.</p>
+        <p data-l="de"><b>Postfachinhalt von einem Konto auf ein anderes (Exchange Server).</b> <i>Postfach
+          deaktivieren</i> (<code>Disable-Mailbox</code>) entfernt die Exchange-Attribute vom AD-Konto und trennt das
+          Postfach; sein Inhalt bleibt für die Aufbewahrungszeit gelöschter Postfächer in der Datenbank. <i>Inhalt eines
+          getrennten Postfachs wiederherstellen</i> (<code>New-MailboxRestoreRequest</code>) kopiert ihn von dort in ein
+          anderes Postfach: <code>SourceDatabase</code>, <code>SourceStoreMailbox</code> (die
+          <code>MailboxGuid</code>, die <code>get-mailbox</code> vor dem Deaktivieren liefert) und
+          <code>TargetMailbox</code> sind Pflicht, <code>AllowLegacyDNMismatch</code> setzt der Worker selbst, weil das
+          Ziel ein anderes Postfach ist. Laut Microsoft gilt ein Postfach erst kurz nach dem Deaktivieren als getrennt
+          (<code>Update-StoreMailboxState</code> beschleunigt das); eine Wiederherstellung unmittelbar danach kann
+          deshalb fehlschlagen und gehört in einen Wiederholungsversuch. Den Stand liest
+          <i>Ein Get-Cmdlet ausführen</i> mit <code>Get-MailboxRestoreRequest</code>. Welche Rolle die Cmdlets brauchen,
+          zeigt <code>Get-ManagementRole -Cmdlet New-MailboxRestoreRequest</code>. In Exchange Online gibt es beides
+          nicht: Dort folgt ein Postfach dem Konto und seiner Lizenz, und eine Wiederherstellung liest nur ein
+          vorläufig gelöschtes oder inaktives Postfach.</p>
+        <p data-l="en"><b>Moving a mailbox's content from one account to another (Exchange Server).</b> <i>Disable a
+          mailbox</i> (<code>Disable-Mailbox</code>) removes the Exchange attributes from the AD account and disconnects
+          the mailbox; its content stays in the database for the deleted-mailbox retention period. <i>Restore a
+          disconnected mailbox's content</i> (<code>New-MailboxRestoreRequest</code>) copies it from there into another
+          mailbox: <code>SourceDatabase</code>, <code>SourceStoreMailbox</code> (the <code>MailboxGuid</code>
+          <code>get-mailbox</code> returns before the disable) and <code>TargetMailbox</code> are required, and the
+          worker sets <code>AllowLegacyDNMismatch</code> itself because the target is a different mailbox. Microsoft
+          documents that a mailbox is marked as disconnected a short time after the disable
+          (<code>Update-StoreMailboxState</code> speeds it up), so a restore straight afterwards can fail and belongs in
+          a retry. <i>Run a Get- cmdlet</i> with <code>Get-MailboxRestoreRequest</code> reads its progress.
+          <code>Get-ManagementRole -Cmdlet New-MailboxRestoreRequest</code> shows which role the cmdlets need. Exchange
+          Online has neither: there a mailbox follows its account and licence, and a restore reads only a soft-deleted
+          or inactive mailbox.</p>
         <p data-l="de"><b>Drei Fallen.</b> <i>Berechtigung ohne Rolle:</i> <code>Exchange.ManageAsApp</code> erlaubt
           der App zu fragen, die Rolle bestimmt, was sie darf – und eine neue Zuweisung braucht Zeit, bis sie
           greift. <i>Ordnernamen sind lokalisiert:</i> Ein deutsches Postfach hat <code>anna@contoso.com:\Kalender</code>,
@@ -8499,6 +8587,17 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           voraussetzt – das ist keine Umständlichkeit, sondern die Struktur von LDAP.</p>
         <p data-l="en"><b>A DN is not business data.</b> Expect every assignment to require a search first – that is
           not clumsiness, it is the structure of LDAP.</p>
+        <p data-l="de"><b>Binäre Attribute kommen als Base64.</b> Eine Suche und ein Sync liefern
+          <code>objectGUID</code>, <code>objectSid</code> und <code>mS-DS-ConsistencyGuid</code> als Base64 der rohen
+          Bytes, so wie AD sie speichert. Für <code>objectGUID</code> ist das genau die
+          <code>onPremisesImmutableId</code> des Kontos in Entra ID, also der Anker, über den Entra Connect ein Konto
+          zuordnet (Hard Match). Eine Prozessvariable kann den Wert deshalb unverändert vergleichen oder
+          weitergeben.</p>
+        <p data-l="en"><b>Binary attributes arrive as base64.</b> A search and a sync return <code>objectGUID</code>,
+          <code>objectSid</code> and <code>mS-DS-ConsistencyGuid</code> as base64 of the raw bytes AD stores. For
+          <code>objectGUID</code> that is exactly the account's <code>onPremisesImmutableId</code> in Entra ID, the
+          anchor Entra Connect matches an account by (hard match), so a process variable can compare or pass the value
+          on as it is.</p>
         <p class="checked" data-checked="2026-09"><span data-l="de">Zuletzt geprüft: September 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked September 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
@@ -14239,7 +14338,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">47</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">47</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">48</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">48</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>

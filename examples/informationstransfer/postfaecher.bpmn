@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_it_postfaecher" targetNamespace="http://atlas/beispiel/informationstransfer">
+  <itemDefinition id="item_Postfach" structureRef="Postfach"/>
+  <dataStore id="ds_exchange_server_empfaenger" name="Exchange Server: Empfaenger"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
+  <dataStore id="ds_active_directory_konten" name="Active Directory: Konten"/>
+  <dataStore id="ds_entra_id_konten" name="Entra ID: Konten"/>
+  <process id="proc_it_postfaecher" name="Informationstransfer: Postfächer lesen" isExecutable="true" atlas:personal="quelle,ziel,begruendung,quelleKonto,zielKonto,pfQuelle,pfZiel" atlas:dataSubject="recipient">
+    <documentation>Liest die Postfächer von Quelle und Ziel, bevor die Regel entscheidet und bevor sich etwas ändert. Aufgerufen von proc_it_transfer mit propagateAllChildVariables: Was hier entsteht, steht danach im Aufrufer.
+
+Nur wenn eine Postfach-Option gewählt ist (optMail, optInhalt, optKontingent). Zuerst, ob beide ein Postfach haben, und zwar mit einer Antwort, die niemanden nennt: mit Exchange Server eine AD-Suche nach dem Konto mit homeMDB (foundVariable pfQuelleDa, pfZielDa), mit Exchange Online eine Entra-Suche nach dem Cloud-Konto mit einer Mailadresse (nur die Objekt-ID, die Engine zählt die Treffer). Fehlt eines, liest der Prozess nichts weiter, und die Regel lehnt die Postfach-Optionen mit Grund ab. Sonst get-mailbox für beide (pfQuelle, pfZiel, versiegelt) und mit Exchange Server die beiden Postfachdatenbanken (dbQuelle, dbZiel), deren Vorgaben gelten, wenn ein Postfach UseDatabaseQuotaDefaults hat.</documentation>
+    <extensionElements><atlas:constants><atlas:constant name="POSTFACH_SYSTEM" type="string" source="application" value="exchange-server"/><atlas:constant name="AD_PERSONEN_OU" type="string" source="application" value="OU=Personen,DC=contoso,DC=local"/><atlas:constant name="NAME_PREFIX" type="string" source="application" value=""/></atlas:constants></extensionElements>
+    <dataObject id="do_postfach" name="Postfach" itemSubjectRef="item_Postfach"/>
+    <startEvent id="s" name="Aufgerufen"><outgoing>f_s__gw_an</outgoing></startEvent>
+    <exclusiveGateway id="gw_an" name="Postfach-Option?" default="f_gw_an__e_nein"><documentation>optMail, optInhalt oder optKontingent.</documentation><incoming>f_s__gw_an</incoming><outgoing>f_gw_an__gw_sys</outgoing><outgoing>f_gw_an__e_nein</outgoing></exclusiveGateway>
+    <endEvent id="e_nein" name="Nicht nötig"><incoming>f_gw_an__e_nein</incoming></endEvent>
+    <exclusiveGateway id="gw_sys" name="Exchange Server?" default="f_gw_sys__st_da_qo"><documentation>POSTFACH_SYSTEM; alles ausser exchange-server ist Exchange Online.</documentation><incoming>f_gw_an__gw_sys</incoming><outgoing>f_gw_sys__st_da_q</outgoing><outgoing>f_gw_sys__st_da_qo</outgoing></exclusiveGateway>
+    <serviceTask id="st_da_q" name="Postfach der Quelle?"><documentation>AD search: das Quellkonto mit homeMDB (ein Postfach auf dem Exchange Server). Nur foundVariable.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="search" baseDN="=application.AD_PERSONEN_OU" scope="sub" filter='=if quelle != null and matches(quelle, "^[A-Za-z0-9._-]{1,20}$") then "(&amp;(objectCategory=person)(objectClass=user)(sAMAccountName=" + quelle + ")(homeMDB=*))" else "(&amp;(objectClass=user)(!(objectClass=user)))"' select="1.1" maxEntries="1" foundVariable="pfQuelleDa"/></extensionElements><incoming>f_gw_sys__st_da_q</incoming><outgoing>f_st_da_q__st_da_z</outgoing></serviceTask>
+    <serviceTask id="st_da_z" name="Postfach des Ziels?"><documentation>Dasselbe für das Zielkonto.</documentation><extensionElements><atlas:adConnector connector="ad_verzeichnis" operation="search" baseDN="=application.AD_PERSONEN_OU" scope="sub" filter='=if ziel != null and matches(ziel, "^[A-Za-z0-9._-]{1,20}$") then "(&amp;(objectCategory=person)(objectClass=user)(sAMAccountName=" + ziel + ")(homeMDB=*))" else "(&amp;(objectClass=user)(!(objectClass=user)))"' select="1.1" maxEntries="1" foundVariable="pfZielDa"/></extensionElements><incoming>f_st_da_q__st_da_z</incoming><outgoing>f_st_da_z__gw_da</outgoing></serviceTask>
+    <exclusiveGateway id="gw_da" name="Beide vorhanden?" default="f_gw_da__e_fehlt"><incoming>f_st_da_z__gw_da</incoming><outgoing>f_gw_da__st_lq</outgoing><outgoing>f_gw_da__e_fehlt</outgoing></exclusiveGateway>
+    <endEvent id="e_fehlt" name="Postfach fehlt"><incoming>f_gw_da__e_fehlt</incoming></endEvent>
+    <serviceTask id="st_lq" name="Quellpostfach lesen"><documentation>get-mailbox auf dem Exchange Server mit dem Anmeldenamen. pfQuelle trägt PrimarySmtpAddress, EmailAddresses, ExchangeGuid, Database und die Kontingente; versiegelt.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="get-mailbox" parameters='{"Identity": "=quelle"}' resultVariable="pfQuelle"/></extensionElements><incoming>f_gw_da__st_lq</incoming><outgoing>f_st_lq__st_lz</outgoing></serviceTask>
+    <serviceTask id="st_lz" name="Zielpostfach lesen"><documentation>Dasselbe für das Ziel (pfZiel).</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="get-mailbox" parameters='{"Identity": "=ziel"}' resultVariable="pfZiel"/></extensionElements><incoming>f_st_lq__st_lz</incoming><outgoing>f_st_lz__st_dbq</outgoing></serviceTask>
+    <serviceTask id="st_dbq" name="Datenbank der Quelle"><documentation>run-get-cmdlet Get-MailboxDatabase für die Datenbank der Quelle: ihre Kontingente gelten, wenn das Postfach UseDatabaseQuotaDefaults hat. dbQuelle nennt niemanden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="run-get-cmdlet" parameters='{"Identity": "=string(pfQuelle.Database)"}' cmdlet="Get-MailboxDatabase" maxResults="1" resultVariable="dbQuelle"/></extensionElements><incoming>f_st_lz__st_dbq</incoming><outgoing>f_st_dbq__st_dbz</outgoing></serviceTask>
+    <serviceTask id="st_dbz" name="Datenbank des Ziels"><documentation>Dasselbe für das Ziel (dbZiel).</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange_onprem" operation="run-get-cmdlet" parameters='{"Identity": "=string(pfZiel.Database)"}' cmdlet="Get-MailboxDatabase" maxResults="1" resultVariable="dbZiel"/></extensionElements><incoming>f_st_dbq__st_dbz</incoming><outgoing>f_st_dbz__e_ok</outgoing><dataOutputAssociation id="doa_st_dbz"><targetRef>dor_st_dbz</targetRef></dataOutputAssociation></serviceTask>
+    <endEvent id="e_ok" name="Gelesen"><incoming>f_st_dbz__e_ok</incoming></endEvent>
+    <serviceTask id="st_da_qo" name="Postfach der Quelle? (Online)"><documentation>Entra list-users: das Cloud-Konto mit der UPN der Quelle und einer Mailadresse (mail ne null braucht die erweiterte Abfrage). select id: das Ergebnis nennt niemanden; pfQuelleDa ist, ob es genau eines gibt.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-users" filter="=if quelleKonto.entries[1].attributes.userPrincipalName[1] = null then &quot;id eq '00000000-0000-0000-0000-000000000000'&quot; else &quot;userPrincipalName eq '&quot; + replace(quelleKonto.entries[1].attributes.userPrincipalName[1], &quot;'&quot;, &quot;''&quot;) + &quot;'&quot; + (if application.NAME_PREFIX = null or application.NAME_PREFIX = &quot;&quot; then &quot;&quot; else &quot; and startswith(userPrincipalName, '&quot; + replace(application.NAME_PREFIX, &quot;'&quot;, &quot;''&quot;) + &quot;')&quot;) + &quot; and mail ne null&quot;" select="id" maxUsers="2" advancedQuery="true" resultVariable="cloudQuelle"/><zeebe:ioMapping><zeebe:output source="=count(cloudQuelle) = 1" target="pfQuelleDa"/></zeebe:ioMapping></extensionElements><incoming>f_gw_sys__st_da_qo</incoming><outgoing>f_st_da_qo__st_da_zo</outgoing></serviceTask>
+    <serviceTask id="st_da_zo" name="Postfach des Ziels? (Online)"><documentation>Dasselbe für das Ziel.</documentation><extensionElements><atlas:entraConnector connector="ucc_entra" operation="list-users" filter="=if zielKonto.entries[1].attributes.userPrincipalName[1] = null then &quot;id eq '00000000-0000-0000-0000-000000000000'&quot; else &quot;userPrincipalName eq '&quot; + replace(zielKonto.entries[1].attributes.userPrincipalName[1], &quot;'&quot;, &quot;''&quot;) + &quot;'&quot; + (if application.NAME_PREFIX = null or application.NAME_PREFIX = &quot;&quot; then &quot;&quot; else &quot; and startswith(userPrincipalName, '&quot; + replace(application.NAME_PREFIX, &quot;'&quot;, &quot;''&quot;) + &quot;')&quot;) + &quot; and mail ne null&quot;" select="id" maxUsers="2" advancedQuery="true" resultVariable="cloudZiel"/><zeebe:ioMapping><zeebe:output source="=count(cloudZiel) = 1" target="pfZielDa"/></zeebe:ioMapping></extensionElements><incoming>f_st_da_qo__st_da_zo</incoming><outgoing>f_st_da_zo__gw_da_o</outgoing></serviceTask>
+    <exclusiveGateway id="gw_da_o" name="Beide vorhanden? (Online)" default="f_gw_da_o__e_fehlt_o"><incoming>f_st_da_zo__gw_da_o</incoming><outgoing>f_gw_da_o__st_lq_o</outgoing><outgoing>f_gw_da_o__e_fehlt_o</outgoing></exclusiveGateway>
+    <endEvent id="e_fehlt_o" name="Postfach fehlt (Online)"><incoming>f_gw_da_o__e_fehlt_o</incoming></endEvent>
+    <serviceTask id="st_lq_o" name="Quellpostfach lesen (Online)"><documentation>get-mailbox in Exchange Online mit der UPN. Neben Adressen und Kontingenten trägt pfQuelle Guid und ExternalDirectoryObjectId (die Objekt-ID in Entra ID), über die spätere Schritte das Konto finden, auch wenn sich die UPN ändert.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mailbox" parameters='{"Identity": "=quelleKonto.entries[1].attributes.userPrincipalName[1]"}' resultVariable="pfQuelle"/></extensionElements><incoming>f_gw_da_o__st_lq_o</incoming><outgoing>f_st_lq_o__st_lz_o</outgoing></serviceTask>
+    <serviceTask id="st_lz_o" name="Zielpostfach lesen (Online)"><documentation>Dasselbe für das Ziel.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="get-mailbox" parameters='{"Identity": "=zielKonto.entries[1].attributes.userPrincipalName[1]"}' resultVariable="pfZiel"/></extensionElements><incoming>f_st_lq_o__st_lz_o</incoming><outgoing>f_st_lz_o__e_ok_o</outgoing><dataOutputAssociation id="doa_st_lz_o"><targetRef>dor_st_lz_o</targetRef></dataOutputAssociation></serviceTask>
+    <endEvent id="e_ok_o" name="Gelesen (Online)"><incoming>f_st_lz_o__e_ok_o</incoming></endEvent>
+    <dataObjectReference id="dor_st_dbz" name="Postfach" dataObjectRef="do_postfach"><dataState name="Aktiv"/></dataObjectReference>
+    <dataObjectReference id="dor_st_lz_o" name="Postfach" dataObjectRef="do_postfach"><dataState name="Aktiv"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_server_empfaenger" name="Exchange Server: Empfaenger" dataStoreRef="ds_exchange_server_empfaenger"/>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
+    <dataStoreReference id="dsr_active_directory_konten" name="Active Directory: Konten" dataStoreRef="ds_active_directory_konten"/>
+    <dataStoreReference id="dsr_entra_id_konten" name="Entra ID: Konten" dataStoreRef="ds_entra_id_konten"/>
+    <sequenceFlow id="f_s__gw_an" sourceRef="s" targetRef="gw_an"/>
+    <sequenceFlow id="f_gw_an__gw_sys" sourceRef="gw_an" targetRef="gw_sys" name="ja"><conditionExpression>=optMail = "ja" or optInhalt = "ja" or optKontingent = "ja"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_an__e_nein" sourceRef="gw_an" targetRef="e_nein" name="nein"/>
+    <sequenceFlow id="f_gw_sys__st_da_q" sourceRef="gw_sys" targetRef="st_da_q" name="Server"><conditionExpression>=application.POSTFACH_SYSTEM = "exchange-server"</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_sys__st_da_qo" sourceRef="gw_sys" targetRef="st_da_qo" name="Online"/>
+    <sequenceFlow id="f_st_da_q__st_da_z" sourceRef="st_da_q" targetRef="st_da_z"/>
+    <sequenceFlow id="f_st_da_z__gw_da" sourceRef="st_da_z" targetRef="gw_da"/>
+    <sequenceFlow id="f_gw_da__st_lq" sourceRef="gw_da" targetRef="st_lq" name="ja"><conditionExpression>=pfQuelleDa = true and pfZielDa = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_da__e_fehlt" sourceRef="gw_da" targetRef="e_fehlt" name="nein"/>
+    <sequenceFlow id="f_st_lq__st_lz" sourceRef="st_lq" targetRef="st_lz"/>
+    <sequenceFlow id="f_st_lz__st_dbq" sourceRef="st_lz" targetRef="st_dbq"/>
+    <sequenceFlow id="f_st_dbq__st_dbz" sourceRef="st_dbq" targetRef="st_dbz"/>
+    <sequenceFlow id="f_st_dbz__e_ok" sourceRef="st_dbz" targetRef="e_ok"/>
+    <sequenceFlow id="f_st_da_qo__st_da_zo" sourceRef="st_da_qo" targetRef="st_da_zo"/>
+    <sequenceFlow id="f_st_da_zo__gw_da_o" sourceRef="st_da_zo" targetRef="gw_da_o"/>
+    <sequenceFlow id="f_gw_da_o__st_lq_o" sourceRef="gw_da_o" targetRef="st_lq_o" name="ja"><conditionExpression>=pfQuelleDa = true and pfZielDa = true</conditionExpression></sequenceFlow>
+    <sequenceFlow id="f_gw_da_o__e_fehlt_o" sourceRef="gw_da_o" targetRef="e_fehlt_o" name="nein"/>
+    <sequenceFlow id="f_st_lq_o__st_lz_o" sourceRef="st_lq_o" targetRef="st_lz_o"/>
+    <sequenceFlow id="f_st_lz_o__e_ok_o" sourceRef="st_lz_o" targetRef="e_ok_o"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_it_postfaecher_diagram">
+    <bpmndi:BPMNPlane id="proc_it_postfaecher_plane" bpmnElement="proc_it_postfaecher">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_an_di" bpmnElement="gw_an" isMarkerVisible="true"><omgdc:Bounds x="305" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="238" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_nein_di" bpmnElement="e_nein"><omgdc:Bounds x="312" y="292" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="280" y="332" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_sys_di" bpmnElement="gw_sys" isMarkerVisible="true"><omgdc:Bounds x="455" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="388" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_da_q_di" bpmnElement="st_da_q"><omgdc:Bounds x="580" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_da_z_di" bpmnElement="st_da_z"><omgdc:Bounds x="730" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_da_di" bpmnElement="gw_da" isMarkerVisible="true"><omgdc:Bounds x="905" y="135" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="838" y="91" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fehlt_di" bpmnElement="e_fehlt"><omgdc:Bounds x="912" y="292" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="332" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lq_di" bpmnElement="st_lq"><omgdc:Bounds x="1030" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lz_di" bpmnElement="st_lz"><omgdc:Bounds x="1180" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_dbq_di" bpmnElement="st_dbq"><omgdc:Bounds x="1330" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_dbz_di" bpmnElement="st_dbz"><omgdc:Bounds x="1480" y="120" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_dbz_di" bpmnElement="dor_st_dbz"><omgdc:Bounds x="1512" y="46" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1480" y="16" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_di" bpmnElement="e_ok"><omgdc:Bounds x="1662" y="142" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1630" y="182" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_da_qo_di" bpmnElement="st_da_qo"><omgdc:Bounds x="580" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_da_zo_di" bpmnElement="st_da_zo"><omgdc:Bounds x="730" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="gw_da_o_di" bpmnElement="gw_da_o" isMarkerVisible="true"><omgdc:Bounds x="905" y="435" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="838" y="391" width="80" height="40"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_fehlt_o_di" bpmnElement="e_fehlt_o"><omgdc:Bounds x="912" y="592" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="880" y="632" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lq_o_di" bpmnElement="st_lq_o"><omgdc:Bounds x="1030" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_lz_o_di" bpmnElement="st_lz_o"><omgdc:Bounds x="1180" y="420" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="dor_st_lz_o_di" bpmnElement="dor_st_lz_o"><omgdc:Bounds x="1212" y="524" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="1180" y="578" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_ok_o_di" bpmnElement="e_ok_o"><omgdc:Bounds x="1362" y="442" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="1330" y="482" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__gw_an_di" bpmnElement="f_s__gw_an"><omgdi:waypoint x="198" y="160"/><omgdi:waypoint x="305" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__gw_sys_di" bpmnElement="f_gw_an__gw_sys"><omgdi:waypoint x="355" y="160"/><omgdi:waypoint x="455" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="361" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_an__e_nein_di" bpmnElement="f_gw_an__e_nein"><omgdi:waypoint x="330" y="185"/><omgdi:waypoint x="330" y="292"/><bpmndi:BPMNLabel><omgdc:Bounds x="336" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sys__st_da_q_di" bpmnElement="f_gw_sys__st_da_q"><omgdi:waypoint x="505" y="160"/><omgdi:waypoint x="580" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="511" y="140" width="44" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_sys__st_da_qo_di" bpmnElement="f_gw_sys__st_da_qo"><omgdi:waypoint x="480" y="185"/><omgdi:waypoint x="480" y="460"/><omgdi:waypoint x="580" y="460"/><bpmndi:BPMNLabel><omgdc:Bounds x="486" y="191" width="44" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_da_q__st_da_z_di" bpmnElement="f_st_da_q__st_da_z"><omgdi:waypoint x="680" y="160"/><omgdi:waypoint x="730" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_da_z__gw_da_di" bpmnElement="f_st_da_z__gw_da"><omgdi:waypoint x="830" y="160"/><omgdi:waypoint x="905" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_da__st_lq_di" bpmnElement="f_gw_da__st_lq"><omgdi:waypoint x="955" y="160"/><omgdi:waypoint x="1030" y="160"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="140" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_da__e_fehlt_di" bpmnElement="f_gw_da__e_fehlt"><omgdi:waypoint x="930" y="185"/><omgdi:waypoint x="930" y="292"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="191" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lq__st_lz_di" bpmnElement="f_st_lq__st_lz"><omgdi:waypoint x="1130" y="160"/><omgdi:waypoint x="1180" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lz__st_dbq_di" bpmnElement="f_st_lz__st_dbq"><omgdi:waypoint x="1280" y="160"/><omgdi:waypoint x="1330" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_dbq__st_dbz_di" bpmnElement="f_st_dbq__st_dbz"><omgdi:waypoint x="1430" y="160"/><omgdi:waypoint x="1480" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_dbz__e_ok_di" bpmnElement="f_st_dbz__e_ok"><omgdi:waypoint x="1580" y="160"/><omgdi:waypoint x="1662" y="160"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_da_qo__st_da_zo_di" bpmnElement="f_st_da_qo__st_da_zo"><omgdi:waypoint x="680" y="460"/><omgdi:waypoint x="730" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_da_zo__gw_da_o_di" bpmnElement="f_st_da_zo__gw_da_o"><omgdi:waypoint x="830" y="460"/><omgdi:waypoint x="905" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_da_o__st_lq_o_di" bpmnElement="f_gw_da_o__st_lq_o"><omgdi:waypoint x="955" y="460"/><omgdi:waypoint x="1030" y="460"/><bpmndi:BPMNLabel><omgdc:Bounds x="961" y="440" width="18" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_gw_da_o__e_fehlt_o_di" bpmnElement="f_gw_da_o__e_fehlt_o"><omgdi:waypoint x="930" y="485"/><omgdi:waypoint x="930" y="592"/><bpmndi:BPMNLabel><omgdc:Bounds x="936" y="491" width="31" height="14"/></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lq_o__st_lz_o_di" bpmnElement="f_st_lq_o__st_lz_o"><omgdi:waypoint x="1130" y="460"/><omgdi:waypoint x="1180" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_lz_o__e_ok_o_di" bpmnElement="f_st_lz_o__e_ok_o"><omgdi:waypoint x="1280" y="460"/><omgdi:waypoint x="1362" y="460"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_dbz_di" bpmnElement="doa_st_dbz"><omgdi:waypoint x="1530" y="120"/><omgdi:waypoint x="1530" y="96"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="doa_st_lz_o_di" bpmnElement="doa_st_lz_o"><omgdi:waypoint x="1230" y="500"/><omgdi:waypoint x="1230" y="524"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>
