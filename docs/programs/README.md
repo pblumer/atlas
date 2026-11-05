@@ -6,12 +6,13 @@ Operational overview of multi-slice programmes for people and coding agents.
 See [delivery protocol](../development/program-delivery.md) and
 [strategic roadmap](../../ROADMAP.md).
 
-**8 programmes** · active: 7 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
+**9 programmes** · active: 8 · blocked: 0 · paused: 1 · planned: 0 · complete: 0
 
 | Programme | Status | Completed slices | Owner | Next action |
 | --- | --- | --- | --- | --- |
 | [atlas hub](../planning/blueprint-marketplace-program.md) | active | 1/4 | pblumer | Owner key ceremony for the atlas hub sample registry (atlas hub keygen, two offline backups checked with atlas hub fingerprint, publicKey in examples/hub/releases.json, secret ATLAS_HUB_SIGNING_KEY), first Pages publication and a Console import from a real installation; then rebase draft PR #1424 and finish verified installation finalization and restart recovery (#1422). |
 | [Capability-driven Automation](../planning/capability-driven-automation-program.md) | active | 2/9 | pblumer | Review and merge the evidence records (PR #1401); configure branch protection on main with code-owner review, which ADR-0483 requires before the first record is published; decide whether the first publication may freeze ADR-0485's v1alpha1 fields; then CDA3's first record: an Entra create-user suite against a fake Graph and the account contract it checks. |
+| [Cross-instance Messaging](../planning/cross-instance-messaging-program.md) | active | 0/8 | pblumer | CIM0: the owner describes the planned instances (how many, which roles, whether one is central, whether any crosses an organisation) so the open questions of ADR-0369 and ADR-0373 can be answered; then CIM1, ADR-0372's first cut: a peer Worker Type naming a configured peer, the full envelope, delivery to waiting subscriptions and the buffer only. |
 | [Identity-aware Execution](../planning/identity-aware-execution-program.md) | active | 0/9 | pblumer | Review ADR-0475 and IAE4's supervised versus external Worker trust boundary; define the next executable slice. |
 | [Device Automation](../planning/device-automation-program.md) | active | 0/10 | pblumer | Review IOT1 increment 1 and the IOT3 driver on branch claude/focused-gauss-i29wni; then IOT1 increment 2: compiler element, reserved job type, server Worker kind and atlas worker --connector device, so a model drives an output and, after it, the display. |
 | [Mobile & Field Experience](../planning/mobile-field-experience-program.md) | active | 0/8 | pblumer | MFE1 server and UI slices (#1492, #1495, #1497, #1498) are merged and the "published" question is decided (newest deployed version). Review and merge the handbook follow-up PR #1500, then collect physical iOS/Android acceptance of the self-service start in MFE0 #1451 before closing MFE1. |
@@ -49,6 +50,23 @@ Connect business outcomes to verified technical operation semantics and, only af
 | **CDA6** — Capability-aware BPMN binding | planned | unassigned | CDA2, CDA3 | — | Approve ADR-0482; keep a stable logical binding slot and explicit initially pinned Worker so a later authorized revision need not redeploy BPMN. No runtime rebinding in CDA6. |
 | **CDA7** — Policy-gated governed execution | planned | unassigned | CDA6 | — | Prove provider-specific ADR-0475 enforcement, fsync-gated effects and replay equality for the initially pinned binding. No automatic fallback or configured Worker hot-swap in CDA7. |
 | **CDA8** — Controlled Worker rebinding without redeployment | planned | unassigned | CDA6, CDA7 | [PR #1355](https://github.com/pblumer/atlas/pull/1355) | Review the proposed controlled-rebinding ADR. Operator-authorized A-to-B binding revisions affect only future jobs; existing queued/leased jobs stay pinned. Per-partition cutover, tenant/policy scope and crash/replay must be proven. No automatic dynamic selection. Review questions deferred until CDA7 has landed; the binding-slot scope is settled when CDA6 starts. |
+
+## Cross-instance Messaging (CIM)
+
+Processes on different Atlas instances exchange messages through a durable, addressed and authorized channel: a published, versioned process interface (ADR-0373), a qualified address and envelope (ADR-0369), delivery as a Worker job acknowledged once on the receiver's disk (ADR-0372), and a participant that names an interface rather than a node (ADR-0371, Proposed).
+
+**[Programme plan](../planning/cross-instance-messaging-program.md) · [Roadmap track](../../ROADMAP.md#milestone-cim--cross-instance-messaging-) · [Manifest](cim/program.json) · Reviewed: 2026-11-05**
+
+| Slice | Status | Owner | Dependencies | GitHub | Next gate / evidence |
+| --- | --- | --- | --- | --- | --- |
+| **CIM0** — Topology, trust and open questions | active | pblumer | — | — | Programme registered at the owner's request on 2026-11-05 with several instances planned; their description is still to come. Answer ADR-0369's open question (is a peer always an Atlas, do peers cross organisations) and ADR-0373's (per-publisher grant or a central catalogue); threat model for peer credentials on top of ADR-0129 and ADR-0410; decide ADR-0371 (Proposed). |
+| **CIM1** — First cut: deliver to a configured peer | planned | unassigned | CIM0 | — | ADR-0372 'The first cut': a reserved peer Worker Type whose Worker is a configured peer (base URL and vault credential reference, an ADR-0129 target); the whole ADR-0369 envelope including messageId and conversationId; the send step completes only when the receiver has the envelope past fsync; the receiver delivers to waiting subscriptions and the ADR-0370 buffer, never to a message start; a scoped token that may deliver to this node and nothing else; recovery tests on both sides. |
+| **CIM2** — Published process interface | planned | unassigned | CIM0 | — | ADR-0373: a versioned descriptor derived from a deployed definition — entry points, payloads, returns, terminal outcomes, commitments — published on purpose, with read and send grants kept apart; HTTP, MCP and Console. |
+| **CIM3** — Qualified entry points and start by message | planned | unassigned | CIM1, CIM2 | — | ADR-0369's full address (node, interface, contract version, entry point): a peer may start an instance only through a published entry point, authorized by that interface's send grant; a peer message never enters messageStarts unqualified. |
+| **CIM4** — A participant names an interface | planned | unassigned | CIM3 | — | ADR-0371 once accepted: atlas:interfaceRef and atlas:entryPoint in the model, the node resolved per server, checked at deploy; the Worker stops being the address. |
+| **CIM5** — Replies, errors and commitments across instances | planned | unassigned | CIM3 | — | The returns an interface promises — reply messages, BPMN errors, escalations — travel back on the conversationId; a commitment's deadline is something a consumer models as a boundary timer, because there is no transaction across two logs. |
+| **CIM6** — Operations across instances | planned | unassigned | CIM1 | — | What is in flight between nodes and where it waits, in the Console, MCP and /metrics; cross-instance flows in the estate view of ADR-0402; incidents that name the peer. |
+| **CIM7** — Intermittent peers (edge profile) | planned | unassigned | CIM1 | — | With IOT7 of the Device Automation programme: a node that is unreachable for hours; sends that park visibly and resume; message lifetimes that outlast an outage; what an edge node may decide alone. |
 
 ## Identity-aware Execution (IAE)
 

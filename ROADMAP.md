@@ -2544,6 +2544,25 @@ is **Accepted / Not started**.
 - 🔲 **IOT8 — People acting through a device**, decided with IAE.
 - 🔲 **IOT9 — MQTT bridge** for off-the-shelf devices (own ADR).
 
+## Milestone CIM — Cross-instance messaging 🔲
+
+A [delivery programme](docs/planning/cross-instance-messaging-program.md) for processes
+on different Atlas instances that send each other messages through a durable, addressed
+and authorized channel. The decisions exist — [ADR-0373](docs/adr/0373-published-process-interface.md),
+[ADR-0369](docs/adr/0369-cross-instance-message-addressing.md) and
+[ADR-0372](docs/adr/0372-peer-message-delivery-worker.md) are **Accepted / Not started**,
+[ADR-0371](docs/adr/0371-participant-binds-a-published-interface.md) is **Proposed** —
+and none of it is built.
+
+- 🚧 **CIM0 — Topology, trust and open questions.**
+- 🔲 **CIM1 — Deliver to a configured peer**, ADR-0372's first cut: durable on both sides, to waiting instances only.
+- 🔲 **CIM2 — Published process interface.**
+- 🔲 **CIM3 — Qualified entry points**, so a peer may start a process only through a published one.
+- 🔲 **CIM4 — A participant names an interface.**
+- 🔲 **CIM5 — Replies, errors and commitments across instances.**
+- 🔲 **CIM6 — Operations across instances.**
+- 🔲 **CIM7 — Intermittent peers**, with IOT7.
+
 ## Milestone K — Service catalogue, orders & the portal 🚧
 
 A parallel track: what a person may order, and a record of what they already hold. Three

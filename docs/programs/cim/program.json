@@ -1,0 +1,108 @@
+{
+  "id": "cim",
+  "name": "Cross-instance Messaging",
+  "summary": "Processes on different Atlas instances exchange messages through a durable, addressed and authorized channel: a published, versioned process interface (ADR-0373), a qualified address and envelope (ADR-0369), delivery as a Worker job acknowledged once on the receiver's disk (ADR-0372), and a participant that names an interface rather than a node (ADR-0371, Proposed).",
+  "status": "active",
+  "owner": "pblumer",
+  "last_reviewed": "2026-11-05",
+  "plan": "../../planning/cross-instance-messaging-program.md",
+  "milestone": "../../../ROADMAP.md#milestone-cim--cross-instance-messaging-",
+  "next_action": "CIM0: the owner describes the planned instances (how many, which roles, whether one is central, whether any crosses an organisation) so the open questions of ADR-0369 and ADR-0373 can be answered; then CIM1, ADR-0372's first cut: a peer Worker Type naming a configured peer, the full envelope, delivery to waiting subscriptions and the buffer only.",
+  "slices": [
+    {
+      "id": "CIM0",
+      "title": "Topology, trust and open questions",
+      "status": "active",
+      "owner": "pblumer",
+      "depends_on": [],
+      "issues": [],
+      "prs": [],
+      "note": "Programme registered at the owner's request on 2026-11-05 with several instances planned; their description is still to come. Answer ADR-0369's open question (is a peer always an Atlas, do peers cross organisations) and ADR-0373's (per-publisher grant or a central catalogue); threat model for peer credentials on top of ADR-0129 and ADR-0410; decide ADR-0371 (Proposed)."
+    },
+    {
+      "id": "CIM1",
+      "title": "First cut: deliver to a configured peer",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0372 'The first cut': a reserved peer Worker Type whose Worker is a configured peer (base URL and vault credential reference, an ADR-0129 target); the whole ADR-0369 envelope including messageId and conversationId; the send step completes only when the receiver has the envelope past fsync; the receiver delivers to waiting subscriptions and the ADR-0370 buffer, never to a message start; a scoped token that may deliver to this node and nothing else; recovery tests on both sides."
+    },
+    {
+      "id": "CIM2",
+      "title": "Published process interface",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM0"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0373: a versioned descriptor derived from a deployed definition — entry points, payloads, returns, terminal outcomes, commitments — published on purpose, with read and send grants kept apart; HTTP, MCP and Console."
+    },
+    {
+      "id": "CIM3",
+      "title": "Qualified entry points and start by message",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM1",
+        "CIM2"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0369's full address (node, interface, contract version, entry point): a peer may start an instance only through a published entry point, authorized by that interface's send grant; a peer message never enters messageStarts unqualified."
+    },
+    {
+      "id": "CIM4",
+      "title": "A participant names an interface",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "ADR-0371 once accepted: atlas:interfaceRef and atlas:entryPoint in the model, the node resolved per server, checked at deploy; the Worker stops being the address."
+    },
+    {
+      "id": "CIM5",
+      "title": "Replies, errors and commitments across instances",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM3"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "The returns an interface promises — reply messages, BPMN errors, escalations — travel back on the conversationId; a commitment's deadline is something a consumer models as a boundary timer, because there is no transaction across two logs."
+    },
+    {
+      "id": "CIM6",
+      "title": "Operations across instances",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "What is in flight between nodes and where it waits, in the Console, MCP and /metrics; cross-instance flows in the estate view of ADR-0402; incidents that name the peer."
+    },
+    {
+      "id": "CIM7",
+      "title": "Intermittent peers (edge profile)",
+      "status": "planned",
+      "owner": "unassigned",
+      "depends_on": [
+        "CIM1"
+      ],
+      "issues": [],
+      "prs": [],
+      "note": "With IOT7 of the Device Automation programme: a node that is unreachable for hours; sends that park visibly and resume; message lifetimes that outlast an outage; what an edge node may decide alone."
+    }
+  ]
+}
