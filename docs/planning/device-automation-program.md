@@ -4,7 +4,8 @@
 **Baseline checked:** 2026-11-05, `main` (programme registration only; no runtime implementation claimed).  
 **Roadmap owner:** [Milestone IOT](../../ROADMAP.md#milestone-iot--device-automation-).  
 **Architecture authority:** [ADR-draft-device-workers-for-the-physical-world](../adr/draft-device-workers-for-the-physical-world.md) (**Accepted / Not started**).  
-**Programme owner:** pblumer.
+**Programme owner:** pblumer.  
+**Reference device:** Raspberry Pi Zero 2 W (64-bit, `linux_arm64`; a stripped build measured 65.3 MB on 2026-11-05) with an e-paper HAT on the 40-pin header; the panel's exact model is still to be read off the HAT.
 
 ## Outcome and boundaries
 
