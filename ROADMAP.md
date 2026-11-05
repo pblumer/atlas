@@ -2540,7 +2540,7 @@ is **Accepted / Not started**.
 - 🔲 **IOT4 — PWM, I2C and 1-Wire.**
 - 🔲 **IOT5 — Microcontroller client** and a protocol conformance suite.
 - 🔲 **IOT6 — Edge server on a Pi**, with measured sizing.
-- 🔲 **IOT7 — Coupling an edge Atlas with a central one** (own ADR).
+- 🔲 **IOT7 — Coupling an edge Atlas with a central one**, on the cross-instance messaging of [ADR-0373](docs/adr/0373-published-process-interface.md), [ADR-0369](docs/adr/0369-cross-instance-message-addressing.md) and [ADR-0372](docs/adr/0372-peer-message-delivery-worker.md), none of it built yet.
 - 🔲 **IOT8 — People acting through a device**, decided with IAE.
 - 🔲 **IOT9 — MQTT bridge** for off-the-shelf devices (own ADR).
 

@@ -101,7 +101,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Needs its own ADR: two engines with their own logs have no cross-engine process today. Decide what crosses (messages, jobs, both), in which direction, and what each side may do while the other is unreachable."
+      "note": "Not a record of its own: process-to-process traffic between Atlas instances is already decided in ADR-0373 (a published, versioned process interface), ADR-0369 (qualified address and envelope), ADR-0372 (delivery to a peer is a Worker job, acknowledged once on the receiver's disk) and ADR-0371 (Proposed: a participant names an interface). All are Not started. IOT7 is the edge case of that work: an Atlas on a device that keeps running while the uplink is down, and whose sends park as visible tokens until the peer answers. What is landed between instances today is design-time and read-only: publishing an application to another server (ADR-0129) and one estate view across nodes (ADR-0402)."
     },
     {
       "id": "IOT8",

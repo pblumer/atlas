@@ -246,7 +246,8 @@ creates. Outputs need nothing beyond today's `worker` scope.
 4. `pwm.set`, `i2c.*`, `onewire.read`.
 5. Microcontroller reference client and the protocol conformance suite.
 6. Edge server on a Pi: sizing measured, an example application, the handbook card.
-7. Coupling an edge Atlas with a central one, in its own record.
+7. Coupling an edge Atlas with a central one, on the cross-instance messaging that
+   ADR-0373, ADR-0369 and ADR-0372 decide and that is not built yet.
 8. People acting through a device (a button that approves), decided with the
    Identity-aware Execution programme.
 9. MQTT bridge for off-the-shelf devices, in its own record.

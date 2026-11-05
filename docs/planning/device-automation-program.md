@@ -52,7 +52,7 @@ I6).
 | **IOT4 — PWM, I2C, 1-Wire** | 🔲 | IOT1 | `pwm.set`, `i2c.read`/`i2c.write`, `onewire.read` against configured devices |
 | **IOT5 — Microcontroller client** | 🔲 | IOT1, IOT2 | MicroPython client for a Pico 2 W and a protocol conformance suite; measured TLS long-poll within the device's RAM |
 | **IOT6 — Edge server on a Pi** | 🔲 | IOT1 | Measured sizing on Pi Zero W, Zero 2 W and Pi 5; example application; handbook |
-| **IOT7 — Edge and central coupling** | 🔲 | IOT6 | New ADR first: what crosses between two engines and what each may do while the other is unreachable |
+| **IOT7 — Edge and central coupling** | 🔲 | IOT6 | Builds on the cross-instance messaging already decided — ADR-0373 (published interface), ADR-0369 (address and envelope), ADR-0372 (peer delivery as a Worker job), ADR-0371 (Proposed) — none of which is built yet; IOT7 adds what an edge node may do while its peer is unreachable |
 | **IOT8 — People acting through a device** | 🔲 | IOT2, IOT3 | Decided with the [IAE programme](identity-aware-execution-program.md): to whom a button press is attributed before a device may complete human work |
 | **IOT9 — MQTT bridge** | 🔲 | IOT2 | Own ADR; a job completes on the effect, not on broker delivery |
 
@@ -73,7 +73,7 @@ IOT1 Linux outputs --+--> IOT2 inputs + device scope --+--> IOT5 microcontroller
                      |                                  +--> IOT9 MQTT
                      +--> IOT3 e-paper ----+--> IOT8 people at a device (with IAE)
                      +--> IOT4 PWM/I2C/1-Wire
-                     +--> IOT6 edge server --> IOT7 edge/central coupling
+                     +--> IOT6 edge server --> IOT7 edge/central coupling (on ADR-0369/0372/0373)
 ```
 
 ## Open questions
