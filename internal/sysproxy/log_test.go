@@ -1,4 +1,4 @@
-package main
+package sysproxy
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/internal/sysproxy"
 	"github.com/pblumer/atlas/logging"
 )
 
@@ -19,7 +18,7 @@ func TestInstallOutboundProxyLogsTheChoice(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = logging.Setup(os.Stderr, logging.DefaultFormat, logging.DefaultLevel) })
 
-	installOutboundProxy(func(k string) string {
+	InstallAndLog(func(k string) string {
 		if k == "HTTPS_PROXY" {
 			return "http://proxy.example:8080"
 		}
@@ -36,7 +35,7 @@ func TestInstallOutboundProxyLogsTheChoice(t *testing.T) {
 // Following the Windows settings, the line names them — and never the credentials a
 // proxy address may carry.
 func TestOutboundProxyAttrsNameTheWindowsSettings(t *testing.T) {
-	attrs := outboundProxyAttrs(sysproxy.ModeWindows, sysproxy.Settings{
+	attrs := logAttrs(ModeWindows, Settings{
 		AutoDetect: true, AutoConfigURL: "http://wpad.example/proxy.pac", Proxy: "user:pw@prx.example:8080", Bypass: "<local>",
 	})
 	got := map[string]string{}
@@ -49,7 +48,7 @@ func TestOutboundProxyAttrsNameTheWindowsSettings(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got[k], v)
 		}
 	}
-	if only := outboundProxyAttrs(sysproxy.ModeNone, sysproxy.Settings{}); len(only) != 1 {
+	if only := logAttrs(ModeNone, Settings{}); len(only) != 1 {
 		t.Errorf("with no settings to follow the line carries %d attributes, want the source alone", len(only))
 	}
 }

@@ -26,7 +26,10 @@ const (
 	// worker receives the equivalent typed command-line flag from its parent.
 	SandboxEnv = "ATLAS_SCRIPT_SANDBOX"
 
-	sandboxSubcommand = "script-sandbox"
+	// SandboxSubcommand is the subcommand a strict sandbox launch re-executes this
+	// process with. Every executable that hosts the script worker — atlas and
+	// atlas-workers — dispatches it to [RunSandbox].
+	SandboxSubcommand = "script-sandbox"
 )
 
 // ParseSandboxMode parses the operator-facing script sandbox setting. Empty is
@@ -187,7 +190,7 @@ func (e *CmdExec) prepareCommand(args, env []string) (name string, launchArgs, l
 	}
 	remove := func() { _ = os.RemoveAll(scratch) }
 
-	launchArgs = []string{sandboxSubcommand, "--scratch", scratch, "--", interpreter}
+	launchArgs = []string{SandboxSubcommand, "--scratch", scratch, "--", interpreter}
 	launchArgs = append(launchArgs, args...)
 	return launcher, launchArgs, privateScratchEnvironment(env, scratch), remove, nil
 }

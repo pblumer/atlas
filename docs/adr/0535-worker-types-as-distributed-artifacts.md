@@ -431,6 +431,22 @@ one is step 3's; the server checks shape only. Still open in step 1: the built-i
 Types' own dependencies on `job`, `compiler`, `expr` and `dmn`, which step 2 does not need
 removed and step 4 removes with the server half.
 
+**2026-11-05 — step 2: the worker-only executable.** `cmd/atlas-workers` builds
+`atlas-workers`, which runs the worker command and nothing else; `atlas worker` runs the
+same command, now in `internal/workercmd` (with the CA pool and outbound-proxy start-up
+moved to `internal/trustroots` and `internal/sysproxy` so both executables share them).
+The supervisor runs `atlas-workers` when it is a regular, executable file beside the
+server binary, without the `worker` subcommand, and falls back to its own `worker` mode
+otherwise; `ATLAS_WORKERS_BINARY` (`self` or a path) is the operator's override. The
+strict script sandbox re-executes whichever binary hosts the script worker, so
+`atlas-workers` answers `script-sandbox` too. Release archives, the container image and
+`make server` ship both binaries. Measured on linux/amd64: `atlas` 88 MB, `atlas-workers`
+35 MB. **What step 2 does not yet deliver:** the server binary still contains every
+Worker Type, because some kinds still run in-process and the server half
+(`api/connectorkinds.go`, `api/superviseenv.go`) imports their packages; that goes with
+step 4. Nor is `atlas-workers` verified by digest before launch — it is trusted as the
+server binary is, by sitting beside it; verified artifacts are step 3.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker
