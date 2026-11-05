@@ -70,6 +70,12 @@ _Changed_ / _Removed_ for each version.
   grants both permissions to the Entra worker app. See ADR-0531
   and `docs/entra-permissions.md`.
 
+### Changed
+- **The Console's welcome card greets the person signed in by name.** Its heading reads
+  "Welcome, Tina Muster" — the display name where one is set, else the username, as the
+  account menu shows them — instead of "Welcome to atlas". With sign-in off there is
+  nobody to name, and it still welcomes to atlas.
+
 ### Fixed
 - **The top bar stays in view while a page scrolls.** In every app the bar with the app
   switcher, the view names and the account menu disappeared after a little less than one
