@@ -1,0 +1,88 @@
+{
+  "type": "default",
+  "id": "lz-weiterfuehren",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Vertrag am Jahrestag weiterführen? · Continue the contract at the anniversary?**\n\nVertrag · Contract: {{wfVertrag}} · {{wfKunde}} · endet am · ends on {{wfEnde}}\n\nBelegung · Use: {{wfBelegung}}"
+    },
+    {
+      "key": "weiterArt",
+      "type": "radio",
+      "label": "Wie weiter · How to continue",
+      "values": [
+        {
+          "label": "Verlängern · Extend",
+          "value": "verlaengern"
+        },
+        {
+          "label": "Senken · Reduce",
+          "value": "senken"
+        },
+        {
+          "label": "Beenden · End",
+          "value": "beenden"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterEnde",
+      "type": "textfield",
+      "label": "Neues Ende (verlängern) · New end",
+      "validate": {
+        "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterE3",
+      "type": "textfield",
+      "label": "Menge danach (senken) E3 · Quantity afterwards E3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterE5",
+      "type": "textfield",
+      "label": "Menge danach (senken) E5 · Quantity afterwards E5",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterF3",
+      "type": "textfield",
+      "label": "Menge danach (senken) F3 · Quantity afterwards F3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "weiterAbgeben",
+      "type": "textarea",
+      "label": "Positionen, die abgeben (senken) · Positions that give up",
+      "description": "Eine Position je Zeile (orderId/positionId); diese gehen in der Karenz zuerst. · One per line.",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

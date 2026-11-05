@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-beenden",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Vertrag beenden · End the contract**\n\nBetroffene Personen · Persons affected: {{betroffen.anzahl}}. Jede Lizenz wird zurückgegeben. · Every licence is returned."
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Beenden · End",
+          "value": "beenden"
+        },
+        {
+          "label": "Zurückweisen · Refuse",
+          "value": "zurueckweisen"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

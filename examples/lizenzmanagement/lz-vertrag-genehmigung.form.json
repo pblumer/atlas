@@ -1,0 +1,81 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-genehmigung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenzvertrag genehmigen · Approve the licence contract**\n\nVertrag · Contract: {{antrag.nummer}} · {{antrag.kunde}} · PSP {{antrag.psp}}\n\nLaufzeit · Term: {{antrag.beginn}} – {{antrag.ende}}\n\nDie Mengen sind vorbelegt; eine angepasste Menge gilt. · Quantities are prefilled; an adjusted quantity applies."
+    },
+    {
+      "key": "kontingentText",
+      "type": "textarea",
+      "label": "Kontingent im EA · Quota in the EA",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeE3",
+      "type": "textfield",
+      "label": "Menge E3 · Quantity E3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeE5",
+      "type": "textfield",
+      "label": "Menge E5 · Quantity E5",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeF3",
+      "type": "textfield",
+      "label": "Menge F3 · Quantity F3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigen · Approve",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

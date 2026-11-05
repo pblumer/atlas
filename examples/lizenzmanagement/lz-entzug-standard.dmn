@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzEntzugStandard: wem in der Abo-Karenz (P8) zuerst die Lizenz entzogen wird, wenn der Kunde keine eigene Tabelle
+  nennt. Eine eigene Tabelle des Kunden hat dieselben Eingaben und Ausgaben.
+  Eingaben: organisationseinheit, funktion, bezogenSeit (Datum), tageSeitBezug, extern (Wahrheitswert), sku,
+            tageSeitAnmeldung (Zahl oder leer, wenn Entra keine Anmeldung kennt)
+  Ausgaben: aktion (entziehen | behalten), prioritaet (1 = zuerst entziehen)
+  Die Reihenfolge innerhalb derselben Priorität: zuletzt bezogen zuerst (das Vertragsbuch kennt den Beginn jedes
+  Bezugs). Die vom Kunden genannten Personen kommen immer vor allen anderen.
+  VORSCHLAG: Geschäftsleitung behält, Externe zuerst, wer seit 60 Tagen nicht angemeldet ist danach, E5 vor E3.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzEntzugStandard" name="LzEntzugStandard" namespace="http://atlas/dmn">
+  <inputData id="id_organisationseinheit" name="organisationseinheit"/>
+  <inputData id="id_funktion" name="funktion"/>
+  <inputData id="id_tageSeitBezug" name="tageSeitBezug"/>
+  <inputData id="id_extern" name="extern"/>
+  <inputData id="id_sku" name="sku"/>
+  <inputData id="id_tageSeitAnmeldung" name="tageSeitAnmeldung"/>
+  <inputData id="id_bezogenSeit" name="bezogenSeit"/>
+  <decision id="LzEntzugStandard" name="LzEntzugStandard">
+    <informationRequirement id="ir_organisationseinheit"><requiredInput href="#id_organisationseinheit"/></informationRequirement>
+    <informationRequirement id="ir_funktion"><requiredInput href="#id_funktion"/></informationRequirement>
+    <informationRequirement id="ir_tageSeitBezug"><requiredInput href="#id_tageSeitBezug"/></informationRequirement>
+    <informationRequirement id="ir_extern"><requiredInput href="#id_extern"/></informationRequirement>
+    <informationRequirement id="ir_sku"><requiredInput href="#id_sku"/></informationRequirement>
+    <informationRequirement id="ir_tageSeitAnmeldung"><requiredInput href="#id_tageSeitAnmeldung"/></informationRequirement>
+    <informationRequirement id="ir_bezogenSeit"><requiredInput href="#id_bezogenSeit"/></informationRequirement>
+    <decisionTable id="dt_LzEntzugStandard" hitPolicy="FIRST">
+      <input id="in_0" label="organisationseinheit"><inputExpression id="ie_0" typeRef="string"><text>organisationseinheit</text></inputExpression></input>
+      <input id="in_1" label="funktion"><inputExpression id="ie_1" typeRef="string"><text>funktion</text></inputExpression></input>
+      <input id="in_2" label="tageSeitBezug"><inputExpression id="ie_2" typeRef="number"><text>tageSeitBezug</text></inputExpression></input>
+      <input id="in_3" label="extern"><inputExpression id="ie_3" typeRef="boolean"><text>extern</text></inputExpression></input>
+      <input id="in_4" label="sku"><inputExpression id="ie_4" typeRef="string"><text>sku</text></inputExpression></input>
+      <input id="in_5" label="tageSeitAnmeldung"><inputExpression id="ie_5" typeRef="number"><text>tageSeitAnmeldung</text></inputExpression></input>
+      <output id="out_0" label="aktion" name="aktion" typeRef="string"/>
+      <output id="out_1" label="prioritaet" name="prioritaet" typeRef="number"/>
+      <rule id="r1">
+        <description>Geschäftsleitung behält die Lizenz</description>
+        <inputEntry id="r1_i0"><text>"Geschäftsleitung"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <inputEntry id="r1_i3"><text>-</text></inputEntry>
+        <inputEntry id="r1_i4"><text>-</text></inputEntry>
+        <inputEntry id="r1_i5"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"behalten"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Geschäftsleitung (Funktion)</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>matches(?, "(?i)geschäftsleit|ceo|cfo")</text></inputEntry>
+        <inputEntry id="r2_i2"><text>-</text></inputEntry>
+        <inputEntry id="r2_i3"><text>-</text></inputEntry>
+        <inputEntry id="r2_i4"><text>-</text></inputEntry>
+        <inputEntry id="r2_i5"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"behalten"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Externe zuerst</description>
+        <inputEntry id="r3_i0"><text>-</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <inputEntry id="r3_i2"><text>-</text></inputEntry>
+        <inputEntry id="r3_i3"><text>true</text></inputEntry>
+        <inputEntry id="r3_i4"><text>-</text></inputEntry>
+        <inputEntry id="r3_i5"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"entziehen"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>1</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Seit 60 Tagen nicht angemeldet</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>-</text></inputEntry>
+        <inputEntry id="r4_i3"><text>-</text></inputEntry>
+        <inputEntry id="r4_i4"><text>-</text></inputEntry>
+        <inputEntry id="r4_i5"><text>&gt; 60</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"entziehen"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>2</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>E5 vor E3</description>
+        <inputEntry id="r5_i0"><text>-</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>-</text></inputEntry>
+        <inputEntry id="r5_i3"><text>-</text></inputEntry>
+        <inputEntry id="r5_i4"><text>"E5"</text></inputEntry>
+        <inputEntry id="r5_i5"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"entziehen"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>3</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Alle anderen</description>
+        <inputEntry id="r6_i0"><text>-</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <inputEntry id="r6_i3"><text>-</text></inputEntry>
+        <inputEntry id="r6_i4"><text>-</text></inputEntry>
+        <inputEntry id="r6_i5"><text>-</text></inputEntry>
+        <outputEntry id="r6_o0"><text>"entziehen"</text></outputEntry>
+        <outputEntry id="r6_o1"><text>4</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

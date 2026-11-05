@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzAbgleich: ob der tägliche Abgleich (P5) eine Abweichung zwischen Tenant und Atlas meldet.
+  Eingaben: belegtTenant (consumedUnits der SKU), belegtAtlas (Summe belegt aller Vertragsbücher)
+  Ausgaben: abweichung (Wahrheitswert), hinweis
+  Eine Differenz heisst meist: Lizenzen wurden ausserhalb von Atlas vergeben oder entzogen, oder ein Bestand ist noch
+  nicht übernommen (P9).
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzAbgleich" name="LzAbgleich" namespace="http://atlas/dmn">
+  <inputData id="id_belegtAtlas" name="belegtAtlas"/>
+  <inputData id="id_belegtTenant" name="belegtTenant"/>
+  <decision id="LzAbgleich" name="LzAbgleich">
+    <informationRequirement id="ir_belegtAtlas"><requiredInput href="#id_belegtAtlas"/></informationRequirement>
+    <informationRequirement id="ir_belegtTenant"><requiredInput href="#id_belegtTenant"/></informationRequirement>
+    <decisionTable id="dt_LzAbgleich" hitPolicy="FIRST">
+      <input id="in_0" label="belegtTenant"><inputExpression id="ie_0" typeRef="number"><text>belegtTenant</text></inputExpression></input>
+      <input id="in_1" label="belegtAtlas"><inputExpression id="ie_1" typeRef="number"><text>belegtAtlas</text></inputExpression></input>
+      <output id="out_0" label="abweichung" name="abweichung" typeRef="boolean"/>
+      <output id="out_1" label="hinweis" name="hinweis" typeRef="string"/>
+      <rule id="r1">
+        <description>Kein Stand aus dem Tenant</description>
+        <inputEntry id="r1_i0"><text>null</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>false</text></outputEntry>
+        <outputEntry id="r1_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Gleich</description>
+        <inputEntry id="r2_i0"><text>-</text></inputEntry>
+        <inputEntry id="r2_i1"><text>belegtTenant</text></inputEntry>
+        <outputEntry id="r2_o0"><text>false</text></outputEntry>
+        <outputEntry id="r2_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Mehr im Tenant als in Atlas</description>
+        <inputEntry id="r3_i0"><text>-</text></inputEntry>
+        <inputEntry id="r3_i1"><text>&lt; belegtTenant</text></inputEntry>
+        <outputEntry id="r3_o0"><text>true</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Im Tenant sind mehr Lizenzen belegt als in den Verträgen: vergeben ausserhalb von Atlas oder noch nicht übernommen (P9)."</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Weniger im Tenant als in Atlas</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <inputEntry id="r4_i1"><text>&gt; belegtTenant</text></inputEntry>
+        <outputEntry id="r4_o0"><text>true</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"In den Verträgen sind mehr Lizenzen belegt als im Tenant: entzogen ausserhalb von Atlas oder eine Rückgabe ohne Freigabe."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

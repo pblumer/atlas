@@ -31,6 +31,7 @@ Trying out the samples should leave a handful of applications behind, not one pe
 | `verwaltung-dienstleistungen` | Beispiel: Dienstleistungen der Verwaltung | shop package with two catalogues |
 | `m365-dienste` | Beispiel: Microsoft-365-Dienste | shop package |
 | `ad-dienste` | Beispiel: Active-Directory-Dienste | shop package |
+| `lizenzmanagement` | Beispiel: Lizenzmanagement | shop package; works with `m365-dienste` |
 
 Rules, checked by `go test ./cmd/atlas`:
 

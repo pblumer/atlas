@@ -1,0 +1,44 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-verrechnung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Form der Verrechnung · Billing format**\n\nGilt ab dem nächsten Monat. · Applies from next month."
+    },
+    {
+      "key": "exportForm",
+      "type": "radio",
+      "label": "Form · Format",
+      "values": [
+        {
+          "label": "CSV-Datei · CSV file",
+          "value": "csv"
+        },
+        {
+          "label": "Liste per Mail · List by mail",
+          "value": "mail"
+        },
+        {
+          "label": "SAP-Format · SAP format",
+          "value": "sap"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "exportAn",
+      "type": "textfield",
+      "label": "Empfänger · Recipient",
+      "description": "Funktionsadresse; leer heisst unsere Finanzen. · Finance mailbox; empty means our finance team.",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

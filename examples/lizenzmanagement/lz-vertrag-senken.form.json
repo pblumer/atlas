@@ -1,0 +1,43 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-senken",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Senken · Reduce**\n\nDie Menge danach pro SKU; leer heisst unverändert. Reicht sie nicht für alle Personen mit Lizenz, wählt ihr danach, wer abgibt. · The quantity afterwards; empty means unchanged."
+    },
+    {
+      "key": "neuE3",
+      "type": "textfield",
+      "label": "Menge danach E3 · Quantity afterwards E3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neuE5",
+      "type": "textfield",
+      "label": "Menge danach E5 · Quantity afterwards E5",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "neuF3",
+      "type": "textfield",
+      "label": "Menge danach F3 · Quantity afterwards F3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

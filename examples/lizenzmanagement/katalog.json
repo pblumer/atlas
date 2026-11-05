@@ -1,0 +1,172 @@
+{
+  "publish": true,
+  "catalogs": [
+    {
+      "id": "cat-lz-kunden",
+      "texts": {
+        "de": "Lizenzmanagement: Verträge",
+        "en": "Licence management: contracts"
+      },
+      "rank": 700,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "lz-lizenzvertrag"
+      ],
+      "groups": [
+        "{{zielgruppe}}"
+      ],
+      "edges": []
+    },
+    {
+      "id": "cat-lz-betrieb",
+      "texts": {
+        "de": "Lizenzmanagement: Betrieb",
+        "en": "Licence management: operations"
+      },
+      "rank": 710,
+      "languages": [
+        "de",
+        "en"
+      ],
+      "items": [
+        "lz-lizenzvertrag"
+      ],
+      "groups": [
+        "{{tenant-verantwortung}}"
+      ],
+      "edges": []
+    }
+  ],
+  "products": [
+    {
+      "id": "lz-lizenzvertrag",
+      "homeCatalog": "cat-lz-kunden",
+      "state": "active",
+      "texts": {
+        "de": "Lizenzvertrag Microsoft 365",
+        "en": "Microsoft 365 licence contract"
+      },
+      "descriptions": {
+        "de": "Eine Menge Microsoft-365-Lizenzen pro SKU (E3, E5, F3) für einen Kunden oder ein Projekt, für eine Laufzeit, verrechnet auf ein PSP-Element. Die Tenant-verantwortliche Person genehmigt. Danach: aufstocken, senken, verlängern, Entzugsregel und Form der Verrechnung ändern, beenden.",
+        "en": "A number of Microsoft 365 licences per SKU (E3, E5, F3) for a customer or a project, for a term, charged to a WBS element. The person responsible for the tenant approves. Afterwards: increase, reduce, extend, change the withdrawal rule and the billing format, end."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_lz_vertrag",
+      "configForm": "lz-vertrag-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "lz.vertrag.bestellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "lz.vertrag.beenden",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Vertrag beenden",
+            "en": "End the contract"
+          }
+        },
+        {
+          "key": "aufstocken",
+          "message": "lz.vertrag.aufstocken",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Aufstocken",
+            "en": "Increase"
+          },
+          "form": "lz-vertrag-aufstocken"
+        },
+        {
+          "key": "senken",
+          "message": "lz.vertrag.senken",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Senken",
+            "en": "Reduce"
+          },
+          "form": "lz-vertrag-senken"
+        },
+        {
+          "key": "verlaengern",
+          "message": "lz.vertrag.verlaengern",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Verlängern",
+            "en": "Extend"
+          },
+          "form": "lz-vertrag-verlaengern"
+        },
+        {
+          "key": "entzugsregel",
+          "message": "lz.vertrag.entzugsregel",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Entzugsregel ändern",
+            "en": "Change the withdrawal rule"
+          },
+          "form": "lz-vertrag-entzugsregel"
+        },
+        {
+          "key": "verrechnung",
+          "message": "lz.vertrag.verrechnung",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Form der Verrechnung ändern",
+            "en": "Change the billing format"
+          },
+          "form": "lz-vertrag-verrechnung"
+        }
+      ],
+      "keywords": [
+        "Lizenz",
+        "Licence",
+        "Vertrag",
+        "Contract",
+        "EA",
+        "PSP",
+        "WBS",
+        "E3",
+        "E5",
+        "F3",
+        "Kontingent",
+        "Quota"
+      ],
+      "category": "lizenzen",
+      "categoryTexts": {
+        "de": "Lizenzen",
+        "en": "Licences"
+      }
+    }
+  ]
+}
