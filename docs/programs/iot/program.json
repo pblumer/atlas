@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-05",
   "plan": "../../planning/device-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-iot--device-automation-",
-  "next_action": "Run the e-paper hardware test on the reference Pi Zero 2 W (SPI enabled, ATLAS_EPAPER_HW=waveshare-2in13-v2) to settle the panel generation; review IOT1 increment 1 and the IOT3 driver; then IOT1 increment 2: compiler element, reserved job type, server Worker kind and atlas worker --connector device.",
+  "next_action": "Review IOT1 increment 1 and the IOT3 driver on branch claude/focused-gauss-i29wni; then IOT1 increment 2: compiler element, reserved job type, server Worker kind and atlas worker --connector device, so a model drives an output and, after it, the display.",
   "slices": [
     {
       "id": "IOT0",
@@ -52,7 +52,7 @@
       ],
       "issues": [],
       "prs": [],
-      "note": "Started ahead of its turn at the owner's request on 2026-11-05, a recorded exception to the limit of two active slices. Driver increment on branch claude/focused-gauss-i29wni: connector/device/epaper drives the Waveshare 2.13inch V2, V3 and V4 panels (register sequences restated from Waveshare's drivers and pinned by test), draws a 250×122 Frame with the Go fonts, and talks to the HAT through the device core's Chip and spidev; an opt-in hardware test (ATLAS_EPAPER_HW=<model>) draws a test picture. Open: the reference panel's generation (V2 assumed from its 2020 date code), partial refresh, content hash, refresh interval, stale marker, the model's layout and display.show itself."
+      "note": "Started ahead of its turn at the owner's request on 2026-11-05, a recorded exception to the limit of two active slices. Driver increment on branch claude/focused-gauss-i29wni: connector/device/epaper drives the Waveshare 2.13inch V2, V3 and V4 panels (register sequences restated from Waveshare's drivers and pinned by test), draws a 250×122 Frame with the Go fonts, and talks to the HAT through the device core's Chip and spidev; an opt-in hardware test (ATLAS_EPAPER_HW=<model>) draws a test picture. On the reference Pi Zero 2 W the V3 sequence drew the test picture and V2 left the panel blank (2026-11-05): the reference panel is waveshare-2in13-v3. Open: partial refresh, content hash, refresh interval, stale marker, the model's layout and display.show itself."
     },
     {
       "id": "IOT4",

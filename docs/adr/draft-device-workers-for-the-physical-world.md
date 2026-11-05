@@ -281,6 +281,10 @@ under `display.show`:
   getbuffer lays it; text in the Go fonts, with Umlauts; the HAT link on the device
   core's `Chip` (reset 17, data/command 25, busy 24, power 18) and spidev (mode 0,
   4 MHz, writes of at most 4096 bytes); a busy wait bounded at 20 s.
+- On hardware (2026-11-05, the reference Pi Zero 2 W with a Waveshare 2.13inch HAT
+  Rev2.1): `waveshare-2in13-v3` drew the test picture; `waveshare-2in13-v2` left the
+  panel blank with its busy line never rising, which is what a wrong generation looks
+  like. The panel's model must therefore be configured, not guessed from its board.
 - Not yet: partial refresh, the content hash and refresh interval, the stale marker,
   and the layout a model states — the driver draws what it is given.
 
