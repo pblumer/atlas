@@ -872,7 +872,14 @@ Each spec loads its own model via `harness.html?model=…`; the `.bpmn` fixtures
   which of how many, who deployed it and who adjusted its layout, and compares the draft with *that*
   version. The bar stays one row with the chip on it. Deploy from a draft saves it first and only
   once; a new diagram's first deploy saves it; a version opened read-only is deployed without a
-  save, and the Deploy panel says the draft is left alone.
+  save, and the Deploy panel says the draft is left alone. The arrows beside the chip
+  ([ADR-draft-modeler-walks-and-restores-versions](../docs/adr/draft-modeler-walks-and-restores-versions.md))
+  open the version before and after the one shown and, from the newest, the draft; the panel lists
+  every record; a draft never deployed or a lone version has no arrows; an edited version is left
+  only on a yes. **Restore as draft** warns, with the differences, when the draft is not the newest
+  version's model, answers the save's 409 without a second dialog and opens the draft; with no
+  draft it makes the version one without a warning, and Cancel writes nothing; a version the draft
+  already is offers no restore.
 - **`xml-source.spec.mjs`** ([ADR-0457](../docs/adr/0457-modeler-xml-source.md)):
   the **XML source** view in the process and decision editors (`xml-source-harness.html` mounts the
   real `editor.js`; the decision editor runs in the Console against a stubbed server). The menu
