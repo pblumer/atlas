@@ -95,6 +95,10 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **An application's artifact table names types plainly.** The type column reads "Prozess" (was
+  "Diagramm") for a BPMN diagram and "Regel" (was "Entscheidungsreferenz") for a DMN reference,
+  in English "Process" and "Rule". The notation pill (BPMN, DMN, FORM) moved from the name column
+  into the type column, so the name column holds the name and its key alone.
 - **The Console's welcome card greets the person signed in by name.** Its heading reads
   "Welcome, Tina Muster" — the display name where one is set, else the username, as the
   account menu shows them — instead of "Welcome to atlas". With sign-in off there is
