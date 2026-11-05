@@ -235,6 +235,9 @@ const STRINGS = {
     'services.col.order': 'Bestellung',
     'services.count': '{n} vorhanden',
     'services.building': '{n} im Aufbau',
+    'link.copy': 'Link kopieren',
+    'link.copied': 'Link kopiert.',
+    'link.copyFailed': 'Der Link konnte nicht kopiert werden.',
     'services.who': 'Für wen',
     'services.who.me': 'Für mich',
     'services.who.others': 'Für andere',
@@ -502,6 +505,9 @@ const STRINGS = {
     'services.col.order': 'Order',
     'services.count': '{n} held',
     'services.building': '{n} being set up',
+    'link.copy': 'Copy link',
+    'link.copied': 'Link copied.',
+    'link.copyFailed': 'The link could not be copied.',
     'services.who': 'For whom',
     'services.who.me': 'For me',
     'services.who.others': 'For others',
@@ -769,6 +775,9 @@ const STRINGS = {
     'services.col.order': 'Commande',
     'services.count': '{n} disponible(s)',
     'services.building': '{n} en cours de mise en place',
+    'link.copy': 'Copier le lien',
+    'link.copied': 'Lien copié.',
+    'link.copyFailed': 'Le lien n’a pas pu être copié.',
     'services.who': 'Pour qui',
     'services.who.me': 'Pour moi',
     'services.who.others': 'Pour d’autres',
@@ -1035,6 +1044,9 @@ const STRINGS = {
     'services.col.order': 'Ordine',
     'services.count': '{n} disponibili',
     'services.building': '{n} in allestimento',
+    'link.copy': 'Copia link',
+    'link.copied': 'Link copiato.',
+    'link.copyFailed': 'Non è stato possibile copiare il link.',
     'services.who': 'Per chi',
     'services.who.me': 'Per me',
     'services.who.others': 'Per altri',
@@ -1489,6 +1501,8 @@ const state = {
   // request to the process — and actionSent the last action asked, shown under its
   // position.
   lineActions: new Map(),
+  // actionsAsked is which positions' actions this load has asked for already.
+  actionsAsked: new Set(),
   acting: '',
   actingCommand: '',
   actionSent: null,
@@ -1689,13 +1703,7 @@ const state = {
 // is a different question from whether it sits inside it, and this one is about
 // where it sits.
 function parentIn(rel, child) {
-  for (const [whole, parts] of Object.entries((rel || {}).includes || {})) {
-    if ((parts || []).includes(child)) return whole;
-  }
-  for (const [whole, parts] of Object.entries((rel || {}).options || {})) {
-    if ((parts || []).includes(child)) return whole;
-  }
-  return '';
+  return parentMap(rel || {}).get(child) || '';
 }
 
 // levelOf says what one position is called, and it is the only thing that does
@@ -2061,13 +2069,19 @@ async function loadCatalogue() {
   // is drawn, or the first paint would be in a language the switch cannot show as
   // chosen.
   settleLocale();
-  state.release = null;
+  // The newest release of each catalogue, and only that: a catalogue that is
+  // worked on has hundreds, and the list route sent all of them (?limit=1,
+  // releaseindex.go). Asked for all catalogues at once rather than one after
+  // another, so the answers' times do not add up.
+  const answers = await Promise.all(state.catalogs.map((c) =>
+    api(`/api/v1/catalogs/${encodeURIComponent(c.id)}/releases?limit=1`)));
+  const newest = answers.filter((r) => r && r.length).map((r) => r[0]);
+  // Unchanged releases are kept as they are: a refresh that found nothing new
+  // must not throw away what the page worked out from them (memo below).
+  const same = (state.newest || []).length === newest.length
+    && newest.every((r, i) => state.newest[i].id === r.id);
+  if (same && state.release) return;
   state.releaseOf = {};
-  const newest = [];
-  for (const c of state.catalogs) {
-    const releases = await api(`/api/v1/catalogs/${encodeURIComponent(c.id)}/releases`);
-    if (releases && releases.length) newest.push(releases[0]);
-  }
   state.release = newest.length ? mergeReleases(newest) : null;
   // Kept apart as well: the tile layout draws one row per catalogue, and a merged
   // release no longer says which catalogue offered what.
@@ -2182,6 +2196,7 @@ async function loadDirectory() {
 
 async function load() {
   state.error = '';
+  state.actionsAsked = new Set();
   // First, because everything below needs a session: a load that read the
   // catalogue first would spend a refusal before establishing there is nobody to
   // refuse, and would then have to unpick which of the two answers it was.
@@ -2191,23 +2206,29 @@ async function load() {
     render();
     return;
   }
-  // Two chains and three single reads, at once. Only a chain is ordered inside:
-  // the releases are read under the catalogue's id, and a position's actions are
-  // asked of the order list the open tasks have been merged into. Everything else
-  // is independent, and read one after another the answers' times added up to the
+  // Every read at once. Only the catalogue is a chain inside (its releases are
+  // read under its id); a position's actions are asked when its entry is opened
+  // (askLineActions). Read one after another the answers' times added up to the
   // seconds the shop said it was loading. A failure still fails the load, as it
   // did when the reads were in turn.
   await Promise.all([
     loadCatalogue(),
-    loadOrdersAndTasks().then(loadLineActions),
+    loadOrdersAndTasks(),
     loadHeld(),
     loadFavourites(),
     loadDirectory(),
     loadReports(),
   ]);
   loadWhoIAm();
+  // A link the page was opened with is applied once there is a catalogue to apply
+  // it to; later loads leave the reader where they are.
+  if (!state.loaded && location.hash) {
+    applyRoute(location.hash);
+    routeStep = `${state.view}|${state.productPage}|${state.svcOpen}`;
+  }
   state.loaded = true;
   render();
+  startRefresh();
 }
 
 // loadWhoIAm asks what this account may do, and nothing else.
@@ -2385,16 +2406,52 @@ function renderSignIn() {
 // A part is shown under the whole it belongs to rather than beside it, or the
 // catalogue would read as a list of components.
 function products(release) {
-  const included = new Set();
-  for (const parts of Object.values(release.includes || {})) parts.forEach((p) => included.add(p));
-  for (const parts of Object.values(release.options || {})) parts.forEach((p) => included.add(p));
-  return (release.items || []).filter((i) => !included.has(i.id));
+  return memo(release, 'products', () => {
+    const included = new Set();
+    for (const parts of Object.values(release.includes || {})) parts.forEach((p) => included.add(p));
+    for (const parts of Object.values(release.options || {})) parts.forEach((p) => included.add(p));
+    return (release.items || []).filter((i) => !included.has(i.id));
+  });
 }
 
 function itemsById(release) {
-  const by = {};
-  for (const i of release.items || []) by[i.id] = i;
-  return by;
+  return memo(release, 'byId', () => {
+    const by = {};
+    for (const i of release.items || []) by[i.id] = i;
+    return by;
+  });
+}
+
+// memo remembers what the page works out from a release, per release. A release is
+// frozen (ADR-0312) and the page never changes one it has read, so an answer about
+// it stays true for as long as the page holds it — and the page asked the same
+// questions over and over: every row of "my services" built the whole id map
+// again, every level walked every edge again. Keyed by the release object itself,
+// so a new release (a refresh that found one) is a new set of answers, and an old
+// one is forgotten with it.
+const memos = new WeakMap();
+function memo(release, key, compute) {
+  if (!release || typeof release !== 'object') return compute();
+  let m = memos.get(release);
+  if (!m) { m = new Map(); memos.set(release, m); }
+  if (!m.has(key)) m.set(key, compute());
+  return m.get(key);
+}
+
+// parentMap is each part's first whole: the includes before the options, in the
+// order the release lists them — the same answer parentIn and depthOf each worked
+// out by walking every edge, once per question.
+function parentMap(release) {
+  return memo(release, 'parents', () => {
+    const parentOf = new Map();
+    for (const [whole, parts] of Object.entries(release.includes || {})) {
+      for (const part of parts || []) if (!parentOf.has(part)) parentOf.set(part, whole);
+    }
+    for (const [whole, parts] of Object.entries(release.options || {})) {
+      for (const part of parts || []) if (!parentOf.has(part)) parentOf.set(part, whole);
+    }
+    return parentOf;
+  });
 }
 
 // order places one order for everything in the basket.
@@ -3428,7 +3485,7 @@ function renderProductPage(rel, item) {
       // unseen.
       el('button', { class: 'secondary page-back', onclick: back }, `\u2039 ${t('page.back')}`),
       el('strong', {}, t('page.title')),
-      el('span', { class: 'page-fav' }, starButton(item.id), ' ', t('page.favourite'))),
+      el('span', { class: 'page-fav' }, linkButton(), ' ', starButton(item.id), ' ', t('page.favourite'))),
     el('div', { class: 'page-banner' },
       productIcon(item),
       el('h2', {}, textOf(item.texts, item.id))),
@@ -4276,27 +4333,33 @@ function newCommandId() {
   return `cmd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-// loadLineActions asks, for every held position of a product with a lifecycle
-// process, which actions it offers. Only those: a position that is not held, or
-// whose product has no lifecycle process, has none, and asking for each line of
-// every order would cost a request per line for nothing.
-async function loadLineActions() {
-  const next = new Map();
+// askLineActions asks, for the held positions of one entry of "my services",
+// which actions they offer — when that entry is opened, and not for every position
+// of every order on each load. Asking for all of them cost one request per held
+// position with a lifecycle process on every load, before anything could be drawn,
+// for buttons nobody sees until they open the entry. Only a held position of a
+// product with a lifecycle process is asked: anything else has none.
+//
+// Each position is asked once per load (state.actionsAsked, cleared by load). What
+// an earlier load found stays drawn until the new answer arrives, so the buttons
+// do not blink out while a refresh asks again.
+function askLineActions(refs) {
   const asks = [];
-  for (const o of state.orders || []) {
-    if (o.held) continue;
-    for (const l of o.lines || []) {
-      if (l.status !== 'done' || !l.lifecycleProcess) continue;
-      const ref = `${o.id}|${lineKey(l)}`;
-      asks.push(api(`/api/v1/orders/${encodeURIComponent(o.id)}/lines/${encodeURIComponent(lineKey(l))}/actions`)
-        .then((r) => { if (r && r.actions && r.actions.length) next.set(ref, r.actions); })
-        // A position whose actions cannot be read shows none; the rest of the page
-        // is still the person's orders.
-        .catch(() => {}));
-    }
+  for (const { order: o, line: l } of refs) {
+    if (o.held || l.status !== 'done' || !l.lifecycleProcess) continue;
+    const ref = `${o.id}|${lineKey(l)}`;
+    if (state.actionsAsked.has(ref)) continue;
+    state.actionsAsked.add(ref);
+    asks.push(api(`/api/v1/orders/${encodeURIComponent(o.id)}/lines/${encodeURIComponent(lineKey(l))}/actions`)
+      .then((r) => {
+        if (r && r.actions && r.actions.length) state.lineActions.set(ref, r.actions);
+        else state.lineActions.delete(ref);
+      })
+      // A position whose actions cannot be read shows none; the rest of the page
+      // is still the person's services.
+      .catch(() => {}));
   }
-  await Promise.all(asks);
-  state.lineActions = next;
+  if (asks.length) Promise.all(asks).then(() => render());
 }
 
 function actionButtons(order, line) {
@@ -4697,13 +4760,7 @@ function amendedNote(line) {
 // Shortest path wins, because a part can belong to more than one whole and the
 // column it reads best in is the highest place it appears.
 function depthOf(release, id) {
-  const parentOf = new Map();
-  for (const [whole, parts] of Object.entries(release.includes || {})) {
-    for (const part of parts) if (!parentOf.has(part)) parentOf.set(part, whole);
-  }
-  for (const [whole, parts] of Object.entries(release.options || {})) {
-    for (const part of parts) if (!parentOf.has(part)) parentOf.set(part, whole);
-  }
+  const parentOf = parentMap(release);
   let d = 0;
   let at = id;
   const seen = new Set();
@@ -4731,13 +4788,17 @@ function depthOf(release, id) {
 // is not. Ties go to the root nearest in the graph, then to the one the release
 // lists first, so the same basket always draws the same lines.
 function ownerAmong(release, roots) {
-  const parents = new Map();
-  const link = (whole, part) => {
-    if (!parents.has(part)) parents.set(part, []);
-    parents.get(part).push(whole);
-  };
-  for (const [whole, parts] of Object.entries(release.includes || {})) parts.forEach((p) => link(whole, p));
-  for (const [whole, parts] of Object.entries(release.options || {})) parts.forEach((p) => link(whole, p));
+  // Every parent of every part, worked out once per release (memo).
+  const parents = memo(release, 'allParents', () => {
+    const all = new Map();
+    const link = (whole, part) => {
+      if (!all.has(part)) all.set(part, []);
+      all.get(part).push(whole);
+    };
+    for (const [whole, parts] of Object.entries(release.includes || {})) parts.forEach((p) => link(whole, p));
+    for (const [whole, parts] of Object.entries(release.options || {})) parts.forEach((p) => link(whole, p));
+    return all;
+  });
   return (id) => {
     const seen = new Set([id]);
     let level = [id];
@@ -4980,6 +5041,7 @@ function entryMatches(rel, e, st) {
 // password reset — as buttons, each named after the part it acts on where that is
 // not the Marktleistung itself, with the open action's form beneath.
 function entryActions(e) {
+  askLineActions(e.refs);
   const held = e.refs.filter((r) => !r.order.held
     && (state.lineActions.get(`${r.order.id}|${lineKey(r.line)}`) || []).length);
   if (!held.length) return null;
@@ -5001,6 +5063,7 @@ function entryDetail(rel, e) {
   const lacking = e.mine ? lackingOf(rel, e.id) : [];
   const nameOf = (id) => textOf((itemsById(rel)[id] || {}).texts, id);
   return el('div', { class: 'svc-detail' },
+    el('div', { class: 'svc-link' }, linkButton()),
     entryActions(e),
     orders.map((o) => el('div', { class: 'svc-order-block' },
       orderNote(o),
@@ -5682,6 +5745,199 @@ function paint(root, ...children) {
   root.replaceChildren(...children.flat().filter((c) => c != null && c !== false));
 }
 
+// --- Links into the shop ---------------------------------------------------------
+//
+// A product, or an entry of "my services", has an address of its own, so it can be
+// sent to somebody, bookmarked, or opened from a mail:
+//
+//   #/catalog                      the catalogue
+//   #/product/<item>               a product: its page in the tile layout, its column
+//                                  in the cascade; a part opens under its product
+//                                  with its description
+//   #/services                     "my services"
+//   #/services/<item>              the reader's own entry for that Marktleistung
+//   #/services/<item>/<principal>  the entry for somebody else
+//   #/team, #/org                  the two reports
+//
+// The address follows the page as it is used (syncRoute, from render), and the page
+// follows the address when it is opened or changed by hand (applyRoute). A link
+// opened before the catalogue is read is applied once it is (load).
+
+const enc = encodeURIComponent;
+
+// routeOf is the address of what the page shows now, or '' where there is none to
+// give (the basket is somebody's own, half-made order).
+function routeOf() {
+  if (state.inBasket) return '';
+  if (state.view === 'services') {
+    const key = state.svcOpen || '';
+    const cut = key.indexOf('|');
+    if (cut < 0) return '#/services';
+    const who = key.slice(0, cut);
+    const id = key.slice(cut + 1);
+    return who === 'me' ? `#/services/${enc(id)}` : `#/services/${enc(id)}/${enc(who)}`;
+  }
+  if (state.view === 'team' || state.view === 'org') return `#/${state.view}`;
+  const item = state.productPage || state.info || state.offering;
+  return item ? `#/product/${enc(item)}` : '#/catalog';
+}
+
+// openItem shows one product where the layout keeps it, as a search hit does: its
+// page or its column, and a part under the product it belongs to with its
+// description open.
+function openItem(id) {
+  const rel = state.release || {};
+  const by = itemsById(rel);
+  if (!by[id]) return false;
+  const root = rootOf(rel, id);
+  const item = by[root] || {};
+  state.view = 'catalog';
+  state.inBasket = false;
+  state.query = '';
+  if (tileLayout()) {
+    state.productPage = root;
+  } else {
+    state.category = (item.category || '').trim();
+    state.group = (item.productGroup || '').trim();
+    state.offering = root;
+    state.step = 3;
+  }
+  state.info = id === root ? '' : id;
+  return true;
+}
+
+// applyRoute makes the page show what an address names. An address naming nothing
+// this reader can see leaves them on the catalogue rather than on an empty screen.
+function applyRoute(hash) {
+  const parts = String(hash || '').replace(/^#\/?/, '').split('/').filter(Boolean).map((p) => {
+    try { return decodeURIComponent(p); } catch { return p; }
+  });
+  const [head, a, b] = parts;
+  state.info = '';
+  state.inBasket = false;
+  if (head === 'services') {
+    state.view = 'services';
+    state.svcOpen = a ? `${b || 'me'}|${a}` : '';
+    // Somebody else's entry is not among the reader's own: the filter shows it.
+    if (b) state.svc = { ...state.svc, who: 'all' };
+    if (a) {
+      // Not narrowed by a heading chosen earlier, so the entry is in view.
+      state.category = null;
+      state.group = null;
+      state.step = tileLayout() ? state.step : 3;
+    }
+    return;
+  }
+  if ((head === 'team' && state.reports.team > 0) || (head === 'org' && state.reports.organisations.length)) {
+    state.view = head;
+    return;
+  }
+  state.view = 'catalog';
+  if (head === 'product' && a && openItem(a)) return;
+  state.productPage = '';
+  state.offering = '';
+}
+
+// syncRoute writes the address of what the page shows. A new product page, a new
+// view or a new entry is a step the browser's back button undoes; anything finer
+// (the columns of the cascade, a description opened) replaces the address in place,
+// so back does not walk through every click.
+let routeStep = '';
+function syncRoute() {
+  if (!state.loaded || state.needSignIn) return;
+  const want = routeOf();
+  if (!want || location.hash === want) return;
+  const step = `${state.view}|${state.productPage}|${state.svcOpen}`;
+  try {
+    if (step !== routeStep && location.hash) history.pushState(null, '', want);
+    else history.replaceState(null, '', want);
+  } catch { /* a page without history (a sandboxed frame) keeps its address */ }
+  routeStep = step;
+}
+
+// A link opened by hand, and the browser's back and forward.
+function followAddress() {
+  if (!state.loaded || location.hash === routeOf()) return;
+  applyRoute(location.hash);
+  routeStep = `${state.view}|${state.productPage}|${state.svcOpen}`;
+  render();
+}
+window.addEventListener('hashchange', followAddress);
+window.addEventListener('popstate', followAddress);
+
+// linkButton copies the address of what the page shows, for the product page and
+// an opened entry of "my services".
+function linkButton() {
+  const note = el('span', { class: 'muted link-note', role: 'status' });
+  return el('span', { class: 'link-copy' },
+    el('button', {
+      class: 'linkish', type: 'button',
+      onclick: async () => {
+        const url = `${location.origin}${location.pathname}${location.search}${routeOf()}`;
+        note.textContent = (await copyText(url)) ? t('link.copied') : t('link.copyFailed');
+      },
+    }, t('link.copy')),
+    note);
+}
+
+// --- Keeping the page current --------------------------------------------------
+//
+// The shop is a page people leave open, and what it shows moves without them: an
+// approval is given, a position is provisioned, a task arrives. Every thirty
+// seconds, while the page is in view, it reads the orders, the tasks and what the
+// reader holds again; every tenth time, and only with an empty basket, the
+// catalogue too (one release per catalogue, so a new publish is picked up).
+//
+// It redraws only when that disturbs nobody: not while something is being sent, a
+// form or a description is open (a correction, an action, a task, the basket, an
+// information panel) or the focus is in a field. Then the redraw waits for the next quiet moment. A refresh that fails
+// keeps what the page shows; one that finds the session gone asks for a sign-in.
+
+const REFRESH_MS = Number(window.__shopRefreshMs) || 30000;
+const CATALOGUE_EVERY = 10;
+let refreshCount = 0;
+let refreshing = false;
+let repaintOwed = false;
+
+function quietForRepaint() {
+  if (state.busy || state.editing || state.acting || state.taskOpen || state.inBasket || state.info) return false;
+  const a = document.activeElement;
+  if (a && a !== document.body && a.closest && a.closest('#app')
+    && a.matches('input, textarea, select, [contenteditable="true"]')) return false;
+  return true;
+}
+
+async function refresh() {
+  if (refreshing || !state.loaded || state.needSignIn || document.hidden) return;
+  if (state.busy) return;
+  if (repaintOwed && quietForRepaint()) render();
+  refreshing = true;
+  refreshCount += 1;
+  try {
+    const catalogue = refreshCount % CATALOGUE_EVERY === 0 && !state.basket.size && !state.inBasket;
+    await Promise.all([catalogue ? loadCatalogue() : null, loadOrdersAndTasks(), loadHeld()]);
+    state.actionsAsked = new Set();
+    if (quietForRepaint()) render();
+    else repaintOwed = true;
+  } catch (e) {
+    if (e && e.status === 401) {
+      state.needSignIn = true;
+      state.signinError = 'signin.expired';
+      render();
+    }
+  } finally {
+    refreshing = false;
+  }
+}
+
+let refreshTimer = null;
+function startRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(refresh, REFRESH_MS);
+}
+// Back in view after a while: read now rather than at the next tick.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
 function render() {
   const root = document.getElementById('app');
   if (!root) return;
@@ -5727,6 +5983,8 @@ function render() {
     ]));
   // The page behind an open dialog stays where it is (infoDialog).
   document.body.classList.toggle('dialog-open', !!state.info);
+  repaintOwed = false;
+  syncRoute();
   // After the page exists. Fire and forget: the containers say they are loading
   // until this finishes, and a failure to load the runtime leaves a sentence rather
   // than an empty box.

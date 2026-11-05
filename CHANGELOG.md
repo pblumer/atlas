@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Links straight into the shop.** A product and an entry of "My services" have an address of their
+  own (`#/product/<item>`, `#/services/<item>`, `#/services/<item>/<person>`), so they can be sent,
+  bookmarked or opened from a mail; a part opens under its product with its description. The
+  address follows the page as it is used, the browser's back and forward step between product
+  pages, entries and views, and the product page and an opened entry carry a "Copy link" button.
+- **The shop keeps itself current.** Every thirty seconds while it is in view it reads the orders,
+  the tasks and what the reader holds again, and every few minutes, with an empty basket, the
+  catalogue. It redraws only when that disturbs nobody: not while a form or a description is open,
+  something is being sent or the focus is in a field.
 - **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
   its symbol, the same one the drawer and the top bar show, and the overview says so. The
   handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.
@@ -71,6 +80,13 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **The shop loads faster.** It asks for the newest release of each catalogue only, with the new
+  `limit` query of `GET /api/v1/catalogs/{id}/releases`, which the server answers from a small index
+  without reading the other releases: on the demo catalogue the shop had been reading all 222
+  releases, 4.4 MB, on every load. A position's actions are read when its entry is opened, not
+  for every position on every load. And the page works out what it needs from a release once
+  rather than on every row, which takes a redraw of a large "My services" from about 110 ms to
+  about 15 ms.
 - **The shop's "My services" and "My orders" are one screen.** "My services" now lists, per
   Marktleistung and per person it is for, what somebody holds and what they ordered: its catalogue
   icon as a pie of how far it is provisioned, how many are held, since when and the order behind
