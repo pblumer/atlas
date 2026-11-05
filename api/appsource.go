@@ -70,8 +70,12 @@ import (
 // (ADR-0134).
 const (
 	// sourceFormatVersion is the newest version this server writes and reads.
-	// Version 3 carries the application's constants as constants.json.
-	sourceFormatVersion = 3
+	// Version 4 carries the application's information models and what it brings to
+	// the capability map (ADR-0528).
+	sourceFormatVersion = 4
+	// sourceFormatVersionConstants is version 3, which carries the application's
+	// constants as constants.json.
+	sourceFormatVersionConstants = 3
 	// sourceFormatVersionModels is version 2, which carries the decision models this
 	// server keeps as files.
 	sourceFormatVersionModels = 2
@@ -99,6 +103,12 @@ type sourceManifest struct {
 	// Needs is what the processes read from the installation and no tree carries,
 	// as the exporting server read them from its drafts (appneeds.go).
 	Needs []sourceNeed `json:"needs,omitempty"`
+	// InformationModels index the application's information models, one file each
+	// (format 4, appsourcearch.go).
+	InformationModels []sourceInfoModel `json:"informationModels,omitempty"`
+	// Architecture names the file of what the application brings to the capability
+	// map: its realizations and its proposals (format 4, appsourcearch.go).
+	Architecture string `json:"architecture,omitempty"`
 }
 
 // sourceConstants is constants.json: the shape PUT /api/v1/applications/{id}/constants
@@ -230,7 +240,7 @@ func buildSourceTree(app project, drafts []draft, forms []form, refs []dmnRef, m
 		if err != nil {
 			return nil, fmt.Errorf("render constants: %w", err)
 		}
-		man.Constants, man.FormatVersion = constantsPath, sourceFormatVersion
+		man.Constants, man.FormatVersion = constantsPath, sourceFormatVersionConstants
 		files = append(files, sourceFile{Path: constantsPath, Data: newlineTerminated(data)})
 	}
 
@@ -399,6 +409,9 @@ func parseSourceTree(files []sourceFile) (sourceManifest, map[string][]byte, err
 	if _, err := treeConstants(man, byPath); err != nil {
 		return sourceManifest{}, nil, err
 	}
+	if _, err := treeArchitecture(man, byPath); err != nil {
+		return sourceManifest{}, nil, err
+	}
 	return man, byPath, nil
 }
 
@@ -500,11 +513,18 @@ type sourceRecords struct {
 	refs      []dmnRef
 	models    map[string][]byte
 	constants []heldConstant
+	// arch is what the application holds of the architecture: its information models,
+	// its realizations and the parts of the map they name (appsourcearch.go).
+	arch sourceArchitectureRecords
 }
 
 // tree renders the records. It compiles the drafts, so it runs off the run loop.
 func (rec sourceRecords) tree() ([]sourceFile, error) {
-	return buildSourceTree(rec.app, rec.drafts, rec.forms, rec.refs, rec.models, rec.constants)
+	files, err := buildSourceTree(rec.app, rec.drafts, rec.forms, rec.refs, rec.models, rec.constants)
+	if err != nil {
+		return nil, err
+	}
+	return addSourceArchitecture(files, rec.arch)
 }
 
 // exportApplicationSource loads an application's artifacts and renders the tree,
@@ -563,6 +583,9 @@ func (s *Server) loadApplicationSource(app project, withConstants bool) (sourceR
 		return sourceRecords{}, err
 	}
 	rec := sourceRecords{app: app, drafts: mine, forms: myForms, refs: myRefs, models: models}
+	if rec.arch, err = s.loadSourceArchitecture(app); err != nil {
+		return sourceRecords{}, err
+	}
 	if withConstants {
 		held, _, err := s.appConstants.Get(app.ID)
 		if err != nil {
@@ -704,11 +727,22 @@ type sourceUndecided struct {
 }
 
 func (e sourceUndecided) Error() string {
-	elsewhere := 0
+	elsewhere, gaps := 0, 0
 	for _, a := range e.plan.Artifacts {
 		if a.Status == importplan.Elsewhere && a.Outcome == importplan.Undecided {
 			elsewhere++
 		}
+		if a.Status == importplan.Gap && a.Outcome == importplan.Undecided {
+			gaps++
+		}
+	}
+	if gaps > 0 && gaps == len(e.refs) {
+		return fmt.Sprintf("%d capabilities or value streams are not in this server's map and were not decided (%s); name each under adopt to file the bundle's proposal, under map as ref=key to use a key the map has, or under omit to leave it out",
+			gaps, strings.Join(e.refs, ", "))
+	}
+	if gaps > 0 {
+		return fmt.Sprintf("%d artifacts were not decided (%s); name each that differs under overwrite or keep, each that another application holds under adopt, and each capability or value stream the map lacks under adopt, map (ref=key) or omit",
+			len(e.refs), strings.Join(e.refs, ", "))
 	}
 	if elsewhere > 0 {
 		return fmt.Sprintf("%d artifacts were not decided (%s); name each that another application holds under adopt to take it, and each that differs from this server's under overwrite or keep",
@@ -980,6 +1014,15 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 	res.Artifacts = append(res.Artifacts, consts.artifacts...)
 	undecided = append(undecided, consts.undecided...)
 	res.ConstantsNotSet = consts.notSet
+	// The information models and what the tree brings to the capability map, planned
+	// with the rest: a model like an artifact, a key the map lacks as a gap the caller
+	// decides (appsourcearch.go).
+	arch, err := s.planSourceArchitecture(app, found, man, byPath, bases, decide)
+	if err != nil {
+		return sourceImportResult{}, err
+	}
+	res.Artifacts = append(res.Artifacts, arch.artifacts...)
+	undecided = append(undecided, arch.undecided...)
 	res.Processes, res.Forms, res.Decisions = len(man.Processes), len(man.Forms), len(man.Decisions)
 	res.ApplicationID, res.Name = app.ID, man.Name
 	if found && !writes["application:"+man.Key] {
@@ -1114,6 +1157,12 @@ func (s *Server) applySourceTree(man sourceManifest, byPath map[string][]byte, c
 	// artifact, written or kept, was reconciled with this tree. A kept one is then
 	// ahead of it, and is not asked about again until a tree brings it changed.
 	maps.Copy(incoming, consts.reconciled)
+	archBases, err := s.writeSourceArchitecture(app, arch, ownerID)
+	if err != nil {
+		return sourceImportResult{}, err
+	}
+	maps.Copy(incoming, arch.incoming)
+	maps.Copy(incoming, archBases)
 	if err := s.recordImportBaselines(applicationBaselineScope(app.ID), incoming); err != nil {
 		return sourceImportResult{}, err
 	}

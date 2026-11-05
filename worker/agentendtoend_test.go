@@ -222,6 +222,8 @@ func TestAnUnreachableModelParksTheRunOnAnIncident(t *testing.T) {
 	w := worker.New(worker.Options{
 		Server: atlas.URL, ID: "agent-1", Handlers: built.Handlers,
 		Wait: 50 * time.Millisecond, Retry: 10 * time.Millisecond,
+		// The refusal is to reach its incident within the test, not after 75 seconds.
+		NoRetryBackoff: true,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

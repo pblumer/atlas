@@ -1,0 +1,27 @@
+{
+  "type": "default",
+  "id": "lz-abweichung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Abweichung klären · Resolve a difference**\n\nIm Tenant und in den Verträgen sind unterschiedlich viele Lizenzen belegt. Meist hilft die Übernahme des Bestands (Lizenzmanagement: Bestand übernehmen). · Tenant and contracts disagree on the licences in use."
+    },
+    {
+      "key": "abweichungText",
+      "type": "textarea",
+      "label": "Abweichung · Difference",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "abweichungNotiz",
+      "type": "textarea",
+      "label": "Notiz · Note",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

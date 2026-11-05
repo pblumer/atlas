@@ -71,6 +71,8 @@ var mcpToolRoutes = map[string]string{
 	"atlas_export_catalog_products":  "GET /api/v1/catalog-products/document",
 	"atlas_import_catalog_archimate": "POST /api/v1/catalogs/{id}/import",
 	"atlas_catalog_deletion":         "GET /api/v1/catalogs/{id}/deletion",
+	"atlas_release_pruning":          "GET /api/v1/catalogs/{id}/releases/pruning",
+	"atlas_prune_releases":           "POST /api/v1/catalogs/{id}/releases/pruning",
 	"atlas_delete_catalog":           "DELETE /api/v1/catalogs/{id}",
 	"atlas_catalog_product_deletion": "GET /api/v1/catalog-products/{id}/deletion",
 	"atlas_delete_catalog_product":   "DELETE /api/v1/catalog-products/{id}",
@@ -84,6 +86,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_refresh_catalog_product_content": "POST /api/v1/catalog-products/{id}/content/refresh",
 	"atlas_unlink_catalog_product_content":  "POST /api/v1/catalog-products/{id}/content/unlink",
 	"atlas_refresh_catalog_content":         "POST /api/v1/catalogs/{id}/content/refresh",
+	"atlas_catalog_refresh_status":          "GET /api/v1/catalogs/{id}/content/refresh",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",
@@ -101,6 +104,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_process_runtime":            "GET /api/v1/processes/{key}/runtime",
 	"atlas_process_statistics":         "GET /api/v1/processes/{key}/statistics",
 	"atlas_process_versions":           "GET /api/v1/processes/{key}/versions",
+	"atlas_compare_versions":           "GET /api/v1/processes/{key}/comparison",
 	"atlas_call_activities":            "GET /api/v1/call-activities",
 
 	// The business architecture (ADR-0305):

@@ -539,7 +539,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "List every retained evaluation of one decision — its inputs, outputs, and trace — newest first, for drilling into a decision's instances", tag: "Decisions", role: RoleOperator,
 			resp: jsonBody("Decision evaluations", tArray())}},
 		{"POST", "/api/v1/instances/{key}/migrate/plan", s.handleMigrationPlan, apiOp{
-			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused — writing nothing (admin-only when auth is on, ADR-0162)", tag: "Instances", role: RoleAdmin,
+			summary: "Answer what migrating this instance to another version of its process would do — the derived element mapping and every reason it would be refused, where the instance stands (at: the element ids it has live element instances on), and what the target version changes against the instance's (changes and counts, as GET /api/v1/processes/{key}/comparison lists them) — writing nothing (admin-only when auth is on, ADR-0162, ADR-0530)", tag: "Instances", role: RoleAdmin,
 			req: jsonBody("Target version, optional element-id overrides, and optional fork resume points", schemaObj(map[string]any{
 				"targetProcessDefKey": tInteger(), "mapping": tArray(), "resume": tArray(),
 			}, "targetProcessDefKey")),
@@ -872,6 +872,12 @@ func (s *Server) apiRoutes() []apiRoute {
 			req: jsonBody("The diagram opened", schemaObj(map[string]any{
 				"kind": tString(), "id": tString(), "deploymentKey": tInteger(),
 			}, "kind")), status: http.StatusNoContent}},
+		{"GET", "/api/v1/processes/{key}/comparison", s.handleProcessComparison, apiOp{
+			summary: "Compare two deployed versions of a process: what changed from the version ?with= names — by default the one before — to the one in the path. Every element added, removed or changed, matched by element id, and for a changed one each field it states differently (name, condition, task definition, input and output mappings, script, form, event definition…) with its value before and after; plus whether the two are the same model and where they first differ. The diagram, formatting, attribute order, attributes at their default and the incoming/outgoing hints are not compared. Both must be versions of the same process (ADR-0530)", tag: "Processes", role: roleAny,
+			resp: jsonBody("The comparison", schemaObj(map[string]any{
+				"processId": tString(), "from": tObject(), "to": tObject(),
+				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
+			}))}},
 		{"GET", "/api/v1/drafts", s.handleListDrafts, apiOp{
 			summary: "List diagram drafts", tag: "Drafts", role: RoleModeler, resp: jsonBody("Drafts", tArray())}},
 		{"GET", "/api/v1/drafts/{id}/availability", s.handleDraftIDAvailability, apiOp{
@@ -879,13 +885,13 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/drafts/{id}/xml", s.handleDraftXML, apiOp{
 			summary: "Fetch a draft's BPMN XML", tag: "Drafts", role: RoleModeler, resp: xmlBody("BPMN 2.0 XML")}},
 		{"GET", "/api/v1/drafts/{id}/comparison", s.handleDraftComparison, apiOp{
-			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452)", tag: "Drafts", role: RoleModeler,
+			summary: "Compare a draft with a deployed version of its process — the newest, or the one ?key= names: whether the two are the same model (the diagram is not compared), where they first differ, every element the draft adds, removes or changes against the version (as GET /api/v1/processes/{key}/comparison lists them), who last saved the draft and who deployed the version. A draft and a deployment are separate records, so this is how the Modeler says whether the draft it opened is what runs (ADR-0452, ADR-0530)", tag: "Drafts", role: RoleModeler,
 			resp: jsonBody("The comparison", schemaObj(map[string]any{
 				"processId": tString(), "ownerId": tString(), "ownerName": tString(),
 				"savedAt": tInteger(), "savedBy": tString(), "savedByName": tString(),
 				"deployed": tBool(), "key": tInteger(), "version": tInteger(), "latestVersion": tInteger(),
 				"deployedAt": tInteger(), "deployedBy": tString(), "deployedByName": tString(),
-				"sameModel": tBool(), "difference": tString(),
+				"sameModel": tBool(), "difference": tString(), "changes": tArray(), "counts": tObject(),
 			}))}},
 		{"PATCH", "/api/v1/drafts/{id}", s.handleMoveDraft, apiOp{
 			summary: "Move a draft to a project", tag: "Drafts", role: RoleModeler, req: jsonBody("Move", tObject()), resp: jsonBody("Updated draft", tObject())}},
@@ -1384,8 +1390,18 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("The published release", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
-			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
+			summary: "A catalogue's releases, newest first. Query limit (a positive whole number) answers only that many of the newest, read without reading the rest: the shop asks for limit=1", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
+		// Pruning a catalogue's old releases (catalogpurge.go): the GET answers what
+		// the POST would remove, and the POST has to repeat the id.
+		{"GET", "/api/v1/catalogs/{id}/releases/pruning", s.handleReleasePruning, apiOp{
+			summary: "What pruning a catalogue's releases would remove: every release that is neither the newest (what the shop offers) nor named by an order (whose approval, corrections, actions and reports read it back), and every release that stays with why. Nothing is changed",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The prune plan", tObject())}},
+		{"POST", "/api/v1/catalogs/{id}/releases/pruning", s.handlePruneReleases, apiOp{
+			summary: "Prune a catalogue's releases: delete every release GET …/releases/pruning names, which is every release that is neither the newest nor named by an order. Permanent; touches no order, instance or hold. Refused with 400 unless `?confirm=` repeats the catalogue id. Answers the plan it carried out, with `done: true`",
+			tag:     "Catalogue", role: RoleAdmin,
+			resp: jsonBody("The prune plan carried out", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/unpublished", s.catalogs.HandleUnpublished, apiOp{
 			summary: "What publishing this catalogue would change for the people ordering: " +
 				"products it would add, products the shop is still offering that it would " +
@@ -1495,8 +1511,11 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
-			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed", tag: "Catalogue", role: RoleProductManager,
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed. With ?wait=false it answers at once with 202 and the run's progress (state, total, done, the lines so far) and refreshes in the background; GET on the same path follows it. 409 with the running one's progress while a refresh of the catalogue is running", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("One line per bound product", tArray())}},
+		{"GET", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefreshStatus, apiOp{
+			summary: "How far the running content refresh of a catalogue has come, or how the last one ended: state (running or done), who started it and when, total bound products, how many are done, and one line per finished product — refreshed, refused (with the problems) or skipped. Kept in memory: 404 when none has run since the server started", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The refresh's progress", tObject())}},
 		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
 			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,
 			resp: jsonBody("Sources", tArray())}},
@@ -1909,7 +1928,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "What an application's drafts need from the installation they run on and no source download carries — the server constants and application constants they read, the configured workers they name — each with how this server answers it (set, missing, fallback, type-mismatch; configured, missing, other-type, unusable), the drafts whose needs could not be read because they do not compile, how many constant values the application holds here, and the catalogues the caller may put in its package, each marked bound when one of its products runs on a process of the application (ADR-0467)", tag: "Applications", role: RoleModeler,
 			resp: jsonBody("Needs", tObject())}},
 		{"POST", "/api/v1/applications/source", s.handleImportApplicationSource, apiOp{
-			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed. Decision models the tree carries are compiled first and stored under their handles; a handle holding a different model that a decision outside the application uses is refused with 409, and a server whose models come from a remote temis service names them under modelsSkipped. Each artifact is compared with this server's and with the version the last import brought: new and behind (as the last import left it, newer in the tree) are written, unchanged and ahead (edited here, as before in the tree) are left, and changed (both moved, or never imported) is written only when ?overwrite= names it and kept when ?keep= does — undecided stops the import with 409 and the plan; ?dryRun=true answers the plan alone. Constants the tree carries (constant:NAME) are planned alike and set only for an administrator; anyone else gets constantsNotSet. The answer names under needs what the tree's processes read from this installation and how it answers each once the import is in (ADR-0134, ADR-0467).", tag: "Applications", role: RoleModeler,
+			summary: "Read a source tree into this server. The application is identified by the portable key in the manifest — created when this server has never seen it, updated in place when it has. Never deletes: local artifacts the tree omits are reported, not removed. Decision models the tree carries are compiled first and stored under their handles; a handle holding a different model that a decision outside the application uses is refused with 409, and a server whose models come from a remote temis service names them under modelsSkipped. Each artifact is compared with this server's and with the version the last import brought: new and behind (as the last import left it, newer in the tree) are written, unchanged and ahead (edited here, as before in the tree) are left, and changed (both moved, or never imported) is written only when ?overwrite= names it and kept when ?keep= does — undecided stops the import with 409 and the plan; ?dryRun=true answers the plan alone. Constants the tree carries (constant:NAME) are planned alike and set only for an administrator; anyone else gets constantsNotSet. The answer names under needs what the tree's processes read from this installation and how it answers each once the import is in (ADR-0134, ADR-0467). A format-4 tree also carries the application's information models (infomodel:NAME, planned like artifacts), its realizations (realizations:KEY, the application's own, replaced as the tree states them) and proposals for the capability map: a key the map has is linked and never written over; one it lacks is a gap that stops the import until ?adopt= files the proposal, ?map=capability:KEY=EXISTING files it under a key the map has, or ?omit= leaves it out (ADR-0528).", tag: "Applications", role: RoleModeler,
 			req:  &bodySpec{mediaType: "application/gzip", schema: tString(), desc: "A gzip tar of a source tree, as produced by GET /api/v1/applications/{id}/source"},
 			resp: jsonBody("Import result", tObject())}},
 
@@ -2419,8 +2438,8 @@ func (s *Server) apiRoutes() []apiRoute {
 			req:  jsonBody("New password", schemaObj(map[string]any{"password": tString()}, "password")),
 			resp: jsonBody("User id", tObject())}},
 		{"POST", "/api/v1/users/{id}/password-link", s.handleUserPasswordLink, apiOp{
-			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
-			req:  jsonBody("Send or hand over", schemaObj(map[string]any{"send": tBool()})),
+			summary: "Have the account's owner set their password: send=true mails them a one-time link through the proc_passwort_link system process; send=false returns the link to hand over in person. revoke=true first makes the current password stop working — for a password somebody else knows — ending the account's sessions and grants; refused for the caller's own account and the last administrator who can sign in. The administrator never chooses a password", tag: "Users", role: RoleAdmin,
+			req:  jsonBody("Send or hand over, and whether to revoke the current password", schemaObj(map[string]any{"send": tBool(), "revoke": tBool()})),
 			resp: jsonBody("Sent, or the link and when it expires", tObject())}},
 		{"DELETE", "/api/v1/users/{id}", s.handleDeleteUser, apiOp{
 			summary: "Delete a user account", tag: "Users", role: RoleAdmin, status: http.StatusNoContent}},

@@ -144,9 +144,11 @@ var catalogSources = []catalogSource{
 		// date in the past, so the timer fires at once — which is both correct and the
 		// only way a reader sees it inside a demo.
 		Start: &catalogStart{"proc_umzug", map[string]any{
-			"umzugstermin": "2026-10-01", "kuendigungsfrist": "P3M",
-			"alteAdresse": "Bahnhofstrasse 12, 8001 Zürich",
-			"neueAdresse": "Seestrasse 4, 8802 Kilchberg",
+			// No umzugstermin: the model then moves in two weeks from today, the case the card
+			// describes, where a fixed date would drift into the past.
+			"kuendigungsfrist": "P3M",
+			"alteAdresse":      "Bahnhofstrasse 12, 8001 Zürich",
+			"neueAdresse":      "Seestrasse 4, 8802 Kilchberg",
 		}},
 	},
 	{ID: "pruefung", App: "Beispiel: Prüfung", Dir: "pruefung"},
@@ -296,6 +298,12 @@ var catalogSources = []catalogSource{
 	// It installs with `atlas import` once its decision models are uploaded (its README says how).
 	{ID: "ad-dienste", Dir: "ad-dienste", NoInstall: true,
 		Main: "ad-dienste/ad-sicherheitsgruppe.bpmn",
+		Shop: true},
+	// Licence contracts per customer and project, kept in long-running books that take
+	// bookings as messages; the m365-dienste licence order checks its quota here. It
+	// installs with its installieren.sh, which also starts the tenant's book.
+	{ID: "lizenzmanagement", Dir: "lizenzmanagement", NoInstall: true,
+		Main: "lizenzmanagement/vertrag.bpmn",
 		Shop: true},
 }
 

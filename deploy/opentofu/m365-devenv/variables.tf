@@ -99,7 +99,7 @@ variable "license_sku_ids" {
 }
 
 variable "entra_graph_permissions" {
-  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team) and invite-guest (User.Invite.All, the SharePoint team site's guests)."
+  description = "Microsoft Graph application permissions of the Entra worker app. Default: the user-and-group lifecycle of docs/entra-permissions.md plus the Teams operations (create-team, add-team-member, create-channel, archive-team), invite-guest (User.Invite.All, the SharePoint team site's guests), list-subscribed-skus (LicenseAssignment.Read.All, the licence stock) and the last sign-in, signInActivity, through select on list-users and get-user (AuditLog.Read.All; Graph answers it only in a tenant with Entra ID P1 or P2)."
   type        = list(string)
   default = [
     "User.ReadWrite.All",
@@ -108,6 +108,8 @@ variable "entra_graph_permissions" {
     "Channel.Create",
     "TeamSettings.ReadWrite.All",
     "User.Invite.All",
+    "LicenseAssignment.Read.All",
+    "AuditLog.Read.All",
   ]
 }
 
@@ -282,6 +284,12 @@ variable "atlas_allowed_cidrs" {
 
 variable "atlas_sso" {
   description = "Register Atlas as an OpenID Connect app in the test tenant, so the test users sign in to Atlas with their Entra accounts (the local admin stays)."
+  type        = bool
+  default     = true
+}
+
+variable "atlas_hub" {
+  description = "Connect the Atlas server to the atlas hub of this repository (examples/hub), so the Console offers its bundles. The registry key comes from examples/hub/releases.json in this checkout, never from the Pages site."
   type        = bool
   default     = true
 }

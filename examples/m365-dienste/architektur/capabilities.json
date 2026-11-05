@@ -1,0 +1,738 @@
+{
+  "_comment": "Was die Applikation beispiel-m365-dienste zur Capability-Landkarte des Servers beitraegt (ADR-0528): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen). Die OnPrem-Variante baut install-m365-dienste.py daraus mit den Prozessen *_onprem.",
+  "realizations": [
+    {
+      "capability": "m365-aufbewahrung",
+      "kind": "process",
+      "processId": "proc_m365_aufbewahrung"
+    },
+    {
+      "capability": "m365-genehmigung",
+      "kind": "process",
+      "processId": "proc_m365_genehmigung_vorgesetzter"
+    },
+    {
+      "capability": "m365-governance",
+      "kind": "process",
+      "processId": "proc_m365_governance_pruefung"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_eintritt_paket"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_hr_eintritt"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_konto_hybrid"
+    },
+    {
+      "capability": "m365-konten",
+      "kind": "process",
+      "processId": "proc_m365_konto_in_cloud"
+    },
+    {
+      "capability": "m365-lizenzen",
+      "kind": "process",
+      "processId": "proc_m365_lizenz"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_funktionspostfach"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_verteiler"
+    },
+    {
+      "capability": "m365-messaging",
+      "kind": "process",
+      "processId": "proc_m365_verteiler_anmeldung"
+    },
+    {
+      "capability": "m365-partner",
+      "kind": "process",
+      "processId": "proc_m365_partnerzugang"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_geraet_einrichten"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_geraet_entfernen"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_einrichten"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_entfernen"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raum_nachfuehren"
+    },
+    {
+      "capability": "m365-ressourcen",
+      "kind": "process",
+      "processId": "proc_m365_raumliste"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_telefonie"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_telefonzentrale"
+    },
+    {
+      "capability": "m365-telefonie",
+      "kind": "process",
+      "processId": "proc_m365_warteschlange"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_oe_mitgliedschaften"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_postfachzugriff_entziehen"
+    },
+    {
+      "capability": "m365-zugriffe",
+      "kind": "process",
+      "processId": "proc_m365_postfachzugriff_erteilen"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_engage_community"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_sharepoint_site"
+    },
+    {
+      "capability": "m365-zusammenarbeit",
+      "kind": "process",
+      "processId": "proc_m365_team"
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "m365-konten",
+      "name": "Benutzerkonten verwalten",
+      "summary": "Konten fuer Mitarbeitende anlegen, aktivieren, sperren und zurueckgeben, ausgeloest durch HR oder eine Bestellung; auch hybrid aus dem lokalen AD und die Uebernahme der Verwaltung in die Cloud.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "HR-Ereignis Eintritt/Austritt",
+          "kind": "event"
+        },
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Aktives Konto mit Zugangsdaten",
+          "kind": "manual"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ad_verzeichnis",
+          "ref": "ad_verzeichnis"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-lizenzen",
+      "name": "Lizenzen und Postfaecher bereitstellen",
+      "summary": "Einer Person die passende Microsoft-365-Lizenz zuweisen, damit Postfach und Apps entstehen, und Postfacheinstellungen pflegen (Abwesenheit, Kontingent, Weiterleitung, Adressen, Stellvertretung).",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Lizenziertes Konto mit Postfach",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [
+        "m365-konten"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-zugriffe",
+      "name": "Zugriffe gewaehren und entziehen",
+      "summary": "Rechte an Postfaechern und Mitgliedschaften nach Organisationseinheit erteilen und wieder entziehen, mit Pruefung durch die Informationssicherheit, wo die Freigaberegel es verlangt.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Erteiltes Recht im Bestand",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [
+        "m365-konten"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-partner",
+      "name": "Externe Partner anbinden",
+      "summary": "Externen Personen ueber ein oeffentliches Formular einen befristeten Zugang geben und ihn nach Ablauf sperren.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Oeffentliches Antragsformular",
+          "kind": "manual"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Befristetes Partnerkonto",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        }
+      ],
+      "requires": [
+        "m365-konten"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-zusammenarbeit",
+      "name": "Zusammenarbeitsraeume bereitstellen",
+      "summary": "Teams, SharePoint-Teamwebsites und Viva-Engage-Communities nach Namensregel anlegen, mit Besitzern, Gaesten, Kontingent und Inventar, und sie archivieren oder loeschen.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Team, Site oder Community",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_sharepoint",
+          "ref": "ucc_sharepoint"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [
+        "m365-konten"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-messaging",
+      "name": "Gemeinsame Postfaecher und Verteiler bereitstellen",
+      "summary": "Funktionspostfaecher und Verteiler anlegen, ihre Berechtigten und Mitglieder pflegen und Anmeldungen zu Verteilern annehmen.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        },
+        {
+          "name": "Anmeldeformular",
+          "kind": "manual"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Postfach oder Verteiler",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [
+        "m365-konten"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-ressourcen",
+      "name": "Raeume und Geraete buchbar machen",
+      "summary": "Raum- und Geraetepostfaecher mit Buchungsregeln einrichten und wieder entfernen.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Buchbarer Raum oder buchbares Geraet",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-telefonie",
+      "name": "Telefonie bereitstellen",
+      "summary": "Personen eine Rufnummer mit Telefonielizenz geben und Telefonzentralen und Anrufwarteschlangen mit Ressourcenkonto einrichten.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Erreichbare Rufnummer",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_teams",
+          "ref": "ucc_teams"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        }
+      ],
+      "requires": [
+        "m365-lizenzen"
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-aufbewahrung",
+      "name": "Daten rechtssicher aufbewahren",
+      "summary": "Postfaecher unter Aufbewahrung (Litigation Hold) stellen und sie wieder aufheben.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung durch Compliance",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Postfach unter Aufbewahrung",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-genehmigung",
+      "name": "Bestellungen genehmigen",
+      "summary": "Bestellungen der vorgesetzten Person aus Entra ID vorlegen, erinnern und eskalieren, mit Ersatzgruppe, wenn niemand zu finden ist.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Bestellung mit Freigabepflicht",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Entscheid",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "mail",
+          "ref": "mail"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "m365-governance",
+      "name": "Governance der Umgebung pruefen",
+      "summary": "Regelmaessig pruefen, welche Postfaecher, Verteiler und Gruppen nicht ueber Atlas entstanden sind, und den Befund vorlegen.",
+      "scope": "Microsoft-365-Tenant",
+      "inputs": [
+        {
+          "name": "Zeitplan",
+          "kind": "event"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Befund zur Pruefung",
+          "kind": "manual"
+        }
+      ],
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "M365-Administration"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_exchange",
+          "ref": "ucc_exchange"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "m365",
+        "beispiel"
+      ],
+      "state": "active"
+    }
+  ],
+  "valueStreams": [
+    {
+      "key": "m365-mitarbeitende-arbeitsfaehig",
+      "name": "Mitarbeitende arbeitsfaehig machen",
+      "description": "Vom HR-Eintritt bis zum Austritt: Konto, Lizenz, Zusammenarbeit und Telefonie, am Ende Rueckgabe und Aufbewahrung.",
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "stages": [
+        {
+          "key": "eintritt",
+          "name": "Eintritt erfassen",
+          "description": "HR meldet den Eintritt; Atlas legt das Konto an.",
+          "capabilities": [
+            "m365-konten"
+          ]
+        },
+        {
+          "key": "ausstatten",
+          "name": "Lizenz und Postfach bereitstellen",
+          "capabilities": [
+            "m365-lizenzen",
+            "m365-genehmigung"
+          ]
+        },
+        {
+          "key": "einbinden",
+          "name": "In Teams und Gruppen einbinden",
+          "description": "Mitgliedschaften der Organisationseinheit.",
+          "capabilities": [
+            "m365-zugriffe",
+            "m365-zusammenarbeit"
+          ]
+        },
+        {
+          "key": "erreichbar",
+          "name": "Erreichbar machen",
+          "capabilities": [
+            "m365-telefonie",
+            "m365-messaging"
+          ]
+        },
+        {
+          "key": "austritt",
+          "name": "Austritt abwickeln",
+          "description": "Konto sperren, Paket zurueckgeben, Postfach aufbewahren.",
+          "capabilities": [
+            "m365-konten",
+            "m365-aufbewahrung"
+          ]
+        }
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ]
+    },
+    {
+      "key": "m365-zusammenarbeit-ermoeglichen",
+      "name": "Zusammenarbeit ermoeglichen",
+      "description": "Von der Bestellung eines Arbeitsraums bis zu seiner regelmaessigen Pruefung.",
+      "owner": {
+        "name": "M365-Administration",
+        "role": "Plattformverantwortung Microsoft 365"
+      },
+      "stages": [
+        {
+          "key": "bestellen",
+          "name": "Bedarf bestellen und freigeben",
+          "capabilities": [
+            "m365-genehmigung"
+          ]
+        },
+        {
+          "key": "bereitstellen",
+          "name": "Arbeitsraum bereitstellen",
+          "description": "Team, Site, Community, Postfach, Verteiler, Raum.",
+          "capabilities": [
+            "m365-zusammenarbeit",
+            "m365-messaging",
+            "m365-ressourcen"
+          ]
+        },
+        {
+          "key": "oeffnen",
+          "name": "Zugriffe steuern",
+          "description": "Berechtigte, Gaeste und externe Partner.",
+          "capabilities": [
+            "m365-zugriffe",
+            "m365-partner"
+          ]
+        },
+        {
+          "key": "pruefen",
+          "name": "Pruefen und aufraeumen",
+          "capabilities": [
+            "m365-governance"
+          ]
+        }
+      ],
+      "tags": [
+        "m365",
+        "beispiel"
+      ]
+    }
+  ]
+}

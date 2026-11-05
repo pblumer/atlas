@@ -87,7 +87,10 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(installFixture, FORM);
   await page.goto("/shop.html");
-  await page.getByRole("button", { name: "My orders" }).click();
+  // The orders are under "My services": the reader's own vpn entry opened shows
+  // its order, positions and tasks.
+  await page.getByRole("button", { name: "My services" }).click();
+  await page.locator(".cell button.label", { hasText: "vpn" }).click();
   await expect(page.getByText("ord_own")).toBeVisible({ timeout: 10000 });
   page._errors = errors;
 });
@@ -98,12 +101,20 @@ test.afterEach(async ({ page }) => {
 
 const taskRow = (page, key) => page.locator(`li[data-task="${key}"]`);
 
+// openHeld shows the order the reader holds a task in. It is somebody else's, so
+// the filter hides it; the page says a task waits there and leads to it.
+async function openHeld(page) {
+  await page.getByRole("button", { name: "Show" }).click();
+  await page.locator(".cell", { hasText: "For Carla" }).locator("button.label").click();
+  await expect(page.getByText("ord_held")).toBeVisible();
+}
+
 test("a position says whom it waits for", async ({ page }) => {
   const row = taskRow(page, 11);
   await expect(row).toContainText("Genehmigen");
   await expect(row).toContainText("Approval by Bob Muster");
   // Under its own position, not somewhere in the row: the laptop has no task.
-  const vpn = page.locator("tr", { hasText: "ord_own" }).locator(".lines > li", { hasText: "vpn" });
+  const vpn = page.locator(".svc-order-block", { hasText: "ord_own" }).locator(".lines > li", { hasText: "vpn" });
   await expect(vpn.locator('li[data-task="11"]')).toHaveCount(1);
 });
 
@@ -112,14 +123,18 @@ test("the orderer is not offered their own approval to answer", async ({ page })
 });
 
 test("an order the reader holds a task in is listed, and said to be so", async ({ page }) => {
-  const held = page.locator("tr", { hasText: "ord_held" });
+  await expect(page.locator(".svc-hidden-tasks")).toContainText("1 service(s) outside the filter wait on a task of yours.");
+  await openHeld(page);
+  const held = page.locator(".svc-order-block", { hasText: "ord_held" });
   await expect(held).toContainText("for you to handle");
+  await expect(page.locator(".cell", { hasText: "For Carla" })).toHaveCount(1);
   await expect(taskRow(page, 22)).toContainText("Approval by the line manager Anja");
   // Nothing on it that belongs to whoever placed it.
   await expect(held.getByRole("button", { name: /withdraw|give back/i })).toHaveCount(0);
 });
 
 test("the holder answers the task on its own form, in the row", async ({ page }) => {
+  await openHeld(page);
   await taskRow(page, 22).getByRole("button", { name: "Work on it" }).click();
   const panel = taskRow(page, 22).locator(".cfg");
   await expect(panel.getByLabel("Genehmigen")).toBeVisible({ timeout: 10000 });
@@ -127,13 +142,32 @@ test("the holder answers the task on its own form, in the row", async ({ page })
   // asks the approver to know a key.
   await expect(panel).toContainText("Bestellt für Carla");
   await expect(panel).not.toContainText("usr_2");
+  // Approving needs no reason: the field is the rejection's, and approving hides it.
   await panel.getByLabel("Genehmigen").check();
-  await panel.getByLabel("Begründung").fill("passt");
+  await expect(panel.getByLabel("Begründung der Ablehnung")).toHaveCount(0);
   await panel.getByRole("button", { name: "Complete" }).click();
 
   await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([
-    { key: 22, body: { variables: { genehmigt: true, begruendung: "passt" } } },
+    { key: 22, body: { variables: { genehmigt: true } } },
   ]);
   // And the page read the orders again: the answered task is gone from the row.
   await expect(taskRow(page, 22)).toHaveCount(0);
+});
+
+// A rejection needs a reason: left unticked, "Genehmigen" is a rejection, and the
+// order refuses one without a reason — the instance used to stop on an incident after
+// the task was gone (found against a real tenant). The form now refuses it first.
+test("the shipped approval form will not reject without a reason", async ({ page }) => {
+  await openHeld(page);
+  await taskRow(page, 22).getByRole("button", { name: "Work on it" }).click();
+  const panel = taskRow(page, 22).locator(".cfg");
+  await expect(panel.getByLabel("Genehmigen")).toBeVisible({ timeout: 10000 });
+  await panel.getByRole("button", { name: "Complete" }).click();
+  await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([]);
+
+  await panel.getByLabel("Begründung der Ablehnung").fill("nicht nötig");
+  await panel.getByRole("button", { name: "Complete" }).click();
+  await expect.poll(() => page.evaluate(() => window.__completed)).toEqual([
+    { key: 22, body: { variables: { genehmigt: false, begruendung: "nicht nötig" } } },
+  ]);
 });

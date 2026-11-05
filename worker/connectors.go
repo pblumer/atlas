@@ -295,6 +295,16 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 				reporter.report(ctx)
 				return out, err
 			})
+			// The directories this worker holds answer a form's directory search too,
+			// under the same bind account and over the same dialer — a mock forest
+			// when the mockup is on (ADR-0473, amended 2026-11-04). Only named
+			// directories: a task that carries its own url names no Worker a form
+			// could name.
+			if dirs != nil {
+				built.Queries[compiler.AdJobType] = func(ctx context.Context, connector string, q lookup.Query) (lookup.Page, error) {
+					return ad.RunLookup(ctx, connector, q, dialer, dirs)
+				}
+			}
 		case "entra":
 			reg, names, err := entraRegistryFromEnv(env)
 			if err != nil {

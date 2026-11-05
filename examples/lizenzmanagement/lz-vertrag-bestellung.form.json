@@ -1,0 +1,143 @@
+{
+  "type": "default",
+  "id": "lz-vertrag-bestellung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Lizenzvertrag · Licence contract**\n\nEine Menge Microsoft-365-Lizenzen pro SKU für eine Laufzeit, verrechnet auf ein PSP-Element. Integrations Manager des Vertrags ist die Person, für die bestellt wird (Feld «Für wen» im Shop); sie wählt den Vertrag bei jeder Lizenzbestellung und erhält die Aufgaben zum Vertrag. Die Tenant-verantwortliche Person genehmigt. · A number of Microsoft 365 licences per SKU for a term, charged to a WBS element. The contract's integration manager is the person the order is for; they choose the contract with every licence order and receive the contract's tasks. The person responsible for the tenant approves."
+    },
+    {
+      "key": "kunde",
+      "type": "textfield",
+      "label": "Kunde · Customer",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "projekt",
+      "type": "textfield",
+      "label": "Projekt (optional) · Project (optional)",
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "psp",
+      "type": "textfield",
+      "label": "PSP-Element · WBS element",
+      "description": "P-nnnn-nn-nn (Projekt) oder K-nnnnnn (Kunde). · P-nnnn-nn-nn (project) or K-nnnnnn (customer).",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeE3",
+      "type": "textfield",
+      "label": "Menge E3 · Quantity E3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeE5",
+      "type": "textfield",
+      "label": "Menge E5 · Quantity E5",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "mengeF3",
+      "type": "textfield",
+      "label": "Menge F3 · Quantity F3",
+      "validate": {
+        "pattern": "^[0-9]{0,6}$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "beginn",
+      "type": "textfield",
+      "label": "Beginn · Start",
+      "description": "JJJJ-MM-TT; leer heisst heute. · YYYY-MM-DD; empty means today.",
+      "validate": {
+        "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "ende",
+      "type": "textfield",
+      "label": "Ende · End",
+      "description": "JJJJ-MM-TT; leer heisst der nächste EA-Jahrestag, längstens das Ende der EA-Laufzeit. · Empty means the next EA anniversary, at most the end of the EA term.",
+      "validate": {
+        "pattern": "^(|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "exportForm",
+      "type": "radio",
+      "label": "Form der Verrechnung · Billing format",
+      "values": [
+        {
+          "label": "CSV-Datei · CSV file",
+          "value": "csv"
+        },
+        {
+          "label": "Liste per Mail · List by mail",
+          "value": "mail"
+        },
+        {
+          "label": "SAP-Format · SAP format",
+          "value": "sap"
+        }
+      ],
+      "defaultValue": "csv",
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "exportAn",
+      "type": "textfield",
+      "label": "Empfänger der Verrechnung · Billing recipient",
+      "description": "Die Funktionsadresse der Finanzen des Kunden; leer heisst unsere Finanzen. · The customer's finance mailbox; empty means our finance team.",
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "entzugsregel",
+      "type": "textfield",
+      "label": "Entzugsregel · Withdrawal rule",
+      "description": "LzEntzugStandard (zuletzt bezogen zuerst) oder die Kennung eurer eigenen Entscheidungstabelle. · LzEntzugStandard or the id of your own decision table.",
+      "defaultValue": "LzEntzugStandard",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

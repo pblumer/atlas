@@ -1,0 +1,117 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.payment.transaction.read",
+    "version": "1.0.0",
+    "profile": "datatrans",
+    "name": "Read the state of a payment transaction"
+  },
+  "spec": {
+    "resourceKind": "payment-transaction",
+    "identityScope": "merchant-account",
+    "verb": "read",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "$ref": "#/$defs/transactionId"
+        }
+      },
+      "required": [
+        "transactionId"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "$ref": "#/$defs/transactionId"
+        },
+        "merchantReference": {
+          "$ref": "#/$defs/merchantReference"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "authorized",
+            "captured",
+            "canceled",
+            "failed"
+          ]
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "currency": {
+          "$ref": "#/$defs/currency"
+        },
+        "capturedAmount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "paymentMethod": {
+          "$ref": "#/$defs/paymentMethod"
+        }
+      },
+      "required": [
+        "transactionId",
+        "status",
+        "amount",
+        "currency"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "merchantReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Whole minor units of the currency, e.g. 1050 for CHF 10.50"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 alphabetic code"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "errors": [
+      {
+        "code": "TRANSACTION_NOT_FOUND",
+        "description": "No transaction with this identifier exists for the merchant account",
+        "retryable": false
+      },
+      {
+        "code": "PROVIDER_UNAVAILABLE",
+        "description": "The provider did not answer or answered with a server error; the same key may be retried",
+        "retryable": true
+      }
+    ],
+    "idempotency": "read-only",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

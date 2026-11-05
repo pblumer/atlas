@@ -248,6 +248,11 @@ type entraOp struct {
 	// and a community whose id nobody kept cannot have its members added, the follow-up
 	// it is created for.
 	async bool
+	// selectOnly marks a listing Graph answers whole and shapes only by $select —
+	// list-subscribed-skus, whose /subscribedSkus refuses $filter
+	// (ADR-0531). It takes a select and maxUsers like any listing,
+	// and refuses filter, search, advancedQuery and pageSize, which would be a 400.
+	selectOnly bool
 }
 
 var entraOps = map[string]entraOp{
@@ -283,6 +288,9 @@ var entraOps = map[string]entraOp{
 	"invite-guest":        {needsAttributes: true},
 	"restore-group":       {needsGroup: true},
 	"list-deleted-groups": {isList: true},
+	// The tenant's licence subscriptions: prepaid and consumed units per SKU
+	// (ADR-0531).
+	"list-subscribed-skus": {isList: true, selectOnly: true},
 	// A Viva Engage community, backed by a Microsoft 365 group; the user is its first
 	// owner (ADR-0172, amended 2026-11-03).
 	"create-community": {needsUser: true, needsAttributes: true, async: true},
@@ -497,8 +505,20 @@ func entraFieldGating(taskID, op string, spec entraOp, cn *xmlEntraConnector) er
 			return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which is not a listing (%s applies to list-users, list-groups and list-deleted-groups)", taskID, a.what, op, a.what)
 		}
 	}
+	if spec.selectOnly {
+		for _, a := range []struct{ what, raw string }{
+			{"filter", cn.Filter},
+			{"search", cn.Search},
+			{"advancedQuery", cn.AdvancedQuery},
+			{"pageSize", cn.PageSize},
+		} {
+			if strings.TrimSpace(a.raw) != "" {
+				return fmt.Errorf("compiler: entra task %q sets %s on operation %q, which Graph answers whole and shapes only by select", taskID, a.what, op)
+			}
+		}
+	}
 	if strings.TrimSpace(cn.Select) != "" && !spec.isList && !spec.isDelta && !spec.selects {
-		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups and the delta operations)", taskID, op)
+		return fmt.Errorf("compiler: entra task %q sets select on operation %q, which reads nothing to project (select applies to get-user, get-user-manager, get-group, list-users, list-groups, list-deleted-groups, list-subscribed-skus and the delta operations)", taskID, op)
 	}
 	if strings.TrimSpace(cn.DeltaLink) != "" && !spec.isDelta {
 		return fmt.Errorf("compiler: entra task %q sets deltaLink on operation %q, which is not a change-tracking query (deltaLink applies to delta-users and delta-groups)", taskID, op)
@@ -1731,6 +1751,9 @@ type sharePointOp struct {
 	takesSelect bool
 	// takesPaging marks the two listings: pageToken and maxResults apply to them only.
 	takesPaging bool
+	// needsQuota marks set-site-quota: quotaGB is the storage it sets, and
+	// warningPercent, which only it takes, the share of it at which SharePoint warns.
+	needsQuota bool
 	// needsResult marks an operation whose whole point is what it returns.
 	needsResult bool
 	takesResult bool
@@ -1739,20 +1762,22 @@ type sharePointOp struct {
 // sharePointOps is the operation table: the steps a process takes in a SharePoint site
 // — record a row, read it back, change it, find rows, take one away; put a document in
 // a library, read it, ask whether it is there, list a folder, make one, delete one; and
-// read the site itself with its storage (get-site). It mirrors connector/sharepoint.Ops, which the drift test keeps honest.
+// read the site itself with its storage (get-site), and set how much storage it may use
+// (set-site-quota). It mirrors connector/sharepoint.Ops, which the drift test keeps honest.
 var sharePointOps = map[string]sharePointOp{
-	"create-item":   {needsList: true, takesFields: true, takesResult: true},
-	"get-item":      {needsList: true, needsItemID: true, takesSelect: true, needsResult: true, takesResult: true},
-	"update-item":   {needsList: true, needsItemID: true, needsFields: true, takesResult: true},
-	"delete-item":   {needsList: true, needsItemID: true, takesResult: true},
-	"list-items":    {needsList: true, takesFilter: true, takesSelect: true, takesPaging: true, needsResult: true, takesResult: true},
-	"upload-file":   {takesList: true, needsPath: true, needsContent: true, takesEncoding: true, takesFields: true, takesResult: true},
-	"download-file": {takesList: true, needsPath: true, takesEncoding: true, needsResult: true, takesResult: true},
-	"get-file":      {takesList: true, needsPath: true, needsResult: true, takesResult: true},
-	"list-folder":   {takesList: true, takesPath: true, takesPaging: true, needsResult: true, takesResult: true},
-	"create-folder": {takesList: true, needsPath: true, takesResult: true},
-	"delete-file":   {takesList: true, needsPath: true, takesResult: true},
-	"get-site":      {needsResult: true, takesResult: true},
+	"create-item":    {needsList: true, takesFields: true, takesResult: true},
+	"get-item":       {needsList: true, needsItemID: true, takesSelect: true, needsResult: true, takesResult: true},
+	"update-item":    {needsList: true, needsItemID: true, needsFields: true, takesResult: true},
+	"delete-item":    {needsList: true, needsItemID: true, takesResult: true},
+	"list-items":     {needsList: true, takesFilter: true, takesSelect: true, takesPaging: true, needsResult: true, takesResult: true},
+	"upload-file":    {takesList: true, needsPath: true, needsContent: true, takesEncoding: true, takesFields: true, takesResult: true},
+	"download-file":  {takesList: true, needsPath: true, takesEncoding: true, needsResult: true, takesResult: true},
+	"get-file":       {takesList: true, needsPath: true, needsResult: true, takesResult: true},
+	"list-folder":    {takesList: true, takesPath: true, takesPaging: true, needsResult: true, takesResult: true},
+	"create-folder":  {takesList: true, needsPath: true, takesResult: true},
+	"delete-file":    {takesList: true, needsPath: true, takesResult: true},
+	"get-site":       {needsResult: true, takesResult: true},
+	"set-site-quota": {needsQuota: true, takesResult: true},
 }
 
 // sharePointOpNames lists the operations, sorted, for the messages that have to say what
@@ -1809,6 +1834,8 @@ func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32
 		{"select", "a select", cn.Select, false, spec.takesSelect},
 		{"pageToken", "a pageToken", cn.PageToken, false, spec.takesPaging},
 		{"maxResults", "a maxResults", cn.MaxResults, false, spec.takesPaging},
+		{"quotaGB", "a quotaGB", cn.QuotaGB, spec.needsQuota, spec.needsQuota},
+		{"warningPercent", "a warningPercent", cn.WarningPercent, false, spec.needsQuota},
 		{"resultVariable", "a resultVariable", cn.ResultVariable, spec.needsResult, spec.takesResult},
 	}
 	for _, v := range values {
@@ -1865,6 +1892,8 @@ func compileSharePointConnectorTask(b *Builder, st xmlServiceTask, retries int32
 		{"filter", cn.Filter, &cfg.Filter},
 		{"select", cn.Select, &cfg.Select},
 		{"pageToken", cn.PageToken, &cfg.PageToken},
+		{"quotaGB", cn.QuotaGB, &cfg.QuotaGB},
+		{"warningPercent", cn.WarningPercent, &cfg.WarningPercent},
 	} {
 		if strings.TrimSpace(v.raw) == "" {
 			continue
@@ -1900,6 +1929,10 @@ func sharePointWhy(attr string) string {
 		return "the columns get-item and list-items answer with"
 	case "pageToken", "maxResults":
 		return "where a listing carries on and how much one page holds; only list-items and list-folder page"
+	case "quotaGB":
+		return "the storage set-site-quota sets, in gigabytes, e.g. =number(kontingent); only set-site-quota sets storage"
+	case "warningPercent":
+		return "the share of the quota, in percent, at which SharePoint warns; only set-site-quota sets one, and empty there means 90"
 	case "resultVariable":
 		return "a read whose answer is discarded is a call made for nothing"
 	}

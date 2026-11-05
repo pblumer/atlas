@@ -182,6 +182,20 @@ var (
 	// mailbox of a synchronised account is the ordinary mailbox Exchange Online creates
 	// once the account is licensed, read with get-mailbox.
 	remoteOnly = "a remote mailbox is an Exchange Server object; in Exchange Online the mailbox of a synchronised account is created when the account is licensed and read with get-mailbox"
+
+	// placesOnly is what the Places operations say on Exchange Server, which has no
+	// Set-Place or Get-Place: there a room's city, street and the like are properties of
+	// its account, and in a hybrid organization they reach Exchange Online with it.
+	placesOnly = "Set-Place and Get-Place exist in Exchange Online only; on Exchange Server a room's city and address are properties of its account (update-mailbox, Set-User), which reach Exchange Online with the account in a hybrid organization"
+
+	// placeMetadata are the Set-Place parameters a model may author: what Outlook's
+	// Room Finder filters and shows (City, Floor and Capacity above all), the address,
+	// and the room's equipment. ParentId is left out: Microsoft documents it as
+	// experimental, for organizations onboarding to Microsoft Places, whose own
+	// Set-PlaceV3 manages that hierarchy.
+	placeMetadata = []string{"Capacity", "City", "Building", "Floor", "FloorLabel", "Label", "Tags",
+		"CountryOrRegion", "State", "Street", "PostalCode", "GeoCoordinates", "Phone",
+		"IsWheelChairAccessible", "AudioDeviceName", "DisplayDeviceName", "VideoDeviceName", "MTREnabled"}
 )
 
 // Ops is the operation table. It covers the four areas an Exchange administration
@@ -265,6 +279,17 @@ var Ops = map[string]Op{
 	"create-distribution-group": same(Op{Area: "group", Label: "create a distribution group", Required: []string{"Name"},
 		Optional: []string{"DisplayName", "Alias", "PrimarySmtpAddress", "Type", "ManagedBy", "Members", "Notes", "OrganizationalUnit", "MemberJoinRestriction", "MemberDepartRestriction", "RequireSenderAuthenticationEnabled"}, Result: ResultObject},
 		Variant{Cmdlet: "New-DistributionGroup"}),
+	// A room list is a distribution group Exchange marks as one (New-DistributionGroup
+	// -RoomList): Outlook's Room Finder lists rooms through room lists only, so a room
+	// mailbox in none is bookable by its address and absent from "Browse all rooms"
+	// (ADR-0532). Its members are room mailboxes; a
+	// room list carries no ordinary recipients, so the group options of
+	// create-distribution-group that are about people joining and sending are not
+	// offered. Find one with list-distribution-groups and RecipientTypeDetails
+	// RoomList.
+	"create-room-list": same(Op{Area: "group", Label: "create a room list", Required: []string{"Name"},
+		Optional: []string{"DisplayName", "Alias", "PrimarySmtpAddress", "ManagedBy", "Members", "Notes", "OrganizationalUnit"}, Result: ResultObject},
+		Variant{Cmdlet: "New-DistributionGroup", Fixed: map[string]any{"RoomList": true}}),
 	"get-distribution-group": same(Op{Area: "group", Label: "read a distribution group", Required: identity, Result: ResultObject, NeedsResult: true},
 		Variant{Cmdlet: "Get-DistributionGroup"}),
 	"list-distribution-groups": same(Op{Area: "group", Label: "list distribution groups", Optional: []string{"Filter", "Anr", "RecipientTypeDetails", "OrganizationalUnit"}, Result: ResultList, NeedsResult: true, Sized: true},
@@ -307,6 +332,15 @@ var Ops = map[string]Op{
 		Variant{Cmdlet: "Get-CalendarProcessing"}),
 	"set-calendar-processing": same(Op{Area: "settings", Label: "set calendar processing", Required: identity, Open: true},
 		Variant{Cmdlet: "Set-CalendarProcessing"}),
+	// A room's Places metadata, what Room Finder filters by
+	// (ADR-0532). Exchange Online only: Exchange Server
+	// has no Places.
+	"get-place": {Area: "settings", Label: "read a room's place metadata", Required: identity, Result: ResultObject, NeedsResult: true,
+		Online:      &Variant{Cmdlet: "Get-Place"},
+		Unavailable: placesOnly},
+	"set-place": {Area: "settings", Label: "set a room's place metadata", Required: identity, Optional: placeMetadata, AnyOf: true,
+		Online:      &Variant{Cmdlet: "Set-Place"},
+		Unavailable: placesOnly},
 	"set-mailbox-quota": same(Op{Area: "settings", Label: "set mailbox quotas", Required: identity, AnyOf: true,
 		Optional: []string{"IssueWarningQuota", "ProhibitSendQuota", "ProhibitSendReceiveQuota", "UseDatabaseQuotaDefaults", "RecoverableItemsQuota", "RecoverableItemsWarningQuota"}},
 		Variant{Cmdlet: "Set-Mailbox"}),

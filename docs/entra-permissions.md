@@ -32,6 +32,8 @@ Derived from the Graph request each operation issues (`connector/entra/offload.g
 | `create-user`, `update-user`, `delete-user`, `enable`, `disable`, `reset-password` | `POST` / `PATCH` / `DELETE /users/{id}` | **`User.ReadWrite.All`** |
 | `get-user`, `get-user-manager`, `list-users`, `delta-users` | `GET /users[/{id}][/delta]` — the manager as `GET /users/{id}?$expand=manager` | `User.Read.All` (subset of `User.ReadWrite.All`) |
 | A form's directory field (lookup, not an operation) | `GET /users?$filter=…&$select=…&$top=…`, and `GET /users/{id}?$select=…` to check a submitted id | `User.Read.All` — and the Worker's **Forms may search** switch in the Console ([ADR-0473](adr/0473-form-remote-data-sources.md)) |
+| `list-subscribed-skus` | `GET /subscribedSkus` (only `$select`; Graph refuses `$filter`) | **`LicenseAssignment.Read.All`** — Microsoft's least privileged permission for it; `Organization.Read.All` and `Directory.Read.All` also suffice but grant more ([List subscribedSkus](https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0)) |
+| `list-users` / `get-user` with `signInActivity` in the `select` | `GET /users?$select=…,signInActivity`, `GET /users/{id}?$select=…,signInActivity` | `User.Read.All` **plus `AuditLog.Read.All`**, and an **Entra ID P1 or P2** licence in the tenant ([List users](https://learn.microsoft.com/en-us/graph/api/user-list?view=graph-rest-1.0), example 11). With `signInActivity` selected Graph returns at most 500 users per page |
 | `assign-license` | `POST /users/{id}/assignLicense` | `User.ReadWrite.All` — no `Organization.Read.All` needed, the worker sends explicit `skuId`s rather than enumerating SKUs |
 | `add-group-member`, `remove-group-member` | `POST` / `DELETE /groups/{id}/members` | **`GroupMember.ReadWrite.All`** (tighter) or `Group.ReadWrite.All` |
 | `create-group`, `update-group`, `delete-group`, `add-group-owner`, `remove-group-owner` | `POST` / `PATCH` / `DELETE /groups[/{id}/owners]` | **`Group.ReadWrite.All`** |
@@ -100,6 +102,26 @@ when a process actually uses those operations, and drop them otherwise.
   the service account needs read permission on it (*Manage Private Keys*). Set exactly one
   of the three — the worker refuses a tenant that has more. With a certificate no shared
   secret travels to Entra: the worker signs a short-lived assertion and only that is sent.
+
+## The SharePoint worker's one step outside Graph: `set-site-quota`
+
+The `sharepoint` Worker Type ([ADR-0141](adr/0141-sharepoint-connector.md)) works through
+Microsoft Graph with `Sites.ReadWrite.All` or `Sites.Selected`, except for
+`set-site-quota`: Graph cannot set a site's storage quota, so that operation goes to
+SharePoint's tenant administration (`https://<tenant>-admin.sharepoint.com`, the client
+object model's `ProcessQuery`, the interface `Set-SPOSite -StorageQuota` uses). It needs:
+
+| What | Why |
+|---|---|
+| The **SharePoint** application permission **`Sites.FullControl.All`** (API *SharePoint*, not *Microsoft Graph*), with admin consent | Tenant administration answers an app only with full control over the tenant's sites. There is no narrower grant for it. |
+| A **certificate** credential (`certificate` or `certificateThumbprint` in the bundle) | SharePoint's own APIs refuse an app-only token obtained with a client secret. A bundle with a secret never reaches the admin host: the worker answers `SHAREPOINT_ADMIN_NOT_PERMITTED` at once. |
+| Optionally `adminUrl` in the bundle | The admin host is derived from the site (`contoso.sharepoint.com` → `contoso-admin.sharepoint.com`); a tenant under a custom domain names it. |
+
+`Sites.FullControl.All` reaches every site of the tenant, which is far more than the rest
+of the Worker needs. Grant it only where quotas are to be set automatically, on a
+dedicated app registration if the other SharePoint steps should keep the narrower grant
+(two Workers, one per app). Without it a process catches `SHAREPOINT_ADMIN_NOT_PERMITTED`
+and hands the quota to a person, as `examples/m365-dienste` does.
 
 ## See also
 

@@ -194,6 +194,52 @@ time the worker refuses a non-empty password and `set-password` with an incident
 - Bad: a second mail path beside the Worker, with its own configuration, retries and
   failure reporting; texts not modelled; nothing in the preview outbox.
 
+## Amendment (2026-11-04): an administrator can revoke a known password
+
+A link does not stop the password the account has. Until its owner uses the link, the
+old password still signs in — and the reason for sending one is often that somebody
+else knows that password: an administrator typed it, it was mailed, it stands in the
+log of an instance that ran the old intake. For such an account a link alone leaves the
+door open for as long as the owner takes to read their mail.
+
+So `POST /api/v1/users/{id}/password-link` takes `"revoke": true`. Before the link is
+minted the account's password hash is cleared: the old password stops working at once,
+the account awaits activation, every session ends and its OAuth grants are revoked. The
+link the owner then gets is an activation link (7 days), mailed or handed over as
+before. The Organization page offers it as "Revoke password…" in an account's menu.
+
+- **Nothing is revoked that no link follows.** The vault, an address, the external URL
+  and the system process are checked first; a refusal leaves the password as it was.
+- **Not one's own account.** A person replaces their own password under the account
+  menu; revoking it would sign them out mid-action.
+- **Not the last administrator who can sign in** — an enabled administrator with a
+  password here, or one an identity provider vouches for. Revoking that one would leave
+  nobody to administer the instance until somebody runs `atlas reset-password` on the
+  server.
+
+Revoking is audited (`auth.password_revoked`); the password itself never was anywhere
+it could be audited.
+
+## Amendment (2026-11-04): a revoke ends the links before it; the preview keeps no piece
+
+Two gaps in the design as built:
+
+- **A revoke brought old links back.** A link's signature covers the account's id, the
+  expiry, its address and its password hash, and a link dies because using it changes
+  the hash. A revoke returns the hash to the empty value an activation link was signed
+  over, so the account's activation link of the past seven days opened it again, whether
+  it had been used or not — and it may be held by the very person the revoke shuts out.
+  The account now counts its revokes (`credentialEpoch`), and a link is signed over that
+  number as well. Zero is left out of the signature, so every link of an account that was
+  never revoked, those mailed before this amendment among them, keeps holding.
+- **The preview outbox searched for the link.** It replaced the link as minted, and a model
+  can write the link in pieces, reversed or encoded where no search for it finds it, for an
+  operator reading the outbox to put together. A mail that carried a password link now
+  keeps its envelope in the outbox and loses its subject and both bodies.
+
+The pages a link opens also refuse every frame (`frame-ancestors 'none'`,
+`X-Frame-Options: DENY`).
+
 ## Links
 
 - supersedes, in part, ADR-0044 (no self-service recovery) and ADR-0126 (the intake's

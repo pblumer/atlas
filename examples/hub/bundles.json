@@ -59,6 +59,11 @@
       "id": "ad-dienste",
       "tags": ["active-directory"],
       "examples": ["ad-dienste"]
+    },
+    {
+      "id": "lizenzmanagement",
+      "tags": ["m365", "lizenzen"],
+      "examples": ["lizenzmanagement"]
     }
   ]
 }

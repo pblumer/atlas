@@ -44,8 +44,8 @@ func TestHubReleasesAreCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(samples) != 11 {
-		t.Fatalf("%d bundles composed, want the 11 of bundles.json", len(samples))
+	if len(samples) != 12 {
+		t.Fatalf("%d bundles composed, want the 12 of bundles.json", len(samples))
 	}
 	if _, _, err := hubIndex(lock, samples); err != nil {
 		t.Fatalf("%v\n\nAfter changing an example, regenerate the catalogue and record its new version:\n"+
@@ -78,7 +78,7 @@ func TestHubBuildWritesARegistryAServerAccepts(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, out.String())
 	}
 	index := readBuiltIndex(t, dir, public)
-	if len(index.Releases) != 11 || index.RegistryID != "io.github.pblumer.atlas.hub" {
+	if len(index.Releases) != 12 || index.RegistryID != "io.github.pblumer.atlas.hub" {
 		t.Fatalf("index = %s with %d releases", index.RegistryID, len(index.Releases))
 	}
 	for _, r := range index.Releases {
@@ -194,6 +194,28 @@ func TestEverySampleInstallsFromItsHubPackage(t *testing.T) {
 			}
 			dir := unpackHubPackage(t, archive)
 			args := []string{"--server", ts.URL, "--note", "atlas hub"}
+			// A package that brings its architecture names capabilities this empty map
+			// lacks: the person installing it decides each, here by adopting what the
+			// package proposes (ADR-0528).
+			var plan struct {
+				Artifacts []struct {
+					Ref      string `json:"ref"`
+					Status   string `json:"status"`
+					Proposed bool   `json:"proposed"`
+				} `json:"artifacts"`
+			}
+			if err := json.Unmarshal(body, &plan); err != nil {
+				t.Fatal(err)
+			}
+			var adopt []string
+			for _, a := range plan.Artifacts {
+				if a.Status == "gap" && a.Proposed {
+					adopt = append(adopt, a.Ref)
+				}
+			}
+			if len(adopt) > 0 {
+				args = append(args, "--adopt", strings.Join(adopt, ","))
+			}
 			if questions, err := readOptional(filepath.Join(dir, packageQuestions)); err != nil {
 				t.Fatal(err)
 			} else if questions != nil {

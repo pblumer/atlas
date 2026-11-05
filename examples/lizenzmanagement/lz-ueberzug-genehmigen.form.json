@@ -1,0 +1,39 @@
+{
+  "type": "default",
+  "id": "lz-ueberzug-genehmigen",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Überzug genehmigen · Approve an overdraft**\n\nVertrag · Contract: {{vertrag}} · SKU {{skuInfo.kurz}} · Position {{bezugId}}\n\nMenge {{reservierung.menge}}, belegt {{reservierung.belegt}}, reserviert {{reservierung.reserviert}}, schon überzogen {{reservierung.ueberzug}}. Ein Überzug wird nachverrechnet. · An overdraft is charged afterwards."
+    },
+    {
+      "key": "entscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Genehmigen · Approve",
+          "value": "genehmigt"
+        },
+        {
+          "label": "Ablehnen · Reject",
+          "value": "abgelehnt"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "begruendung",
+      "type": "textarea",
+      "label": "Begründung · Reason",
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

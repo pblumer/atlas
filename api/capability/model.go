@@ -133,6 +133,12 @@ type Realization struct {
 	// Note is what a system or manual realization is, in words. Required for those
 	// two kinds, because "a system does it" with no name is not a realization.
 	Note string `json:"note,omitempty"`
+	// BundledBy names the application whose bundle brought this realization (its
+	// portable key). Such a realization is the application's, read into the record
+	// and never stored on it: a write of the record drops it (NormalizeCapability),
+	// so reading a capability and sending it back cannot copy an application's
+	// realizations into the map (ADR-0528).
+	BundledBy string `json:"bundledBy,omitempty"`
 }
 
 // KPI is a direction with a goal. Nobody is fined for missing one.

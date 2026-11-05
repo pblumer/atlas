@@ -1,0 +1,55 @@
+[
+  {
+    "name": "capture the full amount",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF"
+    },
+    "valid": true
+  },
+  {
+    "name": "partial capture",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "transactionId": "251104123456789012",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 2500,
+      "currency": "CHF"
+    },
+    "valid": true
+  },
+  {
+    "name": "capture without a transaction",
+    "direction": "input",
+    "document": {
+      "idempotencyKey": "inst-2251799813685249-el-7-0001",
+      "merchantReference": "ORD-2026-0042",
+      "amount": 4990,
+      "currency": "CHF"
+    },
+    "valid": false
+  },
+  {
+    "name": "captured",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "capturedAmount": 4990
+    },
+    "valid": true
+  },
+  {
+    "name": "captured amount of zero is not a capture",
+    "direction": "output",
+    "document": {
+      "transactionId": "251104123456789012",
+      "capturedAmount": 0
+    },
+    "valid": false
+  }
+]

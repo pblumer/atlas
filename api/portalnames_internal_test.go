@@ -21,7 +21,8 @@ import (
 // TestTheOrdersTableResolvesWhoAnOrderIsFor.
 func TestTheOrdersTableResolvesWhoAnOrderIsFor(t *testing.T) {
 	src := readWeb(t, "shop.js")
-	rows := webRegion(t, src, "function orderRowBodies(", "\n}")
+	// The order as "My services" shows it under an entry.
+	rows := webRegion(t, src, "function orderNote(", "\n}")
 	if strings.Contains(rows, "o.recipient || ''") {
 		t.Error("the table prints the principal id of whoever the order is for, which " +
 			"is a reference the reader cannot read")
@@ -90,8 +91,9 @@ func TestAnUnknownPrincipalStillShowsSomething(t *testing.T) {
 // A column that shows names and filters ids is a filter that finds nothing for
 // everything somebody types.
 func TestTheColumnFilterSearchesTheNameAsWell(t *testing.T) {
-	body := webRegion(t, readWeb(t, "shop.js"), "function matchesFilters(", "\n}")
+	// The search above "My services", which matches the person an entry is for.
+	body := webRegion(t, readWeb(t, "shop.js"), "function entryMatches(", "\n}")
 	if !strings.Contains(body, "personName(") {
-		t.Error("the person filter searches the id the column no longer shows")
+		t.Error("the search matches the id the entry no longer shows")
 	}
 }

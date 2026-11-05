@@ -1,0 +1,161 @@
+{
+  "apiVersion": "atlas.io/technical-capability/v1alpha1",
+  "kind": "TechnicalCapabilityContract",
+  "metadata": {
+    "id": "io.atlas.payment.checkout.create",
+    "version": "1.0.0",
+    "profile": "datatrans",
+    "name": "Create a hosted payment checkout"
+  },
+  "spec": {
+    "resourceKind": "payment-checkout",
+    "identityScope": "merchant-account",
+    "verb": "create",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "idempotencyKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "merchantReference": {
+          "$ref": "#/$defs/merchantReference"
+        },
+        "amount": {
+          "$ref": "#/$defs/amount"
+        },
+        "currency": {
+          "$ref": "#/$defs/currency"
+        },
+        "captureMode": {
+          "enum": [
+            "automatic",
+            "manual"
+          ]
+        },
+        "paymentMethods": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/paymentMethod"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2}$"
+        },
+        "returnUrls": {
+          "type": "object",
+          "properties": {
+            "success": {
+              "type": "string",
+              "format": "uri"
+            },
+            "cancel": {
+              "type": "string",
+              "format": "uri"
+            },
+            "error": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "required": [
+            "success",
+            "cancel",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "idempotencyKey",
+        "merchantReference",
+        "amount",
+        "currency",
+        "captureMode",
+        "returnUrls"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9._:-]+$",
+          "description": "Derived from the process instance and element, identical on every retry of the same job"
+        },
+        "merchantReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Whole minor units of the currency, e.g. 1050 for CHF 10.50"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "description": "ISO 4217 alphabetic code"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "outputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "transactionId": {
+          "$ref": "#/$defs/transactionId"
+        },
+        "paymentPageUrl": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "transactionId",
+        "paymentPageUrl"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "transactionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "errors": [
+      {
+        "code": "AMOUNT_INVALID",
+        "description": "The amount is outside what the merchant account accepts",
+        "retryable": false
+      },
+      {
+        "code": "CURRENCY_NOT_SUPPORTED",
+        "description": "The merchant account does not accept this currency",
+        "retryable": false
+      },
+      {
+        "code": "PAYMENT_METHOD_NOT_AVAILABLE",
+        "description": "A requested payment method is not enabled for the merchant account",
+        "retryable": false
+      },
+      {
+        "code": "PROVIDER_UNAVAILABLE",
+        "description": "The provider did not answer or answered with a server error; the same key may be retried",
+        "retryable": true
+      }
+    ],
+    "idempotency": "conditional",
+    "consistency": "provider-defined",
+    "pagination": "none"
+  }
+}

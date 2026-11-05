@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
+	"net/http"
 	"net/url"
 	"time"
 )
@@ -155,26 +157,80 @@ func contentTools() []Tool {
 		{
 			Name: "atlas_refresh_catalog_content",
 			Description: "Refresh every bound product a catalogue offers, each all or nothing on its own; one " +
-				"homed in a catalogue you do not maintain is skipped. Answers refreshed, refused (with the " +
-				"problems) or skipped per product. It waits up to ten minutes; the server finishes the batch " +
-				"even when the call gives up first, so calling it again finds the products refreshed.",
+				"homed in a catalogue you do not maintain is skipped. Starts the refresh in the background " +
+				"and waits up to 45 seconds for it: answers the run's progress — state (running or done), " +
+				"total, done, and refreshed, refused (with the problems) or skipped per finished product. A " +
+				"refresh of the catalogue already running is followed rather than started twice. When the " +
+				"state is still running, read it with atlas_catalog_refresh_status until it is done BEFORE " +
+				"publishing: publishing in the middle freezes the products not yet refreshed as they were.",
 			InputSchema: catalogIDArg("The catalogue whose bound products to refresh."),
 			Handler: func(c *Client, args map[string]any) (string, error) {
 				id, err := argString(args, "id")
 				if err != nil {
 					return "", err
 				}
-				return asText(c.withTimeout(catalogueRefreshTimeout).post(withID(id, "/content/refresh"), "", nil))
+				body, err := c.post(withID(id, "/content/refresh")+"?wait=false", "", nil)
+				var ae *apiError
+				switch {
+				case errors.As(err, &ae) && ae.Status == http.StatusConflict:
+					// Already running: follow that one rather than failing.
+				case err != nil:
+					return "", err
+				}
+				return followRefresh(c, id, body, catalogueRefreshWait)
+			},
+		},
+		{
+			Name: "atlas_catalog_refresh_status",
+			Description: "How far the running content refresh of a catalogue has come, or how the last one " +
+				"ended: state (running or done), who started it and when, total bound products, how many are " +
+				"done, and refreshed, refused (with the problems) or skipped per finished product. Read it " +
+				"after atlas_refresh_catalog_content answered running, until the state is done, and only then " +
+				"publish. Not found when no refresh has run since the server started.",
+			InputSchema: catalogIDArg("The catalogue whose refresh to read."),
+			Handler: func(c *Client, args map[string]any) (string, error) {
+				id, err := argString(args, "id")
+				if err != nil {
+					return "", err
+				}
+				return asText(c.get(withID(id, "/content/refresh")))
 			},
 		},
 	})
 }
 
-// catalogueRefreshTimeout bounds atlas_refresh_catalog_content. The server
-// refreshes the bound products one after the other, each a recheck and a fetch
-// of every page, which took about 1.5 seconds a product against a real wiki: a
-// catalogue of 35 products needed close to a minute, twice the client's thirty
-// seconds, and the agent saw a timeout for a refresh that went on and succeeded.
-// Ten minutes covers a few hundred products. The server finishes the batch even
-// when this runs out, so asking again finds the products refreshed.
-const catalogueRefreshTimeout = 10 * time.Minute
+// catalogueRefreshWait is how long atlas_refresh_catalog_content follows the
+// refresh it started before it answers with the progress so far. The server
+// refreshes the bound products one after the other, about 1.5 seconds a product
+// against a real wiki, so a catalogue of 35 takes close to a minute — and an
+// agent's host cuts a tool call off after a minute. Forty-five seconds answers
+// inside that limit; atlas_catalog_refresh_status follows the rest.
+var catalogueRefreshWait = 45 * time.Second
+
+// refreshPoll is how often the progress is read while following a refresh.
+var refreshPoll = time.Second
+
+// followRefresh reads a catalogue's refresh progress until it is done or wait
+// has passed, and answers the last progress read — prefixed with what to do next
+// when it is still running.
+func followRefresh(c *Client, id string, last []byte, wait time.Duration) (string, error) {
+	running := func(b []byte) bool {
+		var run struct {
+			State string `json:"state"`
+		}
+		return json.Unmarshal(b, &run) != nil || run.State != "done"
+	}
+	for deadline := time.Now().Add(wait); running(last) && time.Now().Before(deadline); {
+		time.Sleep(refreshPoll)
+		b, err := c.get(withID(id, "/content/refresh"))
+		if err != nil {
+			return "", err
+		}
+		last = b
+	}
+	if running(last) {
+		return "The refresh is still running; read atlas_catalog_refresh_status until its state is done " +
+			"before publishing.\n" + string(last), nil
+	}
+	return string(last), nil
+}

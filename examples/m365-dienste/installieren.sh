@@ -6,7 +6,13 @@
 # Schritte, in dieser Reihenfolge:
 #   1. die acht Entscheidungsmodelle unter ihren Handles hochladen (der Quellbaum trägt sie
 #      ebenfalls; der Import findet sie dann unverändert vor);
-#   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
+#   2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen,
+#      Informationsmodell und Architektur, Format 4). Die Capability-Landkarte gehört dem Server:
+#      Fehlt ihr eine Capability oder ein Wertstrom des Pakets, ist das eine Lücke, die entschieden
+#      wird, bevor etwas geschrieben wird. LANDKARTE=uebernehmen (Vorgabe) übernimmt die Vorschläge
+#      des Pakets und nennt sie; LANDKARTE=weglassen lässt sie weg (dann fehlen der Skizze die
+#      Capabilities); LANDKARTE=fragen bricht ab und nennt die Lücken, die dann in der Console
+#      entschieden werden. Was die Landkarte schon hat, wird nur verknüpft und nie überschrieben;
 #   3. die Applikation veröffentlichen;
 #   4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
 #      Dokument importieren und veröffentlichen.
@@ -36,10 +42,32 @@ for m in m365-lizenzprofil m365-namensregel m365-oe-mitgliedschaften m365-postfa
 done
 
 echo "2. Applikation importieren"
-FILES=$(python3 -I -c 'import json,sys; m=json.load(open(sys.argv[1])); print(" ".join(["atlas.json"]+[p["path"] for p in m["processes"]]+[f["path"] for f in m["forms"]]+sorted({d["path"] for d in m["decisions"] if d.get("path")})))' "$HERE/atlas.json")
+FILES=$(python3 -I -c 'import json,sys; m=json.load(open(sys.argv[1])); print(" ".join(["atlas.json"]+[p["path"] for p in m["processes"]]+[f["path"] for f in m["forms"]]+sorted({d["path"] for d in m["decisions"] if d.get("path")})+[x["path"] for x in m.get("informationModels",[])]+([m["architecture"]] if m.get("architecture") else [])))' "$HERE/atlas.json")
 # shellcheck disable=SC2086
 tar -czf "$WORK/source.tar.gz" -C "$HERE" $FILES
-curl -fsS -X POST "$SERVER/api/v1/applications/source" -H "$AUTH" \
+# Zuerst der Plan: Er nennt die Lücken der Capability-Landkarte, bevor etwas geschrieben wird.
+curl -fsS -X POST "$SERVER/api/v1/applications/source?dryRun=true" -H "$AUTH" \
+  -H 'Content-Type: application/gzip' --data-binary "@$WORK/source.tar.gz" > "$WORK/plan.json"
+QUERY=$(python3 -I - "$WORK/plan.json" "${LANDKARTE:-uebernehmen}" <<'PY'
+import json, sys, urllib.parse
+plan, mode = json.load(open(sys.argv[1])), sys.argv[2]
+gaps = [a for a in plan.get("artifacts", []) if a.get("status") == "gap"]
+for a in gaps:
+    print(f"   Lücke der Capability-Landkarte: {a['ref']} ({a.get('name', '')})", file=sys.stderr)
+if not gaps:
+    print("")
+elif mode == "uebernehmen":
+    if any(not a.get("proposed") for a in gaps):
+        sys.exit("   Eine Lücke ohne Vorschlag des Pakets: in der Console entscheiden")
+    print("adopt=" + urllib.parse.quote(",".join(a["ref"] for a in gaps), safe=","))
+elif mode == "weglassen":
+    print("omit=*")
+else:
+    sys.exit("   LANDKARTE=fragen: die Lücken in der Console entscheiden (Applikationen -> Quellbaum importieren)")
+PY
+)
+[ -n "$QUERY" ] && echo "   Landkarte: ${LANDKARTE:-uebernehmen}"
+curl -fsS -X POST "$SERVER/api/v1/applications/source${QUERY:+?$QUERY}" -H "$AUTH" \
   -H 'Content-Type: application/gzip' --data-binary "@$WORK/source.tar.gz" > "$WORK/source.json"
 APP=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["applicationId"])' "$WORK/source.json")
 echo "   Applikation $APP"

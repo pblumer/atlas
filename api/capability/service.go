@@ -63,6 +63,9 @@ type Service struct {
 	// caps and streams are the two records. Owned by the loop.
 	caps    *Store
 	streams *StreamStore
+	// bundled holds the realizations application bundles brought; every read of the
+	// map sees them beside the records' own (bundled.go). nil reads none.
+	bundled *RealizationStore
 	// landscape is what the installation currently runs, resolved on the loop for the
 	// requesting principal. Nothing it returns is ever written down.
 	landscape LandscapeResolver
@@ -177,7 +180,7 @@ func (s *Service) HandleListCapabilities(w http.ResponseWriter, r *http.Request)
 	var opErr error
 	if !s.dispatch(func() {
 		now, horizon := s.now(), s.horizonMonths()
-		all, err := s.caps.LoadAll()
+		all, err := s.loadMap()
 		if err != nil {
 			opErr = err
 			return
@@ -264,7 +267,7 @@ func (s *Service) HandleGetCapability(w http.ResponseWriter, r *http.Request) {
 	var c Capability
 	var found bool
 	var opErr error
-	if !s.dispatch(func() { c, found, opErr = s.caps.Get(r.PathValue("key")) }) {
+	if !s.dispatch(func() { c, found, opErr = s.getMap(r.PathValue("key")) }) {
 		writeShuttingDown(w)
 		return
 	}
@@ -449,12 +452,12 @@ func (s *Service) HandleCoverage(w http.ResponseWriter, r *http.Request) {
 	)
 	if !s.dispatch(func() {
 		var exists bool
-		target, exists, opErr = s.caps.Get(key)
+		target, exists, opErr = s.getMap(key)
 		if opErr != nil || !exists {
 			return
 		}
 		found = true
-		all, err := s.caps.LoadAll()
+		all, err := s.loadMap()
 		if err != nil {
 			opErr = err
 			return
@@ -494,7 +497,7 @@ func (s *Service) HandleGaps(w http.ResponseWriter, r *http.Request) {
 	var rep GapReport
 	var opErr error
 	if !s.dispatch(func() {
-		caps, err := s.caps.LoadAll()
+		caps, err := s.loadMap()
 		if err != nil {
 			opErr = err
 			return
@@ -754,3 +757,36 @@ func requestActor(r *http.Request) string {
 // SetMeasurementResolver wires the off-loop runtime read (ADR-0239). Called once at
 // start-up, before the service serves anything.
 func (s *Service) SetMeasurementResolver(m MeasurementResolver) { s.measure = m }
+
+// SetBundledRealizations hands the service the realizations application bundles
+// brought, so every read of the map sees them (bundled.go). Settable after
+// construction, like the measurement resolver: a service without it reads the records
+// alone.
+func (s *Service) SetBundledRealizations(st *RealizationStore) { s.bundled = st }
+
+// loadMap reads every capability as the map reads it: with the realizations bundles
+// brought. Runs on the loop.
+func (s *Service) loadMap() ([]Capability, error) {
+	all, err := s.caps.LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	overlay, err := s.bundled.Overlay()
+	if err != nil {
+		return nil, err
+	}
+	return WithBundled(all, overlay), nil
+}
+
+// getMap reads one capability as the map reads it. Runs on the loop.
+func (s *Service) getMap(key string) (Capability, bool, error) {
+	c, found, err := s.caps.Get(key)
+	if err != nil || !found {
+		return c, found, err
+	}
+	overlay, err := s.bundled.Overlay()
+	if err != nil {
+		return c, false, err
+	}
+	return WithBundledOne(c, overlay), true, nil
+}

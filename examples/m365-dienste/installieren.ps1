@@ -5,7 +5,11 @@
 .DESCRIPTION
   Dieselben Schritte wie installieren.sh, für Windows PowerShell 5.1 und PowerShell 7:
     1. die acht Entscheidungsmodelle unter ihren Handles hochladen;
-    2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen);
+    2. die Applikation als Quellbaum importieren (Prozesse, Formulare, Entscheidungen samt Modellen,
+       Informationsmodell und Architektur, Format 4). Lücken der Capability-Landkarte entscheidet
+       -Landkarte: uebernehmen (Vorgabe) übernimmt die Vorschläge des Pakets und nennt sie,
+       weglassen lässt sie weg, fragen bricht ab und nennt sie für die Console. Was die Landkarte
+       schon hat, wird nur verknüpft und nie überschrieben;
     3. die Applikation veröffentlichen;
     4. die Platzhalter im Katalogdokument mit den Gruppen der Instanz ausfüllen und das
        Dokument importieren und veröffentlichen.
@@ -25,7 +29,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$Server,
   [string]$Antworten = 'antworten.json',
-  [string]$Token = $env:ATLAS_TOKEN
+  [string]$Token = $env:ATLAS_TOKEN,
+  [ValidateSet('uebernehmen', 'weglassen', 'fragen')][string]$Landkarte = 'uebernehmen'
 )
 $ErrorActionPreference = 'Stop'
 if (-not $Token) { throw 'ATLAS_TOKEN ist nicht gesetzt (oder -Token angeben).' }
@@ -44,13 +49,31 @@ foreach ($m in 'm365-lizenzprofil', 'm365-namensregel', 'm365-oe-mitgliedschafte
 Write-Host '2. Applikation importieren'
 $manifest = [IO.File]::ReadAllText((Join-Path $here 'atlas.json'), $utf8) | ConvertFrom-Json
 $files = @('atlas.json') + @($manifest.processes | ForEach-Object { $_.path }) + @($manifest.forms | ForEach-Object { $_.path }) + @($manifest.decisions | Where-Object { $_.path } | ForEach-Object { $_.path } | Sort-Object -Unique)
+$files += @($manifest.informationModels | Where-Object { $_.path } | ForEach-Object { $_.path })
+if ($manifest.architecture) { $files += $manifest.architecture }
 $work = Join-Path ([IO.Path]::GetTempPath()) ('m365-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 try {
   $archive = Join-Path $work 'source.tar.gz'
   & tar -czf $archive -C $here @files
   if ($LASTEXITCODE -ne 0) { throw "tar ist mit $LASTEXITCODE gescheitert" }
-  $source = Invoke-RestMethod -Method Post -Uri "$Server/api/v1/applications/source" -Headers $auth -ContentType 'application/gzip' -InFile $archive
+  # Zuerst der Plan: Er nennt die Lücken der Capability-Landkarte, bevor etwas geschrieben wird.
+  $plan = Invoke-RestMethod -Method Post -Uri "$Server/api/v1/applications/source?dryRun=true" -Headers $auth -ContentType 'application/gzip' -InFile $archive
+  $gaps = @($plan.artifacts | Where-Object { $_.status -eq 'gap' })
+  foreach ($g in $gaps) { Write-Host "   Lücke der Capability-Landkarte: $($g.ref) ($($g.name))" }
+  $query = ''
+  if ($gaps.Count -gt 0) {
+    switch ($Landkarte) {
+      'uebernehmen' {
+        if (@($gaps | Where-Object { -not $_.proposed }).Count -gt 0) { throw 'Eine Lücke ohne Vorschlag des Pakets: in der Console entscheiden.' }
+        $query = '?adopt=' + [uri]::EscapeDataString((($gaps | ForEach-Object { $_.ref }) -join ',')).Replace('%2C', ',')
+      }
+      'weglassen' { $query = '?omit=*' }
+      default { throw 'Landkarte fragen: die Lücken in der Console entscheiden (Applikationen -> Quellbaum importieren).' }
+    }
+    Write-Host "   Landkarte: $Landkarte"
+  }
+  $source = Invoke-RestMethod -Method Post -Uri "$Server/api/v1/applications/source$query" -Headers $auth -ContentType 'application/gzip' -InFile $archive
   Write-Host "   Applikation $($source.applicationId)"
 
   Write-Host '3. Applikation veröffentlichen'

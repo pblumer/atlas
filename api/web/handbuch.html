@@ -80,6 +80,8 @@ pre code{background:transparent;border:0;padding:0}
 kbd{font-family:ui-monospace,monospace;font-size:.82em;background:var(--card);
   border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
 
+.hb-module{display:inline-block;vertical-align:-5px;margin-right:8px}
+.hb-module svg{display:block}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:16px 18px;margin:14px 0;box-shadow:var(--shadow)}
 /* When a runbook was last read against the real thing. A runbook names menu paths in
@@ -438,24 +440,26 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
       <h3 data-l="de">Die Apps im Überblick</h3><h3 data-l="en">The apps at a glance</h3>
       <p data-l="de">Oben links im Raster-Menü (⊞) wechselst du zwischen den Apps. Das Menü zeigt nur,
         was deine <a href="#konten">Rolle</a> erreicht – wer keine Modelle bearbeiten darf, sieht Modeler,
-        Panorama und Data gar nicht erst.</p>
+        Panorama und Data gar nicht erst. Jede App hat ein eigenes Symbol in ihrer Farbe: dasselbe im
+        Menü, in der Kopfzeile neben dem Namen der offenen App und hier auf ihrer Karte.</p>
       <p data-l="en">Switch between the apps via the grid menu (⊞) in the top-left corner. The menu offers only
         what your <a href="#konten">role</a> reaches – somebody who may not edit models is not shown the Modeler,
-        Panorama or Data at all.</p>
+        Panorama or Data at all. Each app has a symbol of its own in its own colour: the same in the menu, in
+        the top bar beside the open app's name, and here on its card.</p>
       <div class="grid2">
-        <div class="card"><b>Console</b>
+        <div class="card"><span class="hb-module" data-module="console" aria-hidden="true"></span><b>Console</b>
           <p class="lead" data-l="de">Überblick über Deployments und Engine-Gesundheit – und die Stelle, an der
             <a href="#formulare">Worker</a> und ihre Zugangsdaten eingerichtet werden. Dein Startpunkt.</p>
           <p class="lead" data-l="en">Overview of deployments and engine health – and where
             <a href="#formulare">workers</a> and their credentials are configured. Your starting point.</p>
           <a class="applink" href="/#/console">→ Console</a></div>
-        <div class="card"><b>Modeler</b>
+        <div class="card"><span class="hb-module" data-module="modeler" aria-hidden="true"></span><b>Modeler</b>
           <p class="lead" data-l="de">BPMN- und DMN-Modelle im Browser zeichnen, im
             <a href="#playground">Playground</a> durchrechnen und deployen.</p>
           <p class="lead" data-l="en">Draw BPMN and DMN models in the browser, run them through the
             <a href="#playground">Playground</a>, and deploy them.</p>
           <a class="applink" href="/#/modeler">→ Modeler</a></div>
-        <div class="card"><b>Tasks</b>
+        <div class="card"><span class="hb-module" data-module="tasks" aria-hidden="true"></span><b>Tasks</b>
           <p class="lead" data-l="de">Der Posteingang für menschliche Aufgaben (User-Tasks) mit Formularen.
             Genehmigungen stehen hier ebenfalls, und sie werden hier auch entschieden: Eine Genehmigung ist eine
             User-Task. Die Zeile nennt das Produkt und die Kosten, die Detailansicht nennt Empfänger, Besteller
@@ -466,7 +470,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             names the recipient, the orderer and the order, and Approve or Reject sends the decision — with the
             reason a rejection needs.</p>
           <a class="applink" href="/#/tasks">→ Tasks</a></div>
-        <div class="card"><b>Shop</b>
+        <div class="card"><span class="hb-module" data-module="portal" aria-hidden="true"></span><b>Shop</b>
           <p class="lead" data-l="de">Der Shop: den eigenen Katalog durchsehen, etwas bestellen und
             sehen, wo eine Bestellung steht – bis hin zur Rückgabe. Eine eigene Seite, nicht Teil dieser
             Oberfläche, und sie trägt die Farben des Katalogs, dem man zugeordnet ist.</p>
@@ -474,7 +478,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             something, and see where an order stands – down to giving it back. A page of its own rather than a
             view of this shell, and it wears the brand of the catalogue you belong to.</p>
           <a class="applink" href="/shop.html">→ Shop</a></div>
-        <div class="card"><b>Catalogue</b>
+        <div class="card"><span class="hb-module" data-module="catalog" aria-hidden="true"></span><b>Catalogue</b>
           <p class="lead" data-l="de">Hier wird der Katalog gefüllt: Produkte erfassen, sie an
             die Prozesse binden, die sie bereitstellen und entziehen, festlegen was was enthält
             und was zuerst da sein muss – und veröffentlichen. Bis zur ersten Veröffentlichung
@@ -484,23 +488,29 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
             to exist first – and publish. Until the first release the shop shows nobody
             anything.</p>
           <a class="applink" href="/#/catalog">→ Catalogue</a></div>
-        <div class="card"><b>Operations</b>
+        <div class="card"><span class="hb-module" data-module="operations" aria-hidden="true"></span><b>Operations</b>
           <p class="lead" data-l="de">Laufende Instanzen beobachten, Incidents lösen, Entscheidungen prüfen.</p>
           <p class="lead" data-l="en">Watch running instances, resolve incidents, inspect decisions.</p>
           <a class="applink" href="/#/operations">→ Operations</a></div>
-        <div class="card"><b>Panorama</b>
+        <div class="card"><span class="hb-module" data-module="panorama" aria-hidden="true"></span><b>Panorama</b>
           <p class="lead" data-l="de">Die <a href="#panorama">Landschaft</a>: welche Prozesse, Worker und
             Entscheidungen es gibt und wie sie zusammenhängen – abgeleitet aus dem, was deployt ist.</p>
           <p class="lead" data-l="en">The <a href="#panorama">landscape</a>: which processes, workers and
             decisions exist and how they hang together – derived from what is actually deployed.</p>
           <a class="applink" href="/#/panorama/starmap">→ Panorama</a></div>
-        <div class="card"><b>Data</b>
+        <div class="card"><span class="hb-module" data-module="data" aria-hidden="true"></span><b>Data</b>
           <p class="lead" data-l="de">Das <a href="#infomodell">Informationsmodell</a>: was ein «Auftrag» in
             deiner Landschaft <i>ist</i> – als UML-Klassendiagramm über allen Prozessen einer Applikation.</p>
           <p class="lead" data-l="en">The <a href="#infomodell">information model</a>: what an "order"
             <i>is</i> in your landscape – a UML class diagram above every process of an application.</p>
           <a class="applink" href="/#/data">→ Data</a></div>
       </div>
+
+      <script type="module">import { moduleSymbol } from "./module-icons.js";
+        // Each card's symbol, drawn from the Console's own table of them (module-icons.js),
+        // so the handbook shows what the drawer and the top bar show and keeps no copy.
+        for (const el of document.querySelectorAll("#willkommen [data-module]")) el.innerHTML = moduleSymbol(el.dataset.module, 22);
+      </script>
 
       <div id="systemuebersicht" style="scroll-margin-top:66px"></div>
       <h3 data-l="de">Systemübersicht: wie atlas gebaut ist</h3>
@@ -1927,7 +1937,7 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
   &lt;/process&gt;
 &lt;/definitions&gt;</code></pre>
         </details>
-        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>); ein Entra-Task mit <code>get-user-manager</code> wirft <code>ENTRA_USER_NOT_FOUND</code>, wenn Entra ID die Person nicht kennt. Jeder dieser Codes wird nur geworfen, wenn der Prozess ihn fängt; sonst bleibt es ein Fehlschlag mit Wiederholungen.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>); an Entra task with <code>get-user-manager</code> throws <code>ENTRA_USER_NOT_FOUND</code> when Entra ID does not know the person. Each of these codes is thrown only when the process catches it; otherwise it stays a failure with its retries.</span></p>
+        <p class="rz-how"><span data-l="de">Ein Worker kann einen <b>BPMN-Fehler</b> mit Code <code>DECLINED</code> werfen; das passende <code>errorEventDefinition</code> am Rand der Aufgabe fängt ihn und lenkt auf einen Fehlerpfad. Das ist erwartbares Verhalten – kein Incident. Ein Skript-Task wirft ihn, indem er seinem Fehler einen Code gibt, den der Prozess fängt (siehe <a href="#runbook-script">Skript</a>); ein Teams-Phone-Task wirft die Codes seiner fachlichen Abweisungen (siehe <a href="#ref-teamsphone">Teams Phone – alle Operationen</a>); ein Entra-Task mit <code>get-user-manager</code> wirft <code>ENTRA_USER_NOT_FOUND</code>, wenn Entra ID die Person nicht kennt; ein SharePoint-Task mit <code>set-site-quota</code> wirft <code>SHAREPOINT_ADMIN_NOT_PERMITTED</code>, wenn der Worker die SharePoint-Verwaltung nicht erreichen darf (kein Zertifikat, keine Berechtigung <code>Sites.FullControl.All</code>), und <code>SHAREPOINT_QUOTA_REFUSED</code>, wenn SharePoint das Kontingent ablehnt (etwa bei automatischer Speicherverwaltung) – beides ein Pfad zu einer Aufgabe, in der eine Person das Kontingent setzt. Jeder dieser Codes wird nur geworfen, wenn der Prozess ihn fängt; sonst bleibt es ein Fehlschlag mit Wiederholungen.</span><span data-l="en">A worker can throw a <b>BPMN error</b> with code <code>DECLINED</code>; the matching <code>errorEventDefinition</code> on the task's edge catches it and diverts to an error path. That's expected behaviour – not an incident. A script task throws one by giving its error a code the process catches (see <a href="#runbook-script">Script</a>); a Teams Phone task throws the codes of its business refusals (see <a href="#ref-teamsphone">Teams Phone – every operation</a>); an Entra task with <code>get-user-manager</code> throws <code>ENTRA_USER_NOT_FOUND</code> when Entra ID does not know the person; a SharePoint task with <code>set-site-quota</code> throws <code>SHAREPOINT_ADMIN_NOT_PERMITTED</code> when the Worker may not reach SharePoint's tenant administration (no certificate, no <code>Sites.FullControl.All</code> permission) and <code>SHAREPOINT_QUOTA_REFUSED</code> when SharePoint refuses the quota (for instance under automatic storage management) – both a path to a task where a person sets the quota. Each of these codes is thrown only when the process catches it; otherwise it stays a failure with its retries.</span></p>
       </div>
       <div class="recipe" id="rz-escalation" data-proc="recipe-escalation" data-end="done">
         <h4><span class="rz-emoji" aria-hidden="true">📣</span>
@@ -2638,12 +2648,12 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
     <!-- ==================== EXAMPLES ==================== -->
     <section id="beispiele">
       <h2 data-l="de">Beispiele</h2><h2 data-l="en">Examples</h2>
-      <p class="lead" data-l="de">Hier stehen <span data-count="examples">46</span> fertige Szenarien aus dem
+      <p class="lead" data-l="de">Hier stehen <span data-count="examples">47</span> fertige Szenarien aus dem
         atlas-Repository, vollständig beschrieben – <b>fachlich</b> (wofür ist das gut, wer hat etwas davon) und <b>technisch</b>
         (wie ist es gebaut, welche Variablen, welche Fallstricke). Jedes lässt sich mit einem Klick in deine eigene
         Instanz installieren, im Modeler öffnen und zu deinem Prozess umbauen. Vom Dreizeiler bis zur Applikation aus
         zwei Prozessen; vom Einzelunternehmen bis zum Konzernverzeichnis mit 50 000 Konten.</p>
-      <p class="lead" data-l="en">Here are <span data-count="examples">46</span> finished scenarios from the atlas
+      <p class="lead" data-l="en">Here are <span data-count="examples">47</span> finished scenarios from the atlas
         repository, described in full – <b>in business terms</b> (what it is good for, who benefits) and <b>technically</b> (how it is
         built, which variables, which traps). Each one installs into your own instance in one click, opens in the
         Modeler, and can be rebuilt into your process. From a three-liner to an application of two processes; from a
@@ -3467,7 +3477,9 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               warten „in zehn Tagen" ab oder laufen auf einen Zeitplan. <code>&lt;timeDate&gt;</code> nimmt einen
               FEEL-Ausdruck, und der rechnet mit echter Datumsarithmetik – Umzugstermin minus Kündigungsfrist. Liegt
               das Datum schon in der Vergangenheit, feuert der Timer <b>sofort</b>, was bei zwei Wochen Vorlauf und
-              drei Monaten Frist genau die richtige Antwort ist. Die Boundary ist <b>nicht unterbrechend</b>: sie
+              drei Monaten Frist genau die richtige Antwort ist. Ohne angegebenen Umzugstermin rechnet das Modell
+              genau mit diesem Fall – Umzug in zwei Wochen ab heute –, so dass «Installieren und starten» ihn
+              immer zeigt; mit einem eigenen Termin im Startformular rechnet es mit diesem. Die Boundary ist <b>nicht unterbrechend</b>: sie
               erinnert, statt die Aufgabe zu schliessen, deren Erledigung sie anmahnt. Und das Join ist ein
               <b>paralleles</b> Gateway – ein exklusives wäre der häufigste Modellierfehler überhaupt, die Übergabe
               fände statt, sobald irgendein Strang fertig ist.</p>
@@ -3475,7 +3487,8 @@ footer{max-width:1180px;margin:0 auto;padding:26px clamp(16px,4vw,44px) 60px;
               timer waits "in ten days" or runs on a schedule. <code>&lt;timeDate&gt;</code> takes a FEEL expression,
               and that one does real date arithmetic – moving date minus notice period. If the date is already in the
               past the timer fires <b>at once</b>, which with two weeks' lead time and three months' notice is exactly
-              the right answer. The boundary is <b>non-interrupting</b>: it reminds rather than closing the task whose
+              the right answer. Without a moving date the model computes exactly that case – a move two weeks from
+              today – so "Install and start" always shows it; with a date of your own in the start form it uses that. The boundary is <b>non-interrupting</b>: it reminds rather than closing the task whose
               completion it is chasing. And the join is a <b>parallel</b> gateway – an exclusive one would be the most
               common modelling mistake there is, with the handover happening as soon as any one strand finishes.</p>
           </div>
@@ -6189,6 +6202,57 @@ carla@example.org,admins,GOLD</code></pre></li>
           steps, the answers to the catalogue's questions, the application's constants and the rights the Worker's
           service account needs in the directory are in <code>examples/ad-dienste/README.md</code>.</p>
       </div>
+      <div class="bsp" id="bsp-lizenzmanagement">
+        <h4><span class="rz-emoji" aria-hidden="true">📜</span>
+          <span data-l="de">Lizenzmanagement: Microsoft-365-Lizenzverträge mit Kontingent, Verrechnung und Abo-Karenz</span><span data-l="en">Licence management: Microsoft 365 licence contracts with quota, billing and grace period</span></h4>
+        <p class="bsp-tags">
+          <span class="tag" data-l="de">Katalog</span><span class="tag" data-l="en">catalogue</span>
+          <span class="tag">Entra</span>
+          <span class="tag" data-l="de">Kontingent</span><span class="tag" data-l="en">quota</span>
+          <span class="tag" data-l="de">Verrechnung</span><span class="tag" data-l="en">billing</span>
+          <span class="tag">examples/lizenzmanagement/</span>
+        </p>
+        <div class="rz-diagram"><span class="rz-dhint" data-l="de">Diagramm wird geladen…</span><span class="rz-dhint" data-l="en">Loading diagram…</span></div>
+        <div class="bsp-cols">
+          <div>
+            <b class="bsp-lbl" data-l="de">Fachlich</b><b class="bsp-lbl" data-l="en">In business terms</b>
+            <p data-l="de">Jeder Kunde und jedes Projekt hat einen Lizenzvertrag mit PSP-Element und einer Menge pro
+              SKU, den die Tenant-verantwortliche Person genehmigt. Jede Lizenzbestellung im Microsoft-365-Katalog
+              zieht davon ab; fehlt der Platz, wird nicht still überzogen. Täglich vergleicht Atlas die Verträge mit dem
+              Tenant und sagt dem Chef, wann im EA nachzukaufen ist; monatlich verrechnet es die bezogenen Lizenzen pro
+              PSP-Element. Vor dem Jahrestag im EA bereitet es die neue Menge vor und führt in der Abo-Karenz
+              überzählige Lizenzen geordnet zurück, nach einer Entzugsregel, die jeder Kunde selbst bestimmt.</p>
+            <p data-l="en">Every customer and project has a licence contract with a WBS element and a quantity per SKU,
+              approved by the person responsible for the tenant. Every licence order in the Microsoft 365 catalogue
+              draws on it; without room, nothing is silently overdrawn. Every day Atlas compares the contracts with the
+              tenant and tells the head when to buy more in the EA; every month it bills the licences used per WBS
+              element. Before the EA anniversary it prepares the new quantity and, in the grace period, returns surplus
+              licences in order, following a withdrawal rule each customer sets.</p>
+          </div>
+          <div>
+            <b class="bsp-lbl" data-l="de">Technisch</b><b class="bsp-lbl" data-l="en">Technically</b>
+            <p data-l="de">Dreizehn Prozesse, neun Entscheidungstabellen und zweiundzwanzig Formulare. Den Stand halten
+              lange laufende Instanzen: ein Vertragsbuch je Vertrag und das Tenant-Kontingent. Sie nehmen Buchungen als
+              Nachrichten nacheinander an und wenden jede in einer einzigen Script-Task an; deshalb bekommen zwei
+              gleichzeitige Bestellungen nie beide den letzten Platz. Angefragt wird über
+              <code>POST /api/v1/messages</code> mit Lebensdauer, damit nichts verloren geht, während ein Buch beschäftigt
+              ist. Die Lizenzbestellung von <code>m365-dienste</code> ruft die Kontingentprüfung als Call Activity auf.</p>
+            <p data-l="en">Thirteen processes, nine decision tables and twenty-two forms. Long-running instances hold the
+              state: one contract book per contract and the tenant quota. They take bookings as messages one after
+              another and apply each in a single script task, so two simultaneous orders never both get the last seat.
+              Requests go through <code>POST /api/v1/messages</code> with a time to live, so nothing is lost while a book
+              is busy. The licence order of <code>m365-dienste</code> calls the quota check as a call activity.</p>
+          </div>
+        </div>
+        <div class="rz-actions"></div>
+        <div class="rz-status" role="status" aria-live="polite"></div>
+        <p data-l="de"><b>Installiert wird es mit <code>installieren.sh</code></b> (oder <code>atlas import</code>, nachdem die
+          Entscheidungsmodelle hochgeladen sind); danach ist das Tenant-Kontingent einmal zu starten. Die Schritte, die
+          Konstanten und die Rechte des Entra-Workers stehen in <code>examples/lizenzmanagement/README.md</code>.</p>
+        <p data-l="en"><b>It installs with <code>installieren.sh</code></b> (or <code>atlas import</code> once the decision
+          models are uploaded); afterwards the tenant quota is started once. The steps, the constants and the rights the
+          Entra Worker needs are in <code>examples/lizenzmanagement/README.md</code>.</p>
+      </div>
       <h3 data-l="de">Aus einem Beispiel deinen Prozess machen</h3><h3 data-l="en">Turning an example into your process</h3>
       <p data-l="de">Ein Beispiel zu installieren dauert eine Sekunde. Daraus etwas zu machen, das in deinem Betrieb
         läuft, ist Arbeit – aber sie hat eine Reihenfolge, und die ist immer dieselbe.</p>
@@ -7616,7 +7680,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             opt-in, ebenso Gäste einladen (<code>invite-guest</code>, zusätzlich <code>User.Invite.All</code>) und
             Viva-Engage-Communitys anlegen (<code>create-community</code>, zusätzlich
             <code>Community.ReadWrite.All</code>; laut Microsoft muss das Engage-Netzwerk dafür im nativen Modus
-            sein).</li>
+            sein). Den Lizenzbestand des Tenants lesen (<code>list-subscribed-skus</code>: gekaufte und zugewiesene
+            Einheiten pro SKU) braucht zusätzlich <code>LicenseAssignment.Read.All</code>. Die letzte Anmeldung
+            eines Kontos (<code>signInActivity</code> im <code>select</code> von <code>list-users</code> oder
+            <code>get-user</code>) braucht zusätzlich <code>AuditLog.Read.All</code> und im Tenant eine Lizenz
+            Entra ID P1 oder P2.</li>
           <li data-l="en"><b>API permissions → Microsoft Graph → Application permissions.</b> For the usual
             joiner/mover/leaver case exactly two suffice: <code>User.ReadWrite.All</code> and
             <code>Group.ReadWrite.All</code>. If a process only manages membership and creates no groups, the tighter
@@ -7626,7 +7694,11 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
             worker never needs. Teams operations and role assignment are opt-in, and so is inviting guests
             (<code>invite-guest</code>, which also needs <code>User.Invite.All</code>), and so is creating Viva Engage
             communities (<code>create-community</code>, which also needs <code>Community.ReadWrite.All</code>; Microsoft
-            documents that the Engage network must be in native mode for it).</li>
+            documents that the Engage network must be in native mode for it). Reading the tenant's licence stock
+            (<code>list-subscribed-skus</code>: bought and assigned units per SKU) also needs
+            <code>LicenseAssignment.Read.All</code>. An account's last sign-in (<code>signInActivity</code> in the
+            <code>select</code> of <code>list-users</code> or <code>get-user</code>) also needs
+            <code>AuditLog.Read.All</code> and an Entra ID P1 or P2 licence in the tenant.</li>
           <li data-l="de"><b>Administratorzustimmung erteilen.</b> Anwendungsberechtigungen wirken erst danach – das
             ist der Schritt, dessen Fehlen sich als „es tut nichts, ohne Fehler" äussert.</li>
           <li data-l="en"><b>Grant admin consent.</b> Application permissions take effect only afterwards – this is the
@@ -7750,6 +7822,29 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>AccessRights FullAccess</code> on <i>Grant full access</i>) is refused at deploy. A parameter whose
           FEEL expression evaluates to <code>null</code> is left out rather than sent – a variable that is not set
           clears no property. <i>Run a Get- cmdlet</i> reads anything and never changes.</p>
+        <p data-l="de"><b>Räume in der Raumsuche.</b> Outlook zeigt einen Raum unter «Alle Räume durchsuchen»
+          und in den Ortsvorschlägen nur, wenn er Mitglied einer <i>Raumliste</i> ist. Ein Raumpostfach allein ist
+          über seine Adresse buchbar, in der Raumsuche fehlt es. <i>Raumliste anlegen</i> legt eine Verteilergruppe mit
+          <code>-RoomList</code> an; den Raum nimmt <i>Gruppenmitglied hinzufügen</i> auf, und eine vorhandene
+          Raumliste findet <i>Verteilergruppen auflisten</i> mit <code>RecipientTypeDetails</code>
+          <code>RoomList</code>. Gefiltert wird nach Ort, Stockwerk und Plätzen; die setzt <i>Ortsangaben eines Raums
+          setzen</i> (<code>Set-Place</code>: <code>City</code>, <code>Floor</code>, <code>Capacity</code> vor
+          allem). <code>Set-Place</code> gibt es nur in Exchange Online. Gegen einen Exchange Server weist der Worker die
+          Aufgabe ab, bevor er etwas sendet; dort sind Ort und Adresse Eigenschaften des Kontos. Microsoft nennt für
+          <code>Set-Place</code> die Exchange-Rolle <i>Mail Recipients</i>, die in den Rollen
+          <i>Exchange-Empfängeradministrator</i> und <i>Exchange-Administrator</i> enthalten ist. Bis Änderungen in der
+          Raumsuche erscheinen, dauert es 24 bis 48 Stunden.</p>
+        <p data-l="en"><b>Rooms in Room Finder.</b> Outlook lists a room under "Browse all rooms" and in its location
+          suggestions only when the room is a member of a <i>room list</i>. A room mailbox on its own is bookable by its
+          address and missing from Room Finder. <i>Create room list</i> creates a distribution group with
+          <code>-RoomList</code>; <i>Add group member</i> puts the room in it, and <i>List distribution groups</i> with
+          <code>RecipientTypeDetails</code> <code>RoomList</code> finds an existing one. Room Finder filters by city,
+          floor and capacity, which <i>Set a room's place metadata</i> sets (<code>Set-Place</code>: <code>City</code>,
+          <code>Floor</code>, <code>Capacity</code> above all). <code>Set-Place</code> exists in Exchange Online only:
+          against an Exchange Server the worker refuses the task before it sends anything, because there city and
+          address are properties of the account. Microsoft names the Exchange role <i>Mail Recipients</i> for
+          <code>Set-Place</code>, which the <i>Exchange Recipient Administrator</i> and <i>Exchange Administrator</i>
+          roles include. Changes take 24 to 48 hours to appear in Room Finder.</p>
         <p data-l="de"><b>Drei Fallen.</b> <i>Berechtigung ohne Rolle:</i> <code>Exchange.ManageAsApp</code> erlaubt
           der App zu fragen, die Rolle bestimmt, was sie darf – und eine neue Zuweisung braucht Zeit, bis sie
           greift. <i>Ordnernamen sind lokalisiert:</i> Ein deutsches Postfach hat <code>anna@contoso.com:\Kalender</code>,
@@ -14144,7 +14239,7 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
              <a class="applink" href="/api/docs" target="_blank" rel="noopener">API Explorer ↗</a></p>
         </div>
         <div class="card"><b data-l="de">Beispiele</b><b data-l="en">Examples</b>
-          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">46</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">46</span> examples in the handbook</span></a> ·
+          <p><a class="applink" href="#beispiele"><span data-l="de">Alle <span data-count="examples">47</span> Beispiele im Handbuch</span><span data-l="en">All <span data-count="examples">47</span> examples in the handbook</span></a> ·
              <a class="applink" href="#runbooks"><span data-l="de">Worker in Betrieb nehmen</span><span data-l="en">Putting a worker into service</span></a></p>
           <p class="lead" data-l="de">Die Dateien dazu liegen unter <code>examples/</code> im Repository.</p>
           <p class="lead" data-l="en">Their files live under <code>examples/</code> in the repository.</p>
@@ -14370,10 +14465,21 @@ POST /api/v1/applications/{id}/publish         &rarr; definitions + release</cod
       const appId = await applicationId(data.application.name, data.application.key);
       setStatus(T("Entscheidung hochladen\u2026", "Uploading the decision\u2026"));
       try {
-        await apiCall("POST", "/api/v1/dmn-models?handle=" + encodeURIComponent(data.decision.handle),
-                      data.decision.xml, true);
-        await apiCall("POST", "/api/v1/dmnrefs",
-                      { name: data.decision.name, modelRef: data.decision.handle, projectId: appId });
+        // The upload overwrites the model in place under its handle, so a reference made by
+        // an earlier install still points at it. Adding another each time left one copy of
+        // "bw-vorpruefung" per click in the application; the examples chapter checks first,
+        // and so does this. The modelRef is the one the upload reports, which is the folded
+        // handle the reference has to name.
+        const up = await apiCall("POST", "/api/v1/dmn-models?handle=" + encodeURIComponent(data.decision.handle),
+                                 data.decision.xml, true);
+        const modelRef = (up && up.modelRef) || data.decision.handle;
+        const refs = await apiCall("GET", "/api/v1/dmnrefs");
+        const already = (Array.isArray(refs) ? refs : [])
+          .find((r) => r.name === data.decision.name && (r.projectId || "") === appId);
+        if (!already){
+          await apiCall("POST", "/api/v1/dmnrefs",
+                        { name: data.decision.name, modelRef: modelRef, projectId: appId });
+        }
       } catch (e) {
         if (e.status === 409) {
           throw new Error(T("Diese Instanz bezieht DMN-Modelle von einem entfernten temis-Dienst. Lege "

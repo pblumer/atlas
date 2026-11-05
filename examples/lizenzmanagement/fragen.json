@@ -1,0 +1,24 @@
+{
+  "zielgruppe": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Lizenzmanagement: Verträge»: die Integrations Manager der Kunden",
+      "en": "Audience of \"Licence management: contracts\": the customers' integration managers"
+    },
+    "hint": {
+      "de": "Wer für einen Kunden oder ein Projekt Lizenzverträge bestellt und ändert. Die Person, für die ein Vertrag bestellt wird, ist sein Integrations Manager.",
+      "en": "Who orders and changes licence contracts for a customer or a project. The person a contract is ordered for is its integration manager."
+    }
+  },
+  "tenant-verantwortung": {
+    "kind": "group",
+    "label": {
+      "de": "Zielgruppe «Lizenzmanagement: Betrieb»: die Tenant-verantwortliche Person",
+      "en": "Audience of \"Licence management: operations\": the person responsible for the tenant"
+    },
+    "hint": {
+      "de": "Genehmigt Verträge, Aufstockungen und Überzüge und darf Verträge senken und beenden. Dieselbe Gruppe gehört in die Applikationskonstante GRUPPE_TENANT (siehe README); Chef, Lizenzmanagement und Finanzen sind die Konstanten GRUPPE_CHEF, GRUPPE_LIZENZMANAGEMENT und GRUPPE_FINANZEN.",
+      "en": "Approves contracts, increases and overdrafts and may reduce and end contracts. The same group belongs in the application constant GRUPPE_TENANT (see README)."
+    }
+  }
+}

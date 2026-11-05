@@ -134,8 +134,8 @@
         "en": "Microsoft 365: licence with mailbox"
       },
       "descriptions": {
-        "de": "Die Microsoft-365-Lizenz einer Person mit Office, Teams und dem Postfach in Exchange Online. Die Variante bestimmt die Lizenzstufe. Danach: Abwesenheitsnotiz, Postfachkontingent, Weiterleitung in die eigene Domain, zusätzliche Mailadressen und Kalenderstellvertretung.",
-        "en": "A person's Microsoft 365 licence with Office, Teams and the mailbox in Exchange Online. The variant sets the licence tier. Afterwards: automatic reply, mailbox quota, forwarding within the own domain, additional e-mail addresses and calendar delegates."
+        "de": "Die Microsoft-365-Lizenz einer Person mit Office, Teams und dem Postfach in Exchange Online. Die Variante bestimmt die Lizenzstufe. Danach: Lizenz wechseln (E3, E5, F3), Abwesenheitsnotiz, Postfachkontingent, Weiterleitung in die eigene Domain, zusätzliche Mailadressen und Kalenderstellvertretung.",
+        "en": "A person's Microsoft 365 licence with Office, Teams and the mailbox in Exchange Online. The variant sets the licence tier. Afterwards: change the licence (E3, E5, F3), automatic reply, mailbox quota, forwarding within the own domain, additional e-mail addresses and calendar delegates."
       },
       "variants": [
         {
@@ -164,7 +164,7 @@
         "kind": "proc_m365_genehmigung_vorgesetzter"
       },
       "lifecycleProcess": "proc_m365_lizenz",
-      "configForm": "m365-person",
+      "configForm": "m365-lizenz-bestellung",
       "actions": [
         {
           "key": "provision",
@@ -183,6 +183,20 @@
             "de": "Lizenz zurückgeben",
             "en": "Return the licence"
           }
+        },
+        {
+          "key": "wechseln",
+          "message": "m365.lizenz.wechseln",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Lizenz wechseln",
+            "en": "Change the licence"
+          },
+          "form": "m365-lizenz-wechsel"
         },
         {
           "key": "abwesenheit",
@@ -858,8 +872,8 @@
         "en": "Meeting room (room mailbox)"
       },
       "descriptions": {
-        "de": "Ein in Outlook und Teams buchbares Sitzungszimmer; Buchungen werden automatisch angenommen. Name nach der Namensregel (RM-…).",
-        "en": "A meeting room bookable in Outlook and Teams; bookings are accepted automatically. Named by the naming rule (RM-…)."
+        "de": "Ein in Outlook und Teams buchbares Sitzungszimmer, das die Raumsuche unter seinem Ort zeigt (Raumliste des Orts, Stockwerk, Plätze); Buchungen werden automatisch angenommen. Name nach der Namensregel (RM-…).",
+        "en": "A meeting room bookable in Outlook and Teams that Room Finder shows under its city (the city's room list, floor, seats); bookings are accepted automatically. Named by the naming rule (RM-…)."
       },
       "approval": {
         "kind": "role",
@@ -1170,6 +1184,20 @@
             "de": "Lizenz zurückgeben",
             "en": "Return the licence"
           }
+        },
+        {
+          "key": "wechseln",
+          "message": "m365.lizenz.wechseln",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Lizenz wechseln",
+            "en": "Change the licence"
+          },
+          "form": "m365-lizenz-wechsel"
         },
         {
           "key": "abwesenheit",

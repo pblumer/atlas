@@ -28,6 +28,7 @@ import { tokenSimulationModule } from "./token-simulation.js";
 import { attachIdCheck } from "./idcheck.js";
 import { beginFormTrip, fromTail } from "./form-return.js";
 import { migrateInstanceFlow, migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { compareVersionsFlow } from "./version-comparison.js";
 // Which keys a form-js schema binds — the Developer View reads it to offer a linked
 // form's fields as variables, the incident's repair form reads it to know which keys a
 // submit may write (ADR-0169). One description of it, in one place.
@@ -4208,7 +4209,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, and licences and directory-role assignments", icon: "E",
+    id: "entra", name: "Microsoft Entra ID", group: "Directory & identity", desc: "Manage the cloud directory over Graph: users (create, read, list, delta change-tracking, update, enable, disable, reset password, delete, read and transfer the source of authority of a synchronised user), groups (create, read, list, delta, update, delete, list and restore deleted groups, members and owners), Teams (create, add members and owners, channels, archive), Viva Engage communities, guest invitations, licences and directory-role assignments, and the tenant's licence subscriptions (bought and assigned units per SKU)", icon: "E",
     // A person mark inside a cloud on Microsoft blue: the directory account of the
     // AD Worker Type, moved to the cloud — the pair should read as siblings.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0f6cbd"/><path d="M4.4 10.6a2.1 2.1 0 0 1 .3-4.2 2.9 2.9 0 0 1 5.5-.7 2.3 2.3 0 0 1 1.5 4.9z" fill="#fff" opacity=".55"/><circle cx="8" cy="7.4" r="1.8" fill="#fff"/><path d="M4.6 13.1c0-1.9 1.6-3 3.4-3s3.4 1.1 3.4 3z" fill="#fff"/></svg>`,
@@ -4252,6 +4253,7 @@ const SERVICE_TASK_KINDS = [
           { v: "archive-team", l: "Archive team" },
           { v: "create-community", l: "Create Engage community" },
           { v: "assign-license", l: "Assign licence" },
+          { v: "list-subscribed-skus", l: "List licence subscriptions (Lizenzbestand)" },
           { v: "assign-role", l: "Assign directory role" },
           { v: "invite-guest", l: "Invite guest user" },
           { v: "get-sync-behavior", l: "Read source of authority (AD or cloud)" },
@@ -4318,12 +4320,14 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "select", label: "Properties", placeholder: "id,displayName,mail",
-        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["get-user", "get-user-manager", "get-group", "list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: (v) => v.operation === "get-user-manager"
           ? "An OData $select over the manager: which of the manager's properties come back, e.g. id,displayName,mail,userPrincipalName. Empty returns Graph's default set for the manager."
+          : v.operation === "list-subscribed-skus"
+          ? "An OData $select over each licence subscription, e.g. skuId,skuPartNumber,consumedUnits,prepaidUnits. The only query Graph's /subscribedSkus takes: no filter, search or page size. Empty returns every property, servicePlans included."
           : ["get-user", "get-group"].includes(v.operation)
-          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses and employeeId \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId."
-          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
+          ? "An OData $select: which properties the object comes back with. Empty returns Graph's default set, which leaves out properties such as assignedLicenses, employeeId and signInActivity \u2014 name them here to read them, e.g. id,assignedLicenses,employeeId. signInActivity (the last sign-in) additionally needs AuditLog.Read.All and Entra ID P1."
+          : "An OData $select: which properties each object comes back with. Empty returns Graph's default set; signInActivity (the last sign-in) is outside it and additionally needs AuditLog.Read.All and Entra ID P1. Naming the few a process actually reads keeps a large read out of the state store. On a delta query Graph threads the $select forward into the deltaLink, so a resume keeps it automatically.",
       },
       {
         key: "pageSize", label: "Page size", placeholder: "100",
@@ -4332,7 +4336,7 @@ const SERVICE_TASK_KINDS = [
       },
       {
         key: "maxUsers", label: "Maximum objects", placeholder: "1000",
-        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "delta-users", "delta-groups"].includes(v.operation),
+        showIf: (v) => ["list-users", "list-groups", "list-deleted-groups", "list-subscribed-skus", "delta-users", "delta-groups"].includes(v.operation),
         hint: "Caps what may land in the result variable. A read returning more fails the job rather than truncating, because a short result is a wrong answer, not a partial one — and a truncated change set would persist a deltaLink having skipped changes. Empty uses 1000; 0 is unbounded.",
       },
       {
@@ -4356,7 +4360,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
+    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups, room lists and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas, a room's place metadata for Room Finder) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
     // An envelope on Exchange blue: the mailbox this Worker Type administers, beside
     // Entra's directory account in the same group.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0364b8"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="#fff"/><path d="M3.5 5.2 8 8.6l4.5-3.4" fill="none" stroke="#0364b8" stroke-width="1.2"/></svg>`,
@@ -4901,6 +4905,7 @@ const SERVICE_TASK_KINDS = [
           { v: "create-folder", l: "Create folder" },
           { v: "delete-file", l: "Delete file or folder" },
           { v: "get-site", l: "Read site and storage" },
+          { v: "set-site-quota", l: "Set site storage quota" },
         ],
       },
       {
@@ -4978,6 +4983,16 @@ const SERVICE_TASK_KINDS = [
         showIf: (v) => v.operation === "list-items" || v.operation === "list-folder",
         hint: "How many entries one page holds. Empty uses 100; at most 999.",
       },
+      {
+        key: "quotaGB", label: "Storage quota (GB)", placeholder: "=number(kontingent)", fx: true,
+        showIf: (v) => v.operation === "set-site-quota",
+        hint: "The storage the site may use, in gigabytes; at most 25600. This step goes to SharePoint's tenant administration rather than Graph: the Worker needs a certificate credential and the SharePoint application permission Sites.FullControl.All. Catch SHAREPOINT_ADMIN_NOT_PERMITTED and SHAREPOINT_QUOTA_REFUSED with an error boundary to hand the quota to a person where the tenant does not allow it.",
+      },
+      {
+        key: "warningPercent", label: "Warn at (%)", placeholder: "90", fx: true,
+        showIf: (v) => v.operation === "set-site-quota",
+        hint: "Optional. The share of the quota at which SharePoint warns the site's owners; empty means 90.",
+      },
       { group: "Output" },
       {
         key: "resultVariable", label: "Result variable", resultType: () => "object", placeholder: "antwort",
@@ -5001,6 +5016,8 @@ const SERVICE_TASK_KINDS = [
               return "=antwort.exists says whether it is there; when it is, =antwort.webUrl, =antwort.size and its properties under =antwort.listItem.fields come with it.";
             case "get-site":
               return "=antwort.exists says whether there is a site at that address; when there is, =antwort.id, =antwort.webUrl, =antwort.displayName and its storage in bytes under =antwort.quota.used, =antwort.quota.total and =antwort.quota.remaining come with it.";
+            case "set-site-quota":
+              return "Optional. The quota as set lands here: =antwort.quotaGB, =antwort.warningPercent, and SharePoint's own values in megabytes under =antwort.storageMaximumLevelMB and =antwort.storageWarningLevelMB.";
             case "create-folder":
               return "Optional. The folder lands here, with =antwort.created false when it was already there.";
             default:
@@ -12767,6 +12784,7 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
         <a class="btn neutral" id="edit-modeler" href="#/modeler/d/${key}" title="Open this definition in the Modeler">✎ Edit in Modeler</a>
         <button class="btn" id="start" title="Start a new instance of this process">Start instance</button>
         <button class="btn neutral" id="migrate-version" hidden>&#8644; Migrate instances&hellip;</button>
+        <button class="btn neutral" id="compare-versions" hidden title="${esc(tr("cmp.buttonTitle"))}">${esc(tr("cmp.button"))}</button>
         <button class="btn ghost danger" id="cancel-inst" hidden title="Cancel the running instance">Cancel instance</button>
         <a class="btn" id="replay-inst" hidden title="Replay this instance step by step">&#9654; Replay</a>
         <a class="btn" id="collab-link" hidden>⇄ Collaboration replay</a>
@@ -14278,6 +14296,17 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     migrateBtn.hidden = false;
     migrateBtn.title = `Move every running instance of v${thisVersion.version} — not only the one selected — onto another deployed version of this process`;
     migrateBtn.addEventListener("click", () => openMigration(key));
+  }
+  // Comparing the version on screen with the one before it, or any other: what changed
+  // is the question before migrating onto a version and when a run behaves differently
+  // from last week's (ADR-0530). Reading, so offered to
+  // everyone who sees the view, whenever there is a second version.
+  const compareBtn = root.querySelector("#compare-versions");
+  if (thisVersion && versions.length > 1) {
+    compareBtn.hidden = false;
+    compareBtn.addEventListener("click", () => compareVersionsFlow({
+      api, processId, processName: procName, versions, toKey: key,
+    }));
   }
   bindJsonCards(varPanel, jsonCollapsed, renderVariables);
   bindVarCopy(varPanel, toast);

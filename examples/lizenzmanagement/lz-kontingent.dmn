@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzKontingent: was die Kontingentprüfung (P3) mit der Antwort des Vertragsbuchs tut.
+  Die Reservation selbst bucht das Vertragsbuch, in derselben Auswertung, in der es frei = Menge − belegt − reserviert
+  rechnet; diese Tabelle entscheidet nur den nächsten Schritt.
+  Eingaben: ergebnis (reserviert | ueberzug | voll | abgelehnt | keine-antwort), menge, ueberzug (wie viele Lizenzen
+            des Vertrags schon überzogen sind)
+  Ausgaben: weg (reserviert | ueberzug-fragen | abgelehnt), grund
+  VORSCHLAG: Ein Überzug wird bis zur Hälfte der Vertragsmenge (mindestens 2) gefragt; darüber lehnt die Tabelle ab
+  und verweist auf das Aufstocken (P2).
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzKontingent" name="LzKontingent" namespace="http://atlas/dmn">
+  <inputData id="id_ergebnis" name="ergebnis"/>
+  <inputData id="id_menge" name="menge"/>
+  <inputData id="id_ueberzug" name="ueberzug"/>
+  <decision id="LzKontingent" name="LzKontingent">
+    <informationRequirement id="ir_ergebnis"><requiredInput href="#id_ergebnis"/></informationRequirement>
+    <informationRequirement id="ir_menge"><requiredInput href="#id_menge"/></informationRequirement>
+    <informationRequirement id="ir_ueberzug"><requiredInput href="#id_ueberzug"/></informationRequirement>
+    <decisionTable id="dt_LzKontingent" hitPolicy="FIRST">
+      <input id="in_0" label="ergebnis"><inputExpression id="ie_0" typeRef="string"><text>ergebnis</text></inputExpression></input>
+      <input id="in_1" label="menge"><inputExpression id="ie_1" typeRef="number"><text>menge</text></inputExpression></input>
+      <input id="in_2" label="ueberzug"><inputExpression id="ie_2" typeRef="number"><text>ueberzug</text></inputExpression></input>
+      <output id="out_0" label="weg" name="weg" typeRef="string"/>
+      <output id="out_1" label="grund" name="grund" typeRef="string"/>
+      <rule id="r1">
+        <description>Platz reserviert</description>
+        <inputEntry id="r1_i0"><text>"reserviert", "ueberzug"</text></inputEntry>
+        <inputEntry id="r1_i1"><text>-</text></inputEntry>
+        <inputEntry id="r1_i2"><text>-</text></inputEntry>
+        <outputEntry id="r1_o0"><text>"reserviert"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>null</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Vertrag nicht aktiv</description>
+        <inputEntry id="r2_i0"><text>"abgelehnt"</text></inputEntry>
+        <inputEntry id="r2_i1"><text>-</text></inputEntry>
+        <inputEntry id="r2_i2"><text>-</text></inputEntry>
+        <outputEntry id="r2_o0"><text>"abgelehnt"</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Der Vertrag ist nicht aktiv."</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>Vertragsbuch antwortet nicht</description>
+        <inputEntry id="r3_i0"><text>"keine-antwort"</text></inputEntry>
+        <inputEntry id="r3_i1"><text>-</text></inputEntry>
+        <inputEntry id="r3_i2"><text>-</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"abgelehnt"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"Das Vertragsbuch hat nicht geantwortet; die Vertragsnummer ist unbekannt oder das Buch steht."</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Voll, Überzug noch in der Grenze</description>
+        <inputEntry id="r4_i0"><text>"voll"</text></inputEntry>
+        <inputEntry id="r4_i1"><text>-</text></inputEntry>
+        <inputEntry id="r4_i2"><text>&lt; max(2, menge / 2)</text></inputEntry>
+        <outputEntry id="r4_o0"><text>"ueberzug-fragen"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Der Vertrag ist voll; ein Überzug braucht die Genehmigung der Tenant-verantwortlichen Person."</text></outputEntry>
+      </rule>
+      <rule id="r5">
+        <description>Voll und schon weit überzogen</description>
+        <inputEntry id="r5_i0"><text>"voll"</text></inputEntry>
+        <inputEntry id="r5_i1"><text>-</text></inputEntry>
+        <inputEntry id="r5_i2"><text>-</text></inputEntry>
+        <outputEntry id="r5_o0"><text>"abgelehnt"</text></outputEntry>
+        <outputEntry id="r5_o1"><text>"Der Vertrag ist voll und schon um die Hälfte überzogen; bitte zuerst aufstocken."</text></outputEntry>
+      </rule>
+      <rule id="r6">
+        <description>Auffangregel</description>
+        <inputEntry id="r6_i0"><text>-</text></inputEntry>
+        <inputEntry id="r6_i1"><text>-</text></inputEntry>
+        <inputEntry id="r6_i2"><text>-</text></inputEntry>
+        <outputEntry id="r6_o0"><text>"abgelehnt"</text></outputEntry>
+        <outputEntry id="r6_o1"><text>"Unbekannte Antwort des Vertragsbuchs."</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

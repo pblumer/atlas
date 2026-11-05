@@ -39,7 +39,11 @@ func hubTools() []Tool {
 	props["keep"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
 		"description": "Refs of changed artifacts to leave as this server has them (or *)"}
 	props["adopt"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
-		"description": "Refs of artifacts the plan lists as elsewhere — held by another existing application — to move into the release's application, one by one (no *), and only as the person decided. Needs the editor role on the application each leaves."}
+		"description": "Refs of artifacts the plan lists as elsewhere — held by another existing application — to move into the release's application, one by one (no *), and only as the person decided. Needs the editor role on the application each leaves. Also refs of gaps (capability:<key>, valuestream:<key>) whose proposal the person decided to file in the capability map."}
+	props["map"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+		"description": "Gaps the person decided to file under a capability the map already has, as ref=key (capability:<key>=<existing key>)"}
+	props["omit"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"},
+		"description": "Refs of gaps the person decided to leave out (capability:<key>, valuestream:<key>, or *)"}
 	importSchema["required"] = []any{"blueprintId", "version", "digest"}
 
 	return []Tool{
@@ -88,7 +92,12 @@ func hubTools() []Tool {
 				"existing application holds is planned as elsewhere, with heldBy (the application, when " +
 				"you may see it) and compared (unchanged or changed): it stops the import until the person " +
 				"decides to take it, named in adopt, which moves it into the release's application — and, " +
-				"if compared is changed, also needs overwrite or keep for its content. It creates the application when this server has " +
+				"if compared is changed, also needs overwrite or keep for its content. A capability or value stream the " +
+				"release needs and this server's capability map lacks is planned as gap (proposed says the release " +
+				"offers one): it stops the import until the person decides — adopt files the release's proposal in " +
+				"the map, map files it under an existing key, omit leaves it out; never decide that for them. A " +
+				"proposal for a key the map has is linked and never written over the map's record. " +
+				"It creates the application when this server has " +
 				"never seen its key, else needs the editor role on it; it does not publish (use " +
 				"atlas_publish_application) and it does not import the package's catalogues, which it " +
 				"names under cataloguesNotImported: their questions ask for this installation's groups and " +
@@ -108,7 +117,7 @@ func hubTools() []Tool {
 				if dry, given := args["dryRun"].(bool); !given || dry {
 					q.Set("dryRun", "true")
 				}
-				for _, list := range []string{"overwrite", "keep", "adopt"} {
+				for _, list := range []string{"overwrite", "keep", "adopt", "map", "omit"} {
 					if refs := stringList(args[list]); len(refs) > 0 {
 						q.Set(list, strings.Join(refs, ","))
 					}

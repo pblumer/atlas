@@ -1131,6 +1131,11 @@ func (s *Server) deployBody(r *http.Request, body []byte) (deployResp, *deployRe
 	// outside the deploy's own do(): authorization reads the project store through a
 	// do() of its own, and Loop.Do is a rendezvous, so dispatching onto the loop from
 	// the loop would deadlock.
+	// The id of a system process is atlas's alone (ADR-0122): a model that reuses it
+	// outside the system project would be started in its place, with its rights.
+	if msg := s.reservedProcessRefusal(body, projectID); msg != "" {
+		return deployResp{}, refusedWith(http.StatusForbidden, msg)
+	}
 	if projectID != "" {
 		if code, msg := s.authorizeTargetProject(r, projectID, ScopeRoleEditor); code != 0 {
 			return deployResp{}, refusedWith(code, msg)
@@ -1243,6 +1248,16 @@ func (s *Server) deployModel(body []byte, dmnXMLs [][]byte, deployedAt int64, pr
 	deployables, err := compiler.ParseAll(s.nextKey, 1, bytes.NewReader(body))
 	if err != nil {
 		return nil, err, nil
+	}
+	// Every path into the registry comes through here, so the id of a system process
+	// is refused here too, on the compiled id, whatever the caller checked before
+	// (systemprocessguard.go).
+	if projectID != systemProjectID {
+		for i := range deployables {
+			if id := deployables[i].Process.ProcessId(); s.systemPIDs[id] {
+				return nil, errors.New(reservedProcessMessage(id)), nil
+			}
+		}
 	}
 	// A personal declaration is a promise that the values can be destroyed, and the
 	// thing that gets destroyed is a key in the vault. With no vault there is no key,
@@ -1690,8 +1705,9 @@ func (s *Server) handleDeleteProcess(w http.ResponseWriter, r *http.Request) {
 		}
 		found = true
 		// A bootstrap-deployed platform process is platform-managed (ADR-0122):
-		// refuse deletion for every caller.
-		if s.systemPIDs[d.ProcessID] {
+		// refuse deletion for every caller. A copy of its id filed elsewhere is not one
+		// and may go (systemprocessguard.go).
+		if s.isSystemDeployment(d) {
 			protected = true
 			return
 		}
@@ -7177,7 +7193,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"list": j.List, "itemId": j.ItemID, "path": j.Path, "fields": j.Fields,
 			"content": j.Content, "encoding": j.Encoding, "filter": j.Filter,
 			"select": j.Select, "pageToken": j.PageToken, "maxResults": j.MaxResults,
+			"quotaGB": j.QuotaGB, "warningPercent": j.WarningPercent,
 			"requestId": j.RequestID, "resultVariable": j.Result,
+			// The codes the process catches travel, because a worker has no compiled
+			// process to ask whether a refusal is a path or a failure (ADR-0461).
+			"errorCodes": j.ErrorCodes,
 		}}
 	case compiler.ScimJobTypeIndex:
 		// The authored operation and its operands travel, not the method and URL

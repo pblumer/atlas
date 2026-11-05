@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/pblumer/atlas/api/httpapi"
 	"github.com/pblumer/atlas/api/runloop"
@@ -37,6 +38,10 @@ type Service struct {
 	// must be nil-safe — and the server's says yes in that case, because with
 	// enforcement off there is nobody to be rather than nobody who may.
 	admin func(*httpapi.Principal) bool
+
+	// refreshRuns is the progress of each catalogue's content refresh, kept in
+	// memory for the status route (refreshrun.go).
+	refreshRuns refreshRuns
 
 	// Limits are the installation's resource budgets. New sets them to
 	// [limits.Default]; the server overwrites them with its own once it has read
@@ -794,6 +799,18 @@ type publishedRelease struct {
 func (s *Service) HandleListReleases(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p := httpapi.PrincipalFrom(r.Context())
+	// ?limit=n answers only the n newest releases, read without reading the rest
+	// (releaseindex.go). The shop asks for one: the newest is the one it offers, and
+	// a catalogue that is worked on has hundreds.
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			httpapi.Error(w, http.StatusBadRequest, "limit must be a positive whole number")
+			return
+		}
+		limit = n
+	}
 	out := []Release{}
 	var (
 		visible bool
@@ -815,7 +832,7 @@ func (s *Service) HandleListReleases(w http.ResponseWriter, r *http.Request) {
 		if visible = found && s.mayRead(cat, p); !visible {
 			return
 		}
-		if out, loadErr = s.store.ReleasesOf(id); loadErr != nil {
+		if out, loadErr = s.store.NewestReleasesOf(id, limit); loadErr != nil {
 			return
 		}
 		out, loadErr = s.withholdReleases(out, linkInShop)

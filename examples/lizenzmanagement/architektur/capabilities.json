@@ -1,0 +1,314 @@
+{
+  "_comment": "Was die Applikation beispiel-lizenzmanagement zur Capability-Landkarte des Servers beitraegt (ADR-0528): realizations sind die Prozesse dieser Applikation und die Capability, die sie realisieren; capabilities und valueStreams sind Vorschlaege. Die Landkarte gehoert dem Server: Hat er einen Key schon, wird nur verknuepft und nichts ueberschrieben; fehlt er, entscheidet beim Import eine Person (uebernehmen, einem vorhandenen Key zuordnen oder weglassen).",
+  "realizations": [
+    {
+      "capability": "lz-bestand",
+      "kind": "process",
+      "processId": "proc_lz_bestand"
+    },
+    {
+      "capability": "lz-bestand",
+      "kind": "process",
+      "processId": "proc_lz_bestand_aufgaben"
+    },
+    {
+      "capability": "lz-bestand",
+      "kind": "process",
+      "processId": "proc_lz_tenantbuch"
+    },
+    {
+      "capability": "lz-bestand",
+      "kind": "process",
+      "processId": "proc_lz_uebernahme"
+    },
+    {
+      "capability": "lz-jahrestag",
+      "kind": "process",
+      "processId": "proc_lz_jahrestag"
+    },
+    {
+      "capability": "lz-jahrestag",
+      "kind": "process",
+      "processId": "proc_lz_karenz"
+    },
+    {
+      "capability": "lz-jahrestag",
+      "kind": "process",
+      "processId": "proc_lz_karenz_vertrag"
+    },
+    {
+      "capability": "lz-kontingent",
+      "kind": "process",
+      "processId": "proc_lz_buchen"
+    },
+    {
+      "capability": "lz-kontingent",
+      "kind": "process",
+      "processId": "proc_lz_kontingent"
+    },
+    {
+      "capability": "lz-verrechnung",
+      "kind": "process",
+      "processId": "proc_lz_verrechnung"
+    },
+    {
+      "capability": "lz-verrechnung",
+      "kind": "process",
+      "processId": "proc_lz_verrechnung_vertrag"
+    },
+    {
+      "capability": "lz-vertraege",
+      "kind": "process",
+      "processId": "proc_lz_vertrag"
+    },
+    {
+      "capability": "lz-vertraege",
+      "kind": "process",
+      "processId": "proc_lz_vertragsbuch"
+    }
+  ],
+  "capabilities": [
+    {
+      "key": "lz-vertraege",
+      "name": "Lizenzverträge führen",
+      "summary": "Lizenzverträge pro Kunde und Projekt mit Menge pro SKU, Laufzeit und PSP-Element vereinbaren, ändern und beenden.",
+      "scope": "Microsoft-365-Tenant und Enterprise Agreement",
+      "inputs": [
+        {
+          "name": "Bestellung im Shop",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Aktiver Lizenzvertrag",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Lizenzmanagement"
+        }
+      ],
+      "requires": [],
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "lz-kontingent",
+      "name": "Lizenzkontingent prüfen",
+      "summary": "Vor jeder Lizenzbestellung den Platz im Vertrag prüfen und reservieren, ohne dass zwei Bestellungen denselben Platz bekommen; Überzüge genehmigen lassen.",
+      "scope": "Microsoft-365-Tenant und Enterprise Agreement",
+      "inputs": [
+        {
+          "name": "Lizenzbestellung (M365-Dienste)",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Reservation oder Ablehnung",
+          "kind": "api"
+        }
+      ],
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Lizenzmanagement"
+        }
+      ],
+      "requires": [
+        "lz-vertraege"
+      ],
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "lz-bestand",
+      "name": "Lizenzbestand abgleichen",
+      "summary": "Täglich gekaufte und belegte Lizenzen im Tenant lesen, mit den Verträgen vergleichen und den Nachkauf im EA anstossen; den Bestand einmalig übernehmen.",
+      "scope": "Microsoft-365-Tenant und Enterprise Agreement",
+      "inputs": [
+        {
+          "name": "Abos des Tenants",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Tagesstand, Nachkauf-Aufgabe",
+          "kind": "manual"
+        }
+      ],
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Lizenzmanagement"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        }
+      ],
+      "requires": [
+        "lz-vertraege"
+      ],
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "lz-verrechnung",
+      "name": "Lizenzen verrechnen",
+      "summary": "Monatlich die bezogenen Lizenzen pro PSP-Element und SKU in der Form des Vertrags verrechnen und dem Chef die Übersicht geben.",
+      "scope": "Microsoft-365-Tenant und Enterprise Agreement",
+      "inputs": [
+        {
+          "name": "Bezüge des Monats",
+          "kind": "api"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Export pro Vertrag",
+          "kind": "manual"
+        }
+      ],
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Lizenzmanagement"
+        }
+      ],
+      "requires": [
+        "lz-vertraege"
+      ],
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "state": "active"
+    },
+    {
+      "key": "lz-jahrestag",
+      "name": "EA-Jahrestag steuern",
+      "summary": "Den True-up und die Erneuerung im EA vorbereiten und überzählige Lizenzen in der Abo-Karenz geordnet zurückführen.",
+      "scope": "Microsoft-365-Tenant und Enterprise Agreement",
+      "inputs": [
+        {
+          "name": "Jahrestag im EA",
+          "kind": "event"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "Neue Menge, Rückführung",
+          "kind": "manual"
+        }
+      ],
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "resources": [
+        {
+          "kind": "team",
+          "name": "Lizenzmanagement"
+        },
+        {
+          "kind": "system",
+          "name": "ucc_entra",
+          "ref": "ucc_entra"
+        }
+      ],
+      "requires": [
+        "lz-vertraege",
+        "lz-bestand"
+      ],
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "state": "active"
+    }
+  ],
+  "valueStreams": [
+    {
+      "key": "lz-lizenzen-wirtschaftlich",
+      "name": "Lizenzen wirtschaftlich bereitstellen",
+      "description": "Vom Vertrag eines Kunden über jede bezogene Lizenz bis zur Verrechnung und zur Erneuerung im EA.",
+      "owner": {
+        "name": "Lizenzmanagement",
+        "role": "Lizenzverantwortung Microsoft 365"
+      },
+      "tags": [
+        "lizenzmanagement",
+        "beispiel"
+      ],
+      "stages": [
+        {
+          "key": "vereinbaren",
+          "name": "Vertrag vereinbaren",
+          "capabilities": [
+            "lz-vertraege"
+          ]
+        },
+        {
+          "key": "beziehen",
+          "name": "Lizenz beziehen",
+          "description": "Kontingent prüfen und belegen (M365-Dienste).",
+          "capabilities": [
+            "lz-kontingent"
+          ]
+        },
+        {
+          "key": "ueberwachen",
+          "name": "Bestand überwachen",
+          "capabilities": [
+            "lz-bestand"
+          ]
+        },
+        {
+          "key": "verrechnen",
+          "name": "Verrechnen",
+          "capabilities": [
+            "lz-verrechnung"
+          ]
+        },
+        {
+          "key": "erneuern",
+          "name": "Am Jahrestag erneuern",
+          "capabilities": [
+            "lz-jahrestag"
+          ]
+        }
+      ]
+    }
+  ]
+}

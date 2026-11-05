@@ -95,6 +95,8 @@
   .dot.returning { background:var(--accent-soft); border:1px solid var(--accent); }
   .dot.blocked { background:var(--accent-soft); border:1px solid var(--border-strong); }
   .dot.running { background:var(--accent); }
+  /* The light at the head of a row of "my services" (serviceState in shop.js). */
+  .cell > .dot { flex:none; margin:6px 2px 0 2px; }
   button.primary { background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent);
                    border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; margin-top:8px; }
   /* Withdrawing is a plain button, not a red one. Taking back something you
@@ -139,6 +141,72 @@
      (ADR-0417). */
   .cascade { display:grid; grid-template-columns:repeat(4, minmax(220px, 1fr));
              gap:12px; overflow-x:auto; }
+  /* "My services" stops at the Marktleistung: three columns, not four. */
+  .cascade.three { grid-template-columns:repeat(3, minmax(220px, 1fr)); }
+  /* ... and four once one is chosen, the last wider: it holds that Marktleistung's
+     actions, orders, positions and tasks. */
+  .svc-cascade { grid-template-columns:repeat(3, minmax(200px, 1fr)) minmax(320px, 2fr); }
+  /* The filter above "my services": for whom, the status, and a search. */
+  .svc-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:4px 0 12px; }
+  .svc-bar select, .svc-bar input { font:inherit; font-size:14px; padding:6px 8px;
+    border:1px solid var(--border-strong); border-radius:6px; background:var(--surface); color:var(--text); }
+  .svc-find { flex:1 1 260px; min-width:0; }
+  .svc-entry { border-bottom:1px solid var(--border); }
+  .svc-entry > .svc-row { border-bottom:0; }
+  .svc-entry.open { background:var(--bg); }
+  button.svc-open { background:none; border:0; padding:0; font:inherit; color:inherit; cursor:pointer;
+    text-align:left; display:inline-flex; gap:6px; align-items:baseline; }
+  button.svc-open:hover strong { text-decoration:underline; }
+  .svc-caret { color:var(--muted); font-size:12px; }
+  .svc-meta { display:flex; flex-wrap:wrap; gap:4px 10px; font-size:13px; }
+  .svc-task { color:var(--accent-hover); font-weight:600; }
+  .svc-detail { padding:4px 4px 14px 62px; display:flex; flex-direction:column; gap:10px; font-size:14px; }
+  .col .svc-detail { padding:6px 0; }
+  .svc-actions { display:flex; flex-direction:column; gap:4px; }
+  .svc-action-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+  /* The possible events are buttons, not links: they ask a process to do something. */
+  .svc-action-row > button.linkish { border:1px solid var(--border-strong); border-radius:6px;
+    padding:5px 12px; background:var(--surface); color:var(--accent-hover); text-decoration:none; }
+  .svc-action-row > button.linkish:hover:not(:disabled) { border-color:var(--accent); }
+  .svc-action-row > .card { flex-basis:100%; }
+  .svc-link { display:flex; justify-content:flex-end; }
+  .link-note { font-size:12px; margin-left:6px; }
+  .svc-order-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 4px; }
+  .svc-order-block .lines { margin-top:4px; }
+  .cell .pie-icon { width:32px; height:32px; border-radius:5px; }
+  .cell .pie-icon svg { width:22px; height:22px; }
+  .cell-icon { flex:none; width:28px; height:28px; border-radius:5px; display:inline-flex;
+    align-items:center; justify-content:center; background:var(--accent); color:var(--accent-ink); }
+  .cell-icon svg { width:20px; height:20px; }
+  /* "My services" in the tile layout: a list, each Marktleistung with its catalogue
+     icon as a pie of how far it is provisioned (pieIcon in shop.js). */
+  .svc-list { margin-top:8px; }
+  .svc-row { display:grid; grid-template-columns:48px minmax(0, 3fr) 80px 110px minmax(0, 1.4fr) 76px;
+             gap:14px; align-items:center; padding:10px 4px; border-bottom:1px solid var(--border); }
+  .svc-head { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+              padding-bottom:6px; }
+  .svc-heading { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
+                 margin:18px 0 0; padding:0 4px 6px; border-bottom:1px solid var(--border-strong); }
+  .svc-name { display:flex; flex-direction:column; gap:2px; min-width:0; overflow-wrap:break-word; }
+  .svc-state.done { color:var(--ok); }
+  .svc-act { display:flex; gap:6px; justify-content:flex-end; }
+  .svc-lacking { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin-top:4px; font-size:13px; }
+  .svc-offer { display:inline-flex; align-items:center; gap:4px; }
+  .pie-icon { position:relative; width:44px; height:44px; flex:none; border-radius:6px; overflow:hidden; }
+  .pie-icon > span { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .pie-grey { background:var(--border); color:var(--muted); }
+  .pie-done { background:var(--accent); color:var(--accent-ink);
+              -webkit-mask-image:conic-gradient(#000 0 var(--share), transparent var(--share) 100%);
+              mask-image:conic-gradient(#000 0 var(--share), transparent var(--share) 100%); }
+  .pie-icon svg { width:30px; height:30px; }
+  @media (max-width:760px) {
+    .svc-row { grid-template-columns:48px minmax(0, 1fr) auto; }
+    .svc-head { display:none; }
+    .svc-qty, .svc-since, .svc-order { grid-column:2; font-size:13px; color:var(--muted); }
+    .svc-qty::before, .svc-since::before, .svc-order::before { content:attr(data-label) ": "; }
+    .svc-act { grid-column:3; grid-row:1; }
+    .svc-detail { padding-left:4px; }
+  }
   .col { min-width:0; }
   /* The basket's lines, one per offering. The grid makes each line as tall as its
      tallest cell, which is what keeps one offering's services from sliding beside
@@ -193,6 +261,8 @@
             stroke-linecap:round; stroke-linejoin:round; }
   .sq svg.filled path { fill:currentColor; }
   .sq svg .cut { stroke:var(--surface); stroke-width:4.4; }
+  .sq svg .solid { fill:currentColor; stroke:none; }
+  .sq svg .stem { stroke-width:3.4; }
   /* The "i" opens its panel over the page (infoDialog in shop.js), where the
      person is looking, instead of under the last row of a long catalogue. */
   .info-backdrop { position:fixed; inset:0; z-index:50; display:flex; align-items:flex-start;
@@ -263,12 +333,16 @@
                                  border:1px solid var(--border-strong);
                                  background:var(--surface); color:var(--text); }
 
-  /* The action row along the bottom. */
+  /* The action row along the bottom. It sticks to the bottom of the window, so its
+     buttons are in reach however far down a long page or basket a reader is; at
+     the end of the page it settles in its place below the content. */
   .actions { display:flex; justify-content:center; align-items:center; gap:12px;
-             flex-wrap:wrap; margin-top:28px; padding-top:16px; border-top:1px solid var(--border); }
+             flex-wrap:wrap; margin-top:28px; padding:12px 0; border-top:1px solid var(--border);
+             position:sticky; bottom:0; z-index:5; background:var(--bg);
+             box-shadow:0 -6px 12px -10px rgba(0,0,0,.25); }
 
-  /* The orders table: a filter row above the header, exactly as the mockups draw
-     it — the search sits over the column it searches. */
+  /* The tables of the shop (the reports): a filter row, where one has it, above
+     the header. */
   .table { width:100%; border-collapse:collapse; font-size:14px; }
   .table th, .table td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);
                          vertical-align:top; }
@@ -354,6 +428,7 @@
     .stepper .step-back { margin-top:0; }
     .step-path { min-width:0; overflow-wrap:break-word; }
     .cascade { grid-template-columns:1fr; overflow-x:visible; }
+    .cascade.three { grid-template-columns:1fr; }
     .cascade[data-step] > .col { display:none; }
     .cascade[data-step="0"] > .col:nth-child(1),
     .cascade[data-step="1"] > .col:nth-child(2),
@@ -375,22 +450,7 @@
       font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
       font-weight:600; padding:6px 0 2px; }
 
-    /* My orders: the table becomes a list of cards. Each cell says what it is,
-       because the column heads are gone; the filters sit two to a row above. */
     .tablewrap { overflow-x:visible; }
-    .table.orders, .table.orders tbody, .table.orders tr, .table.orders td { display:block; width:100%; }
-    .table.orders thead { display:block; }
-    .table.orders thead tr:not(.filters) { display:none; }
-    .table.orders .filters { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
-    .table.orders .filters td { padding:0; }
-    .table.orders .filters td:empty { display:none; }
-    .table.orders tbody tr { background:var(--surface); border:1px solid var(--border);
-                             border-radius:10px; padding:10px 12px; margin:0 0 12px; }
-    .table.orders tbody td { border-bottom:0; padding:3px 0; }
-    .table.orders tbody td:empty { display:none; }
-    .table.orders tbody td[data-label]::before { content:attr(data-label); display:block;
-      font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
-      font-weight:600; }
     .lines .tasks { margin-left:8px; }
     /* A form opened in a row takes the card's width, not 640px of it. */
     .cfg { max-width:100%; }
@@ -456,6 +516,7 @@
   .tile-next { position:absolute; right:-6px; top:50%; transform:translateY(-50%); width:44px; height:88px;
                border:1px solid var(--border); background:var(--surface); font-size:28px; cursor:pointer;
                box-shadow:-4px 0 8px rgba(0,0,0,.06); }
+  .product-page .page-back { font-size:15px; padding:8px 16px; }
   .product-page .page-top { display:flex; justify-content:space-between; align-items:center; padding:6px 0 12px; }
   .product-page .page-top strong { font-size:22px; font-weight:400; }
   .page-fav { display:flex; align-items:center; gap:6px; color:var(--muted); }
@@ -466,12 +527,17 @@
   .page-banner .tile-icon svg { width:60px; height:60px; }
   .page-banner h2 { color:inherit; text-transform:none; letter-spacing:0; font-size:24px; font-weight:400;
                     align-self:flex-start; margin:14px 0; }
-  .page-columns { display:grid; grid-template-columns:minmax(0, 2fr) minmax(220px, 1fr); gap:28px; margin-top:36px; }
+  /* The description in the wide column, the folding facts in the narrow one; the
+     page's buttons are the shop's row along the bottom. */
+  .page-columns { display:grid; grid-template-columns:minmax(0, 2fr) minmax(240px, 1fr); gap:28px; margin-top:36px; align-items:start; }
+  .page-side { border-left:1px solid var(--border); padding-left:24px; }
+  .page-heading { margin:0 0 10px; font-size:17px; }
+  .page-side .page-section:first-child { padding-top:0; }
+  .page-side .page-section summary { font-size:15px; }
   .page-section { border-bottom:1px solid var(--border); padding:12px 0; }
   .page-section summary { font-weight:600; font-size:17px; cursor:pointer; }
   .page-body { padding-top:8px; }
-  .page-side { border-left:1px solid var(--border); padding-left:24px; display:flex; flex-direction:column; gap:10px; }
-  .page-cta { width:100%; padding:12px; font-size:16px; }
+  .page-part { text-align:left; padding:0; font:inherit; }
   @media (max-width:760px) {
     .tile-track { grid-auto-columns:85%; }
     .page-columns { grid-template-columns:1fr; }

@@ -393,3 +393,36 @@ func TestEntraConnectorCreateCommunity(t *testing.T) {
 		}
 	}
 }
+
+// list-subscribed-skus (ADR-0531) is a listing Graph answers
+// whole: it needs a resultVariable, takes a select and keeps the default maxUsers bound,
+// and refuses every query field /subscribedSkus does not take, naming it.
+func TestEntraConnectorListSubscribedSkus(t *testing.T) {
+	cp, d := entraDetail(t, `connector="c" operation="list-subscribed-skus" resultVariable="lizenzen" select="skuId,skuPartNumber,consumedUnits,prepaidUnits"`)
+	if got := cp.Intern(d.EntraOp); got != "list-subscribed-skus" {
+		t.Errorf("operation = %q", got)
+	}
+	if got := cp.Intern(d.ResultVar); got != "lizenzen" {
+		t.Errorf("resultVariable = %q", got)
+	}
+	if got := cp.Intern(d.EntraSelect); got != "skuId,skuPartNumber,consumedUnits,prepaidUnits" {
+		t.Errorf("select = %q", got)
+	}
+	if d.EntraPageSize != 0 || d.EntraMaxUsers != defaultEntraMaxUsers || d.EntraAdvanced {
+		t.Errorf("bounds = pageSize %d maxUsers %d advanced %v", d.EntraPageSize, d.EntraMaxUsers, d.EntraAdvanced)
+	}
+	for _, tc := range []struct{ name, attrs, want string }{
+		{"no result variable", `connector="c" operation="list-subscribed-skus"`, "resultVariable"},
+		{"filter", `connector="c" operation="list-subscribed-skus" resultVariable="r" filter="capabilityStatus eq 'Enabled'"`, "sets filter on operation \"list-subscribed-skus\", which Graph answers whole"},
+		{"search", `connector="c" operation="list-subscribed-skus" resultVariable="r" search="&#34;skuPartNumber:SPE&#34;"`, "sets search"},
+		{"advancedQuery", `connector="c" operation="list-subscribed-skus" resultVariable="r" advancedQuery="true"`, "sets advancedQuery"},
+		{"pageSize", `connector="c" operation="list-subscribed-skus" resultVariable="r" pageSize="10"`, "sets pageSize"},
+		{"attributes", `connector="c" operation="list-subscribed-skus" resultVariable="r" attributesVariable="x"`, "sends no body"},
+		{"deltaLink", `connector="c" operation="list-subscribed-skus" resultVariable="r" deltaLink="https://x"`, "not a change-tracking query"},
+	} {
+		_, err := Parse(1, 1, strings.NewReader(entraTaskBPMN(tc.attrs)))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want it to contain %q", tc.name, err, tc.want)
+		}
+	}
+}

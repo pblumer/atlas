@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Exchange: Sitzungszimmer nachführen (Raumliste und Ortsangaben für vorhandene Räume).
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:zeebe="http://camunda.org/schema/zeebe/1.0"
+             xmlns:atlas="http://atlas/schema/1.0"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             id="defs_proc_m365_raum_nachfuehren" targetNamespace="http://atlas/beispiel/m365-dienste">
+  <itemDefinition id="item_Raumpostfach" structureRef="Raumpostfach"/>
+  <dataStore id="ds_exchange_online_empfaenger" name="Exchange Online: Empfaenger"/>
+  <process id="proc_m365_raum_nachfuehren" name="Exchange: Sitzungszimmer nachführen" isExecutable="true">
+    <documentation>Macht jedes Sitzungszimmer, das der Katalog eingerichtet hat, in der Raumsuche von Outlook auffindbar: Raumliste seines Orts, Mitgliedschaft, Ortsangaben (Set-Place). Für Räume, die eingerichtet wurden, bevor «Sitzungszimmer einrichten» das selbst tat, und für einen Raum, dessen Raumliste jemand von Hand verändert hat. Von Hand gestartet (Console, Prozess starten); er lässt sich beliebig oft starten, weil «Sitzungszimmer auffindbar machen» nur ergänzt, was fehlt.
+
+Er liest Standort und Plätze aus dem Raumpostfach selbst: CustomAttribute4 trägt seit der Bereitstellung den Standort, ResourceCapacity die Plätze. «Angaben ändern» im Shop berichtigt die Angaben der Position, startet aber keinen Prozess und ändert das Raumpostfach nicht (ADR-0359); ein neuer Standort muss deshalb zuerst ins Postfach (CustomAttribute4), dann holt dieser Prozess die Raumliste nach.
+
+Gefunden werden Räume über die Herkunftskennzeichnung (CustomAttribute1 = atlas-katalog, CustomAttribute2 = m365-raum) und, wenn NAME_PREFIX gesetzt ist, nur die mit diesem Präfix im Alias, damit ein geteilter Tenant die Räume anderer Installationen nicht anfasst.
+
+Worker: ucc_exchange. Konstante NAME_PREFIX.</documentation>
+    <extensionElements>
+      <atlas:constants><atlas:constant name="NAME_PREFIX" type="json" source="application" value='""'/>
+      </atlas:constants>
+    </extensionElements>
+    <startEvent id="s" name="Von Hand gestartet"><documentation>Startet ohne Eingaben.</documentation><outgoing>f_s__st_raeume</outgoing></startEvent>
+    <serviceTask id="st_raeume" name="Räume des Katalogs suchen"><documentation>list-mailboxes mit RecipientTypeDetails RoomMailbox und der Herkunftskennzeichnung; mit NAME_PREFIX zusätzlich Alias -like '&lt;Präfix&gt;*'. maxResults 500: Eine Exchange-Liste über der Grenze scheitert, statt abgeschnitten zu werden.</documentation><extensionElements><atlas:exchangeConnector connector="ucc_exchange" operation="list-mailboxes" parameters="{&quot;Filter&quot;: &quot;=\&quot;CustomAttribute1 -eq 'atlas-katalog' -and CustomAttribute2 -eq 'm365-raum'\&quot; + (if application.NAME_PREFIX = null or application.NAME_PREFIX = \&quot;\&quot; then \&quot;\&quot; else \&quot; -and Alias -like '\&quot; + application.NAME_PREFIX + \&quot;*'\&quot;)&quot;, &quot;RecipientTypeDetails&quot;: &quot;RoomMailbox&quot;}" maxResults="500" resultVariable="raeume"/></extensionElements><incoming>f_s__st_raeume</incoming><outgoing>f_st_raeume__ca_raumliste</outgoing></serviceTask>
+    <callActivity id="ca_raumliste" name="Raum auffindbar machen"><documentation>Call Activity proc_m365_raumliste je Raum, nacheinander (Mehrfachinstanz, sequenziell): Zwei neue Räume am selben Ort würden parallel beide keine Raumliste finden und beide eine anlegen. adresse ist die primäre Adresse, standort CustomAttribute4, kapazitaet ResourceCapacity.</documentation><extensionElements><zeebe:calledElement processId="proc_m365_raumliste" propagateAllParentVariables="false" propagateAllChildVariables="false"/><zeebe:ioMapping><zeebe:input source="=raum.PrimarySmtpAddress" target="adresse"/><zeebe:input source="=raum.CustomAttribute4" target="standort"/><zeebe:input source="=raum.ResourceCapacity" target="kapazitaet"/></zeebe:ioMapping></extensionElements><incoming>f_st_raeume__ca_raumliste</incoming><outgoing>f_ca_raumliste__e</outgoing><multiInstanceLoopCharacteristics isSequential="true"><extensionElements><zeebe:loopCharacteristics inputCollection="=raeume" inputElement="raum"/></extensionElements></multiInstanceLoopCharacteristics><dataOutputAssociation id="doa_ca_raumliste"><targetRef>dor_ca_raumliste</targetRef></dataOutputAssociation></callActivity>
+    <endEvent id="e" name="Räume nachgeführt"><incoming>f_ca_raumliste__e</incoming></endEvent>
+    <sequenceFlow id="f_s__st_raeume" sourceRef="s" targetRef="st_raeume"/>
+    <sequenceFlow id="f_st_raeume__ca_raumliste" sourceRef="st_raeume" targetRef="ca_raumliste"/>
+    <sequenceFlow id="f_ca_raumliste__e" sourceRef="ca_raumliste" targetRef="e"/>
+    <!-- Architektur: Datenobjekte und Datenspeicher (architektur/README) -->
+    <dataObject id="do_raumpostfach" name="Raumpostfach" itemSubjectRef="item_Raumpostfach"/>
+    <dataObjectReference id="dor_ca_raumliste" name="Raumpostfach" dataObjectRef="do_raumpostfach"><dataState name="Auffindbar"/></dataObjectReference>
+    <dataStoreReference id="dsr_exchange_online_empfaenger" name="Exchange Online: Empfaenger" dataStoreRef="ds_exchange_online_empfaenger"/>
+  </process>
+  <bpmndi:BPMNDiagram id="proc_m365_raum_nachfuehren_diagram">
+    <bpmndi:BPMNPlane id="proc_m365_raum_nachfuehren_plane" bpmnElement="proc_m365_raum_nachfuehren">
+      <bpmndi:BPMNShape id="s_di" bpmnElement="s"><omgdc:Bounds x="162" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="130" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="st_raeume_di" bpmnElement="st_raeume"><omgdc:Bounds x="280" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="ca_raumliste_di" bpmnElement="ca_raumliste"><omgdc:Bounds x="430" y="90" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="e_di" bpmnElement="e"><omgdc:Bounds x="612" y="112" width="36" height="36"/><bpmndi:BPMNLabel><omgdc:Bounds x="580" y="152" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="f_s__st_raeume_di" bpmnElement="f_s__st_raeume"><omgdi:waypoint x="198" y="130"/><omgdi:waypoint x="280" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_st_raeume__ca_raumliste_di" bpmnElement="f_st_raeume__ca_raumliste"><omgdi:waypoint x="380" y="130"/><omgdi:waypoint x="430" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="f_ca_raumliste__e_di" bpmnElement="f_ca_raumliste__e"><omgdi:waypoint x="530" y="130"/><omgdi:waypoint x="612" y="130"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dor_ca_raumliste_di" bpmnElement="dor_ca_raumliste"><omgdc:Bounds x="462" y="16" width="36" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="430" y="-15" width="100" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="doa_ca_raumliste_di" bpmnElement="doa_ca_raumliste"><omgdi:waypoint x="480" y="90"/><omgdi:waypoint x="480" y="66"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="dsr_exchange_online_empfaenger_di" bpmnElement="dsr_exchange_online_empfaenger"><omgdc:Bounds x="162" y="340" width="50" height="50"/><bpmndi:BPMNLabel><omgdc:Bounds x="112" y="395" width="150" height="27"/></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

@@ -1,0 +1,52 @@
+{
+  "type": "default",
+  "id": "lz-zuordnung",
+  "components": [
+    {
+      "type": "text",
+      "text": "**Zuordnung bestätigen · Confirm the assignment**\n\nVorgeschlagener Kunde · Proposed customer: {{zuKunde}}"
+    },
+    {
+      "key": "zuLizenzen",
+      "type": "textarea",
+      "label": "Lizenzen (SKU · Konto-ID · Organisationseinheit) · Licences",
+      "disabled": true,
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zuEntscheid",
+      "type": "radio",
+      "label": "Entscheid · Decision",
+      "values": [
+        {
+          "label": "Zuordnen · Assign",
+          "value": "zuordnen"
+        },
+        {
+          "label": "Gehört nicht zu uns · Not ours",
+          "value": "fremd"
+        }
+      ],
+      "validate": {
+        "required": true
+      },
+      "properties": {
+        "personal": "false"
+      }
+    },
+    {
+      "key": "zuVertrag",
+      "type": "textfield",
+      "label": "Vertrag · Contract",
+      "description": "Die Vertragsnummer (LV-…); fehlt der Vertrag, zuerst bestellen. · The contract number.",
+      "validate": {
+        "pattern": "^(|LV-.+)$"
+      },
+      "properties": {
+        "personal": "false"
+      }
+    }
+  ]
+}

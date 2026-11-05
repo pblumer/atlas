@@ -22,6 +22,7 @@
       <button class="btn" id="mig-batch-fail">Migrate batch (fails on page 2)</button>
       <button class="btn" id="mig-batch-nocursor">Migrate batch (no cursor)</button>
       <button class="btn" id="mig-batch-flood">Migrate batch (all refused)</button>
+      <button class="btn" id="mig-batch-nocounts">Migrate batch (counts unreadable)</button>
     </div>
     <script type="module">
       import { migrateInstanceFlow, migrateProcessFlow, planSummary, otherVersions, forkSummary } from "/migrationdialog.js";
@@ -36,7 +37,22 @@
       ];
       window.__PROCESSES = PROCESSES;
 
+      // What the target changes against v1, and where the instance stands
+      // (ADR-0530): its task is renamed and gets a form, and a
+      // task it has not reached yet is new.
+      const OK_CHANGES = {
+        at: ["review"],
+        counts: { added: 1, removed: 0, changed: 1 },
+        changes: [
+          { kind: "added", id: "triage", type: "userTask", name: "Triage", parent: "migrating" },
+          { kind: "changed", id: "review", type: "userTask", name: "Review twice", parent: "migrating", details: [
+            { field: "name", kind: "changed", before: "Review", after: "Review twice" },
+            { field: "extensionElements/zeebe:formDefinition@formId", kind: "added", after: "review-form" },
+          ] },
+        ],
+      };
       const OK_PLAN = (to) => ({
+        ...OK_CHANGES,
         instanceKey: "5001", fromProcessDefKey: 101, fromVersion: 1,
         toProcessDefKey: to, toVersion: to === 103 ? 3 : 2,
         migratable: true,
@@ -61,6 +77,12 @@
         forkable: proposed.length > 0,
       });
       const BAD_PLAN = (to) => ({
+        at: ["review"],
+        counts: { added: 1, removed: 1, changed: 0 },
+        changes: [
+          { kind: "added", id: "review_v2", type: "userTask", name: "Review", parent: "migrating" },
+          { kind: "removed", id: "review", type: "userTask", name: "Review", parent: "migrating" },
+        ],
         instanceKey: "5002", fromProcessDefKey: 101, fromVersion: 1,
         toProcessDefKey: to, toVersion: to === 103 ? 3 : 2,
         migratable: false,
@@ -70,6 +92,33 @@
         ],
         fork: FORK(to, []),
       });
+
+      // The batch dialog's readings: the comparison of the two versions, and where the
+      // source version's tokens stand — on review (changed), cleanup (removed) and the
+      // process itself, which is not a position.
+      const BATCH_COMPARISON = {
+        processId: "migrating", sameModel: false, difference: "x",
+        counts: { added: 0, removed: 1, changed: 2 },
+        changes: [
+          { kind: "changed", id: "review", type: "userTask", name: "Review", parent: "migrating", details: [
+            { field: "extensionElements/zeebe:taskDefinition@type", kind: "changed", before: "review", after: "review-v2" },
+          ] },
+          { kind: "changed", id: "done", type: "endEvent", name: "Done", parent: "migrating", details: [
+            { field: "name", kind: "changed", before: "Fertig", after: "Done" },
+          ] },
+          { kind: "removed", id: "cleanup", type: "task", name: "Cleanup", parent: "migrating" },
+        ],
+      };
+      const BATCH_COUNTS = {
+        instances: 5, tokens: 10, elements: [
+          { elementId: "migrating", tokens: 5 },
+          { elementId: "start", tokens: 0 },
+          { elementId: "review", tokens: 3 },
+          { elementId: "cleanup", tokens: 2 },
+          { elementId: "done", tokens: 0 },
+        ],
+      };
+      window.__reads = [];
 
       window.__calls = [];   // every write the flow issued, in order
       window.__result = null;
@@ -84,6 +133,15 @@
 
       const api = async (method, url, body) => {
         if (method === "GET" && url === "/api/v1/processes") return PROCESSES;
+        if (method === "GET" && /\/comparison\?with=/.test(url)) {
+          window.__reads.push(url);
+          return JSON.parse(JSON.stringify(BATCH_COMPARISON));
+        }
+        if (method === "GET" && url.endsWith("/runtime/counts")) {
+          window.__reads.push(url);
+          if (batchMode === "nocounts") { const e = new Error("counts unavailable"); e.status = 500; throw e; }
+          return JSON.parse(JSON.stringify(BATCH_COUNTS));
+        }
         window.__calls.push({ method, url, body });
 
         if (url.endsWith("/migrate/plan")) {
@@ -138,7 +196,7 @@
         return {};
       };
 
-      const reset = () => { window.__calls = []; window.__result = null; window.__toast = null; window.__done = 0; batchMode = ""; };
+      const reset = () => { window.__calls = []; window.__reads = []; window.__result = null; window.__toast = null; window.__done = 0; batchMode = ""; };
 
       document.getElementById("mig-ok").addEventListener("click", async () => {
         reset();
@@ -173,6 +231,7 @@
       document.getElementById("mig-batch-fail").addEventListener("click", batch("fail"));
       document.getElementById("mig-batch-nocursor").addEventListener("click", batch("nocursor"));
       document.getElementById("mig-batch-flood").addEventListener("click", batch("flood"));
+      document.getElementById("mig-batch-nocounts").addEventListener("click", batch("nocounts"));
 
       // Exported pure helpers, checked directly rather than through the DOM.
       window.__planSummary = planSummary;

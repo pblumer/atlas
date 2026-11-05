@@ -171,8 +171,12 @@ var (
 	AuthPasswordLinkUsed   = newEvent("auth.password_link_used")
 	AuthPasswordChanged    = newEvent("auth.password_changed")
 	AuthPasswordRecovery   = newEvent("auth.password_recovery")
-	AuthTokenMinted        = newEvent("auth.token_minted")
-	AuthTokenRevoked       = newEvent("auth.token_revoked")
+	// AuthPasswordRevoked is an administrator making an account's password stop working
+	// before its owner is sent a link (ADR-0526, amendment of
+	// 2026-11-04): the account awaits activation, its sessions end and its grants go.
+	AuthPasswordRevoked = newEvent("auth.password_revoked")
+	AuthTokenMinted     = newEvent("auth.token_minted")
+	AuthTokenRevoked    = newEvent("auth.token_revoked")
 	// AuthOIDCConfigured is said once at startup where an operator named an identity
 	// provider. It is the line that tells whoever reads the log after a failed login
 	// which issuer this server was asking, which is the first thing to check.
@@ -512,6 +516,14 @@ var (
 	// model is drifting from what the compiler now asks for, and the next deploy of
 	// it will be refused with the author watching.
 	DeploymentReloadedWithProblems = newEvent("deployment.reloaded_with_problems")
+
+	// DeploymentTookSystemProcessID reports, at startup, a deployed definition outside
+	// the system project whose process id is one of atlas's system processes. Since
+	// 0.23.1 no such deploy is accepted and such a copy has no system rights, but an
+	// earlier server ran it in the system process's place: a modeler could make
+	// themselves an administrator that way. The operator checks who deployed it
+	// (deployedBy), what it did, and deletes it.
+	DeploymentTookSystemProcessID = newEvent("deployment.took_system_process_id")
 
 	// DeploymentDiagramUpdated reports a layout-only adjustment to a deployed
 	// definition's diagram (ADR-0251): the picture the

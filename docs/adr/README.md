@@ -614,6 +614,12 @@ paths, the `connector="…"` BPMN attribute, `atlas worker --connector`, the
 | [0524](0524-marktleistung-and-service.md) | A structured catalogue declares Marktleistung and service, and files them under capabilities | Accepted | Landed |
 | [0525](0525-shop-tile-layout.md) | A catalogue chooses the shop's layout, and a product names its icon | Proposed | Partial |
 | [0526](0526-password-set-by-its-owner.md) | A password is set by its owner, through a one-time link | Accepted | Landed |
+| [0527](0527-business-object-capability-vocabulary.md) | A capability vocabulary for CRM, ERP and finance, with idempotent writes as its admission rule | Proposed | Not started |
+| [0528](0528-application-bundle-architecture.md) | What an application bundle carries of the architecture, and where the capability map lives | Accepted | Landed |
+| [0529](0529-datatrans-payment-worker.md) | Card payments through a Datatrans Worker Type | Proposed | Not started |
+| [0530](0530-compare-process-versions.md) | Comparing two versions of a process, element by element | Accepted | Landed |
+| [0531](0531-entra-subscribed-skus.md) | The Entra Worker reads the tenant's licence subscriptions and the last sign-in | Accepted | Landed |
+| [0532](0532-exchange-room-lists-and-places.md) | Rooms Outlook can find — room lists and Places metadata in the Exchange Worker | Accepted | Landed |
 
 ## The two states of a record
 

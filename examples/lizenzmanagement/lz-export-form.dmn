@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LzExportForm: in welcher Form die Verrechnung (P6) den Export eines Vertrags erstellt.
+  Eingabe:  form (exportForm im Vertrag: csv | mail | sap)
+  Ausgaben: trenner, kopf (erste Zeile), betreff, art (text | tabelle)
+  VORSCHLAG für das SAP-Format: eine Zeile pro Position mit PSP-Element, Material (die SKU), Menge und Betrag,
+  getrennt mit Tabulator, wie ihn ein Upload in eine Sammelbuchung liest. Zu prüfen mit der eigenen Finanzabteilung.
+-->
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/" id="defs_LzExportForm" name="LzExportForm" namespace="http://atlas/dmn">
+  <inputData id="id_form" name="form"/>
+  <decision id="LzExportForm" name="LzExportForm">
+    <informationRequirement id="ir_form"><requiredInput href="#id_form"/></informationRequirement>
+    <decisionTable id="dt_LzExportForm" hitPolicy="FIRST">
+      <input id="in_0" label="form"><inputExpression id="ie_0" typeRef="string"><text>form</text></inputExpression></input>
+      <output id="out_0" label="trenner" name="trenner" typeRef="string"/>
+      <output id="out_1" label="kopf" name="kopf" typeRef="string"/>
+      <output id="out_2" label="betreff" name="betreff" typeRef="string"/>
+      <output id="out_3" label="art" name="art" typeRef="string"/>
+      <rule id="r1">
+        <description>CSV</description>
+        <inputEntry id="r1_i0"><text>"csv"</text></inputEntry>
+        <outputEntry id="r1_o0"><text>";"</text></outputEntry>
+        <outputEntry id="r1_o1"><text>"Vertrag;Kunde;PSP;SKU;Lizenzen;Preis;Betrag;Ueberzug"</text></outputEntry>
+        <outputEntry id="r1_o2"><text>"Lizenzverrechnung (CSV)"</text></outputEntry>
+        <outputEntry id="r1_o3"><text>"tabelle"</text></outputEntry>
+      </rule>
+      <rule id="r2">
+        <description>Liste per Mail</description>
+        <inputEntry id="r2_i0"><text>"mail"</text></inputEntry>
+        <outputEntry id="r2_o0"><text>" · "</text></outputEntry>
+        <outputEntry id="r2_o1"><text>"Vertrag · Kunde · PSP · SKU · Lizenzen · Preis · Betrag · Überzug"</text></outputEntry>
+        <outputEntry id="r2_o2"><text>"Lizenzverrechnung"</text></outputEntry>
+        <outputEntry id="r2_o3"><text>"text"</text></outputEntry>
+      </rule>
+      <rule id="r3">
+        <description>SAP-Format</description>
+        <inputEntry id="r3_i0"><text>"sap"</text></inputEntry>
+        <outputEntry id="r3_o0"><text>"\t"</text></outputEntry>
+        <outputEntry id="r3_o1"><text>"PSP\tMATERIAL\tMENGE\tBETRAG\tWAEHRUNG\tTEXT"</text></outputEntry>
+        <outputEntry id="r3_o2"><text>"Lizenzverrechnung (SAP-Upload)"</text></outputEntry>
+        <outputEntry id="r3_o3"><text>"tabelle"</text></outputEntry>
+      </rule>
+      <rule id="r4">
+        <description>Unbekannt: CSV</description>
+        <inputEntry id="r4_i0"><text>-</text></inputEntry>
+        <outputEntry id="r4_o0"><text>";"</text></outputEntry>
+        <outputEntry id="r4_o1"><text>"Vertrag;Kunde;PSP;SKU;Lizenzen;Preis;Betrag;Ueberzug"</text></outputEntry>
+        <outputEntry id="r4_o2"><text>"Lizenzverrechnung (CSV)"</text></outputEntry>
+        <outputEntry id="r4_o3"><text>"tabelle"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

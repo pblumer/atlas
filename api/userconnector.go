@@ -58,8 +58,10 @@ func (s *Server) userConnectorHandler(store userConnStore) job.Handler {
 			return fmt.Errorf("user worker: no compiled process for def %d", ei.ProcessDefKey)
 		}
 		// Gate: only the protected system project's processes may provision users
-		// (ADR-0122/0123). A tenant model that declared the worker fails here.
-		if !s.systemPIDs[cp.ProcessId()] {
+		// (ADR-0122/0123). A tenant model that declared the worker fails here — also one
+		// that took a system process's id: the deployment, not the id, must be the
+		// system project's (systemprocessguard.go).
+		if !s.isSystemDefKey(ei.ProcessDefKey) {
 			return fmt.Errorf("user worker: process %q is not a system process; user provisioning is restricted to the system project", cp.ProcessId())
 		}
 		detail, err := cp.ConnectorTaskOf(ei.ElementId)

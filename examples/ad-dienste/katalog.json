@@ -21,7 +21,12 @@
         "ad-servicekonto",
         "ad-testkonto",
         "ad-externes-konto",
-        "ad-versetzung"
+        "ad-versetzung",
+        "ad-account-verwalten",
+        "ad-unpersoenliches-konto",
+        "ad-kontakt",
+        "ad-racf-konto",
+        "ad-konto-anfrage"
       ],
       "groups": [
         "{{zielgruppe-ad}}"
@@ -31,6 +36,41 @@
           "from": "ad-recht-fileshare-finanzen-aendern",
           "to": "ad-recht-fileshare-finanzen-lesen",
           "kind": "excludes"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-admin-konto",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-testkonto",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-kontakt",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-servicekonto",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-unpersoenliches-konto",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-racf-konto",
+          "kind": "aggregation"
+        },
+        {
+          "from": "ad-account-verwalten",
+          "to": "ad-konto-anfrage",
+          "kind": "aggregation"
         }
       ]
     }
@@ -646,6 +686,325 @@
         "Organisationseinheit",
         "OU",
         "Mover"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-account-verwalten",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "texts": {
+        "de": "Account verwalten",
+        "en": "Manage accounts"
+      },
+      "descriptions": {
+        "de": "Die Kontoverwaltung als ein Angebot: Admin-Konto (A), Testkonto (T), Kontakt (C), Servicekonto (S), unpersönliches Konto (F, R, E), RACF-Konto und allgemeine Anfrage sind Optionen. Wähle beim Bestellen, was du brauchst; weitere Optionen bestellst du später dazu. Jedes Konto ist ein eigenes Recht mit eigener Genehmigung und Befristung.",
+        "en": "Account management as one offering: admin account (A), test account (T), contact (C), service account (S), non-personal account (F, R, E), RACF account and general request are options. Pick what you need when ordering; add further options later. Each account is a right of its own with its own approval and term."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_ad_account_verwalten",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.konten.bereitstellen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.konten.zurueckgeben",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Account verwalten zurückgeben",
+            "en": "Return manage accounts"
+          }
+        }
+      ],
+      "keywords": [
+        "Account",
+        "Konto",
+        "Benutzerkonto",
+        "verwalten",
+        "Mutation"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-unpersoenliches-konto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 365,
+      "texts": {
+        "de": "Active Directory: Unpersönliches Konto (F, R, E)",
+        "en": "Active Directory: non-personal account (F, R, E)"
+      },
+      "descriptions": {
+        "de": "Ein Funktionskonto (f-), Rollenkonto (r-) oder Schulungskonto (e-) ohne persönliche Inhaberin. Die empfangende Person verantwortet es und setzt das Initialpasswort. Genehmigt von der Informationssicherheit (ISBO) mit dem Verwendungszweck als Begründung; Identity Management nimmt es zur Kenntnis. Gilt ein Jahr und wird rezertifiziert. Danach: mutieren, löschen, entsperren, Passwort zurücksetzen.",
+        "en": "A function account (f-), role account (r-) or training account (e-) with no personal owner. The recipient is responsible for it and sets the initial password. Approved by information security (ISBO) with the purpose as justification; identity management takes note. Lasts one year and is recertified. Afterwards: change, delete, unlock, reset the password."
+      },
+      "variants": [
+        {
+          "id": "funktion",
+          "texts": {
+            "de": "Funktionskonto (F)",
+            "en": "Function account (F)"
+          }
+        },
+        {
+          "id": "rolle",
+          "texts": {
+            "de": "Rollenkonto (R)",
+            "en": "Role account (R)"
+          }
+        },
+        {
+          "id": "schulung",
+          "texts": {
+            "de": "Schulungskonto (E)",
+            "en": "Training account (E)"
+          }
+        }
+      ],
+      "approval": {
+        "kind": "role",
+        "ref": "{{informationssicherheit}}"
+      },
+      "lifecycleProcess": "proc_ad_unpersoenliches_konto",
+      "configForm": "ad-unpersoenliches-konto-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.unpers.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.unpers.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto löschen",
+            "en": "Delete the account"
+          }
+        },
+        {
+          "key": "mutieren",
+          "message": "ad.unpers.mutieren",
+          "effect": "change",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto mutieren",
+            "en": "Change the account"
+          },
+          "form": "ad-konto-mutieren"
+        },
+        {
+          "key": "entsperren",
+          "message": "ad.unpers.entsperren",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Konto entsperren",
+            "en": "Unlock the account"
+          }
+        },
+        {
+          "key": "passwort",
+          "message": "ad.unpers.passwort",
+          "effect": "service",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Passwort zurücksetzen",
+            "en": "Reset the password"
+          }
+        }
+      ],
+      "keywords": [
+        "Funktionskonto",
+        "Rollenkonto",
+        "Schulungskonto",
+        "unpersönlich",
+        "F-Account",
+        "E-Account",
+        "R-Account"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-kontakt",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "maxDays": 365,
+      "texts": {
+        "de": "Active Directory: Kontakt (C)",
+        "en": "Active Directory: contact (C)"
+      },
+      "descriptions": {
+        "de": "Ein Adressbucheintrag für eine Person ausserhalb der Organisation, ohne Konto und ohne Anmeldung. Du bist Sponsor; der Kontakt gilt ein Jahr. Danach: zurückgeben.",
+        "en": "An address book entry for a person outside the organisation, without an account or sign-in. You are the sponsor; the contact lasts one year. Afterwards: return."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_ad_kontakt",
+      "configForm": "ad-kontakt-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.kontakt.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.kontakt.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Kontakt entfernen",
+            "en": "Remove the contact"
+          }
+        }
+      ],
+      "keywords": [
+        "Kontakt",
+        "Contact",
+        "Adressbuch",
+        "C-Account"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-racf-konto",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "maxDays": 365,
+      "texts": {
+        "de": "Mainframe: RACF-Konto",
+        "en": "Mainframe: RACF account"
+      },
+      "descriptions": {
+        "de": "Eine RACF-User-ID auf dem Mainframe. Genehmigt von der Informationssicherheit; das Mainframe-Team legt sie an und meldet dir die User-ID. Gilt ein Jahr. Danach: zurückgeben.",
+        "en": "A RACF user ID on the mainframe. Approved by information security; the mainframe team creates it and sends you the user ID. Lasts one year. Afterwards: return."
+      },
+      "approval": {
+        "kind": "role",
+        "ref": "{{informationssicherheit}}"
+      },
+      "lifecycleProcess": "proc_ad_racf_konto",
+      "configForm": "ad-racf-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.racf.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.racf.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "RACF-Konto zurückgeben",
+            "en": "Return the RACF account"
+          }
+        }
+      ],
+      "keywords": [
+        "RACF",
+        "Mainframe",
+        "Host",
+        "z/OS"
+      ],
+      "category": "konten",
+      "categoryTexts": {
+        "de": "Konten",
+        "en": "Accounts"
+      }
+    },
+    {
+      "id": "ad-konto-anfrage",
+      "homeCatalog": "cat-ad-dienste",
+      "state": "active",
+      "multipleAllowed": true,
+      "texts": {
+        "de": "Allgemeine Anfrage – Account",
+        "en": "General account request"
+      },
+      "descriptions": {
+        "de": "Ein Anliegen zu einem Konto, das in kein anderes Produkt passt, als Freitext an Identity Management. Du erhältst eine Rückmeldung.",
+        "en": "An account matter no other product covers, as free text to identity management. You receive feedback."
+      },
+      "approval": {
+        "kind": "none"
+      },
+      "lifecycleProcess": "proc_ad_konto_anfrage",
+      "configForm": "ad-konto-anfrage-bestellung",
+      "actions": [
+        {
+          "key": "provision",
+          "message": "ad.anfrage.anlegen",
+          "effect": "provision"
+        },
+        {
+          "key": "deprovision",
+          "message": "ad.anfrage.entfernen",
+          "effect": "deprovision",
+          "triggers": [
+            "customer",
+            "operator"
+          ],
+          "labels": {
+            "de": "Anfrage abschliessen",
+            "en": "Close the request"
+          }
+        }
+      ],
+      "keywords": [
+        "Anfrage",
+        "Account",
+        "Konto",
+        "allgemein"
       ],
       "category": "konten",
       "categoryTexts": {

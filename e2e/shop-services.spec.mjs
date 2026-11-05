@@ -87,11 +87,11 @@ test.afterEach(async ({ page }) => {
 test("my services are a cascade, read like the catalogue", async ({ page }) => {
   await openServices(page);
 
-  // Nothing chosen: every heading and product held, and no services — a service
-  // is shown only beside the product it belongs to.
+  // Every heading and Marktleistung held, and no column of services: "My
+  // services" lists Marktleistungen only, and their parts are counted in them.
   expect(await column(page, 1)).toEqual(["All", "Identity", "Workplace"]);
   expect(await column(page, 3)).toEqual(["Apple iPhone", "Functional account (F)", "Internal user account"]);
-  expect(await column(page, 4)).toEqual([]);
+  await expect(page.locator(".cascade > .col")).toHaveCount(3);
 
   // A heading narrows the groups and the products to what is filed under it.
   await page.getByRole("button", { name: "Identity", exact: true }).click();
@@ -101,15 +101,13 @@ test("my services are a cascade, read like the catalogue", async ({ page }) => {
   await page.getByRole("button", { name: "Personal account", exact: true }).click();
   expect(await column(page, 3)).toEqual(["Internal user account"]);
 
-  // A product shows what is behind it, and only that.
-  await page.getByRole("button", { name: "Internal user account", exact: true }).click();
-  expect(await column(page, 4)).toEqual(["Internal account (U)"]);
-
-  // The case hangs under the phone this person holds, not the one the release
-  // happens to list first.
+  // A Marktleistung opens its details, not a column of its parts: the case and the
+  // hardware are counted in the phone's pie, and held whole it offers nothing.
   await page.getByRole("button", { name: "All", exact: true }).click();
   await page.getByRole("button", { name: "Apple iPhone", exact: true }).click();
-  expect(await column(page, 4)).toEqual(["Apple iPhone hardware", "Smartphone case"]);
+  await expect(page.locator(".cascade > .col:nth-child(4) .colhead")).toHaveText("Details");
+  await expect(page.locator(".cascade .cell", { hasText: "Smartphone case" })).toHaveCount(0);
+  await expect(page.locator(".svc-detail .svc-lacking")).toHaveCount(0);
   expect(await page.evaluate(() => window.__unmatched)).toEqual([]);
 });
 
@@ -127,9 +125,8 @@ test("the catalogue and my services share where the cascade stands", async ({ pa
   await expect(page.locator(".cascade > .col:nth-child(2) .label.on")).toHaveText("Personal account");
   expect(await column(page, 3)).toEqual(["Internal user account"]);
 
-  // And the other way: a product chosen in the catalogue is the one whose services
-  // "My services" shows.
-  await page.getByRole("button", { name: "Internal user account", exact: true }).click();
+  // And the other way: the heading chosen in the catalogue is the one "My
+  // services" opens on.
   await page.getByRole("button", { name: "My services", exact: true }).click();
-  expect(await column(page, 4)).toEqual(["Internal account (U)"]);
+  await expect(page.locator(".cascade > .col:nth-child(1) .label.on")).toHaveText("Identity");
 });

@@ -95,7 +95,11 @@ func (s *Server) passwordMAC(u User, expiry int64) ([]byte, error) {
 		return nil, errors.New("password links are signed with a key the vault derives, and this server runs without a vault (--vault=false)")
 	}
 	m := hmac.New(sha256.New, s.vault.DerivedKey(passwordLinkPurpose))
-	for _, part := range []string{u.ID, strconv.FormatInt(expiry, 10), strings.ToLower(strings.TrimSpace(u.Email)), u.PasswordHash} {
+	parts := []string{u.ID, strconv.FormatInt(expiry, 10), strings.ToLower(strings.TrimSpace(u.Email)), u.PasswordHash}
+	if u.CredentialEpoch > 0 {
+		parts = append(parts, strconv.FormatUint(u.CredentialEpoch, 10))
+	}
+	for _, part := range parts {
 		m.Write([]byte(part))
 		m.Write([]byte{0})
 	}
@@ -146,8 +150,10 @@ func (s *Server) passwordLinkFor(u User, now time.Time) (string, int64, error) {
 // and unless the mail goes to the account's own address and to nobody beside it: a model
 // — even a modified system process — can send somebody's link only to the mailbox that
 // already is their recovery anchor. Runs on the loop.
-func (d mailDirectory) PasswordLink(processID, username string, to, cc, bcc []string) (string, error) {
-	if !d.s.systemPIDs[processID] {
+func (d mailDirectory) PasswordLink(processDefKey uint64, processID, username string, to, cc, bcc []string) (string, error) {
+	// The deployment, not the process id, must be the system project's: any model may
+	// call its process proc_passwort_link (systemprocessguard.go).
+	if !d.s.isSystemDefKey(processDefKey) {
 		return "", fmt.Errorf("process %q is not a system process; only the system project mails password links", processID)
 	}
 	if username == "" {
@@ -246,6 +252,7 @@ func (s *Server) handlePasswordPage(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("Cache-Control", "no-store")
+	setNoFraming(h)
 	_, _ = w.Write(page)
 }
 
@@ -509,10 +516,18 @@ func (s *Server) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 // handleUserPasswordLink answers POST /api/v1/users/{id}/password-link: an administrator
 // has the account sent its link ({"send": true}), or takes the link to hand over in
 // person — on an instance with no mail — and never chooses a password themselves.
+//
+// With {"revoke": true} the account's current password stops working first: for an
+// account whose password is known to somebody else — typed by an administrator, mailed,
+// read off a log — a link alone would leave that password valid until the owner uses
+// it. The account then awaits activation, every session ends and its OAuth grants are
+// revoked, and the link it is sent is an activation link (ADR-0526, amendment of
+// 2026-11-04).
 func (s *Server) handleUserPasswordLink(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var payload struct {
-		Send bool `json:"send"`
+		Send   bool `json:"send"`
+		Revoke bool `json:"revoke"`
 	}
 	if !s.decodeJSONBody(w, r, &payload) {
 		return
@@ -532,6 +547,8 @@ func (s *Server) handleUserPasswordLink(w http.ResponseWriter, r *http.Request) 
 		httpapi.Error(w, http.StatusConflict, "this account is disabled; enable it first")
 		return
 	}
+	// Everything the link needs is checked before a password is revoked, so a refusal
+	// never leaves an account locked with no link on its way.
 	if payload.Send {
 		if strings.TrimSpace(u.Email) == "" {
 			httpapi.Error(w, http.StatusConflict, "this account has no e-mail address; give it one, or take the link and hand it over in person")
@@ -541,14 +558,31 @@ func (s *Server) handleUserPasswordLink(w http.ResponseWriter, r *http.Request) 
 			httpapi.Error(w, http.StatusConflict, "password links need the vault and the server's external URL (--external-url)")
 			return
 		}
+		if payload.Revoke && !s.passwordRecoveryReady() {
+			httpapi.Error(w, http.StatusConflict, "the system process "+passwordLinkProcessID+" is not deployed; take the link and hand it over in person")
+			return
+		}
+	} else if s.vault == nil {
+		httpapi.Error(w, http.StatusConflict, "password links are signed with a key the vault derives, and this server runs without a vault (--vault=false)")
+		return
+	}
+	if payload.Revoke {
+		revoked, status, err := s.revokePassword(r, u)
+		if err != nil {
+			httpapi.Error(w, status, "revoke password: "+err.Error())
+			return
+		}
+		u = revoked
+	}
+	if payload.Send {
 		inst, err := s.startPasswordLinkProcess(u, passwordAnlassInvite)
 		if err != nil {
 			httpapi.Error(w, http.StatusConflict, "password link: "+err.Error())
 			return
 		}
 		audit(r, logging.AuthPasswordLinkIssued, "password link mailed by an administrator",
-			slog.String("user_id", u.ID), slog.Uint64("instance", inst))
-		httpapi.JSON(w, http.StatusAccepted, map[string]any{"sent": true, "instanceKey": inst})
+			slog.String("user_id", u.ID), slog.Uint64("instance", inst), slog.Bool("revoked", payload.Revoke))
+		httpapi.JSON(w, http.StatusAccepted, map[string]any{"sent": true, "instanceKey": inst, "revoked": payload.Revoke})
 		return
 	}
 	tok, expiry, err := s.passwordToken(u, time.Now())
@@ -557,13 +591,73 @@ func (s *Server) handleUserPasswordLink(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	path := passwordPagePath + "#" + tok
-	resp := map[string]any{"path": path, "expiresAt": expiry, "purpose": passwordPurpose(u)}
+	resp := map[string]any{"path": path, "expiresAt": expiry, "purpose": passwordPurpose(u), "revoked": payload.Revoke}
 	if base := strings.TrimRight(s.externalURL, "/"); base != "" {
 		resp["url"] = base + path
 	}
 	audit(r, logging.AuthPasswordLinkIssued, "password link handed to an administrator", slog.String("user_id", u.ID))
 	w.Header().Set("Cache-Control", "no-store")
 	httpapi.JSON(w, http.StatusOK, resp)
+}
+
+// revokePassword makes u's current password stop working: the account awaits activation,
+// every session ends and its OAuth grants are revoked. It refuses the caller's own
+// account — "Change password" is how a person replaces theirs — and the last enabled
+// administrator who could still sign in, which would leave the instance with nobody to
+// administer it until somebody runs atlas reset-password on the server. It returns the
+// account as stored and, on a refusal, the status to answer with.
+func (s *Server) revokePassword(r *http.Request, u User) (User, int, error) {
+	if p := httpapi.PrincipalFrom(r.Context()); p != nil && p.UserID == u.ID {
+		return u, http.StatusConflict, errors.New("this is your own account; change your password under the account menu instead")
+	}
+	var (
+		out    User
+		status = http.StatusInternalServerError
+		opErr  error
+	)
+	s.do(func() {
+		cur, ok, err := s.users.Get(u.ID)
+		if err != nil || !ok {
+			status, opErr = http.StatusNotFound, errors.New("no user with that id")
+			if err != nil {
+				status, opErr = http.StatusInternalServerError, err
+			}
+			return
+		}
+		if cur.hasRole(RoleAdmin) {
+			all, err := s.users.LoadAll()
+			if err != nil {
+				opErr = err
+				return
+			}
+			others := 0
+			for _, o := range all {
+				if o.ID != cur.ID && !o.Disabled && o.hasRole(RoleAdmin) && (o.PasswordHash != "" || !isLocalAccount(o)) {
+					others++
+				}
+			}
+			if others == 0 {
+				status, opErr = http.StatusConflict, errors.New("this is the last administrator who can sign in; revoking their password would leave nobody to administer the instance (atlas reset-password on the server is the way back)")
+				return
+			}
+		}
+		cur.PasswordHash = ""
+		// The empty hash is the state an activation link was signed over; the new
+		// epoch is what keeps such a link — used or not — from opening the account
+		// again (ADR-0526, amendment of 2026-11-04).
+		cur.CredentialEpoch++
+		cur.UpdatedAt = time.Now().Unix()
+		if opErr = s.users.Save(cur); opErr == nil {
+			out = cur
+		}
+	})
+	if opErr != nil {
+		return u, status, opErr
+	}
+	s.sessions.destroyUser(out.ID)
+	s.revokeUserGrants(out.ID)
+	audit(r, logging.AuthPasswordRevoked, "password revoked by an administrator", slog.String("user_id", out.ID))
+	return out, 0, nil
 }
 
 // ownWorker reports whether the request is the server's own worker credential — the one

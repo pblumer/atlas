@@ -159,7 +159,9 @@ test("each answer says what was entered", async ({ page }) => {
 });
 
 test("a correction of an order's answers is text as well", async ({ page }) => {
-  await page.getByRole("button", { name: "My orders" }).first().click();
+  // Placing the order leads to "My services"; the entry opened shows its order.
+  await page.getByRole("button", { name: "My services" }).first().click();
+  await page.locator(".svc-body .cell:has(.pie-icon) button.label").first().click();
   await page.getByRole("button", { name: "Change the details" }).click();
   // The form opens on what the order holds, each answer in its field's own kind:
   // the number, the unticked box, the one choice and the several.

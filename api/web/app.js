@@ -20,6 +20,7 @@ import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.
 import { importPackage, packageSummary } from "./packageimport.js";
 import { openBlueprintMarketplace } from "./blueprint-marketplace.js";
 import { installFeelAssistant } from "./feel-assistant.js";
+import { moduleSymbol } from "./module-icons.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -38,6 +39,7 @@ import { editWorkerFlow, workerShape, workerCreateBody, workerUsageHTML, openWor
 // already read the handbook.
 import { workerKindDocHTML } from "./workertypedocs.js";
 import { migrateProcessFlow, runningByDefinition } from "./migrationdialog.js";
+import { compareVersionsFlow } from "./version-comparison.js";
 import { purgeFinishedFlow } from "./historypurge.js";
 import { openPickModal } from "./pickmodal.js";
 import { openApplicationDeleteDialog, forceReason } from "./deletedialog.js";
@@ -302,6 +304,13 @@ const initials = (name) => {
   const p = s.split(/\s+/);
   return (p.length > 1 ? p[0][0] + p[1][0] : s.slice(0, 2)).toUpperCase();
 };
+
+// signedInName is how the Console names the person signed in — their display name
+// where they have one, else their username, as the account menu shows them — or ""
+// when nobody is (sign-in off, or not signed in yet).
+function signedInName() {
+  return AUTH.enabled && AUTH.user ? (AUTH.user.displayName || AUTH.user.username || "") : "";
+}
 
 // updateAccount reflects the signed-in user in the top-bar avatar and its menu.
 function updateAccount() {
@@ -1682,14 +1691,16 @@ function paintApps() {
   // catalogue and the shop are the Marketplace (tshopper phase A,
   // ADR-0515), and saying so in the drawer is
   // what tells a person the two belong together. The caption is not a link and not
-  // part of any link's name.
+  // part of any link's name. Each entry leads with its module's symbol
+  // (module-icons.js), hidden from assistive technology so the name alone is what
+  // the link says.
   let suite = "";
   nav.innerHTML = APPS.filter((a) => offered(a)).map((a) => {
     const head = a.suite && a.suite !== suite ? `<div class="app-suite" aria-hidden="true">${a.suite}</div>` : "";
     suite = a.suite || "";
     return head +
       `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
-      `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
+      `${moduleSymbol(a.id)}${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
   }).join("");
 }
 
@@ -1749,6 +1760,10 @@ function paintMobileMenu(appId, route) {
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
+  // Beside the name, the app's symbol — the one its drawer entry leads with — so the
+  // bar says where one is at a glance, and on a phone, where the name gives way, too.
+  // It joins the mark (or an organisation's logo); it never replaces it.
+  document.getElementById("app-symbol").innerHTML = moduleSymbol(appId, 22);
   paintApps();
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) => {
@@ -2004,12 +2019,13 @@ async function viewConsoleDashboard() {
     <div id="catalogue-stranded-slot"></div>
     <div id="api-tokens-expiring-slot"></div>
     <div id="approvals-waiting-slot"></div>
-    <div class="card">
+    <div class="card welcome-card">
+      <div class="welcome-text">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
         }</span>
-        <h1>Welcome to atlas</h1>
+        <h1>${signedInName() ? `Welcome, ${esc(signedInName())}` : "Welcome to atlas"}</h1>
         <span id="welcome-version" class="welcome-version muted"></span>
       </div>
       <p class="muted">Atlas is a durable, high-throughput BPMN&nbsp;2.x workflow engine that runs
@@ -2026,6 +2042,8 @@ async function viewConsoleDashboard() {
         <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
         <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
+      </div>
+      <img class="welcome-art" src="welcome.svg" alt="" width="480" height="320" />
     </div>
     <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
@@ -2764,6 +2782,27 @@ async function copyPasswordLink(u) {
   } catch (e) { toast("could not create the password link: " + e.message, "err"); }
 }
 
+// revokePassword makes the account's current password stop working and then has its
+// owner set a new one (ADR-0526, amendment of 2026-11-04) — for a password somebody
+// else knows: one an administrator typed, one that was mailed, one read off a log. A
+// link alone would leave it valid until the owner uses the link. The account then awaits
+// activation and is signed out everywhere; with an address the link is mailed, without
+// one it is handed to the administrator to pass on in person.
+async function revokePassword(u, reload) {
+  const how = u.email ? `then send them a link to set a new one, to ${u.email}` : "then hand you a link to give them in person";
+  if (!window.confirm(`Revoke the password of "${u.username}"? Their current password stops working at once and they are signed out everywhere; ${how}. Until they use the link, nobody can sign in as this account.`)) return;
+  try {
+    const r = await api("POST", `/api/v1/users/${encodeURIComponent(u.id)}/password-link`, { send: !!u.email, revoke: true });
+    if (u.email) toast(`Password revoked; link sent to ${u.email}`, "ok");
+    else {
+      const link = r.url || (location.origin + r.path);
+      const until = r.expiresAt ? fmtDateTime(r.expiresAt * 1000) : "";
+      window.prompt(`Password revoked. Hand this link to "${u.username}" in person — not by an unencrypted channel. It sets their password once${until ? " and expires " + until : ""}.`, link);
+    }
+  } catch (e) { toast("could not revoke the password: " + e.message, "err"); }
+  reload();
+}
+
 async function toggleUserDisabled(u, reload) {
   try {
     await api("PATCH", `/api/v1/users/${encodeURIComponent(u.id)}`, { disabled: !u.disabled });
@@ -3313,6 +3352,10 @@ async function viewConsoleOrg() {
   const userMenu = (u) => [
     ...(localAccount(u) && !u.disabled && u.email ? [{ label: "Send password link…", icon: "✉", act: "pwsend" }] : []),
     ...(localAccount(u) && !u.disabled ? [{ label: "Copy password link…", icon: "🔑", act: "pwlink" }] : []),
+    // For a password somebody else knows. Not offered on your own account, which
+    // changes its password under the account menu, nor on one with none to revoke.
+    ...(localAccount(u) && !u.disabled && !u.awaitingActivation && !(me && u.id === me.id)
+      ? [{ label: "Revoke password…", icon: "⛔", act: "pwrevoke", danger: true }] : []),
     { label: u.disabled ? "Enable account" : "Disable account", icon: u.disabled ? "▶" : "⊘", act: "toggle" },
     { sep: true },
     { label: "Delete…", icon: "🗑", act: "delete", danger: true },
@@ -3469,6 +3512,7 @@ async function viewConsoleOrg() {
         break;
       case "pwsend": sendPasswordLink(u); break;
       case "pwlink": copyPasswordLink(u); break;
+      case "pwrevoke": revokePassword(u, reload); break;
       case "toggle": toggleUserDisabled(u, reload); break;
       case "delete": deleteUser(u, reload); break;
     }
@@ -7021,6 +7065,11 @@ async function viewInstances() {
       // one click deeper, the same ⋯ pattern the Modeler's rows use).
       const openHref = `#/operations/p/${g.latest.key}`;
       const menuItems = [{ label: "Open", icon: "→", href: openHref }];
+      // Reading what changed between two versions needs no role beyond seeing them
+      // (ADR-0530).
+      if (g.versions.length > 1) {
+        menuItems.push({ label: tr("cmp.menu"), icon: "≠", act: "compare", data: { proc: g.processId } });
+      }
       if (s.running) {
         // Migrating sits above terminating deliberately: both drain a version, but one
         // keeps the work and the other discards it, and the one that keeps it should be
@@ -7068,6 +7117,14 @@ async function viewInstances() {
   // deployed version in bounded batches (the server caps per call, reports remaining).
   // Reached from the row's ⋯ menu, so it takes a confirm before it drains anything.
   async function onRowAction(act, b) {
+    if (act === "compare") {
+      const g = allGroups.find((x) => x.processId === b.dataset.proc);
+      if (!g) return;
+      await compareVersionsFlow({
+        api, processId: g.processId, processName: g.latest.name || g.processId, versions: g.versions,
+      });
+      return;
+    }
     // Move a version's running instances onto another version rather than discarding
     // them — the answer to "the model was wrong" that keeps the work (ADR-0162).
     if (act === "migrate") {
@@ -12442,6 +12499,7 @@ async function route() {
   if (!AUTH.loaded) await loadAuth();
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "atlas";
+    document.getElementById("app-symbol").innerHTML = ""; // no app is open yet
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     document.getElementById("mobile-more").hidden = true;
