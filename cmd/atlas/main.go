@@ -346,6 +346,7 @@ func runServe(args []string) error {
 	history := fs.String("worker-history", "", "name of a clio worker to append every settled job run to, so a worker's history outlives this process (ADR-0036). The console reads it back under a worker's recent jobs; retention and querying are then your clio's, not another flag here. Off unless given, in which case the console keeps only its in-memory tail")
 	historyScope := fs.String("worker-history-scope", api.HistoryScopeAll, "what --worker-history writes: \"all\" settled jobs, or \"failed\" only. All is what \"how long does a mail send take\" needs and the larger bill; failed is much less volume and still answers most of what a history is asked")
 	superviseConnectors := fs.String("supervise-connector", "", "comma-separated Worker Types this server runs a worker for itself, beyond the ones it supervises by default (e.g. ad,entra). Each named kind gets its own supervised worker — handed this server's token and environment at spawn, like the default ones — and is taken off the engine, so that worker is what leases its jobs. It is the missing half of --offload-connectors, which parks a kind's jobs for a worker somebody else runs: on a server with --auth there is no credential an outside worker could hold, so without this a kind outside the defaults cannot be served at all. An unknown kind is refused at startup rather than ignored")
+	allowUnsignedWorkerTypes := fs.Bool("allow-unsigned-worker-types", false, "install Worker Type artifacts that carry no verified signature (POST /api/v1/worker-types/installed). Signatures are not verified yet, so without this no artifact can be installed; an installed one is still checked against its manifest's sha256 at install and before every start, and runs with an allowlisted environment. For development only (ADR-0535)")
 	inProcess := fs.Bool("in-process-connectors", false, "run every worker inside the engine, as before ADR-0164. Off by default: "+strings.Join(api.DefaultOffloadedKinds(), ", ")+" run in a worker this server starts and supervises itself, so the loop cannot stall behind them — behind an SMTP handshake above all — and trying atlas still needs no configuration")
 	workerMaxJobs := fs.Int("worker-max-jobs", api.DefaultSupervisedWorkerMaxJobs, "how many jobs of one type each built-in worker this server supervises runs at once, handed to it as --max-jobs. The default is the bound the engine puts on its own in-process handlers, so moving a kind onto a worker does not change how many of its jobs run together; lower it when a target system takes fewer parallel calls than that, and 1 runs every kind one job at a time. A --supervise command keeps one at a time: it is your own program, and nothing here can know it is safe to run twice at once")
 	supervise := superviseFlag{}
@@ -460,7 +461,7 @@ func runServe(args []string) error {
 		ClientID:     *linkClientID,
 		ClientSecret: *linkClientSecret,
 		Scopes:       *linkScopes,
-	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets)
+	}}, tlsConfig{certFile: *tlsCert, keyFile: *tlsKey, caFile: *tlsCA}, proxies, *vault, *userProvisioning, enabled, *scriptTimeout, scriptSandbox, osCfg, metricsCfg, retention, storeCfg, *checkpointInterval, *checkpointKeep, *compactWAL, *metricsOn, *catalogue, *cataloguePurge, logging.Format(*logFormat), logging.Level(*logLevel), trace, supervise, splitList(*offload), splitList(*superviseConnectors), *workerMaxJobs, *inProcess, *history, *historyScope, *publicFormsCORS, budgets, *allowUnsignedWorkerTypes)
 }
 
 // envOr returns the environment variable's value, or def when it is unset/empty.
@@ -607,7 +608,7 @@ func (c storeConfig) options() []state.Option {
 	}
 }
 
-func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits) error {
+func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Duration, docs, auth bool, oauth oauthConfig, tlsCfg tlsConfig, proxies trustedproxy.Set, vault, userProvisioning bool, scriptLangs map[string]bool, scriptTimeout time.Duration, scriptSandbox script.SandboxMode, osExport opensearch.Config, metricsQuery promquery.Config, retention retentionConfig, storeCfg storeConfig, checkpointInterval time.Duration, checkpointKeep int, compactWAL, metricsOn, catalogue, cataloguePurge bool, logFormat logging.Format, logLevel logging.Level, traceCfg tracing.Config, supervise superviseFlag, offloadKinds, superviseConnectors []string, workerMaxJobs int, inProcessConnectors bool, historyConnector, historyScope, publicFormsCORS string, budgets limits.Limits, allowUnsignedWorkerTypes bool) error {
 	// Tee the process log into a bounded in-memory buffer, exposed at
 	// GET /api/v1/logs, so an operator can read recent server logs from the web UI
 	// without shell access. Set before the first log line so startup is captured.
@@ -1009,6 +1010,9 @@ func serve(ctx context.Context, addr, dataDir string, shutdownTimeout time.Durat
 	if len(specs) > 0 {
 		apiOpts = append(apiOpts, api.WithSupervisedWorkers(internal, specs, handles))
 	}
+	// Installed Worker Type artifacts live beside the log and the state store, and the
+	// supervisor launches them (ADR-0535, migration step 3).
+	apiOpts = append(apiOpts, api.WithInstalledWorkerTypes(filepath.Join(dataDir, "workertypes"), internal, allowUnsignedWorkerTypes))
 	// A worker's job history, when an operator named a clio worker for it. Atlas
 	// keeps none of its own: the console's tail is memory, and everything beyond it
 	// belongs in an event store where retention is already a policy (ADR-0036).

@@ -13,6 +13,15 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **Worker Types can be installed as verified artifacts.** An administrator uploads a Worker Type's
+  manifest and its executable for the server's platform to `POST /api/v1/worker-types/installed`;
+  the server checks the executable against the manifest's sha256, keeps it content-addressed in the
+  data directory, and its supervisor starts it at once — and checks the digest again before every
+  start, refusing a file altered on disk. A launched Worker Type gets the server's address, its own
+  id, the server token and its verified identity, and nothing else of the server's environment.
+  Signatures are not verified yet, so installing needs a server started with
+  `--allow-unsigned-worker-types`, for development only. `examples/workertypes/echo` is the
+  smallest such Worker Type, built against `workersdk` alone.
 - **atlas-workers, the worker-only executable.** Release archives and the container image ship
   `atlas-workers` beside `atlas`: the out-of-process worker without the server, the engine, the web
   UI or the MCP server (35 MB against 88 MB on linux/amd64). It takes exactly the flags and

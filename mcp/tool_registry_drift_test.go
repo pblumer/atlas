@@ -247,6 +247,13 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	// Installed Worker Type artifacts (ADR-0535, migration step 3). Installing one puts
+	// code on the server that its supervisor runs; that is an administrator's decision
+	// made with the artifact in hand, not something an agent should be able to do or
+	// undo, and the upload is a binary the MCP transport does not carry.
+	"POST /api/v1/worker-types/installed":                  "installs an executable the server will run; an administrator's act with the artifact in hand, and a binary upload",
+	"DELETE /api/v1/worker-types/installed/{id}/{version}": "stops and removes code the server runs; kept with the administrator who installed it",
+	"GET /api/v1/worker-types/installed":                   "the installed releases are an administrator's view of what runs on this server; atlas_workers already shows the instances they run as",
 	// The reports that name people (ADR-0515 §3).
 	// They list who holds which right; an agent acting for somebody does not need a
 	// list of other people's rights to do it, and the product manager's counting

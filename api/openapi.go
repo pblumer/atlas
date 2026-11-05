@@ -2186,6 +2186,22 @@ func (s *Server) apiRoutes() []apiRoute {
 		{"GET", "/api/v1/worker-types", s.handleConnectorKinds, apiOp{
 			summary: "List available Worker Types and where this server runs them", tag: "Workers", role: roleAny,
 			resp: jsonBody("Worker Type placements", schemaObj(map[string]any{"kinds": tArray()}))}},
+		// Installed Worker Type artifacts (ADR-0535, migration step 3): verified by
+		// digest at install and before every launch, run by the supervisor with an
+		// allowlisted environment. Unsigned artifacts are refused unless the server was
+		// started with --allow-unsigned-worker-types, for development only.
+		{"GET", "/api/v1/worker-types/installed", s.handleListInstalledWorkerTypes, apiOp{
+			summary: "List the Worker Type artifacts installed on this server, with their digest, origin and signature state (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("Installed releases, this server's platform and whether unsigned artifacts are admitted", tObject())}},
+		{"POST", "/api/v1/worker-types/installed", s.handleInstallWorkerType, apiOp{
+			summary: "Install a Worker Type artifact: the manifest and the executable for this server's platform, verified against the manifest's sha256 before anything is kept, then started under the supervisor (admin-only; unsigned artifacts only with --allow-unsigned-worker-types)", tag: "Workers", role: RoleAdmin,
+			req: &bodySpec{mediaType: "multipart/form-data", desc: "The manifest part first, then the artifact part", schema: schemaObj(map[string]any{
+				"manifest": tString(), "artifact": tString(),
+			}, "manifest", "artifact")},
+			resp: jsonBody("The installed release", tObject())}},
+		{"DELETE", "/api/v1/worker-types/installed/{id}/{version}", s.handleRemoveInstalledWorkerType, apiOp{
+			summary: "Stop and remove an installed Worker Type release (admin-only)", tag: "Workers", role: RoleAdmin,
+			resp: jsonBody("The removed release", tObject())}},
 
 		// The legacy /connectors routes remain compatibility aliases during the ADR-0203
 		// migration. They bind to the same handlers and stores, so no second source

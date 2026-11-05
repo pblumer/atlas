@@ -209,6 +209,29 @@ Exactly one of:
   person's search term, so it must not leave the Worker.
 - A refused answer (the asker has gone) needs no action.
 
+## Launched by atlas
+
+A Worker Type installed on a server as an artifact
+(`POST /api/v1/worker-types/installed`) is launched by the server's supervisor
+([ADR-0535](../../../adr/0535-worker-types-as-distributed-artifacts.md) §2). The supervisor
+verifies the executable's sha256 against the digest it was installed with before every
+start, and refuses one that no longer matches.
+
+It starts the executable **with no arguments**. The environment holds a few runtime basics
+(`PATH`, `HOME`, temporary directories, locale, the outbound proxy variables) and nothing
+else of the server's. On top of that it sets:
+
+| Variable | Meaning |
+|---|---|
+| `ATLAS_SERVER_URL` | The server to work for |
+| `ATLAS_WORKER_ID` | The instance's id, `workertype:<id>@<version>` |
+| `ATLAS_TOKEN` | The bearer credential to authenticate with |
+| `ATLAS_WORKER_TYPE_ID`, `ATLAS_WORKER_TYPE_VERSION`, `ATLAS_WORKER_TYPE_DIGEST` | The release the supervisor verified, to report in the handshake |
+
+`workersdk.LaunchOptions(os.Getenv)` reads these. The instance stops when the server stops
+or when the release is removed. The smallest example is
+[`examples/workertypes/echo`](../../../../examples/workertypes/echo/main.go).
+
 ## What a Worker Instance must not do
 
 - Perform a side effect before it holds the job's lease.

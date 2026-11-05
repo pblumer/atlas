@@ -447,6 +447,27 @@ Worker Type, because some kinds still run in-process and the server half
 step 4. Nor is `atlas-workers` verified by digest before launch — it is trusted as the
 server binary is, by sitting beside it; verified artifacts are step 3.
 
+**2026-11-05 — step 3: verified local artifacts.** `workertype/install` keeps installed
+releases content-addressed under `<data>/workertypes/<id>/<version>/<sha256>/`, written
+atomically with the metadata last; a release is immutable (the same digest again changes
+nothing, another is refused). The manifest gains `spec.artifacts`, one per platform, and
+the executable media type `application/vnd.atlas.worker.executable`. An admin installs a
+release with `POST /api/v1/worker-types/installed` (manifest and artifact for the
+server's platform, verified against the manifest's digest before anything is kept),
+lists them with `GET` and stops and removes one with `DELETE …/{id}/{version}`. The
+supervisor launches each with no arguments, the launch contract of
+[`docs/contracts/worker-protocol/v1`](../contracts/worker-protocol/v1/README.md#launched-by-atlas)
+and an allowlisted environment — never the server's own — and verifies the digest again
+before every start, refusing (state `refused`) an executable altered on disk. Because
+signatures are not verified yet, the server refuses every install unless started with
+`--allow-unsigned-worker-types`, and every release shows `signed: false`. The pilot is
+`examples/workertypes/echo`, built against `workersdk` alone; a test builds it, installs
+it, and has it complete a deployed process's job. **Not yet:** the `container` and
+`kubernetes` launchers (step 6), placement per configured Worker, configuration and
+credentials beyond the server token (step 4), process confinement for installed
+artifacts (Landlock/seccomp on Linux, a job object on Windows), and the Console view
+of installed releases; the API carries them.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker
