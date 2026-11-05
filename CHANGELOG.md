@@ -211,7 +211,9 @@ as it runs 0.23.0:
 - **The shipped approval form requires a reason to reject.** It is reseeded at startup,
   so existing installations get it with the binary.
 - **Bundles of format 4 need 0.23.0.** An earlier server cannot import a bundle that
-  carries an information model or an architecture file.
+  carries an information model or an architecture file. `m365-dienste` 1.0.12, the
+  first bundle of format 4, therefore requires atlas 0.23.0 in the hub: a 0.22.0 server
+  refuses it as incompatible before downloading it and can still install 1.0.11.
 - **Observability.** Five log events are new: `auth.password_link_issued`,
   `auth.password_link_used`, `auth.password_changed`, `auth.password_recovery` and
   `auth.password_revoked`. The MCP tools grow from 180 to 181 with
