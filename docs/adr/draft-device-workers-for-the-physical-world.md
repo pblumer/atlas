@@ -289,6 +289,9 @@ under `display.show`:
   until the busy line fell; with the wrong V2 sequence the "refresh" returned after
   249 ms because the busy line never rose. A refresh that ends far sooner than a
   second is therefore a sign the panel did not run it.
+  The picture on the glass matched the frame pixel for pixel as far as a photograph
+  shows: the orientation marker top right, the outline, text in two sizes, and the
+  Umlaut of "Grüezi" whole; black was solid, without ghosting of the earlier runs.
 - Not yet: partial refresh, the content hash and refresh interval, the stale marker,
   and the layout a model states — the driver draws what it is given.
 
