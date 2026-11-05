@@ -171,7 +171,9 @@ def main():
     if not (args.dry_run and args.test_ou):
         shared = m365.tofu_output(tofu_dir, "shared_tenant")
         prefix = (shared or {}).get("prefix", "")
-    constants = constants_for(test_ou, postfach, prefix)
+    # NAME_PREFIX carries the trailing dash, as install-m365-dienste.py sets it: names are
+    # built as prefix + rest, and the account searches compare with startswith.
+    constants = constants_for(test_ou, postfach, prefix + "-" if prefix else "")
 
     work = tempfile.mkdtemp(prefix="informationstransfer-")
     try:
