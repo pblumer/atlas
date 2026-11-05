@@ -84,6 +84,7 @@ var mcpToolRoutes = map[string]string{
 	"atlas_refresh_catalog_product_content": "POST /api/v1/catalog-products/{id}/content/refresh",
 	"atlas_unlink_catalog_product_content":  "POST /api/v1/catalog-products/{id}/content/unlink",
 	"atlas_refresh_catalog_content":         "POST /api/v1/catalogs/{id}/content/refresh",
+	"atlas_catalog_refresh_status":          "GET /api/v1/catalogs/{id}/content/refresh",
 	// What a held position offers and whether it takes it now (ADR-0429). Reading it
 	// changes nothing; asking for an action is omitted below.
 	"atlas_order_line_actions": "GET /api/v1/orders/{id}/lines/{item}/actions",

@@ -1501,8 +1501,11 @@ func (s *Server) apiRoutes() []apiRoute {
 				"lang": tString(), "reason": tString(), "revision": tInteger()}, "reason")),
 			resp: jsonBody("The product", tObject())}},
 		{"POST", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefresh, apiOp{
-			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed", tag: "Catalogue", role: RoleProductManager,
+			summary: "Refresh every bound product a catalogue offers, each all or nothing on its own; one homed in a catalogue you do not maintain is skipped. Answers one line per product: refreshed, refused (with the problems) or skipped. The batch runs to its end even when the caller stops waiting, so asking again after a client timeout finds the products refreshed. With ?wait=false it answers at once with 202 and the run's progress (state, total, done, the lines so far) and refreshes in the background; GET on the same path follows it. 409 with the running one's progress while a refresh of the catalogue is running", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("One line per bound product", tArray())}},
+		{"GET", "/api/v1/catalogs/{id}/content/refresh", s.catalogs.HandleCatalogContentRefreshStatus, apiOp{
+			summary: "How far the running content refresh of a catalogue has come, or how the last one ended: state (running or done), who started it and when, total bound products, how many are done, and one line per finished product — refreshed, refused (with the problems) or skipped. Kept in memory: 404 when none has run since the server started", tag: "Catalogue", role: RoleProductManager,
+			resp: jsonBody("The refresh's progress", tObject())}},
 		{"GET", "/api/v1/content-sources", s.contentSources.HandleList, apiOp{
 			summary: "The configured content sources: id, name, kind (wikiwikibangbang), https base URL, the credentialsRef naming the vault secret that holds the technical account's read token (never the token), the picture field, the excluded labels and whether the shop links to a page. Admin-only", tag: "Catalogue", role: RoleAdmin,
 			resp: jsonBody("Sources", tArray())}},
