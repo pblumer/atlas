@@ -4360,7 +4360,7 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
-    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
+    id: "exchange", name: "Microsoft Exchange", group: "Directory & identity", desc: "Administer Exchange Online or an Exchange Server: mailboxes (create shared, room and equipment mailboxes, update, convert, add and remove addresses, remove), permissions (full access, send as, send on behalf, folder permissions), distribution groups, room lists and mail contacts with their members, and mailbox settings (automatic reply, forwarding, litigation hold, calendar processing, quotas, a room's place metadata for Room Finder) - plus a read-only escape hatch for any Get- cmdlet", icon: "X",
     // An envelope on Exchange blue: the mailbox this Worker Type administers, beside
     // Entra's directory account in the same group.
     glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#0364b8"/><rect x="3" y="4.5" width="10" height="7" rx="1" fill="#fff"/><path d="M3.5 5.2 8 8.6l4.5-3.4" fill="none" stroke="#0364b8" stroke-width="1.2"/></svg>`,

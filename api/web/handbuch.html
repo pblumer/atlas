@@ -7812,6 +7812,29 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
           (<code>AccessRights FullAccess</code> on <i>Grant full access</i>) is refused at deploy. A parameter whose
           FEEL expression evaluates to <code>null</code> is left out rather than sent – a variable that is not set
           clears no property. <i>Run a Get- cmdlet</i> reads anything and never changes.</p>
+        <p data-l="de"><b>Räume in der Raumsuche.</b> Outlook zeigt einen Raum unter «Alle Räume durchsuchen»
+          und in den Ortsvorschlägen nur, wenn er Mitglied einer <i>Raumliste</i> ist. Ein Raumpostfach allein ist
+          über seine Adresse buchbar, in der Raumsuche fehlt es. <i>Raumliste anlegen</i> legt eine Verteilergruppe mit
+          <code>-RoomList</code> an; den Raum nimmt <i>Gruppenmitglied hinzufügen</i> auf, und eine vorhandene
+          Raumliste findet <i>Verteilergruppen auflisten</i> mit <code>RecipientTypeDetails</code>
+          <code>RoomList</code>. Gefiltert wird nach Ort, Stockwerk und Plätzen; die setzt <i>Ortsangaben eines Raums
+          setzen</i> (<code>Set-Place</code>: <code>City</code>, <code>Floor</code>, <code>Capacity</code> vor
+          allem). <code>Set-Place</code> gibt es nur in Exchange Online. Gegen einen Exchange Server weist der Worker die
+          Aufgabe ab, bevor er etwas sendet; dort sind Ort und Adresse Eigenschaften des Kontos. Microsoft nennt für
+          <code>Set-Place</code> die Exchange-Rolle <i>Mail Recipients</i>, die in den Rollen
+          <i>Exchange-Empfängeradministrator</i> und <i>Exchange-Administrator</i> enthalten ist. Bis Änderungen in der
+          Raumsuche erscheinen, dauert es 24 bis 48 Stunden.</p>
+        <p data-l="en"><b>Rooms in Room Finder.</b> Outlook lists a room under "Browse all rooms" and in its location
+          suggestions only when the room is a member of a <i>room list</i>. A room mailbox on its own is bookable by its
+          address and missing from Room Finder. <i>Create room list</i> creates a distribution group with
+          <code>-RoomList</code>; <i>Add group member</i> puts the room in it, and <i>List distribution groups</i> with
+          <code>RecipientTypeDetails</code> <code>RoomList</code> finds an existing one. Room Finder filters by city,
+          floor and capacity, which <i>Set a room's place metadata</i> sets (<code>Set-Place</code>: <code>City</code>,
+          <code>Floor</code>, <code>Capacity</code> above all). <code>Set-Place</code> exists in Exchange Online only:
+          against an Exchange Server the worker refuses the task before it sends anything, because there city and
+          address are properties of the account. Microsoft names the Exchange role <i>Mail Recipients</i> for
+          <code>Set-Place</code>, which the <i>Exchange Recipient Administrator</i> and <i>Exchange Administrator</i>
+          roles include. Changes take 24 to 48 hours to appear in Room Finder.</p>
         <p data-l="de"><b>Drei Fallen.</b> <i>Berechtigung ohne Rolle:</i> <code>Exchange.ManageAsApp</code> erlaubt
           der App zu fragen, die Rolle bestimmt, was sie darf – und eine neue Zuweisung braucht Zeit, bis sie
           greift. <i>Ordnernamen sind lokalisiert:</i> Ein deutsches Postfach hat <code>anna@contoso.com:\Kalender</code>,
