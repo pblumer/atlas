@@ -234,6 +234,11 @@ type Options struct {
 	NoRetryBackoff bool
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
+	// Identity is the Worker Type this instance runs, reported on every poll as part of
+	// the protocol handshake (ADR-0535 §3) and shown in the server's Workers view. Nil
+	// reports none, which a server accepts: an instance an operator runs by hand may
+	// not be a packaged Worker Type at all.
+	Identity *Identity
 	// Logger receives the few lines the worker writes itself — a poll that failed and
 	// will be retried, a query answer the server did not take. Each carries the event
 	// name under the key "event" ([EventPollFailed]), so an operator can alert on it
@@ -255,6 +260,22 @@ const (
 	// for the first.
 	DefaultMaxQueries = 4
 )
+
+// ProtocolVersion is the major version of the Worker protocol this client speaks
+// (docs/contracts/worker-protocol). It is sent on every poll; a server that does not
+// accept it refuses the poll with 400, naming the versions it does accept, and the
+// worker logs that and keeps retrying, so an upgrade of either side is visible rather
+// than silent.
+const ProtocolVersion = 1
+
+// Identity names a Worker Type the way its manifest does: a stable reverse-DNS id, a
+// semantic version, and the sha256 digest of the artifact when the instance knows it
+// ("sha256:" and 64 hex digits).
+type Identity struct {
+	ID      string `json:"id"`
+	Version string `json:"version"`
+	Digest  string `json:"digest,omitempty"`
+}
 
 // EventPollFailed is the event name the worker's own warnings carry under the key
 // "event": a poll that failed and will be retried, or a query answer the server did not
@@ -484,7 +505,10 @@ func (w *Worker) activate(ctx context.Context, jobType string, maxJobs int) ([]J
 	body := map[string]any{
 		"type": jobType, "worker": w.opts.ID,
 		"leaseMs": w.opts.Lease.Milliseconds(), "waitMs": w.opts.Wait.Milliseconds(),
-		"maxJobs": maxJobs,
+		"maxJobs": maxJobs, "protocol": ProtocolVersion,
+	}
+	if w.opts.Identity != nil {
+		body["workerType"] = w.opts.Identity
 	}
 	// Sent on every poll, including one that returns nothing: it is the engine's only
 	// way to learn what this worker can reach, and an idle worker is exactly the case

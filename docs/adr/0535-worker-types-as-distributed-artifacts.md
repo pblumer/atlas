@@ -415,6 +415,22 @@ exists to carry a separate licence and version tag, and until that is decided it
 only cost CI and coverage plumbing; the package boundary and the guard already give the
 technical separation.
 
+**2026-11-05 — step 1, third slice: the protocol contract and the handshake.** The Worker
+protocol is written down, language-neutral, in
+[`docs/contracts/worker-protocol/v1`](../contracts/worker-protocol/v1/README.md), with the
+compatibility rule: changes within a major version are additive; a server accepts the
+current major version and the one before it; a poll naming no version is version 1. Every
+job and query poll now carries `protocol` and, when the instance has one, `workerType`
+(`id`, `version`, `digest`); the server refuses a version it does not accept and a
+malformed identity with 400 and the reason, answers every poll with
+`X-Atlas-Worker-Protocol`, and shows both per instance in `GET /api/v1/workers`
+(`api/workerproto`, `workertype.CheckIdentity`). `atlas worker` reads its identity from
+`ATLAS_WORKER_TYPE_ID`, `_VERSION` and `_DIGEST`, which the supervisor will set when it
+launches an installed artifact (step 3). Comparing a reported digest with the installed
+one is step 3's; the server checks shape only. Still open in step 1: the built-in Worker
+Types' own dependencies on `job`, `compiler`, `expr` and `dmn`, which step 2 does not need
+removed and step 4 removes with the server half.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker

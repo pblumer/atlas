@@ -161,6 +161,52 @@ func TestACompletedJobReportsEverythingItProduced(t *testing.T) {
 	}
 }
 
+// Every poll carries the handshake: the protocol version this client speaks, and the
+// Worker Type it runs when it was given one (ADR-0535 §3). Without one it reports none.
+func TestEveryPollCarriesTheHandshake(t *testing.T) {
+	digest := "sha256:" + strings.Repeat("ab", 32)
+	stub, ts := newProtoStub(t, map[string]http.HandlerFunc{
+		"/api/v1/jobs/activate":           func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, `{"jobs":[]}`) },
+		"/api/v1/worker-queries/activate": func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, `{"queries":[]}`) },
+	})
+	w := workersdk.New(workersdk.Options{
+		Server: ts.URL, ID: "w-1",
+		Identity: &workersdk.Identity{ID: "com.example.sap-s4", Version: "2.1.3", Digest: digest},
+		Handlers: handling("call", workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) { return nil, nil })),
+		Queries: map[string]workersdk.QueryFunc{"call": func(context.Context, string, lookup.Query) (lookup.Page, error) {
+			return lookup.Page{}, nil
+		}},
+	})
+	if err := w.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if err := w.AnswerQueriesOnce(context.Background(), 0); err != nil {
+		t.Fatalf("AnswerQueriesOnce: %v", err)
+	}
+	for _, path := range []string{"/api/v1/jobs/activate", "/api/v1/worker-queries/activate"} {
+		body := stub.to(path)[0].body
+		if body["protocol"] != float64(workersdk.ProtocolVersion) {
+			t.Errorf("%s protocol = %v, want %d", path, body["protocol"], workersdk.ProtocolVersion)
+		}
+		wt, ok := body["workerType"].(map[string]any)
+		if !ok || wt["id"] != "com.example.sap-s4" || wt["version"] != "2.1.3" || wt["digest"] != digest {
+			t.Errorf("%s workerType = %v, want the identity the worker was given", path, body["workerType"])
+		}
+	}
+
+	stub2, ts2 := newProtoStub(t, map[string]http.HandlerFunc{
+		"/api/v1/jobs/activate": func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, `{"jobs":[]}`) },
+	})
+	if err := runOnce(t, ts2, workersdk.Options{Handlers: handling("call", workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) {
+		return nil, nil
+	}))}); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if body := stub2.to("/api/v1/jobs/activate")[0].body; body["protocol"] != float64(workersdk.ProtocolVersion) || body["workerType"] != nil {
+		t.Errorf("poll without an identity = %v, want the protocol and no workerType", body)
+	}
+}
+
 // A job that completes with nothing sends no variables, no decision and no calls: an
 // agent reporting no calls has said it is done.
 func TestAJobThatProducedNothingCompletesBare(t *testing.T) {

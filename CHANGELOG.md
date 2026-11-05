@@ -12,6 +12,16 @@ _Changed_ / _Removed_ for each version.
 
 ## [Unreleased]
 
+### Added
+- **Worker Instances say which protocol they speak and which Worker Type they run.** Every job
+  and query poll carries the Worker protocol version and, when known, the Worker Type's id,
+  version and artifact digest; the Workers view shows them per instance. A server refuses a
+  protocol version it does not speak with the versions it does, and names them on every answer
+  in `X-Atlas-Worker-Protocol`; a worker from before this names none and is served as version 1.
+  `atlas worker` reports an identity from `ATLAS_WORKER_TYPE_ID`, `ATLAS_WORKER_TYPE_VERSION`
+  and `ATLAS_WORKER_TYPE_DIGEST`. The protocol itself is now written down for other languages in
+  `docs/contracts/worker-protocol/v1`.
+
 ### Changed
 - **The Worker SDK depends on nothing of atlas.** The form-lookup wire shape moved from
   `connector/lookup` to `workersdk/lookup`, and the protocol client's own warnings go to a

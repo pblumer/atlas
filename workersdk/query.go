@@ -114,6 +114,10 @@ func (w *Worker) activateQueries(ctx context.Context, jobType string, max int, w
 		// Sent on every poll: it is what makes this Instance present for these Workers,
 		// and what keeps a query for a tenant it does not hold from reaching it.
 		"connectors": w.opts.Connectors,
+		"protocol":   ProtocolVersion,
+	}
+	if w.opts.Identity != nil {
+		body["workerType"] = w.opts.Identity
 	}
 	var out struct {
 		Queries []leasedQuery `json:"queries"`
