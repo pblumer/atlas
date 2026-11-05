@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/expr"
@@ -57,6 +58,18 @@ const (
 // worker error: the job fails and (retries exhausted) raises an incident, rather than
 // silently producing an empty batch.
 func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
+	return HandlerWithDocuments(store, lookup, nil)
+}
+
+// DocumentReader reads the bytes of a document by its id
+// (ADR-draft-a-file-is-a-document-not-a-variable). A source variable may hold a
+// reference to an uploaded file instead of the file's text; the server passes a reader
+// for its document store, and a worker without one says so rather than parsing nothing.
+type DocumentReader func(id string) ([]byte, error)
+
+// HandlerWithDocuments is [Handler] with a document reader, so a source variable that
+// names a document is parsed from the document's bytes.
+func HandlerWithDocuments(store VarStore, lookup ProcessLookup, docs DocumentReader) job.OutputHandler {
 	return func(j job.Job) ([]model.VariableValue, error) {
 		ei, ok, err := store.GetElementInstance(j.ElementInstanceKey)
 		if err != nil {
@@ -72,7 +85,7 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 		if lookup != nil {
 			if cp := lookup(ei.ProcessDefKey); cp != nil {
 				if node := cp.Node(ei.ElementId); node.Type == compiler.TypeConnectorTask {
-					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey)
+					return rowsFromConnector(store, cp, cp.ConnectorTask(node.Detail), j.ElementInstanceKey, docs)
 				}
 			}
 		}
@@ -80,7 +93,7 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 		if err != nil {
 			return nil, fmt.Errorf("csv-import: read variables: %w", err)
 		}
-		return rowsFromVars(vars)
+		return rowsFromVarsWith(vars, docs)
 	}
 }
 
@@ -89,8 +102,8 @@ func Handler(store VarStore, lookup ProcessLookup) job.OutputHandler {
 // [Run] them — so the in-process path and an out-of-process one cannot disagree
 // about defaults, validation, or what a headerless file's column list means
 // (ADR-0168).
-func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) ([]model.VariableValue, error) {
-	j, err := Resolve(store, cp, detail, elementInstanceKey)
+func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs DocumentReader) ([]model.VariableValue, error) {
+	j, err := ResolveWithDocuments(store, cp, detail, elementInstanceKey, docs)
 	if err != nil {
 		return nil, err
 	}
@@ -116,9 +129,19 @@ func rowsFromConnector(store VarStore, cp *compiler.CompiledProcess, detail *com
 // against the layout, and returns the rows/rowCount output variables. Split out so its
 // input and parse-error branches are unit-testable without the engine.
 func rowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue, error) {
-	text, ok := vars[csvSourceVar]
-	if !ok || text.Kind != model.VarString || text.Text == "" {
+	return rowsFromVarsWith(vars, nil)
+}
+
+// rowsFromVarsWith is rowsFromVars with a document reader: csvText may hold the file's
+// text, as it always could, or a reference to the uploaded file.
+func rowsFromVarsWith(vars map[string]model.VariableValue, docs DocumentReader) ([]model.VariableValue, error) {
+	src, ok := vars[csvSourceVar]
+	if !ok {
 		return nil, fmt.Errorf("csv-import: variable %q is missing or not a non-empty string", csvSourceVar)
+	}
+	content, err := sourceText(src, csvSourceVar, docs)
+	if err != nil {
+		return nil, err
 	}
 	cfgVar, ok := vars[csvConfigVar]
 	if !ok || cfgVar.Kind != model.VarJSON {
@@ -128,7 +151,7 @@ func rowsFromVars(vars map[string]model.VariableValue) ([]model.VariableValue, e
 	if err := json.Unmarshal([]byte(cfgVar.Text), &cfg); err != nil {
 		return nil, fmt.Errorf("csv-import: invalid %s: %v", csvConfigVar, err)
 	}
-	rows, err := ParseRows(cfg, []byte(text.Text))
+	rows, err := ParseRows(cfg, []byte(content))
 	if err != nil {
 		return nil, fmt.Errorf("csv-import: %v", err)
 	}
@@ -163,4 +186,44 @@ func rowsToJSON(rows []map[string]any) (string, error) {
 // csvText/columnConfig (or a worker's source variable).
 func scopeChainVars(store VarStore, elementInstanceKey uint64) (map[string]model.VariableValue, error) {
 	return state.VisibleVariablesMap(store, elementInstanceKey)
+}
+
+// documentID returns the id a JSON variable names when it is a document reference —
+// {"$document": "doc_…", …} — and "" otherwise. The shape is the document store's
+// (api/docstore); it is read here by its key alone, so this package does not depend on
+// the server's.
+func documentID(v model.VariableValue) string {
+	if v.Kind != model.VarJSON || !strings.HasPrefix(strings.TrimSpace(v.Text), "{") {
+		return ""
+	}
+	var ref struct {
+		ID string `json:"$document"`
+	}
+	if json.Unmarshal([]byte(v.Text), &ref) != nil || !strings.HasPrefix(ref.ID, "doc_") {
+		return ""
+	}
+	return ref.ID
+}
+
+// sourceText is a reading task's input: the variable's text, or the bytes of the
+// document it names. Anything else — a missing reader, an empty file, a value of
+// another kind — is an error naming the variable, never an empty batch.
+func sourceText(src model.VariableValue, name string, docs DocumentReader) (string, error) {
+	if id := documentID(src); id != "" {
+		if docs == nil {
+			return "", fmt.Errorf("csv-import: source variable %q names document %s, and this worker cannot read documents", name, id)
+		}
+		data, err := docs(id)
+		if err != nil {
+			return "", fmt.Errorf("csv-import: source variable %q names document %s: %v", name, id, err)
+		}
+		if len(data) == 0 {
+			return "", fmt.Errorf("csv-import: source variable %q names an empty document", name)
+		}
+		return string(data), nil
+	}
+	if src.Kind != model.VarString || src.Text == "" {
+		return "", fmt.Errorf("csv-import: variable %q is missing or not a non-empty string", name)
+	}
+	return src.Text, nil
 }

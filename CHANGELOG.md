@@ -13,6 +13,22 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **A file a process receives is a document, not a variable.** A file picked in a task form is
+  uploaded to a document store and the task is completed with a reference under the field's own
+  key: `{"$document": "doc_…", "name", "contentType", "size", "sha256"}`. The file is stored once,
+  outside the log, the state and the per-step history, up to `limits.Document` (35 MiB), and no
+  longer read as text into `csvText` whatever the field was called. `POST /api/v1/documents`
+  uploads, `GET /api/v1/documents/{id}` downloads, and `GET /api/v1/documents/{id}/meta` reads the
+  reference and its state. An upload is its uploader's until a variable naming it enters an
+  instance; then whoever may read that instance may read it. Every route that lets variables in
+  refuses a reference the caller may not use, and the routes that cannot bind one (messages,
+  public links, order actions) refuse references outright. Unused uploads are removed after
+  `--document-pending-ttl` (24 h by default), and a document is removed once history retention
+  removed every instance it entered. Documents live in the data directory by default, or in an S3
+  bucket with `--documents-backend=s3 --documents-s3-worker --documents-s3-bucket`. A full
+  snapshot carries them only with `?documents=true`. The CSV import reads a referenced file from
+  the store; a Worker Instance cannot yet and says so. Operations and the replay show a reference
+  as a download link (ADR-draft-a-file-is-a-document-not-a-variable).
 - **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
   one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
   `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is

@@ -79,7 +79,7 @@ import { fmtCount } from "./numfmt.js";
 import {
   CARD_CHARS, CARD_VARS, FIELD_CHARS, FIELD_LINES,
   isLongText, previewText, sizeText, searchableNames, cardOrder, downloadName,
-  variableSizeText, variableShape,
+  variableSizeText, variableShape, documentRef, documentHref, documentSizeText,
 } from "./varpreview.js";
 // The heatmap over the live view (ADR-0496): the strip that
 // chooses what the diagram shows, the shading, and the figures behind it.
@@ -662,6 +662,14 @@ function renderVarsBody(list, collapsed) {
     }).join("")}</div>`;
   }
   html += jsons.map((v) => {
+    // A document reference is the file, not a structure to read: it is a link.
+    const doc = documentRef(v);
+    if (doc) {
+      return `<div class="vjson vdoc-card" data-var="${esc(v.name)}">
+        <div class="vj-head"><span class="vk">${esc(v.name)}</span><span class="vtag">${esc(tr("ops.doc.label"))}</span></div>
+        ${documentLink(doc, "vdoc-link")}
+      </div>`;
+    }
     // A structure the listing cut cannot be laid out: it is not valid JSON any more.
     // It says what it is and opens whole in the value window instead.
     if (v.truncated) {
@@ -683,6 +691,15 @@ function renderVarsBody(list, collapsed) {
     </div>`;
   }).join("");
   return html;
+}
+
+// documentLink renders a variable that names a document as a download link: the file is
+// in the document store, and the variable holds only its reference
+// (ADR-draft-a-file-is-a-document-not-a-variable). cls is the surface's own class.
+function documentLink(ref, cls) {
+  const size = documentSizeText(ref);
+  return `<a class="${cls} vdoc" href="${esc(documentHref(ref.id))}" download="${esc(ref.name)}"
+    title="${esc(tr("ops.doc.download", { name: ref.name }))}"><span class="vdoc-ic" aria-hidden="true">&#128196;</span><span class="vdoc-name">${esc(ref.name)}</span>${size ? `<span class="vdoc-size">${esc(size)}</span>` : ""}</a>`;
 }
 
 // showAllBtn is the way from a value's preview to the whole of it in the value window,
@@ -13350,6 +13367,10 @@ export async function mountLive(root, { api, apiRaw, toast, key, instance }) {
     // The listing arrives with ?values=preview, so a long value is already cut and
     // says what the whole is (truncated, size, lines, shape, count): variableShape and
     // variableSizeText read it either way.
+    const doc = documentRef(v);
+    if (doc) {
+      return `<span class="chip vp-chip-doc" ${at}><span class="vp-chip-k">${esc(v.name)}</span>=${documentLink(doc, "vp-doc-link")}</span>`;
+    }
     const shape = variableShape(v);
     const long = !shape && (v.truncated || (v.kind === "string" && isLongText(v.value, CARD_CHARS, 1)));
     if (!shape && !long) {
@@ -15973,9 +15994,12 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
   // summary + preview behind a "···" button that opens the value in a modal — the
   // table stays scannable no matter how deep a structure is (operator's request).
   function varRow(v) {
-    const complex = isComplexVar(v);
+    const doc = documentRef(v);
+    const complex = !doc && isComplexVar(v);
     let valCell;
-    if (complex) {
+    if (doc) {
+      valCell = documentLink(doc, "c-doc");
+    } else if (complex) {
       // A list and an object read almost alike once their text is truncated — the peek of
       // [{"Nachname":…}] and of {"Nachname":…} differ by one character, off the left edge
       // of what fits. So the summary carries the brackets, and the row expands in place:
@@ -16001,9 +16025,11 @@ export async function mountInstanceReplay(root, { api, toast, key, mayUse }) {
              title="${esc(tr("ops.vars.open", { name: v.name }))}">⤢ ${esc(tr("ops.vars.showAll"))} · ${esc(sizeText(v.value))}</button>`
         : `<span class="c-val ${cls}">${esc(v.value)}</span>${ref}`;
     }
-    const typeBadge = complex
-      ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
-      : `<span class="vtag">${esc(v.kind)}</span>`;
+    const typeBadge = doc
+      ? `<span class="vtag obj">${esc(tr("ops.doc.label"))}</span>`
+      : complex
+        ? `<span class="vtag obj">${esc(jsonTypeLabel(v.value))}</span>`
+        : `<span class="vtag">${esc(v.kind)}</span>`;
     const copyData = complex ? prettyJSON(v.value) : v.value;
     // A subprocess-local variable (an input mapping) carries the id of the
     // subprocess it lives in; label it so it reads apart from a process variable

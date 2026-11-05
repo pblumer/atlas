@@ -99,6 +99,15 @@ type startGuard func(d *deployment) (status int, msg string)
 // driving, sealing, recording startedBy or answering — only a further refusal in
 // front of the one command (ADR-0516).
 func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, key uint64, startVars []model.VariableValue, guard startGuard) {
+	// A start variable may name an uploaded document; the caller must be one who may use
+	// it, and it is bound to the new instance once the start is durable
+	// (ADR-draft-a-file-is-a-document-not-a-variable). Checked before sealing, which
+	// would hide a reference inside a personal value's ciphertext.
+	docIDs, code, msg := s.checkDocumentRefs(r, startVars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// A start form is where personal data most often enters, so it is sealed here —
 	// before the CreateInstance command, which therefore already holds ciphertext
 	// (ADR-0314). This is the funnel for the JSON start body and the API start; the CSV
@@ -192,6 +201,7 @@ func (s *Server) startInstanceGuarded(w http.ResponseWriter, r *http.Request, ke
 	case statErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "read stats: "+statErr.Error())
 	default:
+		s.bindDocuments(docIDs, instKey)
 		s.notePositionInstance(startVars, instKey, processID)
 		resp := createInstanceResp{DefinitionKey: key, InstanceKey: instKey, Stats: stats}
 		// A start that ran into a wizard carries the starter to its first screen

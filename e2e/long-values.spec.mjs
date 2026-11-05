@@ -195,3 +195,31 @@ test.describe("the replay's Variables tab", () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe("a variable that names a document", () => {
+  const href = (id) => `/api/v1/documents/${id}`;
+
+  test("is a download link on the card, in the single view and in the replay", async ({ page }) => {
+    const errors = await openLive(page);
+    const id = await page.evaluate(() => window.__DOC_ID);
+    const card = page.locator("#var-panel .vp-inst", { hasText: "281475062011099" });
+    const link = card.locator('.vp-inst-vars [data-var="datei"] a.vdoc');
+    await expect(link).toHaveAttribute("href", href(id));
+    await expect(link).toHaveAttribute("download", "mitarbeitende.csv");
+    await expect(link).toContainText("mitarbeitende.csv");
+    await expect(link).toContainText("KiB");
+    // The reference is the value; nothing of it is shown as JSON.
+    await expect(card).not.toContainText("$document");
+
+    await page.evaluate(() => window.__mountLive("281475062011099"));
+    await expect(page.locator('#var-panel .vdoc-card[data-var="datei"] a.vdoc')).toHaveAttribute("href", href(id));
+
+    await page.evaluate(() => window.__mountReplay());
+    await page.locator('#history-list .ops-hrow[data-eik="1001"]').click();
+    await page.locator("#rp-tabs button[data-tab='variables']").click();
+    const row = page.locator("#tab-variables .vt tbody tr", { has: page.locator("td.c-name", { hasText: "datei" }) });
+    await expect(row.locator("a.vdoc")).toHaveAttribute("href", href(id));
+    await expect(row).not.toContainText("$document");
+    expect(errors).toEqual([]);
+  });
+});

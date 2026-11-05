@@ -1,7 +1,8 @@
 # Documents instead of variables — delivery plan
 
 **Decision record:** [ADR-draft-a-file-is-a-document-not-a-variable](../adr/draft-a-file-is-a-document-not-a-variable.md)
-(Proposed). **Status of this plan:** not started; nothing below is built.
+(Accepted). **Status of this plan:** slices S0–S4 landed (2026-11-05); S5 and S6 open. The
+ADR's *As built* section says what each slice became.
 
 ## Outcome
 
@@ -109,12 +110,10 @@ The example *CSV-Datensätze prüfen* is the first process to work this way.
 2. **Size limit:** reuse `limits.Document` (35 MiB). *Taken.*
 3. **Pending TTL:** 24 hours, configurable. *Taken.*
 4. **Backup:** documents are in the whole-instance snapshot only when asked for. *Taken.*
-   Assumption to confirm: "asked for" is an option of the snapshot (per installation or
-   per snapshot request), not a per-process setting.
-5. **`csvText`:** *proposed, awaiting confirmation* — keep it as the CSV import's source
-   variable, accepting a text or a document reference, with no end date; end only the
-   Tasks app's hard-wiring of every file into `csvText`. See the ADR's *Compatibility*
-   section for why nothing needs phasing out.
+   Confirmed: it is an option of the snapshot request, not a per-process setting.
+5. **`csvText`:** *taken* — it stays the CSV import's source variable, accepting a text or a
+   document reference, with no end date; only the Tasks app's hard-wiring of every file
+   into `csvText` ends. See the ADR's *Compatibility* section.
 
 ## Out of scope, named so it is not forgotten
 

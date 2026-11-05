@@ -112,6 +112,10 @@ export default {
   "ops.vars.window.download": "Download",
   "ops.vars.window.downloadTitle": "Save the value as a file",
   "ops.vars.window.close": "Close",
+  "backup.full.withDocuments": "Download with documents",
+  "backup.full.withDocumentsTitle": "The snapshot also carries the files processes received (the document store). Without them the references survive a restore, but the files are not available.",
+  "ops.doc.download": "Download {name}",
+  "ops.doc.label": "Document",
   "ops.mi.explore": "Explore iterations",
   "ops.mi.explorer.title": "Multi-Instance Explorer",
   "ops.mi.close": "Close",
@@ -1078,7 +1082,7 @@ export default {
   "tasks.folders.unit.h": "hours",
   "tasks.folders.unit.d": "days",
 
-  "tasks.complete.fileUnreadable": "The file could not be read: {error}",
+  "tasks.complete.uploadFailed": "The file could not be uploaded: {error}",
 
   "feel.title": "FEEL assistant",
   "feel.open": "Open the FEEL assistant (Ctrl/⌘ ⇧ E)",

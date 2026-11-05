@@ -118,6 +118,10 @@ export default {
   "ops.vars.window.download": "Herunterladen",
   "ops.vars.window.downloadTitle": "Den Wert als Datei speichern",
   "ops.vars.window.close": "Schliessen",
+  "backup.full.withDocuments": "Mit Dokumenten herunterladen",
+  "backup.full.withDocumentsTitle": "Der Snapshot enthält zusätzlich die Dateien, die Prozesse erhalten haben (Dokumentenspeicher). Ohne sie bleiben die Verweise erhalten, die Dateien sind nach einer Wiederherstellung aber nicht verfügbar.",
+  "ops.doc.download": "{name} herunterladen",
+  "ops.doc.label": "Dokument",
   "ops.mi.explore": "Iterationen erkunden",
   "ops.mi.explorer.title": "Multi-Instance-Explorer",
   "ops.mi.close": "Schliessen",
@@ -1073,7 +1077,7 @@ export default {
   "tasks.folders.unit.h": "Stunden",
   "tasks.folders.unit.d": "Tagen",
 
-  "tasks.complete.fileUnreadable": "Datei konnte nicht gelesen werden: {error}",
+  "tasks.complete.uploadFailed": "Datei konnte nicht hochgeladen werden: {error}",
 
   // The FEEL assistant (feel-assistant.js, ADR-0445).
   "feel.title": "FEEL-Assistent",

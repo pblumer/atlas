@@ -148,6 +148,12 @@ func configOf(j Job) (Config, error) {
 // the detail, and the source text read up the task's scope chain. It is engine work
 // by necessity — both of its inputs live only there.
 func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64) (Job, error) {
+	return ResolveWithDocuments(store, cp, detail, elementInstanceKey, nil)
+}
+
+// ResolveWithDocuments is [Resolve] with a document reader, for a reading task whose
+// source variable names an uploaded document rather than holding its text.
+func ResolveWithDocuments(store VarStore, cp *compiler.CompiledProcess, detail *compiler.ConnectorTaskDetail, elementInstanceKey uint64, docs DocumentReader) (Job, error) {
 	if detail == nil {
 		return Job{}, fmt.Errorf("csv-import: task has no detail")
 	}
@@ -177,8 +183,12 @@ func Resolve(store VarStore, cp *compiler.CompiledProcess, detail *compiler.Conn
 		if src.Kind != model.VarJSON || strings.TrimSpace(src.Text) == "" {
 			return Job{}, fmt.Errorf("csv-import: source variable %q must hold the rows to write, as a JSON array", sourceName)
 		}
-	} else if src.Kind != model.VarString || src.Text == "" {
-		return Job{}, fmt.Errorf("csv-import: source variable %q is missing or not a non-empty string", sourceName)
+	} else {
+		text, err := sourceText(src, sourceName, docs)
+		if err != nil {
+			return Job{}, err
+		}
+		j.Source = text
 	}
 	for i, ci := range detail.CsvColumns {
 		name := cp.Intern(ci)

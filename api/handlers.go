@@ -3260,6 +3260,13 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 		httpapi.Error(w, http.StatusBadRequest, "no variables to set (body must carry a non-empty \"variables\" object)")
 		return
 	}
+	// An operator may point a variable at a document they may read; it is bound to this
+	// instance once the change is durable (ADR-draft-a-file-is-a-document-not-a-variable).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	scopeKey := payload.ScopeKey
 	// A declared personal value is enciphered here, before it becomes a command, exactly
 	// as it would be on the way in from a form or a worker (ADR-0314). An operator
@@ -3326,6 +3333,7 @@ func (s *Server) handleSetInstanceVariables(w http.ResponseWriter, r *http.Reque
 	case runErr != nil:
 		httpapi.Error(w, http.StatusInternalServerError, "set variables: "+runErr.Error())
 	default:
+		s.bindDocuments(docIDs, key)
 		httpapi.JSON(w, http.StatusOK, map[string]any{"instanceKey": key, "variablesSet": len(vars)})
 	}
 }
@@ -4360,6 +4368,13 @@ func (s *Server) handlePublishMessage(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Which instance a message reaches is decided by correlation, possibly long after
+	// this request, so a document it named could not be bound to it
+	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	if code, msg := refuseDocumentRefs(vars); code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	var (
@@ -5559,6 +5574,11 @@ func toolCallsFromReport(jv *model.JobValue, reps []toolCallReport) ([]model.Too
 		if err != nil {
 			return nil, fmt.Errorf("tool call %q: %v", rep.Tool, err)
 		}
+		// A tool's arguments are a model's, handed to a tool; a document reference among
+		// them would name a file nothing binds to anything.
+		if code, msg := refuseDocumentRefs(args); code != 0 {
+			return nil, fmt.Errorf("tool call %q: %s", rep.Tool, msg)
+		}
 		out = append(out, model.ToolCall{
 			Tool:      strings.TrimSpace(rep.Tool),
 			CallId:    strings.TrimSpace(rep.CallId),
@@ -5585,6 +5605,14 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 	vars, err := parseStartVariables(body)
 	if err != nil {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// A worker's result may name a document; the worker (or operator) must be one who
+	// may use it, and it is bound to the job's instance once the completion is durable
+	// (ADR-draft-a-file-is-a-document-not-a-variable).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
 		return
 	}
 	// A worker result landing a job's output is one of the two edges ADR-0314 enciphers
@@ -5669,6 +5697,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 		unauthorized bool
 		badReport    error
 		runErr       error
+		jobInstance  uint64
 	)
 	s.do(func() {
 		jv, ok, err := s.store.GetJob(key)
@@ -5676,6 +5705,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		jobInstance = jv.ProcessInstanceKey
 		if worker != "" {
 			if !holdsLease(jv, worker, payload.LeaseToken) {
 				notHolder = true
@@ -5755,6 +5785,7 @@ func (s *Server) handleCompleteJob(w http.ResponseWriter, r *http.Request) {
 			"this job belongs to a governed Worker and no permit was recorded for the lease it is held under: "+
 				"authorize it (POST /api/v1/jobs/{key}/authorize) before acting, then complete it")
 	default:
+		s.bindDocuments(docIDs, jobInstance)
 		httpapi.JSON(w, http.StatusOK, map[string]any{"jobKey": key})
 	}
 }
@@ -5945,6 +5976,16 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// A file field's answer is a reference to the document its browser uploaded; the
+	// person completing must be one who may use it, and it is bound to the task's
+	// instance once the completion is durable
+	// (ADR-draft-a-file-is-a-document-not-a-variable). Before sealing, which would hide
+	// a reference inside a personal value.
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 	// The form's answer is the other half of the in edge: a submitted personal value is
 	// enciphered before it becomes a command (ADR-0314).
 	if err := s.encipherJobVars(key, vars); err != nil {
@@ -5975,6 +6016,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		// read before the completion, because a completed task's element instance is
 		// gone, and with it the way up to the sitting.
 		sitting, sittingPI uint64
+		taskInstance       uint64
 	)
 	s.do(func() {
 		// A job that can't be read — absent, already completed, or unreadable — is
@@ -5985,6 +6027,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		found = true
+		taskInstance = jv.ProcessInstanceKey
 		// A sitting that cannot be read is no reason to refuse the answer: the
 		// completion goes ahead, and the next screen is found in the inbox instead.
 		sitting, sittingPI, _ = s.wizardOfElement(jv.ElementInstanceKey)
@@ -6002,6 +6045,7 @@ func (s *Server) handleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	case !found:
 		httpapi.Error(w, http.StatusNotFound, "no open task with that key")
 	default:
+		s.bindDocuments(docIDs, taskInstance)
 		resp := map[string]any{"taskKey": key}
 		// A step of a wizard answers with where the sitting now stands, so the person
 		// is carried to the next screen rather than back to the inbox (ADR-0449).
@@ -6952,6 +6996,11 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"inputs": j.Inputs, "resultVariable": j.Result,
 		}}
 	case compiler.CsvImportJobTypeIndex:
+		// A source that names a document is not read here: this runs on the run loop,
+		// and reading a document is file or network I/O. A Worker Instance therefore
+		// cannot parse a referenced upload yet, and its job fails saying so; the
+		// in-process worker reads it off the loop
+		// (ADR-draft-a-file-is-a-document-not-a-variable, slice 5).
 		j, err := csvimport.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
 		if err != nil {
 			// The worker will fail the job with a message of its own; refusing to lease

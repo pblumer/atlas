@@ -79,9 +79,18 @@
       ];
       window.__BIG_VARS = bigVars.map((v) => v.name);
 
+      // A file the process received is a document, and the variable holds its reference
+      // (ADR-draft-a-file-is-a-document-not-a-variable).
+      const DOC_REF = { name: "datei", kind: "json", value: JSON.stringify({
+        $document: "doc_" + "b".repeat(26), name: "mitarbeitende.csv",
+        contentType: "text/csv; charset=utf-8", size: 1164, sha256: "0".repeat(64) }) };
+      window.__DOC_ID = "doc_" + "b".repeat(26);
+      const DOC = 281475062011099;
       const BIG = 281475062011074;
       const SMALL = 281475062011090;
       const instances = [
+        { key: DOC, processDefKey: DEF, state: "active", createdAt: ns(T + 90000), completedAt: 0,
+          variables: [{ name: "importId", value: "IMP-2026-13", kind: "string" }, DOC_REF] },
         { key: SMALL, processDefKey: DEF, state: "active", createdAt: ns(T + 60000), completedAt: 0,
           variables: [
             { name: "importId", value: "IMP-2026-12", kind: "string" },
@@ -146,7 +155,7 @@
       const steps = [
         { elementId: "Start_1", elementInstanceKey: "1000", type: "bpmn:startEvent", position: 1, tokenId: "1", variables: [] },
         { elementId: "Task_1", elementInstanceKey: "1001", type: "bpmn:userTask", position: 2, tokenId: "1",
-          variables: [bigVars[1], bigVars[3]], variablesAfter: [bigVars[1], bigVars[3]] },
+          variables: [bigVars[1], bigVars[3], DOC_REF], variablesAfter: [bigVars[1], bigVars[3], DOC_REF] },
         { elementId: "End_1", elementInstanceKey: "1002", type: "bpmn:endEvent", position: 3, tokenId: "1",
           variables: [bigVars[1], bigVars[3]] },
       ].map((s, i) => ({ ...s, at: ns(T + i * 1000), endAt: ns(T + i * 1000 + 500) }));

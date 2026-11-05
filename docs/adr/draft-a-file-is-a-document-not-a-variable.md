@@ -1,7 +1,7 @@
 # ADR-DRAFT: A file is a document, and a variable holds a reference to it
 
-- **Status:** Proposed
-- **Implementation:** Not started
+- **Status:** Accepted
+- **Implementation:** Partial
 - **Date:** 2026-11-04
 - **Deciders:** Atlas maintainers
 - **Open question:** how a remote Worker Instance reads a document's bytes — over the
@@ -10,11 +10,11 @@
   job protocol), and neither has been measured against a 35 MiB document on a slow link.
   Slices 1 to 4 of the plan do not need the answer; slice 5 does.
 - **Question checked:** 2026-11
-- **Decided so far (2026-11-05, product owner):** the store is internal by default with S3
-  as a selectable backend; `limits.Document` is the size limit; unbound uploads expire
-  after 24 hours, configurable; documents enter the whole-instance snapshot only when
-  asked for; `csvText` is settled as proposed under *Compatibility* below, pending
-  confirmation.
+- **Decided (2026-11-05, product owner):** the store is internal by default with S3 as a
+  selectable backend; `limits.Document` is the size limit; unbound uploads expire after
+  24 hours, configurable; documents enter the whole-instance snapshot only when a
+  snapshot asks for them (per snapshot, not per process); `csvText` as under
+  *Compatibility* below.
 
 ## Context and problem statement
 
@@ -111,7 +111,7 @@ instead?**
 
 ## Decision outcome
 
-Proposed: **option 4**, a document store inside Atlas with a reference in the variable,
+Chosen: **option 4**, a document store inside Atlas with a reference in the variable,
 whose bytes live in the data directory by default or in an S3 bucket when the installation
 chooses it. Option 3 stays available as the way a process moves a document out of Atlas.
 
@@ -263,6 +263,45 @@ cursor over the document, one multi-instance batch per page), which is a separat
   references without their bytes. The design makes that visible, not impossible.
 - **Negative:** two byte backends to test; the `s3` backend's durability is the bucket's,
   not Atlas's.
+
+## As built (slices 1–4, 2026-11-05)
+
+- **Store:** `api/docstore` — metadata records under `documents/meta`, the `local` backend
+  under `documents/blobs` (one file per SHA-256), the `s3` backend (`docstore.Bucket`)
+  through `connector/s3.Documenter`, which gained `GetDocument` and `DeleteDocument`
+  bounded by `limits.Document`. A bucket is not listed; the store keeps a journal of the
+  hashes it wrote there (`documents/written.json`) so the sweep can delete what no record
+  names. `documents/` is `classRuntime`, `onDemand` and `optIn` in `api/storeregistry.go`;
+  `GET /api/v1/backup/full?documents=true` carries it, and a restore accepts it whenever
+  an archive does.
+- **Routes:** `POST /api/v1/documents`, `GET /api/v1/documents/{id}`,
+  `GET /api/v1/documents/{id}/meta` (`api/documents.go`). A download is served with
+  `nosniff`, `Content-Security-Policy: sandbox` and, for a type a browser would run, as an
+  attachment. A missing blob answers 410. No presigned link is handed out: every
+  download passes the access check.
+- **Binding:** `checkDocumentRefs` runs before the command at instance start (the
+  `startInstanceGuarded` funnel), task completion, job completion, the operator variable
+  change and the trigger route; `bindDocuments` records the root instance once `drive()`
+  returned. Messages, public links and wizards, order actions and tool-call arguments
+  refuse references (`refuseDocumentRefs`). `TestEveryVariableEntryChecksDocumentReferences`
+  reads the package's source and fails for a function that parses variables without one
+  of the two.
+- **Sweep:** every 15 minutes, off the run loop, through a read view; an instance counts
+  as existing while it is live or in history.
+- **Configuration:** `--documents-backend` (`local`|`s3`), `--documents-s3-worker`,
+  `--documents-s3-bucket`, `--documents-s3-prefix`, `--document-pending-ttl` and their
+  `ATLAS_*` variables.
+- **Console:** a file field uploads and completes with the reference under its own key;
+  Operations, the single-instance view and the replay show a reference as a download link;
+  the Settings page offers the snapshot with documents.
+- **CSV import:** the source variable may hold text or a reference; the in-process worker
+  reads the document off the run loop. The lease payload for a Worker Instance is resolved
+  on the run loop, where reading a document is not allowed, so a Worker Instance's CSV job
+  fails naming the document until slice 5.
+- **Not built yet:** slice 5 (Worker Instances reading documents, S3 and mail Workers
+  moving documents), slice 6 (MCP tools — the three routes are listed as omitted for now,
+  personal-data encipherment of documents, the handbook). A public start form or answer
+  link cannot carry a file yet: its visitor is nobody the store knows.
 
 ## Links
 

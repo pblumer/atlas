@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -63,6 +64,83 @@ func (c *HTTPClient) PutDocument(ctx context.Context, bucket, key, contentType, 
 		"versionId": resp.Header.Get("x-amz-version-id"),
 		"size":      json.Number(strconv.Itoa(len(data))),
 	}, nil
+}
+
+// DocumentGetter is a [Client] that can read a document back whole, bounded by
+// limits.Document rather than by a variable's budget, and delete it — what Atlas's own
+// document store needs of a bucket it keeps documents in
+// (ADR-draft-a-file-is-a-document-not-a-variable).
+type DocumentGetter interface {
+	GetDocument(ctx context.Context, bucket, key string) ([]byte, error)
+	DeleteDocument(ctx context.Context, bucket, key string) error
+}
+
+// ErrNoSuchDocument is GetDocument's answer for a key the bucket does not hold.
+var ErrNoSuchDocument = errors.New("s3: no such object")
+
+// GetDocument reads bucket/key whole. It refuses an object over limits.Document rather
+// than returning part of it.
+func (c *HTTPClient) GetDocument(ctx context.Context, bucket, key string) ([]byte, error) {
+	req := trimIdentifiers(Request{Operation: "get-object", Bucket: bucket, Key: key})
+	if err := checkBucket(req.Bucket); err != nil {
+		return nil, err
+	}
+	limit := limits.Default().Document
+	_, raw, err := c.callUpTo(ctx, http.MethodGet, c.objectURL(req.Bucket, req.Key, nil), nil, nil, req, limit)
+	if errors.Is(err, errNoSuchKey) {
+		return nil, fmt.Errorf("%w: %s/%s", ErrNoSuchDocument, req.Bucket, req.Key)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > limit {
+		return nil, fmt.Errorf("s3: %s/%s is larger than the %d bytes a document may be (ATLAS_LIMIT_DOCUMENT)", req.Bucket, req.Key, limit)
+	}
+	return raw, nil
+}
+
+// DeleteDocument removes bucket/key; a key that is not there is no error, as for
+// delete-object.
+func (c *HTTPClient) DeleteDocument(ctx context.Context, bucket, key string) error {
+	req := trimIdentifiers(Request{Operation: "delete-object", Bucket: bucket, Key: key})
+	if err := checkBucket(req.Bucket); err != nil {
+		return err
+	}
+	_, _, err := c.call(ctx, http.MethodDelete, c.objectURL(req.Bucket, req.Key, nil), nil, nil, req)
+	return err
+}
+
+// GetDocument reads a document through the named Worker.
+func (d Documenter) GetDocument(ctx context.Context, worker, bucket, key string) ([]byte, error) {
+	g, err := d.getter(worker)
+	if err != nil {
+		return nil, err
+	}
+	return g.GetDocument(ctx, bucket, key)
+}
+
+// DeleteDocument deletes a document through the named Worker.
+func (d Documenter) DeleteDocument(ctx context.Context, worker, bucket, key string) error {
+	g, err := d.getter(worker)
+	if err != nil {
+		return err
+	}
+	return g.DeleteDocument(ctx, bucket, key)
+}
+
+func (d Documenter) getter(worker string) (DocumentGetter, error) {
+	if d.reg == nil {
+		return nil, fmt.Errorf("s3: no S3 Worker is held here, so %q cannot be reached", worker)
+	}
+	client, ok := d.reg.Client(worker)
+	if !ok {
+		return nil, d.reg.Unresolved("s3", worker)
+	}
+	g, ok := client.(DocumentGetter)
+	if !ok {
+		return nil, fmt.Errorf("s3: Worker %q cannot read or delete a document for Atlas's document store", worker)
+	}
+	return g, nil
 }
 
 // Documents adapts a registry to the mail Worker's document store: the Worker a task

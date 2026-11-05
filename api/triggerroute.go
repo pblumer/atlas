@@ -76,6 +76,13 @@ func (s *Server) handleTrigger(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The instance a trigger starts is known once it fires, so a document it names is
+	// bound to it (ADR-draft-a-file-is-a-document-not-a-variable).
+	docIDs, code, msg := s.checkDocumentRefs(r, vars)
+	if code != 0 {
+		httpapi.Error(w, code, msg)
+		return
+	}
 
 	var (
 		key   uint64
@@ -113,6 +120,7 @@ func (s *Server) handleTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 	switch res.Outcome {
 	case engine.TriggerCreated:
+		s.bindDocuments(docIDs, res.InstanceKey)
 		httpapi.JSON(w, http.StatusCreated, triggerResp{InstanceKey: res.InstanceKey})
 	case engine.TriggerReplayed:
 		httpapi.JSON(w, http.StatusOK, triggerResp{InstanceKey: res.InstanceKey, Replayed: true})

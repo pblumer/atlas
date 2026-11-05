@@ -3,6 +3,7 @@ package s3_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -93,5 +94,53 @@ func TestAStoreThatCannotTakeADocumentSaysSo(t *testing.T) {
 	if _, err := s3.Documents(reg).PutDocument(context.Background(), "alt", "b", "k", "", "", []byte("x"), nil); err == nil ||
 		!strings.Contains(err.Error(), "cannot store a document") {
 		t.Errorf("a client without the document path = %v", err)
+	}
+}
+
+// Atlas's own document store reads a document back whole and deletes it through the
+// Worker it keeps documents with (ADR-draft-a-file-is-a-document-not-a-variable): the
+// read is bounded by the document budget, not by a variable's, and a missing key is an
+// answer the store can tell apart from a failure.
+func TestGetAndDeleteDocument(t *testing.T) {
+	objects := map[string][]byte{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			objects[r.URL.Path], _ = io.ReadAll(r.Body)
+		case http.MethodGet:
+			b, ok := objects[r.URL.Path]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, `<Error><Code>NoSuchKey</Code><Message>gone</Message></Error>`)
+				return
+			}
+			_, _ = w.Write(b)
+		case http.MethodDelete:
+			delete(objects, r.URL.Path)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := s3.NewHTTPClient(s3.Connector{Endpoint: srv.URL, Region: "eu-central-1", AccessKeyID: "AKIA", SecretAccessKey: "s"})
+	reg := s3.NewRegistry()
+	reg.Register("docs", c)
+	d := s3.Documents(reg)
+	ctx := context.Background()
+	doc := bytes.Repeat([]byte("x"), int(limits.Default().Variable)+10)
+	if _, err := d.PutDocument(ctx, "docs", "atlas", "documents/abc", "text/plain", "", doc, nil); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	got, err := d.GetDocument(ctx, "docs", "atlas", "documents/abc")
+	if err != nil || !bytes.Equal(got, doc) {
+		t.Fatalf("get = %d bytes, %v; want %d", len(got), err, len(doc))
+	}
+	if err := d.DeleteDocument(ctx, "docs", "atlas", "documents/abc"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := d.GetDocument(ctx, "docs", "atlas", "documents/abc"); !errors.Is(err, s3.ErrNoSuchDocument) {
+		t.Fatalf("get after delete: %v, want ErrNoSuchDocument", err)
+	}
+	if _, err := d.GetDocument(ctx, "nobody", "atlas", "k"); err == nil {
+		t.Fatalf("an unknown Worker answered")
 	}
 }

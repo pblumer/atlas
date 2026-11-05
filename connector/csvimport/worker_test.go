@@ -2,6 +2,7 @@ package csvimport
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -176,7 +177,7 @@ func TestCSVRowsFromConnector(t *testing.T) {
 
 	t.Run("defaults to csvText and rows", func(t *testing.T) {
 		detail := &compiler.ConnectorTaskDetail{CsvHasHeader: true}
-		out, err := rowsFromConnector(withText("email,group\nada@x.io,users\nbob@x.io,ops\n"), cp, detail, 1)
+		out, err := rowsFromConnector(withText("email,group\nada@x.io,users\nbob@x.io,ops\n"), cp, detail, 1, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -215,10 +216,57 @@ func TestCSVRowsFromConnector(t *testing.T) {
 	}
 	for _, tc := range errCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := rowsFromConnector(tc.store, cp, tc.detail, 1); err == nil ||
+			if _, err := rowsFromConnector(tc.store, cp, tc.detail, 1, nil); err == nil ||
 				!strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+// The CSV upload is a document now (ADR-draft-a-file-is-a-document-not-a-variable):
+// csvText may hold a reference to the uploaded file instead of its text, and the same
+// file yields the same rows either way. Without a reader, or for a document that cannot
+// be read, the task fails naming the variable rather than producing an empty batch.
+func TestCSVRowsFromADocument(t *testing.T) {
+	okCfg := vjson(`{"columns":[{"name":"email"},{"name":"group"}]}`)
+	const file = "email,group\nada@x.io,users\nbob,ops\n"
+	const id = "doc_aaaaaaaaaaaaaaaaaaaaaaaaaa"
+	ref := vjson(`{"$document":"` + id + `","name":"a.csv","size":36}`)
+	docs := func(got string) ([]byte, error) {
+		if got != id {
+			return nil, fmt.Errorf("no such document")
+		}
+		return []byte(file), nil
+	}
+
+	fromText, err := rowsFromVarsWith(vars(map[string]model.VariableValue{"csvText": vstr(file), "columnConfig": okCfg}), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromDoc, err := rowsFromVarsWith(vars(map[string]model.VariableValue{"csvText": ref, "columnConfig": okCfg}), docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromDoc[0].Text != fromText[0].Text || fromDoc[1].Text != "2" {
+		t.Fatalf("rows from the document = %+v, want the same as from the text %+v", fromDoc, fromText)
+	}
+
+	for name, tc := range map[string]struct {
+		docs DocumentReader
+		want string
+	}{
+		"no reader":  {nil, "cannot read documents"},
+		"unreadable": {func(string) ([]byte, error) { return nil, fmt.Errorf("gone") }, "gone"},
+		"empty":      {func(string) ([]byte, error) { return nil, nil }, "empty document"},
+	} {
+		_, err := rowsFromVarsWith(vars(map[string]model.VariableValue{"csvText": ref, "columnConfig": okCfg}), tc.docs)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "csvText") {
+			t.Errorf("%s: err = %v, want one naming csvText and %q", name, err, tc.want)
+		}
+	}
+	// A JSON object that is not a reference is still refused as before.
+	if _, err := rowsFromVarsWith(vars(map[string]model.VariableValue{"csvText": vjson(`{"a":1}`), "columnConfig": okCfg}), docs); err == nil {
+		t.Error("a JSON object that names no document was parsed")
 	}
 }

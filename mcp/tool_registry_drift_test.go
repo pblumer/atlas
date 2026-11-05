@@ -247,6 +247,9 @@ var mcpToolRoutes = map[string]string{
 // add a matching tool (and an entry above) or record here why an agent should
 // not have it.
 var mcpOmittedRoutes = map[string]string{
+	"POST /api/v1/documents":          "a document is a file a person picks in a task form, uploaded by the browser that holds it; what an agent may do with documents is decided in its own slice (ADR-draft-a-file-is-a-document-not-a-variable, plan S6)",
+	"GET /api/v1/documents/{id}":      "a document's bytes are for the person downloading it, up to 35 MiB, which is not something to put into an agent's context; decided in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable",
+	"GET /api/v1/documents/{id}/meta": "decided together with the other document routes in plan S6 of ADR-draft-a-file-is-a-document-not-a-variable; an agent already sees the reference in the variable",
 	// The reports that name people (ADR-0515 §3).
 	// They list who holds which right; an agent acting for somebody does not need a
 	// list of other people's rights to do it, and the product manager's counting
