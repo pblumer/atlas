@@ -41,7 +41,11 @@ func TestEveryManagedConnectorKindHasBuiltInWorkerTypeMetadata(t *testing.T) {
 		switch meta.RuntimeMode {
 		case WorkerRuntimeModeAtlasEmbedded, WorkerRuntimeModeAtlasSupervised:
 		case WorkerRuntimeModeExternal:
-			t.Errorf("managed Worker Type %q is compiled into Atlas but declares external runtime mode", kind.name)
+			// Compiled into Atlas, but bound to hardware somewhere else: a device's
+			// worker runs on the device, and only a kind that says so may claim it.
+			if !kind.external {
+				t.Errorf("managed Worker Type %q is compiled into Atlas but declares external runtime mode", kind.name)
+			}
 		default:
 			t.Errorf("managed Worker Type %q has invalid Worker Type runtime mode %q", kind.name, meta.RuntimeMode)
 		}
@@ -61,7 +65,13 @@ func TestWorkerOnlyCompatibilityFlagAgreesWithBuiltInRuntimeMetadata(t *testing.
 			continue
 		}
 		want := WorkerRuntimeModeAtlasEmbedded
-		if kind.workerOnly {
+		switch {
+		case kind.external:
+			want = WorkerRuntimeModeExternal
+			if !kind.workerOnly {
+				t.Errorf("managed Worker Type %q is external but not workerOnly: the engine would run what only a device can", kind.name)
+			}
+		case kind.workerOnly:
 			want = WorkerRuntimeModeAtlasSupervised
 		}
 		if meta.RuntimeMode != want {

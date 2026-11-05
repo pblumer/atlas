@@ -7,7 +7,7 @@
   "last_reviewed": "2026-11-05",
   "plan": "../../planning/device-automation-program.md",
   "milestone": "../../../ROADMAP.md#milestone-iot--device-automation-",
-  "next_action": "IOT1 increment 2 (step a): the <atlas:deviceConnector> compiler element, reserved job type, worker-only device kind in the server and atlas worker --connector device, so a BPMN task switches an output on the reference Pi Zero 2 W; in parallel IOT0's threat model, which gates step b (adoption).",
+  "next_action": "Walk the device setup on the reference Pi Zero 2 W against a running server (a task switches a relay on line 26 or a LED with its resistor) to close IOT1; review the branch; then IOT0's threat model and IOT10, adoption from the Console.",
   "slices": [
     {
       "id": "IOT0",
@@ -27,7 +27,7 @@
       "depends_on": [],
       "issues": [],
       "prs": [],
-      "note": "Step a of the owner's order (2026-11-05). Increment 1 done on branch claude/focused-gauss-i29wni: connector/device and its catalog — named outputs with safe state, on-duration watchdog, pulse deduplication by job key, the GPIO v2 character-device ABI in pure Go pinned by test, a FakeChip; 98.4% coverage; the opt-in hardware test passed on the reference Pi Zero 2 W (gpiochip0 line 26). Increment 2 next: the <atlas:deviceConnector> compiler element, the reserved job type, the server's worker-only device kind and atlas worker --connector device, with the wiring read on the device; runs with today's worker token scope."
+      "note": "Step a of the owner's order (2026-11-05). Increment 1: connector/device and its catalog — named outputs with safe state, on-duration watchdog, pulse deduplication by job key, the GPIO v2 character-device ABI in pure Go pinned by test, a FakeChip; the opt-in hardware test passed on the reference Pi Zero 2 W. Increment 2 on branch claude/focused-gauss-i29wni: <atlas:deviceConnector> and io.atlas.device (index 39), the managed worker-only external device kind with payload arm, package, Modeler, Console form, setup doc and handbook card, atlas worker --connector device (wiring from a file, mock mode, safe state on exit and after the server is out of reach), worker.Permanent and offline detection; an end-to-end test through a real server. Open before the slice closes: walk the setup steps on the reference Pi against a running server."
     },
     {
       "id": "IOT10",

@@ -44,6 +44,7 @@ func TestConnectorCompilersRegistry(t *testing.T) {
 		{GoogleContacts: &xmlGoogleContactsConnector{}},
 		{CardDAV: &xmlCardDAVConnector{}},
 		{Wiki: &xmlWikiConnector{}},
+		{Device: &xmlDeviceConnector{}},
 	}
 	if len(cases) != len(connectorCompilers) {
 		t.Fatalf("cases = %d, connectorCompilers = %d; keep them in step", len(cases), len(connectorCompilers))

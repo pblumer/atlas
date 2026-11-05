@@ -25,6 +25,7 @@ import (
 	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/device"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
@@ -7305,6 +7306,18 @@ func (s *Server) resolveConnectorTask(jobKey uint64, jv *model.JobValue, ei *mod
 			"transition": j.Transition, "comment": j.Comment, "query": j.Query,
 			"maxResults": j.MaxResults, "resultVariable": j.ResultVariable, "errorCodes": j.ErrorCodes,
 			"redelivered": j.Redelivered,
+		}}
+	case compiler.DeviceJobTypeIndex:
+		// The evaluated values travel, typed as the device reads them, and nothing about
+		// the device's wiring: which pin a name is, the device alone knows
+		// (ADR-draft-device-workers-for-the-physical-world).
+		j, err := device.Resolve(rd, cp, cp.ConnectorTask(node.Detail), jv.ElementInstanceKey)
+		if err != nil {
+			return nil
+		}
+		return &connectorPayload{Kind: "device", Fields: map[string]any{
+			"connector": j.Connector, "operation": j.Operation, "fields": j.Fields,
+			"resultVariable": j.ResultVariable,
 		}}
 	case compiler.ClioWriteJobTypeIndex, compiler.ClioQueryJobTypeIndex, compiler.ClioReadJobTypeIndex:
 		// One arm for the three clio operations: the resolved job says which it is, so

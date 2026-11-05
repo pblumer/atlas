@@ -101,6 +101,11 @@ const (
 	// the API token of the wiki account it writes as (connector/wikiwikibangbang.Bundle).
 	// The engine builds no client from it.
 	connectorKindWiki = "wikiwikibangbang"
+	// connectorKindDevice is the device Worker Type
+	// (ADR-draft-device-workers-for-the-physical-world). Worker-only, and more than that:
+	// its worker runs on the device whose pins it drives, so Atlas never supervises it.
+	// A record holds the device's name and nothing else; its wiring lives on the device.
+	connectorKindDevice = "device"
 	// connectorKindAD is the Active Directory Worker Type
 	// (ADR-0206). A record holds the directory's LDAP URL
 	// and a credentialsRef naming a vault {bindDN, password} bundle; the model names

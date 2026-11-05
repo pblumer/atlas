@@ -338,8 +338,35 @@ under `display.show`:
 - Not yet: partial refresh, the content hash and refresh interval, the stale marker,
   and the layout a model states — the driver draws what it is given.
 
-Not yet: the compiler element, the reserved job type, the Worker kind in the server,
-`atlas worker --connector device`, the Modeler, the setup doc and the handbook card.
+IOT1, second increment — a task drives a device:
+
+- `compiler` — `io.atlas.device` at reserved index 39, `<atlas:deviceConnector>` with
+  `connector`, `operation`, `output`, `line`, `on`, `durationMs`, `resultVariable` and
+  `retries`, checked against `connector/device/catalog` at deploy; a literal line name, state
+  and duration are checked there too.
+- `connector/device/offload.go` — `Resolve` evaluates the task's values when the server
+  leases the job and keeps their types (a name a string, `on` a boolean, a duration a
+  number); `Run` executes the resolved job on the device it names.
+- `api` — the managed `device` kind, worker-only and *external*: its runtime mode is
+  `external`, it is never supervised, and a record holds a name and nothing else (an
+  endpoint or a credential reference is refused); its payload arm, Repository package
+  `atlas.device`, placement, Modeler entry (`device-ops.js`, group «Devices»), Console form
+  and catalogue card, setup doc and handbook card `runbook-device` in both languages.
+- `worker` — `--connector device`: `ATLAS_DEVICE_CONNECTORS`, per name
+  `ATLAS_DEVICE_<NAME>_CONFIG_FILE` or `_CONFIG`, `ATLAS_DEVICE_MOCK=1` and
+  `ATLAS_DEVICE_OFFLINE_AFTER` (default 2m). Every line is claimed at startup; the
+  outputs go to their safe state on exit and once the server has been out of reach for
+  that long. Two worker capabilities came with it: `worker.Permanent` fails a job with
+  no retries left, which a refused device job is; and `Options.OfflineAfter` with
+  `OnOffline`/`OnOnline` tells a worker its server is gone and back. A hanging poll is
+  noticed only when it fails, so detection can take up to one poll's timeout; the
+  watchdog is what holds regardless.
+- An end-to-end test (`worker/deviceconnector_test.go`) runs a model that switches an
+  output and reads it back through a real server and a device in memory.
+
+Not yet: running `atlas worker --connector device` on the reference Pi against a server
+— the walk the setup doc's `checked` date stands for — adoption from the Console, inputs
+as events, and `display.show`.
 
 ## Pros and cons of the options
 

@@ -105,6 +105,7 @@ var authoredKindJobTypes = map[string][]int32{
 	connectorKindGoogleContacts: {compiler.GoogleContactsJobTypeIndex},
 	connectorKindCardDAV:        {compiler.CardDAVJobTypeIndex},
 	connectorKindWiki:           {compiler.WikiwikibangbangJobTypeIndex},
+	connectorKindDevice:         {compiler.DeviceJobTypeIndex},
 
 	// A script task's language (ADR-0047). One entry per language, not one for
 	// "script": see above.

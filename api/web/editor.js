@@ -18,6 +18,7 @@ import { exchangeOperationOptions, exchangeParametersPlaceholder, exchangeParame
 import { googleContactsOperationOptions, googleContactsUses, googleContactsResultType, googleContactsResultShape, googleContactsMaxPlaceholder, googleContactsMaxHint, googleContactsQueryHint, googleContactsContactPlaceholder } from "./googlecontacts-ops.js";
 import { cardDAVOperationOptions, cardDAVUses, cardDAVResultType, cardDAVResultShape, cardDAVMaxPlaceholder, cardDAVMaxHint, cardDAVQueryHint, cardDAVContactPlaceholder } from "./carddav-ops.js";
 import { wikiOperationOptions, wikiUses, wikiResultType, wikiResultShape, wikiMaxPlaceholder, wikiMaxHint, wikiPropertiesPlaceholder } from "./wikiwikibangbang-ops.js";
+import { deviceOperationOptions, deviceUses, deviceResultType, deviceResultShape, deviceOnHint } from "./device-ops.js";
 import { installDevShortcut, markDevField } from "./dev-view.js";
 import { lookupSamples, sampleFor } from "./instance-samples.js";
 import { devLang } from "./dev-lang.js";
@@ -5506,6 +5507,54 @@ const SERVICE_TASK_KINDS = [
     ],
   },
   {
+    id: "device", name: "Device (GPIO)", group: "Devices",
+    desc: "Switch a device's outputs, read its lines and pulse an output: relays, lamps, valves, buttons, on a Raspberry Pi whose worker serves this server",
+    icon: "G",
+    // A board with two pins on green: hardware, told apart at a glance from the
+    // application Worker Types' cards.
+    glyph: `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect width="16" height="16" rx="3" fill="#15803d"/><rect x="3.5" y="4" width="9" height="8" rx="1" fill="#fff"/><circle cx="6" cy="8" r="1.3" fill="#15803d"/><circle cx="10" cy="8" r="1.3" fill="#15803d"/><path d="M6 2.5v1.5M10 2.5v1.5M6 12v1.5M10 12v1.5" stroke="#fff" stroke-width="1.1" stroke-linecap="round"/></svg>`,
+    ext: "atlas:DeviceConnector",
+    fields: [
+      { group: "Device" },
+      {
+        key: "connector", label: "Worker", datalist: "device", placeholder: "pi-gewaechshaus",
+        hint: "The device's Worker, by its name under Workers in the Console. The worker on that device serves it; which pin is which output is the device's own configuration. A value starting with = is a FEEL expression, so one process can choose the device at runtime.",
+      },
+      { group: "Operation" },
+      {
+        key: "operation", label: "Operation", type: "select", reRender: true,
+        options: deviceOperationOptions(),
+      },
+      {
+        key: "output", label: "Output", placeholder: "relais", fx: true,
+        showIf: (v) => deviceUses(v.operation || "digital.write", "output"),
+        hint: "The output's name in the device's wiring, e.g. relais — never a pin number. Lower-case letters, digits and hyphens.",
+      },
+      {
+        key: "line", label: "Line", placeholder: "taster", fx: true,
+        showIf: (v) => deviceUses(v.operation || "digital.write", "line"),
+        hint: "The name of an output or an input in the device's wiring. An output reads the state it was last switched to, an input its level as the wiring reads it.",
+      },
+      {
+        key: "on", label: "On", placeholder: "true", fx: true,
+        showIf: (v) => deviceUses(v.operation || "digital.write", "on"),
+        hint: (v) => deviceOnHint(v.operation || "digital.write"),
+      },
+      {
+        key: "durationMs", label: "Duration (ms)", placeholder: "1500", fx: true,
+        showIf: (v) => deviceUses(v.operation || "digital.write", "durationMs"),
+        hint: "How long the pulse holds, in milliseconds, at most 60000. The output then returns to its safe state. A pulse runs once per job however often the job is delivered; anything longer is a switch on, a timer and a switch off.",
+      },
+      { group: "Output" },
+      {
+        key: "resultVariable", label: "Result variable", placeholder: "zustand",
+        resultType: (v) => deviceResultType(v.operation || "digital.write"),
+        showIf: (v) => !!deviceResultType(v.operation || "digital.write"),
+        hint: (v) => deviceResultShape(v.operation || "digital.write"),
+      },
+    ],
+  },
+  {
     id: "discord", name: "Discord", group: "Messaging & events",
     desc: "Send, edit, delete and read messages in a Discord channel, and open a thread for a case",
     icon: "D",
@@ -5961,7 +6010,7 @@ function placementBadgeHTML(id) {
 // curId. Shared by the service task (SERVICE_TASK_KINDS) and the send task, which prepends a
 // Message kind (ADR-0112); the click/filter handlers key off the .stkind-row markup.
 const ST_KIND_GROUPS = ["Directory & identity", "Database", "Web & API", "Files",
-  "Applications", "Messaging & events", "No Worker Type"];
+  "Applications", "Messaging & events", "Devices", "No Worker Type"];
 
 // stKindRow renders one picker row, with the placement badge that says where this kind's
 // work runs on this server (ADR-0164/0168/0173). One line per kind: the description is

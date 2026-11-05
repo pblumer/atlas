@@ -69,6 +69,11 @@ type managedConnectorKind struct {
 	// the Console and the supervised worker is provisioned from it (superviseEnv). Its
 	// newRegistry/rebuild/registerHandlers are therefore nil and skipped at setup.
 	workerOnly bool
+	// external marks a worker-only kind whose Worker Instances Atlas can never run
+	// itself, because the work is bound to hardware somewhere else: a device's worker
+	// runs on the device (ADR-draft-device-workers-for-the-physical-world). Its runtime
+	// mode is WorkerRuntimeModeExternal, and it is never supervised.
+	external bool
 }
 
 // createConnectorParams is the decoded body of a create-connector request. The
@@ -474,6 +479,17 @@ var managedConnectorKinds = append([]managedConnectorKind{
 		workerOnly:     true,
 		validateCreate: validateWikiConnector,
 		jobTypes:       []int32{compiler.WikiwikibangbangJobTypeIndex},
+	},
+	{
+		// A device task drives a named output of a device, reads one of its lines or
+		// pulses an output (ADR-draft-device-workers-for-the-physical-world). Worker-only
+		// and external: the pins are on the device, so is its worker, and the server
+		// holds nothing of it but its name.
+		name:           connectorKindDevice,
+		workerOnly:     true,
+		external:       true,
+		validateCreate: validateDeviceConnector,
+		jobTypes:       []int32{compiler.DeviceJobTypeIndex},
 	},
 	{
 		// An Active Directory task performs one directory operation against a
@@ -1080,6 +1096,22 @@ func validateWikiConnector(p *createConnectorParams) string {
 	}
 	if p.CredentialsRef == "" {
 		return "a wikiwikibangbang worker requires a credentialsRef naming a vault bundle: {token}"
+	}
+	return ""
+}
+
+// validateDeviceConnector checks a device a Console operator is adding. The record is
+// the device's name, which a task names and a worker on the device serves; its wiring —
+// which pin is which output — is the device's own configuration, and it holds no
+// credential of the model's. An endpoint or a credentialsRef would be stored and
+// ignored, so both are refused.
+func validateDeviceConnector(p *createConnectorParams) string {
+	p.Provider, p.Sender, p.Model = "", "", ""
+	if strings.TrimSpace(p.Endpoint) != "" {
+		return "a device worker takes no endpoint: the device connects to this server, not the other way round"
+	}
+	if p.CredentialsRef != "" {
+		return "a device worker takes no credentialsRef: its wiring lives on the device, and the device authenticates with its own token"
 	}
 	return ""
 }

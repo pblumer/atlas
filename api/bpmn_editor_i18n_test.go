@@ -32,7 +32,7 @@ func TestEveryMessageTheBPMNEditorFrameAsksForExists(t *testing.T) {
 		"web/editor.js", "web/playground.js", "web/shown-version.js", "web/process-doc.js",
 		"web/token-simulation.js", "web/idcheck.js", "web/startvars.js",
 		"web/pgroup.js", "web/feel.js", "web/varrefs.js", "web/exchange-ops.js",
-		"web/googlecontacts-ops.js", "web/carddav-ops.js", "web/wikiwikibangbang-ops.js", "web/entra-attrmask.js",
+		"web/googlecontacts-ops.js", "web/carddav-ops.js", "web/wikiwikibangbang-ops.js", "web/device-ops.js", "web/entra-attrmask.js",
 		"web/powershell.js", "web/workertypedocs.js", "web/dev-view.js", "web/decision-graph.js",
 		"web/version-comparison.js",
 	} {

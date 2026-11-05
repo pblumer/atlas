@@ -14,6 +14,17 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A process can switch and read a device's pins.** A new Worker Type, Device (GPIO), runs on the device
+  itself — a Raspberry Pi — as `atlas worker --connector device` and connects out to the server. A service
+  task `<atlas:deviceConnector>` switches a named output on or off, reads an output or an input into a
+  variable, or pulses an output for at most 60 seconds; it names a line by its name in the device's wiring,
+  never a pin, and the wiring lives on the device (`ATLAS_DEVICE_<NAME>_CONFIG_FILE`). Every output is
+  claimed already in its safe state and returns to it when the worker stops, when its own `maxOnMs`
+  watchdog runs out and when the server has been out of reach for `ATLAS_DEVICE_OFFLINE_AFTER` (default
+  2 minutes); a pulse runs once per job however often the job is delivered, and a job the device cannot run
+  fails without retries. The GPIO character device is driven in pure Go, without cgo, and was checked on a
+  Raspberry Pi Zero 2 W; `ATLAS_DEVICE_MOCK=1` serves a wiring from memory on any machine. A worker can now
+  fail a job without retries (`worker.Permanent`) and be told when its server is gone and back.
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
   come — running or done, total and finished products, and refreshed, refused or skipped per product. A second

@@ -15,6 +15,7 @@ import (
 	"github.com/pblumer/atlas/connector/carddav"
 	"github.com/pblumer/atlas/connector/clio"
 	"github.com/pblumer/atlas/connector/csvimport"
+	"github.com/pblumer/atlas/connector/device"
 	"github.com/pblumer/atlas/connector/discord"
 	"github.com/pblumer/atlas/connector/entra"
 	"github.com/pblumer/atlas/connector/exchange"
@@ -659,6 +660,7 @@ func TestEveryPayloadArmSendsTheWholeResolvedJob(t *testing.T) {
 		{"compiler.GoogleContactsJobTypeIndex", googlecontacts.Job{}},
 		{"compiler.CardDAVJobTypeIndex", carddav.Job{}},
 		{"compiler.WikiwikibangbangJobTypeIndex", wikiwikibangbang.Job{}},
+		{"compiler.DeviceJobTypeIndex", device.Job{}},
 	} {
 		t.Run(tc.arm, func(t *testing.T) {
 			sent, ok := arms[tc.arm]
@@ -857,6 +859,7 @@ func payloadArmCases(t *testing.T) map[int32]bool {
 		"CardDAVJobTypeIndex":        compiler.CardDAVJobTypeIndex,
 
 		"WikiwikibangbangJobTypeIndex": compiler.WikiwikibangbangJobTypeIndex,
+		"DeviceJobTypeIndex":           compiler.DeviceJobTypeIndex,
 	}
 	if len(indexByConstName) != int(compiler.ReservedJobTypeCount()) {
 		t.Fatalf("this table names %d job-type constants but the compiler reserves %d; "+

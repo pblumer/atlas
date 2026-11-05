@@ -160,6 +160,11 @@ var connectorCompilers = []connectorCompiler{
 		retries: func(st xmlServiceTask) string { return st.Wiki.Retries },
 		compile: compileWikiConnectorTask,
 	},
+	{
+		present: func(st xmlServiceTask) bool { return st.Device != nil },
+		retries: func(st xmlServiceTask) string { return st.Device.Retries },
+		compile: compileDeviceConnectorTask,
+	},
 }
 
 // The directory-file formats and directions a model can author. They are spelled here

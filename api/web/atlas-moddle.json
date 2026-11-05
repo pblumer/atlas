@@ -568,6 +568,21 @@
       ]
     },
     {
+      "name": "DeviceConnector",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["bpmn:ServiceTask"] },
+      "properties": [
+        { "name": "connector", "type": "String", "isAttr": true },
+        { "name": "operation", "type": "String", "isAttr": true },
+        { "name": "output", "type": "String", "isAttr": true },
+        { "name": "line", "type": "String", "isAttr": true },
+        { "name": "on", "type": "String", "isAttr": true },
+        { "name": "durationMs", "type": "String", "isAttr": true },
+        { "name": "resultVariable", "type": "String", "isAttr": true },
+        { "name": "retries", "type": "String", "isAttr": true }
+      ]
+    },
+    {
       "name": "GoogleContactsConnector",
       "superClass": ["Element"],
       "meta": { "allowedIn": ["bpmn:ServiceTask"] },

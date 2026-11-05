@@ -34,6 +34,7 @@ var connectorJobTypes = map[string][]string{
 	"agent":        {compiler.AgentJobType, compiler.AiTaskJobType},
 	"clio":         {compiler.ClioWriteJobType, compiler.ClioQueryJobType, compiler.ClioReadJobType},
 	"csv":          {compiler.CsvImportJobType},
+	"device":       {compiler.DeviceJobType},
 	"discord":      {compiler.DiscordJobType},
 	"entra":        {compiler.EntraJobType},
 	"exchange":     {compiler.ExchangeJobType},
@@ -187,6 +188,13 @@ func configuredEnvFor(t *testing.T, kind string) map[string]string {
 		return map[string]string{
 			"ATLAS_SHAREPOINT_CONNECTORS":           "intranet",
 			"ATLAS_SHAREPOINT_INTRANET_CREDENTIALS": `{"method":"clientCredentials","tenantId":"t-1","clientId":"c-1","clientSecret":"s3cr3t"}`,
+		}
+	case "device":
+		// From memory, so no machine running this needs a GPIO chip.
+		return map[string]string{
+			"ATLAS_DEVICE_CONNECTORS": "pi",
+			"ATLAS_DEVICE_PI_CONFIG":  `{"chip":"gpiochip0","outputs":[{"name":"relais","line":17}]}`,
+			"ATLAS_DEVICE_MOCK":       "1",
 		}
 	case "temis":
 		return map[string]string{

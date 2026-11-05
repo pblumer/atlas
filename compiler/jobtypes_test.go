@@ -54,6 +54,7 @@ func TestReservedJobTypesMatchTheirIndices(t *testing.T) {
 		CardDAVJobType:        CardDAVJobTypeIndex,
 
 		WikiwikibangbangJobType: WikiwikibangbangJobTypeIndex,
+		DeviceJobType:           DeviceJobTypeIndex,
 	}
 
 	reserved := ReservedJobTypes()

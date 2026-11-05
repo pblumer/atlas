@@ -231,6 +231,18 @@ type Options struct {
 	NoRetryBackoff bool
 	// HTTP is the client to use; nil means a default one bounded by Lease + Wait.
 	HTTP *http.Client
+	// OfflineAfter, when positive, is how long every poll may fail before OnOffline is
+	// called: the server has been unreachable for longer than this worker may act
+	// without it. OnOnline is called on the first poll that succeeds after that. A
+	// device worker drives its outputs to their safe state there
+	// (ADR-draft-device-workers-for-the-physical-world). A poll that hangs counts only
+	// once it fails, so detection can take up to one poll's timeout; the device's own
+	// watchdog is what holds regardless.
+	OfflineAfter time.Duration
+	OnOffline    func()
+	OnOnline     func()
+	// Now reads the clock the offline detection measures against; nil is time.Now.
+	Now func() time.Time
 }
 
 // Defaults, chosen so an unconfigured worker is safe rather than surprising: it
@@ -253,6 +265,8 @@ type Worker struct {
 	opts  Options
 	http  *http.Client
 	types []string
+	// reach tracks whether the server answers, for OfflineAfter.
+	reach reachability
 	// queryTypes are the job types this worker answers queries for, sorted.
 	queryTypes []string
 }
@@ -288,7 +302,47 @@ func New(opts Options) *Worker {
 		w.queryTypes = append(w.queryTypes, t)
 	}
 	sort.Strings(w.queryTypes)
+	if w.opts.Now == nil {
+		w.opts.Now = time.Now
+	}
 	return w
+}
+
+// reachability is whether this worker's polls reach its server: when the first poll of
+// the current run of failures failed, and whether OnOffline has been called for it.
+type reachability struct {
+	mu        sync.Mutex
+	failingAt time.Time
+	offline   bool
+}
+
+// polled records one poll's outcome and calls OnOffline or OnOnline when the server's
+// reachability has changed. Several job types poll at once; whichever reports first
+// moves the state, and the callbacks run once per change.
+func (w *Worker) polled(err error) {
+	if w.opts.OfflineAfter <= 0 {
+		return
+	}
+	r := &w.reach
+	r.mu.Lock()
+	var call func()
+	now := w.opts.Now()
+	switch {
+	case err == nil:
+		if r.offline {
+			call = w.opts.OnOnline
+		}
+		r.failingAt, r.offline = time.Time{}, false
+	case r.failingAt.IsZero():
+		r.failingAt = now
+	case !r.offline && now.Sub(r.failingAt) >= w.opts.OfflineAfter:
+		r.offline = true
+		call = w.opts.OnOffline
+	}
+	r.mu.Unlock()
+	if call != nil {
+		call()
+	}
 }
 
 // Run works until ctx is cancelled. Each type is polled by its own goroutine, so a
@@ -350,6 +404,9 @@ func (w *Worker) serve(ctx context.Context, jobType string) {
 		}
 
 		jobs, err := w.activate(ctx, jobType, free)
+		if ctx.Err() == nil {
+			w.polled(err)
+		}
 		// Hand back the places this poll did not fill.
 		for i := len(jobs); i < free; i++ {
 			<-places
@@ -442,6 +499,11 @@ func (w *Worker) work(ctx context.Context, j Job) {
 			_ = w.throwError(ctx, j, be)
 			return
 		}
+		var pe *permanentError
+		if errors.As(err, &pe) {
+			_ = w.failWith(ctx, j, err.Error(), 0)
+			return
+		}
 		_ = w.fail(ctx, j, err.Error())
 		return
 	}
@@ -504,9 +566,29 @@ func (w *Worker) complete(ctx context.Context, j Job, out Outcome) error {
 	return w.call(ctx, "/api/v1/jobs/"+strconv.FormatUint(j.JobKey, 10)+"/complete", body, nil)
 }
 
+// Permanent marks a handler's error as one no retry can fix — a job the target refuses
+// as it stands, such as a device asked for a line it does not have. The worker fails the
+// job with no retries left, so it becomes an incident somebody reads at once instead of
+// a retry budget spent learning the same answer.
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &permanentError{err: err}
+}
+
+type permanentError struct{ err error }
+
+func (e *permanentError) Error() string { return e.err.Error() }
+func (e *permanentError) Unwrap() error { return e.err }
+
 func (w *Worker) fail(ctx context.Context, j Job, message string) error {
 	// One attempt is spent by this failure; at zero the engine raises an incident.
-	retries := j.Retries - 1
+	return w.failWith(ctx, j, message, j.Retries-1)
+}
+
+// failWith fails a job leaving it retries attempts; zero raises its incident.
+func (w *Worker) failWith(ctx context.Context, j Job, message string, retries int32) error {
 	if retries < 0 {
 		retries = 0
 	}

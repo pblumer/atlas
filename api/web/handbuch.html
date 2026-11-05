@@ -7642,6 +7642,90 @@ curl -X POST https://atlas.example.com/api/v1/jobs/$JOBKEY/fail \
         <p class="checked" data-checked="2026-10"><span data-l="de">Zuletzt geprüft: Oktober 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked October 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
       </div>
 
+      <div class="card" id="runbook-device">
+        <h4 data-l="de">Gerät (GPIO)</h4><h4 data-l="en">Device (GPIO)</h4>
+        <p data-l="de">Ein Geräte-Worker steht für <b>ein Gerät</b>, etwa einen Raspberry Pi, und seine benannten
+          Ausgänge und Eingänge. Ein Prozess schaltet damit einen Ausgang ein oder aus – ein Relais, eine Lampe, ein
+          Ventil –, liest einen Ausgang oder Eingang oder pulst einen Ausgang für eine begrenzte Zeit. Ein Task nennt
+          dabei immer einen <b>Namen</b> wie <code>relais</code>, nie eine Pin-Nummer: Welcher Pin welcher Name ist,
+          steht in der Verdrahtung auf dem Gerät. Der Worker läuft <b>auf dem Gerät</b> und verbindet sich von dort
+          mit diesem Server; atlas startet und beaufsichtigt ihn nie.</p>
+        <p data-l="en">A device worker stands for <b>one device</b>, a Raspberry Pi for instance, and its named outputs
+          and inputs. A process uses it to switch an output on or off – a relay, a lamp, a valve –, to read an output
+          or an input, or to pulse an output for a bounded time. A task always states a <b>name</b> such as
+          <code>relais</code>, never a pin number: which pin a name is, the wiring on the device says. The worker
+          runs <b>on the device</b> and connects from there to this server; atlas never starts or supervises it.</p>
+        <ol>
+          <li data-l="de">Worker anlegen: Typ <b>Device (GPIO)</b> und ein Name, z.&nbsp;B. <code>pi-gewaechshaus</code>
+            – ohne Endpoint und ohne Credential-Referenz. Genau diesen Namen nennt ein Task.</li>
+          <li data-l="en">Create the worker: type <b>Device (GPIO)</b> and a name, e.g. <code>pi-gewaechshaus</code> –
+            with no endpoint and no credential reference. This is the name a task states.</li>
+          <li data-l="de">Einen API-Token mit Scope <b>worker</b> ausstellen (<a href="#konten">Konten, Rollen &amp;
+            Anmeldung</a>) und auf dem Pi in einer Datei ablegen, die nur das Konto des Workers lesen kann
+            (<code>chmod 600</code>). Er reicht genau für die Job-Aufrufe.</li>
+          <li data-l="en">Mint an API token of scope <b>worker</b> (<a href="#konten">Accounts, roles &amp;
+            sign-in</a>) and keep it on the Pi in a file only the worker's account can read (<code>chmod 600</code>).
+            It reaches exactly the job calls.</li>
+          <li data-l="de">Die Verdrahtung auf dem Pi als JSON-Datei beschreiben, z.&nbsp;B.
+            <code>/etc/atlas/pi-gewaechshaus.json</code>:
+            <code>{"chip": "gpiochip0", "outputs": [{"name": "relais", "line": 17, "activeLow": true, "maxOnMs":
+            600000}], "inputs": [{"name": "taster", "line": 27, "activeLow": true, "bias": "pull-up"}]}</code>.
+            <code>line</code> ist die BCM-Nummer des Pins, <code>safe</code> der sichere Zustand (Standard
+            <code>off</code>), <code>maxOnMs</code> die längste Zeit ausserhalb davon.</li>
+          <li data-l="en">Describe the wiring on the Pi as a JSON file, e.g. <code>/etc/atlas/pi-gewaechshaus.json</code>:
+            <code>{"chip": "gpiochip0", "outputs": [{"name": "relais", "line": 17, "activeLow": true, "maxOnMs":
+            600000}], "inputs": [{"name": "taster", "line": 27, "activeLow": true, "bias": "pull-up"}]}</code>.
+            <code>line</code> is the pin's BCM number, <code>safe</code> the safe state (default <code>off</code>),
+            <code>maxOnMs</code> the longest time away from it.</li>
+          <li data-l="de">Auf dem Pi starten:
+            <code>ATLAS_TOKEN=… ATLAS_DEVICE_CONNECTORS=pi-gewaechshaus
+            ATLAS_DEVICE_PI_GEWAECHSHAUS_CONFIG_FILE=/etc/atlas/pi-gewaechshaus.json atlas worker --server
+            https://atlas.example.ch --connector device</code>. Der Worker erscheint unter <i>Workers</i>, sobald er
+            das erste Mal abholt. Mit <code>ATLAS_DEVICE_MOCK=1</code> läuft er ohne Pins, aus dem Speicher.</li>
+          <li data-l="en">Start it on the Pi:
+            <code>ATLAS_TOKEN=… ATLAS_DEVICE_CONNECTORS=pi-gewaechshaus
+            ATLAS_DEVICE_PI_GEWAECHSHAUS_CONFIG_FILE=/etc/atlas/pi-gewaechshaus.json atlas worker --server
+            https://atlas.example.ch --connector device</code>. The worker appears under <i>Workers</i> once it first
+            pulls work. With <code>ATLAS_DEVICE_MOCK=1</code> it runs without pins, from memory.</li>
+        </ol>
+        <div class="note warn">
+          <span class="lbl" data-l="de">Ein Pin ist kein Schalter für Lasten</span><span class="lbl" data-l="en">A pin is no switch for loads</span>
+          <p data-l="de" style="margin:.3em 0 0">Ein GPIO-Pin liefert 3,3&nbsp;V und wenige Milliampere. Er steuert ein
+            Relaismodul mit eigenem Treiber, nie direkt einen Motor, eine Pumpe oder Netzspannung; Motoren brauchen
+            eine eigene Versorgung und eine Freilaufdiode. Arbeiten an 230&nbsp;V gehören in fachkundige Hände. Und
+            eine Leitung gehört genau einem Prozess: Hält schon ein anderes Programm denselben Pin, startet der Worker
+            nicht und sagt, welche Leitung belegt ist.</p>
+          <p data-l="en" style="margin:.3em 0 0">A GPIO pin gives 3.3&nbsp;V and a few milliamperes. It drives a relay
+            module with its own driver, never a motor, a pump or mains voltage directly; motors need a supply of their
+            own and a flyback diode. Work on mains voltage belongs in qualified hands. And a line belongs to exactly
+            one process: if another program already holds the pin, the worker does not start and says which line is
+            taken.</p>
+        </div>
+        <p data-l="de"><b>Sicherer Zustand:</b> Jeder Ausgang wird beim Start schon in seinem sicheren Zustand
+          übernommen und geht dorthin zurück, wenn der Worker endet, wenn <code>maxOnMs</code> abläuft – das prüft
+          das Gerät selbst, auch ohne Server – und wenn der Server länger als
+          <code>ATLAS_DEVICE_OFFLINE_AFTER</code> (Standard 2 Minuten) nicht erreichbar war. Ein BPMN-Timer ist der
+          Plan, <code>maxOnMs</code> die Garantie.</p>
+        <p data-l="en"><b>Safe state:</b> every output is claimed already in its safe state and returns to it when the
+          worker ends, when <code>maxOnMs</code> runs out – the device checks that itself, without a server – and when
+          the server has been out of reach for longer than <code>ATLAS_DEVICE_OFFLINE_AFTER</code> (default 2 minutes).
+          A BPMN timer is the plan, <code>maxOnMs</code> the guarantee.</p>
+        <p data-l="de"><b>Puls nur einmal:</b> Ein Job kann mehr als einmal zugestellt werden. Schalten und Lesen
+          schaden dabei nicht; ein Puls läuft pro Job nur einmal. Startet das Gerät zwischen zwei Zustellungen neu,
+          kann sich ein Puls wiederholen – das Gedächtnis dafür liegt im Arbeitsspeicher. Alles, was länger als 60
+          Sekunden dauert, modellierst du als Einschalten, Timer und Ausschalten.</p>
+        <p data-l="en"><b>A pulse once:</b> a job can be delivered more than once. Switching and reading do no harm
+          then; a pulse runs once per job. If the device restarts between two deliveries a pulse can repeat – the
+          memory of it is held in RAM. Anything longer than 60 seconds you model as a switch on, a timer and a switch
+          off.</p>
+        <p data-l="de"><b>Fehler:</b> Ein Job, den das Gerät nicht ausführen kann – eine Leitung, die es nicht hat,
+          ein Wert vom falschen Typ, ein Puls über seinem Limit –, schlägt ohne weitere Versuche fehl und wird sofort
+          zum Vorfall.</p>
+        <p data-l="en"><b>Failures:</b> a job the device cannot run – a line it does not have, a value of the wrong
+          type, a pulse above its limit – fails without further attempts and becomes an incident at once.</p>
+        <p class="checked" data-checked="2026-11"><span data-l="de">Zuletzt geprüft: November 2026. Menüpfade und Bezeichnungen können sich seither geändert haben; bei Abweichungen gilt die aktuelle Oberfläche.</span><span data-l="en">Last checked November 2026. Menu paths and labels may have changed since; where they differ, the current interface takes precedence.</span></p>
+      </div>
+
       <div class="card" id="runbook-entra">
         <h4>Microsoft Entra ID</h4>
         <p data-l="de">Das wertvollste Geheimnis, das ein atlas-Worker hält: Eine Anwendungsberechtigung wie

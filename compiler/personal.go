@@ -88,7 +88,8 @@ var engineEvaluatedExpressions = map[string]bool{
 // connector/discord/offload.go:141, connector/s3/offload.go:155,
 // connector/exchange/offload.go:100, connector/teamsphone/offload.go (resolveValue),
 // connector/googlecontacts/offload.go, connector/carddav/offload.go and
-// connector/wikiwikibangbang/offload.go (Resolve and resolveValue) and
+// connector/wikiwikibangbang/offload.go (Resolve and resolveValue),
+// connector/device/offload.go (Resolve) and
 // connector/agent/aitask.go:133, each over the scope variables handed to that call.
 //
 // THE EXEMPTION IS CONDITIONAL, and the condition is the next step's to satisfy: it holds
@@ -244,6 +245,13 @@ var workerEvaluatedExpressions = map[string]string{
 	"connectorTasks.WikiTransition.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.WikiComment.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 	"connectorTasks.WikiQuery.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+
+	// The device Worker's (ADR-draft-device-workers-for-the-physical-world).
+	"connectorTasks.DeviceConnector.Expr": "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.DeviceOutput.Expr":    "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.DeviceLine.Expr":      "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.DeviceOn.Expr":        "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
+	"connectorTasks.DeviceDuration.Expr":  "evaluated in a connector worker, not by the engine — the edge where ADR-0314 permits plaintext",
 
 	// A mail template's FEEL (ADR-0487): rendered by the mail worker in
 	// connector/mail/offload.go (Resolve), over the same scope as the fields beside it.

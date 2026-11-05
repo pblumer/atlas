@@ -547,6 +547,19 @@ const WikiwikibangbangJobType = "io.atlas.wikiwikibangbang"
 // so it is always 38.
 const WikiwikibangbangJobTypeIndex int32 = 38
 
+// DeviceJobType is the reserved job type a device task carries
+// (ADR-draft-device-workers-for-the-physical-world): one job type for every operation on
+// a device's outputs and inputs — write, read, pulse — because they share a device and
+// its wiring; the operation is a modeled value, as it is for Jira (ADR-0201).
+//
+// Nothing in the engine subscribes to it: the kind is worker-only, and the worker that
+// serves it runs on the device, because that is where the pins are.
+const DeviceJobType = "io.atlas.device"
+
+// DeviceJobTypeIndex is the interned index DeviceJobType is guaranteed to occupy in
+// every compiled process: NewBuilder reserves it fortieth, so it is always 39.
+const DeviceJobTypeIndex int32 = 39
+
 // reservedJobTypes is the ordered list of job types Atlas reserves: every builder
 // interns these first, so a reserved name occupies the same index in every compiled
 // process, and the *engine-wide* job-type registry seeds itself from the same list
@@ -596,6 +609,7 @@ var reservedJobTypes = []string{
 	CardDAVJobType,        // 37
 
 	WikiwikibangbangJobType, // 38
+	DeviceJobType,           // 39
 }
 
 // ReservedJobTypes returns the reserved job-type names in index order, so index i
@@ -2626,6 +2640,51 @@ func (b *Builder) AddWikiConnectorTask(cfg WikiConfig) int32 {
 		WikiComment:       cfg.Comment,
 		WikiQuery:         cfg.Query,
 		WikiMaxResults:    cfg.MaxResults,
+	})
+	return b.addNode(TypeConnectorTask, detail)
+}
+
+// DeviceConfig is the deploy-time configuration of a device task
+// (ADR-draft-device-workers-for-the-physical-world). Worker names the configured
+// device and WorkerExpr carries it as literal-or-FEEL; Op is a row of
+// connector/device/catalog. Output, Line, On and Duration are literal-or-FEEL values;
+// which of them an operation needs is the catalog's, and the compiler has refused a
+// model that sets one the operation does not use.
+type DeviceConfig struct {
+	Worker     string
+	WorkerExpr RestExpr
+	Op         string
+	Output     RestExpr
+	Line       RestExpr
+	On         RestExpr
+	Duration   RestExpr
+	ResultVar  string
+	Retries    int32
+}
+
+// AddDeviceConnectorTask adds a device task and returns its element id. Like a service
+// task it creates a job on activation and waits; the job carries the reserved
+// DeviceJobType, which nothing in the engine subscribes to — the worker that serves it
+// is the one on the device.
+func (b *Builder) AddDeviceConnectorTask(cfg DeviceConfig) int32 {
+	detail := int32(len(b.connectorTasks))
+	b.connectorTasks = append(b.connectorTasks, ConnectorTaskDetail{
+		JobType:         b.intern(DeviceJobType),
+		Connector:       b.intern(cfg.Worker),
+		DeviceConnector: cfg.WorkerExpr,
+		Subject:         -1, // not a clio task
+		EventType:       -1,
+		ClioQuery:       -1,
+		ReduceSpec:      -1,
+		Method:          -1, // a device operation, not an HTTP method, is authored
+		Auth:            -1, // the device holds no credential of the model's
+		ResultVar:       b.intern(cfg.ResultVar),
+		Retries:         cfg.Retries,
+		DeviceOp:        b.intern(cfg.Op),
+		DeviceOutput:    cfg.Output,
+		DeviceLine:      cfg.Line,
+		DeviceOn:        cfg.On,
+		DeviceDuration:  cfg.Duration,
 	})
 	return b.addNode(TypeConnectorTask, detail)
 }

@@ -461,6 +461,16 @@ func TestEveryManagedKindIsProvisioned(t *testing.T) {
 			}
 			continue
 		}
+		if k.external {
+			// A device's worker runs on the device whose pins it drives: there is no
+			// handler in the engine to move, and nothing for a supervisor to start
+			// (ADR-draft-device-workers-for-the-physical-world). Handing it to one would
+			// be the defect.
+			if _, handed := provisioned[k.name]; handed {
+				t.Errorf("managed kind %q is external, yet a supervised worker is provisioned for it", k.name)
+			}
+			continue
+		}
 		if _, handed := provisioned[k.name]; !handed {
 			t.Errorf("managed kind %q is not handed to a supervised worker: add a %sWorkerEnv "+
 				"to provisionedConnectorKinds, or it can never leave the engine's run loop", k.name, k.name)

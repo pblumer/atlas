@@ -2471,6 +2471,10 @@ type xmlServiceTask struct {
 	// create, read, update or move an item, comment on it, query items, read a page as
 	// Markdown or append to one — as an account a *worker* holds the token of.
 	Wiki *xmlWikiConnector `xml:"extensionElements>wikiwikibangbangConnector"`
+	// Device, when present, marks this service task a device task
+	// (ADR-draft-device-workers-for-the-physical-world): one operation on a device's
+	// named outputs and inputs — write, read, pulse — served by the worker on the device.
+	Device *xmlDeviceConnector `xml:"extensionElements>deviceConnector"`
 	// Agent, when present, marks this service task an AI task: one call to a language
 	// model, one answer into one variable (ADR-0256). It is the same extension element an
 	// ad-hoc container carries, read for its other half — prompt and resultVariable rather
@@ -2828,6 +2832,25 @@ type xmlWikiConnector struct {
 	Query              string `xml:"query,attr"`
 	MaxResults         string `xml:"maxResults,attr"`
 	ResultVariable     string `xml:"resultVariable,attr"`
+	// Retries is the task's own retry budget (ADR-0135), overriding a
+	// <zeebe:taskDefinition retries> on the same task; blank means the default.
+	Retries string `xml:"retries,attr"`
+}
+
+// xmlDeviceConnector is the <atlas:deviceConnector> extension on a service task
+// (ADR-draft-device-workers-for-the-physical-world). connector names the device Worker
+// (literal-or-FEEL). operation is a row of connector/device/catalog; which other
+// attributes apply is decided by the operation, and only by it. output and line name
+// lines of the device's wiring, never pins: which pin a name is wired to is the
+// device's configuration.
+type xmlDeviceConnector struct {
+	Connector      string `xml:"connector,attr"`
+	Operation      string `xml:"operation,attr"`
+	Output         string `xml:"output,attr"`
+	Line           string `xml:"line,attr"`
+	On             string `xml:"on,attr"`
+	DurationMs     string `xml:"durationMs,attr"`
+	ResultVariable string `xml:"resultVariable,attr"`
 	// Retries is the task's own retry budget (ADR-0135), overriding a
 	// <zeebe:taskDefinition retries> on the same task; blank means the default.
 	Retries string `xml:"retries,attr"`

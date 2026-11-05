@@ -396,6 +396,19 @@ export const WORKER_TYPE_DOCS = {
     trap: "workerDoc.wikiwikibangbang.trap",
   },
 
+  device: {
+    anchor: "runbook-device", title: "workerDoc.device.title",
+    checked: "2026-11",
+    needs: "workerDoc.device.needs",
+    steps: [
+      "workerDoc.device.step1",
+      "workerDoc.device.step2",
+      "workerDoc.device.step3",
+      "workerDoc.device.step4",
+    ],
+    trap: "workerDoc.device.trap",
+  },
+
   discord: {
     anchor: "runbook-discord", title: "workerDoc.discord.title",
     checked: "2026-09",

@@ -1240,6 +1240,19 @@ type ConnectorTaskDetail struct {
 	WikiComment       RestExpr
 	WikiQuery         RestExpr
 	WikiMaxResults    int32
+	// device fields (JobType == DeviceJobType,
+	// ADR-draft-device-workers-for-the-physical-world). Connector (above) names the
+	// configured device, and DeviceConnector carries it as literal-or-FEEL. DeviceOp is the
+	// interned operation — a row of connector/device/catalog. DeviceOutput and DeviceLine
+	// name an output or a line of the device's wiring, DeviceOn the state to drive and
+	// DeviceDuration a pulse's milliseconds. All are the zero value for a task of another
+	// kind.
+	DeviceConnector RestExpr
+	DeviceOp        int32
+	DeviceOutput    RestExpr
+	DeviceLine      RestExpr
+	DeviceOn        RestExpr
+	DeviceDuration  RestExpr
 }
 
 // MockupTaskDetail is the per-mockup-task data the engine reads to simulate a

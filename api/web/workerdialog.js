@@ -142,6 +142,10 @@ export function workerShape(kind, provider) {
   // The wiki is CardDAV's shape: a base URL to reach and an account's token to reach it
   // with — every wiki is an installation of its own.
   const wiki = kind === "wikiwikibangbang";
+  // A device is the one kind with nothing to author here: it is reached by no endpoint
+  // — its worker connects to this server from the device — and holds no credential of
+  // the model's. Its wiring lives on the device.
+  const device = kind === "device";
   // S3 is the one bundle kind whose endpoint is still worth authoring, and it carries
   // two meanings at once: empty is AWS at the region the bundle names, and anything else
   // is the store the installation runs — which is also what decides that its buckets are
@@ -213,7 +217,7 @@ export function workerShape(kind, provider) {
     // without opening a secret store. That is also why it is a record field and not a
     // vault bundle entry.
     model: agent,
-    endpoint: !bundle && !preview,
+    endpoint: !bundle && !preview && !device,
     // A mail worker always has a sender: it is the default From address, and the
     // preview transport frames the message exactly as it would be sent, so it needs
     // one too.
@@ -224,7 +228,7 @@ export function workerShape(kind, provider) {
     // An agent's key is required *unless* an endpoint is named — a self-hosted endpoint
     // may legitimately need none — so the form asks for it without insisting, and the
     // server refuses a record with neither.
-    credRef: preview || spMock ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || wiki ? "required" : "optional")),
+    credRef: preview || spMock || device ? "none" : (sql ? "optional" : (bundle || remedy || jira || ad || s3 || exchange || carddav || wiki ? "required" : "optional")),
     modelPlaceholder: provider === "chat-completions" ? "gpt-4o" : "claude-opus-5",
     endpointPlaceholder: agent
       ? (provider === "chat-completions"

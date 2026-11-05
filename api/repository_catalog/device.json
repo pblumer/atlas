@@ -1,0 +1,35 @@
+{
+  "id": "atlas.device",
+  "version": "1.0.0",
+  "kind": "connector",
+  "title": "Device (GPIO)",
+  "author": "Atlas core",
+  "description": "Switch and read the physical world from a process: drive a named output of a device on or off, read one of its outputs or inputs, or pulse an output for a bounded time. A model names the device's Worker and a line by its name — never a pin; which pin a name is wired to is the device's own configuration, and its worker runs on the device itself, connecting out to this server (ADR-draft-device-workers-for-the-physical-world). Every output has a safe state the device returns to at start, at shutdown and when its own watchdog's limit runs out, so a lost server or a cancelled process cannot leave a valve open. A write and a read may run twice without harm; a pulse is run once per job, however often the job is delivered. A job the device cannot run — a line it does not have, a pulse longer than its limit — fails without retries.",
+  "engineCompat": ">=0.23",
+  "template": {
+    "$schema": "https://unpkg.com/@camunda/element-templates-json-schema/resources/schema.json",
+    "name": "Device (GPIO)",
+    "id": "atlas.device",
+    "appliesTo": ["bpmn:ServiceTask"],
+    "properties": [
+      { "label": "Worker", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:connector" },
+        "description": "Name of the device's Worker (Console → Workers), e.g. pi-gewaechshaus. The worker on that device serves it." },
+      { "label": "Operation", "type": "Dropdown", "value": "digital.write", "binding": { "type": "property", "name": "atlas:operation" },
+        "choices": [
+          { "name": "Switch an output", "value": "digital.write" },
+          { "name": "Read a line", "value": "digital.read" },
+          { "name": "Pulse an output", "value": "pulse" }
+        ] },
+      { "label": "Output (switch, pulse)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:output" },
+        "description": "The output's name in the device's wiring, e.g. relais." },
+      { "label": "Line (read)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:line" },
+        "description": "The name of an output or an input in the device's wiring, e.g. taster." },
+      { "label": "On (switch, pulse)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:on" },
+        "description": "true or false, or a FEEL expression. A pulse is on unless this says false." },
+      { "label": "Duration in ms (pulse)", "type": "String", "feel": "optional", "value": "", "binding": { "type": "property", "name": "atlas:durationMs" },
+        "description": "How long the pulse holds, at most 60000. Anything longer is a switch on, a timer and a switch off." },
+      { "label": "Result variable (read)", "type": "String", "value": "", "binding": { "type": "property", "name": "atlas:resultVariable" },
+        "description": "Receives {on: true|false}. Required on Read a line." }
+    ]
+  }
+}

@@ -2534,7 +2534,7 @@ a Raspberry Pi hosting the server down to a microcontroller speaking the job pro
 is **Accepted / Not started**.
 
 - 🔲 **IOT0 — Decision and threat model.** The direction is decided; the threat model for a physically exposed device credential is open.
-- 🚧 **IOT1 — Tasks drive a device.** `digital.write`, `digital.read` and `pulse` in pure Go against the GPIO character device, outputs addressed by name, safe states and an on-duration watchdog enforced on the device; the device core runs on a Pi Zero 2 W, the task wiring is next.
+- 🚧 **IOT1 — Tasks drive a device.** `digital.write`, `digital.read` and `pulse` in pure Go against the GPIO character device, outputs addressed by name, safe states and an on-duration watchdog enforced on the device; the device core runs on a Pi Zero 2 W, and a BPMN task drives a device through `<atlas:deviceConnector>` and `atlas worker --connector device`; walking it on the Pi against a server closes the slice.
 - 🔲 **IOT10 — Adopt a device in the Console.** The device fetches its configuration and its own revocable token; the server never logs in to a device.
 - 🔲 **IOT2 — Inputs and the device token scope.** Debounced edges published as idempotent messages; a credential that reaches only the job protocol and the device's declared message names.
 - 🚧 **IOT3 — E-paper displays.** The driver draws on the reference panel; next is `display.show` with a declarative layout, rendered on the device, unchanged pictures skipped, a stale marker as the display's safe state.

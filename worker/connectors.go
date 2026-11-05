@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/pblumer/atlas/limits"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/ad"
@@ -63,11 +65,18 @@ import (
 // fail. A kind that *is* implemented but misconfigured returns an error here for the
 // same reason — the operator is still watching at startup, and a per-job discovery
 // would spend a retry budget learning what was knowable before the first poll.
-func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, error) {
+func BuiltinConnectors(env func(string) string, kinds ...string) (_ Connectors, err error) {
 	if env == nil {
 		env = func(string) string { return "" }
 	}
 	built := Connectors{Handlers: map[string]Exec{}, Queries: map[string]QueryFunc{}, Endpoints: map[string]string{}}
+	// A kind that fails after another has claimed something — a device's lines — must
+	// not leave it claimed behind the error.
+	defer func() {
+		if err != nil {
+			built.Close()
+		}
+	}()
 	for _, kind := range kinds {
 		switch kind {
 		case "csv":
@@ -553,6 +562,28 @@ func BuiltinConnectors(env func(string) string, kinds ...string) (Connectors, er
 			built.Handlers[compiler.WikiwikibangbangJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
 				return RunWikiJob(ctx, j, reg)
 			})
+		case "device":
+			devices, names, offline, err := devicesFromEnv(env)
+			if err != nil {
+				return Connectors{}, err
+			}
+			if devices == nil {
+				built.Unconfigured = append(built.Unconfigured, kind)
+				continue
+			}
+			built.Names = append(built.Names, names...)
+			built.Handlers[compiler.DeviceJobType] = ExecFunc(func(ctx context.Context, j Job) (map[string]any, error) {
+				return RunDeviceJob(ctx, j, devices)
+			})
+			// The outputs go to their safe state when the worker stops, and when it has
+			// not reached its server for longer than it may act without one.
+			for _, d := range devices {
+				built.closers = append(built.closers, d.Close)
+				built.safe = append(built.safe, d.Safe)
+			}
+			if offline > 0 && (built.OfflineAfter == 0 || offline < built.OfflineAfter) {
+				built.OfflineAfter = offline
+			}
 		case "jira":
 			reg, names, err := jiraRegistryFromEnv(env)
 			if err != nil {
@@ -697,6 +728,32 @@ type Connectors struct {
 	// rather than swallowed: "mail is not being served here" is the answer to why a
 	// mail task is waiting, and the worker's log is in the Workers console.
 	Unconfigured []string
+	// OfflineAfter is how long the server may be unreachable before MakeSafe is due:
+	// the shortest a configured kind asks for, zero when none does.
+	OfflineAfter time.Duration
+
+	closers []func() error
+	safe    []func() error
+}
+
+// Close releases what the configured kinds hold — a device's lines, after driving its
+// outputs to their safe state. A worker calls it once it has stopped working.
+func (c Connectors) Close() error {
+	var errs []error
+	for _, f := range c.closers {
+		errs = append(errs, f())
+	}
+	return errors.Join(errs...)
+}
+
+// MakeSafe drives what the configured kinds hold to the state they may be left in
+// without a server: every device output to its safe state.
+func (c Connectors) MakeSafe() error {
+	var errs []error
+	for _, f := range c.safe {
+		errs = append(errs, f())
+	}
+	return errors.Join(errs...)
 }
 
 // KnownConnectorKinds are the kinds [BuiltinConnectors] implements. A kind may serve
@@ -711,7 +768,7 @@ type Connectors struct {
 // case below was added without it. TestKnownConnectorKindsMatchesWhatIsImplemented holds
 // the two together now, in both directions.
 func KnownConnectorKinds() []string {
-	return []string{"ad", "agent", "carddav", "clio", "csv", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
+	return []string{"ad", "agent", "carddav", "clio", "csv", "device", "discord", "entra", "exchange", "googlecontacts", "googlesheets", "jira", "ldap", "ldif", "mail", "mariadb", "mssql", "paperless", "postgres", "remedy", "rest", "s3", "scim", "script", "sharepoint", "soap", "teamsphone", "temis", "webscrape", "wikiwikibangbang"}
 }
 
 // mailEnvPrefix is where a mail worker's credentials live.
