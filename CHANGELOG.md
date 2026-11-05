@@ -13,7 +13,6 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
-
 - **The Exchange Worker creates room lists and sets a room's Places metadata.** Three operations
   for Outlook's Room Finder, which lists rooms only through room lists and filters them by city,
   floor and capacity: `create-room-list` (`New-DistributionGroup -RoomList`, the switch set by the
@@ -22,6 +21,21 @@ _Changed_ / _Removed_ for each version.
   at least one of them) and `get-place`. The two Places operations exist in Exchange Online only:
   against an Exchange Server the Worker refuses them before anything is sent and says that city and
   address are properties of the account there (ADR-draft-exchange-room-lists-and-places).
+- **The handbook shows every app's symbol.** In "The apps at a glance", each app's card leads with
+  its symbol, the same one the drawer and the top bar show, and the overview says so. The
+  handbook keeps no copy: a module script draws the cards from `api/web/module-icons.js`.
+- **Every app has a symbol, and the Console greets with a rocket built of them.** Each module — Console,
+  Modeler, Data, Operations, Tasks, Panorama, Catalogue and Shop — has a symbol: a white
+  glyph on its own colour, which leads its entry in the app drawer and stands beside
+  the open app's name in the top bar (left out where a 1024px bar has no room for it,
+  back on a phone). The Console's
+  welcome card shows a rocket beside its text whose sections are the modules, each
+  marked with its symbol: Operations at the engines, the Console in the command capsule,
+  the Marketplace as the two boosters. The symbols are drawn once
+  (`api/web/module-icons.js`); `scripts/brand/modules.py` writes their copies under
+  `docs/brand/icons/modules/` and `scripts/brand/welcome.py` draws the rocket, and a test
+  holds both to the drawing. On a phone the card leaves the picture out.
+
 - **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
   starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
   come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
@@ -219,7 +233,9 @@ as it runs 0.23.0:
 - **The shipped approval form requires a reason to reject.** It is reseeded at startup,
   so existing installations get it with the binary.
 - **Bundles of format 4 need 0.23.0.** An earlier server cannot import a bundle that
-  carries an information model or an architecture file.
+  carries an information model or an architecture file. `m365-dienste` 1.0.12, the
+  first bundle of format 4, therefore requires atlas 0.23.0 in the hub: a 0.22.0 server
+  refuses it as incompatible before downloading it and can still install 1.0.11.
 - **Observability.** Five log events are new: `auth.password_link_issued`,
   `auth.password_link_used`, `auth.password_changed`, `auth.password_recovery` and
   `auth.password_revoked`. The MCP tools grow from 180 to 181 with

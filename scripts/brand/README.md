@@ -49,3 +49,20 @@ behind fails rather than going unnoticed. It needs the same fonts as a build:
 where those are not guaranteed, the run reports a font mismatch instead of a
 stale file, which is a true statement about that machine but not the one the
 check is asking about.
+
+# Module symbols and the welcome illustration
+
+Two more design tools, Python 3 only and without packages. Both read the module
+symbols from the Console's own drawing in `api/web/module-icons.js`
+(see [`docs/brand/README.md`](../../docs/brand/README.md#module-symbols-iconsmodules)).
+
+```bash
+scripts/brand/modules.py            # docs/brand/icons/modules/module-*.svg
+scripts/brand/welcome.py            # docs/brand/atlas-welcome.svg and api/web/welcome.svg
+scripts/brand/modules.py --check    # verify, write nothing, exit 1 on drift
+scripts/brand/welcome.py --check
+```
+
+`api/modulesymbols_internal_test.go` holds the written files to the drawing in the
+normal test run, so a forgotten re-run fails the build rather than shipping a stale
+picture.

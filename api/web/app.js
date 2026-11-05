@@ -20,6 +20,7 @@ import { openSourceDownload, needsReport, showImportNeeds } from "./sourceneeds.
 import { importPackage, packageSummary } from "./packageimport.js";
 import { openBlueprintMarketplace } from "./blueprint-marketplace.js";
 import { installFeelAssistant } from "./feel-assistant.js";
+import { moduleSymbol } from "./module-icons.js";
 import { restoreSummary } from "./restore-report.js";
 // Documentation prose is Markdown (ADR-0250). The renderer
 // is a module of its own because every surface that shows an element's documentation
@@ -1683,14 +1684,16 @@ function paintApps() {
   // catalogue and the shop are the Marketplace (tshopper phase A,
   // ADR-0515), and saying so in the drawer is
   // what tells a person the two belong together. The caption is not a link and not
-  // part of any link's name.
+  // part of any link's name. Each entry leads with its module's symbol
+  // (module-icons.js), hidden from assistive technology so the name alone is what
+  // the link says.
   let suite = "";
   nav.innerHTML = APPS.filter((a) => offered(a)).map((a) => {
     const head = a.suite && a.suite !== suite ? `<div class="app-suite" aria-hidden="true">${a.suite}</div>` : "";
     suite = a.suite || "";
     return head +
       `<a href="${a.route}" data-app="${a.id}"${a.separate ? ' target="_blank" rel="noopener"' : ""}>` +
-      `${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
+      `${moduleSymbol(a.id)}${a.name}${a.on ? "" : '<span class="soon">soon</span>'}</a>`;
   }).join("");
 }
 
@@ -1750,6 +1753,10 @@ function paintMobileMenu(appId, route) {
 function setChrome(appId, route) {
   document.getElementById("app-name").textContent =
     (APPS.find((a) => a.id === appId) || {}).name || "atlas";
+  // Beside the name, the app's symbol — the one its drawer entry leads with — so the
+  // bar says where one is at a glance, and on a phone, where the name gives way, too.
+  // It joins the mark (or an organisation's logo); it never replaces it.
+  document.getElementById("app-symbol").innerHTML = moduleSymbol(appId, 22);
   paintApps();
   const topnav = document.getElementById("topnav");
   topnav.innerHTML = (TOPNAV[appId] || []).filter((t) => offered(t)).map((t) => {
@@ -2005,7 +2012,8 @@ async function viewConsoleDashboard() {
     <div id="catalogue-stranded-slot"></div>
     <div id="api-tokens-expiring-slot"></div>
     <div id="approvals-waiting-slot"></div>
-    <div class="card">
+    <div class="card welcome-card">
+      <div class="welcome-text">
       <div class="welcome-head">
         <span class="mark welcome-mark${hasLogoCached() ? " has-logo" : ""}" aria-hidden="true">${
           hasLogoCached() ? `<img class="mark-img" alt="" src="${esc(LOGO_URL)}" />` : BUILTIN_MARK
@@ -2027,6 +2035,8 @@ async function viewConsoleDashboard() {
         <a class="btn ghost" href="/handbuch.html" target="_blank" rel="noopener">Handbook ↗</a>
         <button type="button" class="btn ghost" data-system-overview title="Show how atlas is built, from the apps down to its persistence">System Overview</button>
       </div>
+      </div>
+      <img class="welcome-art" src="welcome.svg" alt="" width="480" height="320" />
     </div>
     <div id="release-notes-slot"></div>
     <div class="grid2" style="margin-top:18px">
@@ -12482,6 +12492,7 @@ async function route() {
   if (!AUTH.loaded) await loadAuth();
   if (AUTH.enabled && !AUTH.user) {
     document.getElementById("app-name").textContent = "atlas";
+    document.getElementById("app-symbol").innerHTML = ""; // no app is open yet
     document.getElementById("topnav").innerHTML = "";
     paintApps(); // nobody is signed in, so nobody holds a role: the drawer says so too
     document.getElementById("mobile-more").hidden = true;
