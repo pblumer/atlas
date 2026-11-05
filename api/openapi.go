@@ -1390,7 +1390,7 @@ func (s *Server) apiRoutes() []apiRoute {
 			summary: "Publish a catalogue: validate it and freeze a release, or answer with every problem that stops it (422)", tag: "Catalogue", role: RoleProductManager,
 			resp: jsonBody("The published release", tObject())}},
 		{"GET", "/api/v1/catalogs/{id}/releases", s.catalogs.HandleListReleases, apiOp{
-			summary: "A catalogue's releases, newest first", tag: "Catalogue", role: roleAny,
+			summary: "A catalogue's releases, newest first. Query limit (a positive whole number) answers only that many of the newest, read without reading the rest: the shop asks for limit=1", tag: "Catalogue", role: roleAny,
 			resp: jsonBody("Releases", tArray())}},
 		// Pruning a catalogue's old releases (catalogpurge.go): the GET answers what
 		// the POST would remove, and the POST has to repeat the id.

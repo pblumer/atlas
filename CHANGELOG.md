@@ -20,6 +20,15 @@ _Changed_ / _Removed_ for each version.
   actions and reports read it back), and every one that stays with why.
   `POST …/releases/pruning?confirm=<id>` deletes them. It touches no order, instance or hold, and
   is for administrators. The MCP tools are `atlas_release_pruning` and `atlas_prune_releases`.
+- **Links straight into the shop.** A product and an entry of "My services" have an address of their
+  own (`#/product/<item>`, `#/services/<item>`, `#/services/<item>/<person>`), so they can be sent,
+  bookmarked or opened from a mail; a part opens under its product with its description. The
+  address follows the page as it is used, the browser's back and forward step between product
+  pages, entries and views, and the product page and an opened entry carry a "Copy link" button.
+- **The shop keeps itself current.** Every thirty seconds while it is in view it reads the orders,
+  the tasks and what the reader holds again, and every few minutes, with an empty basket, the
+  catalogue. It redraws only when that disturbs nobody: not while a form or a description is open,
+  something is being sent or the focus is in a field.
 - **The Exchange Worker creates room lists and sets a room's Places metadata.** Three operations
   for Outlook's Room Finder, which lists rooms only through room lists and filters them by city,
   floor and capacity: `create-room-list` (`New-DistributionGroup -RoomList`, the switch set by the
@@ -86,6 +95,13 @@ _Changed_ / _Removed_ for each version.
   and `docs/entra-permissions.md`.
 
 ### Changed
+- **The shop loads faster.** It asks for the newest release of each catalogue only, with the new
+  `limit` query of `GET /api/v1/catalogs/{id}/releases`, which the server answers from a small index
+  without reading the other releases: on the demo catalogue the shop had been reading all 222
+  releases, 4.4 MB, on every load. A position's actions are read when its entry is opened, not
+  for every position on every load. And the page works out what it needs from a release once
+  rather than on every row, which takes a redraw of a large "My services" from about 110 ms to
+  about 15 ms.
 - **The shop's "My services" and "My orders" are one screen.** "My services" now lists, per
   Marktleistung and per person it is for, what somebody holds and what they ordered: its catalogue
   icon as a pie of how far it is provisioned, how many are held, since when and the order behind
