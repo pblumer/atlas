@@ -134,6 +134,11 @@ mcp/        MCP server over the HTTP API (ADR-0016)
 metrics/    Prometheus metrics (ADR-0142)
 opensearch/ OpenSearch event exporter (ADR-0114)
 cmd/atlas/  The single binary (ADR-0011)
+cmd/atlas-workers/ The worker-only executable the server's supervised workers run when it
+            sits beside the server binary (ADR-0535)
+internal/workercmd/ The out-of-process worker's command line, shared by `atlas worker` and
+            `atlas-workers`
+internal/trustroots/ The host's certificate roots plus an operator's CA bundle (--tls-ca)
 internal/dirsync/ Opening a directory so it can be fsynced — the one step that differs
             on Windows, shared by wal/, checkpoint/ and api/sidecar/
 internal/sharedread/ Reading a file without blocking a delete of it or a rename over it,

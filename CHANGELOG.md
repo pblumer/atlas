@@ -13,6 +13,11 @@ _Changed_ / _Removed_ for each version.
 ## [Unreleased]
 
 ### Added
+- **atlas-workers, the worker-only executable.** Release archives and the container image ship
+  `atlas-workers` beside `atlas`: the out-of-process worker without the server, the engine, the web
+  UI or the MCP server (35 MB against 88 MB on linux/amd64). It takes exactly the flags and
+  variables of `atlas worker`. A server finding it beside its own binary starts its supervised
+  workers with it; `ATLAS_WORKERS_BINARY=self` keeps the server's own binary, a path names another.
 - **Worker Instances say which protocol they speak and which Worker Type they run.** Every job
   and query poll carries the Worker protocol version and, when known, the Worker Type's id,
   version and artifact digest; the Workers view shows them per instance. A server refuses a

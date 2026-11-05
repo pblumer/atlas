@@ -92,10 +92,19 @@ jobs:
               --file-version "${version}"
           fi
           go build -trimpath -ldflags "${ldflags}" -o "${bin}" ./cmd/atlas
+          # The worker-only executable ships beside the server; the server's
+          # supervised workers run it when it is there (ADR-0535). It has no
+          # VERSIONINFO resource of its own yet: cmd/atlas/rsrc_*.syso is linked
+          # only into the package it sits in.
+          workers="atlas-workers"
+          if [ "${GOOS}" = "windows" ]; then
+            workers="atlas-workers.exe"
+          fi
+          go build -trimpath -ldflags "${ldflags}" -o "${workers}" ./cmd/atlas-workers
 
           name="atlas_${version}_${GOOS}_${GOARCH}"
           mkdir -p "dist/${name}"
-          cp "${bin}" "dist/${name}/"
+          cp "${bin}" "${workers}" "dist/${name}/"
           cp LICENSE README.md CHANGELOG.md "dist/${name}/"
 
           mkdir -p out

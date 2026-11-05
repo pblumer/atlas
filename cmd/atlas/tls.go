@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/internal/trustroots"
 	"log/slog"
 	"os"
 	"strings"
@@ -151,30 +152,7 @@ func loadCertPair(certFile, keyFile string) (*tls.Certificate, error) {
 	return &cert, nil
 }
 
-// trustPool returns the host's roots with the operator's CA bundle added, or nil
-// when no bundle was named — nil being what crypto/tls reads as "the system roots".
-//
-// Added, never replacing: an internal CA is the reason this exists, and a
-// deployment that also talks to something with a publicly issued certificate must
-// not lose that by naming its own. And it is not a way around verification — there
-// is deliberately no skip-verify switch anywhere here, because it would be the
-// first thing reached for when a certificate is wrong, which is exactly when it
-// must not be available (ADR-0129, ADR-0191).
-func trustPool(caFile string) (*x509.CertPool, error) {
-	caFile = strings.TrimSpace(caFile)
-	if caFile == "" {
-		return nil, nil
-	}
-	pem, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("read --tls-ca: %w", err)
-	}
-	pool, err := x509.SystemCertPool()
-	if err != nil {
-		return nil, fmt.Errorf("read the host's certificate authorities: %w", err)
-	}
-	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("--tls-ca %s holds no PEM certificate", caFile)
-	}
-	return pool, nil
-}
+// trustPool is [trustroots.Load]: the host's roots with the operator's CA bundle added,
+// or nil when none was named. It lives in internal/trustroots so the worker command
+// shares it (ADR-0535, migration step 2).
+func trustPool(caFile string) (*x509.CertPool, error) { return trustroots.Load(caFile) }

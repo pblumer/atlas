@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/pblumer/atlas/internal/workercmd"
 	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -157,11 +160,16 @@ type child struct {
 
 // supervisor owns every supervised worker.
 type supervisor struct {
-	// exe is the program to run. Production always uses os.Executable — the binary
-	// supervising is the binary supervised — and only a test points it elsewhere.
-	exe     string
-	backoff time.Duration
-	quit    <-chan struct{}
+	// exe is the program to run: the dedicated `atlas-workers` executable when it
+	// sits beside this binary (ADR-0535, migration step 2), else this binary itself
+	// in its `worker` mode. Only the operator's own environment can name another
+	// (WorkersBinaryEnv), and only a test points it elsewhere.
+	exe string
+	// dedicated says exe is the worker-only executable, which takes the worker's
+	// flags directly rather than after a `worker` subcommand.
+	dedicated bool
+	backoff   time.Duration
+	quit      <-chan struct{}
 	// afterRun, when set, runs between a child's exit and the wait that follows it.
 	// It is a test's way to land a restart in exactly that window; nil in production.
 	afterRun func(c *child)
@@ -176,11 +184,64 @@ type supervisor struct {
 
 // newSupervisor builds an empty supervisor that runs until quit is closed.
 func newSupervisor(quit <-chan struct{}) *supervisor {
-	exe, err := os.Executable()
+	self, err := os.Executable()
 	if err != nil {
-		exe = "atlas"
+		self = "atlas"
 	}
-	return &supervisor{exe: exe, backoff: defaultRestartBackoff, quit: quit}
+	exe, dedicated := workerExecutable(self, os.Getenv(WorkersBinaryEnv))
+	return &supervisor{exe: exe, dedicated: dedicated, backoff: defaultRestartBackoff, quit: quit}
+}
+
+// WorkersBinaryEnv names the operator's choice of the executable supervised workers
+// run: unset finds `atlas-workers` beside this binary, "self" runs this binary's
+// `worker` mode, and a path runs that worker-only executable. It is read from the
+// server's own environment, at the operator's trust level, never from a request.
+const WorkersBinaryEnv = "ATLAS_WORKERS_BINARY"
+
+// workersBinaryName is the dedicated worker executable's file name on this platform.
+func workersBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "atlas-workers.exe"
+	}
+	return "atlas-workers"
+}
+
+// workerExecutable decides what a supervised worker runs, from this binary's path and
+// the operator's WorkersBinaryEnv. It reports whether the choice is the dedicated
+// worker-only executable. A sibling is used only when it is a regular file — and, off
+// Windows, an executable one — so a stray directory or an unpacked but unmarked file
+// falls back to this binary rather than to a worker that cannot start.
+func workerExecutable(self, choice string) (string, bool) {
+	switch choice = strings.TrimSpace(choice); choice {
+	case "self":
+		return self, false
+	case "":
+		sibling := filepath.Join(filepath.Dir(self), workersBinaryName())
+		if runnable(sibling) {
+			return sibling, true
+		}
+		return self, false
+	default:
+		return choice, true
+	}
+}
+
+// runnable reports whether path is a regular file this process could execute.
+func runnable(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return false
+	}
+	return runtime.GOOS == "windows" || info.Mode().Perm()&0o111 != 0
+}
+
+// childArgs is the argv tail for exe: the worker-only executable takes the worker's
+// flags without the `worker` subcommand this binary needs.
+func (s *supervisor) childArgs(args []string) []string {
+	if s.dedicated && len(args) > 0 && args[0] == "worker" {
+		return args[1:]
+	}
+	return args
 }
 
 // add registers a worker to supervise. args is the argv tail the server built; it
@@ -285,7 +346,7 @@ func (s *supervisor) supervise(c *child) {
 // runOnce starts the child and waits for it to exit, for the server to quit, or for
 // a restart to be asked for. It returns nil when the exit was expected.
 func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
-	cmd := exec.Command(s.exe, c.args...)
+	cmd := exec.Command(s.exe, s.childArgs(c.args)...)
 	// A script worker starts from a small environment because it hosts model-authored
 	// code. Other workers preserve the historical inherited environment. Reading it
 	// here rather than at registration is what makes the console's Restart button
@@ -321,7 +382,7 @@ func (s *supervisor) runOnce(c *child, stop <-chan struct{}) error {
 		c.lastEnv = extra
 	})
 	logging.Info(logging.WorkerSupervisorStarted, "started a supervised worker",
-		slog.String("id", c.spec.ID), slog.Int("pid", cmd.Process.Pid))
+		slog.String("id", c.spec.ID), slog.Int("pid", cmd.Process.Pid), slog.String("executable", s.exe))
 
 	go c.drain(stdout)
 
@@ -377,7 +438,7 @@ const exitNothingToServe = ExitNothingToServe
 // one its supervisor parks on. 78 is sysexits.h's EX_CONFIG — "something was found
 // in an unconfigured or misconfigured state" — which is the condition, and it is far
 // from the statuses a panic or a signal produces.
-const ExitNothingToServe = 78
+const ExitNothingToServe = workercmd.ExitNothingToServe
 
 // idleNothingToServe is what finish returns for that status, so supervise can park
 // the child instead of scheduling another start.
