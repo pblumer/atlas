@@ -10,6 +10,11 @@
   job protocol), and neither has been measured against a 35 MiB document on a slow link.
   Slices 1 to 4 of the plan do not need the answer; slice 5 does.
 - **Question checked:** 2026-11
+- **Decided so far (2026-11-05, product owner):** the store is internal by default with S3
+  as a selectable backend; `limits.Document` is the size limit; unbound uploads expire
+  after 24 hours, configurable; documents enter the whole-instance snapshot only when
+  asked for; `csvText` is settled as proposed under *Compatibility* below, pending
+  confirmation.
 
 ## Context and problem statement
 
@@ -106,8 +111,9 @@ instead?**
 
 ## Decision outcome
 
-Proposed: **option 4**, a document store in the data directory, with a reference in the
-variable. Option 3 stays available as the way a process moves a document out of Atlas.
+Proposed: **option 4**, a document store inside Atlas with a reference in the variable,
+whose bytes live in the data directory by default or in an S3 bucket when the installation
+chooses it. Option 3 stays available as the way a process moves a document out of Atlas.
 
 ### The reference
 
@@ -134,13 +140,29 @@ A document is named in a variable by an ordinary JSON object:
 
 ### The store
 
-- A new directory `documents/` under the data directory, registered in
-  `api/storeregistry.go` as `classRuntime` — it is carried by the whole-instance snapshot
-  (ADR-0109) and not by the design-time backup (ADR-0107), the same as the log.
-- Bytes are stored once per SHA-256, written temp file → `fsync` → rename, the
-  `api/sidecar` discipline. A small metadata record per document id holds name, detected
-  and declared content type, size, hash, uploader, creation time, state and the
-  instances it is bound to.
+- **Metadata is always local.** A small record per document id in a new directory
+  `documents/` under the data directory holds name, detected and declared content type,
+  size, hash, uploader, creation time, state, the instances it is bound to, and where its
+  bytes are. Written temp file → `fsync` → rename, the `api/sidecar` discipline.
+- **Bytes have two backends**, chosen per installation:
+  - `local` (the default): `documents/blobs/` under the data directory, one file per
+    SHA-256, the same write discipline. A bare installation needs nothing else.
+  - `s3`: a bucket reached through an S3 Worker the installation already defines
+    (ADR-0442) — its name, never its credentials, in the server's configuration. The
+    server resolves it in its own S3 registry, as the mail Worker's export does in process
+    (ADR-0478). The object key is the hash. A download may then answer with a short-lived
+    presigned link instead of streaming the bytes through Atlas.
+  - Switching backend applies to new documents; a document keeps the backend it was
+    written to, which its metadata names. Moving existing documents is a separate,
+    explicit operation, not a side effect of a configuration change.
+- **Backup is opt-in.** `documents/` is registered in `api/storeregistry.go` as runtime
+  data, but outside the default whole-instance snapshot (ADR-0109): a snapshot carries the
+  documents only when it is asked to, because documents can make it many times larger and
+  not every use case needs them back. The design-time backup (ADR-0107) never carries them.
+  A snapshot without documents restores references whose bytes are absent; every surface
+  that resolves a reference then says *document not available* rather than failing
+  silently, and a Worker raises an incident naming the variable. With the `s3` backend, the
+  bucket's own versioning and backup are what protect the bytes.
 - The store is written by the API server, never by the processor. No event carries bytes,
   and `applyToState` never touches a document (I4).
 - Each document is bounded by `limits.Document` (35 MiB), the budget Atlas already has
@@ -150,8 +172,8 @@ A document is named in a variable by an ordinary JSON object:
 ### Lifecycle: pending, bound, released
 
 1. **Pending.** An upload creates a pending document owned by the uploader. Only the
-   uploader may read it. A pending document that is never bound is removed after a TTL
-   (proposed: 24 hours).
+   uploader may read it. A pending document that is never bound is removed after a TTL:
+   24 hours by default, set by a server option.
 2. **Bound.** A document becomes bound to a **root process instance** at the boundary
    where a variable value enters the engine through the server: task completion,
    instance start, message publication, an operator's variable change, a job completion.
@@ -190,14 +212,30 @@ many, is decided in the slice that adds it; it is not proposed here.
 ### What changes elsewhere
 
 - **Tasks app:** a form's file field uploads the file first and completes the task with
-  the reference under the field's own key. The hard-wired `csvText` branch becomes the
-  compatibility path for the existing example; the `logoKatalog` path is unchanged.
-- **CSV import worker:** reads a `$document` reference as well as `csvText`, and parses
-  the file as a stream instead of a string.
+  the reference under the field's own key. The `logoKatalog` path is unchanged.
+- **CSV import worker:** its source variable may hold a CSV text, as today, or a
+  `$document` reference; it parses the file as a stream instead of a string.
 - **S3 and mail Workers:** gain the store as a source and a target — export a document
   to S3, put a mail attachment into the store instead of a variable — through the
   `DocumentStore` seam that already exists.
 - **Operations, replay, variable audit:** show a document card for a reference.
+
+### Compatibility: `csvText`
+
+Today the Tasks app writes every picked file, as text, into the variable `csvText`,
+whatever the field is called. The example's upload form already names its file field
+`csvText`, so the rule above — the reference goes under the field's own key — puts the
+reference exactly where the CSV import already looks. Nothing has to be phased out:
+
+- `csvText` stays the CSV import's default source variable and accepts **both** a text
+  (API callers and scripted starts that pass the file inline) and a reference. Accepting
+  a text costs one type check; refusing it would break callers for no gain, and the
+  variable budget already keeps such a text under 1 MiB.
+- What ends is the **hard-wiring**: a file field named anything else no longer lands in
+  `csvText`. A model that relied on that — a file field under another key feeding a CSV
+  import that reads `csvText` — stops working at the version that ships slice 3. None of
+  the shipped examples does; installations' own models are not known. The release note
+  says so, and the CSV import's incident names the variable it found empty.
 
 ### What this does not solve
 
@@ -220,7 +258,11 @@ cursor over the document, one multi-instance batch per page), which is a separat
   Every route through which a variable value enters must call it, and a route added
   later that forgets it produces a reference only its uploader can read — a safe failure,
   but a failure.
-- **Negative:** a new data class in the data directory to size, monitor and back up.
+- **Negative:** a new data class in the data directory to size, monitor and back up —
+  and, because the snapshot carries it only on request, a restore can bring back
+  references without their bytes. The design makes that visible, not impossible.
+- **Negative:** two byte backends to test; the `s3` backend's durability is the bucket's,
+  not Atlas's.
 
 ## Links
 

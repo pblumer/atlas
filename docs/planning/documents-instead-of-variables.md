@@ -27,15 +27,20 @@ The example *CSV-Datensätze prüfen* is the first process to work this way.
 
 ### S0 — Decide
 
-- Review the ADR draft; settle the decisions listed under *Decisions needed* below.
+- Decisions 1–4 below are taken; decision 5 is proposed and awaits confirmation.
 - Exit: ADR status `Accepted`, `Implementation: Not started`.
 
 ### S1 — Store and routes
 
-- `documents/` in the data directory, registered in `api/storeregistry.go` as
-  `classRuntime` (whole-instance snapshot yes, design-time backup no).
-- Content-addressed bytes (SHA-256), metadata per random document id, temp → `fsync` →
-  rename.
+- `documents/` in the data directory for metadata, registered in
+  `api/storeregistry.go` as runtime data outside the default whole-instance snapshot;
+  the snapshot carries it only when asked to.
+- Byte backend `local` (default): content-addressed blobs (SHA-256) under
+  `documents/blobs/`; metadata per random document id; temp → `fsync` → rename.
+- Byte backend `s3`: a server option naming an existing S3 Worker and bucket; object key
+  is the hash; download may answer with a presigned link. A document keeps the backend it
+  was written to.
+- Server option for the pending TTL, default 24 hours.
 - `POST /api/v1/documents` (streamed, `limits.Document`), `GET /api/v1/documents/{id}`,
   `GET /api/v1/documents/{id}/meta`. Pending documents readable by the uploader only.
 - Content-type detection; HTML, SVG and XML served as attachment (as ADR-0478).
@@ -44,7 +49,9 @@ The example *CSV-Datensätze prüfen* is the first process to work this way.
 - **Tests:** upload/download round trip at the size limit and one byte over; a second
   user gets 404 for a pending document; identical bytes from two users share storage and
   not authorization; a crash between temp write and rename leaves no visible document;
-  snapshot and restore carry `documents/`.
+  a snapshot carries `documents/` only when asked to; a restore without them shows
+  *document not available* and does not fail; the same suite passes against the `s3`
+  backend (against a local S3-compatible test server).
 
 ### S2 — Binding, authorization and release
 
@@ -95,16 +102,19 @@ The example *CSV-Datensätze prüfen* is the first process to work this way.
   (ADR-0314).
 - Handbook (de/en), key-features review.
 
-## Decisions needed before S1
+## Decisions (2026-11-05)
 
-1. **Internal store as the default** — or an outside object store required from the start?
-   The draft proposes the internal store, with S3 as a target, not a prerequisite.
-2. **Size limit** — reuse `limits.Document` (35 MiB), or a separate upload budget?
-3. **Pending TTL** — 24 hours proposed.
-4. **Backup class** — runtime (with the log, in the whole-instance snapshot) as proposed,
-   or a separate opt-in because documents can dominate the snapshot's size?
-5. **Compatibility** — keep the `csvText` path indefinitely, or deprecate it once S4
-   lands?
+1. **Store:** both backends — internal (`local`) is the default, S3 selectable per
+   installation. *Taken.*
+2. **Size limit:** reuse `limits.Document` (35 MiB). *Taken.*
+3. **Pending TTL:** 24 hours, configurable. *Taken.*
+4. **Backup:** documents are in the whole-instance snapshot only when asked for. *Taken.*
+   Assumption to confirm: "asked for" is an option of the snapshot (per installation or
+   per snapshot request), not a per-process setting.
+5. **`csvText`:** *proposed, awaiting confirmation* — keep it as the CSV import's source
+   variable, accepting a text or a document reference, with no end date; end only the
+   Tasks app's hard-wiring of every file into `csvText`. See the ADR's *Compatibility*
+   section for why nothing needs phasing out.
 
 ## Out of scope, named so it is not forgotten
 
