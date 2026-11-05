@@ -402,6 +402,19 @@ Package `worker` keeps every old name as an alias. Not yet done in step 1: its o
 module, the language-neutral protocol contract, the handshake, and moving the built-in
 Worker Types off the engine packages they still import (`job`, `compiler`, `expr`, `dmn`).
 
+**2026-11-05 — step 1, second slice.** `workersdk` imports nothing of atlas outside
+itself. The form-lookup wire shape moved from `connector/lookup` to `workersdk/lookup`
+(every importer follows; the package is unchanged). The worker's own warnings no longer
+go through atlas's `logging` package: `Options.Logger` takes any `*slog.Logger`, nil
+meaning `slog.Default()`, and each line carries `event=worker.poll_failed`
+(`workersdk.EventPollFailed`), held equal to the catalogue's `logging.WorkerPollFailed` by
+a test in package `worker`. The guard is now `TestTheSDKImportsNothingOfAtlas` and admits
+only `workersdk` and its subpackages. The SDK's own Go module is deliberately deferred to
+the licence decision (ADR-draft-worker-sdk-licence-and-hub-curation): a separate module
+exists to carry a separate licence and version tag, and until that is decided it would
+only cost CI and coverage plumbing; the package boundary and the guard already give the
+technical separation.
+
 ## Links
 
 - refines [ADR-0203](0203-worker-execution-model.md): ends compiled-in embedded Worker

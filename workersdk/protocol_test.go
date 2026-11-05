@@ -1,10 +1,12 @@
 package workersdk_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -13,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/workersdk"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // The protocol tests drive the client against a recording stand-in for atlas: what
@@ -311,8 +313,10 @@ func TestRunRetriesAFailingPollUntilCancelled(t *testing.T) {
 			writeJSON(w, http.StatusNotFound, `{"error":"older server"}`)
 		},
 	})
+	logs := &syncBuffer{}
 	w := workersdk.New(workersdk.Options{
 		Server: ts.URL, ID: "w-1", Retry: time.Millisecond, Wait: time.Millisecond,
+		Logger:   slog.New(slog.NewJSONHandler(logs, nil)),
 		Handlers: handling("call", workersdk.ExecFunc(func(context.Context, workersdk.Job) (map[string]any, error) { return nil, nil })),
 		Queries: map[string]workersdk.QueryFunc{"call": func(context.Context, string, lookup.Query) (lookup.Page, error) {
 			return lookup.Page{}, nil
@@ -333,6 +337,30 @@ func TestRunRetriesAFailingPollUntilCancelled(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return after cancellation")
 	}
+	// The retried polls are said on the logger the Worker Type gave, under the event
+	// name an operator alerts on.
+	if out := logs.String(); !strings.Contains(out, `"event":"`+workersdk.EventPollFailed+`"`) ||
+		!strings.Contains(out, "a job poll failed") || !strings.Contains(out, "a query poll failed") {
+		t.Errorf("log = %s, want both failed polls under %s", out, workersdk.EventPollFailed)
+	}
+}
+
+// syncBuffer is a bytes.Buffer safe for the worker's goroutines to write to.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // Run keeps serving jobs and queries until cancelled, and finishes the work it started.

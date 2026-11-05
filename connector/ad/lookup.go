@@ -11,7 +11,7 @@ import (
 
 	goldap "github.com/go-ldap/ldap/v3"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // A form lookup against Active Directory: the AD twin of Entra's (ADR-0473, amended

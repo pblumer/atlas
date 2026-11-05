@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/pblumer/atlas/api/httpapi"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // MaxPollWait bounds one long poll, as maxJobPollWait bounds a job poll. It stays

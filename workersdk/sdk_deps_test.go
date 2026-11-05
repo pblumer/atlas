@@ -4,7 +4,6 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,23 +11,18 @@ import (
 
 const modulePath = "github.com/pblumer/atlas"
 
-// sdkMayImport are the packages of this module the SDK still depends on. Both are
-// leaves — they import nothing of atlas themselves, which the test below also checks —
-// and both are debts to pay before workersdk becomes a module of its own
-// (ADR-0535, migration step 1): the log event
-// names, and the lookup query and page a form lookup carries. Adding to this list is a
-// decision against that record, not a fix for a failing test.
-var sdkMayImport = map[string]bool{
-	modulePath + "/logging":          true,
-	modulePath + "/connector/lookup": true,
-}
+// sdkPath is this package's import path; its own subpackages (workersdk/lookup) are the
+// SDK too and may be imported.
+const sdkPath = modulePath + "/workersdk"
 
-// TestTheSDKImportsNothingOfTheEngine holds workersdk to what makes it an SDK: a Worker
-// Type built outside this repository depends on it, so it must not pull in the engine —
-// job, state, compiler, and through state the storage engine. It reads the imports of
-// every non-test file of this package and, transitively, of every atlas package it
-// reaches, and fails on any atlas package outside sdkMayImport.
-func TestTheSDKImportsNothingOfTheEngine(t *testing.T) {
+// TestTheSDKImportsNothingOfAtlas holds workersdk to what makes it an SDK: a Worker
+// Type built outside this repository depends on it, so it must pull in nothing of
+// atlas — not the engine (job, state, compiler, and through state the storage engine),
+// and not the AGPL packages around it either, since the SDK is to be licensed apart
+// from them (ADR-0535, ADR-draft-worker-sdk-licence-and-hub-curation). It reads the
+// imports of every non-test file of this package and, transitively, of its
+// subpackages, and fails on any atlas package outside workersdk.
+func TestTheSDKImportsNothingOfAtlas(t *testing.T) {
 	seen := map[string]bool{}
 	var visit func(dir, pkg string)
 	visit = func(dir, pkg string) {
@@ -37,15 +31,14 @@ func TestTheSDKImportsNothingOfTheEngine(t *testing.T) {
 		}
 		seen[pkg] = true
 		for _, imp := range atlasImports(t, dir) {
-			if !sdkMayImport[imp] {
-				t.Errorf("%s imports %s; workersdk and what it reaches may import only %s",
-					pkg, imp, strings.Join(sortedKeys(sdkMayImport), ", "))
+			if imp != sdkPath && !strings.HasPrefix(imp, sdkPath+"/") {
+				t.Errorf("%s imports %s; workersdk may import nothing of atlas outside itself", pkg, imp)
 				continue
 			}
-			visit(filepath.Join("..", strings.TrimPrefix(imp, modulePath+"/")), imp)
+			visit(filepath.Join(dir, strings.TrimPrefix(strings.TrimPrefix(imp, sdkPath), "/")), imp)
 		}
 	}
-	visit(".", modulePath+"/workersdk")
+	visit(".", sdkPath)
 }
 
 // atlasImports are the atlas packages the non-test files in dir import.
@@ -74,14 +67,5 @@ func atlasImports(t *testing.T, dir string) []string {
 			}
 		}
 	}
-	return out
-}
-
-func sortedKeys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
 	return out
 }

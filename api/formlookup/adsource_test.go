@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // An Active Directory field (ADR-0473, amended 2026-11-04): the same field model as

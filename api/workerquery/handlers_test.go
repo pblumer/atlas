@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 func serve(t *testing.T, s *Service, method, path, body string) *httptest.ResponseRecorder {

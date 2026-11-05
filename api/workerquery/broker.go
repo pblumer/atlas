@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // The answers a waiting asker can get instead of a page.

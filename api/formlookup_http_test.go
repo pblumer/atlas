@@ -19,11 +19,11 @@ import (
 	"github.com/pblumer/atlas/api"
 	"github.com/pblumer/atlas/compiler"
 	"github.com/pblumer/atlas/connector/entra"
-	"github.com/pblumer/atlas/connector/lookup"
 	"github.com/pblumer/atlas/engine"
 	"github.com/pblumer/atlas/state"
 	"github.com/pblumer/atlas/wal"
 	"github.com/pblumer/atlas/worker"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // The example process, run end to end (ADR-0473): a person

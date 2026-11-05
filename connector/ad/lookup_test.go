@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/pblumer/atlas/connector/ad"
-	"github.com/pblumer/atlas/connector/lookup"
+	"github.com/pblumer/atlas/workersdk/lookup"
 )
 
 // A form lookup against AD (ADR-0473, amended 2026-11-04), answered by the mock forest

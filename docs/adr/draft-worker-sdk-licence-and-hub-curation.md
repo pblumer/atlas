@@ -86,11 +86,10 @@ retaliation clause, which matters for an SDK that vendors build products on.
 
 **Conditions before the relicensing takes effect:**
 
-- `workersdk` imports no AGPL package of this repository. Today it still imports
-  `logging` and `connector/lookup` (ADR-0535, *As built*). Both are moved into the SDK
-  module, or their needed parts are, before the module is published under Apache-2.0.
-  The guard test `TestTheSDKImportsNothingOfTheEngine` then admits no atlas package at
-  all.
+- `workersdk` imports no AGPL package of this repository. Met since 2026-11-05: the
+  lookup wire shape moved into `workersdk/lookup` and the logger became an option
+  (ADR-0535, *As built*); `TestTheSDKImportsNothingOfAtlas` admits no atlas package
+  outside `workersdk`.
 - The holders of rights in the code moved into the module agree to the relicensing,
   and legal review confirms it (open question).
 - The module carries its own `LICENSE` file. Contributions to it are accepted under
@@ -188,8 +187,8 @@ the policy no longer admits the release.
   notices and in contributions.
 - **Follow-ups / risks to watch:** legal review (open question); listing terms and a
   publisher agreement; the `attestation` field in the next index schema version
-  (ADR-0499 compatibility review); key and process for signing attestations; moving
-  `logging` and `connector/lookup` out of the SDK's dependencies.
+  (ADR-0499 compatibility review); key and process for signing attestations; the SDK's
+  own Go module, which ADR-0535 defers to this decision.
 
 ## Pros and cons of the options
 
