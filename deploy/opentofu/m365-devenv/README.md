@@ -10,7 +10,11 @@ Entwicklungsumgebung für die Microsoft-Worker von atlas auf und entfernt sie mi
 - in **Azure**: einen **atlas-Server** (Ubuntu 24.04), dessen Worker beim ersten Start
   bereits in der Console eingerichtet sind und von atlas selbst betrieben werden,
   Anmeldung der Testpersonen über Entra ID (OpenID Connect);
-- optional einen **Active-Directory-Domänencontroller** im selben Netz.
+- optional einen **Active-Directory-Domänencontroller** im selben Netz und dazu einen
+  **Exchange Server SE** für das On-Premises-Backend des Exchange-Workers.
+
+Danach spielen zwei Skripte die Beispiele `examples/m365-dienste` und
+`examples/lizenzmanagement` passend zum Tenant ein (siehe «Beispiele einspielen»).
 
 Das Projekt ist für **Entwicklung und temporäre Tests** gedacht, nicht für den Betrieb.
 
@@ -20,14 +24,32 @@ Das Projekt ist für **Entwicklung und temporäre Tests** gedacht, nicht für de
 |---|---|---|---|
 | `entra` ([ADR-0172](../../../docs/adr/0172-entra-id-connector.md)) | `ucc_entra` | Microsoft Graph: Benutzer, Gruppen, Teams | `User.ReadWrite.All`, `Group.ReadWrite.All`, `TeamMember.ReadWrite.All`, `Channel.Create`, `TeamSettings.ReadWrite.All`, `User.Invite.All`, `LicenseAssignment.Read.All` (Lizenzbestand, `list-subscribed-skus`), `AuditLog.Read.All` (letzte Anmeldung, `signInActivity`; nur mit Entra ID P1/P2 im Tenant); Zertifikat |
 | `exchange` ([ADR-0462](../../../docs/adr/0462-exchange-worker.md)) | `ucc_exchange` | Exchange Online | `Exchange.ManageAsApp` + Rolle *Exchange Administrator*; Zertifikat |
-| `sharepoint` ([ADR-0141](../../../docs/adr/0141-sharepoint-connector.md)) | `ucc_sharepoint` | SharePoint Online | `Sites.ReadWrite.All`; Zertifikat |
+| `sharepoint` ([ADR-0141](../../../docs/adr/0141-sharepoint-connector.md)) | `ucc_sharepoint` | SharePoint Online | `Sites.ReadWrite.All` (`sharepoint_graph_permissions`; im geteilten Tenant `Sites.Selected`, mit `sharepoint_read_all_sites` zusätzlich `Sites.Read.All`); mit `sharepoint_admin_quota` die SharePoint-Berechtigung `Sites.FullControl.All` für `set-site-quota`; Zertifikat oder Secret (`sharepoint_credential`) |
 | `teamsphone` ([ADR-0463](../../../docs/adr/0463-teams-phone-worker.md)) | `ucc_teams` | Teams Phone (PowerShell) | `User.ReadWrite.All` + Rolle *Teams Administrator*; Zertifikat |
 | `mail` ([ADR-0079](../../../docs/adr/0079-outbound-mail-connector.md)) | `mail` | Versand über Microsoft Graph | `Mail.Send`; Secret (der Mail-Provider kennt kein Zertifikat) |
-| `ad` ([ADR-0166](../../../docs/adr/0166-active-directory-connector.md)) | `ucc_ad` | Active Directory über LDAPS | Bind-Konto mit Vollzugriff nur auf `OU=AtlasTest`; ohne Domänencontroller Mock-Modus |
+| `ad` ([ADR-0166](../../../docs/adr/0166-active-directory-connector.md)) | `ucc_ad` (`worker_names.ad`) | Active Directory über LDAPS | Bind-Konto mit Vollzugriff nur auf `OU=AtlasTest`; nur mit `enable_ad_dc` (sonst Mock-Modus, siehe «Active Directory») |
+| `exchange`, Ziel `onprem` | `ucc_exchange_onprem` | Exchange Server SE auf `exch01` | Dienstkonto `svc-exch-<zufall>` in *Organization Management* (Kerberos); läuft auf `exch01` selbst, gestartet von `onprem/install-worker.sh`, nicht vom Bootstrap (siehe «Exchange Server») |
 
 Die Worker-Namen entsprechen [`examples/m365-dienste`](../../../examples/m365-dienste/); dessen
 Prozesse laufen damit ohne Anpassung. Das API-Token, das diese Prozesse im Vault unter
-`atlas` erwarten, legt das Projekt ebenfalls an.
+`atlas` erwarten, legt das Projekt ebenfalls an. Die Berechtigungen des Entra-Workers setzt
+`entra_graph_permissions`; `LicenseAssignment.Read.All` und `AuditLog.Read.All` braucht das
+Lizenzmanagement (Lizenzbestand und letzte Anmeldung).
+
+**Zwei Abweichungen von den Beispielen, die von Hand zu erledigen sind:**
+
+- [`examples/ad-dienste`](../../../examples/ad-dienste/) und der Lizenzmodus `ad-gruppe` von
+  `m365-dienste` nennen den AD-Worker `ad_verzeichnis`, die Umgebung nennt ihn `ucc_ad`. Vor
+  dem ersten `tofu apply` `worker_names = { ad = "ad_verzeichnis" }` setzen. Auf einer
+  laufenden VM ändert das die Cloud-Init-Daten und ersetzt die VM; dort legt man den Worker
+  stattdessen in der Console unter dem neuen Namen an (Worker-Typ AD, Verbindung
+  `ldaps://dc01.<ad_domain_name>:636`, Zugangsdaten aus dem Vault-Eintrag `m365-ucc_ad`).
+- **«Forms may search»** (`formLookups`, ADR-0473) schaltet der Bootstrap nur am Entra-Worker
+  ein (Personensuche in den Bestellformularen). Die Personenfelder von `ad-dienste` suchen über
+  den AD-Worker, die Live-Prüfung der Site-URL im Bestellformular der SharePoint-Teamwebsite
+  fragt zusätzlich `ucc_sharepoint` und `ucc_exchange`. Bei diesen Workern den Schalter unter
+  *Console → Workers* beim Bearbeiten des Workers einschalten; beim Anlegen bietet die Console
+  ihn nicht an.
 
 **Testobjekte im Tenant** (Präfix `atlas-test-<zufall>`): drei Testpersonen und eine
 vorgesetzte Person (als Manager eingetragen), eine Sicherheitsgruppe mit allen
@@ -51,6 +73,10 @@ Entra-Workers macht sie zum Test-Team.
                                              │ LDAPS 636, nur im VNet
                                              ▼
                                    Domänencontroller «dc01» (optional)
+                                             │ Kerberos, nur im VNet
+                                             ▼
+                                   Exchange Server «exch01» (optional)
+                                   └─ Worker ucc_exchange_onprem (atlas.exe)
 ```
 
 ## Voraussetzungen
@@ -155,35 +181,13 @@ tofu output -json atlas_admin
   der Browser warnt einmal. Ein vertrauenswürdiges Zertifikat liefert
   `atlas_tls = "letsencrypt"` (siehe «Sicherheit»).
 
-Beispielprozesse einspielen, z. B. `examples/m365-dienste` (Anleitung in dessen README,
-mit `ATLAS_TOKEN` eines Tokens mit Rolle `modeler`):
-
-```bash
-ATLAS_TOKEN=atlasat_... ../../../examples/m365-dienste/installieren.sh "$(tofu output -raw atlas_url)" antworten.json
-```
-
-Das Lizenzmanagement (`examples/lizenzmanagement`: Lizenzverträge, Kontingentprüfung der
-Lizenzbestellung, täglicher Abgleich, Verrechnung) installiert nach `install-m365-dienste.py`:
-
-```bash
-python3 scripts/install-lizenzmanagement.py --cafile out/caddy-root.crt --vertrag-pruefen
-```
-
-Es legt die Gruppen Lizenz-Tenantverantwortung, Lizenz-Chef, Lizenzmanagement, Lizenz-Finanzen
-und Lizenz-Integrations-Manager an, setzt `LzSku` auf die erste SKU von `license_sku_ids`
-(dieselbe wie `M365Lizenzprofil`), importiert und veröffentlicht Applikation, Architektur und
-Katalog, übernimmt die Vorschläge der Capability-Landkarte, setzt die Konstanten
-(`EA_JAHRESTAG` der nächste 1. Juli) und startet das Tenant-Kontingent. `--vertrag-pruefen`
-schaltet in `beispiel-m365-dienste` `LIZENZ_VERTRAG_PRUEFEN = ein`; danach braucht jede
-Lizenzbestellung einen Lizenzvertrag (`--standardvertrag LV-…` für Bestellungen ohne). Die
-Berechtigungen `LicenseAssignment.Read.All` und `AuditLog.Read.All` des Entra-Workers stehen in
-`variables.tf`. Am Tenant ändert das Skript nichts. `install-m365-dienste.py` ersetzt bei jedem Lauf
-alle Konstanten von `beispiel-m365-dienste`; danach `install-lizenzmanagement.py --vertrag-pruefen`
-wiederholen.
+Beispiele einspielen: `scripts/install-m365-dienste.py`, danach
+`scripts/install-lizenzmanagement.py` (siehe «Beispiele einspielen»).
 
 Mit `atlas_tls = "internal"` lehnt `curl` das Zertifikat ab, solange Caddys
 Stammzertifikat nicht vertraut ist; es liegt auf dem Server unter
-`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`.
+`/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`. Die
+Installationsskripte nehmen es mit `--cafile` (z. B. nach `out/caddy-root.crt` kopiert).
 
 ### 4. Abbauen
 
@@ -221,6 +225,156 @@ App-Registrierungen, Benutzer und Gruppen. Erst auflisten, dann löschen:
 Danach `purge-deleted.sh` und, im geteilten Tenant, `shared-tenant-cleanup.ps1`. Weil das
 Skript nach Präfix löscht, darf im Tenant **nichts anderes** mit `atlas-test` beginnen.
 
+**Was nicht im State steht und `tofu destroy` deshalb nicht entfernt:**
+
+- **Was der Katalog im Tenant anlegt**: Funktionspostfächer, Verteiler, Sitzungszimmer und
+  Raumlisten, Gerätepostfächer, Teams und Microsoft-365-Gruppen, SharePoint-Teamwebsites,
+  Mail-Kontakte der Verteiler-Anmeldung und die **Partnerkonten** aus dem öffentlichen
+  Formular. Am saubersten gibt man die Bestellungen vor dem Abbau im Shop zurück. Mit
+  `NAME_PREFIX` (siehe «Beispiele einspielen») tragen Anzeigename und Alias dieser Objekte das
+  Präfix der Umgebung, auch ein Partnerkonto; Benutzer und Gruppen in Entra findet
+  `emergency-cleanup.sh <umgebungs-id>` deshalb ebenfalls. In Exchange verwaltete Gruppen
+  (Verteiler, Raumlisten) und Mail-Kontakte löscht Microsoft Graph laut Microsoft nicht; sie
+  werden in Exchange Online entfernt (`Remove-DistributionGroup`, `Remove-MailContact`), am
+  einfachsten nach `Get-Recipient -Filter "Alias -like '<umgebungs-id>*'"`.
+- **Was `shared-tenant-setup.ps1` in Exchange Online anlegt** (Management Scope,
+  Rollengruppe, Rollenzuweisungen, Dienstprinzipale) und die Liste «Site-Inventar» auf der
+  Test-Website: Die Exchange-Objekte entfernt `shared-tenant-cleanup.ps1`, die Liste geht mit
+  der Website der Testgruppe.
+- **Alles, was in Atlas liegt** (Applikationen, Kataloge, Bestellungen, Vault), liegt auf der
+  Platte der Atlas-VM und geht mit ihr.
+- Der Run Command `atlas-exchange-worker` auf `exch01` wird von `onprem/install-worker.sh`
+  selbst wieder gelöscht; der Worker selbst geht mit der VM.
+
+## Beispiele einspielen
+
+Die Pakete unter `examples/` lassen sich mit ihrem `installieren.sh` in jede Atlas-Instanz
+einspielen. Für diese Umgebung gibt es zwei Skripte, die die Pakete vorher an den Tenant
+anpassen und als lokaler Administrator installieren (Passwort aus
+`tofu output -json atlas_admin`, nie ausgegeben). Beide brauchen `python3` und `tofu`, laufen
+aus `deploy/opentofu/m365-devenv` nach `wait-atlas.sh`, dürfen beliebig oft laufen und ändern
+nichts in Azure oder im Tenant.
+
+### `scripts/install-m365-dienste.py`
+
+```bash
+python3 scripts/install-m365-dienste.py --cafile out/caddy-root.crt
+```
+
+| Option | Vorgabe | Wirkung |
+|---|---|---|
+| `--cafile` | – | Caddys Stammzertifikat bei `atlas_tls = "internal"`; mit `letsencrypt` weglassen |
+| `--sku` | erste SKU von `license_sku_ids` | Lizenz, die die drei Varianten (E3, E5, F3) in `M365Lizenzprofil` erhalten |
+| `--mail-domain` | Initial-Domain des Tenants | `MAIL_DOMAIN` und `PARTNER_UPN_DOMAIN` |
+| `--site-inventory` | – | `SITE_INVENTAR` (`<host>:/sites/<pfad>`), die Site mit der Liste «Site-Inventar»; ohne die Option fehlt die SharePoint-Teamwebsite im Katalog |
+| `--no-onprem` | – | lässt die Exchange-Server-Variante weg, auch wenn `exch01` gebaut ist |
+| `--tofu-dir`, `--example` | dieses Verzeichnis, `examples/m365-dienste` | woher die Ausgaben und das Paket kommen |
+
+Was es tut:
+
+1. Es legt die Gruppen an, die das Paket anspricht: `M365-Administration`, `M365-Telefonie`,
+   `Informationssicherheit`, dazu die Zielgruppen und Genehmigenden aus `fragen.json`
+   (`M365-Mitarbeitende`, `M365-UCC`, `M365-Facility`). Testpersonen, die sich schon einmal
+   angemeldet haben, kommen in alle diese Gruppen; wer sich später zum ersten Mal anmeldet,
+   sieht keinen Katalog, bis das Skript wieder läuft.
+2. Es passt eine Kopie des Pakets an: Die drei Varianten erhalten die eine Lizenz des Tenants;
+   jedes Personenfeld der Formulare erhält den festen Filter `department` = Umgebungs-ID, damit
+   die Suche im geteilten Tenant nur die Testpersonen anbietet; das Bestellformular der Site
+   erhält den SharePoint-Host des Tenants. **Weggelassen** werden immer `m365-engage` (braucht
+   `Community.ReadWrite.All` auf dem ganzen Tenant), `m365-aufbewahrung` (braucht Exchange
+   Online Plan 2) und die beiden Produkte der hybriden Identität (die Umgebung synchronisiert
+   nichts), ohne Teams-Phone-Worker auch Telefonie, Anrufwarteschlange und Telefonzentrale,
+   ohne `--site-inventory` die SharePoint-Teamwebsite. Ein Katalog ohne Produkte
+   (`cat-m365-identitaet`) fällt weg.
+3. Es lädt die Entscheidungsmodelle hoch und importiert die Applikation
+   `beispiel-m365-dienste` als Quellbaum mit Informationsmodell und Architektur (ADR-0528).
+   Fehlt der Capability-Landkarte des Servers ein Eintrag, übernimmt es den Vorschlag des
+   Pakets über die API und nennt ihn im Protokoll; einen bestehenden Eintrag überschreibt es
+   nicht, und eine Lücke ohne Vorschlag beendet es mit dem Hinweis, in der Console zu
+   entscheiden. Danach veröffentlicht es Applikation und Katalog.
+4. Es setzt **alle** Konstanten der Applikation neu: `NAME_PREFIX` (Umgebungs-ID mit
+   Bindestrich, im geteilten Tenant; so liegt alles, was der Katalog anlegt, im Exchange-Scope
+   und wird von den Abbauskripten gefunden), `MAIL_DOMAIN`, `USAGE_LOCATION`
+   (`M365_USAGE_LOCATION`, Vorgabe `CH`), `PARTNER_UPN_DOMAIN`, `ATLAS_API_BASE`,
+   `SHAREPOINT_HOST` und mit `--site-inventory` `SITE_INVENTAR`. Konstanten, die man von Hand
+   gesetzt hat (etwa `LIZENZ_MODUS`), sind danach weg.
+5. **Exchange-Server-Variante**, wenn `exch01` gebaut ist: eine zweite Applikation
+   `beispiel-m365-dienste-onprem` mit Kopien der Prozesse und Formulare von Funktionspostfach,
+   Verteiler, Postfachzugriff, Sitzungszimmer und Gerät (Prozess-IDs `…_onprem`, Formulare
+   `…-onprem`, Nachrichten `m365onprem.*`, Worker `ucc_exchange_onprem`, auch der aufgerufene
+   Prozess `proc_m365_raumliste`) und der Katalog «Exchange Server (OnPrem)»
+   (`cat-m365-onprem`, Rang 400, Zielgruppe `M365-Mitarbeitende`) mit den Produkten
+   `…-onprem`. Genehmigung und Entscheidungen bleiben die der Online-Applikation. Konstanten:
+   `NAME_PREFIX`, `MAIL_DOMAIN` = Domäne von `exch01`, `ATLAS_API_BASE` und
+   `ORTSANGABEN = false`, weil `Set-Place` nur Exchange Online kennt.
+
+### SharePoint-Teamwebsite
+
+Das Produkt braucht eine Inventarliste. Im geteilten Tenant legt sie `shared-tenant-setup.ps1`
+(Teil `SharePoint`) auf der Test-Website an: Liste «Site-Inventar» mit den Spalten `Alias`,
+`SiteUrl`, `GroupId`, `Sprache`, `Position`, `Status` und `KontingentGB`. Das Skript gibt am
+Schluss den Wert für `--site-inventory` aus. Dazu gehören:
+
+- `sharepoint_read_all_sites = true`: Im geteilten Tenant hat die SharePoint-App nur
+  `Sites.Selected` auf der Test-Website; `get-site` auf eine neu bestellte Site (Existenz,
+  Kontingent) braucht `Sites.Read.All`, das alle Sites des Tenants lesen lässt.
+- `sharepoint_admin_quota = true` (optional): `set-site-quota` setzt das Speicherkontingent
+  selbst (siehe «Geteilter Tenant»); sonst erhält `M365-SharePoint` die Aufgabe
+  «Speicherkontingent von Hand setzen». Diese Gruppe legt `install-m365-dienste.py` nicht an;
+  sie ist in Atlas von Hand anzulegen, wenn jemand die Prüf- und Kontingentaufgaben der Site
+  erhalten soll.
+- «Forms may search» an `ucc_sharepoint` und `ucc_exchange` für die Live-Prüfung der URL
+  (siehe «Inhalt»).
+
+### `scripts/install-lizenzmanagement.py`
+
+Das Lizenzmanagement (`examples/lizenzmanagement`: Lizenzverträge, Kontingentprüfung der
+Lizenzbestellung, täglicher Abgleich, Verrechnung) kommt **nach** `install-m365-dienste.py`:
+
+```bash
+python3 scripts/install-lizenzmanagement.py --cafile out/caddy-root.crt --vertrag-pruefen
+```
+
+| Option | Vorgabe | Wirkung |
+|---|---|---|
+| `--cafile` | – | wie oben |
+| `--sku` | erste SKU von `license_sku_ids` | Lizenz, die `LzSku` für E3, E5 und F3 kennt (dieselbe wie `M365Lizenzprofil`; jede Lizenz zählt dann als E3) |
+| `--ea-jahrestag` | der nächste 1. Juli | `EA_JAHRESTAG` |
+| `--ea-ende` | drei Jahre nach dem Jahrestag, minus ein Tag | `EA_ENDE` |
+| `--vertrag-pruefen` | – | setzt in `beispiel-m365-dienste` `LIZENZ_VERTRAG_PRUEFEN = ein`, die übrigen Konstanten bleiben |
+| `--standardvertrag` | – | `LIZENZ_VERTRAG_STANDARD` (`LV-…`), der Vertrag für Bestellungen, die keinen nennen |
+
+Es legt die Gruppen Lizenz-Tenantverantwortung, Lizenz-Chef, Lizenzmanagement, Lizenz-Finanzen
+und Lizenz-Integrations-Manager an (angemeldete Testpersonen kommen hinein), importiert und
+veröffentlicht Applikation, Architektur und Katalog wie oben, setzt `ATLAS_API_BASE`,
+`EA_JAHRESTAG`, `EA_ENDE` und die vier Gruppenkonstanten und startet das Tenant-Kontingent
+(`proc_lz_tenantbuch`, ein zweiter Start wird erkannt). Mit `--vertrag-pruefen` braucht danach
+jede Lizenzbestellung einen Lizenzvertrag.
+
+**Nach jedem Lauf von `install-m365-dienste.py` erneut ausführen** (mit `--vertrag-pruefen`):
+Jenes ersetzt alle Konstanten von `beispiel-m365-dienste` und schaltet damit
+`LIZENZ_VERTRAG_PRUEFEN` wieder aus.
+
+Die Berechtigungen, die das Lizenzmanagement am Entra-Worker braucht
+(`LicenseAssignment.Read.All` für `list-subscribed-skus`, `AuditLog.Read.All` für
+`signInActivity`), stehen in der Vorgabe von `entra_graph_permissions`; eine Umgebung, die vor
+dieser Vorgabe gebaut wurde, erhält sie mit einem `tofu apply`. Die letzte Anmeldung liefert
+Graph nur in einem Tenant mit Entra ID P1 oder P2.
+
+### `examples/ad-dienste`
+
+Den AD-Katalog bietet die Console unter «atlas hub» an (`atlas_hub = true`); ein Skript dieser
+Umgebung gibt es dafür nicht. Voraussetzungen hier: `enable_ad_dc`, der Worker
+`ad_verzeichnis` mit «Forms may search» (siehe «Inhalt») und die Konstanten `AD_*` des Pakets.
+`ad-setup.ps1` legt nur `OU=AtlasService` und `OU=AtlasTest` an, und das Bind-Konto darf nur
+unter `OU=AtlasTest` schreiben. Die OUs, die das Paket braucht (Gruppen, Admin-, Service-,
+Test-, externe, Funktions-, Rollen- und Schulungskonten, Kontakte: `AD_GRUPPEN_OU` bis
+`AD_KONTAKT_OU`), legt man deshalb von Hand unter `OU=AtlasTest` an und setzt die Konstanten
+darauf; `AD_PERSONEN_OU` ist `OU=AtlasTest` selbst. Die Gruppen `AD_IM_GRUPPE` und
+`AD_MAINFRAME_GRUPPE` sind Atlas-Gruppen (siehe
+[`examples/ad-dienste/README.md`](../../../examples/ad-dienste/README.md), «Voraussetzungen
+auf der Zielinstanz»).
+
 ## Geteilter Tenant (`shared_tenant = true`)
 
 Für einen Tenant, der auch produktiv genutzt wird, etwa den eigenen. Anwendungsberechtigungen
@@ -232,7 +386,7 @@ SharePoint:
 |---|---|---|
 | `mail` | `Mail.Send` in Entra (jedes Postfach) | kein `Mail.Send` in Entra; Exchange **RBAC for Applications**: «Application Mail.Send» nur im Management Scope |
 | `exchange` | Rolle *Exchange Administrator* | keine Verzeichnisrolle; Mitglied einer Exchange-Rollengruppe (*Mail Recipients*, *Mail Recipient Creation*, *Distribution Groups*, *Security Group Creation and Membership*, *Legal Hold*, *View-Only Recipients*) mit **Schreibbereich** = Management Scope |
-| `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website |
+| `sharepoint` | `Sites.ReadWrite.All` | `Sites.Selected` mit Schreibrecht **nur** auf der Test-Website; mit `sharepoint_read_all_sites = true` zusätzlich `Sites.Read.All` (liest jede Site des Tenants) |
 | `teamsphone` | Rolle *Teams Administrator* | **nicht erlaubt**: die Rolle lässt sich nicht eingrenzen (`workers = { teamsphone = false }` setzen) |
 | `entra` | `User.ReadWrite.All`, `Group.ReadWrite.All` … | **unverändert** (siehe unten) |
 | Zugangsdaten | `credential_validity_days` frei | höchstens 7 Tage |
@@ -269,6 +423,17 @@ tofu output -json shared_tenant > out/shared-tenant.json
 ```bash
 pwsh ./scripts/shared-tenant-setup.ps1 -Config out/shared-tenant.json -Device
 ```
+
+Das Skript hat zwei Teile, die `-Part Exchange` oder `-Part SharePoint` einzeln wiederholt
+(Vorgabe `All`):
+
+- **Exchange:** prüft `IsDehydrated`, legt den Management Scope an, gibt der Mail-App
+  «Application Mail.Send» in diesem Scope und nimmt die Exchange-App in die Rollengruppe mit
+  Schreibbereich auf; fehlende Rollen der Rollengruppe ergänzt es.
+- **SharePoint:** macht die angemeldete Person kurz zur Besitzerin der Testgruppe (im
+  `finally` wieder entfernt), gibt der SharePoint-App `write` auf der Test-Website
+  (`Sites.Selected`), legt die Liste «Site-Inventar» für die SharePoint-Teamwebsite des
+  Katalogs an und gibt den Wert für `install-m365-dienste.py --site-inventory` aus.
 
 Exchange übernimmt Rechte für Anwendungen laut Microsoft erst nach 30 Minuten bis 2 Stunden;
 bis dahin lehnt Exchange den Mail-Worker ab. Beim Abbauen **vor oder nach** `tofu destroy`:
@@ -323,8 +488,37 @@ als echtes Postfach nicht).
   `systemctl reload caddy`. Weitere Adressen für `atlas_allowed_cidrs` gehen ebenso nur
   über die Netzwerksicherheitsgruppe.
 - **Protokolle:** `/var/log/atlas-setup.log`, `journalctl -u atlas`, `journalctl -u caddy`.
+- **Daten:** `/var/lib/atlas` (`--data-dir`), Umgebung in `/etc/atlas/atlas.env`, Programm
+  `/usr/local/bin/atlas`.
 - **Automatische Abschaltung** täglich um `atlas_auto_shutdown_time` (Vorgabe 19:00 UTC).
   Wieder starten mit `az vm start -g <ressourcengruppe> -n <vm>` oder im Azure-Portal.
+
+### Atlas auf der VM aktualisieren
+
+`atlas-setup.sh` installiert Atlas nur, solange `/usr/local/bin/atlas` fehlt. Ein geändertes
+`atlas_version`, `atlas_install` oder `atlas_source_ref` ändert die Cloud-Init-Daten, und ein
+`tofu apply` **ersetzt** die VM samt allen Daten. Eine laufende VM erhält eine neue Version
+deshalb von Hand: lokal bauen (oder das Archiv eines Releases laden), kopieren, das bisherige
+Programm aufheben, ersetzen, neu starten.
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o /tmp/atlas-linux ../../../cmd/atlas
+```
+
+```bash
+ssh_cmd="$(tofu output -raw atlas_ssh)"
+key="$(awk '{print $3}' <<<"$ssh_cmd")"; host="$(awk '{print $4}' <<<"$ssh_cmd")"
+scp -i "$key" /tmp/atlas-linux "$host:/tmp/atlas"
+```
+
+```bash
+$ssh_cmd 'sudo cp -p /usr/local/bin/atlas /usr/local/bin/atlas.vorher && sudo install -m 0755 /tmp/atlas /usr/local/bin/atlas && sudo systemctl restart atlas && /usr/local/bin/atlas version'
+```
+
+Die Daten unter `/var/lib/atlas` bleiben; die überwachten Worker starten mit dem neuen Programm.
+Zurück geht es mit `atlas.vorher`. Danach mit `./scripts/wait-atlas.sh` warten (prüft
+`/healthz`) und bei Bedarf die Beispiele erneut einspielen. Der Exchange-Worker auf `exch01`
+hat ein eigenes `atlas.exe`; ihn aktualisiert `onprem/install-worker.sh`.
 
 ## Active Directory (optional)
 
@@ -343,7 +537,10 @@ Mit `enable_ad_dc = true` entsteht im selben VNet eine Windows-Server-2022-VM:
 - Von aussen ist der Domänencontroller nur für `ad_allowed_cidrs` erreichbar (LDAPS,
   mit `ad_allow_rdp` auch RDP).
 
-Ohne Domänencontroller startet der Server den AD-Worker mit `ATLAS_AD_MOCK=1` (ADR-0181).
+- Abschaltung täglich um `ad_auto_shutdown_time` (Vorgabe 19:00 UTC).
+
+Ohne Domänencontroller legt der Bootstrap keinen AD-Worker an; der Server erhält
+`ATLAS_AD_MOCK=1` in `/etc/atlas/atlas.env` (ADR-0181).
 
 ## Exchange Server (optional)
 
@@ -375,6 +572,28 @@ Minuten lang nur im VNet von der Atlas-VM an, erzeugt ein Worker-Token und führ
 Parameter). `onprem/exchange-onprem-smoke.bpmn` prüft jede Operation von Funktionspostfach,
 Postfachzugriff und Verteiler einmal hin und zurück und hinterlässt nichts.
 
+```bash
+./scripts/wait-exchange.sh
+```
+
+```bash
+./onprem/install-worker.sh
+```
+
+```bash
+python3 -I onprem/run-smoke.py
+```
+
+`run-smoke.py` deployt den Rauchtest als Administrator, startet ihn für eine Testperson mit
+Postfach auf `exch01` (Vorgabe: die erste, sonst `--person <upn>`), zeigt jeden Schritt und den
+Incident, an dem die Instanz steht, und endet mit 0, wenn sie abgeschlossen ist.
+`install-worker.sh` und `run-smoke.py` kennen kein `--cafile`; sie brauchen ein Zertifikat, dem
+Python vertraut (`atlas_tls = "letsencrypt"` oder Caddys Stammzertifikat im Systemspeicher).
+
+Das Worker-Token gilt **7 Tage**. Danach, und nach jeder Änderung am Exchange-Worker,
+`install-worker.sh` erneut ausführen; es baut `atlas.exe` aus dem Checkout, in dem es liegt
+(`ATLAS_REPO=<checkout>` baut aus einem anderen, etwa einem Branch mit einer Korrektur).
+
 **Geprüft am 2026-11-03:** Installation in rund 55 Minuten (Image in 7 Minuten), Worker auf
 `exch01`, Rauchtest vollständig: Funktionspostfach anlegen und kennzeichnen, Vollzugriff und
 «Senden als» erteilen, Postfach über die Kennzeichnung finden, Verteiler anlegen, Mitglied
@@ -388,14 +607,14 @@ Informationssicherheit erteilt und entzogen; alles gegen `exch01`, nichts blieb 
 Dabei gefunden:
 
 - «Senden als» (`Add-ADPermission`) fand das Postfach nicht über seine Adresse; der Worker
-  löst die Identität jetzt über `Get-Recipient` auf (`connector/exchange`, Branch
-  `feat/m365-dienste-shared-tenant`). `install-worker.sh` baut dafür mit
-  `ATLAS_REPO=<checkout>` aus jenem Branch.
+  löst die Identität jetzt über `Get-Recipient` auf (`connector/exchange/lookup.go`, inzwischen
+  auf `main`).
 - Atlas verteilte Exchange-Jobs nur nach Jobtyp, nicht nach Worker-Name: Der Online-Worker
   `ucc_exchange` übernahm einen Job für `ucc_exchange_onprem` und scheiterte mit «no worker
   registered». Behoben in PR #1523 (ein Worker erhält nur noch Jobs der Namen, die er meldet);
-  mit diesem Stand lief der Rauchtest bei laufendem Online-Worker durch. Ohne ihn den
-  Online-Worker für den Rauchtest kurz ausschalten (Console → Workers, `ucc_exchange`).
+  mit diesem Stand lief der Rauchtest bei laufendem Online-Worker durch. Auf einem Atlas-Server
+  ohne diese Korrektur den Online-Worker für den Rauchtest kurz ausschalten (Console → Workers,
+  `ucc_exchange`).
 - Der Runner startet `atlas.exe` über `cmd.exe`: Windows PowerShell 5.1 bricht sonst mit
   `ErrorActionPreference Stop` an der ersten Protokollzeile auf stderr ab.
 
@@ -445,6 +664,9 @@ Massgebend ist der [Azure-Preisrechner](https://azure.microsoft.com/pricing/calc
 | atlas-Server + DC, Arbeitstage 8 h | 1 Monat | ca. 80 |
 | atlas-Server + DC, durchgehend | 1 Monat | ca. 250 |
 
+Der optionale Exchange Server (`Standard_D4s_v5`, Windows, 256-GB-Platte) ist nicht
+geschätzt; er hat doppelt so viele Kerne und doppelt so viel Speicher wie der Domänencontroller.
+
 **Microsoft-365-Lizenzen** sind nicht eingerechnet. Ein Tenant aus dem Developer Program
 oder ein Testabonnement kostet nichts; gekaufte Lizenzen (z. B. Microsoft 365 E3/E5 je
 Testperson und Monat) übersteigen die Azure-Kosten schnell.
@@ -464,7 +686,9 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
 - **Anwendungsberechtigungen gelten tenantweit** (`Mail.Send` darf als jedes Postfach
   senden). Ohne `shared_tenant` ist die Grenze allein der Testtenant; deshalb gegen einen
   auch produktiv genutzten Tenant nur mit `shared_tenant = true` anwenden, und auch dann
-  bleibt der Entra-Worker tenantweit (siehe «Geteilter Tenant»).
+  bleibt der Entra-Worker tenantweit (siehe «Geteilter Tenant»). Ebenfalls tenantweit, auch
+  im geteilten Tenant: `sharepoint_read_all_sites` (liest jede Site) und
+  `sharepoint_admin_quota` (Vollzugriff auf jede Site); beide sind deshalb aus.
 - **Netz:** SSH und (mit `atlas_tls = "internal"`) HTTPS nur für `atlas_allowed_cidrs`.
   `atlas_tls = "letsencrypt"` öffnet 80 und 443 für das ganze Internet, weil Let's Encrypt
   von nicht veröffentlichten Adressen prüft; die Anmeldung bleibt Pflicht. Ob für
@@ -473,6 +697,28 @@ noch Datenträger und IP-Adressen an. `tofu destroy` beendet alle Kosten.
   lesbar, nach dem Bootstrap gelöscht); der Domänencontroller über die geschützten
   Einstellungen der Custom Script Extension. Für eine Testumgebung vertretbar, für
   Produktion nicht.
+
+## Skripte im Überblick
+
+| Skript | Wer startet es | Wofür |
+|---|---|---|
+| `scripts/atlas-setup.sh` | Cloud-Init beim ersten Start der Atlas-VM | Pakete, Vertrauen in das LDAPS-Zertifikat, Atlas, Dienste, Bootstrap; Protokoll `/var/log/atlas-setup.log` |
+| `scripts/atlas-bootstrap.py` | `atlas-setup.sh` | Worker, Vault-Bundles und API-Token `atlas` in der Console; «Forms may search» am Entra-Worker |
+| `scripts/assign-licenses.sh` | OpenTofu (`license_sku_ids`) | Lizenzen der Testpersonen über `az rest` |
+| `scripts/ad-setup.ps1` | Custom Script Extension des Domänencontrollers | AD DS, `OU=AtlasService` mit Bind-Konto, `OU=AtlasTest` mit Testpersonen und Testgruppe, LDAPS-Zertifikat |
+| `scripts/exchange-setup.ps1` | Custom Script Extension von `exch01` | Exchange Server SE in vier Phasen, Dienstkonto, Postfächer der Testpersonen |
+| `scripts/wait-atlas.sh` | von Hand nach `tofu apply` | wartet auf `/healthz` und `/var/lib/atlas-setup.done` (`WAIT_MINUTES`, Vorgabe 30); Exit 1 mit Protokollauszug bei Zeitüberschreitung |
+| `scripts/wait-ad.sh` | von Hand | wartet auf LDAPS mit dem Zertifikat aus `out/` und, mit `ldapwhoami`, auf die Anmeldung des Bind-Kontos (Passwort über eine Datei) |
+| `scripts/wait-exchange.sh` | von Hand | verfolgt die Installation auf `exch01` über den Run Command (`WAIT_MINUTES`, Vorgabe 150) |
+| `onprem/install-worker.sh` | von Hand nach `wait-exchange.sh` | startet `ucc_exchange_onprem` auf `exch01` (Token 7 Tage) |
+| `onprem/exchange-worker.ps1` | `install-worker.sh` über den Run Command | lädt `atlas.exe`, schreibt `C:\Atlas\worker.json`, Starttask als Dienstkonto |
+| `onprem/run-smoke.py` | von Hand | Rauchtest `exchange-onprem-smoke.bpmn` gegen `exch01` |
+| `scripts/shared-tenant-setup.ps1` | von Hand nach `tofu apply`, geteilter Tenant | Rechte in Exchange und SharePoint, Liste «Site-Inventar» (`-Part`) |
+| `scripts/install-m365-dienste.py` | von Hand | `examples/m365-dienste` und seine Exchange-Server-Variante einspielen |
+| `scripts/install-lizenzmanagement.py` | von Hand, nach `install-m365-dienste.py` | `examples/lizenzmanagement` einspielen |
+| `scripts/purge-deleted.sh` | von Hand nach `tofu destroy` | Papierkorb von Entra nach Präfix leeren (erst auflisten, mit `--yes` löschen) |
+| `scripts/emergency-cleanup.sh` | von Hand, ohne State | Ressourcengruppen, gelöschte Key Vaults, App-Registrierungen, Benutzer und Gruppen nach Präfix |
+| `scripts/shared-tenant-cleanup.ps1` | von Hand, geteilter Tenant | Rollenzuweisungen, Rollengruppen, Dienstprinzipale und Scopes in Exchange Online nach Präfix (`-Yes` löscht) |
 
 ## Prüfung
 
@@ -546,8 +792,13 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
 - Am 2026-11-03 zusätzlich geprüft: Rückgabe des Verteilers, Postfachzugriff erteilen und
   entziehen, Lizenz, Abwesenheit; Zugriff aus dem Netz der Bundesverwaltung mit
   `atlas_tls = "letsencrypt"`.
-- Ungetestet: Sitzungszimmer, Partnerzugang, übrige Aktionen an Bestellungen,
-  Governance-Prüfung, Teams Phone.
+- Ebenfalls am 2026-11-03 geprüft (Einzelheiten in
+  [`examples/m365-dienste/README.md`](../../../examples/m365-dienste/README.md), «Was geprüft
+  ist und was nicht»): Sitzungszimmer bestellen und zurückgeben (noch ohne Raumliste),
+  Partnerzugang über den öffentlichen Link, Governance-Prüfung von Hand gestartet.
+- Ungetestet: Raumliste und Ortsangaben, Lizenz wechseln (der Testtenant hat nur eine SKU),
+  das Lizenzmanagement gegen den Tenant, `set-site-quota`, die übrigen Aktionen an
+  Bestellungen, Teams Phone.
 
 ## Bekannte Grenzen
 
@@ -562,5 +813,11 @@ Was dabei auffiel und wie es gelöst ist; was nur von Hand ging, steht unter «V
   ein. Ob `Connect-MicrosoftTeams` über `User.ReadWrite.All` hinaus Graph-Berechtigungen
   verlangt, ist nicht geprüft (`teamsphone_graph_permissions`).
 - **Ein Team** legt erst der Entra-Worker an (`create-team`).
+- **Nicht im Katalog dieser Umgebung:** Viva-Engage-Community, Aufbewahrung (Litigation Hold)
+  und die hybride Identität (siehe «Beispiele einspielen»); ohne Teams-Phone-Worker auch die
+  Telefonie-Produkte.
+- **Sitzungszimmer in der Raumsuche:** Raumlisten und Ortsangaben erscheinen in Outlook laut
+  Microsoft erst nach 24 bis 48 Stunden. `Set-Place` gibt es nur in Exchange Online; die
+  Exchange-Server-Variante setzt `ORTSANGABEN = false` und führt nur die Raumliste.
 - **Gruppenmitgliedschaften** ignoriert OpenTofu nach dem ersten Anlegen, damit die
   Worker sie ändern dürfen.

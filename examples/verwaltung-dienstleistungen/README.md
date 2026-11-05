@@ -14,6 +14,27 @@ ihre Formulare, zweisprachig (Deutsch und Englisch).
 | `geoportal-einrichten.bpmn`, `geoportal-entfernen.bpmn` | Der Geoportal-Zugang, ebenfalls mit getrennten Prozessen |
 | `vd-*.form.json` | Das Bestellformular des Parkplatzes, das Formular der Aktion «Badge sperren» und die Formulare der Aufgaben |
 
+## Die Kataloge und Produkte
+
+| Katalog | Rang | Zielgruppe | Produkte |
+|---|---|---|---|
+| Dienstleistungen der Verwaltung (`cat-verwaltung-dienste`) | 100 | `{{zielgruppe}}` | Zutrittsbadge, Parkplatz |
+| Fachbereich Bau (`cat-fachbereich-bau`) | 110 | `{{zielgruppe-bau}}` | Zugang Geoportal, Zutrittsbadge, Parkplatz |
+
+In beiden Katalogen setzt der Parkplatz den Zutrittsbadge voraus (`requires`).
+
+| Produkt | Varianten | Genehmigung | Prozess | Laufzeit, Preis | Aktionen |
+|---|---|---|---|---|---|
+| Zutrittsbadge (`vd-zutrittsbadge`) | Standard (`standard`), Mit Zutritt Serverraum (`serverraum`) | vorgesetzte Person (`superior`) | `proc_vd_zutrittsbadge` (`zutrittsbadge-lebenszyklus.bpmn`), ein Lebenszyklus-Prozess | –, CHF 0.– | Badge sperren (`sperren`, Änderung, Formular `vd-badge-sperrung`), Ersatzbadge anfordern (`ersatz`, Service), Badge zurückgeben (`deprovision`) |
+| Parkplatz (`vd-parkplatz`) | – | feste Person `{{facility-management}}` (`fixed`) | `proc_vd_parkplatz_zuteilen`, `proc_vd_parkplatz_freigeben` (getrennte Prozesse) | 365 Tage, CHF 40.– / Monat; Bestellformular `vd-parkplatz-bestellung` | Rückgabe |
+| Zugang Geoportal (`vd-geoportal`) | – | Gruppe `{{geoportal-verantwortliche}}` (`role`) | `proc_vd_geoportal_einrichten`, `proc_vd_geoportal_entfernen` (getrennte Prozesse) | 180 Tage, CHF 0.– | Rückgabe |
+
+Die Nachrichten des Badges: `vd.badge.ausgeben` (Bestellung), `vd.badge.sperren`,
+`vd.badge.ersatz` und `vd.badge.einziehen` (Rückgabe). Jeder Schritt ist eine Benutzeraufgabe ohne
+Zuweisung im Modell (Badge ausgeben, sperren, Ersatz ausgeben, einziehen; Parkplatz zuteilen und freigeben;
+Zugang im Geoportal einrichten und entfernen); danach meldet der Prozess die Position oder
+beantwortet die Aktion mit einer Shop-Aufgabe.
+
 ## Was offen bleibt
 
 Das Dokument kennt die Installation nicht, in die es importiert wird. Vier Werte
