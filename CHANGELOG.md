@@ -42,6 +42,15 @@ Nothing in the log, the state or a deployment's format changed; 0.24.0 replaces 
 place.
 
 ### Added
+- **The Modeler steps between a process's versions and restores one as the draft.** Arrows on
+  either side of the editor bar's version chip open the version before or after the one shown, the
+  draft after the newest, and the chip's panel lists every version with who deployed it and when.
+  A version's panel offers **Restore as draft**: a dialog reads the draft against the newest
+  version and warns, with its differences, when replacing it loses something that is not deployed;
+  confirming saves the version as the draft and reopens the editor on it, so the next Deploy runs it
+  as a new version. Leaving through the arrows or the list keeps unsaved work as every other door
+  out of the editor does
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **A catalogue's old releases can be pruned.** Every publish freezes a release and nothing removed
   one short of deleting the whole catalogue, so a catalogue that is worked on gathers hundreds.
   `GET /api/v1/catalogs/{id}/releases/pruning` answers which releases would go: every one that is
@@ -149,6 +158,12 @@ place.
   the corner of a product page in the tile layout.
 
 ### Fixed
+- **Saving a version over its draft moves the editor onto the draft.** A version opened in the
+  Modeler and saved onto its process's existing draft (the overwrite Save offers) left the session
+  addressing the version: the address still named it, and Deploy said the draft would be left
+  alone although it had just been replaced. The session now addresses the draft, as after the
+  first save of a version
+  ([ADR-0533](docs/adr/0533-modeler-walks-and-restores-versions.md)).
 - **The test environment installs the AD services with its own directory.** `examples/ad-dienste`
   went into the M365 test environment with the example DNs of its tables
   (`…,DC=contoso,DC=local`), so the domain controller answered with an LDAP referral and the order
