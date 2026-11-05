@@ -1,4 +1,4 @@
-# ADR-DRAFT: The Worker SDK is Apache-2.0, and atlas hub lists executable Worker Types in two curated tiers
+# ADR-0536: The Worker SDK is Apache-2.0, and atlas hub lists executable Worker Types in two curated tiers
 
 - **Status:** Proposed
 - **Implementation:** Not started

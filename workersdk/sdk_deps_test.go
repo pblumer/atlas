@@ -19,7 +19,7 @@ const sdkPath = modulePath + "/workersdk"
 // Type built outside this repository depends on it, so it must pull in nothing of
 // atlas — not the engine (job, state, compiler, and through state the storage engine),
 // and not the AGPL packages around it either, since the SDK is to be licensed apart
-// from them (ADR-0535, ADR-draft-worker-sdk-licence-and-hub-curation). It reads the
+// from them (ADR-0535, ADR-0536). It reads the
 // imports of every non-test file of this package and, transitively, of its
 // subpackages, and fails on any atlas package outside workersdk.
 func TestTheSDKImportsNothingOfAtlas(t *testing.T) {

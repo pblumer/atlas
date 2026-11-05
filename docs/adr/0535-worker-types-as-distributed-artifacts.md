@@ -410,7 +410,7 @@ meaning `slog.Default()`, and each line carries `event=worker.poll_failed`
 (`workersdk.EventPollFailed`), held equal to the catalogue's `logging.WorkerPollFailed` by
 a test in package `worker`. The guard is now `TestTheSDKImportsNothingOfAtlas` and admits
 only `workersdk` and its subpackages. The SDK's own Go module is deliberately deferred to
-the licence decision (ADR-draft-worker-sdk-licence-and-hub-curation): a separate module
+the licence decision (ADR-0536): a separate module
 exists to carry a separate licence and version tag, and until that is decided it would
 only cost CI and coverage plumbing; the package boundary and the guard already give the
 technical separation.
