@@ -32,8 +32,8 @@ test("nothing at risk reads as the plain sentence", async ({ page }) => {
   ]) {
     const text = await warn(page, impact);
     expect(text).toBe(
-      "Diese DMN-Referenz löschen? Die Modelldatei bleibt im Modellspeicher und erscheint unter Nicht zugeordnet, " +
-      "wo sich wieder eine Referenz darauf setzen lässt.");
+      "Diese Regel löschen? Die Modelldatei bleibt im Modellspeicher und erscheint unter Nicht zugeordnet, " +
+      "wo sie sich wieder als Regel hinzufügen lässt.");
   }
 });
 
