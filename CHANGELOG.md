@@ -14,6 +14,13 @@ _Changed_ / _Removed_ for each version.
 
 ### Added
 
+- **A catalogue content refresh reports its progress.** `POST /api/v1/catalogs/{id}/content/refresh?wait=false`
+  starts the refresh in the background and answers 202 at once; `GET` on the same path reads how far it has
+  come — running or done, total and finished products, and refreshed, refused or skipped per product. A second
+  refresh of the catalogue while one runs is refused with 409. The MCP tool `atlas_refresh_catalog_content` now
+  starts in the background and follows the refresh for up to 45 seconds, inside an agent host's one-minute
+  limit, and the new tool `atlas_catalog_refresh_status` follows the rest, so an agent no longer publishes a
+  catalogue half way through its refresh. Without `?wait=false` the route answers as before.
 - **Example: licence management for Microsoft 365.** A new example package,
   `examples/lizenzmanagement` (application «Beispiel: Lizenzmanagement», hub bundle
   `lizenzmanagement`), keeps licence contracts per customer and project with a WBS element
@@ -255,6 +262,14 @@ as it runs 0.23.0:
   (ADR-0526).
 
 ### Changed
+- **"My services" lists Marktleistungen, with how far each is provisioned and how many are held.** The
+  services a Marktleistung is assembled from are no longer rows of their own; a held Marktleistung that lacks a
+  part opens only what it lacks, to order again. Each row carries the order list's coloured light — ready, or
+  still being set up with "2 of 3 ready" — and the count of what is held and on its way. In a catalogue with
+  the tile layout "My services" is a list instead: each Marktleistung under its heading, with its catalogue
+  icon drawn grey and filled clockwise in the catalogue's colour like a pie as its parts are provisioned, the
+  quantity, since when it is held and the order that granted it. The information button is a plain "i"
+  without a ring.
 - **A product page in the tile layout is two columns and has one basket button.** The product's
   description stands open in the wide column, and who it is for, what comes with it, approval and
   price fold in the narrow column beside it. The page's own "Put in the basket" and "Go to the

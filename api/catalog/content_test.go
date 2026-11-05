@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pblumer/atlas/api/contentsource"
 	"github.com/pblumer/atlas/api/contentsource/wikifake"
@@ -877,6 +878,76 @@ func TestACatalogueRefreshFinishesWhenItsCallerLeaves(t *testing.T) {
 	}
 	if b.item(t, "vpn").Revision == it.Revision {
 		t.Fatal("the refresh did not write")
+	}
+}
+
+// asQuery is as with a query string on the request.
+func asQuery(t *testing.T, h http.HandlerFunc, p *httpapi.Principal, method, query string, vals ...string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, "/x?"+query, strings.NewReader("")).
+		WithContext(httpapi.WithPrincipal(context.Background(), p))
+	for i := 0; i+1 < len(vals); i += 2 {
+		req.SetPathValue(vals[i], vals[i+1])
+	}
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec
+}
+
+func TestACatalogueRefreshRunsInTheBackgroundAndReportsItsProgress(t *testing.T) {
+	b := newBoundFixture(t)
+	b.linkVPN(t)
+	if rec := b.link(t, "mail", `{"source":"wiki","pages":{"de":"SVC-30"}}`); rec.Code != 200 {
+		t.Fatalf("link mail = %d %s", rec.Code, rec.Body)
+	}
+	// Nothing has run yet.
+	if rec := as(t, b.s.HandleCatalogContentRefreshStatus, b.owner, "GET", "", "id", b.cat.ID); rec.Code != http.StatusNotFound {
+		t.Fatalf("status before any run = %d %s", rec.Code, rec.Body)
+	}
+
+	// Hold the wiki's answers so the run is caught while it is running.
+	gate := make(chan struct{})
+	b.wiki.Set(func(s *wikifake.Server) { s.Hold = gate })
+	rec := asQuery(t, b.s.HandleCatalogContentRefresh, b.owner, "POST", "wait=false", "id", b.cat.ID)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
+	}
+	started := decode[refreshRun](t, rec)
+	if started.State != "running" || started.Total != 2 || started.Done != 0 || started.StartedBy != b.owner.UserID {
+		t.Fatalf("started = %+v", started)
+	}
+	// A second refresh while it runs is refused, with the running one's progress.
+	if rec := as(t, b.s.HandleCatalogContentRefresh, b.owner, "POST", "", "id", b.cat.ID); rec.Code != http.StatusConflict ||
+		decode[refreshRun](t, rec).State != "running" {
+		t.Fatalf("second start = %d %s", rec.Code, rec.Body)
+	}
+	close(gate)
+
+	var run refreshRun
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		rec := as(t, b.s.HandleCatalogContentRefreshStatus, b.owner, "GET", "", "id", b.cat.ID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d %s", rec.Code, rec.Body)
+		}
+		if run = decode[refreshRun](t, rec); run.State == "done" {
+			break
+		}
+	}
+	if run.State != "done" || run.Done != 2 || len(run.Lines) != 2 || run.FinishedAt == 0 {
+		t.Fatalf("finished run = %+v", run)
+	}
+	for _, l := range run.Lines {
+		if l.Status != "refreshed" {
+			t.Fatalf("line = %+v", l)
+		}
+	}
+	// A viewer of the catalogue reads no progress.
+	if rec := as(t, b.s.HandleCatalogContentRefreshStatus, user("usr_customer", "grp_shop"), "GET", "", "id", b.cat.ID); rec.Code != http.StatusForbidden {
+		t.Fatalf("customer status = %d", rec.Code)
+	}
+	// And a finished run lets the next one start.
+	if rec := as(t, b.s.HandleCatalogContentRefresh, b.owner, "POST", "", "id", b.cat.ID); rec.Code != http.StatusOK {
+		t.Fatalf("next run = %d %s", rec.Code, rec.Body)
 	}
 }
 

@@ -127,9 +127,11 @@ test("a part of a bundle that is held whole, or that a chosen bundle carries, st
 
 test("my services offers what a held bundle is missing, and the basket takes it", async ({ page }) => {
   await open(page, "My services");
-  await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().click();
+  // The iPhone lacks its hardware and its case, so it opens what it lacks.
+  await page.locator(".cascade .cell", { hasText: "Apple iPhone" }).first().locator("button.label").click();
   const col = page.locator(".cascade > .col:nth-child(4)");
-  await expect(col.locator(".colhead")).toHaveText(["Service", "Not held"]);
+  // Only what it lacks: "My services" lists no service it holds.
+  await expect(col.locator(".colhead")).toHaveText(["Not held"]);
   await expect(col.locator(".cell .label")).toHaveText(["Apple iPhone hardware", "Smartphone case"]);
   // Both are offers: the hardware because it was given back, the case because it
   // was never taken.
@@ -146,10 +148,9 @@ test("my services offers what a held bundle is missing, and the basket takes it"
 
 test("a bundle held whole offers nothing extra in my services", async ({ page }) => {
   await open(page, "My services");
-  await page.locator(".cascade .cell", { hasText: "Internal user account" }).first().click();
-  const col = page.locator(".cascade > .col:nth-child(4)");
-  await expect(col.locator(".colhead")).toHaveText(["Service"]);
-  await expect(col.locator(".cell .label")).toHaveText(["Internal account (U)"]);
+  // Held whole, it lacks nothing, so it opens nothing and no fourth column appears.
+  await expect(page.locator(".cascade .cell", { hasText: "Internal user account" }).locator("button.label")).toHaveCount(0);
+  await expect(page.locator(".cascade > .col")).toHaveCount(3);
 });
 
 // Ordered again and not yet provisioned is not held, but it is coming: offering it a
